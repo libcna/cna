@@ -145,6 +145,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void TextureCube::SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                               const Color* data, int startIndex, int elementCount)
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("TextureCube");
         if (!IsValidCubeMapFace(face))
             throw std::out_of_range("TextureCube::SetData: face is not a valid CubeMapFace value");
         if (!data)
@@ -159,15 +161,35 @@ namespace Microsoft::Xna::Framework::Graphics
         const int levelSize = mipDim(size_, level);
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelSize || y + h > levelSize)
             throw std::out_of_range("TextureCube::SetData: rectangle out of texture bounds");
         if (elementCount < w * h)
             throw std::out_of_range("TextureCube::SetData: elementCount is less than the number of pixels in the requested region");
 
-        const auto rgba = colorsToRgba(data, startIndex, elementCount);
-        if (backend_)
-            backend_->SetData(static_cast<int>(face), level, x, y, w, h,
-                              rgba.data(), static_cast<int>(rgba.size()));
+        // REMED-GFX-135 (REMED-GFX-127/130's contract, applied to the WRITE direction). Every check
+        // above runs BEFORE anything is converted or handed to a backend, so a rejected call cannot
+        // have changed one texel. A backend that was never created at all (SDL_Renderer, ASCII,
+        // Canvas, DX3 keep IGraphicsBackend::CreateTextureCube's nullptr default) used to be skipped
+        // by a bare `if (backend_)`, which turned "no storage exists" into a successful-looking
+        // upload -- it is the same answer as an unimplemented write, reached one step earlier.
+        if (!backend_)
+        {
+            throw System::NotSupportedException(
+                "TextureCube::SetData: this graphics backend creates no cube-map texture resource, "
+                "so a cube face's content cannot be stored");
+        }
+
+        // Converted to the REQUESTED REGION, not to elementCount: the backend stores exactly w*h
+        // texels, so converting more would read source elements the call never uploads and hand
+        // backends a buffer whose length disagrees with the region they are told to write.
+        const auto rgba = colorsToRgba(data, startIndex, w * h);
+        if (!backend_->SetData(static_cast<int>(face), level, x, y, w, h,
+                               rgba.data(), static_cast<int>(rgba.size())))
+        {
+            throw System::NotSupportedException(
+                "TextureCube::SetData: this graphics backend did not store the complete requested "
+                "cube face region -- the face, mip level or region is not supported here");
+        }
     }
 
     void TextureCube::GetData(CubeMapFace face, Color* data, int elementCount) const

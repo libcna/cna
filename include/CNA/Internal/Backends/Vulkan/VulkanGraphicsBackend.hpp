@@ -535,9 +535,13 @@ namespace CNA::Internal::Backends::Vulkan
         VulkanTexture3DBackend(VulkanGraphicsBackend* owner, int w, int h, int depth, bool mipMap);
         ~VulkanTexture3DBackend() override;
 
-        void SetData(int level, int x, int y, int z,
-                     int w, int h, int depth,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once the host-visible staging buffer has been filled and its
+        /// copy submitted and waited on; false when this texture has no usable image, the staging
+        /// buffer could not be mapped, or the level/box/source length is out of range. The staging
+        /// copy happens inside this call, so the caller's memory is never retained past it.
+        [[nodiscard]] bool SetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: true only once the staging copy has filled the whole requested box;
         /// false when this texture has no usable image (torn-down owner/device) or the staging
         /// buffer could not be mapped, so the shared layer rejects the read instead of converting
@@ -565,8 +569,9 @@ namespace CNA::Internal::Backends::Vulkan
         VulkanTextureCubeBackend(VulkanGraphicsBackend* owner, int size, bool mipMap);
         ~VulkanTextureCubeBackend() override;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: same explicit completion contract as VulkanTexture3DBackend::SetData.
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: same explicit completion contract as VulkanTexture3DBackend::GetData --
         /// true only once the staging copy has filled the whole requested face rectangle.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,

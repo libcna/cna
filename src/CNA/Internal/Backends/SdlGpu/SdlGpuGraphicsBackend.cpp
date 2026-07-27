@@ -4942,7 +4942,8 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SdlGpuTexture3DBackend::SdlGpuTexture3DBackend(SdlGpuGraphicsBackend& owner, int width, int height,
                                                     int depth, bool mipMap)
-        : owner_(&owner)
+        : owner_(&owner), width_(width), height_(height), depth_(depth)
+        , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
     {
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_3D;
@@ -4971,14 +4972,21 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_ReleaseGPUTexture(owner_->Device(), texture_);
     }
 
-    void SdlGpuTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool SdlGpuTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
                                          const void* data, int dataLength)
     {
-        if (w <= 0 || h <= 0 || depth <= 0)
-            return;
+        // REMED-GFX-135: `w <= 0` used to be a silent `return` the shared layer read as a completed
+        // upload, and neither the null source nor the level/box range was checked at all -- an
+        // out-of-range level reached SDL_UploadToGPUTexture as a nonexistent subresource.
+        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * static_cast<Uint32>(depth) * 4;
-        if (static_cast<Uint32>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA SDL_GPU: Texture3D::SetData: dataLength too small for the requested region");
+        if (dataLength < 0 || static_cast<Uint32>(dataLength) < sizeBytes) return false;
 
         SDL_GPUDevice* device = owner_->Device();
         SDL_GPUTransferBufferCreateInfo transferInfo{};
@@ -5033,6 +5041,7 @@ namespace CNA::Internal::Backends::SdlGpu
             throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
         }
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return true;
     }
 
     bool SdlGpuTexture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
@@ -5103,6 +5112,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SdlGpuTextureCubeBackend::SdlGpuTextureCubeBackend(SdlGpuGraphicsBackend& owner, int size, bool mipMap)
         : owner_(&owner), size_(size), mipMap_(mipMap)
+        , levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
     {
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_CUBE;
@@ -5131,14 +5141,17 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_ReleaseGPUTexture(owner_->Device(), texture_);
     }
 
-    void SdlGpuTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool SdlGpuTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                            const void* data, int dataLength)
     {
-        if (w <= 0 || h <= 0)
-            return;
+        // REMED-GFX-135: see SdlGpuTexture3DBackend::SetData -- silent returns looked like writes,
+        // and neither the face nor the level was range-checked before reaching SDL.
+        if (data == nullptr || w <= 0 || h <= 0) return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
-        if (static_cast<Uint32>(dataLength) < sizeBytes)
-            throw std::out_of_range("CNA SDL_GPU: TextureCube::SetData: dataLength too small for the requested region");
+        if (dataLength < 0 || static_cast<Uint32>(dataLength) < sizeBytes) return false;
 
         SDL_GPUDevice* device = owner_->Device();
         SDL_GPUTransferBufferCreateInfo transferInfo{};
@@ -5198,6 +5211,7 @@ namespace CNA::Internal::Backends::SdlGpu
             throw std::runtime_error(std::string("CNA SDL_GPU: TextureCube::SetData: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
         }
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return true;
     }
 
     bool SdlGpuTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,

@@ -113,8 +113,18 @@ namespace CNA::Internal::Backends::EasyGL
 
         // ITextureCubeBackend — bind and upload to the shared cube texture.
         void BindGL() const override;
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        /**
+         * @brief Uploads CPU pixels into a rendered cube face's mip level.
+         *
+         * REMED-GFX-135: the only render-target cube in CNA that implements this rather than
+         * inheriting `IRenderTargetCubeBackend::SetData`'s refusal -- the FBO's colour attachment
+         * IS a normal GL cube texture here, so glTexSubImage2D reaches it directly.
+         *
+         * @return True once the whole region has been uploaded with no GL error; false for an
+         *         out-of-range face/level/region or a driver-rejected upload.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
@@ -143,9 +153,13 @@ namespace CNA::Internal::Backends::EasyGL
         EasyGLTexture3DBackend(int w, int h, int depth, bool mipMap, int surfaceFormat);
         ~EasyGLTexture3DBackend() override = default;
 
-        void SetData(int level, int x, int y, int z,
-                     int w, int h, int depth,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once the requested box has been uploaded into a level this
+        /// texture really allocated and GL reported no error; false for an out-of-range level or
+        /// box, a source buffer too small for the box, or a driver-rejected upload. glTexSubImage3D
+        /// copies out of the caller's memory before returning, so the source is never retained.
+        [[nodiscard]] bool SetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   const void* data, int dataLength) override;
 
         /// REMED-GFX-130: true only once every requested Z slice has been read back through the
         /// temporary FBO below; false when the request is out of range or an FBO attachment for
@@ -163,6 +177,8 @@ namespace CNA::Internal::Backends::EasyGL
         int width_  = 0;
         int height_ = 0;
         int depth_  = 0;
+        /// Mip levels this texture really allocated storage for (REMED-GFX-135).
+        int levelCount_ = 1;
     };
 
     /// EasyGL cube map texture backend.
@@ -172,8 +188,13 @@ namespace CNA::Internal::Backends::EasyGL
         EasyGLTextureCubeBackend(int size, bool mipMap, int surfaceFormat);
         ~EasyGLTextureCubeBackend() override = default;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once the requested face/mip rectangle has been uploaded into a
+        /// level this texture really allocated and GL reported no error; false for an out-of-range
+        /// face/level/rectangle, a source buffer too small for the region, or a driver-rejected
+        /// upload. glTexSubImage2D copies out of the caller's memory before returning, so the
+        /// source is never retained.
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
 
         /// REMED-GFX-130: true only once the requested face/mip rectangle has been read back
         /// through the temporary FBO below; false for an out-of-range face or an incomplete
@@ -187,6 +208,8 @@ namespace CNA::Internal::Backends::EasyGL
     private:
         ::easygl::Texture tex_;
         int size_ = 0;
+        /// Mip levels this cube really allocated storage for (REMED-GFX-135).
+        int levelCount_ = 1;
     };
 
     /// EasyGL implementation of IEffectBackend — wraps an easygl::Program.

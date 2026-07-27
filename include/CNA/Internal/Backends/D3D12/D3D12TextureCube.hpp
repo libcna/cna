@@ -40,8 +40,12 @@ namespace CNA::Internal::Backends::D3D12
     public:
         D3D12TextureCubeBackend(D3D12GraphicsBackend* backend, int size, bool mipMap, int surfaceFormat);
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once the staged copy has been submitted and waited on for the
+        /// whole requested face rectangle; false for an out-of-range face/level/rectangle, a null
+        /// source or a source buffer too small for the region. A failed D3D12 resource
+        /// creation/Map/Close still throws -- that is a broken device, not an unsupported request.
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
 
         /// REMED-GFX-130: true only once the READBACK-heap copy has completed and the whole
         /// requested face rectangle has been unpacked from it; false for an out-of-range

@@ -318,7 +318,7 @@ namespace CNA::Internal::Backends::Headless
         state_->registry.Unregister(resourceId_);
     }
 
-    void HeadlessTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool HeadlessTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                          const void* data, int dataLength)
     {
         Require(state_, face >= 0 && face <= 5,
@@ -328,6 +328,10 @@ namespace CNA::Internal::Backends::Headless
                "HeadlessTextureCubeBackend::SetData: negative rectangle");
         Require(state_, dataLength >= 0, "HeadlessTextureCubeBackend::SetData: negative dataLength");
         state_->RecordTrace("TextureCube::SetData", "face=" + std::to_string(face));
+        // REMED-GFX-135: the trace entry above is the whole of what happens here -- no pixel data is
+        // stored anywhere, so this call has never been a completed write and now says so.
+        (void)data;
+        return false;
     }
 
     // ---- HeadlessTexture3DBackend ----
@@ -350,7 +354,7 @@ namespace CNA::Internal::Backends::Headless
         state_->registry.Unregister(resourceId_);
     }
 
-    void HeadlessTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool HeadlessTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
                                        const void* data, int dataLength)
     {
         Require(state_, level >= 0, "HeadlessTexture3DBackend::SetData: level must be >= 0");
@@ -358,6 +362,9 @@ namespace CNA::Internal::Backends::Headless
                "HeadlessTexture3DBackend::SetData: negative sub-volume");
         Require(state_, dataLength >= 0, "HeadlessTexture3DBackend::SetData: negative dataLength");
         state_->RecordTrace("Texture3D::SetData", "");
+        // REMED-GFX-135: see HeadlessTextureCubeBackend::SetData -- trace only, never a store.
+        (void)data;
+        return false;
     }
 
     // ---- HeadlessEffectBackend ----

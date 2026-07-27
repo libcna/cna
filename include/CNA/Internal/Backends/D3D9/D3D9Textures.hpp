@@ -63,8 +63,13 @@ namespace CNA::Internal::Backends::D3D9
     public:
         D3D9TextureCubeBackend(IDirect3DDevice9* device, int size, bool mipMap, int surfaceFormat);
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once the whole requested face rectangle has been copied into
+        /// the locked surface and unlocked; false for an out-of-range face/level/rectangle, a null
+        /// source or a source buffer too small for the region. A failed LockRect still throws --
+        /// that is a broken device, not an unsupported request. LockRect/UnlockRect copy out of the
+        /// caller's memory inside this call, so the source is never retained past it.
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: true only once the whole requested face rectangle has been copied out of
         /// the locked surface; false for an out-of-range face/level or a failed LockRect, so the
         /// shared layer rejects the read instead of fabricating a transparent-black face.
@@ -91,8 +96,10 @@ namespace CNA::Internal::Backends::D3D9
     public:
         D3D9Texture3DBackend(IDirect3DDevice9* device, int w, int h, int depth, bool mipMap, int surfaceFormat);
 
-        void SetData(int level, int x, int y, int z, int w, int h, int depth,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: same explicit completion contract as D3D9TextureCubeBackend::SetData,
+        /// applied to LockBox's row pitch and slice pitch.
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: same explicit completion contract as D3D9TextureCubeBackend::GetData,
         /// applied to LockBox's row pitch and slice pitch.
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,

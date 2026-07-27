@@ -510,8 +510,27 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- BgfxTextureCubeBackend ---
 
+    // REMED-GFX-135: mirrors TextureCube.cpp's CalculateMipLevels(size,size) -- bgfx builds the
+    // same full chain when `mipMap` is true, so this is what `handle` really has storage for.
+    static int BgfxCubeMipLevels(int size)
+    {
+        int levels = 1;
+        int s = size;
+        while (s > 1) { s = std::max(1, s / 2); ++levels; }
+        return levels;
+    }
+
+    // Mirrors Texture3D.cpp's CalculateMipLevels(width, height) -- depth does not participate.
+    static int BgfxVolumeMipLevels(int w, int h)
+    {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
+
     BgfxTextureCubeBackend::BgfxTextureCubeBackend(int size, bool mipMap, int /*surfaceFormat*/)
         : size_(size)
+        , levelCount_(mipMap ? BgfxCubeMipLevels(size) : 1)
     {
         // Task 914: mipMap now genuinely threaded through (was hardcoded false) -- verifiable now
         // that GetData() (below) provides a real readback path to check mip-level content.
@@ -529,11 +548,21 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::destroy(handle);
     }
 
-    void BgfxTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool BgfxTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                          const void* data, int dataLength)
     {
-        if (!bgfx::isValid(handle) || !data || dataLength <= 0) return;
-        const bgfx::Memory* mem = bgfx::copy(data, static_cast<uint32_t>(dataLength));
+        // REMED-GFX-135: each of these used to be a silent `return`, which the shared layer could
+        // not tell apart from a completed upload.
+        if (!bgfx::isValid(handle) || !data || w <= 0 || h <= 0) return false;
+        if (face < 0 || face >= 6 || level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        const uint32_t regionBytes = static_cast<uint32_t>(w) * static_cast<uint32_t>(h) * 4u;
+        if (dataLength < 0 || static_cast<uint32_t>(dataLength) < regionBytes) return false;
+
+        // Sized to the REGION, not to dataLength: bgfx::updateTextureCube reads exactly w*h*4 bytes
+        // out of `mem`, and a longer block would be an allocation this call never uses.
+        const bgfx::Memory* mem = bgfx::copy(data, regionBytes);
         bgfx::updateTextureCube(handle,
             0,
             static_cast<uint8_t>(face),
@@ -541,6 +570,7 @@ namespace CNA::Internal::Backends::Bgfx
             static_cast<uint16_t>(x), static_cast<uint16_t>(y),
             static_cast<uint16_t>(w), static_cast<uint16_t>(h),
             mem);
+        return true;
     }
 
     // Task 914: real GPU readback, previously a total no-op (the shared ITextureCubeBackend
@@ -599,6 +629,8 @@ namespace CNA::Internal::Backends::Bgfx
     // --- BgfxTexture3DBackend ---
 
     BgfxTexture3DBackend::BgfxTexture3DBackend(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+        : width_(w), height_(h), depth_(depth)
+        , levelCount_(mipMap ? BgfxVolumeMipLevels(w, h) : 1)
     {
         // Task 914: mipMap now genuinely threaded through (was hardcoded false) -- verifiable now
         // that GetData() (below) provides a real readback path to check mip-level content.
@@ -617,17 +649,29 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::destroy(handle);
     }
 
-    void BgfxTexture3DBackend::SetData(int level, int x, int y, int z,
+    bool BgfxTexture3DBackend::SetData(int level, int x, int y, int z,
                                        int w, int h, int depth,
                                        const void* data, int dataLength)
     {
-        if (!bgfx::isValid(handle) || !data || dataLength <= 0) return;
-        const bgfx::Memory* mem = bgfx::copy(data, static_cast<uint32_t>(dataLength));
+        // REMED-GFX-135: see BgfxTextureCubeBackend::SetData -- silent returns looked like writes.
+        if (!bgfx::isValid(handle) || !data || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        const uint32_t regionBytes =
+            static_cast<uint32_t>(w) * static_cast<uint32_t>(h) * static_cast<uint32_t>(depth) * 4u;
+        if (dataLength < 0 || static_cast<uint32_t>(dataLength) < regionBytes) return false;
+
+        const bgfx::Memory* mem = bgfx::copy(data, regionBytes);
         bgfx::updateTexture3D(handle,
             static_cast<uint8_t>(level),
             static_cast<uint16_t>(x), static_cast<uint16_t>(y), static_cast<uint16_t>(z),
             static_cast<uint16_t>(w), static_cast<uint16_t>(h), static_cast<uint16_t>(depth),
             mem);
+        return true;
     }
 
     // Task 914: real GPU readback, previously a total no-op -- mirrors

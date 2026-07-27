@@ -28,8 +28,10 @@ namespace CNA::Internal::Backends::D3D12
     public:
         D3D12Texture3DBackend(D3D12GraphicsBackend* backend, int w, int h, int depth, bool mipMap, int surfaceFormat);
 
-        void SetData(int level, int x, int y, int z, int w, int h, int depth,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: same explicit completion contract as D3D12TextureCubeBackend::SetData,
+        /// applied to the placed footprint's row pitch and slice pitch.
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: same explicit completion contract as D3D12TextureCubeBackend::GetData,
         /// applied to the placed footprint's RowPitch and slice pitch.
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,

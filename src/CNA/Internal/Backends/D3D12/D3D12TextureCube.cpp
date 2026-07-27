@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -96,10 +97,17 @@ namespace CNA::Internal::Backends::D3D12
         backend_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
-    void D3D12TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
-                                          const void* data, int /*dataLength*/)
+    bool D3D12TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                          const void* data, int dataLength)
     {
-        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+        // REMED-GFX-135: this used to be a silent `return` the shared layer read as a completed
+        // upload -- reachable for every mip level above 0, since this backend's constructor pins
+        // mipLevels_ to 1 whatever `mipMap` says.
+        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (data == nullptr) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
 
         const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 uploadBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
@@ -172,6 +180,7 @@ namespace CNA::Internal::Backends::D3D12
         if (FAILED(hr))
             throw std::runtime_error("D3D12TextureCubeBackend: command list Close failed, hr=" + FormatHr(hr));
         backend_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
+        return true;
     }
 
     bool D3D12TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,

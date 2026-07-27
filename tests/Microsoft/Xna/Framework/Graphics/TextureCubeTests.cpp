@@ -38,6 +38,7 @@
 #include "System/FormatException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -62,12 +63,33 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // (no cube resource exists at all); Headless stores no pixel data by design. Every other backend
 // reads level 0 back exactly -- Software only at level 0, since it stores no cube mip levels.
 // -----------------------------------------------------------------------
+//
+// REMED-GFX-135 adds the write-side half of the same question. `TextureCube::SetData` now has
+// exactly two outcomes too -- the complete requested region is stored, or it throws -- so the
+// "does not throw" tests below became false-positive-capable in the opposite direction: on a
+// backend with no cube storage they used to pass for a call that discarded the data. Storage
+// support and readback support are the same set (a backend either owns cube pixels or it does
+// not), so one constant drives both.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
     defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_HEADLESS)
 constexpr bool kCubeLevel0ReadbackSupported = false;
+constexpr bool kCubeStorageSupported        = false;
 #else
 constexpr bool kCubeLevel0ReadbackSupported = true;
+constexpr bool kCubeStorageSupported        = true;
 #endif
+
+/// Runs one TextureCube::SetData call and asserts REMED-GFX-135's contract for this backend:
+/// it either completes, or it refuses with System::NotSupportedException. Never both, never
+/// neither.
+template <typename Fn>
+void ExpectUploadStoredOrRefused(Fn&& upload)
+{
+    if (kCubeStorageSupported)
+        EXPECT_NO_THROW(upload());
+    else
+        EXPECT_THROW(upload(), System::NotSupportedException);
+}
 
 // -----------------------------------------------------------------------
 // Constructor / properties
@@ -158,12 +180,25 @@ TEST_F(TextureCubeTest, SetDataStartIndexNegativeStartIndexThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), -1, 4), std::out_of_range);
 }
 
-TEST_F(TextureCubeTest, SetDataExactElementCountDoesNotThrow)
+// REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a backend that dropped
+// the upload passed just as easily as one that stored it. They now assert the real outcome, and
+// the readback proves the second (startIndex) overload really stored ITS OWN data rather than
+// leaving the first call's behind.
+TEST_F(TextureCubeTest, SetDataExactElementCountStoresOrRefusesDeterministically)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    std::vector<Color> buf(4, Color(1, 2, 3, 4));
-    EXPECT_NO_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), 4));
-    EXPECT_NO_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), 0, 4));
+    std::vector<Color> first(4, Color(1, 2, 3, 4));
+    std::vector<Color> second(4, Color(9, 8, 7, 6));
+    ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, first.data(), 4); });
+    ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, second.data(), 0, 4); });
+
+    if (kCubeLevel0ReadbackSupported)
+    {
+        std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+        ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, got.data(), 4));
+        for (const Color& c : got)
+            EXPECT_EQ(c.getPackedValueProperty(), second[0].getPackedValueProperty());
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -206,12 +241,26 @@ TEST_F(TextureCubeTest, SetDataRectOutOfBoundsThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 4), std::out_of_range);
 }
 
-TEST_F(TextureCubeTest, SetDataRectWithinBoundsDoesNotThrow)
+// REMED-GFX-135: was a bare EXPECT_NO_THROW. It now asserts the outcome, and -- where the backend
+// can read back -- that the 1x1 write landed on exactly one texel and left the other three alone.
+TEST_F(TextureCubeTest, SetDataRectWithinBoundsStoresOnlyThatTexel)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    std::vector<Color> whole(4, Color(40, 41, 42, 43));
+    ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, whole.data(), 4); });
+
     Color buf[1] = { Color(1, 2, 3, 4) };
     const Rectangle rect(0, 0, 1, 1);
-    EXPECT_NO_THROW(tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1));
+    ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1); });
+
+    if (kCubeLevel0ReadbackSupported)
+    {
+        std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+        ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, got.data(), 4));
+        EXPECT_EQ(got[0].getPackedValueProperty(), buf[0].getPackedValueProperty());
+        for (std::size_t i = 1; i < got.size(); ++i)
+            EXPECT_EQ(got[i].getPackedValueProperty(), whole[0].getPackedValueProperty());
+    }
 }
 
 // Task 913: elementCount must cover the full requested region (w*h) — previously unvalidated,
@@ -233,9 +282,20 @@ TEST_F(TextureCubeTest, SetDataRectElementCountLessThanRegionThrowsOutOfRange)
 TEST_F(TextureCubeTest, SetDataNullRectAtMipLevelUsesReducedSize)
 {
     // size=4, mipMap=true -> levels 4x4, 2x2, 1x1. Level 1 is 2x2 = 4 elements.
+    // REMED-GFX-135: every backend that stores cube faces at all now stores the whole declared mip
+    // chain (Software was the last one allocating level 0 only), so this level-1 write is either a
+    // real store or a deterministic refusal -- never the silent drop it used to be.
     TextureCube tex(gd, 4, true, SurfaceFormat::Color);
     std::vector<Color> buf(4, Color(1, 2, 3, 4));
-    EXPECT_NO_THROW(tex.SetData(CubeMapFace::PositiveX, 1, nullptr, buf.data(), 0, 4));
+    ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, 1, nullptr, buf.data(), 0, 4); });
+
+    if (kCubeLevel0ReadbackSupported)
+    {
+        std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+        ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, 1, nullptr, got.data(), 0, 4));
+        for (const Color& c : got)
+            EXPECT_EQ(c.getPackedValueProperty(), buf[0].getPackedValueProperty());
+    }
 }
 
 TEST_F(TextureCubeTest, SetDataNullRectAtMipLevelRejectsFullFaceSizedElementCount)
@@ -300,7 +360,7 @@ TEST_F(TextureCubeTest, GetDataRectWithinBoundsReturnsUploadedTexelOrRejectsDete
         Color(17, 200, 33, 199), Color(18, 201, 34, 198),
         Color(19, 202, 35, 197), Color(20, 203, 36, 196),
     };
-    tex.SetData(CubeMapFace::PositiveX, uploaded, 4);
+    ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, uploaded, 4); });
 
     const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
     Color buf[1] = { sentinel };
@@ -387,17 +447,82 @@ TEST_F(TextureCubeTest, GetDataRectInvalidFaceThrowsOutOfRange)
     EXPECT_THROW(tex.GetData(invalidFace, 0, nullptr, buf, 0, 4), std::out_of_range);
 }
 
-TEST_F(TextureCubeTest, SetDataAllSixValidFacesDoNotThrow)
+// REMED-GFX-135: uploading the SAME colour to all six faces could not distinguish them, so this
+// used to pass on a backend that stored one face, all six, or none. Each face now gets its own
+// colour and is read back independently.
+TEST_F(TextureCubeTest, SetDataAllSixValidFacesStoreIndependently)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    Color buf[4] = { Color(1, 2, 3, 4), Color(1, 2, 3, 4), Color(1, 2, 3, 4), Color(1, 2, 3, 4) };
     const CubeMapFace faces[6] = {
         CubeMapFace::PositiveX, CubeMapFace::NegativeX,
         CubeMapFace::PositiveY, CubeMapFace::NegativeY,
         CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
     };
-    for (CubeMapFace face : faces)
-        EXPECT_NO_THROW(tex.SetData(face, buf, 4));
+    for (int f = 0; f < 6; ++f)
+    {
+        std::vector<Color> buf(4, Color(static_cast<std::uint8_t>(10 + f * 30),
+                                        static_cast<std::uint8_t>(200 - f * 20),
+                                        static_cast<std::uint8_t>(5 + f * 40),
+                                        static_cast<std::uint8_t>(101 + f * 7)));
+        ExpectUploadStoredOrRefused([&] { tex.SetData(faces[f], buf.data(), 4); });
+    }
+
+    if (kCubeLevel0ReadbackSupported)
+    {
+        for (int f = 0; f < 6; ++f)
+        {
+            const Color expected(static_cast<std::uint8_t>(10 + f * 30),
+                                 static_cast<std::uint8_t>(200 - f * 20),
+                                 static_cast<std::uint8_t>(5 + f * 40),
+                                 static_cast<std::uint8_t>(101 + f * 7));
+            std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+            ASSERT_NO_THROW(tex.GetData(faces[f], got.data(), 4));
+            for (const Color& c : got)
+                EXPECT_EQ(c.getPackedValueProperty(), expected.getPackedValueProperty())
+                    << "face " << f;
+        }
+    }
+}
+
+// REMED-GFX-135: a source array with padding on both sides of the uploaded window. Whatever the
+// backend stores, the padding must never reach the resource -- that is what proves startIndex is
+// applied exactly once and that the call reads only elementCount elements from it.
+TEST_F(TextureCubeTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    const Color poison(0x7E, 0x11, 0x33, 0x5C);
+    std::vector<Color> src(11, poison);
+    for (int i = 0; i < 4; ++i)
+        src[static_cast<std::size_t>(3 + i)] =
+            Color(static_cast<std::uint8_t>(60 + i * 9), 140, 25, static_cast<std::uint8_t>(180 - i));
+    ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::NegativeY, src.data(), 3, 4); });
+
+    if (kCubeLevel0ReadbackSupported)
+    {
+        std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+        ASSERT_NO_THROW(tex.GetData(CubeMapFace::NegativeY, got.data(), 4));
+        for (int i = 0; i < 4; ++i)
+        {
+            EXPECT_EQ(got[static_cast<std::size_t>(i)].getPackedValueProperty(),
+                      src[static_cast<std::size_t>(3 + i)].getPackedValueProperty());
+            EXPECT_NE(got[static_cast<std::size_t>(i)].getPackedValueProperty(),
+                      poison.getPackedValueProperty());
+        }
+    }
+}
+
+// REMED-GFX-135: SetData after Dispose() used to be a silent no-op, while GetData already threw --
+// so a caller could be told the resource was gone on read and never on write.
+TEST_F(TextureCubeTest, SetDataAfterDisposeThrowsObjectDisposed)
+{
+    TextureCube tex(gd, 2, false, SurfaceFormat::Color);
+    std::vector<Color> buf(4, Color(1, 2, 3, 4));
+    tex.Dispose();
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), 4), System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, 0, nullptr, buf.data(), 0, 4),
+                 System::ObjectDisposedException);
+    tex.Dispose();   // repeated Dispose must not change the answer
+    EXPECT_THROW(tex.SetData(CubeMapFace::PositiveX, buf.data(), 4), System::ObjectDisposedException);
 }
 
 // -----------------------------------------------------------------------
@@ -617,6 +742,15 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesSizeFormatAndLevelCount)
     std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, colors);
     System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
 
+    // REMED-GFX-135: DDSFromStreamEXT decodes on the CPU and then uploads every face through
+    // SetData, which on a backend with no cube storage is now a deterministic refusal instead of a
+    // silent discard -- so the whole load fails rather than returning a TextureCube holding nothing.
+    if (!kCubeStorageSupported)
+    {
+        EXPECT_THROW((void)TextureCube::DDSFromStreamEXT(gd, stream), System::NotSupportedException);
+        return;
+    }
+
     TextureCube tex = TextureCube::DDSFromStreamEXT(gd, stream);
     EXPECT_EQ(tex.getSizeProperty(), 4);
     EXPECT_EQ(tex.getFormatProperty(), SurfaceFormat::Color);
@@ -637,6 +771,14 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
     };
     std::vector<uint8_t> dds = BuildSolidColorCubeDds(4, expected);
     System::IO::MemoryStream stream(dds.data(), static_cast<System::IO::intcs>(dds.size()));
+
+    // REMED-GFX-135: see the sibling test above -- a backend that cannot store a cube face now
+    // fails the load outright rather than handing back an empty resource.
+    if (!kCubeStorageSupported)
+    {
+        EXPECT_THROW((void)TextureCube::DDSFromStreamEXT(gd, stream), System::NotSupportedException);
+        return;
+    }
 
     TextureCube tex = TextureCube::DDSFromStreamEXT(gd, stream);
 

@@ -118,10 +118,16 @@ namespace CNA::Internal::Backends::D3D11
             throw std::runtime_error("D3D11TextureCubeBackend: CreateShaderResourceView failed, hr=" + FormatHr(hr));
     }
 
-    void D3D11TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
-                                          const void* data, int /*dataLength*/)
+    bool D3D11TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                          const void* data, int dataLength)
     {
-        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6) return;
+        // REMED-GFX-135: these used to be a silent `return` the shared layer read as a completed
+        // upload, and neither the source pointer nor the rectangle was checked at all.
+        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6) return false;
+        if (data == nullptr || w <= 0 || h <= 0) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
         const UINT subresource = D3D11CalcSubresource(static_cast<UINT>(level), static_cast<UINT>(face),
                                                        static_cast<UINT>(mipLevels_));
         D3D11_BOX box{};
@@ -133,6 +139,9 @@ namespace CNA::Internal::Backends::D3D11
         box.back = 1;
         context_->UpdateSubresource(texture_.Get(), subresource, &box, data,
                                     static_cast<UINT>(w) * 4, static_cast<UINT>(w) * static_cast<UINT>(h) * 4);
+        // UpdateSubresource copies out of `data` before returning -- nothing here still depends on
+        // caller memory once this call completes (REMED-GFX-135).
+        return true;
     }
 
     bool D3D11TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
@@ -202,10 +211,18 @@ namespace CNA::Internal::Backends::D3D11
             throw std::runtime_error("D3D11Texture3DBackend: CreateShaderResourceView failed, hr=" + FormatHr(hr));
     }
 
-    void D3D11Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
-                                        const void* data, int /*dataLength*/)
+    bool D3D11Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                        const void* data, int dataLength)
     {
-        if (level < 0 || level >= mipLevels_) return;
+        // REMED-GFX-135: see D3D11TextureCubeBackend::SetData -- silent returns looked like writes.
+        if (level < 0 || level >= mipLevels_) return false;
+        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        if (dataLength < w * h * depth * 4) return false;
         D3D11_BOX box{};
         box.left = static_cast<UINT>(x);
         box.top = static_cast<UINT>(y);
@@ -215,6 +232,7 @@ namespace CNA::Internal::Backends::D3D11
         box.back = static_cast<UINT>(z + depth);
         context_->UpdateSubresource(texture_.Get(), static_cast<UINT>(level), &box, data,
                                     static_cast<UINT>(w) * 4, static_cast<UINT>(w) * static_cast<UINT>(h) * 4);
+        return true;
     }
 
     bool D3D11Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,

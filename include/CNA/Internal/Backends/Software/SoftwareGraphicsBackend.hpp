@@ -200,39 +200,65 @@ namespace CNA::Internal::Backends::Software
         bool bound_ = false;
     };
 
-    /// SOFTWARE-82: real 6-face RGBA8 cube map storage, for EnvironmentMapEffect. Mip levels
-    /// beyond 0 aren't stored (mirrors SoftwareTextureBackend::UpdatePixelsLevel's own no-op
-    /// precedent -- no mipmapping support in v1).
+    /// SOFTWARE-82: real 6-face RGBA8 cube map storage, for EnvironmentMapEffect.
+    ///
+    /// REMED-GFX-135 extended it to EVERY mip level TextureCube declares. Previously only level 0
+    /// was allocated, so a mipmapped cube reported a LevelCount its storage could not back and
+    /// `SetData(level > 0, ...)` returned early without storing anything -- one of the three silent
+    /// write-loss routes that finding removed. Storage is now allocated per level, so `LevelCount`
+    /// and `SetData`/`GetData` agree at every level.
     class SoftwareTextureCubeBackend final : public ITextureCubeBackend
     {
     public:
-        explicit SoftwareTextureCubeBackend(int size);
+        /**
+         * @brief Allocates zeroed RGBA8 storage for all six faces.
+         *
+         * @param size   Edge length of one cube face at mip 0, in texels.
+         * @param mipMap Allocate the full mip chain down to 1x1 as well as level 0.
+         */
+        SoftwareTextureCubeBackend(int size, bool mipMap);
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                    const void* data, int dataLength) override;
+        /**
+         * @brief Copies one face's RGBA8 sub-rectangle into this backend's CPU storage.
+         *
+         * REMED-GFX-135. `levels_` IS this resource's authoritative content, so a completed copy is
+         * a completed write -- there is no asynchronous stage to wait on and the caller's memory is
+         * never retained past the call.
+         *
+         * @return True when the whole requested region was stored; false for an out-of-range level
+         *         or face, an out-of-bounds rectangle or a source buffer too small for the region.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /**
          * @brief Reads one face's stored RGBA8 sub-rectangle back from this backend's CPU shadow.
          *
-         * REMED-GFX-130. `faces_` IS this resource's authoritative content here -- SetData writes
-         * straight into it and the rasterizer's cube sampler reads straight out of it -- so mip 0
-         * returns exact data. Mip levels above 0 are not stored at all (see this class's own header
-         * comment), and reporting false for them is the point of the finding: the shared layer used
-         * to convert its own zeroed scratch buffer into a complete transparent-black face instead.
+         * REMED-GFX-130. `levels_` IS this resource's authoritative content here -- SetData writes
+         * straight into it and the rasterizer's cube sampler reads straight out of it -- so every
+         * allocated level returns exact data. Reporting false for anything outside the allocated
+         * chain is the point of the finding: the shared layer used to convert its own zeroed scratch
+         * buffer into a complete transparent-black face instead.
          *
          * @return True when the whole requested region was copied out of the shadow; false for an
-         *         unstored mip level, an out-of-range face or an out-of-bounds rectangle.
+         *         out-of-range level or face, or an out-of-bounds rectangle.
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSize() const { return size_; }
-        /// Real RGBA8 pixel storage for one of the 6 faces (CubeMapFace ordinal 0-5), size*size*4
-        /// bytes -- the rasterizer's cube sampler (SOFTWARE-82) reads directly from here.
-        [[nodiscard]] const std::vector<std::uint8_t>& FacePixels(int face) const { return faces_[face]; }
+        /// Real RGBA8 pixel storage for one of the 6 faces (CubeMapFace ordinal 0-5) at mip 0,
+        /// size*size*4 bytes -- the rasterizer's cube sampler (SOFTWARE-82) reads directly from
+        /// here, and samples level 0 only.
+        [[nodiscard]] const std::vector<std::uint8_t>& FacePixels(int face) const { return levels_[0][face]; }
 
     private:
+        /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mipDim().
+        [[nodiscard]] int LevelDim(int level) const;
+
         int size_ = 0;
-        std::array<std::vector<std::uint8_t>, 6> faces_;
+        int levelCount_ = 1;
+        /// levels_[level][face] -- one tightly packed RGBA8 buffer per face per allocated mip level.
+        std::vector<std::array<std::vector<std::uint8_t>, 6>> levels_;
     };
 
     // Cube-map render targets, Texture3D, and hardware occlusion queries remain out of scope for

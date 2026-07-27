@@ -142,8 +142,14 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuTexture3DBackend(const SdlGpuTexture3DBackend&) = delete;
         SdlGpuTexture3DBackend& operator=(const SdlGpuTexture3DBackend&) = delete;
 
-        void SetData(int level, int x, int y, int z, int w, int h, int depth,
-                    const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once the upload command buffer has been submitted with the
+        /// whole requested box copied into a transfer buffer this call owns; false for an
+        /// out-of-range level or box, a null source, or a source buffer too small for the box. A
+        /// genuine SDL API failure still throws -- that is a broken device, not an unsupported
+        /// request. The transfer buffer is filled inside this call, so the caller's memory is never
+        /// retained past it.
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
         /// box has been copied out of the transfer buffer; false for an empty request. Every other
         /// failure already throws, and the shared layer converts false into a deterministic
@@ -154,6 +160,9 @@ namespace CNA::Internal::Backends::SdlGpu
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
         SDL_GPUTexture* texture_ = nullptr;
+        int width_ = 0, height_ = 0, depth_ = 0;
+        /// Mip levels SDL really allocated for this volume (REMED-GFX-135).
+        int levelCount_ = 1;
     };
 
     // Real architectural fix for a render-target-destroyed-before-flush use-after-free: this
@@ -409,8 +418,9 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuTextureCubeBackend(const SdlGpuTextureCubeBackend&) = delete;
         SdlGpuTextureCubeBackend& operator=(const SdlGpuTextureCubeBackend&) = delete;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                    const void* data, int dataLength) override;
+        /// REMED-GFX-135: same explicit completion contract as SdlGpuTexture3DBackend::SetData.
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
         /// face rectangle has been copied out of the transfer buffer; false for an empty request.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
@@ -424,6 +434,8 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUTexture* texture_ = nullptr;
         int size_ = 0;
         bool mipMap_ = false;
+        /// Mip levels SDL really allocated for this cube (REMED-GFX-135).
+        int levelCount_ = 1;
     };
 
     /** @brief `SDL_gpu`-backed vertex buffer. */

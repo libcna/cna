@@ -76,12 +76,25 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads data to a sub-rectangle of a mip level on the specified cube face.
          *
+         * REMED-GFX-135: this call has exactly two outcomes -- the complete requested region is
+         * stored, or it throws. It never returns after storing nothing or only part of the region.
+         * Every argument is validated before anything is uploaded, so a rejected call leaves the
+         * resource and the source array untouched.
+         *
          * @param face         The cube map face to write to.
          * @param level        Mip level to write (0 = full size).
          * @param rect         Sub-rectangle to update, or nullptr for the entire level.
          * @param data         Pointer to the source Color array.
          * @param startIndex   First element within @p data to start reading.
-         * @param elementCount Number of Color elements to upload.
+         * @param elementCount Number of Color elements the caller offers; must be at least the
+         *                     number of texels in the requested region, of which exactly that many
+         *                     are read starting at @p startIndex.
+         * @throws System::ObjectDisposedException if this TextureCube has been disposed.
+         * @throws System::NotSupportedException if this backend cannot store the requested face,
+         *         mip level or region -- including a backend that creates no cube-map resource.
+         * @throws std::invalid_argument if @p data is null.
+         * @throws std::out_of_range for an invalid face, level, startIndex, elementCount or
+         *         rectangle.
          */
         void SetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                      const Color* data, int startIndex, int elementCount);

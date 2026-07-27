@@ -202,13 +202,19 @@ namespace CNA::Internal::Backends::Bgfx
     public:
         bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
         int size_ = 0;
+        /// Mip levels bgfx really allocated for this cube (REMED-GFX-135).
+        int levelCount_ = 1;
 
         BgfxTextureCubeBackend(int size, bool mipMap, int surfaceFormat);
         bgfx::TextureHandle GetBgfxCubeTextureHandle() const override { return handle; }
         ~BgfxTextureCubeBackend() override;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once the whole region has been handed to bgfx as a
+        /// `bgfx::copy()`-owned memory block sized exactly to it; false for an invalid handle, an
+        /// out-of-range face/level/rectangle or a source buffer too small for the region. The copy
+        /// happens inside this call, so the caller's memory is never retained past it.
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /// Task 914: real GPU readback via a temporary BGFX_TEXTURE_BLIT_DST|BGFX_TEXTURE_READ_BACK
         /// 2D texture (blit the requested face/mip/region into it, then bgfx::readTexture()).
         /// REMED-GFX-130: true only once bgfx has advanced to the frame that completes the
@@ -224,13 +230,17 @@ namespace CNA::Internal::Backends::Bgfx
     {
     public:
         bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
+        int width_ = 0, height_ = 0, depth_ = 0;
+        /// Mip levels bgfx really allocated for this volume (REMED-GFX-135).
+        int levelCount_ = 1;
 
         BgfxTexture3DBackend(int w, int h, int depth, bool mipMap, int surfaceFormat);
         ~BgfxTexture3DBackend() override;
 
-        void SetData(int level, int x, int y, int z,
-                     int w, int h, int depth,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: same completion contract as BgfxTextureCubeBackend::SetData above.
+        [[nodiscard]] bool SetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   const void* data, int dataLength) override;
         /// Task 914: real GPU readback via a temporary BGFX_TEXTURE_BLIT_DST|BGFX_TEXTURE_READ_BACK
         /// 3D texture sized to the requested region (blit from the requested mip/offset, then
         /// bgfx::readTexture()). REMED-GFX-130: same explicit completion contract as

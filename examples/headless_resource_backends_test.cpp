@@ -75,8 +75,21 @@ protected:
             TextureCube cube(dev, 4, false, SurfaceFormat::Color);
             std::vector<Color> posX(16, Color::Red);
             std::vector<Color> negX(16, Color::Blue);
-            cube.SetData(CubeMapFace::PositiveX, posX.data(), 16);
-            cube.SetData(CubeMapFace::NegativeX, negX.data(), 16);
+            // REMED-GFX-135: these two uploads used to be issued bare, as if they had stored
+            // something. They never did -- this backend's cube SetData validates its arguments,
+            // records a trace entry and keeps no pixels -- and the shared layer had no way to say
+            // so. Both are now deterministic rejections, asserted here rather than assumed.
+            bool threwSetPosX = false, threwSetNegX = false;
+            try { cube.SetData(CubeMapFace::PositiveX, posX.data(), 16); }
+            catch (const System::NotSupportedException&) { threwSetPosX = true; }
+            catch (...) {}
+            try { cube.SetData(CubeMapFace::NegativeX, negX.data(), 16); }
+            catch (const System::NotSupportedException&) { threwSetNegX = true; }
+            catch (...) {}
+            check(threwSetPosX && threwSetNegX,
+                  "TextureCube: SetData() on two independent faces throws a deterministic "
+                  "System::NotSupportedException -- this backend stores no pixel data, so it "
+                  "refuses the upload rather than accepting and discarding it (REMED-GFX-135)");
             // REMED-GFX-127 false-positive audit: these two checks used to be `check(true, ...)`
             // -- they asserted nothing at all about what GetData produced, so any behaviour
             // whatsoever passed them. They were then strengthened to PIN what the Headless cube
@@ -211,8 +224,9 @@ protected:
             check(countsOk, "resource-creation counters increment by exactly one for each type created above");
         }
 
-        std::printf("=== %d/%d PASS ===\n", passCount_, 9);
-        result_ = (passCount_ == 9) ? 0 : 1;
+        // REMED-GFX-135 added the cube SetData rejection check to Check A.
+        std::printf("=== %d/%d PASS ===\n", passCount_, 10);
+        result_ = (passCount_ == 10) ? 0 : 1;
         Exit();
     }
 

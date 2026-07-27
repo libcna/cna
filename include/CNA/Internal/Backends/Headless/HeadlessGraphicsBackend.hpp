@@ -325,8 +325,20 @@ namespace CNA::Internal::Backends::Headless
         HeadlessTextureCubeBackend(std::shared_ptr<HeadlessSharedState> state, int size, bool mipMap, int surfaceFormat);
         ~HeadlessTextureCubeBackend() override;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        /**
+         * @brief Validates and traces a cube-face upload, then reports that nothing was stored.
+         *
+         * REMED-GFX-135, the write-side counterpart of `GetData` below. This backend stores no
+         * pixel data at all by design, so it has always been unable to keep an upload -- pre-fix it
+         * simply had no way to say so, and `TextureCube::SetData` returned normally after the data
+         * had been validated, recorded in the trace and dropped. The validation and the trace entry
+         * are the value this backend provides and are unchanged; the return value now tells the
+         * truth about the storage.
+         *
+         * @return Always false.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /**
          * @brief Reports that this backend cannot read a cube face back.
          *
@@ -366,8 +378,15 @@ namespace CNA::Internal::Backends::Headless
                              bool mipMap, int surfaceFormat);
         ~HeadlessTexture3DBackend() override;
 
-        void SetData(int level, int x, int y, int z, int w, int h, int depth,
-                     const void* data, int dataLength) override;
+        /**
+         * @brief Validates and traces a volume upload, then reports that nothing was stored.
+         *
+         * REMED-GFX-135, same reviewed reasoning as `HeadlessTextureCubeBackend::SetData`.
+         *
+         * @return Always false.
+         */
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
         /**
          * @brief Reports that this backend cannot read a volume texture back.
          *

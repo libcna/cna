@@ -133,6 +133,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture3D::SetData(int level, int left, int top, int right, int bottom, int front, int back,
                             const Color* data, int startIndex, int elementCount)
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("Texture3D");
         if (!data)
             throw std::invalid_argument("Texture3D::SetData: data must not be null");
         if (elementCount <= 0)
@@ -143,10 +145,14 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture3D::SetData: level must be >= 0");
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
             throw std::out_of_range("Texture3D::SetData: box position/size is invalid");
-        if (elementCount < (right - left) * (bottom - top) * (back - front))
+        const int boxVoxels = (right - left) * (bottom - top) * (back - front);
+        if (elementCount < boxVoxels)
             throw std::out_of_range("Texture3D::SetData: elementCount is less than the number of voxels in the requested region");
 
-        const auto rgba = colorsToRgba(data, startIndex, elementCount);
+        // REMED-GFX-135 -- see TextureCube::SetData's identical note: converted to the REQUESTED
+        // BOX rather than to elementCount, so the call never reads source elements it does not
+        // upload and the buffer length always matches the region the backend is told to write.
+        const auto rgba = colorsToRgba(data, startIndex, boxVoxels);
         SetDataPointerEXT(level, left, top, right, bottom, front, back,
                           rgba.data(), static_cast<int>(rgba.size()));
     }
@@ -154,12 +160,29 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture3D::SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
                                       const void* data, int dataLength)
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("Texture3D");
         if (!data)
             throw std::invalid_argument("Texture3D::SetDataPointerEXT: data must not be null");
-        if (backend_)
-            backend_->SetData(level, left, top, front,
-                              right - left, bottom - top, back - front,
-                              data, dataLength);
+
+        // REMED-GFX-135: `if (backend_)` used to drop the upload silently. Texture3D's constructor
+        // already refuses a device that reports no GraphicsCapability::Texture3D, so a null backend
+        // here means the resource has been disposed out from under this call or the backend failed
+        // to allocate -- neither of which is a successful store.
+        if (!backend_)
+        {
+            throw System::NotSupportedException(
+                "Texture3D::SetDataPointerEXT: this graphics backend creates no volume texture "
+                "resource, so its content cannot be stored");
+        }
+        if (!backend_->SetData(level, left, top, front,
+                               right - left, bottom - top, back - front,
+                               data, dataLength))
+        {
+            throw System::NotSupportedException(
+                "Texture3D::SetDataPointerEXT: this graphics backend did not store the complete "
+                "requested volume region -- the mip level or box is not supported here");
+        }
     }
 
     static void rgbaToColors(const std::vector<uint8_t>& rgba, Color* data, int startIndex, int count)

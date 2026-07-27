@@ -946,18 +946,20 @@ namespace CNA::Internal::Backends::WebGPU
     // convention and TextureCube.cpp's CubeMapFace ordinal values) -- maps directly onto the
     // texture's array layer index, since WebGPU cube faces are just array layers 0..5 in a fixed,
     // implementation-defined order that matches this.
-    void WebGPUTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+    bool WebGPUTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                             const void* data, int dataLength)
     {
-        if (face < 0 || face >= 6)
-            throw std::out_of_range("CNA WebGPU: TextureCube face must be 0..5");
-        if (level < 0 || level >= mipLevels_)
-            throw std::out_of_range("CNA WebGPU: TextureCube level out of range");
-        if (data == nullptr || w <= 0 || h <= 0)
-            throw std::invalid_argument("CNA WebGPU: invalid TextureCube SetData region");
+        // REMED-GFX-135: these were `throw std::out_of_range`/`std::invalid_argument` from inside a
+        // backend, so a request this backend cannot store escaped the public API as a raw std
+        // exception rather than the shared layer's own deterministic System::NotSupportedException.
+        // Returning false routes every such case through the one contract.
+        if (face < 0 || face >= 6) return false;
+        if (level < 0 || level >= mipLevels_) return false;
+        if (data == nullptr || w <= 0 || h <= 0) return false;
+        const int levelSize = MipDim(size_, level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
-        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
-            throw std::invalid_argument("CNA WebGPU: TextureCube SetData buffer too small for region");
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
         WGPUTexelCopyTextureInfo destination{};
         destination.texture = texture_;
@@ -983,6 +985,9 @@ namespace CNA::Internal::Backends::WebGPU
         // (if not maximally efficient). A no-op when mipLevels_ == 1.
         if (level == 0 && mipLevels_ > 1)
             owner_->GenerateMipsCubeFace(texture_, face, size_, mipLevels_);
+        // wgpuQueueWriteTexture copies out of `data` before it returns, so nothing here still
+        // depends on caller memory once this call completes (REMED-GFX-135).
+        return true;
     }
 
     // WEBGPU-113: real per-face CPU readback, same staged-copy/row-alignment/async-map technique
@@ -1396,18 +1401,22 @@ namespace CNA::Internal::Backends::WebGPU
         if (texture_ != nullptr) wgpuTextureRelease(texture_);
     }
 
-    void WebGPUTexture3DBackend::SetData(int level, int x, int y, int z,
+    bool WebGPUTexture3DBackend::SetData(int level, int x, int y, int z,
                                           int w, int h, int depth,
                                           const void* data, int dataLength)
     {
-        if (level < 0 || level >= mipLevels_)
-            throw std::out_of_range("CNA WebGPU: Texture3D.SetData: level out of range");
-        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0)
-            throw std::invalid_argument("CNA WebGPU: invalid Texture3D SetData region");
+        // REMED-GFX-135: see WebGPUTextureCubeBackend::SetData for why these are results, not
+        // throws.
+        if (level < 0 || level >= mipLevels_) return false;
+        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
+        const int levelW = MipDim(width_, level);
+        const int levelH = MipDim(height_, level);
+        const int levelD = MipDim(depth_, level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
         const std::size_t required =
             static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * static_cast<std::size_t>(depth) * 4u;
-        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
-            throw std::invalid_argument("CNA WebGPU: Texture3D SetData buffer too small for region");
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required) return false;
 
         WGPUTexelCopyTextureInfo destination{};
         destination.texture = texture_;
@@ -1422,6 +1431,7 @@ namespace CNA::Internal::Backends::WebGPU
         const WGPUExtent3D extent{static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
                                   static_cast<std::uint32_t>(depth)};
         wgpuQueueWriteTexture(owner_->Queue(), &destination, data, required, &layout, &extent);
+        return true;
     }
 
     // Same staged-copy/row-alignment/async-map technique as WebGPUTextureBackend::GetData()
@@ -4252,8 +4262,18 @@ struct VertexOutput {
             envMapDefaultWhiteCube_ = std::make_unique<WebGPUTextureCubeBackend>(*this, 1, false);
             const std::array<std::uint8_t, 4> whitePixel{255, 255, 255, 255};
             for (int face = 0; face < 6; ++face)
-                envMapDefaultWhiteCube_->SetData(face, 0, 0, 0, 1, 1, whitePixel.data(),
-                                                 static_cast<int>(whitePixel.size()));
+            {
+                // REMED-GFX-135: SetData now reports completion. This 1x1 white fallback is what
+                // an EnvironmentMapEffect without a cube map samples, so a face that failed to
+                // upload would silently darken every such draw -- say so instead.
+                if (!envMapDefaultWhiteCube_->SetData(face, 0, 0, 0, 1, 1, whitePixel.data(),
+                                                      static_cast<int>(whitePixel.size())))
+                {
+                    throw std::runtime_error(
+                        "CNA WebGPU: failed to upload the default white env-map cube face " +
+                        std::to_string(face));
+                }
+            }
         }
     }
 

@@ -61,8 +61,12 @@ namespace CNA::Internal::Backends::D3D11
         D3D11TextureCubeBackend(ID3D11Device* device, ID3D11DeviceContext* context,
                                 int size, bool mipMap, int surfaceFormat);
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once UpdateSubresource has been issued for the whole
+        /// requested face rectangle; false for an out-of-range face/level/rectangle, a null source
+        /// or a source buffer too small for the region. UpdateSubresource copies out of the
+        /// caller's memory before it returns, so the source is never retained past this call.
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: true only once the whole requested face rectangle has been copied out of
         /// the STAGING mirror; false for an out-of-range face/level or a failed staging
         /// creation/Map, so the shared layer rejects the read instead of fabricating a face.
@@ -90,8 +94,10 @@ namespace CNA::Internal::Backends::D3D11
         D3D11Texture3DBackend(ID3D11Device* device, ID3D11DeviceContext* context,
                               int w, int h, int depth, bool mipMap, int surfaceFormat);
 
-        void SetData(int level, int x, int y, int z, int w, int h, int depth,
-                     const void* data, int dataLength) override;
+        /// REMED-GFX-135: same explicit completion contract as D3D11TextureCubeBackend::SetData,
+        /// applied to the box's row pitch and depth pitch.
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
         /// REMED-GFX-130: same explicit completion contract as D3D11TextureCubeBackend::GetData,
         /// applied to the staging texture's RowPitch and DepthPitch.
         [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,

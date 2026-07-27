@@ -93,6 +93,11 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Uploads data to a sub-volume of the specified mip level.
          *
+         * REMED-GFX-135: this call has exactly two outcomes -- the complete requested box is
+         * stored, or it throws. It never returns after storing nothing or only part of the box.
+         * Every argument is validated before anything is uploaded, so a rejected call leaves the
+         * resource and the source array untouched.
+         *
          * @param level        Mip level to write (0 = full size).
          * @param left         Left boundary of the sub-volume in texels.
          * @param top          Top boundary of the sub-volume in texels.
@@ -102,13 +107,23 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param back         Back boundary (exclusive) of the sub-volume in texels.
          * @param data         Pointer to the source Color array.
          * @param startIndex   First element within @p data to start reading.
-         * @param elementCount Number of Color elements to upload.
+         * @param elementCount Number of Color elements the caller offers; must be at least the
+         *                     number of voxels in the requested box, of which exactly that many
+         *                     are read starting at @p startIndex.
+         * @throws System::ObjectDisposedException if this Texture3D has been disposed.
+         * @throws System::NotSupportedException if this backend cannot store the requested mip
+         *         level or box.
+         * @throws std::invalid_argument if @p data is null.
+         * @throws std::out_of_range for an invalid level, startIndex, elementCount or box.
          */
         void SetData(int level, int left, int top, int right, int bottom, int front, int back,
                      const Color* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads raw byte data to a sub-volume using a native pointer.
+         *
+         * REMED-GFX-135: shares SetData's completion contract -- it returns only after the whole
+         * box has been stored, and otherwise throws.
          *
          * @param level      Mip level to write.
          * @param left       Left boundary in texels.
@@ -119,6 +134,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param back       Back boundary (exclusive) in texels.
          * @param data       Pointer to the raw byte data.
          * @param dataLength Size of the data in bytes.
+         * @throws System::ObjectDisposedException if this Texture3D has been disposed.
+         * @throws System::NotSupportedException if this backend did not store the whole box.
+         * @throws std::invalid_argument if @p data is null.
          */
         NOXNA void SetDataPointerEXT(int level, int left, int top, int right, int bottom, int front, int back,
                                      const void* data, int dataLength);

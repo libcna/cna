@@ -42,17 +42,19 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // REMED-GFX-130: does THIS build's backend actually read a cube face back? See the identical
 // constant (and its full rationale) in tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // -----------------------------------------------------------------------
+// REMED-GFX-135 additionally makes the UPLOAD side of this fixture load-bearing: a backend that
+// cannot store a cube face now throws System::NotSupportedException out of TextureCubeReader's own
+// SetData call, so the whole ContentManager::Load fails instead of quietly returning an empty cube.
+// Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
     defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_HEADLESS)
-constexpr bool kCubeLevel0ReadbackSupported = false;
-constexpr bool kCubeMipReadbackSupported    = false;
-#elif defined(CNA_BACKEND_SOFTWARE)
-// SOFTWARE-82 stores level 0 only -- no cube mip storage in v1.
-constexpr bool kCubeLevel0ReadbackSupported = true;
-constexpr bool kCubeMipReadbackSupported    = false;
+constexpr bool kCubeStorageSupported         = false;
+constexpr bool kCubeLevel0ReadbackSupported  = false;
+constexpr bool kCubeMipReadbackSupported     = false;
 #else
-constexpr bool kCubeLevel0ReadbackSupported = true;
-constexpr bool kCubeMipReadbackSupported    = true;
+constexpr bool kCubeStorageSupported         = true;
+constexpr bool kCubeLevel0ReadbackSupported  = true;
+constexpr bool kCubeMipReadbackSupported     = true;
 #endif
 
 namespace
@@ -93,6 +95,17 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
     cm.setGraphicsDevice(gd);
 
+    // REMED-GFX-135: on a backend with no cube storage, TextureCubeReader's own SetData call now
+    // throws instead of silently discarding all 42 face/level uploads, so the load fails as a whole
+    // rather than handing back a TextureCube that reports LevelCount 7 and holds nothing. That is
+    // the content-pipeline consequence of the finding, asserted here rather than worked around.
+    if (!kCubeStorageSupported)
+    {
+        EXPECT_THROW((void)cm.Load<TextureCube>("SampleCube64DXT1Mips"),
+                     System::NotSupportedException);
+        return;
+    }
+
     TextureCube cube = cm.Load<TextureCube>("SampleCube64DXT1Mips");
 
     EXPECT_EQ(cube.getSizeProperty(), 64);
@@ -127,8 +140,9 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
         }
         EXPECT_TRUE(sawNonUniform) << "level 0 should not decode to a uniformly flat image";
 
-        // The smallest mip level (1x1) is the sub-4x4 DXT1 block-rounding edge case. Software
-        // stores no cube mip levels at all, so only the mip-capable backends assert content here.
+        // The smallest mip level (1x1) is the sub-4x4 DXT1 block-rounding edge case. Every backend
+        // that stores cube faces at all now stores the whole declared chain (REMED-GFX-135 gave
+        // Software the per-mip storage it was the last to be missing).
         if (kCubeMipReadbackSupported)
         {
             ASSERT_NO_THROW(cube.GetData(CubeMapFace::NegativeZ, 6, nullptr, &onePixel, 0, 1));

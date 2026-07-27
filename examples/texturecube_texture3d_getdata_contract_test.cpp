@@ -116,10 +116,12 @@ namespace
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_BACKEND_SOFTWARE)
-    // SOFTWARE-82 gives this backend real 6-face RGBA8 cube storage at mip 0 only (mip levels
-    // beyond 0 are not stored -- the same v1 boundary SoftwareTextureBackend::UpdatePixelsLevel
-    // states). Texture3D is an explicit documented v1 scope boundary, refused at construction.
-    constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Unsupported,
+    // SOFTWARE-82 gives this backend real 6-face RGBA8 cube storage. REMED-GFX-135 extended it to
+    // every mip level TextureCube declares (previously only level 0 was allocated, so this entry
+    // read `Support::Unsupported` for mips), which is what makes a mipmapped cube's LevelCount a
+    // claim the storage can actually back. Texture3D is an explicit documented v1 scope boundary,
+    // refused at construction.
+    constexpr Contract kContract{"SOFTWARE", true, Support::Exact, Support::Exact,
                                  false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_BACKEND_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
@@ -290,7 +292,16 @@ class CubeVolumeGetDataContractTest : public Game
     // Fixtures
     // ---------------------------------------------------------------------
 
-    /// Uploads the full pattern for one cube mip level, one face at a time.
+    /**
+     * @brief Uploads the full pattern for one cube mip level, one face at a time.
+     *
+     * REMED-GFX-135 gave SetData the same two-outcome contract GetData has, so on a backend with no
+     * cube storage this fixture now raises System::NotSupportedException instead of quietly doing
+     * nothing. That rejection is the write side's own subject and is asserted in
+     * texturecube_texture3d_setdata_contract_test.cpp; here it only means "there is nothing to read
+     * back", which is exactly what the Unsupported contract below already expects, so it is
+     * absorbed rather than allowed to abort this file.
+     */
     static void UploadCubeLevel(TextureCube& cube, int level)
     {
         const int dim = MipDim(kCube, level);
@@ -300,12 +311,17 @@ class CubeVolumeGetDataContractTest : public Game
             src.reserve(static_cast<std::size_t>(dim) * dim);
             for (int y = 0; y < dim; ++y)
                 for (int x = 0; x < dim; ++x) src.push_back(CubeTexel(face, level, x, y));
-            cube.SetData(static_cast<CubeMapFace>(face), level, nullptr, src.data(), 0,
-                         static_cast<int>(src.size()));
+            try
+            {
+                cube.SetData(static_cast<CubeMapFace>(face), level, nullptr, src.data(), 0,
+                             static_cast<int>(src.size()));
+            }
+            catch (const System::NotSupportedException&) { }
         }
     }
 
-    /// Uploads the full pattern for one Texture3D mip level in a single call.
+    /// Uploads the full pattern for one Texture3D mip level in a single call. See UploadCubeLevel
+    /// for why an unsupported upload is absorbed here (REMED-GFX-135).
     static void UploadVolumeLevel(Texture3D& vol, int level)
     {
         const int w = MipDim(kVolW, level);
@@ -316,7 +332,11 @@ class CubeVolumeGetDataContractTest : public Game
         for (int z = 0; z < d; ++z)
             for (int y = 0; y < h; ++y)
                 for (int x = 0; x < w; ++x) src.push_back(VolumeVoxel(level, x, y, z));
-        vol.SetData(level, 0, 0, w, h, 0, d, src.data(), 0, static_cast<int>(src.size()));
+        try
+        {
+            vol.SetData(level, 0, 0, w, h, 0, d, src.data(), 0, static_cast<int>(src.size()));
+        }
+        catch (const System::NotSupportedException&) { }
     }
 
     // ---------------------------------------------------------------------
@@ -739,7 +759,10 @@ class CubeVolumeGetDataContractTest : public Game
         {
             TextureCube dead(dev, kCube, false, SurfaceFormat::Color);
             std::vector<Color> flat(static_cast<std::size_t>(kCube) * kCube, Color(200, 100, 50, 25));
-            dead.SetData(CubeMapFace::PositiveX, flat.data(), static_cast<int>(flat.size()));
+            // REMED-GFX-135: pre-populating the doomed cube is a convenience, not the subject --
+            // a backend with no cube storage now rejects the upload rather than ignoring it.
+            try { dead.SetData(CubeMapFace::PositiveX, flat.data(), static_cast<int>(flat.size())); }
+            catch (const System::NotSupportedException&) { }
             dead.Dispose();
             std::vector<Color> got(static_cast<std::size_t>(kCube) * kCube, SentinelA5());
             bool threwDisposed = false;
@@ -998,7 +1021,8 @@ class CubeVolumeGetDataContractTest : public Game
         {
             Texture3D dead(dev, kVolW, kVolH, kVolD, false, SurfaceFormat::Color);
             std::vector<Color> flat(static_cast<std::size_t>(kVolW) * kVolH * kVolD, Color(9, 8, 7, 6));
-            dead.SetData(flat.data(), static_cast<int>(flat.size()));
+            try { dead.SetData(flat.data(), static_cast<int>(flat.size())); }
+            catch (const System::NotSupportedException&) { }
             dead.Dispose();
             std::vector<Color> got(flat.size(), SentinelA5());
             bool threwDisposed = false;

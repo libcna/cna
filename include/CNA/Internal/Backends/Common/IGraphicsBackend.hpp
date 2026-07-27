@@ -186,9 +186,39 @@ namespace CNA::Internal::Backends
     {
     public:
         virtual ~ITextureCubeBackend() = default;
-        /** @brief Uploads raw byte data to a sub-rectangle of a single cube face. */
-        virtual void SetData(int face, int level, int x, int y, int w, int h,
-                             const void* data, int dataLength) = 0;
+        /**
+         * @brief Uploads raw RGBA8 pixels into a sub-rectangle of a single cube face.
+         *
+         * REMED-GFX-135, the write-side counterpart of `GetData`'s contract below. Returns **true
+         * only when the COMPLETE requested region was stored**, and false when this backend stored
+         * nothing. There is no third state: an implementation that cannot store the region, or that
+         * fails part-way through, must return false rather than reporting a partial write as
+         * success.
+         *
+         * There is deliberately no default body. `void` was the whole defect: it left an
+         * implementation no way to say "I stored nothing", so `TextureCube::SetData`'s
+         * `if (backend_) backend_->SetData(...)` returned normally after an upload that had been
+         * validated, traced and discarded (Headless), dropped for an unstored mip level (Software),
+         * or never attempted at all. The shared layer now raises `System::NotSupportedException` on
+         * false, so the one thing a backend can never do is accept data it does not keep.
+         *
+         * `data` holds the region as tightly packed RGBA8 rows, top row first, so its row pitch is
+         * `w * 4`. The caller's memory is valid only for the duration of the call: an implementation
+         * that hands it to an asynchronous native upload must copy or stage it before returning
+         * true.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to write.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Source pixels, tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True if the whole region was stored; false if this backend stored nothing.
+         */
+        [[nodiscard]] virtual bool SetData(int face, int level, int x, int y, int w, int h,
+                                           const void* data, int dataLength) = 0;
         /**
          * @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face.
          *
@@ -233,10 +263,28 @@ namespace CNA::Internal::Backends
     {
     public:
         virtual ~ITexture3DBackend() = default;
-        /** @brief Uploads raw byte data to a sub-volume of the given mip level. */
-        virtual void SetData(int level, int x, int y, int z,
-                             int w, int h, int depth,
-                             const void* data, int dataLength) = 0;
+        /**
+         * @brief Uploads raw RGBA8 voxels into a sub-volume of the given mip level.
+         *
+         * REMED-GFX-135. Identical contract to `ITextureCubeBackend::SetData` -- see its
+         * documentation for why there is no default body. `data` holds the requested box slice by
+         * slice (front to back), each slice as tightly packed RGBA8 rows with the top row first, so
+         * the row pitch is `w * 4` and the slice pitch is `w * h * 4`.
+         *
+         * @param level      Mip level to write.
+         * @param x          Left edge of the requested box, in voxels.
+         * @param y          Top edge of the requested box, in voxels.
+         * @param z          Front edge of the requested box, in voxels.
+         * @param w          Width of the requested box, in voxels.
+         * @param h          Height of the requested box, in voxels.
+         * @param depth      Depth of the requested box, in voxels.
+         * @param data       Source voxels, tightly packed RGBA8.
+         * @param dataLength Size of @p data in bytes; at least w * h * depth * 4.
+         * @return True if the whole box was stored; false if this backend stored nothing.
+         */
+        [[nodiscard]] virtual bool SetData(int level, int x, int y, int z,
+                                           int w, int h, int depth,
+                                           const void* data, int dataLength) = 0;
         /**
          * @brief Reads back raw RGBA8 voxels from a sub-volume of the given mip level.
          *
@@ -373,9 +421,26 @@ namespace CNA::Internal::Backends
             return depthFormatWasRequested;
         }
 
-        // ITextureCubeBackend — render targets do not support CPU-side SetData; no-op by default.
-        void SetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
-                     const void* /*data*/, int /*dataLength*/) override {}
+        /**
+         * @brief Reports that this backend cannot upload CPU pixels into a rendered cube face.
+         *
+         * REMED-GFX-135. This body used to be `{}` -- an empty override that made
+         * `RenderTargetCube::SetData` (inherited from `TextureCube`) return normally on every
+         * backend while storing nothing, which is exactly the accept-and-discard this finding
+         * removes, reached through inheritance instead of a null backend. `false` makes the shared
+         * layer raise `System::NotSupportedException` instead.
+         *
+         * EasyGL overrides this with a real upload into the shared GL cube texture; the other
+         * render-target cube backends inherit this refusal, matching `GetData`'s own default
+         * immediately below.
+         *
+         * @return Always false.
+         */
+        [[nodiscard]] bool SetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/,
+                                   int /*h*/, const void* /*data*/, int /*dataLength*/) override
+        {
+            return false;
+        }
 
         // ITextureCubeBackend::GetData is deliberately NOT re-declared here: a render-target cube
         // inherits the same `return false` default, which means "this backend cannot read a

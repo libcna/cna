@@ -21,6 +21,7 @@
 // See the "TextureCollection assignment / Texture base class (Task 863)" section below.
 
 #include <gtest/gtest.h>
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -33,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -166,12 +168,60 @@ TEST_F(Texture3DTest, SetDataStartIndexNegativeStartIndexThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(buf.data(), -1, 8), std::out_of_range);
 }
 
-TEST_F(Texture3DTest, SetDataExactElementCountDoesNotThrow)
+// REMED-GFX-135: both overloads used to be bare EXPECT_NO_THROWs, which a backend that dropped the
+// upload passed just as easily as one that stored it. Every backend reaching this fixture has real
+// volume storage (the SetUp above skips the rest), so the readback is the oracle: it proves the
+// second (startIndex) overload stored ITS OWN data rather than leaving the first call's behind.
+TEST_F(Texture3DTest, SetDataExactElementCountStoresTheWholeVolume)
+{
+    Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    std::vector<Color> first(8, Color(1, 2, 3, 4));
+    std::vector<Color> second(8, Color(9, 8, 7, 6));
+    EXPECT_NO_THROW(tex.SetData(first.data(), 8));
+    EXPECT_NO_THROW(tex.SetData(second.data(), 0, 8));
+
+    std::vector<Color> got(8, Color(0xCD, 0xCD, 0xCD, 0xCD));
+    ASSERT_NO_THROW(tex.GetData(got.data(), 8));
+    for (const Color& c : got)
+        EXPECT_EQ(c.getPackedValueProperty(), second[0].getPackedValueProperty());
+}
+
+// REMED-GFX-135: a source array padded on both sides of the uploaded window -- the padding must
+// never reach the resource, which is what proves startIndex is applied exactly once.
+TEST_F(Texture3DTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
+{
+    Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    const Color poison(0x7E, 0x11, 0x33, 0x5C);
+    std::vector<Color> src(15, poison);
+    for (int i = 0; i < 8; ++i)
+        src[static_cast<std::size_t>(4 + i)] =
+            Color(static_cast<std::uint8_t>(20 + i * 11), 130,
+                  static_cast<std::uint8_t>(200 - i * 9), static_cast<std::uint8_t>(150 + i));
+    EXPECT_NO_THROW(tex.SetData(src.data(), 4, 8));
+
+    std::vector<Color> got(8, Color(0xCD, 0xCD, 0xCD, 0xCD));
+    ASSERT_NO_THROW(tex.GetData(got.data(), 8));
+    for (int i = 0; i < 8; ++i)
+    {
+        EXPECT_EQ(got[static_cast<std::size_t>(i)].getPackedValueProperty(),
+                  src[static_cast<std::size_t>(4 + i)].getPackedValueProperty());
+        EXPECT_NE(got[static_cast<std::size_t>(i)].getPackedValueProperty(),
+                  poison.getPackedValueProperty());
+    }
+}
+
+// REMED-GFX-135: SetData after Dispose() used to be a silent no-op, while GetData already threw.
+TEST_F(Texture3DTest, SetDataAfterDisposeThrowsObjectDisposed)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     std::vector<Color> buf(8, Color(1, 2, 3, 4));
-    EXPECT_NO_THROW(tex.SetData(buf.data(), 8));
-    EXPECT_NO_THROW(tex.SetData(buf.data(), 0, 8));
+    tex.Dispose();
+    EXPECT_THROW(tex.SetData(buf.data(), 8), System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 2, buf.data(), 0, 8), System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetDataPointerEXT(0, 0, 0, 2, 2, 0, 2, buf.data(), 32),
+                 System::ObjectDisposedException);
+    tex.Dispose();   // repeated Dispose must not change the answer
+    EXPECT_THROW(tex.SetData(buf.data(), 8), System::ObjectDisposedException);
 }
 
 // -----------------------------------------------------------------------
@@ -227,11 +277,23 @@ TEST_F(Texture3DTest, SetDataBoxFrontNotLessThanBackThrowsOutOfRange)
     EXPECT_THROW(tex.SetData(0, 0, 0, 2, 2, 1, 1, buf.data(), 0, 4), std::out_of_range);
 }
 
-TEST_F(Texture3DTest, SetDataBoxWithinBoundsDoesNotThrow)
+// REMED-GFX-135: was a bare EXPECT_NO_THROW. It now proves the sub-box landed on slice 0 only and
+// left slice 1 untouched -- a write that flattened the volume or duplicated the slice fails.
+TEST_F(Texture3DTest, SetDataBoxWithinBoundsStoresOnlyThatSlice)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    std::vector<Color> whole(8, Color(40, 41, 42, 43));
+    EXPECT_NO_THROW(tex.SetData(whole.data(), 8));
+
     std::vector<Color> buf(4, Color(1, 2, 3, 4));
     EXPECT_NO_THROW(tex.SetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
+
+    std::vector<Color> got(8, Color(0xCD, 0xCD, 0xCD, 0xCD));
+    ASSERT_NO_THROW(tex.GetData(got.data(), 8));
+    for (std::size_t i = 0; i < 4; ++i)
+        EXPECT_EQ(got[i].getPackedValueProperty(), buf[0].getPackedValueProperty()) << "slice 0, i=" << i;
+    for (std::size_t i = 4; i < 8; ++i)
+        EXPECT_EQ(got[i].getPackedValueProperty(), whole[0].getPackedValueProperty()) << "slice 1, i=" << i;
 }
 
 // Task 913: elementCount must cover the full requested region (right-left)*(bottom-top)*

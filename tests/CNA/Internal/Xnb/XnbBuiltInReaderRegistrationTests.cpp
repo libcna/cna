@@ -9,6 +9,8 @@
 
 #include <gtest/gtest.h>
 
+#include "System/NotSupportedException.hpp"
+
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -142,10 +144,29 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
     EXPECT_GT(texture.getHeightProperty(), 0);
 }
 
+
+// REMED-GFX-135: does THIS build's backend actually store a cube face? SDL_Renderer, ASCII, Canvas
+// and DX3 create no cube resource at all and Headless stores no pixel data by design, so
+// TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
+// deterministically instead of accepting the data and discarding it. Same constant and same
+// reviewed backend set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
+#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_HEADLESS)
+constexpr bool kCubeStorageSupported = false;
+#else
+constexpr bool kCubeStorageSupported = true;
+#endif
+
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATextureCubeFixtureWithNoOtherSetup)
 {
     ContentManager cm(nullptr, kUncompressedDir);
     cm.setGraphicsDevice(gd);
+    if (!kCubeStorageSupported)
+    {
+        EXPECT_THROW((void)cm.Load<TextureCube>("SampleCube64DXT1Mips"),
+                     System::NotSupportedException);
+        return;
+    }
     TextureCube cube = cm.Load<TextureCube>("SampleCube64DXT1Mips");
     EXPECT_EQ(cube.getSizeProperty(), 64);
 }

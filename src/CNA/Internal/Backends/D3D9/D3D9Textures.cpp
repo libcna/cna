@@ -103,10 +103,16 @@ namespace CNA::Internal::Backends::D3D9
             throw std::runtime_error("D3D9TextureCubeBackend: CreateCubeTexture failed, hr=" + FormatHr(hr));
     }
 
-    void D3D9TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
-                                         const void* data, int /*dataLength*/)
+    bool D3D9TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                         const void* data, int dataLength)
     {
-        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6) return;
+        // REMED-GFX-135: these used to be a silent `return` the shared layer read as a completed
+        // upload, and neither the source pointer nor the rectangle was checked at all.
+        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6) return false;
+        if (data == nullptr || w <= 0 || h <= 0) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
 
         RECT rect{ x, y, x + w, y + h };
         D3DLOCKED_RECT locked{};
@@ -124,6 +130,7 @@ namespace CNA::Internal::Backends::D3D9
                         src + static_cast<std::size_t>(row) * rowBytes, rowBytes);
         }
         texture_->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), static_cast<UINT>(level));
+        return true;
     }
 
     bool D3D9TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
@@ -170,10 +177,18 @@ namespace CNA::Internal::Backends::D3D9
             throw std::runtime_error("D3D9Texture3DBackend: CreateVolumeTexture failed, hr=" + FormatHr(hr));
     }
 
-    void D3D9Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
-                                       const void* data, int /*dataLength*/)
+    bool D3D9Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                       const void* data, int dataLength)
     {
-        if (level < 0 || level >= mipLevels_) return;
+        // REMED-GFX-135: see D3D9TextureCubeBackend::SetData -- silent returns looked like writes.
+        if (level < 0 || level >= mipLevels_) return false;
+        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        if (dataLength < w * h * depth * 4) return false;
 
         D3DBOX box{};
         box.Left = static_cast<UINT>(x);
@@ -204,6 +219,7 @@ namespace CNA::Internal::Backends::D3D9
             }
         }
         texture_->UnlockBox(static_cast<UINT>(level));
+        return true;
     }
 
     bool D3D9Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,

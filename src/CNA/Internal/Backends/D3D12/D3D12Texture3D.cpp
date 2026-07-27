@@ -106,10 +106,19 @@ namespace CNA::Internal::Backends::D3D12
         backend_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
-    void D3D12Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
-                                        const void* data, int /*dataLength*/)
+    bool D3D12Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                        const void* data, int dataLength)
     {
-        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return;
+        // REMED-GFX-135: this used to be a silent `return` the shared layer read as a completed
+        // upload.
+        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (data == nullptr) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        if (dataLength < w * h * depth * 4) return false;
 
         // Row-pitch-aligned staging BUFFER, one slice-pitch-sized region per Z slice -- same
         // discipline D3D12TextureBackend::UploadRegion already established for its own 2D case,
@@ -198,6 +207,7 @@ namespace CNA::Internal::Backends::D3D12
         if (FAILED(hr))
             throw std::runtime_error("D3D12Texture3DBackend::SetData: command list Close failed, hr=" + FormatHr(hr));
         backend_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
+        return true;
     }
 
     bool D3D12Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,

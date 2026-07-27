@@ -84,6 +84,7 @@ namespace CNA::Internal::Backends::EasyGL
 
     EasyGLTexture3DBackend::EasyGLTexture3DBackend(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
         : width_(w), height_(h), depth_(depth)
+        , levelCount_(mipMap ? CalculateTexture3DMipLevels(w, h) : 1)
     {
         tex_.create();
         tex_.bind(::easygl::TextureTarget::Texture3D);
@@ -91,7 +92,7 @@ namespace CNA::Internal::Backends::EasyGL
         // use glTexSubImage3D, which requires the target level to already have a defined image —
         // without this loop, SetData(level>0,...) would silently fail (same bug shape as Task
         // 276's TextureCube finding).
-        const int levelCount = mipMap ? CalculateTexture3DMipLevels(w, h) : 1;
+        const int levelCount = levelCount_;
         int levelW = w, levelH = h, levelD = depth;
         for (int level = 0; level < levelCount; ++level)
         {
@@ -111,16 +112,42 @@ namespace CNA::Internal::Backends::EasyGL
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
     }
 
-    void EasyGLTexture3DBackend::SetData(int level, int x, int y, int z,
-                                          int w, int h, int depth,
-                                          const void* data, int /*dataLength*/)
+    // REMED-GFX-135: glTexSubImage2D/3D have no return value, so GL's error queue is the only
+    // completion signal it offers. Drained BEFORE the upload so a stale error left by unrelated code
+    // cannot be misread as this call failing, and read AFTER it so an upload the driver rejected is
+    // reported as such instead of being returned as a completed write.
+    static void DrainGlErrors()
     {
+        for (int i = 0; i < 8; ++i)
+            if (::metagl::glGetError() == ::metagl::ErrorCode::NoError) return;
+    }
+
+    static bool GlUploadSucceeded()
+    {
+        return ::metagl::glGetError() == ::metagl::ErrorCode::NoError;
+    }
+
+    bool EasyGLTexture3DBackend::SetData(int level, int x, int y, int z,
+                                          int w, int h, int depth,
+                                          const void* data, int dataLength)
+    {
+        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        const int levelD = std::max(1, depth_ >> level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        if (dataLength < w * h * depth * 4) return false;
+
+        DrainGlErrors();
         tex_.bind(::easygl::TextureTarget::Texture3D);
         tex_.set_sub_image_3d(::easygl::TextureTarget::Texture3D, level,
                               x, y, z, w, h, depth,
                               ::metagl::PixelFormat::Rgba,
                               ::metagl::PixelType::UnsignedByte,
                               data);
+        return GlUploadSucceeded();
     }
 
     void EasyGLTexture3DBackend::BindGL() const
@@ -150,13 +177,14 @@ namespace CNA::Internal::Backends::EasyGL
 
     EasyGLTextureCubeBackend::EasyGLTextureCubeBackend(int size, bool mipMap, int /*surfaceFormat*/)
         : size_(size)
+        , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
     {
         tex_.create();
         tex_.bind(::easygl::TextureTarget::TextureCubeMap);
         // Pre-allocate GPU storage for every mip level (not just level 0): SetData's box writes
         // use glTexSubImage2D, which requires the target level to already have a defined image —
         // without this loop, SetData(level>0,...) would silently fail (Task 276 finding).
-        const int levelCount = mipMap ? CalculateCubeMipLevels(size) : 1;
+        const int levelCount = levelCount_;
         for (auto faceTarget : kCubeFaceTargets)
         {
             int levelSize = size;
@@ -222,15 +250,24 @@ namespace CNA::Internal::Backends::EasyGL
         tex_.bind(::easygl::TextureTarget::TextureCubeMap);
     }
 
-    void EasyGLTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
-                                            const void* data, int /*dataLength*/)
+    bool EasyGLTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                            const void* data, int dataLength)
     {
-        if (face < 0 || face >= 6) return;
+        // REMED-GFX-135: the face guard used to be a silent `return`, which the shared layer could
+        // not tell apart from a completed upload.
+        if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
+
+        DrainGlErrors();
         tex_.bind(::easygl::TextureTarget::TextureCubeMap);
         tex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
                               ::metagl::PixelFormat::Rgba,
                               ::metagl::PixelType::UnsignedByte,
                               data);
+        return GlUploadSucceeded();
     }
 
     bool EasyGLTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
@@ -990,15 +1027,25 @@ namespace CNA::Internal::Backends::EasyGL
         cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
     }
 
-    void EasyGLRenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
-                                                 const void* data, int /*dataLength*/)
+    bool EasyGLRenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                                 const void* data, int dataLength)
     {
-        if (face < 0 || face >= 6) return;
+        // REMED-GFX-135: same completion contract as EasyGLTextureCubeBackend::SetData -- this is
+        // the one render-target cube that really stores CPU pixels rather than inheriting
+        // IRenderTargetCubeBackend::SetData's refusal.
+        if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
+
+        DrainGlErrors();
         cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
         cubeTex_.set_sub_image_2d(kCubeFaceTargets[face], level, x, y, w, h,
                                    ::metagl::PixelFormat::Rgba,
                                    ::metagl::PixelType::UnsignedByte,
                                    data);
+        return GlUploadSucceeded();
     }
 
     void EasyGLRenderTargetCubeBackend::release_gl_handle_only()

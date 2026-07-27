@@ -1342,29 +1342,61 @@ namespace CNA::Internal::Backends::Software
 
     // ---- SoftwareTextureCubeBackend (SOFTWARE-82) ----
 
-    SoftwareTextureCubeBackend::SoftwareTextureCubeBackend(int size) : size_(size)
+    // REMED-GFX-135: mirrors TextureCube.cpp's CalculateMipLevels(size,size) -- cube faces are
+    // square, so the chain length is driven by a single edge.
+    static int CalculateCubeMipLevels(int size)
     {
-        const std::size_t faceBytes = static_cast<std::size_t>(size) * static_cast<std::size_t>(size) * 4u;
-        for (auto& face : faces_)
-            face.assign(faceBytes, 0u);
+        int levels = 1;
+        int s = size;
+        while (s > 1) { s = std::max(1, s / 2); ++levels; }
+        return levels;
     }
 
-    void SoftwareTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
-                                             const void* data, int)
+    int SoftwareTextureCubeBackend::LevelDim(int level) const
     {
-        if (level != 0 || data == nullptr || face < 0 || face > 5)
-            return;  // mirrors SoftwareTextureBackend::UpdatePixelsLevel's no-op-beyond-level-0 precedent
+        return std::max(1, size_ >> level);
+    }
+
+    SoftwareTextureCubeBackend::SoftwareTextureCubeBackend(int size, bool mipMap)
+        : size_(size)
+        , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
+    {
+        levels_.resize(static_cast<std::size_t>(levelCount_));
+        for (int level = 0; level < levelCount_; ++level)
+        {
+            const int dim = LevelDim(level);
+            const std::size_t faceBytes = static_cast<std::size_t>(dim) * static_cast<std::size_t>(dim) * 4u;
+            for (auto& face : levels_[static_cast<std::size_t>(level)])
+                face.assign(faceBytes, 0u);
+        }
+    }
+
+    bool SoftwareTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                             const void* data, int dataLength)
+    {
+        // REMED-GFX-135: `level != 0` used to be a silent early `return` -- the shared layer had no
+        // way to tell that apart from a completed upload, so a mipmapped cube accepted every level
+        // and kept only level 0. Every level TextureCube declares now has real storage, and
+        // anything outside the chain is refused rather than swallowed.
+        if (data == nullptr || face < 0 || face > 5) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int dim = LevelDim(level);
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > dim || y + h > dim) return false;
+        if (dataLength < w * h * 4) return false;
+
         const auto* src = static_cast<const std::uint8_t*>(data);
-        std::vector<std::uint8_t>& pixels = faces_[static_cast<std::size_t>(face)];
+        std::vector<std::uint8_t>& pixels =
+            levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
         const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
         for (int row = 0; row < h; ++row)
         {
-            const std::size_t dstOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(size_) +
+            const std::size_t dstOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(dim) +
                                           static_cast<std::size_t>(x)) * 4u;
             std::copy(src + static_cast<std::size_t>(row) * rowBytes,
                      src + static_cast<std::size_t>(row) * rowBytes + rowBytes,
                      pixels.begin() + static_cast<std::ptrdiff_t>(dstOffset));
         }
+        return true;
     }
 
     bool SoftwareTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
@@ -1372,18 +1404,22 @@ namespace CNA::Internal::Backends::Software
     {
         // REMED-GFX-130: every rejection below used to be a silent `return`, which the shared layer
         // turned into a complete transparent-black face rather than a refusal.
-        if (level != 0 || data == nullptr || face < 0 || face > 5)
+        if (data == nullptr || face < 0 || face > 5)
             return false;
-        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > size_ || y + h > size_)
+        if (level < 0 || level >= levelCount_)
+            return false;
+        const int dim = LevelDim(level);
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > dim || y + h > dim)
             return false;
         if (dataLength < w * h * 4)
             return false;
         auto* dst = static_cast<std::uint8_t*>(data);
-        const std::vector<std::uint8_t>& pixels = faces_[static_cast<std::size_t>(face)];
+        const std::vector<std::uint8_t>& pixels =
+            levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
         const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
         for (int row = 0; row < h; ++row)
         {
-            const std::size_t srcOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(size_) +
+            const std::size_t srcOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(dim) +
                                           static_cast<std::size_t>(x)) * 4u;
             std::copy(pixels.begin() + static_cast<std::ptrdiff_t>(srcOffset),
                      pixels.begin() + static_cast<std::ptrdiff_t>(srcOffset) + static_cast<std::ptrdiff_t>(rowBytes),
@@ -1706,9 +1742,11 @@ namespace CNA::Internal::Backends::Software
         return std::make_unique<SoftwareTextureBackend>(data);
     }
 
-    std::unique_ptr<ITextureCubeBackend> SoftwareGraphicsBackend::CreateTextureCube(int size, bool, int)
+    std::unique_ptr<ITextureCubeBackend> SoftwareGraphicsBackend::CreateTextureCube(int size, bool mipMap, int)
     {
-        return std::make_unique<SoftwareTextureCubeBackend>(size);
+        // REMED-GFX-135: `mipMap` used to be discarded here, so a mipmapped TextureCube reported a
+        // LevelCount whose storage did not exist and every mip upload was dropped in silence.
+        return std::make_unique<SoftwareTextureCubeBackend>(size, mipMap);
     }
 
     bool SoftwareGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const

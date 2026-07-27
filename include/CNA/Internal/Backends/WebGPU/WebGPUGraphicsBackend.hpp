@@ -213,8 +213,14 @@ namespace CNA::Internal::Backends::WebGPU
         WebGPUTextureCubeBackend(const WebGPUTextureCubeBackend&) = delete;
         WebGPUTextureCubeBackend& operator=(const WebGPUTextureCubeBackend&) = delete;
 
-        void SetData(int face, int level, int x, int y, int w, int h,
-                    const void* data, int dataLength) override;
+        /// REMED-GFX-135: true only once the whole region has been handed to
+        /// `wgpuQueueWriteTexture`, which copies out of the caller's memory before returning; false
+        /// for an out-of-range face/level/rectangle or a source buffer too small for the region.
+        /// Those rejections used to be `std::out_of_range`/`std::invalid_argument` thrown from a
+        /// backend, which escaped the public API as raw std exceptions instead of the shared
+        /// layer's own deterministic `System::NotSupportedException`.
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
         /// WEBGPU-113: real per-face CPU readback, closing this class's former no-op
         /// `ITextureCubeBackend::GetData()` default. Same staged-copy/row-alignment/async-map
         /// technique as `WebGPUTextureBackend::GetData()` (WEBGPU-51), with `origin.z = face`
@@ -329,9 +335,10 @@ namespace CNA::Internal::Backends::WebGPU
         WebGPUTexture3DBackend(const WebGPUTexture3DBackend&) = delete;
         WebGPUTexture3DBackend& operator=(const WebGPUTexture3DBackend&) = delete;
 
-        void SetData(int level, int x, int y, int z,
-                    int w, int h, int depth,
-                    const void* data, int dataLength) override;
+        /// REMED-GFX-135: same explicit completion contract as WebGPUTextureCubeBackend::SetData.
+        [[nodiscard]] bool SetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   const void* data, int dataLength) override;
         /// Same staged-copy/row-alignment/async-map technique as `WebGPUTextureBackend::GetData()`
         /// (WEBGPU-51), extended to a 3rd (depth) dimension: the whole requested level is copied
         /// to a temporary readback buffer sized `alignedBytesPerRow * levelHeight * levelDepth`,
