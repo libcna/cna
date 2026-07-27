@@ -189,6 +189,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${_d3d11_rendertargetcube_getdata_contract_cmd}
         TIMEOUT 60 LABELS "D3D11")
 
+    # REMED-GFX-136: IGraphicsBackend::CreateRenderTargetCube had no `preserveContents` parameter,
+    # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
+    # backend and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
+    # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
+    # marker landed" is what a discarding backend also achieves, so it can never pass for
+    # preservation.
+    cna_d3d11_test(cna_test_d3d11_rendertargetcube_usage
+                   examples/rendertargetcube_usage_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_rendertargetcube_usage_cmd cna_test_d3d11_rendertargetcube_usage)
+    cna_register_backend_test(NAME D3D11_RenderTargetCube_Usage
+        COMMAND ${_d3d11_rendertargetcube_usage_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.

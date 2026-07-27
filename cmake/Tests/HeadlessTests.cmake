@@ -75,6 +75,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
         COMMAND cna_test_headless_rendertargetcube_getdata_contract
         TIMEOUT 30 LABELS "Headless")
 
+    # REMED-GFX-136: IGraphicsBackend::CreateRenderTargetCube had no `preserveContents` parameter,
+    # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
+    # backend and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
+    # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
+    # marker landed" is what a discarding backend also achieves, so it can never pass for
+    # preservation.
+    cna_headless_test(cna_test_headless_rendertargetcube_usage
+                      examples/rendertargetcube_usage_test.cpp)
+    cna_register_backend_test(NAME Headless_RenderTargetCube_Usage
+        COMMAND cna_test_headless_rendertargetcube_usage
+        TIMEOUT 30 LABELS "Headless")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.

@@ -76,6 +76,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Ascii_RenderTargetCube_GetDataContract COMMAND cna_test_ascii_rendertargetcube_getdata_contract
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-136: IGraphicsBackend::CreateRenderTargetCube had no `preserveContents` parameter,
+    # unlike CreateRenderTarget2D, so a RenderTargetCube's real RenderTargetUsage never reached the
+    # backend and Vulkan/WebGPU discarded a PreserveContents cube face on every bind cycle. Reuses
+    # REMED-GFX-134's asymmetric face producer, then rebinds and draws only a small marker: "the
+    # marker landed" is what a discarding backend also achieves, so it can never pass for
+    # preservation.
+    cna_ascii_test(cna_test_ascii_rendertargetcube_usage
+                   examples/rendertargetcube_usage_test.cpp)
+    cna_register_backend_test(NAME Ascii_RenderTargetCube_Usage COMMAND cna_test_ascii_rendertargetcube_usage
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
