@@ -511,6 +511,47 @@ TEST_F(TextureCubeTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
     }
 }
 
+// REMED-GFX-135: a mipmapped cube declares LevelCount mip levels; every one of them must have real
+// storage behind it. Software was the last backend allocating level 0 only, so this walked the
+// whole declared chain and passed on a resource that kept just the first level.
+TEST_F(TextureCubeTest, EveryDeclaredMipLevelStoresItsOwnContent)
+{
+    TextureCube tex(gd, 8, true, SurfaceFormat::Color);
+    const int levels = tex.getLevelCountProperty();
+    ASSERT_EQ(levels, 4);   // 8 -> 4 -> 2 -> 1
+
+    for (int level = 0; level < levels; ++level)
+    {
+        const int dim = 8 >> level;
+        std::vector<Color> src(static_cast<std::size_t>(dim) * dim,
+                               Color(static_cast<std::uint8_t>(30 + level * 50),
+                                     static_cast<std::uint8_t>(200 - level * 40),
+                                     static_cast<std::uint8_t>(7 + level * 25),
+                                     static_cast<std::uint8_t>(90 + level * 30)));
+        ExpectUploadStoredOrRefused(
+            [&] { tex.SetData(CubeMapFace::PositiveZ, level, nullptr, src.data(), 0,
+                              static_cast<int>(src.size())); });
+    }
+
+    if (!kCubeLevel0ReadbackSupported) return;
+
+    // Read back in reverse, so a backend that kept only the LAST write cannot pass either.
+    for (int level = levels - 1; level >= 0; --level)
+    {
+        const int dim = 8 >> level;
+        const Color expected(static_cast<std::uint8_t>(30 + level * 50),
+                             static_cast<std::uint8_t>(200 - level * 40),
+                             static_cast<std::uint8_t>(7 + level * 25),
+                             static_cast<std::uint8_t>(90 + level * 30));
+        std::vector<Color> got(static_cast<std::size_t>(dim) * dim, Color(0xCD, 0xCD, 0xCD, 0xCD));
+        ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveZ, level, nullptr, got.data(), 0,
+                                    static_cast<int>(got.size()))) << "level " << level;
+        for (const Color& c : got)
+            EXPECT_EQ(c.getPackedValueProperty(), expected.getPackedValueProperty())
+                << "level " << level;
+    }
+}
+
 // REMED-GFX-135: SetData after Dispose() used to be a silent no-op, while GetData already threw --
 // so a caller could be told the resource was gone on read and never on write.
 TEST_F(TextureCubeTest, SetDataAfterDisposeThrowsObjectDisposed)

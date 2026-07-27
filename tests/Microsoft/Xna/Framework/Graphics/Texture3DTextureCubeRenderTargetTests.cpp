@@ -154,3 +154,90 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
     // Matches the default parameter in RenderTarget2D and RenderTargetCube constructors.
     EXPECT_EQ(RenderTargetUsage::DiscardContents, static_cast<RenderTargetUsage>(0));
 }
+
+// -----------------------------------------------------------------------
+// RenderTargetCube::SetData — REMED-GFX-135
+//
+// RenderTargetCube IS a TextureCube, so it inherits SetData. Every backend except EasyGL leaves
+// IRenderTargetCubeBackend::SetData at its interface body, which used to be `{}` -- the same
+// accept-and-discard this finding removes, reached through inheritance rather than a null backend.
+// EasyGL is the one backend that overrides it with a real upload into the shared GL cube texture.
+//
+// Constructing a RenderTargetCube can legitimately fail on a backend that has no cube-map render
+// target at all (Software, SDL_Renderer, ASCII, Canvas, DX3 keep CreateRenderTargetCube's nullptr
+// default); that is not what is under test, so it is skipped rather than asserted either way.
+// -----------------------------------------------------------------------
+
+#include <memory>
+#include <vector>
+
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
+
+namespace
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
+    using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+
+#if defined(CNA_BACKEND_EASYGL)
+    /// EasyGLRenderTargetCubeBackend::SetData is a real glTexSubImage2D upload into the shared cube
+    /// texture. REMED-GFX-130 left RenderTargetCube READBACK unimplemented here (tracked as
+    /// REMED-GFX-134), so this test can only assert that the upload is accepted -- the byte-exact
+    /// content assertion for the identical `set_sub_image_2d` path lives on the plain cube in
+    /// examples/texturecube_texture3d_setdata_contract_test.cpp.
+    constexpr bool kRenderTargetCubeAcceptsSetData = true;
+#else
+    constexpr bool kRenderTargetCubeAcceptsSetData = false;
+#endif
+}
+
+TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilentlyDiscardsIt)
+{
+    GraphicsDevice gd;
+    std::unique_ptr<RenderTargetCube> rt;
+    try
+    {
+        rt = std::make_unique<RenderTargetCube>(gd, 4, false, SurfaceFormat::Color,
+                                                DepthFormat::None, 0,
+                                                RenderTargetUsage::DiscardContents);
+    }
+    catch (const std::exception&)
+    {
+        GTEST_SKIP() << "this backend creates no cube-map render target, so the inherited SetData "
+                        "is unreachable";
+    }
+
+    std::vector<Color> face(16, Color(64, 128, 192, 255));
+    if (kRenderTargetCubeAcceptsSetData)
+        EXPECT_NO_THROW(rt->SetData(CubeMapFace::PositiveX, face.data(), 16));
+    else
+        EXPECT_THROW(rt->SetData(CubeMapFace::PositiveX, face.data(), 16),
+                     System::NotSupportedException);
+}
+
+TEST(RenderTargetCubeSetDataContractTest, SetDataAfterDisposeThrowsObjectDisposed)
+{
+    GraphicsDevice gd;
+    std::unique_ptr<RenderTargetCube> rt;
+    try
+    {
+        rt = std::make_unique<RenderTargetCube>(gd, 4, false, SurfaceFormat::Color,
+                                                DepthFormat::None, 0,
+                                                RenderTargetUsage::DiscardContents);
+    }
+    catch (const std::exception&)
+    {
+        GTEST_SKIP() << "this backend creates no cube-map render target";
+    }
+
+    std::vector<Color> face(16, Color(64, 128, 192, 255));
+    rt->Dispose();
+    EXPECT_THROW(rt->SetData(CubeMapFace::PositiveX, face.data(), 16),
+                 System::ObjectDisposedException);
+}
