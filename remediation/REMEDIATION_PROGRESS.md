@@ -2476,8 +2476,13 @@ existing task.
 | REMED-GFX-124 | Software render targets could be neither read back nor sampled: `SoftwareRenderTargetBackend` implemented no `ITextureBackend::GetData` and was not a `SoftwareTextureBackend`. | MEDIUM | P2 | REMED-GFX-119 render-target control | **DONE 2026-07-27 — TWO INDEPENDENT DEFECTS, ONE ARCHITECTURAL CAUSE: THE TARGET'S COLOUR STORAGE WAS REACHABLE THROUGH NO INTERFACE ANY CONSUMER USED. THE INHERITED READBACK SYMPTOM WAS WRONG IN THE WORSE DIRECTION — `Texture2D::GetData` ZERO-INITIALIZES THE SCRATCH BUFFER IT HANDS THE BACKEND, SO A NO-OP BACKEND RETURNS A FABRICATED, FULLY WRITTEN TRANSPARENT-BLACK FRAME AND THE "DID GETDATA WRITE ANYTHING?" SENTINEL CHECK PASSES PRE-FIX. FIXED BY ONE SHARED READ-ONLY `SoftwareColorSurface` CAPABILITY IMPLEMENTED BY BOTH TEXTURE AND TARGET (NO DUPLICATE BUFFER, NO RESOLVE, NO COPY PER SAMPLE) PLUS A REAL `GetData` OVERRIDE OVER THE SAME STORAGE. NEW SUITE 88/88, A/B 32/88 PRE-FIX; `ctest -L Software` 17/17; ASAN/UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-126/127/128.** |
 | REMED-GFX-125 | The XNA vertex structs build `getVertexDeclarationStatic()` from `sizeof(T)`, which includes the `IVertexType` virtual base's vtable, so the declared `VertexStride` exceeds the GPU layout. | MEDIUM | P2 | REMED-GFX-119 stride coverage | **DONE 2026-07-27 — ALL SEVEN BUILT-IN DECLARATIONS NOW TAKE THEIR STRIDE FROM `sizeof(stream)` AND EVERY ELEMENT OFFSET FROM `offsetof(stream, member)` OF ONE SHARED PACKED STRUCTURE PER TYPE, SO A STRIDE AND ITS ELEMENT LAYOUT CANNOT DIVERGE; A STRIDE-ONLY PATCH WOULD HAVE BEEN A HALF-FIX, SO EIGHT TYPED EXPLICIT-DECLARATION `DrawUser` OVERLOADS CONVERT AN OBJECT ARRAY INTO THAT STREAM EXACTLY ONCE AND THE RAW `const void*` OVERLOADS KEEP THEIR UNCHANGED CALLER-PACKED CONTRACT; DECLARATION AND 64-BIT RANGE VALIDATION ADDED WHERE A `vertexOffset` OF `0x7FFFFFF0` PREVIOUSLY DUMPED CORE; `VertexBuffer` PROVEN UNAFFECTED; 24/24 ON SEVEN RENDERING BACKENDS, SANITIZERS CLEAN, NO ABI OR PUBLIC-FIELD CHANGE.** |
 | REMED-GFX-126 | Software reports a `MultiSampleCount` it never implements: `SoftwareRenderTargetBackend::GetMultiSampleCount()` returns the requested power-of-two-rounded count although the rasterizer writes one sample per pixel and stores no per-sample data. | LOW | P3 | REMED-GFX-124 multisample boundary | **OPEN — CONTRADICTS `IRenderTargetBackend::GetMultiSampleCount`'S OWN "0 IF NOT SUPPORTED BY THIS BACKEND" CONTRACT AND FNA'S `FNA3D_GetMaxMultiSampleCount` SEMANTICS; READBACK AND SAMPLING ARE UNAFFECTED, SO THIS IS A REPORTING DEFECT. VALUE PINNED BY `Software_RenderTargetReadback` CHECK H3.** |
-| REMED-GFX-127 | `Texture2D::GetData`'s render-target fallback zero-initializes the scratch buffer it hands the backend and converts it for the caller regardless, so a backend with no readback support returns a fabricated, fully written transparent-black frame. | MEDIUM | P2 | REMED-GFX-124 pre-fix measurement | **OPEN — DEFEATS "DID GETDATA WRITE ANYTHING?" SENTINEL CHECKS AND LETS ANY ASSERTION EXPECTING TRANSPARENT BLACK PASS ON AN EMPTY TARGET. REMED-GFX-074 ALREADY RECORDED THAT EASYGL, BGFX, D3D11, D3D12, D3D9 AND SDL_RENDERER NEVER OVERRIDE `GetData`, SO THE FABRICATION IS LIVE THERE TODAY. SHARED-LAYER, BACKEND-NEUTRAL FIX.** |
+| REMED-GFX-127 | `Texture2D::GetData`'s render-target fallback zero-initialized the scratch buffer it handed the backend and converted it for the caller regardless, so a backend with no readback returned a fabricated, fully written transparent-black frame. | MEDIUM | P2 | REMED-GFX-124 pre-fix measurement | **DONE 2026-07-27 — REPRODUCED ON SEVEN BACKENDS (SDL_RENDERER, BGFX, ASCII, DX3, HEADLESS, D3D9, D3D11) AT `sentinelSurvivors=0/128`, `fabricated=128`, `exact=0`, NO EXCEPTION — THE SENTINEL ORACLE PASSES ON EVERY ONE. FIXED BY MAKING `ITextureBackend::GetData` RETURN `bool` (TRUE ONLY FOR A COMPLETE REGION, `[[nodiscard]]` DEFAULT FALSE) AND CONVERTING ONLY ON TRUE, ELSE `System::NotSupportedException` WITH THE DESTINATION UNTOUCHED. REAL READBACK IMPLEMENTED ON SDL_RENDERER/ASCII, BGFX, DX3, D3D9, D3D11, D3D12 AND CANVAS USING EACH BACKEND'S OWN ESTABLISHED MECHANISM; HEADLESS REFUSES EXPLICITLY; TWO WEBGPU `memset`-TO-ZERO-AND-SUCCEED SITES CLOSED. NEW SHARED SUITE 39/39 ON ELEVEN RUNTIME BACKENDS, 34/34 HEADLESS, D3D12 VIA 5 NEW SMOKE CHECKS (247/247), CANVAS COMPILE-VERIFIED; ASAN/UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-129/130/131/132/133.** |
 | REMED-GFX-128 | `Texture2D::GetData`'s two overloads give `startIndex` opposite meanings: a SOURCE offset in `GetData(Color*, int, int)` and a DESTINATION offset in the rectangle overload. | LOW | P3 | REMED-GFX-124 destination-offset coverage | **OPEN — XNA/FNA DEFINE `startIndex` AS THE DESTINATION ARRAY OFFSET IN BOTH; FOR A RENDER TARGET THE DIVERGENCE IS MASKED BY THE WHOLE-LEVEL OVERLOAD'S `startIndex == 0` GATE, WHICH THROWS `std::runtime_error` INSTEAD OF READING. BOTH BEHAVIOURS PINNED BY CHECKS D7/D8/E10.** |
+| REMED-GFX-129 | Vulkan builds a `PreserveContents` render target's pass with `VK_ATTACHMENT_LOAD_OP_LOAD` and delivers the clear colour only through the load op, so an explicit `GraphicsDevice.Clear()` on such a target is silently dropped. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **OPEN — MEASURED: A PRESERVECONTENTS TARGET CLEARED TO `(0,255,255,128)` AND THEN PAINTED READ BACK WITH THE SPRITE BLOCKS EXACT AND ALL 64 BACKGROUND PIXELS `(0,0,0,0)`. XNA/FNA SCOPE `PreserveContents` TO SET-TIME DISCARD, NOT TO WHETHER `Clear()` WORKS.** |
+| REMED-GFX-130 | `ITextureCubeBackend::GetData`/`ITexture3DBackend::GetData` keep the no-op `void` default and the public cube/volume `GetData` convert their own zeroed scratch buffer regardless, so `TextureCube`/`Texture3D` readback still fabricates the frame REMED-GFX-127 removed from `Texture2D`. | MEDIUM | P2 | REMED-GFX-127 interface survey | **OPEN — `HeadlessTextureCubeBackend::GetData` ACTIVELY ZERO-FILLS THE CALLER'S DESTINATION WHILE `SetData` STORES NOTHING; CANVAS, SDL_RENDERER, DX3 AND D3D12 OVERRIDE NEITHER. PINNED BY `headless_resource_backends_test` CHECK A.** |
+| REMED-GFX-131 | WebGPU configures an `*UnormSrgb` surface format and creates render targets with it, so a mid-tone channel written through the render pass comes back gamma-encoded (128 -> 188) unlike XNA's non-sRGB `SurfaceFormat.Color`. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **OPEN — ALPHA AND THE 0/255 FIXED POINTS ARE UNAFFECTED, WHICH IS WHY EXISTING SATURATED-COLOUR WEBGPU RENDER-TARGET TESTS NEVER SAW IT.** |
+| REMED-GFX-132 | `cna_reference_dump` links `CNA` without the `--start-group` wrapper its own build-system comment says it needs, so it fails to link under the ASCII backend. | LOW | P3 | REMED-GFX-127 build matrix | **OPEN — `BuildAsciiFontAtlas` REFERENCES `SpriteFont::SpriteFont` FROM AN ALREADY-PASSED ARCHIVE. EVERY BACKEND LIBRARY, EVERY ASCII TEST AND `CnaTests` BUILD; ONLY THIS TOOL TARGET FAILS.** |
+| REMED-GFX-133 | `headless_smoke_test` Check F catches `HeadlessValidationException` for an out-of-range indexed draw that REMED-GFX-110's shared validation now rejects with `System::ArgumentOutOfRangeException` first, so the exception escapes and aborts the executable. | LOW | P3 | REMED-GFX-127 regression matrix | **OPEN — A/B-PROVEN PRE-EXISTING (THE PRE-REMED-GFX-127 SOURCES ABORT IDENTICALLY). WHETHER THE SHARED LAYER OR THE HEADLESS MODE DIAL SHOULD OWN THE REJECTION IS A CONTRACT QUESTION.** |
 
 #### REMED-BUILD-010 detail
 
@@ -12004,6 +12009,8 @@ Three, none of which can honestly be folded into a Software render-target correc
   zero-initialized in the shared layer. REMED-GFX-074 already recorded that EasyGL, Bgfx, D3D11,
   D3D12, D3D9 and SDL_Renderer never override `GetData`, so the same fabrication is live on those
   backends today. The fix belongs in the shared layer and is backend-neutral.
+  **DONE 2026-07-27** — see that finding's own record below; it reproduced the fabrication on seven
+  backends and found REMED-GFX-074's list already stale (EasyGL had gained an override).
 - **REMED-GFX-128** — `Texture2D::GetData`'s two overloads give `startIndex` opposite meanings
   (source offset in the whole-level overload, destination offset in the rectangle overload); XNA/FNA
   define it as the destination offset in both. Shared, backend-neutral and pre-existing.
@@ -12016,3 +12023,382 @@ Three, none of which can honestly be folded into a Software render-target correc
 - `docs(remediation): record GFX-124 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-127 — honest `Texture2D::GetData` readback contract (DONE 2026-07-27)
+
+### Classification
+
+**Real defect, MEDIUM, GRAPHICS, shared layer.** Not a missing feature in any one backend: the
+public `Texture2D::GetData` path could *manufacture* a complete, confidently-wrong result out of its
+own scratch memory, and did so on more than half the backends in the tree.
+
+The exact fabrication sequence, all five layers of it:
+
+1. `Texture2D::GetData`'s render-target fallback allocates `std::vector<uint8_t> pixels(total*4, 0)`.
+2. The vector's own value-initialization makes every byte zero — the shared layer, not the backend,
+   is what wrote them.
+3. It calls `ITextureBackend::GetData`, whose interface default was `{}` — literally nothing.
+4. There was no way for the wrapper to learn that nothing had happened: the method returned `void`.
+5. The conversion loop ran unconditionally, so those zeros became `Color(0,0,0,0)` in the caller's
+   array and the call returned normally.
+
+The result is worse than an empty answer in a way that matters for testing: **the two obvious
+oracles both report success.** "Did GetData overwrite my sentinel destination?" — yes, completely.
+"Did it throw?" — no. And any assertion whose expected content happens to be transparent black
+passes on a target that was never read at all.
+
+### Pre-fix evidence
+
+Red-first shared suite `examples/texture2d_getdata_contract_test.cpp`, commit `e6ceec10`, registered
+on all fourteen backends. Every render-target readback records four measured facts, not a verdict:
+whether a `System::NotSupportedException` was raised, whether any other exception was, how many of
+the destination's sentinel pixels survived, and how many pixels are exactly `(0,0,0,0)`.
+
+| Backend | Result | `sentinelSurvivors` | `fabricated(0,0,0,0)` | `exact` | threw |
+|---|---|---|---|---|---|
+| SDL_RENDERER | 25/33 | 0 / 128 | **128** | 0 | no |
+| BGFX | 25/33 | 0 / 128 | **128** | 0 | no |
+| ASCII | 25/33 | 0 / 128 | **128** | 0 | no |
+| DX3 | 25/33 | 0 / 128 | **128** | 0 | no |
+| HEADLESS | 25/33 | 0 / 128 | **128** | 0 | no |
+| D3D9 (Wine+DXVK 2.6.0) | 25/33 | 0 / 128 | **128** | 0 | no |
+| D3D11 (Wine+DXVK) | 25/33 | 0 / 128 | **128** | 0 | no |
+| SOFTWARE / EASYGL / VULKAN / WEBGPU / SDL_GPU | 33/33 | 0 / 128 | 0 | 128 | no |
+
+The last row is the control: those five already overrode `GetData`, and they pass the identical
+suite unchanged. Checks **Z1** and **Z2** exist specifically to record *why* the sentinel oracle is
+invalid here — Z1 fails if a call both wipes the sentinel and returns a uniform fabricated frame
+without throwing, Z2 fails if a call neither throws nor returns the exact pattern — so the reason
+sentinel-only testing was insufficient is now a permanent assertion rather than a comment.
+
+### Complete backend inventory
+
+Every concrete `ITextureBackend`/`IRenderTargetBackend` in the tree, verified against current source
+rather than REMED-GFX-074's recorded list (which had already gone stale — EasyGL gained an override
+after it was written). Plain `Texture2D` readback never reaches a backend at all: the shared layer
+serves it from `cpuPixels_`, and a freed shadow throws. Only `gpuOnlyContent_` instances — i.e.
+`RenderTarget2D` — take the backend path, which is why the render-target column is the live one.
+
+| Backend | Override before | Fabricated before | Category | Mechanism now | Intended final behaviour |
+|---|---|---|---|---|---|
+| Software | RT yes (GFX-124) | no | B (CPU shadow) | `SoftwareColorSurface` copy | exact |
+| EasyGL | RT yes | no | A | FBO bind + `glReadPixels` + row flip | exact |
+| Vulkan | RT yes | no | A | deferred flush + staging buffer copy | exact |
+| WebGPU | texture **and** RT yes | **partly** | A | `CopyTextureToBuffer` + async map | exact |
+| SDL_GPU | RT yes | no | A | download transfer buffer + fence | exact |
+| SDL_Renderer | no | **yes** | A | `SDL_SetRenderTarget` + `SDL_RenderReadPixels` | exact |
+| ASCII | no (wraps SDL_Renderer) | **yes** | A | inherits SDL_Renderer's | exact |
+| Bgfx | no | **yes** | A | blit → `BLIT_DST\|READ_BACK` → `readTexture` | exact |
+| DX3 | no | **yes** | A | `IDirectDrawSurface::Lock` | exact |
+| D3D9 | no | **yes** | A | `GetRenderTargetData` + `LockRect` | exact |
+| D3D11 | no | **yes** | A | staging texture + `Map` | exact |
+| D3D12 | no | **yes** | A | READBACK heap + fence + `Map` | exact |
+| Canvas | no | **yes** (Emscripten) | A / C | `getImageData` on the target's own canvas; native has no canvas | exact / reject |
+| Headless | no | **yes** | D (diagnostic) | none — refuses | deterministic rejection |
+
+"Fabricated before" for WebGPU is qualified deliberately: it *did* override `GetData`, but both its
+Texture2D and RenderTarget2D readbacks ended with
+
+```cpp
+if (mapped == nullptr || dataLength < requiredLength) { std::memset(data, 0, dataLength); }
+```
+
+— an explicit fabrication on the failure path, reported to the caller as a successful read. Those
+are now `return false`, with the destination left alone. SdlGpu's `if (w <= 0 || h <= 0) return;`
+and Vulkan's `if (!owner_ || colorImage_ == VK_NULL_HANDLE || ...) return;` were the same shape and
+now report `false` as well. **No backend was treated as category A merely for uniformity**: Headless
+is the one that genuinely cannot answer, and it says so.
+
+### Interface design
+
+Five options were evaluated against source compatibility, ABI, implementation count, partial-write
+detectability, exception consistency, testability and diagnostic backends.
+
+| Option | Verdict |
+|---|---|
+| A — default `GetData` throws `NotSupportedException` | rejected: makes the *backend* raise a public-API exception from an internal interface, and still cannot express "I wrote part of it" |
+| **B — `bool` return, `[[nodiscard]]`, default `false`** | **chosen** |
+| C — separate capability query | rejected: a second source of truth a backend can implement `GetData` and forget to update, and vice versa |
+| D — pure virtual | rejected: 13 of the 26 concrete implementations are plain-texture backends the public path never reaches, so it would have forced 13 dead overrides — noise that hides the 13 decisions that matter |
+| E — canary fill in the shared scratch buffer | rejected outright: it only fabricates *different* garbage, and a legitimate pixel equal to the canary would fail |
+
+Option B makes silent fabrication impossible **by construction** rather than by diligence: the only
+way to reach the conversion loop is an affirmative `true`, and the only thing a backend that reads
+nothing can produce is a deterministic `System::NotSupportedException` with the caller's memory
+untouched. `[[nodiscard]]` means a future caller that ignores the answer does not compile silently.
+
+**Partial writes** are covered by the same contract, stated in the interface's own documentation:
+`true` means the COMPLETE requested region was written, and an implementation that fails part-way
+must return `false` rather than report a partly populated buffer. Every backend was audited against
+that wording, which is how the WebGPU/SdlGpu/Vulkan early-return paths above were found. The public
+layer additionally never lets a partial buffer reach the caller regardless, because the conversion
+loop is gated on the result and the scratch buffer is this layer's own memory.
+
+**Source/ABI compatibility.** `ITextureBackend` lives under `include/CNA/Internal/`, is not part of
+the XNA surface, and has no supported external implementors, so changing the return type is an
+internal refactor. No public `Microsoft::Xna` signature changed. The `void` overloads on
+`ITextureCubeBackend`/`ITexture3DBackend` were deliberately left alone — separate interfaces,
+separate public classes, recorded as **REMED-GFX-130**.
+
+### Ordinary texture versus render target
+
+Classified independently, because they take different paths:
+
+| Resource | Path | Result |
+|---|---|---|
+| `Texture2D` from CPU data (`SetData`/`CreateFromPixels`) | shared `cpuPixels_` shadow; backend never consulted | exact on all fourteen backends |
+| `Texture2D` loaded from content | same shadow | exact |
+| `Texture2D` whose shadow was freed (context recovery off) | rejected | unchanged `std::runtime_error` |
+| `RenderTarget2D` colour texture | backend readback | exact, or deterministic rejection |
+| Currently-active render target | backend readback | check B9: exact or deterministic rejection, never fabricated |
+| Multisampled render target | backend readback of the RESOLVED single-sample copy | exact |
+| Disposed resource | rejected before any backend call | throws, destination untouched |
+
+REMED-GFX-039's active-target rules are untouched: they govern `TextureCollection` binding, which
+this change does not go near. B9 adds the readback counterpart as an honesty requirement rather than
+a fixed outcome, because backends legitimately differ on whether they can serve a still-bound read.
+
+### Content, rectangle and mip coverage
+
+Per backend, through the public API only:
+
+| Case | Ordinary texture | Render target |
+|---|---|---|
+| full level | A1 (two sentinels) | B1/B2 (two sentinels) |
+| one pixel at the origin | A3a | B8a |
+| lower-right corner pixel | A3e | B8b |
+| final row | A3c | B8c |
+| final column | A3d | B8d |
+| middle rectangle | A3b | B8e / B4 |
+| whole level via the rectangle overload | A3f | — |
+| nonzero destination offset, oversized destination, margins intact | A4 | B4 |
+| consecutive calls agree | A5 | B3 |
+| content after `SetData` | A1 | — |
+| content after a partial `SetData`, rest of the level intact | A6 | — |
+| content after rendering | — | B1 |
+| two live resources do not alias | A7 | B5 |
+| disposed resource | C10 | B6 |
+| nonexistent mip level | C4 | B7 |
+
+Mip and format boundaries are stated per backend rather than assumed. Every backend stores
+`SurfaceFormat::Color` RGBA8 — the only format `Texture::ValidateFormat` accepts framework-wide — so
+there is no compressed or floating-point readback path to broaden, and none was added.
+`ValidateGetDataFormat(format_, 4)` remains the shared gate. Mip level counts are real, not guessed:
+Bgfx computes its chain length from the `mipMap` flag it was constructed with, D3D11/D3D12 use their
+existing `levelCount_`, and Software, SDL_Renderer, DX3, Canvas and D3D9 reject any level above 0
+because they allocate exactly one. Every rejection is `System::NotSupportedException`, never a
+silent read of level 0.
+
+### Validation
+
+Deterministic on every backend, all arithmetic 64-bit and performed **before** any storage access,
+so a rectangle near `INT_MAX` is rejected rather than wrapped into an apparently valid one:
+
+| Rejected | Exception |
+|---|---|
+| null destination | `std::invalid_argument` (public) |
+| negative start index | `std::out_of_range` |
+| zero/negative element count | `std::invalid_argument` |
+| negative mip level | `std::out_of_range` / `System::ArgumentOutOfRangeException` |
+| mip level this resource does not have | `System::NotSupportedException` |
+| rectangle leaving the level, negative origin, empty size | `std::out_of_range` / `System::ArgumentOutOfRangeException` |
+| element count below the requested region | `std::out_of_range` / `System::ArgumentOutOfRangeException` |
+| destination byte capacity below the region | `System::ArgumentOutOfRangeException` |
+| right-edge / bottom-edge / byte-size int32 overflow | `System::ArgumentOutOfRangeException` |
+| backend has no readback | `System::NotSupportedException` |
+
+Check C9 asserts that after ten consecutive rejected requests the destination is byte-for-byte the
+sentinel it was pre-filled with. No `std::` exception is introduced at the public API by this
+change; the two that remain there (`invalid_argument`, `out_of_range`, and the `runtime_error` for a
+freed shadow) are pre-existing and are REMED-GFX-128's neighbourhood, not this task's.
+
+### REMED-GFX-128 boundary
+
+Untouched and deliberately so. The whole-level overload keeps its `startIndex == 0 && elementCount
+== total` gate for a render target and still throws `std::runtime_error` otherwise, and its
+`startIndex` still indexes the SOURCE while the rectangle overload's indexes the DESTINATION. Each
+overload is tested according to its own current contract (A4/B4 exercise the rectangle overload's
+destination offset; the whole-level overload is only ever called with `startIndex == 0`), and
+neither fabricates. Unifying the two semantics remains GFX-128's.
+
+### False-positive test audit
+
+Four sites in directly relevant texture/readback tests, two with no assertion at all:
+
+| Site | What made it a false positive | Action |
+|---|---|---|
+| `headless_resource_backends_test` Checks A/B | `check(true, ...)` after `GetData` — asserted nothing whatsoever | strengthened: Check A now pins the measured transparent-black overwrite against a non-zero sentinel (recording REMED-GFX-130, not blessing it); Check B asserts REMED-CONTENT-004's documented Texture3D rejection |
+| `vulkan_rendertarget_getdata_lifetime_test` `IsBlack` | ignored alpha, so a never-written pixel satisfied it exactly as well as the opaque `Color::Black` clear | requires alpha 255; new S1e asserts not one pixel of the readback is fabricated transparent black |
+| `gfx077_colorwritechannels_3d_test` | comment recorded "reads back all zeros on D3D11/D3D9" as a property of the rectangle overload | corrected: that was the fabrication, and both paths now return real content |
+| `ascii_offscreentarget_test` | comment claimed `Texture2D::GetData` "would need a CPU-side shadow this backend doesn't populate" | corrected: the wrapped SDL_Renderer target now has a real readback |
+
+**Found: 4. Strengthened: 2 (with real new assertions), corrected: 2 (comments only, no assertion
+weakened).** The gaps they masked: Headless's cube/volume zero-fill (GFX-130) and, on the Vulkan
+side, any readback that produced nothing at all for a pixel expected to be black.
+`headless_resource_backends_test` went from aborting outright to **9/9** as a side effect, because
+its Check B had been throwing an uncaught exception since REMED-CONTENT-004 — A/B-verified against
+the pre-REMED-GFX-127 file, which aborts identically.
+
+### Synchronization, staging and performance
+
+| Backend | Synchronization | Staging | Lifetime |
+|---|---|---|---|
+| Software | none | none | — |
+| EasyGL | `glReadPixels` (implicit) | transient level-FBO for mip > 0 | freed in-call |
+| Vulkan | `EndOneTimeCommands` on the copy only | one host-visible buffer | freed in-call |
+| WebGPU | `wgpuBufferMapAsync` + poll | one MapRead buffer | released in-call |
+| SDL_GPU | `SDL_WaitForGPUFences` on the download only | one download transfer buffer | released in-call |
+| SDL_Renderer / ASCII | `SDL_RenderReadPixels` flushes internally | one `SDL_Surface` | destroyed in-call |
+| Bgfx | `bgfx::frame()` until `readTexture`'s target frame | one `BLIT_DST\|READ_BACK` texture | destroyed in-call |
+| DX3 | `Lock` | none | unlocked in-call |
+| D3D9 | `GetRenderTargetData` (blocking) | one SYSTEMMEM surface | released in-call |
+| D3D11 | `Map(D3D11_MAP_READ)` blocks on the copy | one staging texture | released in-call |
+| D3D12 | fence wait on the copy list | one READBACK-heap buffer | released in-call |
+
+**No new cost when `GetData` is not called** on any backend: nothing was added to bind, unbind,
+draw, resolve or present. Nothing permanent was allocated per texture or per target — every staging
+resource is created and released inside the one call, so repeated readbacks have bounded resource
+cardinality (verified by B3/B5's repeated and multi-target reads under ASan). Unsupported paths fail
+without a GPU allocation; the shared scratch `std::vector` is allocated before the backend is asked,
+which is the one transient cost of keeping the completion report as the single source of truth
+rather than adding a second, desynchronisable capability query.
+
+**One backend genuinely needs a frame advance.** bgfx's only texture readback is deferred:
+`bgfx::readTexture` returns the frame number at which the data exists, so frames must be advanced to
+reach it. This is the same mechanism Task 914 already uses for `TextureCube`/`Texture3D` readback and
+`ReadBackbuffer` already uses for the backbuffer on this backend, and it is confined to the
+explicitly synchronous `GetData` call. Because `bgfx::frame()` also ends the frame, the readback
+performs this backend's own per-frame bookkeeping (`spriteVpValid_`, `EndFrameSegments()`) exactly
+as `ReadBackbuffer` does, so viewport-segment view ids are recycled correctly across the implicit
+boundary. No other backend adds a frame or a `Present`.
+
+**Two orientation/ordering corrections were required, not optional.** The blit must be issued on the
+reserved highest bgfx view id, because bgfx executes views in ascending id order and a blit on view
+0 would copy the *previous* frame's content; and REMED-GFX-067's `originBottomLeft` finding applies
+to the readback exactly as it applied to sampling — measured before the correction as `exact=64/128`
+with the two half-rows transposed, i.e. a textbook vertical mirror.
+
+### Cross-backend matrix
+
+`texture2d_getdata_contract_test` (39 checks; 34 on Headless, whose contract skips the five
+exact-content-only rectangle checks):
+
+| Backend | Runtime | Result |
+|---|---|---|
+| Software | Xvfb :101 | **39/39** exact readback |
+| EasyGL | Xvfb :101 | **39/39** exact readback |
+| Vulkan | Xvfb :101 | **39/39** exact readback |
+| WebGPU | Xvfb :101 | **39/39** exact readback |
+| SDL_GPU | Xvfb :101 | **39/39** exact readback |
+| Bgfx (OpenGL) | Xvfb :101 | **39/39** exact readback |
+| Bgfx (Vulkan, `CNA_BGFX_RENDERER=vulkan`) | Xvfb :101 | **39/39** exact readback |
+| SDL_Renderer | Xvfb :101 | **39/39** exact readback |
+| ASCII | Xvfb :101 | **39/39** exact readback |
+| DX3 (free-direct) | `SDL_VIDEODRIVER=dummy` | **39/39** exact readback |
+| D3D9 | Wine + DXVK 2.6.0, :0 | **39/39** exact readback |
+| D3D11 | Wine + DXVK, :0 | **39/39** exact readback |
+| Headless | native | **34/34** deterministic unsupported rejection |
+| D3D12 | Wine + vkd3d-proton, :0 | contract test build-verified only (no window/swap chain in this dev loop); readback verified by 5 new checks inside `d3d12_smoke_test`, **247/247** |
+| Canvas | Emscripten toolchain | compile-verified (wasm; Canvas tests are not ctest-registered) |
+
+No unsupported-exception result is counted as a functional readback: Headless is the only row in the
+rejection column, and it is labelled as such.
+
+### Sanitizers
+
+Focused runs of the full 39-check contract over supported readback, unsupported rejection, partial
+rectangles, nonzero destination offsets, mip boundaries, two textures, two targets, repeated calls,
+disposal, invalid capacities and int32 arithmetic limits:
+
+| Build directory | Sanitizer | Result |
+|---|---|---|
+| `cmake-build-software-asan` | address | 39/39, zero reports |
+| `cmake-build-software-ubsan` | undefined | 39/39, zero runtime-error lines |
+| `cmake-build-vulkan-asan` | address | 39/39 + `Vulkan_RenderTargetGetDataLifetime` 14/14, zero reports |
+| `cmake-build-bgfx-asan` | address | 39/39 on OpenGL and on Vulkan, zero reports |
+| `cmake-build-bgfx-ubsan` | undefined | 39/39, zero runtime-error lines |
+| `cmake-build-sdlgpu-asan` | address | 39/39, zero reports |
+| `cmake-build-sdlgpu-ubsan` | undefined | 39/39, zero runtime-error lines |
+
+The Software ASan run also covers REMED-GFX-124's `Software_RenderTargetReadback` at 88/88.
+
+### Prior regression gates
+
+| Suite | Result |
+|---|---|
+| `ctest -L Software` | **18/18** |
+| Software `CnaTests` | **5687 passed of 5732**, the same three A/B-proven pre-existing failures REMED-GFX-124 recorded |
+| REMED-GFX-124 `Software_RenderTargetReadback` | **88/88** |
+| `ctest -R "^Vulkan_"` | **162/163**, only the documented `Vulkan_DepthBias` baseline |
+| REMED-GFX-074 `Vulkan_RenderTargetGetDataLifetime` | **14/14** (13 + the new S1e) |
+| REMED-GFX-075/076 | green |
+| `ctest -R "^Bgfx_"` | 6 failures, **all A/B-proven pre-existing** (restored pre-fix sources fail identically); none of the six sources contains a `GetData` call |
+| `ctest -L SdlGpu` | 1 failure, `SdlGpu_RenderState`, **A/B-proven pre-existing** ("Cannot present while render targets are bound") |
+| `ctest -L WebGPU` | 1 failure, `WebGPU_Clear_Readback`, sampler AddressMode Wrap/Mirror — no `GetData` involvement |
+| `ctest -R "^SDL_Renderer"` | 3 failures, all depth-clear / buffer-construction validation, **zero `GetData` usage** |
+| `ctest -R "^Ascii_"` | **7/7** |
+| `ctest -L DX3` | 2 failures, both pre-existing (`Dx3_SpriteBatch` is a recorded known failure; `Dx3_No3D` is REMED-CONTENT-004's capability gate) |
+| `ctest -L D3D9` | **28/28** |
+| `ctest -L D3D11` | **18/18** |
+| `ctest -L D3D12` | **1/1** (`D3D12_Smoke`, 247 internal checks) |
+| `ctest -L Headless` | **7/8**, only `Headless_Smoke` — A/B-proven pre-existing, recorded as REMED-GFX-133 |
+| EasyGL full `ctest` | 7 failures, none touching `GetData` (net loopback, XNB fuzz, audio, depth format, vertex-buffer-slot validation, the documented `ReferenceStencil` known failure, and a third-party easy-gl smoke assertion) |
+| REMED-GFX-125 built-in vertex streams | unaffected (no vertex path touched) |
+| REMED-GFX-096 render-target binding / REMED-GFX-054/103 empty resources | unaffected |
+| ordinary `Texture2D::SetData`, SpriteBatch sampling, RT producer/consumer | covered by the contract suite's Section A and B5 on every backend |
+
+### Independent findings
+
+Five, none of which belongs inside an honest-readback correction.
+
+- **REMED-GFX-129** — Vulkan drops `GraphicsDevice.Clear()` on a `PreserveContents` render target:
+  the pass uses `VK_ATTACHMENT_LOAD_OP_LOAD` and the clear colour is delivered only through the load
+  op. Measured, not inferred: the sprite blocks read back exact while all 64 background pixels were
+  `(0,0,0,0)`.
+- **REMED-GFX-130** — `TextureCube`/`Texture3D` readback still fabricates the frame this task
+  removed from `Texture2D`; `HeadlessTextureCubeBackend::GetData` actively zero-fills the caller's
+  destination while `SetData` stores nothing.
+- **REMED-GFX-131** — WebGPU render targets use an `*UnormSrgb` format, so a mid-tone channel comes
+  back gamma-encoded (128 → 188). Alpha and the 0/255 fixed points are unaffected, which is why
+  saturated-colour tests never saw it.
+- **REMED-GFX-132** — `cna_reference_dump` links `CNA` without the `--start-group` wrapper its own
+  build-system comment says it needs, so it cannot link under the ASCII backend.
+- **REMED-GFX-133** — `headless_smoke_test` Check F catches `HeadlessValidationException` for a
+  draw that REMED-GFX-110's shared validation now rejects first, so the exception escapes and aborts
+  `Headless_Smoke`. A/B-proven pre-existing.
+
+### Build directories, ccache and displays
+
+Used, all pre-existing and reused incrementally: `cmake-build-software`, `cmake-build-debug`
+(EasyGL), `cmake-build-headless`, `cmake-build-sdlrenderer`, `cmake-build-ascii`, `cmake-build-dx3`,
+`cmake-build-sdlgpu`, `cmake-build-vulkan`, `cmake-build-webgpu`, `cmake-build-bgfx`,
+`cmake-build-canvas`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`,
+plus the sanitizer directories `cmake-build-software-asan`, `cmake-build-software-ubsan`,
+`cmake-build-vulkan-asan`, `cmake-build-bgfx-asan`, `cmake-build-bgfx-ubsan`,
+`cmake-build-sdlgpu-asan`, `cmake-build-sdlgpu-ubsan`. `CNA_USE_CCACHE=ON` in every one.
+
+**No new build directory was created**, none was cleaned, deleted or recreated, and no clean build
+was required — every configure was incremental. `CNA_BUILD_TESTS` was switched from OFF to ON in
+`cmake-build-sdlrenderer`, `cmake-build-ascii`, `cmake-build-dx3` and `cmake-build-canvas` so those
+backends could build and run the new shared test at all; that adds test targets and changes no
+library compile flags. No build tree was created under `/tmp`, `/var/tmp` or `/dev/shm` — the session
+scratchpad held only small logs and the saved originals used for the A/B restores. `git clean -xfd`
+was never run, `git stash` was never used, and the pre-existing user stashes are untouched. Builds
+used `-j4` (`-j2` for sanitizer variants). CPU temperature was 46 °C at the start of the session.
+
+Xvfb: shared `:101` served the Software, EasyGL, Vulkan, WebGPU, SDL_GPU, Bgfx, SDL_Renderer, ASCII
+and sanitizer runs; `:0` served the Wine D3D9/D3D11/D3D12 runs (DXVK's dxgi probe is known to crash
+under Xvfb here); DX3 used `SDL_VIDEODRIVER=dummy`. **No display was started and none was stopped**;
+`:0`, `:99` and `:101` were all left running.
+
+### Commits
+
+- `e6ceec10 test(Task REMED-GFX-127): reproduce fabricated Texture2D readback`
+- `9b85fcf6 fix(Task REMED-GFX-127): make backend texture readback completion explicit`
+- `cfce6d10 test(Task REMED-GFX-127): cover backend readback and strengthen false positives`
+- `docs(remediation): record GFX-127 completion` (this record)
+
+No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
+untouched.
