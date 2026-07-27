@@ -974,8 +974,12 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> D3D12GraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int multiSampleCount)
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        // REMED-GFX-136: consumed by being deliberately unused, for the same reason
+        // CreateRenderTarget2D above states -- OMSetRenderTargets has no load action, so a bound
+        // cube face keeps whatever is in it until something explicitly clears or draws over it.
+        (void) preserveContents;
         // DX-144 follow-up: mipMap now honored, same real CPU box-filter downsample cascade
         // D3D12RenderTargetBackend's own 2D leg uses (see D3D12RenderTargets.hpp/.cpp). DX-152:
         // multiSampleCount is now honored too -- device-queried and clamped to 0 (off) by

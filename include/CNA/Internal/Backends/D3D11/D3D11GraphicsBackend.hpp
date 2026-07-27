@@ -103,6 +103,7 @@ namespace CNA::Internal::Backends::D3D11
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,

@@ -128,6 +128,7 @@ namespace CNA::Internal::Backends::D3D9
         /// targets (matches D3D11RenderTargetCubeBackend's own precedent) -- `multiSampleCount` is
         /// accepted for signature compatibility and silently ignored.
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
         /// D9-53: explicitly overridden -- IGraphicsBackend's own default

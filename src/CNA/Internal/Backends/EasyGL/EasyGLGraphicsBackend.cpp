@@ -1941,8 +1941,18 @@ void main()
         return std::make_unique<EasyGLRenderTargetBackend>(w, h, depthFormat, RegistryPtr(), mipMap, multiSampleCount);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size, int depthFormat, bool mipMap, int multiSampleCount)
+    std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        // REMED-GFX-136: consumed by being deliberately unused, exactly like this backend's own
+        // CreateRenderTarget2D above. A GL framebuffer object's colour attachment IS the cube
+        // texture and binding an FBO never touches its contents, so a single-sample face is
+        // preserved by construction; the ONLY thing that clears one is an explicit glClear, which
+        // is what GraphicsDevice::SetRenderTargets issues (and only issues) for a DiscardContents
+        // target. Multisampled cube targets are a declared boundary: this backend allocates one
+        // multisample colour renderbuffer shared by all six faces, so rebinding a multisampled
+        // face reloads whichever face was rendered into that renderbuffer last -- see
+        // EasyGLRenderTargetCubeBackend's own msaaColorRbo_ and REMED-GFX-136's record.
+        (void) preserveContents;
         return std::make_unique<EasyGLRenderTargetCubeBackend>(size, depthFormat, RegistryPtr(), mipMap, multiSampleCount);
     }
 

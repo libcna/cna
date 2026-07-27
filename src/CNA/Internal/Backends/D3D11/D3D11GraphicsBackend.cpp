@@ -585,10 +585,16 @@ namespace CNA::Internal::Backends::D3D11
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> D3D11GraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int multiSampleCount)
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         // DX-152: multiSampleCount is now honored -- device-queried and clamped to 0 (off) by
         // D3D11RenderTargetCubeBackend's own ClampMultiSampleCount() when unsupported.
+        // REMED-GFX-136: preserveContents is consumed by being deliberately unused, for the same
+        // reason CreateRenderTarget2D above states -- OMSetRenderTargets has no load action, so a
+        // bound cube face keeps whatever is in it until something explicitly clears or draws over
+        // it, and the only unrequested clear is GraphicsDevice::SetRenderTargets' DiscardContents
+        // one.
+        (void) preserveContents;
         return std::make_unique<D3D11::D3D11RenderTargetCubeBackend>(
             this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount);
     }

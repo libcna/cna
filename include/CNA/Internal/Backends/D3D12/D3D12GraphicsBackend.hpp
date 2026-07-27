@@ -102,6 +102,7 @@ namespace CNA::Internal::Backends::D3D12
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         /// DX-117: real D3D12RenderTargetCubeBackend, no longer the inherited default (-> nullptr).
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
         /// DX-117: real MRT -- binds every target's own RTV (up to 8, D3D12's own

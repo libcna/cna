@@ -639,7 +639,19 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 911: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
         // gives this instance true per-RT DepthStencilFormat fidelity, mirroring
         // VulkanRenderTargetBackend's identical constructor-comment fix.
+        // REMED-GFX-136: `preserveContents` is the public RenderTargetCube's own
+        // RenderTargetUsage, arriving here for the first time. It selects this instance's face
+        // render pass exactly the way VulkanRenderTargetBackend has always selected its own
+        // (GetOrCreateRTRenderPass(depthFmt, !preserveContents)): LOAD_OP_LOAD with
+        // initialLayout SHADER_READ_ONLY_OPTIMAL when true, LOAD_OP_CLEAR with initialLayout
+        // UNDEFINED when false. This class previously hardcoded the discard variant with a
+        // comment saying it had "no preserveContents concept", which was true only because the
+        // creation call could not carry one.
+        // MSAA is a declared boundary, inherited unchanged from the 2D leg: msaaColorImage_ is
+        // ONE transient attachment shared by all six faces and GetOrCreateRTRenderPassMsaa() has
+        // no LOAD variant, so a multisampled cube face is not preserved across bind cycles.
         VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, int depthFormat,
+                                       bool preserveContents = false,
                                        bool mipMap = false, int requestedMultiSampleCount = 0);
         ~VulkanRenderTargetCubeBackend() override;
 
@@ -754,6 +766,11 @@ namespace CNA::Internal::Backends::Vulkan
         int                        size_      = 0;
         int                        levelCount_ = 1;
         int                        appliedMultiSampleCount_ = 0;
+        /// REMED-GFX-136: this target's own RenderTargetUsage, collapsed by
+        /// RenderTargetUsagePreservesContentsEXT(). Read once, in the constructor, to pick the
+        /// face render pass; nothing mutates it afterwards, so a pass can never be built against a
+        /// value that changed later.
+        bool                       preserveContents_ = false;
     };
 
     // -------------------------------------------------------------------------
@@ -1005,7 +1022,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DBackend>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
-        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
 

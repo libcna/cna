@@ -1392,7 +1392,17 @@ namespace CNA::Internal::Backends::SdlGpu
             colorTarget.layer_or_depth_plane = static_cast<Uint32>(face);
         }
         colorTarget.clear_color = cube->clearColor[face];
-        colorTarget.load_op = cube->clearColorPending[face] ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+        // REMED-GFX-136: LOAD is what makes a single-sample cube face preserve its contents across
+        // bind cycles -- but it is ILLEGAL together with the cycle flag the multisampled path below
+        // must set, and SDL_gpu says so out loud ('Cannot cycle color target when load op is
+        // LOAD!'). That combination was reachable the moment a multisampled cube face was bound a
+        // second time without a Clear() in between, which is exactly what a PreserveContents (or
+        // PlatformContents) target does. The scratch texture's previous contents are another
+        // face's samples anyway -- see the cycle comment below -- so CLEAR is both the legal and
+        // the honest choice here, and multisampled cube targets are recorded as not preserving.
+        const bool cubeMsaa = cube->msaaTexture != nullptr;
+        colorTarget.load_op = (cube->clearColorPending[face] || cubeMsaa) ? SDL_GPU_LOADOP_CLEAR
+                                                                         : SDL_GPU_LOADOP_LOAD;
         // msaaTexture is reused across every face's own pass this frame (it's a disposable scratch
         // resource, immediately resolved away each time) -- SDL_gpu's own doc comment on this cycle
         // flag says reusing a bound resource across passes without cycling "will produce unexpected
@@ -1400,7 +1410,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // 2026-07-16 once SDLGPU-6 turned debug_mode on for real). cubeTexture must NEVER cycle here
         // (whether as the direct target below or as resolve_texture above) -- cycling wipes the
         // ENTIRE persistent 6-layer resource, including every other face already written this frame.
-        colorTarget.cycle = (cube->msaaTexture != nullptr);
+        colorTarget.cycle = cubeMsaa;
         if (cube->msaaTexture != nullptr)
         {
             // Automatic render-pass-end resolve -- SDL_gpu has no multisampled cube texture type,
@@ -2004,8 +2014,17 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> SdlGpuGraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int multiSampleCount)
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        // REMED-GFX-136: consumed by being deliberately unused, exactly like this backend's own
+        // CreateRenderTarget2D above. RenderToTargetCubeFace() already picks SDL_GPU_LOADOP_LOAD
+        // unless a real Clear() is pending for that face (clearColorPending[face]), and the only
+        // clear a cube target gets without the game asking is the one
+        // GraphicsDevice::SetRenderTargets issues for a DiscardContents target -- so a
+        // single-sample face is preserved by construction. Multisampled cube targets are a
+        // declared boundary: their pass renders into one shared, must-be-cycled scratch texture
+        // that is resolved away immediately, so there is nothing per-face left to load.
+        (void) preserveContents;
         return std::make_unique<SdlGpuRenderTargetCubeBackend>(*this, size, depthFormat, mipMap, multiSampleCount);
     }
 

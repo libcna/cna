@@ -1010,8 +1010,13 @@ namespace CNA::Internal::Backends::D3D9
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> D3D9GraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool /*mipMap*/, int /*multiSampleCount*/)
+        int size, int depthFormat, bool preserveContents, bool /*mipMap*/, int /*multiSampleCount*/)
     {
+        // REMED-GFX-136: consumed by being deliberately unused. D3D9 has no load action at all --
+        // SetRenderTarget swaps the surface and leaves its contents alone -- so a cube face is
+        // preserved by construction, and the only clear it ever sees is the one
+        // GraphicsDevice::SetRenderTargets issues for a DiscardContents target.
+        (void) preserveContents;
         return std::make_unique<D3D9RenderTargetCubeBackend>(*this, device_.Get(), size, depthFormat);
     }
 

@@ -46,7 +46,12 @@ namespace Microsoft::Xna::Framework::Graphics
                       // to TextureCube so sampling and rendering share the same GPU image.
                       std::unique_ptr<ITextureCubeBackend>(
                           device.backend_ ? device.backend_->CreateRenderTargetCube(
-                                                 size, static_cast<int>(preferredDepthFormat), mipMap,
+                                                 size, static_cast<int>(preferredDepthFormat),
+                                                 // REMED-GFX-136: `usage` used to stop here. The
+                                                 // backend had to invent its own answer, and both
+                                                 // backends that had to (Vulkan, WebGPU) invented
+                                                 // "always discard".
+                                                 RenderTargetUsagePreservesContentsEXT(usage), mipMap,
                                                  ClosestMSAAPower(preferredMultiSampleCount)).release()
                                           : nullptr),
                       mipMap ? CalculateMipLevels(size) : 1)

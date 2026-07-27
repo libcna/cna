@@ -54,7 +54,12 @@ namespace Microsoft::Xna::Framework::Graphics
                     std::shared_ptr<IRenderTargetBackend>(
                         device.GetBackend().CreateRenderTarget2D(
                             width, height, static_cast<int>(preferredDepthFormat),
-                            usage == RenderTargetUsage::PreserveContents, mipMap,
+                            // REMED-GFX-136: one shared mapping for both public render targets.
+                            // The literal `usage == PreserveContents` this replaces contradicted
+                            // GraphicsDevice::SetRenderTargets, which only ever clears a
+                            // DiscardContents target, so PlatformContents was preserved by the
+                            // shared layer and discarded by the backend at the same time.
+                            RenderTargetUsagePreservesContentsEXT(usage), mipMap,
                             ClosestMSAAPower(preferredMultiSampleCount))))
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)

@@ -750,7 +750,7 @@ protected:
                   "mip chain regenerates correctly, not just level 1 (plan_dx.md DX-144)");
         }
         {
-            auto rtCubeMip = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+            auto rtCubeMip = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
             auto* d3dRtCubeMip = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMip.get());
             rtCubeMip->BindAsRenderTargetFace(0);
             dev.Clear(Color(50, 150, 250, 255));
@@ -780,7 +780,7 @@ protected:
         // the one just drawn to, and that a DIFFERENT, previously-untouched face's own base level
         // survives the call.
         {
-            auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+            auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
             auto* d3dRtCubeMip2 = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMip2.get());
             rtCubeMip2->BindAsRenderTargetFace(2);
             dev.Clear(Color(60, 120, 180, 255));
@@ -3538,7 +3538,7 @@ protected:
         // aliasing risk a shared 6-slice texture array creates that a single RenderTarget2D never
         // has to prove).
         {
-            auto rtCube = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/);
+            auto rtCube = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, false /*mipMap*/);
             auto* d3dRtCube = static_cast<D3D11RenderTargetCubeBackend*>(rtCube.get());
 
             // (a) Bind face 0, Clear() -> exact color lands in face 0's own texture slice.
@@ -3597,7 +3597,7 @@ protected:
         // actually granted real multi-sampling is printed as diagnostics, not gated on, since
         // that's real hardware/driver capability.
         {
-            auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/, 4);
+            auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, false /*mipMap*/, 4);
             auto* d3dRtCubeMsaa = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMsaa.get());
             rtCubeMsaa->BindAsRenderTargetFace(0);
             dev.Clear(Color(77, 88, 99, 255));

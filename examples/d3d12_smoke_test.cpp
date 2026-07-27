@@ -3580,6 +3580,67 @@ int main()
                   "GFX134d: an out-of-range face, an unallocated mip level and a rectangle leaving "
                   "the face are each refused with the caller's buffer byte-for-byte untouched");
         }
+
+        // ---- REMED-GFX-136: RenderTargetUsage now reaches CreateRenderTargetCube. ----
+        // The shared Game-harness battery (examples/rendertargetcube_usage_test.cpp) is the real
+        // oracle and passes 30/30 on the eight backends that can run it, D3D11 -- this backend's
+        // closest sibling -- included; DX-100's Wine dxgi.dll crash keeps it from running here, so
+        // what these two checks pin is what CAN be pinned at backend level with Clear() as the only
+        // content producer: the new parameter is accepted at both values, and this backend really
+        // has NO load action, which is exactly why it consumes `preserveContents` by deliberately
+        // ignoring it. A partial second producer pass (the thing that separates preservation from
+        // "the marker landed") needs SpriteBatch, so it lives in the shared battery only.
+        {
+            auto keep = backend.CreateRenderTargetCube(kRtWidth, 0, /*preserveContents=*/true);
+            auto drop = backend.CreateRenderTargetCube(kRtWidth, 0, /*preserveContents=*/false);
+            Check(keep != nullptr && drop != nullptr,
+                  "GFX136a: CreateRenderTargetCube accepts the new preserveContents flag at both "
+                  "values and returns a real target for each");
+
+            bool bothSurvive = true;
+            std::string detail;
+            CNA::Internal::Backends::IRenderTargetCubeBackend* targets[2] = { keep.get(), drop.get() };
+            const std::uint8_t expected[2][3] = { {0, 153, 255}, {255, 153, 0} };
+            const float clears[2][3] = { {0.0f, 0.6f, 1.0f}, {1.0f, 0.6f, 0.0f} };
+            for (int t = 0; t < 2 && bothSurvive; ++t)
+            {
+                targets[t]->BindAsRenderTargetFace(2);
+                backend.Clear(clears[t][0], clears[t][1], clears[t][2], 1.0f);
+                targets[t]->UnbindAsRenderTarget();
+                // A whole bind cycle that renders nothing at all. On a backend with a load action
+                // this is where a discard would happen.
+                targets[t]->BindAsRenderTargetFace(2);
+                targets[t]->UnbindAsRenderTarget();
+
+                std::vector<std::uint8_t> got(static_cast<std::size_t>(kRtWidth) * kRtHeight * 4, 0xCD);
+                if (!targets[t]->GetData(2, 0, 0, 0, kRtWidth, kRtHeight, got.data(),
+                                         static_cast<int>(got.size())))
+                {
+                    bothSurvive = false;
+                    detail = " target " + std::to_string(t) + " refused readback";
+                    break;
+                }
+                for (std::size_t i = 0; i < got.size(); i += 4)
+                    if (got[i + 0] != expected[t][0] || got[i + 1] != expected[t][1] ||
+                        got[i + 2] != expected[t][2] || got[i + 3] != 255)
+                    {
+                        bothSurvive = false;
+                        detail = " target " + std::to_string(t) + " texel " +
+                                 std::to_string(i / 4) + " = (" +
+                                 std::to_string(static_cast<int>(got[i + 0])) + "," +
+                                 std::to_string(static_cast<int>(got[i + 1])) + "," +
+                                 std::to_string(static_cast<int>(got[i + 2])) + "," +
+                                 std::to_string(static_cast<int>(got[i + 3])) + ")";
+                        break;
+                    }
+            }
+            const std::string label =
+                "GFX136b: a cube face's colour survives a whole further bind cycle on BOTH a "
+                "preserveContents=true and a preserveContents=false target -- D3D12's "
+                "OMSetRenderTargets has no load action, so the only clear a cube target ever gets "
+                "unasked is GraphicsDevice::SetRenderTargets' DiscardContents one" + detail;
+            Check(bothSurvive, label.c_str());
+        }
     }
 
     // ---- Check X: DX-118 -- real BlendState/RasterizerState now genuinely runtime-settable,
@@ -5043,7 +5104,7 @@ int main()
     // D3D11RenderTargetCubeBackend's own face-0-only test precedent (a real, honest scope match,
     // not an oversight -- only one face is ever the active draw target at a time). ----
     {
-        auto rtCubeMip = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+        auto rtCubeMip = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
         auto* d3dRtCubeMip = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMip.get());
         Check(d3dRtCubeMip != nullptr && d3dRtCubeMip->GetLevelCountEXT() == 4,
               "MM0: D3D12RenderTargetCubeBackend: an 8x8 mipMap=true cube render target reports "
@@ -5139,7 +5200,7 @@ int main()
     // (confirmed by reading the code, not assumed), so this mainly confirms the
     // mip + face*levelCount subresource math generalizes correctly past face 0. ----
     {
-        auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+        auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
         auto* d3dRtCubeMip2 = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMip2.get());
         Check(d3dRtCubeMip2 != nullptr, "TT0: D3D12RenderTargetCubeBackend: a second 8x8 mipMap=true "
               "cube render target constructs cleanly (plan_dx.md DX-153)");
@@ -5235,7 +5296,7 @@ int main()
     // produces the exact clear color for face 0, not that the device granted a specific sample
     // count (printed as diagnostics only, same honest framing DX-45/DX-117 already established). ----
     {
-        auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/, 4);
+        auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, false /*mipMap*/, 4);
         auto* d3dRtCubeMsaa = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMsaa.get());
         Check(d3dRtCubeMsaa != nullptr, "SS0: D3D12RenderTargetCubeBackend: CreateRenderTargetCube(multiSampleCount=4) "
               "returns a real backend object (plan_dx.md DX-152)");

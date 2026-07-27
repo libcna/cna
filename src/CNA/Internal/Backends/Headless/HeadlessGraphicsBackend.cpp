@@ -599,8 +599,13 @@ namespace CNA::Internal::Backends::Headless
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> HeadlessGraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int multiSampleCount)
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        // REMED-GFX-136: consumed by being deliberately unused, exactly like this backend's own
+        // CreateRenderTarget2D above. Nothing is ever rasterized here, so there is no face content
+        // either to preserve or to discard -- REMED-GFX-130 already made the readback say so
+        // instead of fabricating one.
+        (void) preserveContents;
         return std::make_unique<HeadlessRenderTargetCubeBackend>(state_, size, depthFormat, mipMap, multiSampleCount);
     }
 

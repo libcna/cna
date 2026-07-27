@@ -169,23 +169,23 @@ namespace
     // the backend's own global `sampleCount_`, so a cube target multisamples only when the
     // BACKBUFFER was created multisampled -- which this test does not request. The applied count is
     // still asserted against this claim below rather than assumed.
-    // `preservesOnRebind` false: VulkanRenderTargetCubeBackend hardcodes
-    // `GetOrCreateRTRenderPass(depthFmt, /*discardContents=*/true)` because
-    // IGraphicsBackend::CreateRenderTargetCube -- unlike CreateRenderTarget2D -- has no
-    // preserveContents parameter carrying the target's real RenderTargetUsage down to it. The same
-    // interface gap produces the same behaviour on WebGPU. Distinct from REMED-GFX-129, which is
-    // about an explicit Clear() being DROPPED on a preserving target.
+    // `preservesOnRebind` true since REMED-GFX-136: IGraphicsBackend::CreateRenderTargetCube now
+    // carries a `preserveContents` flag, so VulkanRenderTargetCubeBackend builds its face
+    // framebuffers against GetOrCreateRTRenderPass(depthFmt, !preserveContents) instead of
+    // hardcoding the discard variant. examples/rendertargetcube_usage_test.cpp is that finding's
+    // own full battery; what U1/U2 below keep is the single check that a preserved face is exactly
+    // what GetData reports.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
-                                 true, false, Support::Exact, MipTargets::Real, false, true, false, false, false};
+                                 true, false, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     // `mipMapCubeTargets` false: WEBGPU-114 refuses a mipMap=true RenderTargetCube at construction
     // rather than under-delivering the mip chain RenderTargetCube already told the XNA layer to
-    // expect. `preservesOnRebind` false: RenderPendingDrawsToRenderTargetCubeFace() always clears,
-    // because IGraphicsBackend::CreateRenderTargetCube -- unlike CreateRenderTarget2D -- has no
-    // preserveContents parameter to thread the target's real usage through. Both are recorded
-    // boundaries of this backend, checked here rather than assumed.
+    // expect -- a recorded boundary of this backend, checked here rather than assumed.
+    // `preservesOnRebind` true since REMED-GFX-136: RenderPendingDrawsToRenderTargetCubeFace() no
+    // longer hardcodes WGPULoadOp_Clear, it uses the same `clearPending || !preserveContents`
+    // choice as its RenderTarget2D sibling. See examples/rendertargetcube_usage_test.cpp.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Unsupported,
-                                 true, false, Support::Exact, MipTargets::RefusedAtCreation, false, true, false, false, false};
+                                 true, false, Support::Exact, MipTargets::RefusedAtCreation, true, true, false, false, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};

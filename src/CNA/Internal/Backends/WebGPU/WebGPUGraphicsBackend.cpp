@@ -1096,8 +1096,9 @@ namespace CNA::Internal::Backends::WebGPU
 
     // WEBGPU-114: see this class's own header doc comment for the full architecture summary.
     WebGPURenderTargetCubeBackend::WebGPURenderTargetCubeBackend(WebGPUGraphicsBackend& owner, int size,
-                                                                  int depthFormat, bool mipMap)
-        : owner_(&owner), size_(size)
+                                                                  int depthFormat,
+                                                                  bool preserveContents, bool mipMap)
+        : owner_(&owner), size_(size), preserveContents_(preserveContents)
     {
         if (size_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTargetCube size must be positive");
@@ -5753,28 +5754,40 @@ struct VSOut {
     }
 
     // WEBGPU-114: the cube-face counterpart of RenderPendingDrawsToRenderTarget() immediately
-    // above -- near-identical structure, with two differences: (1) the colour attachment is one
-    // face's own single-layer 2D view (no MSAA/resolveTarget -- this class does not implement
-    // MSAA at all, see its own doc comment) and (2) content is ALWAYS discarded on each bind cycle
-    // (RenderTargetUsage::DiscardContents behaviour unconditionally), since
-    // IGraphicsBackend::CreateRenderTargetCube's own signature -- unlike CreateRenderTarget2D's --
-    // has no preserveContents parameter to thread a RenderTargetCube's real usage_ value through
-    // in the first place; this is a pre-existing common-interface gap, not something introduced
-    // here (see plan_webgpu.md's WEBGPU-114 row).
+    // above -- near-identical structure, with one difference: the colour attachment is one face's
+    // own single-layer 2D view (no MSAA/resolveTarget -- this class does not implement MSAA at
+    // all, see its own doc comment).
+    // REMED-GFX-136: the second difference is gone. This function used to set
+    // `loadOp = WGPULoadOp_Clear` unconditionally -- RenderTargetUsage::DiscardContents behaviour
+    // on every bind cycle whatever the game asked for -- because
+    // IGraphicsBackend::CreateRenderTargetCube had no preserveContents parameter to thread a
+    // RenderTargetCube's real usage through. It has one now, so the choice below is the same
+    // `clearPending || !preserveContents` expression the 2D sibling above already used.
     void WebGPUGraphicsBackend::RenderPendingDrawsToRenderTargetCubeFace(WebGPURenderTargetCubeBackend* target, int face)
     {
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU RenderTargetCube Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
 
+        // REMED-GFX-136: `discard` is read from the target THIS pass is being created for, at the
+        // moment the pass descriptor is built, and preserveContents_ is immutable after
+        // construction -- so an A -> B -> A sequence can never apply target B's policy to target A,
+        // whichever order the flushes happen in.
+        const bool discard = !target->PreserveContents();
         WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
         colorAttachment.view = target->ColorAttachmentView(face);
         colorAttachment.resolveTarget = nullptr;
-        const bool doClearColor = true; // see this function's own top comment: always discard.
+        const bool doClearColor = clearColorPending_ || discard;
         colorAttachment.loadOp = doClearColor ? WGPULoadOp_Clear : WGPULoadOp_Load;
         colorAttachment.storeOp = WGPUStoreOp_Store;
         colorAttachment.clearValue = clearColor_;
 
+        // Depth/stencil deliberately keeps clearing on a PRESERVING target too, unlike the 2D
+        // sibling above. RenderTargetUsage is a colour contract in this project (Vulkan's own
+        // PreserveContents render pass has always used LOAD_OP_DONT_CARE for depth), and this
+        // cube's depth+stencil texture is ONE attachment shared by all six faces -- "preserving"
+        // it would hand face A whatever depth face B last wrote, which is worse than a defined
+        // clear, not better.
         WGPURenderPassDepthStencilAttachment depthAttachment{};
         depthAttachment.view = target->DepthView();
         depthAttachment.depthLoadOp = WGPULoadOp_Clear;
@@ -6310,10 +6323,13 @@ struct VSOut {
     // WebGPURenderTargetCubeBackend's own doc comment for exactly what is/isn't implemented
     // (no mip regen, no MSAA -- both deliberate, documented scope cuts).
     std::unique_ptr<IRenderTargetCubeBackend> WebGPUGraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int multiSampleCount)
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         (void) multiSampleCount; // see WebGPURenderTargetCubeBackend's own doc comment: ignored.
-        return std::make_unique<WebGPURenderTargetCubeBackend>(*this, size, depthFormat, mipMap);
+        // REMED-GFX-136: preserveContents is the public RenderTargetUsage, reaching a cube target
+        // for the first time -- see RenderPendingDrawsToRenderTargetCubeFace().
+        return std::make_unique<WebGPURenderTargetCubeBackend>(*this, size, depthFormat,
+                                                              preserveContents, mipMap);
     }
 
     std::unique_ptr<ITexture3DBackend> WebGPUGraphicsBackend::CreateTexture3D(

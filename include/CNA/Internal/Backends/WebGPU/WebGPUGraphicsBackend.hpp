@@ -271,7 +271,8 @@ namespace CNA::Internal::Backends::WebGPU
     class WebGPURenderTargetCubeBackend final : public IRenderTargetCubeBackend, public IWebGPUCubeSamplable
     {
     public:
-        WebGPURenderTargetCubeBackend(WebGPUGraphicsBackend& owner, int size, int depthFormat, bool mipMap);
+        WebGPURenderTargetCubeBackend(WebGPUGraphicsBackend& owner, int size, int depthFormat,
+                                      bool preserveContents, bool mipMap);
         ~WebGPURenderTargetCubeBackend() override;
 
         WebGPURenderTargetCubeBackend(const WebGPURenderTargetCubeBackend&) = delete;
@@ -306,6 +307,12 @@ namespace CNA::Internal::Backends::WebGPU
         /// REMED-GFX-102: exact colour-attachment format shared by all faces. Sprite pipeline
         /// identity uses this format, not the cube object or face identity.
         [[nodiscard]] WGPUTextureFormat ColorFormat() const { return colorFormat_; }
+        /// REMED-GFX-136: this target's own RenderTargetUsage, collapsed by
+        /// RenderTargetUsagePreservesContentsEXT() -- true selects WGPULoadOp_Load for a face's
+        /// colour attachment, mirroring WebGPURenderTargetBackend::PreserveContents() exactly.
+        /// Immutable after construction, so the load op recorded for a pass can never come from a
+        /// value some LATER target changed.
+        [[nodiscard]] bool PreserveContents() const { return preserveContents_; }
 
     private:
         WebGPUGraphicsBackend* owner_ = nullptr;
@@ -319,6 +326,7 @@ namespace CNA::Internal::Backends::WebGPU
         std::array<WGPUTextureView, 6> faceViews_{};
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
+        bool preserveContents_ = false;
     };
 
     /// WEBGPU-57/112: a plain volume (3D) texture -- `WGPUTextureDimension_3D`, uploaded/read back
@@ -761,6 +769,7 @@ namespace CNA::Internal::Backends::WebGPU
         /// WEBGPU-114: real render-into-a-cube-face support -- see `WebGPURenderTargetCubeBackend`'s
         /// own doc comment for exactly what this does and does not implement (no mip regen, no MSAA).
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool preserveContents = false,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
 

@@ -869,7 +869,7 @@ namespace CNA::Internal::Backends::Bgfx
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
-        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         // Task 907 finding: the shared IGraphicsBackend::SetRenderTargetCubeFace default only
         // calls BindAsRenderTargetFace -- it never updates currentRtWidth_/currentRtHeight_ (the
         // Task 901 fix for 2D RTs), so any SpriteBatch draw into a cube face was rasterizing into

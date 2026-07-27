@@ -8940,8 +8940,10 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanTextureCubeBackend>(this, size, mipMap);
     }
 
-    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, int depthFormat, bool mipMap, int multiSampleCount)
+    std::unique_ptr<IRenderTargetCubeBackend> VulkanGraphicsBackend::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        // REMED-GFX-136: preserveContents is the public RenderTargetUsage, reaching a cube target
+        // for the first time -- see VulkanRenderTargetCubeBackend's own constructor comment.
         // mipMap (Task 907): real per-face vkCmdBlitImage cascade, mirroring Task 878's
         // RenderTarget2D fix -- see VulkanRenderTargetCubeBackend::FaceProxy::MaybeGenerateMips.
         // multiSampleCount (Task 903): now wired up -- mirrors VulkanRenderTargetBackend's
@@ -8949,7 +8951,9 @@ namespace CNA::Internal::Backends::Vulkan
         // cube face via a shared MSAA color image (see VulkanRenderTargetCubeBackend's
         // constructor). depthFormat (Task 877) now gets true per-instance fidelity (Task 911),
         // mirroring VulkanRenderTargetBackend's identical treatment.
-        return std::make_unique<VulkanRenderTargetCubeBackend>(this, size, depthFormat, mipMap, multiSampleCount);
+        return std::make_unique<VulkanRenderTargetCubeBackend>(this, size, depthFormat,
+                                                               preserveContents, mipMap,
+                                                               multiSampleCount);
     }
 
     void VulkanGraphicsBackend::SetRenderTargets(
@@ -9720,9 +9724,10 @@ namespace CNA::Internal::Backends::Vulkan
     // --- VulkanRenderTargetCubeBackend ---
 
     VulkanRenderTargetCubeBackend::VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size,
-                                                                  int depthFormat, bool mipMap,
+                                                                  int depthFormat,
+                                                                  bool preserveContents, bool mipMap,
                                                                   int requestedMultiSampleCount)
-        : owner_(owner), size_(size)
+        : owner_(owner), size_(size), preserveContents_(preserveContents)
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice    dev  = owner_->device_;
@@ -9809,7 +9814,13 @@ namespace CNA::Internal::Backends::Vulkan
         // transition that assumption is false the first time any face is ever rendered,
         // producing live VUID-vkCmdDraw-None-09600 validation errors (mirrors
         // VulkanRenderTargetBackend's identical Task 878 fix).
-        if (levelCount_ > 1)
+        // REMED-GFX-136: `|| preserveContents_` is the second reason this barrier is needed. A
+        // PreserveContents face uses the LOAD render-pass variant, whose colour initialLayout is
+        // SHADER_READ_ONLY_OPTIMAL, so every layer must already be in that layout the FIRST time
+        // any face is bound -- otherwise vkCmdBeginRenderPass sees an image still in UNDEFINED.
+        // The discard variant declares initialLayout UNDEFINED and never needed it, which is why
+        // Task 907's mip-cascade precondition used to be the only trigger.
+        if (levelCount_ > 1 || preserveContents_)
         {
             VkCommandBuffer initCb = owner_->BeginOneTimeCommands();
             VkImageMemoryBarrier initBarrier{};
@@ -9946,10 +9957,15 @@ namespace CNA::Internal::Backends::Vulkan
                 VkImageView atts[] = { faceViews_[face], depthView_ };
                 VkFramebufferCreateInfo fbInfo{};
                 fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-                // Task 911: this class has no preserveContents concept (unlike
-                // VulkanRenderTargetBackend) -- always use the discard/clear variant, matching
-                // this class's own pre-existing (pre-911) behavior of always using rtRenderPass_.
-                fbInfo.renderPass      = owner_->GetOrCreateRTRenderPass(depthVkFormat_, true);
+                // REMED-GFX-136: this class now HAS a preserveContents concept, because
+                // IGraphicsBackend::CreateRenderTargetCube finally carries one -- so pick the same
+                // way VulkanRenderTargetBackend's own framebuffer does. Pipelines only ever need a
+                // reference render pass built against the discard variant (see
+                // GetOrCreateRTRenderPass()'s own comment: discard/load differ only in
+                // loadOp/initialLayout, neither of which affects render-pass compatibility), so
+                // this adds at most one more cached render pass per distinct depth format, never a
+                // per-target or per-face one.
+                fbInfo.renderPass      = owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
                 fbInfo.attachmentCount = hasDepth ? 2u : 1u;
                 fbInfo.pAttachments    = atts;
                 fbInfo.width           = us;
@@ -9959,7 +9975,7 @@ namespace CNA::Internal::Backends::Vulkan
                     throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateFramebuffer failed");
 
                 faceProxies_[face].framebuffer = framebuffers_[face];
-                faceProxies_[face].renderPass  = owner_->GetOrCreateRTRenderPass(depthVkFormat_, true);
+                faceProxies_[face].renderPass  = owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
             }
 
             faceProxies_[face].size        = size;

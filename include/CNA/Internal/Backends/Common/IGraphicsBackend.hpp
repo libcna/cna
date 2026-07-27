@@ -911,7 +911,17 @@ namespace CNA::Internal::Backends
         /// Creates a cube-map render target. Returns nullptr on backends that
         /// do not support cube map render targets. See CreateRenderTarget2D for `depthFormat`/
         /// `mipMap`/`multiSampleCount`.
-        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
+        /// `preserveContents` (REMED-GFX-136) carries the public RenderTargetCube's own
+        /// RenderTargetUsage down here, exactly as CreateRenderTarget2D's identically-placed
+        /// parameter does — true means "when a face of this target is bound, load what is already
+        /// in it", false means "the previous colour need not survive". Both public targets derive
+        /// it from the single Microsoft::Xna::Framework::Graphics::
+        /// RenderTargetUsagePreservesContentsEXT() mapping, so PlatformContents cannot mean one
+        /// thing to the shared layer and another to a backend. Before this parameter existed a
+        /// cube target's real usage stopped at RenderTargetCube's constructor and every backend
+        /// had to invent an answer: Vulkan and WebGPU both invented "always discard", so a
+        /// PreserveContents cube face was wiped on every bind cycle.
+        virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
         /// Compiles a shader program from GLSL/HLSL source strings.
         /// Returns nullptr on backends that do not support programmable shaders.
