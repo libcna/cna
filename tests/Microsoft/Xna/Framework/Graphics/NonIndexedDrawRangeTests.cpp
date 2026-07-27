@@ -23,17 +23,19 @@
 // keeps its exact range therefore leaves both outer regions at the clear colour, while a draw that
 // binds a wider vertex range necessarily lights them.
 //
-// Backend scope. Bgfx, EasyGL, WebGPU, Vulkan, D3D9 and D3D11 render 3D triangles and support
-// backbuffer readback, so they carry the permanent TriangleList coverage. The full five-topology
-// sweep additionally needs PointListEXT, which Vulkan/D3D9/D3D11/D3D12 still route through their
-// triangle-list default (the independent REMED-GFX-114), so that sweep runs on Bgfx, EasyGL and
-// WebGPU. Software raster keeps its documented TriangleList-only v1 boundary and is covered by its
-// own control below.
+// Backend scope. Bgfx, EasyGL, WebGPU, Vulkan, D3D9, D3D11 and Software raster render 3D triangles
+// and support backbuffer readback, so they carry the permanent TriangleList coverage. The full
+// five-topology sweep additionally needs PointListEXT, which Vulkan/D3D9/D3D11/D3D12 still route
+// through their triangle-list default (the independent REMED-GFX-114), so that sweep runs on Bgfx,
+// EasyGL and WebGPU. Software raster keeps its documented TriangleList-only v1 boundary, so its
+// explicit rejection of the other four topologies is asserted in its own section below
+// (REMED-GFX-119) rather than in the shared sweep.
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 #include <gtest/gtest.h>
@@ -82,6 +84,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
+using Microsoft::Xna::Framework::Graphics::CullMode;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
@@ -523,6 +526,47 @@ namespace
             << label << ": decoy colour must not appear anywhere in the frame";
     }
 
+    /// Slots that hold rendered geometry, as a comma-separated list. Because every slot is an
+    /// exclusive screen region owned by exactly one list primitive, the lit slots *are* the
+    /// primitives a draw consumed — so a failure message names the actual consumed range instead of
+    /// only reporting that some pixel was wrong. "none" when the frame is still at @p background.
+    std::string DescribeLitSlots(
+        const FrameSnapshot& snapshot, const SlotLayout& layout, const Color& background)
+    {
+        std::string lit;
+        for (int slot = 0; slot < kSlotCount; ++slot)
+        {
+            const int x0 = static_cast<int>(layout.Boundary(slot));
+            const int x1 = static_cast<int>(layout.Boundary(slot + 1) + 0.999f);
+            if (snapshot.CountLitInColumns(x0, x1, background) > 0)
+            {
+                if (!lit.empty())
+                    lit += ',';
+                lit += std::to_string(slot);
+            }
+        }
+        return lit.empty() ? "none" : lit;
+    }
+
+    /// The list-topology slots a draw is supposed to consume, in the same notation, so a failure
+    /// message can print "expected 2,3,4 / actual 0,1,2" rather than a pixel coordinate alone.
+    std::string DescribeExpectedSlots(
+        PrimitiveType primitive, int vertexStart, int primitiveCount)
+    {
+        const int perPrimitive = VerticesPerListPrimitive(primitive);
+        if (perPrimitive == 0)
+            return "?";
+        const int firstSlot = vertexStart / perPrimitive;
+        std::string expected;
+        for (int i = 0; i < primitiveCount; ++i)
+        {
+            if (!expected.empty())
+                expected += ',';
+            expected += std::to_string(firstSlot + i);
+        }
+        return expected.empty() ? "none" : expected;
+    }
+
     const char* TopologyName(PrimitiveType primitive)
     {
         switch (primitive)
@@ -601,7 +645,8 @@ namespace
 
 #if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
     defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11)
+    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
+    defined(CNA_BACKEND_SOFTWARE)
 
 // Proof 1 of the range contract, isolated: primitiveCount alone must limit the consumed vertex
 // range. vertexStart is zero, so nothing here depends on the offset half of the contract; every
@@ -879,12 +924,22 @@ TEST_F(NonIndexedDrawRangeTest, NonIndexedRangeHoldsOnRenderTargetAndBackbuffer)
 
     // Rendered target pixels live only on the GPU; sample the finished target through the ordinary
     // texture path.
+#ifndef CNA_BACKEND_SOFTWARE
     device.SetVertexBuffer(nullptr);
     SampleTargetToBackbuffer(device, target);
     const FrameSnapshot fromTarget =
         CaptureBackbuffer(device, layout.width, layout.height);
     ExpectIntendedPrimitivesRendered(fromTarget, plan, "render-target range");
     ExpectRangeExclusive(fromTarget, plan, Color::Black, "render-target range");
+#else
+    // Software render targets are write-only in v1: SoftwareRenderTargetBackend implements no
+    // ITextureBackend::GetData (the interface default leaves the caller's buffer untouched) and it
+    // is not a SoftwareTextureBackend, so the rasterizer's sampler dynamic_casts it to null and
+    // draws the quad untextured. Both facets are the independent finding REMED-GFX-124, not a
+    // draw-range question, so this backend asserts only what it can actually observe: the
+    // target-only draw above stayed off the backbuffer, and the backbuffer range below still
+    // holds after a render target was used.
+#endif
 
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
@@ -1416,12 +1471,79 @@ TEST_F(NonIndexedDrawRangeTest, BgfxDisposingAfterQueuedRangedDrawsIsSafe)
 #endif
 
 #ifdef CNA_BACKEND_SOFTWARE
-// Software raster's documented v1 boundary is TriangleList only, and its non-indexed paths address
-// the bound buffer from element zero: they enforce primitiveCount against the buffer size but never
-// apply vertexStart at all. That is the Software counterpart of this task's Bgfx defect and is
-// recorded as its own finding (REMED-GFX-119), not corrected here. Pinning it keeps the boundary
-// explicit and makes the follow-up fix an obvious, deliberate change.
-TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartIsCurrentlyIgnored)
+// REMED-GFX-119. Software raster's non-indexed paths address the bound buffer with the raw loop
+// ordinal, so `vertexStart` never selects the first consumed vertex. The three tests below separate
+// the two halves of the public contract from each other and from every render state that could
+// plausibly produce the same picture, so the classification does not rest on the finding's title.
+
+// The offset half of the contract, isolated per case. The first two cases request vertexStart 0, so
+// they exercise only the count half and hold both before and after the correction; every later case
+// keeps the same primitiveCount as one that passed, changing nothing but the offset. A failure
+// prints the slots that actually rendered, and a list slot is one primitive's exclusive screen
+// region, so the message names the consumed vertex range rather than a single wrong pixel.
+TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedDrawConsumesExactlyTheRequestedVertexRange)
+{
+    RequireRangeRendering();
+
+    const SlotLayout layout = BackbufferLayout();
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), kSlotCount * 3, BufferUsage::None);
+    BasicEffect effect(device);
+
+    struct RangeCase
+    {
+        int vertexStart;
+        int primitiveCount;
+        const char* label;
+    };
+    constexpr std::array<RangeCase, 7> cases{{
+        {0, 1, "count only: first single primitive"},
+        {0, 3, "count only: first three primitives"},
+        {0, 7, "complete buffer"},
+        {9, 3, "offset only: middle range, same count as case 2"},
+        {6, 3, "offset only: interior range, same count as case 2"},
+        {18, 1, "offset only: final single primitive, same count as case 1"},
+        {3, 5, "offset and count: decoys on both sides"},
+    }};
+
+    for (const RangeCase& rangeCase : cases)
+    {
+        const RangePlan plan = BuildRangePlan(
+            layout, PrimitiveType::TriangleList,
+            rangeCase.vertexStart, rangeCase.primitiveCount);
+        vertexBuffer.SetData(
+            plan.vertices.data(), static_cast<int>(plan.vertices.size()));
+
+        ApplyVertexColorEffect(effect);
+        device.Clear(Color::Black);
+        device.SetVertexBuffer(&vertexBuffer);
+        device.DrawPrimitives(
+            PrimitiveType::TriangleList,
+            rangeCase.vertexStart,
+            rangeCase.primitiveCount);
+
+        const FrameSnapshot pixels =
+            CaptureBackbuffer(device, layout.width, layout.height);
+        const std::string consumed = "vertexStart=" +
+            std::to_string(rangeCase.vertexStart) + " primitiveCount=" +
+            std::to_string(rangeCase.primitiveCount) + " expected slots " +
+            DescribeExpectedSlots(
+                PrimitiveType::TriangleList, rangeCase.vertexStart,
+                rangeCase.primitiveCount) +
+            ", actual " + DescribeLitSlots(pixels, layout, Color::Black);
+        SCOPED_TRACE(consumed);
+        ExpectIntendedPrimitivesRendered(pixels, plan, rangeCase.label);
+        ExpectRangeExclusive(pixels, plan, Color::Black, rangeCase.label);
+    }
+}
+
+// The same requested range under render states that could each independently produce a wrong
+// picture: both cull modes against a fixed winding, depth testing on and off, an explicitly
+// restated full viewport and scissor, and a readback from a render target instead of the
+// backbuffer. Software raster's own regressions own these individually (REMED-GFX-030 depth,
+// REMED-GFX-079 viewport, REMED-GFX-080 scissor, REMED-GFX-082 fill mode); here they exist only to
+// rule every one of them out as the cause of the consumed range.
+TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStateAndTarget)
 {
     RequireRangeRendering();
 
@@ -1429,7 +1551,108 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartIsCurrentlyIgnored)
     const RangePlan plan =
         BuildRangePlan(layout, PrimitiveType::TriangleList, 6, 3);
     const int vertexCount = static_cast<int>(plan.vertices.size());
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
+    vertexBuffer.SetData(plan.vertices.data(), vertexCount);
+    BasicEffect effect(device);
 
+    struct StateCase
+    {
+        const char* label;
+        CullMode cullMode;
+        bool depthEnabled;
+        bool alphaBlend;
+        /// Draws the same range into a RenderTarget2D first, then measures the backbuffer draw.
+        /// Software render targets cannot be read back or sampled (REMED-GFX-124), so the round
+        /// trip is what is observable here; the target-isolation assertion itself lives in
+        /// NonIndexedRangeHoldsOnRenderTargetAndBackbuffer.
+        bool renderTargetRoundTrip;
+        /// False only for the cull mode that removes this fixture's winding outright. Stating it
+        /// per case is what stops a state that silently renders nothing from passing the range
+        /// assertions vacuously.
+        bool expectsGeometry;
+    };
+    constexpr std::array<StateCase, 6> stateCases{{
+        {"CullNone, no depth, opaque, backbuffer",
+         CullMode::None, false, false, false, true},
+        {"CullClockwise", CullMode::CullClockwiseFace, false, false, false, true},
+        {"CullCounterClockwise",
+         CullMode::CullCounterClockwiseFace, false, false, false, false},
+        {"depth test and write enabled", CullMode::None, true, false, false, true},
+        {"AlphaBlend", CullMode::None, false, true, false, true},
+        {"after a render-target round trip", CullMode::None, false, false, true, true},
+    }};
+
+    for (const StateCase& stateCase : stateCases)
+    {
+        SCOPED_TRACE(stateCase.label);
+        RasterizerState rasterizerState;
+        rasterizerState.setCullModeProperty(stateCase.cullMode);
+        rasterizerState.setFillModeProperty(FillMode::Solid);
+        rasterizerState.setScissorTestEnableProperty(false);
+        device.setRasterizerStateProperty(rasterizerState);
+        device.setDepthStencilStateProperty(
+            stateCase.depthEnabled ? DepthStencilState::Default : DepthStencilState::None);
+        device.setBlendStateProperty(
+            stateCase.alphaBlend ? BlendState::AlphaBlend : BlendState::Opaque);
+        device.setViewportProperty(Viewport(0, 0, layout.width, layout.height));
+        device.setScissorRectangleProperty(Rectangle(0, 0, layout.width, layout.height));
+
+        if (stateCase.renderTargetRoundTrip)
+        {
+            RenderTarget2D target(
+                device, layout.width, layout.height, false, SurfaceFormat::Color,
+                DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+            device.SetRenderTarget(&target);
+            ApplyVertexColorEffect(effect);
+            device.Clear(Color::Black);
+            device.SetVertexBuffer(&vertexBuffer);
+            device.DrawPrimitives(PrimitiveType::TriangleList, 6, 3);
+            device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        }
+
+        ApplyVertexColorEffect(effect);
+        device.Clear(Color::Black);
+        device.SetVertexBuffer(&vertexBuffer);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 6, 3);
+
+        const FrameSnapshot pixels =
+            CaptureBackbuffer(device, layout.width, layout.height);
+
+        const int lit = pixels.CountLitInColumns(0, layout.width, Color::Black);
+        if (!stateCase.expectsGeometry)
+        {
+            // The control that proves the cull mode really is applied: the same draw under the
+            // opposite winding rule must remove the fixture outright.
+            EXPECT_EQ(0, lit)
+                << stateCase.label << ": the culled winding still rendered (actual slots "
+                << DescribeLitSlots(pixels, layout, Color::Black) << ')';
+            continue;
+        }
+        EXPECT_GT(lit, 0)
+            << stateCase.label
+            << ": nothing rendered at all, so this state proves nothing about the range";
+        EXPECT_EQ(0, pixels.CountExact(Color::Magenta))
+            << stateCase.label << ": decoy geometry outside the requested range rendered ("
+            << "actual slots " << DescribeLitSlots(pixels, layout, Color::Black) << ')';
+        ExpectIntendedPrimitivesRendered(pixels, plan, stateCase.label);
+        ExpectRangeExclusive(pixels, plan, Color::Black, stateCase.label);
+    }
+
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+}
+
+// Software raster's documented v1 boundary is TriangleList only. The other four topologies stay
+// explicitly rejected rather than approximated through the triangle path, and a rejected draw must
+// leave the frame exactly as the clear left it.
+TEST_F(NonIndexedDrawRangeTest, SoftwareRejectsUnsupportedNonIndexedTopologiesWithoutRendering)
+{
+    RequireRangeRendering();
+
+    const SlotLayout layout = BackbufferLayout();
+    const RangePlan plan =
+        BuildRangePlan(layout, PrimitiveType::TriangleList, 0, 1);
+    const int vertexCount = static_cast<int>(plan.vertices.size());
     VertexBuffer vertexBuffer(
         device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
     vertexBuffer.SetData(plan.vertices.data(), vertexCount);
@@ -1438,23 +1661,100 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartIsCurrentlyIgnored)
     ApplyVertexColorEffect(effect);
     device.Clear(Color::Black);
     device.SetVertexBuffer(&vertexBuffer);
-    device.DrawPrimitives(PrimitiveType::TriangleList, 6, 3);
+
+    constexpr std::array<PrimitiveType, 4> unsupported{
+        PrimitiveType::TriangleStrip,
+        PrimitiveType::LineList,
+        PrimitiveType::LineStrip,
+        PrimitiveType::PointListEXT,
+    };
+    for (const PrimitiveType primitive : unsupported)
+    {
+        // Both a zero and a nonzero offset, so the rejection cannot depend on the range either.
+        EXPECT_THROW(device.DrawPrimitives(primitive, 0, 1), std::runtime_error)
+            << TopologyName(primitive) << " at vertexStart 0 was not rejected";
+        EXPECT_THROW(device.DrawPrimitives(primitive, 6, 1), std::runtime_error)
+            << TopologyName(primitive) << " at vertexStart 6 was not rejected";
+    }
 
     const FrameSnapshot pixels =
         CaptureBackbuffer(device, layout.width, layout.height);
-    // REMED-GFX-119: the draw renders the buffer's first three triangles instead of the requested
-    // ones, so the magenta prefix decoys are on screen and the intended range is not.
-    EXPECT_GT(pixels.CountExact(Color::Magenta), 0)
-        << "REMED-GFX-119: Software non-indexed draws now honour vertexStart -- flip this test";
+    EXPECT_EQ(0, pixels.CountLitInColumns(0, layout.width, Color::Black))
+        << "a rejected topology still rasterized -- "
+        << pixels.DescribeFirstLitInColumns(0, layout.width, Color::Black);
+}
 
-    // Non-TriangleList topologies stay explicitly rejected rather than approximated.
+// A rejected range must leave nothing partially committed on the CPU raster path: the draw that
+// follows it renders exactly what the identical draw before it rendered. Reading each of the three
+// frames separately is what makes "the valid draw still works" a real assertion rather than a
+// side effect of the last draw overwriting the frame.
+TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeepsRendering)
+{
+    RequireRangeRendering();
+
+    const SlotLayout layout = BackbufferLayout();
+    const RangePlan plan =
+        BuildRangePlan(layout, PrimitiveType::TriangleList, 9, 3);
+    const int vertexCount = static_cast<int>(plan.vertices.size());
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
+    vertexBuffer.SetData(plan.vertices.data(), vertexCount);
+
+    BasicEffect effect(device);
+    const auto drawValidRange = [&]() {
+        ApplyVertexColorEffect(effect);
+        device.Clear(Color::Black);
+        device.SetVertexBuffer(&vertexBuffer);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 9, 3);
+        return CaptureBackbuffer(device, layout.width, layout.height);
+    };
+
+    const FrameSnapshot before = drawValidRange();
+    ExpectIntendedPrimitivesRendered(before, plan, "valid draw before the rejected range");
+    ExpectRangeExclusive(before, plan, Color::Black, "valid draw before the rejected range");
+
+    // Every rejected form: past the end, one primitive too many, a topology-count overflow, a
+    // byte-offset-scale overflow and an unsupported topology. None may render or corrupt state.
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    EXPECT_THROW(
+        device.DrawPrimitives(PrimitiveType::TriangleList, vertexCount, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        device.DrawPrimitives(PrimitiveType::TriangleList, 19, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        device.DrawPrimitives(PrimitiveType::TriangleList, -1, 1),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 0),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        device.DrawPrimitives(
+            PrimitiveType::TriangleList, 0, std::numeric_limits<int>::max()),
+        System::ArgumentOutOfRangeException);
+    EXPECT_THROW(
+        device.DrawPrimitives(
+            PrimitiveType::PointListEXT,
+            std::numeric_limits<int>::max(),
+            std::numeric_limits<int>::max()),
+        System::ArgumentOutOfRangeException);
     EXPECT_THROW(
         device.DrawPrimitives(PrimitiveType::TriangleStrip, 0, 1), std::runtime_error);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::LineList, 0, 1), std::runtime_error);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::LineStrip, 0, 1), std::runtime_error);
-    EXPECT_THROW(
-        device.DrawPrimitives(PrimitiveType::PointListEXT, 0, 1), std::runtime_error);
+
+    const FrameSnapshot rejected =
+        CaptureBackbuffer(device, layout.width, layout.height);
+    EXPECT_EQ(0, rejected.CountLitInColumns(0, layout.width, Color::Black))
+        << "a rejected non-indexed range reached Software storage -- "
+        << rejected.DescribeFirstLitInColumns(0, layout.width, Color::Black);
+
+    const FrameSnapshot after = drawValidRange();
+    ExpectIntendedPrimitivesRendered(after, plan, "valid draw after the rejected range");
+    ExpectRangeExclusive(after, plan, Color::Black, "valid draw after the rejected range");
+    EXPECT_EQ(
+        before.CountLitInColumns(0, layout.width, Color::Black),
+        after.CountLitInColumns(0, layout.width, Color::Black))
+        << "the valid draw rendered a different number of pixels after a rejected range";
 }
 #endif
