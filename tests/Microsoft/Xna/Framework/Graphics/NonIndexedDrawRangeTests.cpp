@@ -480,9 +480,16 @@ namespace
         FrameSnapshot snapshot;
         snapshot.width = width;
         snapshot.height = height;
+        // REMED-GFX-124: NOT Color::Transparent. A backend whose render-target readback does
+        // nothing still returns a fully written all-zero frame, because Texture2D::GetData hands
+        // the backend a scratch buffer it zero-initialized itself -- so a transparent-black
+        // pre-fill is byte-identical to that fabricated result, and the exclusivity assertions
+        // below (which treat RGB 0,0,0 as "not lit" and look for an absent decoy colour) would all
+        // pass on an empty frame. A pre-fill that matches no rendered colour makes an unwritten
+        // readback fail instead.
         snapshot.pixels.assign(
             static_cast<std::size_t>(width) * static_cast<std::size_t>(height),
-            Color::Transparent);
+            Color(0xCD, 0xCD, 0xCD, 0xCD));
         const Rectangle region(0, 0, width, height);
         target.GetData(
             0, &region, snapshot.pixels.data(), 0,
@@ -948,23 +955,15 @@ TEST_F(NonIndexedDrawRangeTest, NonIndexedRangeHoldsOnRenderTargetAndBackbuffer)
         << "a render-target-only draw reached the backbuffer";
 
     // Rendered target pixels live only on the GPU; sample the finished target through the ordinary
-    // texture path.
-#ifndef CNA_BACKEND_SOFTWARE
+    // texture path. REMED-GFX-124 restored this half on Software too -- the target's colour storage
+    // is now reachable through the same capability every other texture is sampled through, so this
+    // is no longer a per-backend carve-out.
     device.SetVertexBuffer(nullptr);
     SampleTargetToBackbuffer(device, target);
     const FrameSnapshot fromTarget =
         CaptureBackbuffer(device, layout.width, layout.height);
     ExpectIntendedPrimitivesRendered(fromTarget, plan, "render-target range");
     ExpectRangeExclusive(fromTarget, plan, Color::Black, "render-target range");
-#else
-    // Software render targets are write-only in v1: SoftwareRenderTargetBackend implements no
-    // ITextureBackend::GetData (the interface default leaves the caller's buffer untouched) and it
-    // is not a SoftwareTextureBackend, so the rasterizer's sampler dynamic_casts it to null and
-    // draws the quad untextured. Both facets are the independent finding REMED-GFX-124, not a
-    // draw-range question, so this backend asserts only what it can actually observe: the
-    // target-only draw above stayed off the backbuffer, and the backbuffer range below still
-    // holds after a render target was used.
-#endif
 
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
@@ -1588,9 +1587,10 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStat
         bool depthEnabled;
         bool alphaBlend;
         /// Draws the same range into a RenderTarget2D first, then measures the backbuffer draw.
-        /// Software render targets cannot be read back or sampled (REMED-GFX-124), so the round
-        /// trip is what is observable here; the target-isolation assertion itself lives in
-        /// NonIndexedRangeHoldsOnRenderTargetAndBackbuffer.
+        /// The round trip is what this case is about; the target's own content and the
+        /// producer-to-consumer sampling assertion live in
+        /// NonIndexedRangeHoldsOnRenderTargetAndBackbuffer, which REMED-GFX-124 restored on every
+        /// backend including Software.
         bool renderTargetRoundTrip;
         /// False only for the cull mode that removes this fixture's winding outright. Stating it
         /// per case is what stops a state that silently renders nothing from passing the range
