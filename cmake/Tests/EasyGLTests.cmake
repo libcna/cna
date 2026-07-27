@@ -1618,4 +1618,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_Texture2D_GetDataContract COMMAND cna_test_easygl_texture2d_getdata_contract
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube
+        # and volume GetData paths converted their own zero-initialized scratch buffer for the caller
+        # regardless of whether the backend read anything back, so an unimplemented readback returned
+        # a complete, uniformly transparent-black face/volume instead of rejecting the request.
+        cna_easygl_test(cna_test_easygl_cube_volume_getdata_contract
+                        examples/texturecube_texture3d_getdata_contract_test.cpp)
+        cna_register_backend_test(NAME EasyGL_CubeVolume_GetDataContract COMMAND cna_test_easygl_cube_volume_getdata_contract
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()

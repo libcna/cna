@@ -41,4 +41,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # found crashes under this dev loop's vanilla Wine dxgi.dll. Building it keeps D3D12's readback
     # implementation compile-verified and runnable by hand on real Windows.
     cna_d3d12_test(cna_test_d3d12_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
+
+    # REMED-GFX-130: the TextureCube/Texture3D half of the same finding. Built, not ctest-registered,
+    # for exactly the reason above -- this is a Game-harness test, so it constructs a window and swap
+    # chain, which DX-100's spike already found crashes under this dev loop's vanilla Wine dxgi.dll.
+    cna_d3d12_test(cna_test_d3d12_cube_volume_getdata_contract
+                   examples/texturecube_texture3d_getdata_contract_test.cpp)
 endif()

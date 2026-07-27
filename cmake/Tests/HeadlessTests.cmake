@@ -53,4 +53,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_Texture2D_GetDataContract
         COMMAND cna_test_headless_texture2d_getdata_contract
         TIMEOUT 30 LABELS "Headless")
+
+    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. This backend is the
+    # one that must REJECT both -- its cube SetData is a trace entry rather than a write, and
+    # pre-fix its cube GetData actively `std::fill_n`'d the caller's destination with zeros.
+    cna_headless_test(cna_test_headless_cube_volume_getdata_contract
+                      examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_CubeVolume_GetDataContract
+        COMMAND cna_test_headless_cube_volume_getdata_contract
+        TIMEOUT 30 LABELS "Headless")
 endif()

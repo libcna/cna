@@ -268,4 +268,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_register_backend_test(NAME D3D9_Texture2D_GetDataContract
         COMMAND ${_d3d9_texture2d_getdata_contract_cmd}
         TIMEOUT 60 LABELS "D3D9")
+
+    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
+    # volume GetData paths converted their own zero-initialized scratch buffer for the caller
+    # regardless of whether the backend read anything back. The volume half needs a
+    # GraphicsProfile::HiDef device (D9-100: Reach does not support volume textures at all), which
+    # the test itself requests.
+    cna_d3d9_test(cna_test_d3d9_cube_volume_getdata_contract
+                  examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_cube_volume_getdata_contract_cmd cna_test_d3d9_cube_volume_getdata_contract)
+    cna_register_backend_test(NAME D3D9_CubeVolume_GetDataContract
+        COMMAND ${_d3d9_cube_volume_getdata_contract_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 endif()

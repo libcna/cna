@@ -283,4 +283,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME WebGPU_Texture2D_GetDataContract COMMAND cna_test_webgpu_texture2d_getdata_contract
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. This backend's own
+    # cube/volume readbacks additionally `memset` the caller's destination to zero and returned as if
+    # successful whenever the readback buffer could not be mapped -- the same fabrication in backend
+    # clothing, closed here.
+    cna_webgpu_test(cna_test_webgpu_cube_volume_getdata_contract
+                    examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME WebGPU_CubeVolume_GetDataContract COMMAND cna_test_webgpu_cube_volume_getdata_contract
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

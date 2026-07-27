@@ -56,4 +56,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                    examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Ascii_Texture2D_GetDataContract COMMAND cna_test_ascii_texture2d_getdata_contract
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. This backend creates
+    # neither a cube nor a volume resource, so both public readbacks must reject rather than convert
+    # the shared layer's own zeroed scratch buffer into a complete face/volume.
+    cna_ascii_test(cna_test_ascii_cube_volume_getdata_contract
+                   examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Ascii_CubeVolume_GetDataContract COMMAND cna_test_ascii_cube_volume_getdata_contract
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

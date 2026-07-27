@@ -140,6 +140,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_texture2d_getdata_contract
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
+    # volume GetData paths converted their own zero-initialized scratch buffer for the caller
+    # regardless of whether the backend read anything back, so an unimplemented readback returned a
+    # complete, uniformly transparent-black face/volume instead of rejecting the request.
+    cna_software_test(cna_test_software_cube_volume_getdata_contract
+                      examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Software_CubeVolume_GetDataContract
+        COMMAND cna_test_software_cube_volume_getdata_contract
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.

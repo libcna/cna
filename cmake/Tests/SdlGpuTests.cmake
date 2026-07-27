@@ -275,4 +275,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
                     examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME SdlGpu_Texture2D_GetDataContract COMMAND cna_test_sdlgpu_texture2d_getdata_contract
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
+    # volume GetData paths converted their own zero-initialized scratch buffer for the caller
+    # regardless of whether the backend read anything back, so an unimplemented readback returned a
+    # complete, uniformly transparent-black face/volume instead of rejecting the request.
+    cna_sdlgpu_test(cna_test_sdlgpu_cube_volume_getdata_contract
+                    examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_CubeVolume_GetDataContract COMMAND cna_test_sdlgpu_cube_volume_getdata_contract
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

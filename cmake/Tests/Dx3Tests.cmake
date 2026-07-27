@@ -82,4 +82,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                  examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Dx3_Texture2D_GetDataContract COMMAND cna_test_dx3_texture2d_getdata_contract
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. DirectDraw is 2D
+    # only, so this backend creates neither resource and both public readbacks must reject rather
+    # than convert the shared layer's own zeroed scratch buffer into a complete face/volume.
+    cna_dx3_test(cna_test_dx3_cube_volume_getdata_contract
+                 examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Dx3_CubeVolume_GetDataContract COMMAND cna_test_dx3_cube_volume_getdata_contract
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 endif()

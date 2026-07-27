@@ -14,4 +14,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # contract at least stays compile-verified on the Emscripten toolchain.
     add_executable(cna_test_canvas_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
     target_link_libraries(cna_test_canvas_texture2d_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+
+    # REMED-GFX-130: the TextureCube/Texture3D half of the same finding. Built (not ctest-registered,
+    # like every Canvas test) so this backend's deterministic cube/volume rejection stays
+    # compile-verified on the Emscripten toolchain.
+    add_executable(cna_test_canvas_cube_volume_getdata_contract
+                   examples/texturecube_texture3d_getdata_contract_test.cpp)
+    target_link_libraries(cna_test_canvas_cube_volume_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 endif()
