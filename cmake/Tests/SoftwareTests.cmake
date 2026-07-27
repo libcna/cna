@@ -117,6 +117,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_IndexedAddressing COMMAND cna_test_software_indexed_addressing
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-124: a RenderTarget2D must be readable and sampleable once it is no longer active --
+    # GetData returns the rendered colour attachment (full level, rectangle, destination start index)
+    # and the finished target samples as an ordinary texture through both SpriteBatch and a textured
+    # 3D primitive. Pre-fix SoftwareRenderTargetBackend overrode no ITextureBackend::GetData (the
+    # interface default silently leaves the caller's buffer untouched) and was not a
+    # SoftwareTextureBackend, so both samplers dynamic_cast it to null and drew untextured white.
+    cna_software_test(cna_test_software_rendertarget_readback examples/software_rendertarget_readback_test.cpp)
+    cna_register_backend_test(NAME Software_RenderTargetReadback
+        COMMAND cna_test_software_rendertarget_readback
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
