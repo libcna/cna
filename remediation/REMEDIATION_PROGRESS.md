@@ -2467,9 +2467,12 @@ existing task.
 | REMED-GFX-115 | Bgfx Vulkan point pipelines emit `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because the SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-111 validation inspection | **OPEN — SHADER-DECLARATION GAP IN 15 BGFX 3D VERTEX SHADERS; PIXELS CORRECT ON THE TESTED DRIVER, SIZE FORMALLY UNDEFINED.** |
 | REMED-GFX-116 | WebGPU's deferred 3D render pass resolves `GraphicsDevice.Viewport` live at flush time instead of capturing it per queued draw. | MEDIUM | P2 | REMED-GFX-111 viewport control | **OPEN — SAME CLASS AS REMED-GFX-062/063/064/065; THE SPRITEBATCH PATH WAS FIXED UNDER REMED-GFX-072, THE 3D PATH WAS NOT.** |
 | REMED-GFX-117 | SDL_GPU passes literal `0` for `first_index`/`vertex_offset` at all eight native indexed draw sites, dropping public `startIndex`/`baseVertex`. | MEDIUM | P2 | REMED-GFX-111 SDL_GPU control | **DONE 2026-07-27 — ALL EIGHT SITES NOW RESOLVE `first_index = startIndex` (INDEX ELEMENTS) AND `vertex_offset = baseVertex` (APPLIED ONCE) THROUGH ONE SHARED `ResolveIndexedRange`, CARRIED BY VALUE ON EACH DEFERRED DRAW COMMAND; 16-/32-BIT, STATIC/DYNAMIC, ALL FIVE TOPOLOGIES, ALL EIGHT PIPELINE FAMILIES, DRAWUSER, A→B→A, TARGETS, STATE, INVALID-RANGE REJECTION, SANITIZERS, CLEAN VALIDATION AND EIGHT CROSS-BACKEND CONTROLS PASS.** |
-| REMED-GFX-118 | Bgfx `DrawInstancedPrimitivesEx` binds complete vertex and index buffers, dropping public `baseVertex`, `startIndex` and the topology-derived index count. | MEDIUM | P2 | REMED-GFX-113 draw-path inventory | **OPEN — REMED-GFX-107'S INDEXED DEFECT CLASS IN THE ONE BGFX PATH GFX-107 DID NOT COVER.** |
+| REMED-GFX-118 | Bgfx `DrawInstancedPrimitivesEx` binds complete vertex and index buffers, dropping public `baseVertex`, `startIndex` and the topology-derived index count. | MEDIUM | P2 | REMED-GFX-113 draw-path inventory | **DONE 2026-07-27 — THE INSTANCED PATH NOW BINDS `setIndexBuffer(handle, startIndex, PrimitiveVerts)` AND `setVertexBuffer(0, handle, baseVertex, remainder)`, THE SAME EXACT-RANGE MODEL REMED-GFX-107 ESTABLISHED; `GraphicsDevice::DrawInstancedPrimitives` GAINED THE MATCHING 64-BIT PUBLIC GUARD PLUS AN INSTANCE-STREAM CAPACITY CHECK; 16-/32-BIT, STATIC/DYNAMIC, EVERY MAPPED TOPOLOGY, A→B→A, TARGETS, STATE, CARDINALITY, BOTH RENDERER ROUTES, SANITIZERS AND FIVE CROSS-BACKEND CONTROLS PASS.** |
 | REMED-GFX-119 | Software's non-indexed raster paths never apply `vertexStart`; they read from element zero and only enforce `primitiveCount` against the buffer size. | MEDIUM | P2 | REMED-GFX-113 cross-backend controls | **OPEN — SOFTWARE COUNTERPART OF REMED-GFX-113'S OFFSET HALF; PINNED BY A COMMITTED CURRENT-BEHAVIOUR TEST.** |
 | REMED-GFX-120 | SDL_GPU's point-topology graphics pipelines raise `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because its SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-117 validation inspection | **OPEN — SDL_GPU COUNTERPART OF REMED-GFX-115; PIXELS CORRECT ON THE TESTED DRIVER, POINT SIZE FORMALLY UNDEFINED WITHOUT `maintenance5`.** |
+| REMED-GFX-121 | Bgfx's non-GLSL renderers transpose the per-instance world matrix: `vs_instanced3d.sc` builds it with the raw `mat4(i_data0..i_data3)` constructor instead of bgfx's `mtxFromCols()`. | MEDIUM | P2 | REMED-GFX-118 Vulkan route | **OPEN — A/B-PROVEN PRE-EXISTING; INSTANCE 0 IS CORRECT AND EVERY LATER INSTANCE IS PROJECTED SOMEWHERE UNPREDICTABLE ON GENUINE BGFX VULKAN; PINNED BY A COMMITTED PER-RENDERER TEST.** |
+| REMED-GFX-122 | EasyGL's stock (non-custom-effect) instanced branch ignores `params.startIndex`, `params.baseVertex` and `params.instanceVb` entirely. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — EASYGL COUNTERPART OF REMED-GFX-118 PLUS A DROPPED PER-INSTANCE STREAM; PINNED BY A COMMITTED CURRENT-BEHAVIOUR TEST.** |
+| REMED-GFX-123 | D3D11 and D3D12 issue `DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0)`, dropping public `startIndex` and `baseVertex` on the instanced path. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — REMED-GFX-020/060'S OFFSET DEFECT IN THE ONE D3D PATH THOSE TASKS DID NOT COVER; D3D11 MEASURED 3/16 UNDER WINE+DXVK, D3D12 INSPECTION-ONLY.** |
 
 #### REMED-BUILD-010 detail
 
@@ -10736,5 +10739,285 @@ WebGPU. No shader source and no generated artifact changed.
 - `db4aa914 test(Task REMED-GFX-117): cover indexed paths and deferred capture`
 - `c82fb5f7 docs(Task REMED-GFX-117): Doxygen the SDL GPU native indexed range`
 - `docs(remediation): record GFX-117 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-118 — Bgfx instanced indexed range, baseVertex and index count (DONE 2026-07-27)
+
+### Classification
+
+**Real defect, MEDIUM, GRAPHICS.** `BgfxGraphicsBackend::DrawInstancedPrimitivesEx` bound the
+whole-buffer `bgfx::setVertexBuffer(0, handle)` and `bgfx::setIndexBuffer(ib.handle)` overloads.
+Neither carries a range, so the public `baseVertex`, `startIndex` and topology-derived index count
+never reached the native instanced draw at all: **every instance consumed the complete bound index
+buffer from element zero.** This is REMED-GFX-107's *indexed* defect class in the one Bgfx draw
+path GFX-107 did not touch — REMED-GFX-113 deliberately left it alone because it is an indexed
+defect, not the non-indexed one it corrected.
+
+The classification was proven, not assumed. Three distinguishable failure modes were separated
+before the fix:
+
+| Requested | Correct slots | `startIndex` only | `baseVertex` only | Observed pre-fix |
+|---|---|---|---|---|
+| `startIndex=3`, `baseVertex=6`, 2 primitives | 3–4 | 1–2 | 2–3 | **all seven** |
+
+Every case rendered the complete buffer, so the defect is "no range reaches the native draw", not
+"one of the two offsets is dropped" and not "an offset is applied twice".
+
+### Affected path
+
+```
+GraphicsDevice::DrawInstancedPrimitives          (public, XNA 4.0)
+  -> GpuDrawParams { startIndex, baseVertex, minVertexIndex, numVertices, instanceCount, instanceVb }
+  -> IGraphicsBackend::DrawInstancedPrimitivesEx
+  -> BgfxGraphicsBackend::DrawInstancedPrimitivesEx
+       -> bgfx::setVertexBuffer / bgfx::setIndexBuffer / bgfx::setInstanceDataBuffer
+       -> SubmitViewProgram(instanced3DProgram_)
+```
+
+Bgfx has no deferred draw-command queue of CNA's own: `submit()` records the draw into bgfx's
+encoder immediately and bgfx executes the frame at `frame()` time. The public range is therefore
+captured by value the moment it is handed to `setVertexBuffer`/`setIndexBuffer`, and the
+per-instance records are copied into a transient `InstanceDataBuffer` at draw time. Nothing in the
+capture was wrong — there was simply no range to capture.
+
+### Public instanced contract, as reconciled
+
+| Value | Meaning |
+|---|---|
+| `baseVertex` | Added to every decoded index exactly once. Non-negative. |
+| `minVertexIndex` | Range-validation hint. Never an address. |
+| `numVertices` | Range-validation hint. Never an address. Must be > 0. |
+| `startIndex` | Index-**element** offset of the first consumed index. Never a byte offset. |
+| `primitiveCount` | Fixes the exact consumed index count via the shared topology formula. |
+| `instanceCount` | Number of instances consuming that one geometry range. Must be > 0 and must fit the bound per-instance stream. |
+| instance start | **Not exposed by CNA or XNA.** None was invented; the per-instance stream is always read from element 0. |
+| Index width | `IndexElementSize` chooses 16- or 32-bit decoding; `startIndex` stays an element offset in both. |
+| Topology | `TriangleList 3n`, `TriangleStrip n+2`, `LineList 2n`, `LineStrip n+1`, `PointListEXT n`. |
+| Instance frequency | The per-instance buffer is the first `VertexBufferBinding` with `instanceFrequency > 0`; a non-1 frequency remains a documented pre-existing scope reduction, untouched here. |
+
+### Old and corrected native bindings
+
+| | Before | After |
+|---|---|---|
+| Index buffer | `setIndexBuffer(ib.handle)` — whole buffer | `setIndexBuffer(ib.handle, startIndex, IndexCountForPrimitives(topology, primitiveCount))` |
+| Vertex buffer | `setVertexBuffer(0, vb.handle)` — whole buffer | `setVertexBuffer(0, vb.handle, baseVertex, vertexCount - baseVertex)` |
+| Instance data | `memcpy(idb.data, cpuData, min(requested, available))` | exact `instanceCount * stride`, over-long range rejected |
+| Wireframe | `setVertexBuffer(0, vb.handle)` + expanded TIB | `setVertexBuffer(0, vb.handle, 0, vertexCount)` + the same expanded TIB |
+
+bgfx has no draw-time base-vertex argument, so `baseVertex` becomes the vertex binding's start
+element — the same model REMED-GFX-107 established for the ordinary indexed path. The safe
+remainder of the buffer stays bound because `minVertexIndex`/`numVertices` are hints, not a second
+address. The `FillMode.WireFrame` branch keeps a zero-based vertex binding because
+`ExpandWireframeIndices` already writes absolute (`startIndex + local + baseVertex`) indices.
+
+### Validation
+
+`ResolveIndexedRange` resolves the pair in 64-bit **before** anything is allocated or submitted and
+rejects — never clamps:
+
+- negative `startIndex` / `baseVertex`, non-positive `primitiveCount`;
+- an index range leaving the logical index buffer, by offset or by count;
+- a `baseVertex` at or past the logical vertex count;
+- topology-count overflow (`primitiveCount * 3` is computed in `int64_t`, so
+  `primitiveCount = INT_MAX` is rejected rather than wrapped into a small valid-looking count);
+- an instance range past the bound per-instance stream.
+
+`GraphicsDevice::DrawInstancedPrimitives` gained the matching public guard its indexed sibling has
+had since REMED-GFX-107: `minVertexIndex`/`numVertices` are validated and forwarded instead of
+discarded (`(void)`-ed), the index range must fit the bound index buffer, the declared vertex window
+must fit the bound vertex buffer after `baseVertex`, and `instanceCount` must fit the bound
+per-instance stream. The null-buffer and null-effect `std::runtime_error` guards still fire first,
+so every existing throws-test keeps its exact exception and message.
+
+### Regression design
+
+A two-axis oracle. The target is divided into `kSlotCount = 7` vertical slots (the geometry axis,
+one white triangle each, all authored inside band 0) and `kRowCount = 4` horizontal bands (the
+instance axis, one pure-translation matrix per instance). A wrong index range lights the wrong
+**columns**; a wrong instance count lights the wrong **rows**. The two are independent, so a draw
+cannot satisfy one by accident while breaking the other. The index buffer is the identity permutation,
+so every requested range is expressed purely through the public
+`startIndex`/`baseVertex`/`primitiveCount` triple with no index-content trickery to hide a dropped
+parameter. Colour carries no information — every primitive is opaque white — so the backends whose
+instanced shader colours from `DiffuseColor` and those that colour from the vertex stream produce
+identical pixels.
+
+Proven separately: a zero-offset control; `primitiveCount` alone; `startIndex` alone; `baseVertex`
+alone (whose *unbased* decoys are the three slots the draw must not touch); both together with
+decoys on each side; `instanceCount` independence in both directions; a first/middle/final boundary
+sweep; and the exact native bindings.
+
+### Results
+
+| Route | Pre-fix | Post-fix |
+|---|---|---|
+| Bgfx OpenGL (Xvfb `:101`, OpenGL 2.1) | **2/20** | **20/20** |
+| Bgfx Vulkan (real AMD Radeon on `:0`, `CNA_BGFX_RENDERER=vulkan`) | **3/20** | **19/20 + 1 explicit skip** |
+
+`active renderer: Vulkan` was confirmed on all 20 device creations of the Vulkan route — no silent
+OpenGL fallback. The single skip is REMED-GFX-121 (below), not a range failure.
+
+- **startIndex**: honoured as an index-element offset on both routes, 16- and 32-bit.
+- **baseVertex**: applied exactly once; the unbased decoy prefix stays black and the double-based
+  slots are out of range and would throw.
+- **primitiveCount**: fixes the exact consumed index count; the suffix decoys stay black.
+- **instanceCount**: independent — 1, 2 and 4 instances of the same range light the same columns and
+  their own bands, and changing it never changes the consumed vertex/index count.
+- **Static/dynamic**: `VertexBuffer`/`IndexBuffer` and `DynamicVertexBuffer`/`DynamicIndexBuffer`
+  both pass with the same range.
+- **16-/32-bit**: identical element ranges; the wider element is never mistaken for a byte offset.
+- **A→B→A**: three queued draws with three different ranges and instance counts in one frame, one
+  readback — each keeps its own parameters, and the three slots belonging to no draw stay black.
+- **Source update / disposal after queued use**: a `SetData` between two queued draws feeds only the
+  later one (REMED-GFX-109 preserved: the earlier draw's cell stays lit in its own band and the
+  updated mesh's cell in the new band); disposing every buffer, including the per-instance stream,
+  while draws are still queued for the frame is safe across two `Present()` calls.
+- **Targets**: backbuffer, `RenderTarget2D` (sampled back in a later frame), and backbuffer again
+  after the target; the target-only draw never reaches the backbuffer.
+- **State**: explicit `RasterizerState`, `BlendState.Opaque`, `DepthStencilState.Default`, full and
+  narrowed `Viewport`, `ScissorRectangle` with `ScissorTestEnable`, `FillMode.WireFrame`. Culling is
+  proven orientation-sensitive without hardcoding a winding convention (exactly one of
+  `CullClockwise`/`CullCounterClockwise` must remove the fixture). None of it changes the range.
+
+### Native bindings asserted directly
+
+bgfx exposes no way to read a submitted draw's stream ranges back, so the backend records the
+`(startVertex, numVertices)`, `(firstIndex, numIndices)` and instance-count triple it handed to
+bgfx, mirroring REMED-GFX-113's own observables. Asserted for every topology the instanced path maps
+(`TriangleList`, `TriangleStrip`, `LineList`, `LineStrip`, `PointListEXT` — REMED-GFX-111's
+`BGFX_STATE_PT_*` table is untouched), each with its own offsets so no case can pass on another's
+numbers, plus the wireframe path's zero-based vertex binding and 12-index expansion for a
+two-triangle request.
+
+### Resource cardinality and performance
+
+24 frames of mixed ranges and instance counts (seven single-primitive draws at seven different
+`baseVertex` values with four different instance counts, a whole-buffer draw, and a `LineList`
+draw per frame) never exceed the created-object baseline of `numDynamicVertexBuffers` and
+`numDynamicIndexBuffers`, and both return to the process baseline after disposal. Narrowing a
+binding is free: no repacking, no per-draw allocation, no extra native handle, no extra submission,
+no wait, no extra `Present`/frame latency, and no pipeline key involving a geometry range or buffer
+identity. The one behavioural change to allocation is that the per-instance copy is now exactly
+`instanceCount * stride` instead of `min(requested, available)`.
+
+### Independent findings allocated
+
+None can honestly be folded into a Bgfx instanced-range correction.
+
+- **REMED-GFX-121** — Bgfx's non-GLSL renderers transpose the per-instance world matrix.
+  `vs_instanced3d.sc` uses the raw `mat4(i_data0, i_data1, i_data2, i_data3)` constructor; bgfx maps
+  `mat4()` to GLSL's **column** constructor on the GLSL profile and to HLSL's `float4x4` **row**
+  constructor on SPIR-V/HLSL/Metal/WGSL, which is exactly why bgfx supplies `mtxFromCols()` and uses
+  it in its own 05-instancing example. On genuine Bgfx Vulkan a pure translation therefore lands in
+  `w`: instance 0 (identity) is pixel-correct and every later instance is clipped off the top of the
+  frame and stretched outward. **A/B-proven pre-existing** — the same probe fails identically with
+  this task's production change reverted. Correcting it means changing a shader source and
+  regenerating `bgfx_shaders.hpp` across all profiles, which this task must not do. The regression
+  probes for it once per test and reduces the instance axis to one instance on the affected routes,
+  so REMED-GFX-118's own contract is still asserted in full on **both** renderer routes;
+  `BgfxPerInstanceWorldMatrixIsAppliedOnGlslRenderersOnly` pins the per-renderer behaviour and
+  `InstanceCountIsIndependentOfTheGeometryRange` skips with a named reason.
+- **REMED-GFX-122** — EasyGL's stock (non-custom-effect) instanced branch calls
+  `draw_elements_instanced(topology, indexCount, type, nullptr, instanceCount)` and never reads
+  `params.startIndex`, `params.baseVertex` or `params.instanceVb`. Pinned by
+  `EasyGLStockInstancedPathIgnoresOffsetsAndTheInstanceStream`.
+- **REMED-GFX-123** — D3D11 and D3D12 call `DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0)`.
+  Measured on D3D11 (Wine + DXVK) at **3/16** by temporarily widening the regression's backend guard
+  and reverting it; no red test was committed. D3D9 already honours both offsets in its own instanced
+  path (REMED-GFX-060), so this is the one D3D path the earlier offset tasks did not cover.
+
+One earlier suspicion was **withdrawn after investigation**: a first D3D9 run reported the instanced
+draw rendering outside its `Viewport`. That was the regression's own fault — it narrowed the viewport
+*before* `Clear`, and XNA's `Clear` (like D3D9's native `Clear` with `pRects = nullptr`) is scoped to
+the viewport and scissor rectangles, so the previous frame's pixels survived outside them. The test
+now clears with the full viewport and the scissor test off before narrowing either rectangle, and
+D3D9 passes **16/16**. No D3D9 finding was recorded.
+
+### Renderer routes and validation
+
+- **Bgfx OpenGL** (Xvfb `:101`, OpenGL 2.1): **20/20**.
+- **Bgfx Vulkan** (real AMD Radeon on `:0`): **19/20 + 1 skip**, renderer confirmed on all 20 device
+  creations.
+- **Vulkan validation**: with the Khronos layer configured to log directly to a file
+  (`VK_LAYER_SETTINGS_PATH`, `debug_action = VK_DBG_LAYER_ACTION_LOG_MSG`,
+  `report_flags = info,warn,perf,error`), the whole instanced suite produces **zero** validation
+  errors, warnings and performance messages; the layer's own "Khronos Validation Layer Active" banner
+  is the only thing it logs, confirming it ran. REMED-GFX-115's
+  `VUID-VkGraphicsPipelineCreateInfo-topology-08773` did not appear for this suite and remains
+  separately owned — it is neither hidden nor absorbed here.
+
+### Cross-backend controls
+
+| Backend | Result |
+|---|---|
+| Bgfx OpenGL | **20/20** (pre-fix 2/20) |
+| Bgfx Vulkan (genuine) | **19/20 + 1 REMED-GFX-121 skip** (pre-fix 3/20) |
+| Vulkan | **16/16** — already copies the index slice from `startIndex` and passes `baseVertex` to `vkCmdDrawIndexed` |
+| WebGPU | **16/16** — already `drawIndexed(count, instances, firstIndex, baseVertex, 0)` |
+| D3D9 (Wine + DXVK9) | **16/16** — already `DrawIndexedPrimitive(topology, baseVertex, 0, numVertices, startIndex, primitiveCount)` (REMED-GFX-060) |
+| EasyGL | **1/1** — the REMED-GFX-122 pin; the main suite is not compiled for it |
+| D3D11 (Wine + DXVK) | **3/16** with the guard temporarily widened and reverted — REMED-GFX-123 |
+| D3D12 | inspection only (`DrawIndexedInstanced(..., 0, 0, 0)`); runtime remains blocked by REMED-BUILD-012 |
+| SDL_GPU | no instanced path — `DrawInstancedPrimitivesEx` is not overridden and the base class throws (unchanged, confirmed under REMED-GFX-117) |
+| Software / Headless / SDL_Renderer / ASCII / Canvas / DX3 | no instanced path; the suite is not compiled for them |
+
+Only Bgfx production changed, plus the shared public guard in `GraphicsDevice`.
+
+### Regression gates
+
+- REMED-GFX-107/108/109 (`IndexedDrawDeferredTest`), REMED-GFX-113 (`NonIndexedDrawRangeTest`),
+  REMED-GFX-111 (`PointListPrimitiveTest`), REMED-GFX-043/054/103 (`VertexDeclarationTest`,
+  `IndexBufferEmptyDataTest`, `VertexBufferEmptyDataTest`), `VertexBufferBindingTest` and
+  `GraphicsDeviceValidationTest`: **147/147** on Bgfx OpenGL.
+- REMED-GFX-104/105 (WebGPU indexed): WebGPU `CnaTests` instanced suite **16/16**, no WebGPU
+  production changed.
+- REMED-GFX-017/018 state behaviour, REMED-GFX-065/084 view segmentation: green in the Bgfx binary
+  shard below.
+- Bgfx binary shard `ctest -R '^Bgfx_'`: **124/130**. The six failures
+  (`Bgfx_RenderTarget_Viewport`, `Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_MipChain`,
+  `Bgfx_RenderTargetCube_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`,
+  `Bgfx_GraphicsDevice_ClearOptions_Vulkan`) are **A/B-proven pre-existing** — identical with the two
+  production files checked out at the pre-fix commit and rebuilt.
+- Full Bgfx `CnaTests`: **5748 passed**, with the same four pre-existing failures as the pre-fix
+  baseline (`CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+  `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`,
+  `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`).
+
+### Sanitizers
+
+Focused ASan and UBSan over the instanced suite plus the non-indexed, indexed and point suites —
+first/middle/final/invalid ranges, valid and invalid instance ranges, 16-/32-bit indices, static and
+dynamic buffers, A→B→A, `SetData` after a queued draw and disposal after queued use: **80/80 each**,
+with zero `ERROR: AddressSanitizer` reports and zero `runtime error` lines.
+
+### Source, shader and generated artifacts
+
+Three production files changed: `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`,
+`include/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp` and
+`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`. No `.sc` shader source, no
+`bgfx_shaders.hpp`, no HLSL bytecode, no WGSL, no SPIR-V and no other generated artifact changed —
+REMED-GFX-121 is precisely the part that would have required one, and is deliberately left open. All
+fourteen backend libraries compile incrementally.
+
+### Build directories, ccache and storage policy
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-bgfx` | BGFX | yes | reused |
+| `cmake-build-bgfx-asan` | BGFX + ASan | yes | reused |
+| `cmake-build-bgfx-ubsan` | BGFX + UBSan | yes | reused |
+| `cmake-build-debug` (EasyGL) · `cmake-build-vulkan` · `cmake-build-webgpu` · `cmake-build-software` · `cmake-build-sdlgpu` · `cmake-build-headless` · `cmake-build-sdlrenderer` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-dx3` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other eleven | yes | reused |
+
+No build directory was created, cleaned or recreated; every build was incremental; no build tree was
+created under `/tmp`, `/var/tmp` or `/dev/shm` (only small log files and one Vulkan validation-layer
+settings file). `git clean -xfd` was never run. Every build used `-j4` or fewer.
+
+### Commits
+
+- `b6bdb3f4 test(Task REMED-GFX-118): reproduce Bgfx instanced indexed range loss`
+- `bd691a09 fix(Task REMED-GFX-118): bind exact Bgfx instanced indexed ranges`
+- `774f1d5f test(Task REMED-GFX-118): cover instancing parameters and deferred capture`
+- `docs(remediation): record GFX-118 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
