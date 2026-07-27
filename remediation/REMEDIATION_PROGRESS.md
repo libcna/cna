@@ -12726,7 +12726,7 @@ invalid pointer formation.
 * **REMED-GFX-135** — the WRITE side has no completion contract: `TextureCube::SetData` and
   `Texture3D::SetData` still silently discard on a null backend and after `Dispose()`, and Software
   drops any `level != 0` cube write, while the read side now refuses. Same fix shape, other
-  direction.
+  direction. *(closed 2026-07-27 — see its own record below.)*
 
 ### Build directories, ccache and displays
 
@@ -12760,3 +12760,258 @@ backends ran on a virtual display too, not on the real `:0`**. DX3 used `SDL_VID
 
 No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
 untouched.
+
+---
+
+## REMED-GFX-135 — honest `TextureCube`/`Texture3D` upload contract (DONE 2026-07-27)
+
+### Classification
+
+**Real defect, MEDIUM, GRAPHICS, shared layer — REMED-GFX-127/130's contract applied to the WRITE
+direction.** Not a missing feature in any one backend: the public cube and volume `SetData` paths
+could *report a completed upload* for data that was never stored, and did so on five of the fourteen
+backends plus every `RenderTargetCube` outside EasyGL.
+
+The shared, backend-neutral shape, in `TextureCube::SetData` itself:
+
+```cpp
+const auto rgba = colorsToRgba(data, startIndex, elementCount);
+if (backend_)                                                   // <-- silently skipped
+    backend_->SetData(face, level, x, y, w, h, rgba.data(), n);  // <-- `void`
+```
+
+and, byte for byte the same, in `Texture3D::SetDataPointerEXT`. `void` left an implementation no way
+to say "I stored nothing", and `if (backend_)` turned "this backend creates no cube/volume resource"
+into a successful-looking call.
+
+Three distinct silent-discard routes were reachable through the public API:
+
+1. **NO RESOURCE** — SDL_Renderer, ASCII, Canvas and DX3 keep `IGraphicsBackend::CreateTextureCube`'s
+   nullptr default, so `backend_` is null and the `if` itself drops the upload.
+2. **NO STORAGE** — `HeadlessTextureCubeBackend::SetData` validates its arguments, records a trace
+   entry and stores nothing (REMED-GFX-130 had already deleted the zero-filled buffers that used to
+   make its `GetData` look like a readback), and `IRenderTargetCubeBackend::SetData`'s `{}` body made
+   every `RenderTargetCube` except EasyGL's accept-and-discard *through inheritance*.
+3. **NO LEVEL** — `SoftwareTextureCubeBackend::SetData` returned early for any `level != 0`, because
+   it allocated storage for level 0 only while `TextureCube` reported the full `LevelCount`.
+
+After REMED-GFX-130 the reachable end state was strictly worse than losing the data: a caller could
+upload a face, read it back, be told *"this backend cannot read a cube face back to the CPU"*, and
+still never learn that the write went nowhere either. That inconsistency is now a permanent
+runtime-derived assertion (checks **Z2/Z4**), not a comment.
+
+### Pre-fix evidence
+
+Red-first shared suite `examples/texturecube_texture3d_setdata_contract_test.cpp`, commit `9bc5243f`,
+registered on all fourteen backends. Every probe records measured facts before judging them: whether
+the call returned at all, which exception type it raised, how many asserted entries came back exactly
+as uploaded, how many still hold the destination sentinel, and how many hold the source array's
+out-of-window `Poison()`.
+
+| Backend | Result | route | evidence |
+|---|---|---|---|
+| HEADLESS | 18/32 | no storage | Z1 `returned=1` with `exact=0/64 sentinelSurvivors=64`; Z2 `returned=1 readBack=0 readNotSupported=1` |
+| SDL_RENDERER | 18/32 | null backend | identical shape, dropped one step earlier by `if (backend_)` |
+| SOFTWARE | 30/34 | unstored mip | C16 mip 1 `returned=1 exact=0/16`; R1 RenderTargetCube accepted-and-dropped |
+| EASYGL | 52/56 | — | every face, rect, mip, source-offset, lifetime, aliasing and atomicity check already exact — the file measures the defect, not the harness |
+
+`C29/C30` and `V21/V22` failed on **every** backend: `SetData` after `Dispose()` was a silent no-op
+while the read side already raised `System::ObjectDisposedException`.
+
+Checks **Z1–Z4** are derived at runtime rather than from the per-backend contract table, so they
+state the finding itself: Z1/Z3 fail if a call returns normally without the data being readable back
+exactly, and Z2/Z4 fail if write support and read support disagree about whether the resource has
+storage at all.
+
+### Complete backend/resource inventory
+
+| Backend | cube `SetData` | 3D `SetData` | storage | pre-fix | final |
+|---|---|---|---|---|---|
+| SOFTWARE | own override | none (refused at construction) | CPU shadow, now per-mip | dropped `level != 0` | **A** complete write, every declared mip |
+| HEADLESS | own override | own override | none by design | accepted + traced + dropped | **E** diagnostic: validates, traces, returns false |
+| EASYGL | own override (+ RT cube) | own override | GL texture | no range checks at all | **A**, `glGetError` is the completion signal |
+| BGFX | own override | own override | bgfx texture | `bgfx::copy` sized to `dataLength` | **A**, sized to the region |
+| VULKAN | own override | own override | VkImage + staging | `memcpy` into a possibly-null mapping | **A**, refuses a failed staging map |
+| WEBGPU | own override | own override | WGPUTexture | threw raw std exceptions out of a backend | **A**, out-of-range becomes a result |
+| SDL_GPU | own override | own override | SDL_GPUTexture | no null-source or level/face range check | **A** |
+| D3D9 | own override | own override | D3D9 surfaces/volumes | no source or rectangle check | **A** |
+| D3D11 | own override | own override | `UpdateSubresource` | no source or region check | **A** |
+| D3D12 | own override | own override | staged copy | cube `mipLevels_` pinned to 1 | **A** at level 0, **C** for cube mips |
+| SDL_RENDERER / ASCII / CANVAS / DX3 | none | none | none | null backend, silent no-op | **D** refused at the public layer |
+| RenderTargetCube (all but EasyGL) | inherited `{}` | — | render target only | accepted + dropped | **C** deterministic refusal |
+
+Classification letters follow the task's own scheme: **A** complete write supported, **C** genuinely
+unsupported and now failing deterministically, **D** resource type unsupported at creation, **E**
+diagnostic backend with an explicit contract.
+
+### Completion design
+
+`ITextureCubeBackend::SetData` and `ITexture3DBackend::SetData` return `[[nodiscard]] bool` — true
+**only** when the complete requested region was stored — and deliberately have **no default body**,
+so a new backend cannot inherit silence. `IRenderTargetCubeBackend::SetData` states `return false`
+explicitly rather than leaving `{}`.
+
+The public layer:
+
+* validates every argument **before** converting or dispatching, so a rejected call cannot have
+  changed one texel (failure atomicity by construction, not by native-API luck);
+* refuses a null backend one step earlier with `System::NotSupportedException`;
+* raises `System::NotSupportedException` when the backend reports an incomplete store;
+* raises `System::ObjectDisposedException` after `Dispose()` (and after a repeated `Dispose()`);
+* converts exactly the **requested region** rather than `elementCount`, so the call never reads
+  source elements it does not upload and every backend receives a buffer whose length matches the
+  region it is told to write.
+
+No public XNA-compatible signature changed; `SetDataPointerEXT` (NOXNA) keeps its `void` return and
+throws instead. Source/ABI impact is confined to the two internal backend interfaces.
+
+### Software mip result
+
+Chosen branch: **implement real storage**, not reject. `SoftwareGraphicsBackend::CreateTextureCube`
+now threads `mipMap` through, and `SoftwareTextureCubeBackend` allocates one RGBA8 buffer per face
+per declared level, so `LevelCount` is a claim the storage can back. `FacePixels(face)` still returns
+level 0 — the rasterizer's cube sampler is unchanged. Consequence: a mipmapped cube `.xnb` now loads
+**and** reads back completely on Software, and REMED-GFX-130's SOFTWARE row moves from
+`Support::Unsupported` to `Support::Exact` for cube mips.
+
+### Content-pipeline impact
+
+`TextureCubeReader`, the `.cnj` `sourceFile` path and `TextureCube::DDSFromStreamEXT` all upload
+through `SetData`, and none of them catches or suppresses the new result. On a backend that cannot
+store a cube face the whole load now fails deterministically instead of returning a `TextureCube`
+that reports `LevelCount 7` and holds nothing — asserted, not worked around, in
+`Texture3DTextureCubeContentTypeReaderTests`, `XnbBuiltInReaderRegistrationTests`,
+`CnjCapabilityMatrixTests` and `TextureCubeTests`' two DDS cases. Valid content on a storage-capable
+backend is unaffected and still green.
+
+### False-positive test audit
+
+| Test | Why it could pass on a discarded upload | Strengthened to |
+|---|---|---|
+| `TextureCubeTest.SetDataExactElementCountDoesNotThrow` | bare `EXPECT_NO_THROW` ×2 | asserts the outcome, and reads back to prove the second overload stored ITS OWN data |
+| `TextureCubeTest.SetDataRectWithinBoundsDoesNotThrow` | bare `EXPECT_NO_THROW` | 1×1 write lands on exactly one texel, other three unchanged |
+| `TextureCubeTest.SetDataNullRectAtMipLevelUsesReducedSize` | bare `EXPECT_NO_THROW` | mip-1 write is stored or refused, and read back |
+| `TextureCubeTest.SetDataAllSixValidFacesDoNotThrow` | same colour on all six faces — could not distinguish them | one colour per face, each read back independently |
+| `Texture3DTest.SetDataExactElementCountDoesNotThrow` | bare `EXPECT_NO_THROW` ×2 | readback oracle proves the second overload's data |
+| `Texture3DTest.SetDataBoxWithinBoundsDoesNotThrow` | bare `EXPECT_NO_THROW` | sub-box lands on slice 0 only, slice 1 untouched |
+| `headless_resource_backends_test` Check A | two bare `cube.SetData(...)` calls issued as if they stored something | both asserted as deterministic rejections |
+
+Seven false-positive-capable cases found, seven strengthened. New cases added for the gaps none of
+them covered: non-zero `startIndex` windows (cube and volume), `SetData` after `Dispose()` (cube,
+volume and `SetDataPointerEXT`), the full declared mip chain read back in reverse, and
+`RenderTargetCube::SetData`'s inherited path.
+
+### Synchronization, lifetime and performance
+
+Every supported path copies out of the caller's memory before returning true — Software/`std::copy`,
+GL `glTexSubImage*`, `bgfx::copy`, a Vulkan staging buffer submitted and waited on by
+`EndOneTimeCommands`, an SDL transfer buffer released after `SDL_SubmitGPUCommandBuffer`,
+`wgpuQueueWriteTexture`, D3D9 `LockRect`/`UnlockRect`, D3D11 `UpdateSubresource`, and a D3D12 upload
+heap released after `ExecuteCommandListAndWaitEXT`. `SetData` therefore never returns success while
+the backend still depends on caller memory. Test C19/V11 mutate the source array immediately after
+the call and assert the stored content is unchanged.
+
+No verification readback runs inside production `SetData`; no permanent duplicate storage was added
+for completion tracking (Software's per-mip buffers are the resource's own declared levels, not a
+shadow); staging resources stay bounded and per-call; and unsupported paths fail before any
+allocation. The only new per-call cost on GL is one `glGetError` pair, which is what makes EasyGL's
+result honest rather than assumed. `SetData` that is never called costs nothing.
+
+### Cross-backend matrix
+
+| Backend | cube L0 | cube mip | volume | RT cube | setdata suite | route |
+|---|---|---|---|---|---|---|
+| SOFTWARE | exact | exact | refused at construction | refused | 34/34 | verified |
+| EASYGL | exact | exact | exact | accepted (no public RT-cube readback — REMED-GFX-134) | 56/56 | verified |
+| VULKAN | exact | exact | exact | refused | 56/56 | verified |
+| BGFX (OpenGL) | exact | exact | exact | refused | 56/56 | verified — the renderer reported `OpenGL 2.1`, so **no Bgfx-Vulkan claim is made** |
+| SDL_GPU | exact | exact | exact | refused | 56/56 | verified |
+| WEBGPU | exact | exact | exact | refused | 56/56 | verified |
+| D3D9 | exact | exact | exact | refused | 56/56 | verified under Wine on `:99` |
+| D3D11 | exact | exact | exact | refused | 56/56 | verified under Wine on `:99` |
+| D3D12 | exact | unsupported (`mipLevels_` pinned to 1) | exact | refused | compile-verified | Game-harness runs crash this dev loop's Wine `dxgi.dll` |
+| HEADLESS | refused | refused | refused at construction | refused | 32/32 | verified |
+| SDL_RENDERER | refused | refused | refused at construction | refused | 32/32 | verified |
+| ASCII | refused | refused | refused at construction | refused | 32/32 | verified |
+| DX3 | refused | refused | refused at construction | refused | 32/32 | verified |
+| CANVAS | refused | refused | refused at construction | refused | compile-verified | Emscripten module needs a browser |
+
+### Sanitizers
+
+Whole contract suite — supported cube and volume writes, unsupported rejection, all six faces,
+partial rectangle/box, non-zero source offset, mip boundaries, two resources, repeated updates,
+disposal, invalid capacities, arithmetic boundaries and valid → invalid → valid reuse:
+
+| Build | setdata | getdata | Result |
+|---|---|---|---|
+| `cmake-build-software-asan` | 34/34 | 33/33 | clean |
+| `cmake-build-software-ubsan` | 34/34 | 33/33 | clean |
+| `cmake-build-vulkan-asan` | 56/56 | 56/56 | clean |
+| `cmake-build-sdlgpu-asan` | 56/56 | 56/56 | clean |
+| `cmake-build-sdlgpu-ubsan` | 56/56 | 56/56 | clean |
+| `cmake-build-bgfx-asan` | 56/56 | 56/56 | clean |
+| `cmake-build-bgfx-ubsan` | 56/56 | 56/56 | clean |
+
+No out-of-bounds access, use-after-free, uninitialized read, signed overflow, alignment error or
+dangling caller-memory dependency.
+
+### Independent findings recorded
+
+* **D3D12 cube mip levels do not exist.** `D3D12TextureCubeBackend`'s constructor pins `mipLevels_`
+  to 1 whatever `mipMap` says (its own header states so). REMED-GFX-130's D3D12 contract row claims
+  `Support::Exact` for cube mips; that file is compile-verified only on this backend, so the claim
+  was never executed. GFX-135's own D3D12 row records the source truth (`Unsupported`) instead of
+  inheriting the optimistic one. Not fixed here — implementing a real D3D12 cube mip chain is a
+  capability addition, not a completion contract.
+
+### Full-shard results and every remaining failure
+
+| Shard | Result | Remaining failures |
+|---|---|---|
+| `ctest` EasyGL | 6000/6005 | the five REMED-GFX-130 already catalogued (`XnbContainerFuzzTest`, `EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests`, `EasyGL_RenderTargetCube_DepthFormat`, `EasyGL_DeviceValidation`). Re-verified here: the RT-cube one fails a depth-buffer colour comparison and the validation one fails `SetVertexBuffers(16)`; neither file contains a cube/volume `SetData` |
+| `ctest` Vulkan | 5909/5915 | exactly the six recorded (`XnbContainerFuzzTest`, flaky `DynamicSoundEffectInstanceTest`, `CnjEffectTest`, `CnjStockEffectTest`, `DoesNotSupportWireFrame`, `Vulkan_DepthBias` = D9-62) |
+| `ctest` Bgfx (renderer reported **OpenGL 2.1**) | 5912/5924 | the six A/B-proven pre-existing Bgfx graphics failures (`Bgfx_RenderTarget_Viewport`, `Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_MipChain`, `Bgfx_RenderTargetCube_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, `Bgfx_GraphicsDevice_ClearOptions_Vulkan`) — **grepped: not one of those five source files contains a cube or volume `SetData`** — plus the four recorded gtest ones and two audio flakes (`DynamicSoundEffectInstanceTest`, `WaveBankTest`) |
+| `ctest` Software | 5750/5759 | `XnbContainerFuzzTest`, `DoesNotSupportWireFrame` (REMED-GFX-036), `SetRenderTargets_FourTargets` (Headless/Software MRT gap), a flaky `DynamicSoundEffectInstanceTest`, and five `ENetDiscoveryServiceTest` cases that **pass on re-run** under lighter load |
+| `ctest` Headless | 5702/5707 | `XnbContainerFuzzTest`, flaky audio, `DoesNotSupportWireFrame`, `SetRenderTargets_FourTargets`, and `Headless_Smoke` — re-run by hand and it still aborts on `ArgumentOutOfRangeException: primitiveCount`, the recorded REMED-GFX-133 |
+| `ctest -L SdlGpu` | 40/41 | `SdlGpu_RenderState`, A/B-proven pre-existing by REMED-GFX-127. `SdlGpu_PbrEffect` failed once on `SDL_InitSubSystem(SDL_INIT_VIDEO): x11 not available` under load and **passes in isolation** |
+| `ctest -L WebGPU` | 34/35 | `WebGPU_Clear_Readback`, recorded pre-existing |
+| `ctest -R Ascii_` | 9/9 | — (was 8/8; this finding adds one) |
+| `ctest -L DX3` | 11/13 | `Dx3_SpriteBatch` and `Dx3_No3D`, both recorded pre-existing by REMED-GFX-127 |
+| `ctest -R SDL_Renderer_` | 3 failures | `SDL_Renderer_RenderTarget_DepthDecision`, `SDL_Renderer_ClearOptions_Audit` and `SDL_Renderer_BufferConstructionThrows` — the same three REMED-GFX-130 recorded |
+| `TextureCube*`/`Texture3D*`/`*RenderTargetCube*`/`*ContentTypeReader*`/`*Cnj*`/`*Xnb*` gtest shard | green on Software (89), Headless (89), SDL_Renderer (89), EasyGL (127), SdlGpu (283) | SDL_Renderer/ASCII/DX3 still fail the same `ModelContentTypeReaderTest`/`GltfToCnjToolTest` cases, every one of them with `"SDL_Renderer does not support 3D: CreateVertexBuffer"` — the recorded 2D-only-backend cause, no cube or volume involvement. SdlGpu's two are the recorded `CnjEffectTest`/`CnjStockEffectTest` |
+| `cna_reference_dump`/`cna_test_ascii_fontatlas` under ASCII | link failure | the recorded REMED-GFX-132 (undefined `SpriteFont` constructor) — unchanged, and the targets this finding needs build fine |
+
+### Regression gates
+
+REMED-GFX-039 (resource validation), REMED-GFX-054/103 (empty-upload contracts — buffer-side, and
+cube/volume `elementCount <= 0` still throws `std::out_of_range` as before), REMED-GFX-074 (readback
+records), REMED-GFX-093 (Vulkan Texture3D mip transitions — its `CmdTransitionTexture3DLevel` calls
+are untouched), REMED-GFX-094/096 (cube render-target behaviour), REMED-GFX-124 (Software
+render-target storage), REMED-GFX-127 (Texture2D honest readback) and REMED-GFX-130 (cube/volume
+honest readback) all remain green; ordinary `Texture2D::SetData` is untouched.
+
+### Build directories, ccache and displays
+
+Used, all pre-existing and in-repository: `cmake-build-software`, `cmake-build-headless`,
+`cmake-build-debug` (EasyGL), `cmake-build-vulkan`, `cmake-build-bgfx`, `cmake-build-sdlgpu`,
+`cmake-build-webgpu`, `cmake-build-sdlrenderer`, `cmake-build-ascii`, `cmake-build-dx3`,
+`cmake-build-canvas`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`,
+`cmake-build-software-asan`, `cmake-build-software-ubsan`, `cmake-build-vulkan-asan`,
+`cmake-build-sdlgpu-asan`, `cmake-build-sdlgpu-ubsan`, `cmake-build-bgfx-asan`,
+`cmake-build-bgfx-ubsan`. `CNA_USE_CCACHE=ON` in every one (`CMAKE_CXX_COMPILER_LAUNCHER=ccache`).
+
+**No new build directory was created**, none was cleaned, deleted or recreated, and no clean build
+was required. Every `cmake -S . -B <dir>` was an incremental reconfigure, for exactly two reasons:
+to refresh the `CONFIGURE_DEPENDS` glob so the new test source produced a target, and to move
+`CNA_TEST_DISPLAY` off the stale `:0`/`:99` values baked into some caches. Builds used `-j4`,
+dropping to `-j2` for the sanitizer variants. No build tree was created under `/tmp`, `/var/tmp` or
+`/dev/shm` — the session scratchpad held only ctest logs and contract-test output. `git clean -xfd`
+was never run, `git stash` was never used, and the four pre-existing user stashes are untouched.
+
+Xvfb: shared `:101` served every native run — Software, EasyGL, Vulkan, Bgfx, SDL_GPU, WebGPU,
+SDL_Renderer, ASCII and all sanitizer builds; `cmake-build-headless`, `cmake-build-sdlrenderer`,
+`cmake-build-ascii`, `cmake-build-software-asan`, `cmake-build-software-ubsan`,
+`cmake-build-vulkan-asan`, `cmake-build-bgfx-asan` and `cmake-build-bgfx-ubsan` were reconfigured
+onto it from a stale `:0`/`:99`. Shared `:99` served the Wine D3D9/D3D11 runs (`WAYLAND_DISPLAY`
+unset). DX3 used `SDL_VIDEODRIVER=dummy`. Headless needs no display. **`:0` was not used for any
+measurement**, no display was started, and none was stopped.
