@@ -2699,6 +2699,80 @@ namespace CNA::Internal::Backends::Bgfx
             static_cast<uint32_t>(vertexStart), static_cast<uint32_t>(consumed)};
     }
 
+    /// REMED-GFX-118: the exact index and vertex ranges an indexed draw owes, resolved once per
+    /// draw. `startIndex` is an index-ELEMENT offset and the consumed index count is
+    /// topology-derived, so the index binding is [startIndex, startIndex + consumed). bgfx has no
+    /// draw-time base-vertex argument, so `baseVertex` becomes the vertex binding's start element
+    /// and every decoded index picks it up exactly once; the safe remainder of the buffer stays
+    /// bound because minVertexIndex/numVertices are range hints, not a second address.
+    struct BgfxIndexedRange
+    {
+        uint32_t indexStart = 0;
+        uint32_t indexCount = 0;
+        uint32_t vertexStart = 0;
+        uint32_t vertexCount = 0;
+    };
+
+    static BgfxIndexedRange ResolveIndexedRange(
+        const BgfxVertexBufferBackend& vb, const BgfxIndexBufferBackend& ib,
+        PrimitiveType primitive, int primitiveCount, int startIndex, int baseVertex)
+    {
+        if (primitiveCount <= 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "primitiveCount must be greater than zero.");
+        }
+        if (startIndex < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "startIndex", std::to_string(startIndex),
+                "startIndex must not be negative.");
+        }
+        if (baseVertex < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "baseVertex", std::to_string(baseVertex),
+                "baseVertex must not be negative.");
+        }
+        // 64-bit throughout: primitiveCount * 3 and startIndex + consumed both overflow int for
+        // large public arguments, and an overflowed range must be rejected, not wrapped.
+        std::int64_t consumed = 0;
+        switch (primitive)
+        {
+        case PrimitiveType::TriangleList:
+            consumed = static_cast<std::int64_t>(primitiveCount) * 3; break;
+        case PrimitiveType::TriangleStrip:
+            consumed = static_cast<std::int64_t>(primitiveCount) + 2; break;
+        case PrimitiveType::LineList:
+            consumed = static_cast<std::int64_t>(primitiveCount) * 2; break;
+        case PrimitiveType::LineStrip:
+            consumed = static_cast<std::int64_t>(primitiveCount) + 1; break;
+        case PrimitiveType::PointListEXT:
+            consumed = primitiveCount; break;
+        }
+        const std::int64_t availableIndices = static_cast<std::int64_t>(ib.indexCount);
+        if (startIndex > availableIndices ||
+            consumed > availableIndices - static_cast<std::int64_t>(startIndex))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "The requested primitive range exceeds the bound index buffer.");
+        }
+        const std::int64_t availableVertices = static_cast<std::int64_t>(vb.vertexCount);
+        if (baseVertex >= availableVertices)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "baseVertex", std::to_string(baseVertex),
+                "The requested base vertex exceeds the bound vertex buffer.");
+        }
+        return BgfxIndexedRange{
+            static_cast<uint32_t>(startIndex),
+            static_cast<uint32_t>(consumed),
+            static_cast<uint32_t>(baseVertex),
+            static_cast<uint32_t>(availableVertices - baseVertex)};
+    }
+
     static uint32_t IndexCountForPrimitives(PrimitiveType primitive, int primitiveCount)
     {
         switch (primitive)
@@ -3685,12 +3759,31 @@ namespace CNA::Internal::Backends::Bgfx
         auto& vb     = static_cast<const BgfxVertexBufferBackend&>(vb_in);
         auto& ib     = static_cast<const BgfxIndexBufferBackend&>(ib_in);
         auto& instVb = static_cast<const BgfxVertexBufferBackend&>(*params.instanceVb);
-        if (!bgfx::isValid(vb.handle) || instVb.cpuData.empty()) return;
+        if (!bgfx::isValid(vb.handle) || !bgfx::isValid(ib.handle) || instVb.cpuData.empty())
+            return;
+
+        // REMED-GFX-118: resolved (and validated in 64-bit) before anything is allocated or
+        // submitted, so an out-of-buffer request is an error rather than a clamped native draw.
+        const BgfxIndexedRange range = ResolveIndexedRange(
+            vb, ib, primitive, primitiveCount, params.startIndex, params.baseVertex);
 
         ApplyViewportOverride();
 
         const int instCount = std::max(1, instanceCount);
         const uint16_t instStride = static_cast<uint16_t>(instVb.stride > 0 ? instVb.stride : 64);
+
+        // REMED-GFX-118: the per-instance stream owes every requested instance its own record.
+        // Copying min(requested, available) instead left the surplus instances reading
+        // uninitialised transient memory; an over-long instance range is now rejected -- before
+        // the transient-capacity probe below, so an invalid request is never reported as a
+        // temporary out-of-memory skip.
+        const std::size_t copyBytes = static_cast<std::size_t>(instCount) * instStride;
+        if (copyBytes > instVb.cpuData.size())
+        {
+            throw System::ArgumentOutOfRangeException(
+                "instanceCount", std::to_string(instanceCount),
+                "The requested instance count exceeds the bound per-instance vertex buffer.");
+        }
 
         if (bgfx::getAvailInstanceDataBuffer(static_cast<uint32_t>(instCount), instStride) <
             static_cast<uint32_t>(instCount))
@@ -3698,9 +3791,7 @@ namespace CNA::Internal::Backends::Bgfx
 
         bgfx::InstanceDataBuffer idb{};
         bgfx::allocInstanceDataBuffer(&idb, static_cast<uint32_t>(instCount), instStride);
-        const std::size_t copyBytes = static_cast<std::size_t>(instCount) * instStride;
-        std::memcpy(idb.data, instVb.cpuData.data(),
-                    std::min(copyBytes, instVb.cpuData.size()));
+        std::memcpy(idb.data, instVb.cpuData.data(), copyBytes);
 
         const Matrix vp = view * projection;
         float vp_col[16];
@@ -3708,20 +3799,38 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(vpInstanced3DUnif_, vp_col);
         SetDepthBiasUniform();
 
-        bgfx::setVertexBuffer(0, vb.handle);
-        vb.MarkSubmitted();
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
         const bool useWireframe = wireframe_
             && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
                                       params.baseVertex, 0, wireTib);
+        // REMED-GFX-118: bind the exact requested geometry range, the same way the ordinary
+        // indexed path has since REMED-GFX-107. This call previously passed the whole-buffer
+        // setVertexBuffer/setIndexBuffer overloads, so baseVertex, startIndex and the
+        // topology-derived index count never reached the native instanced draw at all -- every
+        // instance consumed the complete index buffer from element zero. instanceCount stays
+        // independent of this range: it only chooses how many instances consume it.
+        const uint32_t vertexStart = useWireframe ? 0u : range.vertexStart;
+        const uint32_t vertexCount = useWireframe
+            ? static_cast<uint32_t>(vb.vertexCount)
+            : range.vertexCount;
+        bgfx::setVertexBuffer(0, vb.handle, vertexStart, vertexCount);
+        vb.MarkSubmitted();
+        lastInstancedVertexBindStartEXT_ = vertexStart;
+        lastInstancedVertexBindCountEXT_ = vertexCount;
         if (useWireframe) {
             bgfx::setIndexBuffer(&wireTib);
+            lastInstancedIndexBindStartEXT_ = 0;
+            lastInstancedIndexBindCountEXT_ =
+                wireTib.size / (wireTib.isIndex16 ? 2u : 4u);
         } else {
-            bgfx::setIndexBuffer(ib.handle);
+            bgfx::setIndexBuffer(ib.handle, range.indexStart, range.indexCount);
             ib.MarkSubmitted();
+            lastInstancedIndexBindStartEXT_ = range.indexStart;
+            lastInstancedIndexBindCountEXT_ = range.indexCount;
         }
         bgfx::setInstanceDataBuffer(&idb);
+        lastInstancedInstanceCountEXT_ = static_cast<uint32_t>(instCount);
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
         const uint64_t state = (colorWriteFlags_

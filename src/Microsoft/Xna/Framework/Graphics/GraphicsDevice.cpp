@@ -762,9 +762,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int instanceCount
     )
     {
-        (void)minVertexIndex;
-        (void)numVertices;
-
         if (backend_ == nullptr)
             return;
 
@@ -783,7 +780,37 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegative(baseVertex, "baseVertex");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(instanceCount, "instanceCount");
+
+        // REMED-GFX-118: the instanced entry point takes the same indexed contract as
+        // DrawIndexedPrimitives above -- startIndex is an index-element offset, primitiveCount
+        // fixes the exact topology-derived index count, baseVertex is added to every decoded index
+        // once, and minVertexIndex/numVertices declare the referenced vertex window. Rejecting a
+        // request that leaves either bound buffer here keeps every backend's native binding an
+        // exact range instead of a silently widened or clamped draw. instanceCount is validated
+        // independently: it never widens or narrows the geometry range.
+        const int consumedIndexCount =
+            CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+        const int availableIndexCount = currentIndexBuffer_->GetBackend().GetIndexCount();
+        if (startIndex > availableIndexCount ||
+            consumedIndexCount > availableIndexCount - startIndex)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "The requested primitive range exceeds the bound index buffer.");
+        }
+
+        const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
+        if (baseVertex > availableVertexCount ||
+            minVertexIndex > availableVertexCount - baseVertex ||
+            numVertices > availableVertexCount - baseVertex - minVertexIndex)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "numVertices", std::to_string(numVertices),
+                "The declared vertex range exceeds the bound vertex buffer.");
+        }
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -792,6 +819,8 @@ namespace Microsoft::Xna::Framework::Graphics
         p.instanceCount = instanceCount;
         p.startIndex    = startIndex;
         p.baseVertex    = baseVertex;
+        p.minVertexIndex = minVertexIndex;
+        p.numVertices    = numVertices;
         // Find the per-instance vertex buffer binding (instanceFrequency > 0).
         for (const auto& binding : currentVertexBuffers_) {
             if (binding.getInstanceFrequencyProperty() > 0) {
@@ -800,6 +829,15 @@ namespace Microsoft::Xna::Framework::Graphics
                     break;
                 }
             }
+        }
+        // REMED-GFX-118: the per-instance stream must be able to supply every requested instance.
+        // Without this the backends copy min(requested, available) bytes and quietly render the
+        // surplus instances from uninitialised per-instance memory.
+        if (p.instanceVb != nullptr && instanceCount > p.instanceVb->GetVertexCount())
+        {
+            throw System::ArgumentOutOfRangeException(
+                "instanceCount", std::to_string(instanceCount),
+                "The requested instance count exceeds the bound per-instance vertex buffer.");
         }
         applySamplerStatesToBackend();
         backend_->DrawInstancedPrimitivesEx(

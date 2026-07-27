@@ -563,6 +563,16 @@ namespace CNA::Internal::Backends::Bgfx
         // back, so the exact native binding is recorded here for the range regression to assert.
         uint32_t lastNonIndexedBindStartEXT_ = 0;
         uint32_t lastNonIndexedBindCountEXT_ = 0;
+        // REMED-GFX-118: the same record for the instanced indexed path -- the (startVertex,
+        // numVertices) pair handed to bgfx::setVertexBuffer, the (firstIndex, numIndices) pair
+        // handed to bgfx::setIndexBuffer, and the instance count handed to
+        // bgfx::allocInstanceDataBuffer/setInstanceDataBuffer. The whole-buffer overloads these
+        // replaced carried none of the public range at all.
+        uint32_t lastInstancedVertexBindStartEXT_ = 0;
+        uint32_t lastInstancedVertexBindCountEXT_ = 0;
+        uint32_t lastInstancedIndexBindStartEXT_ = 0;
+        uint32_t lastInstancedIndexBindCountEXT_ = 0;
+        uint32_t lastInstancedInstanceCountEXT_ = 0;
         // Callback registered at bgfx init — captures screenshot data for ReadBackbuffer
         BgfxCnaCallback readbackCallback_;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
