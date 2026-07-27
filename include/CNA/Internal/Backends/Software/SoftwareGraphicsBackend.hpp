@@ -295,11 +295,32 @@ namespace CNA::Internal::Backends::Software
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 
+        /**
+         * @brief Renders `primitiveCount` primitives from the whole bound vertex buffer.
+         *
+         * REMED-GFX-119: this overload carries no `GpuDrawParams` and therefore no `vertexStart`,
+         * so its contract is a complete-buffer draw beginning at element zero. Its only caller has
+         * already copied exactly the requested source range into the temporary buffer it binds.
+         * The exact topology-derived vertex count is still validated against the bound buffer in
+         * 64-bit, and a range that leaves the buffer throws `System::ArgumentOutOfRangeException`
+         * before any vertex byte is read rather than being clamped.
+         */
         void DrawColoredPrimitives(const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view,
                                    const Matrix& projection, PrimitiveType primitive, int primitiveCount) override;
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+        /**
+         * @brief Effect-aware non-indexed draw over an exact vertex range.
+         *
+         * REMED-GFX-119: `params.vertexStart` is a vertex-**element** offset, never a byte offset,
+         * and `primitiveCount` fixes the exact topology-derived vertex count, so vertex
+         * `vertexStart + local` is read for `local` in `[0, consumed)` and nothing before or after
+         * that range is consumed. The whole range is validated against the bound buffer in 64-bit
+         * before the stride multiply, so a request that leaves the buffer throws
+         * `System::ArgumentOutOfRangeException` instead of forming an invalid pointer into the CPU
+         * vertex storage.
+         */
         void DrawPrimitivesEx(const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view,
                               const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                               const GpuDrawParams& params) override;

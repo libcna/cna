@@ -1071,9 +1071,11 @@ namespace CNA::Internal::Backends::Software
         // minVertexIndex/numVertices are validation hints: they never add to a decoded index,
         // never replace startIndex, and never narrow the vertices an index legitimately reaches.
 
-        /// Exact topology-derived consumed index count, computed in 64-bit so an extreme
-        /// primitiveCount cannot wrap. Returns -1 for an unrecognized topology.
-        std::int64_t IndexedElementCount(PrimitiveType primitive, int primitiveCount)
+        /// Exact topology-derived consumed element count, computed in 64-bit so an extreme
+        /// primitiveCount cannot wrap. Returns -1 for an unrecognized topology. XNA uses the same
+        /// formula for both kinds of draw, so this counts index elements for the indexed paths and
+        /// vertex elements for the non-indexed ones.
+        std::int64_t PrimitiveElementCount(PrimitiveType primitive, int primitiveCount)
         {
             const std::int64_t count = primitiveCount;
             switch (primitive)
@@ -1153,6 +1155,56 @@ namespace CNA::Internal::Backends::Software
                             ", outside the bound vertex buffer of " +
                             std::to_string(availableVertexCount) + " vertices.");
                 }
+            }
+        }
+
+        // ---- REMED-GFX-119: non-indexed addressing and bounds ----
+        //
+        // The non-indexed counterpart of the block above, shared by both CPU non-indexed raster
+        // paths so they cannot drift apart either. The public contract is:
+        //
+        //   fetched vertex = vertexStart + localVertex           (an ELEMENT offset, never bytes)
+        //   localVertex    in [0, PrimitiveElementCount(primitive, primitiveCount))
+        //
+        // DrawColoredPrimitives carries no GpuDrawParams and therefore no vertexStart: its own
+        // contract is a complete-buffer draw from element zero, because its only caller has already
+        // copied exactly the requested source range into the temporary buffer it binds. Applying an
+        // offset there as well would consume that range twice.
+
+        /// Validates the complete consumed vertex range before a single vertex byte is read, so an
+        /// out-of-buffer request can never form an invalid pointer into the CPU vertex storage. All
+        /// arithmetic is 64-bit, so neither an extreme primitiveCount nor a large vertexStart can
+        /// wrap into an apparently valid address, and the stride multiply happens only afterwards.
+        /// Throws the public CNA range exception rather than any implementation type, and rejects
+        /// rather than clamps.
+        void ValidateNonIndexedAddressing(int availableVertexCount,
+                                          std::int64_t consumedVertexCount, int vertexStart)
+        {
+            // CNA's public contract rejects a negative vertexStart before backend dispatch; the CPU
+            // paths address real host storage, so they re-assert it rather than trust it.
+            if (vertexStart < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "vertexStart", std::to_string(vertexStart),
+                    "vertexStart must not be negative.");
+            }
+            if (consumedVertexCount < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "primitiveCount", std::to_string(consumedVertexCount),
+                    "The requested primitive range is too large.");
+            }
+            if (vertexStart > availableVertexCount ||
+                consumedVertexCount >
+                    static_cast<std::int64_t>(availableVertexCount) - vertexStart)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "vertexStart", std::to_string(vertexStart),
+                    "The requested primitive range consumes " +
+                        std::to_string(consumedVertexCount) + " vertices from element " +
+                        std::to_string(vertexStart) +
+                        ", outside the bound vertex buffer of " +
+                        std::to_string(availableVertexCount) + " vertices.");
             }
         }
     }
@@ -1825,9 +1877,15 @@ namespace CNA::Internal::Backends::Software
             throw std::runtime_error("SoftwareGraphicsBackend::DrawColoredPrimitives: primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawColoredPrimitives: only TriangleList is supported in v1");
-        if (primitiveCount * 3 > vb.GetVertexCount())
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend::DrawColoredPrimitives: primitiveCount needs more vertices than the bound buffer has");
+
+        // REMED-GFX-119: this entry point carries no GpuDrawParams, so its contract is a complete
+        // buffer draw -- first element zero, no offset. It still validates the exact
+        // topology-derived range through the shared helper, in 64-bit, so an extreme
+        // primitiveCount is rejected instead of wrapping the old `primitiveCount * 3` product.
+        constexpr int kVertexStart = 0;
+        const std::int64_t consumedVertexCount =
+            PrimitiveElementCount(primitive, primitiveCount);
+        ValidateNonIndexedAddressing(vb.GetVertexCount(), consumedVertexCount, kVertexStart);
 
         const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
         const std::uint8_t* base = swVb.Data().data();
@@ -1854,12 +1912,18 @@ namespace CNA::Internal::Backends::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
+        // REMED-GFX-119: element = vertexStart + local (never a byte offset); the stride multiply
+        // happens only after the element range above was validated.
+        const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
+            return base + static_cast<std::size_t>(kVertexStart + local) * stride;
+        };
+
         for (int i = 0; i < primitiveCount; ++i)
         {
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
-                const std::uint8_t* raw = base + static_cast<std::size_t>(i * 3 + k) * stride;
+                const std::uint8_t* raw = fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
                 cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
 
@@ -1906,7 +1970,7 @@ namespace CNA::Internal::Backends::Software
         // topology-derived range and every decoded vertex address through the shared helper.
         constexpr int kStartIndex = 0;
         constexpr int kBaseVertex = 0;
-        const std::int64_t consumedIndexCount = IndexedElementCount(primitive, primitiveCount);
+        const std::int64_t consumedIndexCount = PrimitiveElementCount(primitive, primitiveCount);
         ValidateIndexedAddressing(ibBase, thirtyTwoBit, ib.GetIndexCount(), vb.GetVertexCount(),
                                   consumedIndexCount, kStartIndex, kBaseVertex);
 
@@ -1990,9 +2054,14 @@ namespace CNA::Internal::Backends::Software
             throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: dualTexture=true but texture1 is null");
         if (params.envMapping && params.envMap == nullptr)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: envMapping=true but envMap is null");
-        if (primitiveCount * 3 > vb.GetVertexCount())
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend::DrawPrimitivesEx: primitiveCount needs more vertices than the bound buffer has");
+
+        // REMED-GFX-119: this path receives the public vertexStart. It was previously dropped, so
+        // every non-indexed draw rendered the element-zero prefix of the bound buffer; only the
+        // consumed count was ever right.
+        const int vertexStart = params.vertexStart;
+        const std::int64_t consumedVertexCount =
+            PrimitiveElementCount(primitive, primitiveCount);
+        ValidateNonIndexedAddressing(vb.GetVertexCount(), consumedVertexCount, vertexStart);
 
         const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
         const std::size_t stride = swVb.Stride();
@@ -2022,12 +2091,18 @@ namespace CNA::Internal::Backends::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
+        // REMED-GFX-119: element = vertexStart + local (never a byte offset); the stride multiply
+        // happens only after the element range above was validated.
+        const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
+            return base + static_cast<std::size_t>(vertexStart + local) * stride;
+        };
+
         for (int i = 0; i < primitiveCount; ++i)
         {
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
-                const std::uint8_t* raw = base + static_cast<std::size_t>(i * 3 + k) * stride;
+                const std::uint8_t* raw = fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
@@ -2089,7 +2164,7 @@ namespace CNA::Internal::Backends::Software
         // minVertexIndex/numVertices stay hints -- they are deliberately not consulted here.
         const int startIndex = params.startIndex;
         const int baseVertex = params.baseVertex;
-        const std::int64_t consumedIndexCount = IndexedElementCount(primitive, primitiveCount);
+        const std::int64_t consumedIndexCount = PrimitiveElementCount(primitive, primitiveCount);
         ValidateIndexedAddressing(ibBase, thirtyTwoBit, ib.GetIndexCount(), vb.GetVertexCount(),
                                   consumedIndexCount, startIndex, baseVertex);
 
