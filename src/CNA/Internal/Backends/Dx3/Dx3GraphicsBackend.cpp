@@ -7,6 +7,8 @@
 #include <ddraw.h>
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -977,6 +979,66 @@ namespace CNA::Internal::Backends::Dx3
         }
 
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+
+        /**
+         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         *
+         * REMED-GFX-127. DirectDraw's own `IDirectDrawSurface::Lock` is a fully synchronous,
+         * direct-memory read of exactly this target's off-screen surface -- the same access
+         * `Clear()` and `ReadBackbuffer()` already use here -- so this backend has real readback and
+         * must not be left on the interface default. Before this override existed the shared layer
+         * converted its own zero-initialized scratch buffer for the caller, i.e. a fabricated
+         * transparent-black frame. Rows are top-first and channels are R,G,B,A, matching what
+         * `WriteSurfacePixels`/`FillSurfaceColor` store, so neither a flip nor a swizzle applies.
+         * The lock is taken and released inside this call; nothing is staged or retained.
+         *
+         * @param level      Mip level; IDirectDrawSurface has no mip chain.
+         * @param x          Left edge of the requested rectangle, in pixels.
+         * @param y          Top edge of the requested rectangle, in pixels.
+         * @param w          Width of the requested rectangle, in pixels.
+         * @param h          Height of the requested rectangle, in pixels.
+         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param dataLength Capacity of @p data in bytes.
+         * @return True once the whole rectangle has been written; false if this target has no
+         *         surface, leaving @p data untouched.
+         * @throws System::NotSupportedException if @p level is above 0.
+         * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle leaves
+         *         the target, or @p dataLength is too small for the rectangle.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override
+        {
+            if (level < 0)
+                throw System::ArgumentOutOfRangeException(
+                    "level", std::to_string(level), "level must not be negative.");
+            if (level > 0)
+                throw System::NotSupportedException(
+                    "Dx3RenderTargetBackend::GetData: IDirectDrawSurface has no mip chain; level " +
+                    std::to_string(level) + " was requested.");
+            // 64-bit throughout, so a rectangle near INT_MAX is rejected rather than wrapping.
+            const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
+            const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
+            if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+                right > static_cast<std::int64_t>(width_) ||
+                bottom > static_cast<std::int64_t>(height_))
+                throw System::ArgumentOutOfRangeException(
+                    "rect",
+                    std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+                        std::to_string(h),
+                    "The requested rectangle leaves the " + std::to_string(width_) + "x" +
+                        std::to_string(height_) + " render target.");
+            const std::int64_t requiredBytes =
+                static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+            if (static_cast<std::int64_t>(dataLength) < requiredBytes)
+                throw System::ArgumentOutOfRangeException(
+                    "dataLength", std::to_string(dataLength),
+                    "The destination holds fewer than the " + std::to_string(requiredBytes) +
+                        " bytes the requested rectangle needs.");
+            if (surface_ == nullptr || data == nullptr) return false;
+
+            ReadSurfacePixels(surface_, x, y, w, h, static_cast<uint8_t*>(data));
+            return true;
+        }
 
         // DX3-24: IDirectDrawSurface has no depth-buffer concept at all, regardless of what
         // DepthFormat was requested -- always false, same reasoning SDL_RENDERER's Task 708 used.

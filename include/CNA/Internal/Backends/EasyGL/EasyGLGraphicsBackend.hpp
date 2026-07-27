@@ -57,8 +57,11 @@ namespace CNA::Internal::Backends::EasyGL
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
-        void GetData(int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-127: returns true once glReadPixels has filled the whole requested region.
+        /// Every invalid request throws; there is no path that returns false having written part of
+        /// @p data, so the shared layer can never convert a partially populated buffer.
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
         [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }

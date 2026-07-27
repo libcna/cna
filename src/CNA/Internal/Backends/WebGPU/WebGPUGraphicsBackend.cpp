@@ -784,11 +784,13 @@ namespace CNA::Internal::Backends::WebGPU
     // sub-rectangle from the mapped memory -- this texture is always WGPUTextureFormat_RGBA8Unorm
     // (see the constructor above), so unlike the swapchain/a RenderTarget2D there is never a
     // BGRA byte-swap to apply.
-    void WebGPUTextureBackend::GetData(int level, int x, int y, int w, int h,
+    bool WebGPUTextureBackend::GetData(int level, int x, int y, int w, int h,
                                         void* data, int dataLength) const
     {
+        // REMED-GFX-127: nothing is written on these paths, so they must not be reported as a
+        // completed readback -- the shared layer would otherwise convert its own zeroed scratch.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
-            return;
+            return false;
         if (level < 0 || level >= mipLevels_)
             throw std::out_of_range("CNA WebGPU: Texture2D.GetData: mip level out of range");
 
@@ -848,32 +850,36 @@ namespace CNA::Internal::Backends::WebGPU
             wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        // REMED-GFX-127: an unmappable buffer or an undersized destination used to memset the
+        // caller's memory to zero and return as if the read had succeeded -- exactly the fabricated
+        // transparent-black frame this finding removes. Report the failure instead, leaving the
+        // destination untouched.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
         {
-            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+            wgpuBufferUnmap(readbackBuffer);
+            wgpuBufferRelease(readbackBuffer);
+            return false;
         }
-        else
+        for (int row = 0; row < h; ++row)
         {
-            for (int row = 0; row < h; ++row)
+            const int sy = y + row;
+            for (int col = 0; col < w; ++col)
             {
-                const int sy = y + row;
-                for (int col = 0; col < w; ++col)
+                const int sx = x + col;
+                std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
+                if (sx < 0 || sx >= levelW || sy < 0 || sy >= levelH)
                 {
-                    const int sx = x + col;
-                    std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
-                    if (sx < 0 || sx >= levelW || sy < 0 || sy >= levelH)
-                    {
-                        d[0] = d[1] = d[2] = d[3] = 0;
-                        continue;
-                    }
-                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
-                                            static_cast<std::size_t>(sx) * 4;
-                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
+                    d[0] = d[1] = d[2] = d[3] = 0;
+                    continue;
                 }
+                const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
+                                        static_cast<std::size_t>(sx) * 4;
+                d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
             }
         }
         wgpuBufferUnmap(readbackBuffer);
         wgpuBufferRelease(readbackBuffer);
+        return true;
     }
 
     // WEBGPU-56/74: minimal cube-map texture backend, just enough for
@@ -1684,11 +1690,13 @@ namespace CNA::Internal::Backends::WebGPU
         if (owner_ != nullptr && owner_->currentRenderTarget_ == this) owner_->currentRenderTarget_ = nullptr;
     }
 
-    void WebGPURenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool WebGPURenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
+        // REMED-GFX-127: see WebGPUTextureBackend::GetData -- nothing written means false, never a
+        // silently successful return.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
-            return;
+            return false;
         if (level != 0)
             throw std::invalid_argument("CNA WebGPU: RenderTarget2D.GetData: mip level > 0 is not "
                                         "supported on this backend (no mip chain, see "
@@ -1759,33 +1767,35 @@ namespace CNA::Internal::Backends::WebGPU
                              colorFormat_ == WGPUTextureFormat_BGRA8UnormSrgb);
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
-        if (mapped == nullptr || static_cast<std::size_t>(dataLength) < requiredLength)
+        // REMED-GFX-127: was a memset-to-zero-and-return-as-success path; report the failure and
+        // leave the destination alone instead.
+        if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
         {
-            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+            wgpuBufferUnmap(readbackBuffer);
+            wgpuBufferRelease(readbackBuffer);
+            return false;
         }
-        else
+        for (int row = 0; row < h; ++row)
         {
-            for (int row = 0; row < h; ++row)
+            const int sy = y + row;
+            for (int col = 0; col < w; ++col)
             {
-                const int sy = y + row;
-                for (int col = 0; col < w; ++col)
+                const int sx = x + col;
+                std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
+                if (sx < 0 || sx >= width_ || sy < 0 || sy >= height_)
                 {
-                    const int sx = x + col;
-                    std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
-                    if (sx < 0 || sx >= width_ || sy < 0 || sy >= height_)
-                    {
-                        d[0] = d[1] = d[2] = d[3] = 0;
-                        continue;
-                    }
-                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
-                                            static_cast<std::size_t>(sx) * 4;
-                    if (isBgra) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
-                    else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
+                    d[0] = d[1] = d[2] = d[3] = 0;
+                    continue;
                 }
+                const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
+                                        static_cast<std::size_t>(sx) * 4;
+                if (isBgra) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
+                else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
             }
         }
         wgpuBufferUnmap(readbackBuffer);
         wgpuBufferRelease(readbackBuffer);
+        return true;
     }
 
     WebGPUVertexBufferBackend::WebGPUVertexBufferBackend(WebGPUGraphicsBackend& owner, int vertexCapacity)

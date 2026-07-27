@@ -42,6 +42,42 @@ namespace CNA::Internal::Backends::D3D11
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
+
+        /**
+         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         *
+         * REMED-GFX-127. D3D11's readback is the same staging-copy discipline
+         * D3D11GraphicsBackend::ReadBackbuffer already uses: copy the requested subresource region
+         * into a D3D11_USAGE_STAGING texture with D3D11_CPU_ACCESS_READ, then Map it for reading --
+         * a Map that blocks until the copy has completed, so no separate synchronisation, fence or
+         * extra frame is involved. The source is always GetSampleableTextureEXT(), i.e. the
+         * resolved copy when this target is MSAA, since a multisampled texture cannot be copied to
+         * a staging resource region. Before this override existed the shared layer converted its
+         * own zero-initialized scratch buffer for the caller, i.e. a fabricated transparent-black
+         * frame.
+         *
+         * The staging texture is created and released inside this call, so repeated readbacks hold
+         * no extra GPU memory. Storage is DXGI_FORMAT_R8G8B8A8_UNORM, so no swizzle applies; rows
+         * are top-first, so no flip applies, and D3D11_MAPPED_SUBRESOURCE::RowPitch is honoured
+         * rather than assuming tightly packed rows.
+         *
+         * @param level      Mip level; this target has a full chain only when it was created with
+         *                   mipMap.
+         * @param x          Left edge of the requested rectangle, in level pixels.
+         * @param y          Top edge of the requested rectangle, in level pixels.
+         * @param w          Width of the requested rectangle, in pixels.
+         * @param h          Height of the requested rectangle, in pixels.
+         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param dataLength Capacity of @p data in bytes.
+         * @return True once the whole rectangle has been written; false if D3D11 could not create
+         *         or map the staging texture, leaving @p data untouched.
+         * @throws System::NotSupportedException if this target has no such mip level.
+         * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle leaves
+         *         the level, or @p dataLength is too small for the rectangle.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
         /// DX-143: the real MSAA-resolve/mip-regeneration work UnbindAsRenderTarget() does,

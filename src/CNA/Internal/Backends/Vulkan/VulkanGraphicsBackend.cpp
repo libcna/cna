@@ -785,10 +785,12 @@ namespace CNA::Internal::Backends::Vulkan
     // initial transition already left colorImage_ readable). Then copy the requested sub-rectangle
     // via a host-visible staging buffer, mirroring VulkanTexture3DBackend::GetData, applying the
     // swapchain BGRA->RGBA swap since the RT colour image uses swapchainFormat_.
-    void VulkanRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool VulkanRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
-        if (!owner_ || colorImage_ == VK_NULL_HANDLE || !data || dataLength <= 0) return;
+        // REMED-GFX-127: reporting false here is what makes the shared layer raise the missing
+        // capability instead of handing the caller its own zero-initialized scratch buffer.
+        if (!owner_ || colorImage_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
 
         owner_->FlushDeferredRenderTarget(const_cast<VulkanRenderTargetBackend*>(this));
 
@@ -831,6 +833,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
+        return true;
     }
 
     // =========================================================================

@@ -258,6 +258,25 @@ namespace CNA::Internal::Backends::Headless
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
+        /**
+         * @brief Reports that this backend cannot read a render target's colour attachment back.
+         *
+         * REMED-GFX-127. Stated explicitly rather than inherited, because the answer is a reviewed
+         * capability decision, not an oversight: the Headless backend deliberately executes no
+         * rasterization at all -- it records API usage and resource state for validation/tracing --
+         * so a render target's colour content does not exist here in any form it could return.
+         * The alternative, handing back this object's zeroed `pixels_`, is precisely the fabricated
+         * transparent-black frame this finding removes: it would be indistinguishable from a real
+         * readback of an empty target. Returning false makes `Texture2D::GetData` raise
+         * `System::NotSupportedException` with the caller's destination untouched.
+         *
+         * @return Always false.
+         */
+        [[nodiscard]] bool GetData(int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
+                                   void* /*data*/, int /*dataLength*/) const override
+        {
+            return false;
+        }
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }

@@ -355,17 +355,27 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             // No CPU-side shadow. For a RenderTarget2D (gpuOnlyContent_), that's normal -- its
             // content comes from GPU rendering, not SetData() -- so fall back to a real backend
-            // readback for the common full-texture-read case, matching TextureCube::GetData's own
-            // always-ask-the-backend convention; backends without real support leave `data`
-            // untouched (the interface's default no-op) rather than fabricate content. For a plain
-            // Texture2D, an empty shadow means it was freed because context recovery is disabled
-            // (MaybeFreeCpuPixels) -- that must still throw below, not silently read back whatever
-            // the backend's GPU texture currently holds.
+            // readback for the common full-texture-read case. For a plain Texture2D, an empty
+            // shadow means it was freed because context recovery is disabled (MaybeFreeCpuPixels)
+            // -- that must still throw below, not silently read back whatever the backend's GPU
+            // texture currently holds.
             const int total = width * height;
             if (gpuOnlyContent_ && backend_ && startIndex == 0 && elementCount == total && total > 0)
             {
+                // REMED-GFX-127: `pixels` is scratch memory THIS layer owns and zero-initializes,
+                // so converting it unconditionally is not "leaving the caller's buffer untouched"
+                // when the backend has no readback -- it fabricates a complete transparent-black
+                // frame. Conversion happens only when the backend reports it wrote the whole
+                // region; otherwise the caller's `data` is left byte-for-byte as it was and the
+                // missing capability is raised instead of being answered with invented content.
                 std::vector<uint8_t> pixels(static_cast<std::size_t>(total) * 4, 0);
-                backend_->GetData(0, 0, 0, width, height, pixels.data(), static_cast<int>(pixels.size()));
+                if (!backend_->GetData(0, 0, 0, width, height, pixels.data(),
+                                       static_cast<int>(pixels.size())))
+                {
+                    throw System::NotSupportedException(
+                        "Texture2D::GetData: this graphics backend cannot read a render target's "
+                        "colour attachment back to the CPU");
+                }
                 for (int i = 0; i < elementCount; ++i)
                 {
                     const int src = i * 4;
@@ -429,8 +439,16 @@ namespace Microsoft::Xna::Framework::Graphics
                 if (elementCount < w * h)
                     throw std::out_of_range("Texture2D::GetData: elementCount is less than the number of pixels in the requested region");
 
+                // REMED-GFX-127: same contract as the whole-level overload above -- scratch memory
+                // this layer zero-initialized is never handed to the caller as if it were content.
                 std::vector<uint8_t> pixels(static_cast<std::size_t>(w) * h * 4, 0);
-                backend_->GetData(level, x, y, w, h, pixels.data(), static_cast<int>(pixels.size()));
+                if (!backend_->GetData(level, x, y, w, h, pixels.data(),
+                                       static_cast<int>(pixels.size())))
+                {
+                    throw System::NotSupportedException(
+                        "Texture2D::GetData: this graphics backend cannot read a render target's "
+                        "colour attachment back to the CPU");
+                }
                 for (int row = 0; row < h; ++row)
                     for (int col = 0; col < w; ++col)
                     {

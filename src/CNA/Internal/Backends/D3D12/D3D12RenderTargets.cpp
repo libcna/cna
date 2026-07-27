@@ -4,9 +4,14 @@
 #include "CNA/Internal/Backends/D3DCommon/D3DFormatMapping.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
+#include <string>
+
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace CNA::Internal::Backends::D3D12
 {
@@ -394,6 +399,59 @@ namespace CNA::Internal::Backends::D3D12
 
         if (FAILED(cmdList->Close())) return;
         owner_->ExecuteCommandListAndWaitEXT(cmdList);
+    }
+
+    bool D3D12RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+    {
+        if (level < 0)
+            throw System::ArgumentOutOfRangeException(
+                "level", std::to_string(level), "level must not be negative.");
+        if (level >= levelCount_)
+            throw System::NotSupportedException(
+                "D3D12RenderTargetBackend::GetData: this render target has " +
+                std::to_string(levelCount_) + " mip level(s); level " + std::to_string(level) +
+                " was requested.");
+
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        // 64-bit throughout, so a rectangle near INT_MAX is rejected rather than wrapping.
+        const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
+        const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+            right > static_cast<std::int64_t>(levelW) || bottom > static_cast<std::int64_t>(levelH))
+            throw System::ArgumentOutOfRangeException(
+                "rect",
+                std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+                    std::to_string(h),
+                "The requested rectangle leaves the " + std::to_string(levelW) + "x" +
+                    std::to_string(levelH) + " mip level.");
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes)
+            throw System::ArgumentOutOfRangeException(
+                "dataLength", std::to_string(dataLength),
+                "The destination holds fewer than the " + std::to_string(requiredBytes) +
+                    " bytes the requested rectangle needs.");
+
+        ID3D12Resource* const source = GetSampleableColorResourceEXT();
+        if (!owner_ || !device_ || !source || data == nullptr)
+            return false;
+
+        const std::vector<uint8_t> levelPixels = ReadbackSubresourceRGBA8(
+            owner_, device_.Get(), source, static_cast<UINT>(level), levelW, levelH);
+        // ReadbackSubresourceRGBA8's own honest bail-out: empty means the copy never completed.
+        if (levelPixels.size() < static_cast<std::size_t>(levelW) * levelH * 4)
+            return false;
+
+        auto* dst = static_cast<std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+            std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
+                        levelPixels.data() +
+                            (static_cast<std::size_t>(y + row) * levelW + x) * 4u,
+                        rowBytes);
+        return true;
     }
 
     void D3D12RenderTargetBackend::GenerateMipsEXT()

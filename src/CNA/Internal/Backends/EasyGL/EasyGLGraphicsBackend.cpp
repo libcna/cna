@@ -690,7 +690,7 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
     }
 
-    void EasyGLRenderTargetBackend::GetData(
+    bool EasyGLRenderTargetBackend::GetData(
         int level, int x, int y, int w, int h, void* data, int dataLength) const
     {
         if (!data || level < 0 || w <= 0 || h <= 0
@@ -746,6 +746,7 @@ namespace CNA::Internal::Backends::EasyGL
         }
         ::easygl::Framebuffer::unbind(
             ::easygl::FramebufferTarget::ReadFramebuffer);
+        return true;
     }
 
     void EasyGLRenderTargetBackend::AttachColorToMRT(

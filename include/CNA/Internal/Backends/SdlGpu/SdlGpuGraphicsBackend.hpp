@@ -258,8 +258,13 @@ namespace CNA::Internal::Backends::SdlGpu
          * is MSAA), a texture this backend fully owns, unlike the swapchain -- so it does not hit
          * the swapchain-download segfault documented in `plan_sdlgpu.md`'s `SDLGPU-39` row.
          * Flushes any pending frame first so the read reflects this frame's draws.
+         *
+         * REMED-GFX-127: returns true only once the downloaded transfer buffer has been copied into
+         * @p data in full. An empty region returns false rather than reporting success on a
+         * destination it never wrote, and every real failure (transfer buffer, command buffer,
+         * fence, map) still throws before any byte is copied.
          */
-        void GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 
         /** @brief Queues a color-only clear, consumed on this target's next render pass. NOXNA. */
         NOXNA void QueueClear(SDL_FColor color) { state_->clearColor = color; state_->clearColorPending = true; }

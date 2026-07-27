@@ -231,13 +231,42 @@ namespace CNA::Internal::Backends
         /// The backend stores this reference for OpenGL context-loss restoration instead
         /// of keeping its own duplicate copy of the pixel data.
         virtual void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
-        /// Reads back raw RGBA8 pixels from a sub-rectangle of the given mip level. No-op by
-        /// default (matches ITextureCubeBackend::GetData's own convention). Texture2D::GetData()
-        /// only calls this when its own CPU-side pixel shadow is unavailable (i.e. for a
-        /// RenderTarget2D, whose content comes from GPU rendering rather than SetData()) --
-        /// plain, SetData()-populated textures never reach this path.
-        virtual void GetData(int level, int x, int y, int w, int h,
-                             void* data, int dataLength) const {}
+        /**
+         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of the given mip level.
+         *
+         * REMED-GFX-127. Returns **true only when the complete requested region was written into
+         * @p data**, and false when this backend performed no readback at all. There is no third
+         * state: an implementation that fails part-way through, or that cannot complete the
+         * transfer, must return false rather than reporting a partially written buffer as success.
+         *
+         * The default is `false` — "this backend has no render-target/texture readback" — because a
+         * silent no-op default was worse than useless here. `Texture2D::GetData` hands this method a
+         * scratch buffer it zero-initialized itself and converts the result for the caller, so a
+         * no-op default did not leave the caller's destination untouched: it fabricated a complete,
+         * uniformly transparent-black frame that passed both "did GetData write anything?" and any
+         * expectation whose content happened to be transparent black. The shared layer now converts
+         * only on `true` and raises `System::NotSupportedException` on `false`, so the one thing an
+         * unimplemented backend can never do is answer with content it never read.
+         *
+         * `Texture2D::GetData` only calls this when its own CPU-side pixel shadow is unavailable
+         * (i.e. for a RenderTarget2D, whose content comes from GPU rendering rather than SetData())
+         * -- plain, SetData()-populated textures never reach this path.
+         *
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested region, in pixels.
+         * @param y          Top edge of the requested region, in pixels.
+         * @param w          Width of the requested region, in pixels.
+         * @param h          Height of the requested region, in pixels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes.
+         * @return True if the whole region was written; false if this backend read nothing back.
+         */
+        [[nodiscard]] virtual bool GetData(int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+        {
+            (void)level; (void)x; (void)y; (void)w; (void)h; (void)data; (void)dataLength;
+            return false;
+        }
     };
 
     /// Backend handle for a 2D render target (off-screen FBO on EasyGL).

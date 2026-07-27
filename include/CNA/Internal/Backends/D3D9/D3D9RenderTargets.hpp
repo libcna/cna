@@ -55,6 +55,41 @@ namespace CNA::Internal::Backends::D3D9
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
+
+        /**
+         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         *
+         * REMED-GFX-127. D3D9 has a real, fully synchronous readback for a D3DPOOL_DEFAULT render
+         * target: `IDirect3DDevice9::GetRenderTargetData` copies the colour surface into a
+         * D3DPOOL_SYSTEMMEM offscreen plain surface, which is then `LockRect`ed for the requested
+         * rectangle. When this target is multisampled the read still comes from the resolved,
+         * sampleable texture surface (`UnbindAsRenderTarget` StretchRects into it), never from the
+         * multisampled surface, which `GetRenderTargetData` cannot accept. Before this override
+         * existed the shared layer converted its own zero-initialized scratch buffer for the
+         * caller, i.e. a fabricated transparent-black frame.
+         *
+         * The system-memory surface is created and released inside this call, so repeated readbacks
+         * hold no extra resources. Storage is D3DFMT_A8B8G8R8, whose byte order is already R,G,B,A,
+         * so no swizzle applies; rows are top-first, so no flip applies.
+         *
+         * @param level      Mip level; this backend allocates a single level (see this file's own
+         *                   header note on mip-chain generation).
+         * @param x          Left edge of the requested rectangle, in pixels.
+         * @param y          Top edge of the requested rectangle, in pixels.
+         * @param w          Width of the requested rectangle, in pixels.
+         * @param h          Height of the requested rectangle, in pixels.
+         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param dataLength Capacity of @p data in bytes.
+         * @return True once the whole rectangle has been written; false if this target's
+         *         D3DPOOL_DEFAULT resources are currently released (device lost) or D3D9 could not
+         *         complete the copy, leaving @p data untouched.
+         * @throws System::NotSupportedException if @p level is above 0.
+         * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle leaves
+         *         the target, or @p dataLength is too small for the rectangle.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {

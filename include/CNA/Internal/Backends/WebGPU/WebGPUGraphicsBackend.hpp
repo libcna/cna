@@ -83,8 +83,13 @@ namespace CNA::Internal::Backends::WebGPU
         /// WGPUTextureFormat_RGBA8Unorm, so unlike the swapchain/RenderTarget2D there is never a
         /// BGRA byte-swap to worry about), then extracts the @p x,@p y,@p w,@p h sub-rectangle
         /// from the mapped memory on the CPU side.
-        void GetData(int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        ///
+        /// REMED-GFX-127: returns true only once the whole requested rectangle has been written.
+        /// An empty request, a torn-down owner, an unmappable readback buffer or a destination too
+        /// small for the rectangle now return false, where the destination used to be memset to
+        /// zero and reported as a successful readback.
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         [[nodiscard]] WGPUTextureView View() const override { return view_; }
@@ -140,8 +145,12 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-        void GetData(int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        /// REMED-GFX-127: returns true only once the whole requested rectangle has been written;
+        /// false for an empty request, a torn-down owner or a destination too small for it. The
+        /// former behaviour -- memset the destination to zero and return -- reported a fabricated
+        /// transparent-black frame as a successful readback.
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;

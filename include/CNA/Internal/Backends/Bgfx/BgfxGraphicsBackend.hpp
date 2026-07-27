@@ -252,7 +252,8 @@ namespace CNA::Internal::Backends::Bgfx
         // see Detail::AllocateRtViewId()'s comment for why every RT needs a distinct one.
         bgfx::ViewId viewId_ = Detail::kInvalidRtViewId;
 
-        BgfxRenderTargetBackend(int w, int h, int depthFormat, bool preserveContents = false,
+        BgfxRenderTargetBackend(BgfxGraphicsBackend* owner, int w, int h, int depthFormat,
+                                 bool preserveContents = false,
                                  int requestedMultiSampleCount = 0, bool mipMap = false);
         ~BgfxRenderTargetBackend() override;
 
@@ -266,8 +267,49 @@ namespace CNA::Internal::Backends::Bgfx
         // REMED-GFX-067: this IS a render-target color attachment — see IBgfxSamplable.
         bool IsRenderTargetColorSource() const override { return true; }
 
+        /**
+         * @brief Reads this target's rendered colour attachment back as tightly packed RGBA8 rows.
+         *
+         * REMED-GFX-127. Uses the SAME mechanism Task 914 already established for
+         * BgfxTextureCubeBackend/BgfxTexture3DBackend readback -- blit the requested mip/rectangle
+         * into a temporary `BGFX_TEXTURE_BLIT_DST | BGFX_TEXTURE_READ_BACK` texture, then
+         * `bgfx::readTexture()` and advance frames until the returned frame number is reached. The
+         * blit is issued on the reserved highest view id, so bgfx's ascending-view-id execution
+         * order guarantees it runs after every render-target and viewport-segment view queued this
+         * frame and therefore sees this frame's draws rather than the previous frame's content.
+         *
+         * bgfx's texture readback is inherently deferred: the data only exists once the frame that
+         * carries the blit has been submitted, so this call advances bgfx frames, exactly as
+         * BgfxGraphicsBackend::ReadBackbuffer already does. That frame advance is confined to this
+         * explicitly synchronous call -- ordinary rendering never pays for it -- and the temporary
+         * readback texture is destroyed before returning, so repeated readbacks hold no extra GPU
+         * memory. Before this override existed the call reached ITextureBackend::GetData's default
+         * and the shared layer converted its own zeroed scratch buffer for the caller.
+         *
+         * @param level      Mip level to read; this target has a full chain only when it was
+         *                   created with mipMap.
+         * @param x          Left edge of the requested rectangle, in level pixels.
+         * @param y          Top edge of the requested rectangle, in level pixels.
+         * @param w          Width of the requested rectangle, in pixels.
+         * @param h          Height of the requested rectangle, in pixels.
+         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param dataLength Capacity of @p data in bytes.
+         * @return True once the whole rectangle has been written; false when this renderer cannot
+         *         create a readback texture (BGFX_CAPS_TEXTURE_BLIT/READ_BACK absent) or the
+         *         deferred read never completed, leaving @p data untouched.
+         * @throws System::NotSupportedException if this target has no such mip level.
+         * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle leaves
+         *         the level, or @p dataLength is too small for the rectangle.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
+
+    private:
+        BgfxGraphicsBackend* owner_ = nullptr;
+        int mipLevels_ = 1;   ///< 1 unless this target was created with a full mip chain.
     };
 
     /// bgfx-backed cube map render target.
@@ -699,6 +741,27 @@ namespace CNA::Internal::Backends::Bgfx
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
+        /**
+         * @brief Blits @p srcTexture's requested region into a temporary readback texture and
+         * copies it to @p data, advancing bgfx frames until the deferred read completes.
+         *
+         * REMED-GFX-127: the readback half of BgfxRenderTargetBackend::GetData lives here because
+         * the frame advance has to be paired with this backend's own per-frame bookkeeping
+         * (viewport-segment recycling and the sprite viewport validity flag), exactly as
+         * ReadBackbuffer does. This is an internal backend helper, not part of the XNA surface.
+         *
+         * @param srcTexture Source texture handle (a render target's colour attachment).
+         * @param level      Source mip level.
+         * @param x          Left edge of the requested region, in level pixels.
+         * @param y          Top edge of the requested region, in level pixels.
+         * @param w          Width of the requested region, in pixels.
+         * @param h          Height of the requested region, in pixels.
+         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @return True once the whole region was written; false if the readback texture could not
+         *         be created or the deferred read did not complete.
+         */
+        [[nodiscard]] bool ReadTextureRegionEXT(bgfx::TextureHandle srcTexture, int level,
+                                                int x, int y, int w, int h, void* data);
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,

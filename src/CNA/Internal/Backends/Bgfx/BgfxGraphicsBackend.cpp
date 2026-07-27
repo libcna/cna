@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <bgfx/embedded_shader.h>
 #include <bx/math.h>
@@ -465,6 +466,48 @@ namespace CNA::Internal::Backends::Bgfx
         return false;
     }
 
+    bool BgfxGraphicsBackend::ReadTextureRegionEXT(bgfx::TextureHandle srcTexture, int level,
+                                                   int x, int y, int w, int h, void* data)
+    {
+        // Task 914's proven readback shape (BgfxTextureCubeBackend/BgfxTexture3DBackend::GetData):
+        // a temporary BLIT_DST|READ_BACK texture is the only thing bgfx::readTexture accepts.
+        const bgfx::TextureHandle readback = bgfx::createTexture2D(
+            static_cast<uint16_t>(w), static_cast<uint16_t>(h),
+            false, 1, bgfx::TextureFormat::RGBA8,
+            BGFX_TEXTURE_BLIT_DST | BGFX_TEXTURE_READ_BACK);
+        if (!bgfx::isValid(readback))
+        {
+            // BGFX_CAPS_TEXTURE_BLIT/READ_BACK are not guaranteed on every renderer this backend
+            // can select. REMED-GFX-127: report the missing capability instead of returning with
+            // the caller's buffer unwritten -- the shared layer turns this into a deterministic
+            // System::NotSupportedException rather than a fabricated transparent-black frame.
+            std::cerr << "CNA: bgfx RenderTarget2D::GetData readback texture creation failed -- "
+                          "BGFX_CAPS_TEXTURE_BLIT/READ_BACK may not be supported on "
+                       << bgfx::getRendererName(bgfx::getRendererType()) << "\n";
+            return false;
+        }
+
+        // The blit must run AFTER every render-target and viewport-segment view queued this frame,
+        // or it would copy the previous frame's content. bgfx processes views in ascending id
+        // order and kBackbufferFlushViewId is the reserved highest id, above both the RT base range
+        // and the per-frame segment range (see Detail's own view-id partition comment).
+        bgfx::blit(Detail::kBackbufferFlushViewId, readback, 0, 0, 0, 0,
+                   srcTexture, static_cast<uint8_t>(level),
+                   static_cast<uint16_t>(x), static_cast<uint16_t>(y), 0,
+                   static_cast<uint16_t>(w), static_cast<uint16_t>(h), 1);
+
+        const uint32_t targetFrame = bgfx::readTexture(readback, data);
+        const bool completed = AdvanceFramesUntil(targetFrame);
+        // bgfx::frame() ran, so this backend's per-frame state must be recycled exactly as
+        // ReadBackbuffer does after its own frame advance -- otherwise the segment view ids
+        // allocated before this readback would be treated as still belonging to the current frame.
+        spriteVpValid_ = false;
+        EndFrameSegments();
+
+        bgfx::destroy(readback);
+        return completed;
+    }
+
     // --- BgfxTextureCubeBackend ---
 
     BgfxTextureCubeBackend::BgfxTextureCubeBackend(int size, bool mipMap, int /*surfaceFormat*/)
@@ -705,10 +748,22 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
-    BgfxRenderTargetBackend::BgfxRenderTargetBackend(int w, int h, int depthFormat, bool preserve,
+    BgfxRenderTargetBackend::BgfxRenderTargetBackend(BgfxGraphicsBackend* owner,
+                                                      int w, int h, int depthFormat, bool preserve,
                                                       int requestedMultiSampleCount, bool mipMap)
-        : width(w), height(h), preserveContents(preserve), viewId_(Detail::AllocateRtViewId())
+        : width(w), height(h), preserveContents(preserve), viewId_(Detail::AllocateRtViewId()),
+          owner_(owner)
     {
+        // REMED-GFX-127: bgfx allocates the FULL chain when hasMips is set (same convention the
+        // EasyGL target uses), so GetData can validate a mip request against a real level count
+        // instead of guessing.
+        mipLevels_ = 1;
+        if (mipMap)
+        {
+            int dim = std::max(w, h);
+            while (dim > 1) { dim >>= 1; ++mipLevels_; }
+        }
+
         int appliedMsaa = 0;
         const uint64_t msaaFlag = BgfxMsaaRtFlag(requestedMultiSampleCount, appliedMsaa);
         multiSampleCount = appliedMsaa;
@@ -767,13 +822,77 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setViewFrameBuffer(viewId_, BGFX_INVALID_HANDLE);
     }
 
+    bool BgfxRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+    {
+        if (level < 0)
+            throw System::ArgumentOutOfRangeException(
+                "level", std::to_string(level), "level must not be negative.");
+        if (level >= mipLevels_)
+            throw System::NotSupportedException(
+                "BgfxRenderTargetBackend::GetData: this render target has " +
+                std::to_string(mipLevels_) + " mip level(s); level " + std::to_string(level) +
+                " was requested.");
+
+        const int levelW = std::max(1, width >> level);
+        const int levelH = std::max(1, height >> level);
+        // 64-bit throughout, so a rectangle near INT_MAX is rejected rather than wrapping into an
+        // apparently valid one.
+        const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
+        const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+            right > static_cast<std::int64_t>(levelW) || bottom > static_cast<std::int64_t>(levelH))
+            throw System::ArgumentOutOfRangeException(
+                "rect",
+                std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+                    std::to_string(h),
+                "The requested rectangle leaves the " + std::to_string(levelW) + "x" +
+                    std::to_string(levelH) + " mip level.");
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes)
+            throw System::ArgumentOutOfRangeException(
+                "dataLength", std::to_string(dataLength),
+                "The destination holds fewer than the " + std::to_string(requiredBytes) +
+                    " bytes the requested rectangle needs.");
+        if (owner_ == nullptr || data == nullptr || !bgfx::isValid(colorTex))
+            return false;
+
+        // REMED-GFX-067 established that a render target's colour attachment stores its texel
+        // memory BOTTOM-UP on originBottomLeft renderers (OpenGL/GLES/WebGL) -- that finding fixed
+        // sampling; the identical correction belongs on the readback path, or GetData would hand
+        // back a vertically mirrored frame. The requested rectangle is mapped into bottom-up
+        // coordinates for the blit and the returned rows are then flipped back, so the public
+        // result is top-left-origin like every other backend. No-op on Vulkan/D3D/Metal.
+        const bool bottomUp = bgfx::getCaps()->originBottomLeft;
+        const int srcY = bottomUp ? (levelH - (y + h)) : y;
+        if (!owner_->ReadTextureRegionEXT(colorTex, level, x, srcY, w, h, data))
+            return false;
+
+        if (bottomUp && h > 1)
+        {
+            auto* pixels = static_cast<std::uint8_t*>(data);
+            const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+            std::vector<std::uint8_t> scratch(rowBytes);
+            for (int topRow = 0; topRow < h / 2; ++topRow)
+            {
+                std::uint8_t* top = pixels + static_cast<std::size_t>(topRow) * rowBytes;
+                std::uint8_t* bottom = pixels + static_cast<std::size_t>(h - 1 - topRow) * rowBytes;
+                std::memcpy(scratch.data(), top, rowBytes);
+                std::memcpy(top, bottom, rowBytes);
+                std::memcpy(bottom, scratch.data(), rowBytes);
+            }
+        }
+        return true;
+    }
+
     // ---
 
     std::unique_ptr<IRenderTargetBackend> BgfxGraphicsBackend::CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         // multiSampleCount: BGFX_TEXTURE_RT_MSAA_Xn (Task 878/879) — see BgfxRenderTargetBackend.
         // mipMap (Task 906): real mip chain, auto-regenerated by bgfx itself on every resolve.
-        return std::make_unique<BgfxRenderTargetBackend>(w, h, depthFormat, preserveContents,
+        return std::make_unique<BgfxRenderTargetBackend>(this, w, h, depthFormat, preserveContents,
                                                           multiSampleCount, mipMap);
     }
 

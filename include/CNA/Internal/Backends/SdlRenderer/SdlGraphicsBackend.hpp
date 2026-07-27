@@ -40,6 +40,36 @@ namespace CNA::Internal::Backends::SdlRenderer
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void BindGL() const override {}
 
+        /**
+         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         *
+         * REMED-GFX-127. SDL_Renderer has a real, fully synchronous readback for a
+         * `SDL_TEXTUREACCESS_TARGET` texture: make it the render target and call
+         * `SDL_RenderReadPixels`, which flushes the pending command queue itself. Before this
+         * override existed the call reached `ITextureBackend::GetData`'s default, and the shared
+         * layer converted its own zero-initialized scratch buffer into the caller's array -- a
+         * fabricated, fully written transparent-black frame rather than an honest refusal.
+         *
+         * The renderer's previous target is restored before returning, so a readback never changes
+         * what subsequent drawing goes to. No staging texture is kept: the surface SDL returns is
+         * created and destroyed inside this call, so repeated readbacks hold no extra memory.
+         *
+         * @param level      Mip level; SDL_Renderer render targets have no mip chain.
+         * @param x          Left edge of the requested rectangle, in target pixels.
+         * @param y          Top edge of the requested rectangle, in target pixels.
+         * @param w          Width of the requested rectangle, in pixels.
+         * @param h          Height of the requested rectangle, in pixels.
+         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param dataLength Capacity of @p data in bytes.
+         * @return True once the whole rectangle has been written; false if SDL could not complete
+         *         the readback, in which case @p data is left untouched.
+         * @throws System::NotSupportedException if @p level is above 0.
+         * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle leaves
+         *         the target, or @p dataLength is too small for the rectangle.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
 

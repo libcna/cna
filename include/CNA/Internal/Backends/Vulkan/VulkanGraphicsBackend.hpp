@@ -191,8 +191,12 @@ namespace CNA::Internal::Backends::Vulkan
         // VulkanTexture3DBackend::GetData's pattern, plus the swapchain BGRA->RGBA channel swap
         // (the RT colour image uses swapchainFormat_). Pre-fix this was the unimplemented base
         // no-op, so a RenderTarget2D read back before Present returned all-zeros.
-        void GetData(int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        //
+        // REMED-GFX-127: returns true only once the staging copy has filled the whole requested
+        // region; false when this target has no usable colour image (torn-down owner/device) so the
+        // shared layer rejects the read instead of converting its own zeroed scratch buffer.
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }

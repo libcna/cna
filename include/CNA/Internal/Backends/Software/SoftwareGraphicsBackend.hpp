@@ -167,9 +167,13 @@ namespace CNA::Internal::Backends::Software
          * @throws System::NotSupportedException if @p level is above 0.
          * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle is
          *         empty or leaves the target, or @p dataLength is too small for the rectangle.
+         * @return Always true -- REMED-GFX-127's "the whole region was written" report. Software's
+         *         colour storage is CPU memory this object owns, so once the request validates
+         *         there is no failure mode left between the copy starting and finishing; every
+         *         rejected request throws instead.
          */
-        void GetData(int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
         void BindAsRenderTarget() override { bound_ = true; }
         void UnbindAsRenderTarget() override { bound_ = false; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }

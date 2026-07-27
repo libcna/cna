@@ -1402,7 +1402,7 @@ namespace CNA::Internal::Backends::Software
         framebuffer_.color.assign(rgba, rgba + byteCount);
     }
 
-    void SoftwareRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool SoftwareRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                               void* data, int dataLength) const
     {
         if (data == nullptr)
@@ -1454,6 +1454,7 @@ namespace CNA::Internal::Backends::Software
                       framebuffer_.color.begin() + static_cast<std::ptrdiff_t>(srcOffset + rowBytes),
                       dst + static_cast<std::size_t>(row) * rowBytes);
         }
+        return true;
     }
 
     // ---- SoftwareEffectBackend ----

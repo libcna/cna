@@ -2,8 +2,14 @@
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
 
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
+#include <string>
+
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace CNA::Internal::Backends::D3D9
 {
@@ -103,6 +109,71 @@ namespace CNA::Internal::Backends::D3D9
     {
         ResolveForTransitionEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
+    }
+
+    bool D3D9RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                          void* data, int dataLength) const
+    {
+        if (level < 0)
+            throw System::ArgumentOutOfRangeException(
+                "level", std::to_string(level), "level must not be negative.");
+        // This backend allocates exactly one level (see D3D9RenderTargets.hpp's header note on the
+        // deliberately unimplemented mip-chain generation), so a higher level is rejected rather
+        // than answered from level 0.
+        if (level > 0)
+            throw System::NotSupportedException(
+                "D3D9RenderTargetBackend::GetData: this render target has a single mip level; "
+                "level " + std::to_string(level) + " was requested.");
+        // 64-bit throughout, so a rectangle near INT_MAX is rejected rather than wrapping.
+        const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
+        const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+            right > static_cast<std::int64_t>(width_) || bottom > static_cast<std::int64_t>(height_))
+            throw System::ArgumentOutOfRangeException(
+                "rect",
+                std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+                    std::to_string(h),
+                "The requested rectangle leaves the " + std::to_string(width_) + "x" +
+                    std::to_string(height_) + " render target.");
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes)
+            throw System::ArgumentOutOfRangeException(
+                "dataLength", std::to_string(dataLength),
+                "The destination holds fewer than the " + std::to_string(requiredBytes) +
+                    " bytes the requested rectangle needs.");
+        if (!device_ || !colorSurface_ || data == nullptr)
+            return false;
+
+        // A D3DUSAGE_RENDERTARGET surface in D3DPOOL_DEFAULT cannot be locked directly; D3D9's own
+        // readback path is a copy into system memory, which also synchronises with the GPU.
+        ComPtr<IDirect3DSurface9> staging;
+        HRESULT hr = device_->CreateOffscreenPlainSurface(
+            static_cast<UINT>(width_), static_cast<UINT>(height_), D3DFMT_A8B8G8R8,
+            D3DPOOL_SYSTEMMEM, staging.GetAddressOf(), nullptr);
+        if (FAILED(hr)) return false;
+
+        // Always the resolved, single-sample colour surface -- GetRenderTargetData rejects a
+        // multisampled source, and UnbindAsRenderTarget has already StretchRect-resolved into this
+        // one when this target is MSAA.
+        hr = device_->GetRenderTargetData(colorSurface_.Get(), staging.Get());
+        if (FAILED(hr)) return false;
+
+        RECT rect{ static_cast<LONG>(x), static_cast<LONG>(y),
+                   static_cast<LONG>(x + w), static_cast<LONG>(y + h) };
+        D3DLOCKED_RECT locked{};
+        hr = staging->LockRect(&locked, &rect, D3DLOCK_READONLY);
+        if (FAILED(hr)) return false;
+
+        auto* dst = static_cast<std::uint8_t*>(data);
+        const auto* src = static_cast<const std::uint8_t*>(locked.pBits);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+            std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
+                        src + static_cast<std::size_t>(row) * locked.Pitch, rowBytes);
+
+        staging->UnlockRect();
+        return true;
     }
 
     void D3D9RenderTargetBackend::ReleaseDefaultPoolResourceEXT()

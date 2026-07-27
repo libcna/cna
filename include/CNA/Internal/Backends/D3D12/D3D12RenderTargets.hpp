@@ -68,6 +68,41 @@ namespace CNA::Internal::Backends::D3D12
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
+
+        /**
+         * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.
+         *
+         * REMED-GFX-127. Reuses the READBACK-heap `CopyTextureRegion` + fence-wait + `Map`
+         * discipline DX-144's own mip cascade already established in this file, against the
+         * SAMPLEABLE colour resource -- the resolved single-sample copy when this target is MSAA,
+         * since a multisampled resource cannot be copied to a readback buffer. The requested
+         * rectangle is extracted from the read level on the CPU. Before this override existed the
+         * shared layer converted its own zero-initialized scratch buffer for the caller, i.e. a
+         * fabricated transparent-black frame.
+         *
+         * The readback buffer is created and released inside this call, so repeated readbacks hold
+         * no extra GPU memory; the fence wait is the one D3D12 genuinely requires for a synchronous
+         * read and is confined to this call. Storage is DXGI_FORMAT_R8G8B8A8_UNORM, so no swizzle
+         * applies; rows are top-first, so no flip applies, and the placed footprint's RowPitch is
+         * honoured rather than assuming tightly packed rows.
+         *
+         * @param level      Mip level; this target has a full chain only when it was created with
+         *                   mipMap.
+         * @param x          Left edge of the requested rectangle, in level pixels.
+         * @param y          Top edge of the requested rectangle, in level pixels.
+         * @param w          Width of the requested rectangle, in pixels.
+         * @param h          Height of the requested rectangle, in pixels.
+         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param dataLength Capacity of @p data in bytes.
+         * @return True once the whole rectangle has been written; false if D3D12 could not complete
+         *         the readback, leaving @p data untouched.
+         * @throws System::NotSupportedException if this target has no such mip level.
+         * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle leaves
+         *         the level, or @p dataLength is too small for the rectangle.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {

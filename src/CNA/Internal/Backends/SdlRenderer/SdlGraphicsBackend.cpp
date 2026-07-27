@@ -7,6 +7,9 @@
 #include <filesystem>
 #include <SDL3/SDL_gpu.h>
 
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
+
 namespace CNA::Internal::Backends::SdlRenderer
 {
     using namespace Microsoft::Xna::Framework;
@@ -731,6 +734,77 @@ namespace CNA::Internal::Backends::SdlRenderer
     void SdlRenderTargetBackend::UpdatePixels(const uint8_t* rgba, int stride)
     {
         if (texture && rgba) SDL_UpdateTexture(texture, nullptr, rgba, stride);
+    }
+
+    bool SdlRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                          void* data, int dataLength) const
+    {
+        if (level < 0)
+            throw System::ArgumentOutOfRangeException(
+                "level", std::to_string(level), "level must not be negative.");
+        // Task 681's precedent: an SDL_Renderer texture has no native mip chain at all, so a
+        // level > 0 request is rejected rather than answered from level 0.
+        if (level > 0)
+            throw System::NotSupportedException(
+                "SdlRenderTargetBackend::GetData: SDL_Renderer render targets have no mip chain; "
+                "level " + std::to_string(level) + " was requested.");
+        // 64-bit throughout, so a rectangle near INT_MAX is rejected rather than wrapping into an
+        // apparently valid one.
+        const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
+        const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+            right > static_cast<std::int64_t>(width) || bottom > static_cast<std::int64_t>(height))
+            throw System::ArgumentOutOfRangeException(
+                "rect",
+                std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+                    std::to_string(h),
+                "The requested rectangle leaves the " + std::to_string(width) + "x" +
+                    std::to_string(height) + " render target.");
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes)
+            throw System::ArgumentOutOfRangeException(
+                "dataLength", std::to_string(dataLength),
+                "The destination holds fewer than the " + std::to_string(requiredBytes) +
+                    " bytes the requested rectangle needs.");
+        if (!renderer || !texture || !data)
+            return false;
+
+        // SDL_RenderReadPixels always reads the CURRENT target, so this target has to be made
+        // current for the duration of the read and the caller's target restored afterwards.
+        SDL_Texture* const previousTarget = SDL_GetRenderTarget(renderer);
+        if (!SDL_SetRenderTarget(renderer, texture))
+            return false;
+
+        const SDL_Rect region{ x, y, w, h };
+        SDL_Surface* surface = SDL_RenderReadPixels(renderer, &region);
+        SDL_SetRenderTarget(renderer, previousTarget);
+        if (!surface)
+            return false;
+
+        SDL_Surface* converted = surface;
+        bool ownsConverted = false;
+        if (surface->format != SDL_PIXELFORMAT_RGBA32)
+        {
+            converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+            if (!converted)
+            {
+                SDL_DestroySurface(surface);
+                return false;
+            }
+            ownsConverted = true;
+        }
+
+        const auto* base = static_cast<const uint8_t*>(converted->pixels);
+        auto* dst = static_cast<uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+            std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
+                        base + static_cast<std::size_t>(row) * converted->pitch, rowBytes);
+
+        if (ownsConverted) SDL_DestroySurface(converted);
+        SDL_DestroySurface(surface);
+        return true;
     }
 
     void SdlRenderTargetBackend::BindAsRenderTarget()

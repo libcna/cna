@@ -5393,11 +5393,12 @@ namespace CNA::Internal::Backends::SdlGpu
             owner_->currentRenderTarget_ = nullptr;
     }
 
-    void SdlGpuRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+    bool SdlGpuRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
+        // REMED-GFX-127: nothing was written, so this must not be reported as a completed readback.
         if (w <= 0 || h <= 0)
-            return;
+            return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: RenderTarget2D::GetData: dataLength too small for the requested region");
@@ -5457,6 +5458,7 @@ namespace CNA::Internal::Backends::SdlGpu
         std::memcpy(data, mapped, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return true;
     }
 
     // ---- SdlGpuRenderTargetCubeBackend (Phase SDLGPU-8, SDLGPU-36) ----

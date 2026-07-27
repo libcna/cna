@@ -4,8 +4,14 @@
 #include "CNA/Internal/Backends/D3DCommon/D3DFormatMapping.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
+#include <string>
+
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace CNA::Internal::Backends::D3D11
 {
@@ -161,6 +167,79 @@ namespace CNA::Internal::Backends::D3D11
     {
         ResolveAndGenerateMipsEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
+    }
+
+    bool D3D11RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+    {
+        if (level < 0)
+            throw System::ArgumentOutOfRangeException(
+                "level", std::to_string(level), "level must not be negative.");
+        if (level >= levelCount_)
+            throw System::NotSupportedException(
+                "D3D11RenderTargetBackend::GetData: this render target has " +
+                std::to_string(levelCount_) + " mip level(s); level " + std::to_string(level) +
+                " was requested.");
+
+        const int levelW = std::max(1, width_ >> level);
+        const int levelH = std::max(1, height_ >> level);
+        // 64-bit throughout, so a rectangle near INT_MAX is rejected rather than wrapping.
+        const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
+        const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+            right > static_cast<std::int64_t>(levelW) || bottom > static_cast<std::int64_t>(levelH))
+            throw System::ArgumentOutOfRangeException(
+                "rect",
+                std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+                    std::to_string(h),
+                "The requested rectangle leaves the " + std::to_string(levelW) + "x" +
+                    std::to_string(levelH) + " mip level.");
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes)
+            throw System::ArgumentOutOfRangeException(
+                "dataLength", std::to_string(dataLength),
+                "The destination holds fewer than the " + std::to_string(requiredBytes) +
+                    " bytes the requested rectangle needs.");
+
+        ID3D11Texture2D* const source = GetSampleableTextureEXT();
+        if (!device_ || !context_ || !source || data == nullptr)
+            return false;
+
+        D3D11_TEXTURE2D_DESC stagingDesc{};
+        stagingDesc.Width = static_cast<UINT>(w);
+        stagingDesc.Height = static_cast<UINT>(h);
+        stagingDesc.MipLevels = 1;
+        stagingDesc.ArraySize = 1;
+        stagingDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        stagingDesc.SampleDesc.Count = 1;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.BindFlags = 0;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        stagingDesc.MiscFlags = 0;
+
+        ComPtr<ID3D11Texture2D> staging;
+        if (FAILED(device_->CreateTexture2D(&stagingDesc, nullptr, staging.GetAddressOf())))
+            return false;
+
+        const D3D11_BOX box{ static_cast<UINT>(x), static_cast<UINT>(y), 0,
+                             static_cast<UINT>(x + w), static_cast<UINT>(y + h), 1 };
+        context_->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, source,
+                                        static_cast<UINT>(level), &box);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context_->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+            return false;
+
+        auto* dst = static_cast<std::uint8_t*>(data);
+        const auto* src = static_cast<const std::uint8_t*>(mapped.pData);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+            std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
+                        src + static_cast<std::size_t>(row) * mapped.RowPitch, rowBytes);
+
+        context_->Unmap(staging.Get(), 0);
+        return true;
     }
 
     // -------------------------------------------------------------------------
