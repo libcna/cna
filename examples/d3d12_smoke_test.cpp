@@ -3480,6 +3480,106 @@ int main()
 
         rtCube->UnbindAsRenderTarget();
         Check(!backend.HasBoundColorTargetEXT(), "W13: UnbindAsRenderTarget() on RenderTargetCube restores the honest 'nothing bound' state");
+
+        // ---- REMED-GFX-134: the public RenderTargetCube readback this backend used to refuse. ----
+        // The shared Game-harness suite (examples/rendertargetcube_getdata_contract_test.cpp) is
+        // the real oracle -- asymmetric per-face patterns, orientation against a RenderTarget2D
+        // reference, partial rectangles, MSAA resolve -- but it needs a window and swap chain,
+        // which DX-100 already found crashes under this dev loop's Wine dxgi.dll. These checks
+        // therefore exercise the same D3D12RenderTargetCubeBackend::GetData through the only
+        // content producer available at this level, a per-face Clear. That is enough to prove real
+        // per-face subresource selection, a real off-centre sub-rectangle, agreement with the
+        // independent ReadBackRenderTargetFull oracle, and the rejection contract; it deliberately
+        // cannot prove row ORIENTATION, which a uniform clear colour can never detect and which the
+        // shared suite covers on the eight backends that do run it.
+        {
+            struct FaceColor { float r, g, b; std::uint8_t er, eg, eb; };
+            // Only 0.0/0.6/1.0 components -- exact under any rounding mode, like W12's own choice.
+            const FaceColor kFaceColors[6] = {
+                {1.0f, 0.0f, 0.0f, 255,   0,   0},
+                {0.0f, 1.0f, 0.0f,   0, 255,   0},
+                {0.0f, 0.0f, 1.0f,   0,   0, 255},
+                {1.0f, 1.0f, 0.0f, 255, 255,   0},
+                {1.0f, 0.0f, 1.0f, 255,   0, 255},
+                {0.0f, 1.0f, 1.0f,   0, 255, 255},
+            };
+            for (int face = 0; face < 6; ++face)
+            {
+                rtCube->BindAsRenderTargetFace(face);
+                backend.Clear(kFaceColors[face].r, kFaceColors[face].g, kFaceColors[face].b, 1.0f);
+                rtCube->UnbindAsRenderTarget();
+            }
+
+            bool allFacesExact = true;
+            bool allReported = true;
+            std::string faceDetail;
+            for (int face = 0; face < 6; ++face)
+            {
+                std::vector<std::uint8_t> got(static_cast<std::size_t>(kRtWidth) * kRtHeight * 4, 0xCD);
+                const bool ok = rtCube->GetData(face, 0, 0, 0, kRtWidth, kRtHeight, got.data(),
+                                                static_cast<int>(got.size()));
+                allReported = allReported && ok;
+                for (std::size_t i = 0; i < got.size(); i += 4)
+                {
+                    if (got[i + 0] != kFaceColors[face].er || got[i + 1] != kFaceColors[face].eg ||
+                        got[i + 2] != kFaceColors[face].eb || got[i + 3] != 255)
+                    {
+                        allFacesExact = false;
+                        if (faceDetail.empty())
+                            faceDetail = " face " + std::to_string(face) + " texel " +
+                                         std::to_string(i / 4) + " = (" +
+                                         std::to_string(static_cast<int>(got[i + 0])) + "," +
+                                         std::to_string(static_cast<int>(got[i + 1])) + "," +
+                                         std::to_string(static_cast<int>(got[i + 2])) + "," +
+                                         std::to_string(static_cast<int>(got[i + 3])) + ")";
+                        break;
+                    }
+                }
+            }
+            const std::string facesLabel =
+                "GFX134a: D3D12RenderTargetCubeBackend::GetData returns each of the SIX faces' own "
+                "rendered colour -- real per-face subresource selection, not face 0 six times" +
+                faceDetail;
+            Check(allReported && allFacesExact, facesLabel.c_str());
+
+            // An off-centre sub-rectangle of a face, and agreement with the independent
+            // ReadBackRenderTargetFull oracle already used by W12 for face 0.
+            std::vector<std::uint8_t> rect(4 * 3 * 4, 0xCD);
+            const bool rectOk = rtCube->GetData(3, 0, 2, 1, 4, 3, rect.data(),
+                                                static_cast<int>(rect.size()));
+            bool rectExact = rectOk;
+            for (std::size_t i = 0; i < rect.size() && rectExact; i += 4)
+                rectExact = rect[i + 0] == kFaceColors[3].er && rect[i + 1] == kFaceColors[3].eg &&
+                            rect[i + 2] == kFaceColors[3].eb && rect[i + 3] == 255;
+            Check(rectExact,
+                  "GFX134b: GetData on an off-centre 4x3 sub-rectangle of face 3 returns that face's "
+                  "content, with the destination filled exactly");
+
+            auto oracle = ReadBackRenderTargetFull(backend, rtCubeImpl->GetSampleableColorResourceEXT(),
+                                                   kRtWidth, kRtHeight);
+            std::vector<std::uint8_t> viaGetData(static_cast<std::size_t>(kRtWidth) * kRtHeight * 4, 0xCD);
+            const bool face0Ok = rtCube->GetData(0, 0, 0, 0, kRtWidth, kRtHeight, viaGetData.data(),
+                                                 static_cast<int>(viaGetData.size()));
+            Check(face0Ok && oracle.size() >= viaGetData.size() &&
+                  std::equal(viaGetData.begin(), viaGetData.end(), oracle.begin()),
+                  "GFX134c: the public per-face readback agrees byte-for-byte with the independent "
+                  "subresource-0 oracle W12 already uses");
+
+            // The rejection contract: an out-of-range face, an unallocated mip level and a
+            // rectangle that leaves the face must all report false WITHOUT writing one byte.
+            std::vector<std::uint8_t> poisoned(static_cast<std::size_t>(kRtWidth) * kRtHeight * 4, 0xAB);
+            const bool badFace  = rtCube->GetData(6, 0, 0, 0, kRtWidth, kRtHeight, poisoned.data(),
+                                                  static_cast<int>(poisoned.size()));
+            const bool badLevel = rtCube->GetData(0, 4, 0, 0, 1, 1, poisoned.data(),
+                                                  static_cast<int>(poisoned.size()));
+            const bool badRect  = rtCube->GetData(0, 0, kRtWidth - 1, 0, 4, 4, poisoned.data(),
+                                                  static_cast<int>(poisoned.size()));
+            bool poisonIntact = true;
+            for (std::uint8_t b : poisoned) if (b != 0xAB) { poisonIntact = false; break; }
+            Check(!badFace && !badLevel && !badRect && poisonIntact,
+                  "GFX134d: an out-of-range face, an unallocated mip level and a rectangle leaving "
+                  "the face are each refused with the caller's buffer byte-for-byte untouched");
+        }
     }
 
     // ---- Check X: DX-118 -- real BlendState/RasterizerState now genuinely runtime-settable,

@@ -95,16 +95,22 @@ namespace
      * `Unsupported` -- SetData must throw System::NotSupportedException. Reserved for a
      * resource/level this backend genuinely cannot store, never for one it merely has not been
      * checked on.
-     * `AcceptedNoOracle` -- SetData genuinely stores the region, but this resource has no public
-     * readback on this backend (REMED-GFX-130 left RenderTargetCube readback unimplemented outside
-     * SdlGpu/WebGPU, tracked as REMED-GFX-134), so only "did not throw" can be asserted here. Used
-     * for exactly one entry -- EasyGL's RenderTargetCube -- and never as a fallback.
+     * `AcceptedRowMirrored` -- SetData stores the complete region and REMED-GFX-134's readback
+     * returns it, but with the ROWS MIRRORED. Used for exactly one entry -- EasyGL's
+     * RenderTargetCube -- and never as a fallback. It is a byte-exact assertion, not a weaker one:
+     * this backend's rasterizer fills a rendered face bottom-up (which is why
+     * EasyGLRenderTargetCubeBackend::GetData normalizes) while glTexSubImage2D writes source row 0
+     * into texel row 0 like every other backend's upload, so the two writers of one face disagree
+     * on row order. REMED-GFX-134's own check W1 records that asymmetry as an enforced fact; this
+     * entry is the write side of the same statement. Before REMED-GFX-134 there was no public
+     * readback of a RenderTargetCube outside SdlGpu/WebGPU, so this entry could only assert "did
+     * not throw" -- which a SetData that stored nothing would also have satisfied.
      */
     enum class Support
     {
         Exact,
         Unsupported,
-        AcceptedNoOracle,
+        AcceptedRowMirrored,
     };
 
     /// The complete, reviewed per-backend claim this file enforces.
@@ -141,10 +147,10 @@ namespace
                                  Support::Unsupported, false};
 #elif defined(CNA_BACKEND_EASYGL)
     // The only backend whose RenderTargetCube overrides SetData with a real upload into the shared
-    // GL cube texture; every other RenderTargetCube inherits the interface no-op.
+    // GL cube texture; every other RenderTargetCube inherits the interface refusal.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::AcceptedNoOracle, false};
+                                 Support::AcceptedRowMirrored, false};
 #elif defined(CNA_BACKEND_BGFX)
     constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
@@ -464,10 +470,19 @@ class CubeVolumeSetDataContractTest : public Game
             check(ok, label + " -- deterministic NotSupportedException required" + WriteFacts(w));
             return;
         }
-        if (required == Support::AcceptedNoOracle)
+        if (required == Support::AcceptedRowMirrored)
         {
-            const bool ok = w.returnedNormally && !w.threwSomethingElse;
-            check(ok, label + " -- upload must be accepted" + WriteFacts(w));
+            std::vector<Color> mirrored = want;
+            const std::size_t rows = want.empty() ? 0 : want.size() / static_cast<std::size_t>(kCube);
+            for (std::size_t row = 0; row < rows; ++row)
+                for (std::size_t col = 0; col < static_cast<std::size_t>(kCube); ++col)
+                    mirrored[row * kCube + col] = want[(rows - 1 - row) * kCube + col];
+            const Compare m = CompareContent(r.data, mirrored);
+            const bool ok = w.returnedNormally && !w.threwSomethingElse && !w.threwNotSupported &&
+                            r.read && m.exact == m.total && m.poisoned == 0;
+            check(ok, label + " -- complete stored region required, read back with the rows "
+                              "mirrored (see this file's Support::AcceptedRowMirrored comment)" +
+                      WriteFacts(w) + CompareFacts(m));
             return;
         }
 
@@ -966,9 +981,13 @@ class CubeVolumeSetDataContractTest : public Game
             return;
         }
 
-        const std::vector<Color> flat(static_cast<std::size_t>(kCube) * kCube, Color(64, 128, 192, 255));
-        const WriteProbe w = WriteCube(*rt, 0, 0, nullptr, flat, 0, static_cast<int>(flat.size()));
-        JudgeWrite(w, {}, {}, kContract.rtCube,
+        // REMED-GFX-134 gave this resource a public readback, so the upload is now VERIFIED here
+        // rather than merely "did not throw". A uniform colour cannot tell a stored face from a
+        // dropped one, so the source carries the same per-texel pattern the plain-cube checks use.
+        const std::vector<Color> src = CubeFacePattern(2, 0);
+        const WriteProbe w = WriteCube(*rt, 2, 0, nullptr, src, 0, static_cast<int>(src.size()));
+        const ReadProbe r = ReadCube(*rt, 2, 0, nullptr, kCube, kCube);
+        JudgeWrite(w, r, src, kContract.rtCube,
                    "R1 rtcube: RenderTargetCube::SetData must either store the face or refuse -- "
                    "never accept it and drop it");
     }

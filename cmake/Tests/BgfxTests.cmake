@@ -289,8 +289,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # REMED-GFX-096: backend-neutral singular/plural cube-face binding parity.
     cna_bgfx_test(cna_test_bgfx_rendertargetcube_plural_binding
                   examples/rendertargetcube_plural_binding_test.cpp)
-    target_compile_definitions(cna_test_bgfx_rendertargetcube_plural_binding
-        PRIVATE CNA_GFX096_STAGED_SINGLE_FACE=1)
+    # REMED-GFX-134: the CNA_GFX096_STAGED_SINGLE_FACE reduction this used to carry is gone. It
+    # existed because binding several cube faces within one un-advanced bgfx frame silently dropped
+    # the first face's draws -- BgfxRenderTargetCubeBackend destroyed and rebuilt one shared
+    # framebuffer handle per bind and re-pointed the base view at it, so the earlier face's already
+    # recorded draws ended up aimed at a destroyed framebuffer. With per-face framebuffers and the
+    # base view left alone once it has recorded work, this backend runs the full battery every
+    # other backend runs: all six faces, A->B->A, and two independent cubes.
     cna_register_backend_test(NAME Bgfx_RenderTargetCube_PluralBinding
         COMMAND cna_test_bgfx_rendertargetcube_plural_binding
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

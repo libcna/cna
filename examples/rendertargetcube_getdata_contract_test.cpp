@@ -99,6 +99,23 @@ namespace
         Unsupported,
     };
 
+    /**
+     * @brief What a `mipMap=true` RenderTargetCube really is on this backend.
+     *
+     * `Real` -- the mip chain exists and its levels above 0 hold rendered content.
+     * `RefusedAtCreation` -- constructing or first using one throws, rather than under-delivering
+     * the chain `RenderTargetCube` has already told the XNA layer to expect.
+     * `LevelsWithoutStorage` -- construction succeeds and `LevelCount` reports the full chain, but
+     * only level 0 was actually allocated. Recorded as an independent finding; what this file
+     * enforces is that the missing levels are REFUSED by GetData rather than answered from level 0.
+     */
+    enum class MipTargets
+    {
+        Real,
+        RefusedAtCreation,
+        LevelsWithoutStorage,
+    };
+
     /// The complete, reviewed per-backend claim this file enforces.
     struct Contract
     {
@@ -108,9 +125,14 @@ namespace
         Support mipLevel;          ///< RenderTargetCube::GetData at mip > 0 on a mipMap=true target.
         bool    rt2dReadback;      ///< RenderTarget2D::GetData works -- the orientation reference.
         bool    msaaCubeTargets;   ///< A multisampled RenderTargetCube really engages MSAA here.
-        bool    mipMapCubeTargets; ///< A mipMap=true RenderTargetCube can be created and rendered.
+        Support msaaReadback;      ///< GetData on a MULTISAMPLED RenderTargetCube.
+        MipTargets mipMapCubeTargets; ///< What a mipMap=true RenderTargetCube really is here.
         bool    preservesOnRebind; ///< RenderTargetUsage::PreserveContents survives a rebind cycle.
         bool    exactAlpha;        ///< A non-255 rendered alpha survives readback exactly.
+        bool    rtCubeSetData;     ///< RenderTargetCube::SetData stores pixels (REMED-GFX-135).
+        /// True when an UPLOADED face reads back vertically mirrored, i.e. this backend's rendering
+        /// and its CPU upload write the same face's rows in opposite order. See check W1.
+        bool    rtCubeUploadMirrored;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
     };
 
@@ -121,28 +143,40 @@ namespace
     // make its cube readback look like one.
     // `msaaCubeTargets` true: this backend records and reports the requested sample count as
     // applied, which is what a state-tracking diagnostic backend is for -- it is a bookkeeping
-    // claim, not a rasterized one, and there is no resolved surface behind it to read.
+    // claim, not a rasterized one, and there is no resolved surface behind it to read (hence
+    // `msaaReadback` Unsupported, like every other readback here).
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, Support::Unsupported,
-                                 false, true, true, true, false, false};
+                                 false, true, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_BACKEND_SOFTWARE)
     // Cube-map render targets are an explicit documented v1 scope boundary here
     // (CreateRenderTargetCube keeps IGraphicsBackend's nullptr default), so binding one is refused
     // by GraphicsDevice::SetRenderTargets and there is no resource to read.
     constexpr Contract kContract{"SOFTWARE", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, true, true, false, false};
+                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_BACKEND_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
-                                 true, true, true, true, true, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
-    constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
-                                 true, true, true, true, true, false};
+    // `mipLevel`/`msaaReadback` Unsupported: measured, not assumed. `bgfx::blit` reports success
+    // and copies untouched memory for both a multisampled cube attachment and a cube render
+    // target's auto-regenerated mip levels on the OpenGL renderer this backend selects, so
+    // BgfxRenderTargetCubeBackend::GetData refuses them rather than returning zeros. Level 0 is
+    // exact, as is every mip of a plain BgfxTextureCubeBackend (REMED-GFX-130's own suite).
+    constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Unsupported,
+                                 true, true, Support::Unsupported, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // `msaaCubeTargets` false: Task 903 deliberately piggybacks a cube target's sample count on
     // the backend's own global `sampleCount_`, so a cube target multisamples only when the
     // BACKBUFFER was created multisampled -- which this test does not request. The applied count is
     // still asserted against this claim below rather than assumed.
+    // `preservesOnRebind` false: VulkanRenderTargetCubeBackend hardcodes
+    // `GetOrCreateRTRenderPass(depthFmt, /*discardContents=*/true)` because
+    // IGraphicsBackend::CreateRenderTargetCube -- unlike CreateRenderTarget2D -- has no
+    // preserveContents parameter carrying the target's real RenderTargetUsage down to it. The same
+    // interface gap produces the same behaviour on WebGPU. Distinct from REMED-GFX-129, which is
+    // about an explicit Clear() being DROPPED on a preserving target.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, Support::Exact,
-                                 true, false, true, true, true, false};
+                                 true, false, Support::Exact, MipTargets::Real, false, true, false, false, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     // `mipMapCubeTargets` false: WEBGPU-114 refuses a mipMap=true RenderTargetCube at construction
     // rather than under-delivering the mip chain RenderTargetCube already told the XNA layer to
@@ -151,34 +185,37 @@ namespace
     // preserveContents parameter to thread the target's real usage through. Both are recorded
     // boundaries of this backend, checked here rather than assumed.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, Support::Unsupported,
-                                 true, false, false, false, true, false};
+                                 true, false, Support::Exact, MipTargets::RefusedAtCreation, false, true, false, false, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
-                                 true, true, true, true, true, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     // 2D-only by design: CreateRenderTargetCube keeps IGraphicsBackend's nullptr default.
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, true, true, false, false};
+                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_BACKEND_ASCII)
     constexpr Contract kContract{"ASCII", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, true, true, false, false};
+                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, true, true, false, false};
+                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_BACKEND_DX3)
     constexpr Contract kContract{"DX3", false, Support::Unsupported, Support::Unsupported,
-                                 true, false, true, true, false, false};
+                                 true, false, Support::Unsupported, MipTargets::Real, true, false, false, false, false};
 #elif defined(CNA_BACKEND_D3D9)
-    // D3D9RenderTargetCubeBackend reports GetMultiSampleCount() == 0 unconditionally and builds no
-    // mip chain, so this target is single-sample, level-0-only by construction.
+    // D3D9RenderTargetCubeBackend reports GetMultiSampleCount() == 0 unconditionally and its
+    // Recreate() allocates exactly ONE level whatever `mipMap` asked for, so this target is
+    // single-sample and level-0-only -- while RenderTargetCube::LevelCount still reports the whole
+    // chain. `MipTargets::LevelsWithoutStorage` records that mismatch as an independent finding and
+    // pins what GetData must do about it: refuse the levels that were never allocated.
     constexpr Contract kContract{"D3D9", true, Support::Exact, Support::Unsupported,
-                                 true, false, false, true, true, true};
+                                 true, false, Support::Exact, MipTargets::LevelsWithoutStorage, true, true, false, false, true};
 #elif defined(CNA_BACKEND_D3D11)
     constexpr Contract kContract{"D3D11", true, Support::Exact, Support::Exact,
-                                 true, true, true, true, true, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_BACKEND_D3D12)
     constexpr Contract kContract{"D3D12", true, Support::Exact, Support::Exact,
-                                 true, true, true, true, true, false};
+                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #else
 #error "REMED-GFX-134: this backend has no declared RenderTargetCube GetData contract."
 #endif
@@ -1072,9 +1109,9 @@ class RenderTargetCubeGetDataContractTest : public Game
         RenderFace(dev, msaa, 2, 0);
         Probe p = ProbeFace(msaa, 2, 0, nullptr, kCube, kCube, 0, SentinelCD(),
                             ExpectedFace(2, 0));
-        Judge(p, kContract.level0, 0, SentinelCD(),
+        Judge(p, applied > 0 ? kContract.msaaReadback : kContract.level0, 0, SentinelCD(),
               "M2 msaa: an applied-" + std::to_string(applied) +
-              "x cube target reads back its RESOLVED face, exact");
+              "x cube target reads back its RESOLVED face");
     }
 
     void RunMipChecks(GraphicsDevice& dev)
@@ -1083,15 +1120,16 @@ class RenderTargetCubeGetDataContractTest : public Game
         {
             check(true, "L1 mip: skipped -- no cube render target on this backend");
             check(true, "L2 mip: skipped -- no cube render target on this backend");
+            check(true, "L3 mip: skipped -- no cube render target on this backend");
             return;
         }
 
-        if (!kContract.mipMapCubeTargets)
+        if (kContract.mipMapCubeTargets == MipTargets::RefusedAtCreation)
         {
             // A backend that cannot build the mip chain RenderTargetCube's own LevelCount already
-            // promised must say so, not under-deliver it silently. Whether it refuses at
-            // construction or at first use, the refusal has to be an exception rather than a
-            // target whose declared levels have no storage behind them.
+            // promised may refuse it -- what it must not do is accept the request and silently
+            // under-deliver. Whether the refusal lands at construction or at first use, it has to
+            // be an exception rather than a target whose declared levels have no storage.
             std::string what;
             try
             {
@@ -1136,7 +1174,76 @@ class RenderTargetCubeGetDataContractTest : public Game
         Probe l1 = ProbeFace(mipped, 3, 1, nullptr, dim, dim, 0, SentinelA5(),
                              Uniform(kPalette[4], dim * dim));
         Judge(l1, kContract.mipLevel, 0, SentinelA5(),
-              "L3 mip: level 1 of a mipMap=true cube target");
+              kContract.mipMapCubeTargets == MipTargets::LevelsWithoutStorage
+                  ? std::string("L3 mip: this backend allocates ONLY level 0 while LevelCount "
+                                "reports the whole chain -- the levels it never allocated must be "
+                                "REFUSED, never answered from level 0")
+                  : std::string("L3 mip: level 1 of a mipMap=true cube target"));
+    }
+
+    /**
+     * @brief W1 -- how a face UPLOADED through the inherited TextureCube::SetData relates to the
+     *        same face read back.
+     *
+     * Only EasyGL's RenderTargetCube implements SetData (REMED-GFX-135); every other one inherits
+     * `IRenderTargetCubeBackend::SetData`'s refusal, which is asserted here instead. Where it IS
+     * implemented, the round trip is measured rather than assumed, because the two writers of a
+     * rendered cube face need not agree: EasyGL's rasterizer fills the face bottom-up (which is
+     * why GetData normalizes, see EasyGLRenderTargetCubeBackend::GetData) while glTexSubImage2D
+     * writes source row 0 into texel row 0 like every other backend's upload. Recording that
+     * asymmetry as an enforced fact keeps it from being silently "fixed" in either direction --
+     * flipping the upload would only move the divergence onto the cube SAMPLING path, where the
+     * real difference lives.
+     */
+    void RunUploadRoundTrip(GraphicsDevice& dev)
+    {
+        if (!kContract.cubeTargetBinds)
+        {
+            check(true, "W1 upload: skipped -- no cube render target on this backend");
+            return;
+        }
+
+        RenderTargetCube cube(dev, kCube, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::PreserveContents);
+        std::vector<Color> src;
+        src.reserve(static_cast<std::size_t>(kCube) * kCube);
+        for (int y = 0; y < kCube; ++y)
+            for (int x = 0; x < kCube; ++x) src.push_back(PatternTexel(2, x, y, 0));
+
+        bool refused = false;
+        try
+        {
+            cube.SetData(CubeMapFace::PositiveY, 0, nullptr, src.data(), 0,
+                         static_cast<int>(src.size()));
+        }
+        catch (const System::NotSupportedException&) { refused = true; }
+
+        if (!kContract.rtCubeSetData)
+        {
+            check(refused,
+                  "W1 upload: this backend's RenderTargetCube refuses SetData (REMED-GFX-135), so "
+                  "there is no uploaded face to round-trip");
+            return;
+        }
+
+        Probe p = ProbeFace(cube, 2, 0, nullptr, kCube, kCube, 0, SentinelCD(), src);
+        std::size_t mirrored = 0;
+        for (int y = 0; y < kCube; ++y)
+            for (int x = 0; x < kCube; ++x)
+            {
+                const Color& got = p.dest[static_cast<std::size_t>(y) * kCube + x];
+                if (Same(got, src[static_cast<std::size_t>(kCube - 1 - y) * kCube + x])) ++mirrored;
+            }
+        const bool sameOrder = !refused && p.exact == p.window;
+        const bool flipped   = !refused && mirrored == p.window;
+        check(kContract.rtCubeUploadMirrored ? flipped : sameOrder,
+              "W1 upload: an uploaded face reads back " +
+              std::string(kContract.rtCubeUploadMirrored ? "vertically mirrored"
+                                                         : "in the same row order") +
+              " -- this backend's rasterizer and its CPU upload write opposite row orders "
+              "[sameOrder=" + std::to_string(p.exact) + "/" + std::to_string(p.window) +
+              " mirrored=" + std::to_string(mirrored) + "/" + std::to_string(p.window) +
+              " refused=" + std::string(refused ? "1" : "0") + "]");
     }
 
     void RunDisposalChecks(GraphicsDevice& dev)
@@ -1258,6 +1365,7 @@ protected:
         RunDepthChecks(dev);
         RunMsaaChecks(dev);
         RunMipChecks(dev);
+        RunUploadRoundTrip(dev);
         RunDisposalChecks(dev);
 
         std::printf("%d/%d checks passed on %s\n", passCount_, totalCount_, kContract.name);
