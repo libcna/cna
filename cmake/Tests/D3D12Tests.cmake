@@ -47,4 +47,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # chain, which DX-100's spike already found crashes under this dev loop's vanilla Wine dxgi.dll.
     cna_d3d12_test(cna_test_d3d12_cube_volume_getdata_contract
                    examples/texturecube_texture3d_getdata_contract_test.cpp)
+
+    # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
+    # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
+    # upload that stored nothing, or only part of the requested region, still returned normally.
+    cna_d3d12_test(cna_test_d3d12_cube_volume_setdata_contract
+                   examples/texturecube_texture3d_setdata_contract_test.cpp)
 endif()

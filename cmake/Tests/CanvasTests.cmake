@@ -21,4 +21,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     add_executable(cna_test_canvas_cube_volume_getdata_contract
                    examples/texturecube_texture3d_getdata_contract_test.cpp)
     target_link_libraries(cna_test_canvas_cube_volume_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+
+    # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
+    # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
+    # upload that stored nothing, or only part of the requested region, still returned normally.
+    add_executable(cna_test_canvas_cube_volume_setdata_contract
+                   examples/texturecube_texture3d_setdata_contract_test.cpp)
+    target_link_libraries(cna_test_canvas_cube_volume_setdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 endif()

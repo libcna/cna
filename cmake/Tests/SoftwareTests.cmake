@@ -150,6 +150,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_cube_volume_getdata_contract
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
+    # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
+    # upload that stored nothing, or only part of the requested region, still returned normally.
+    cna_software_test(cna_test_software_cube_volume_setdata_contract
+                      examples/texturecube_texture3d_setdata_contract_test.cpp)
+    cna_register_backend_test(NAME Software_CubeVolume_SetDataContract
+        COMMAND cna_test_software_cube_volume_setdata_contract
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.

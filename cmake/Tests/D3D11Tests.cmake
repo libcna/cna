@@ -176,6 +176,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${_d3d11_cube_volume_getdata_contract_cmd}
         TIMEOUT 60 LABELS "D3D11")
 
+    # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
+    # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
+    # upload that stored nothing, or only part of the requested region, still returned normally.
+    cna_d3d11_test(cna_test_d3d11_cube_volume_setdata_contract
+                   examples/texturecube_texture3d_setdata_contract_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_cube_volume_setdata_contract_cmd cna_test_d3d11_cube_volume_setdata_contract)
+    cna_register_backend_test(NAME D3D11_CubeVolume_SetDataContract
+        COMMAND ${_d3d11_cube_volume_setdata_contract_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
     # REMED-GFX-077 runtime verification for D3D11 lives inside cna_test_d3d11_smoke (Check GFX077):
     # D3D11 has no public RenderTarget2D GPU-readback path (only the back buffer via
     # GetBackBufferData / the backend's staging-copy), so ColorWriteChannels/MultiSampleMask are
