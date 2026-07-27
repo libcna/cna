@@ -366,6 +366,9 @@ namespace CNA::Internal::Backends::SdlGpu
          */
         /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
         /// face rectangle has been copied out of the transfer buffer; false for an empty request.
+        /// REMED-GFX-134: also false for a mip level or rectangle this target never allocated --
+        /// `SDL_DownloadFromGPUTexture` accepts an out-of-range `mip_level` without complaint and
+        /// fills the transfer buffer with whatever it finds, so the guard has to be here.
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
@@ -392,6 +395,8 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuGraphicsBackend* owner_ = nullptr;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
+        /// Mip levels SDL really allocated for this cube target (REMED-GFX-134).
+        int levelCount_ = 1;
         std::shared_ptr<SdlGpuRenderTargetCubeState> state_;
     };
 

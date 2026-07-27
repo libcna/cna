@@ -1048,6 +1048,52 @@ namespace CNA::Internal::Backends::EasyGL
         return GlUploadSucceeded();
     }
 
+    bool EasyGLRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                                 void* data, int dataLength) const
+    {
+        // REMED-GFX-134: closes the refusal this class inherited from
+        // IRenderTargetCubeBackend/ITextureCubeBackend. Same temporary-FBO mechanism
+        // EasyGLTextureCubeBackend::GetData already uses, plus the bottom-up correction a
+        // RENDERED attachment needs (EasyGLRenderTargetBackend::GetData's own).
+        if (face < 0 || face >= 6 || data == nullptr || w <= 0 || h <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
+
+        ::easygl::Framebuffer fbo;
+        fbo.create();
+        fbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        fbo.attach_texture_2d(::easygl::FramebufferTarget::ReadFramebuffer,
+                              ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                              kCubeFaceTargets[face],
+                              cubeTex_, level);
+        fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+
+        const bool complete = fbo.is_complete(::easygl::FramebufferTarget::ReadFramebuffer);
+        if (complete)
+        {
+            ::metagl::glReadPixels(x, levelSize - y - h, w, h,
+                                   ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedByte,
+                                   data);
+            const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+            auto* pixels = static_cast<std::uint8_t*>(data);
+            std::vector<std::uint8_t> row(rowBytes);
+            for (int topRow = 0; topRow < h / 2; ++topRow)
+            {
+                auto* top    = pixels + static_cast<std::size_t>(topRow) * rowBytes;
+                auto* bottom = pixels + static_cast<std::size_t>(h - 1 - topRow) * rowBytes;
+                std::copy(top, top + rowBytes, row.data());
+                std::copy(bottom, bottom + rowBytes, top);
+                std::copy(row.begin(), row.end(), bottom);
+            }
+        }
+
+        ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
+        return complete;
+    }
+
     void EasyGLRenderTargetCubeBackend::release_gl_handle_only()
     {
         fbo_.reset_handle_no_gl();

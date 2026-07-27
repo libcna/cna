@@ -664,6 +664,39 @@ namespace CNA::Internal::Backends::Vulkan
                 appliedMultiSampleCount_ > 1 ? appliedMultiSampleCount_ : 1);
         }
 
+        /**
+         * @brief Reads a RENDERED cube face's mip level back to the CPU.
+         *
+         * REMED-GFX-134. `VulkanTextureCubeBackend::GetData`'s mechanism -- transition just this
+         * face layer to TRANSFER_SRC_OPTIMAL, copy it into a host-visible staging buffer, restore
+         * the layout -- with the two things a RENDERED face additionally needs:
+         * `FlushDeferredRenderTarget` on this face's own proxy first (REMED-GFX-074's readback
+         * flush, so a target whose draws are still queued for Present is read after them, not
+         * before), and the BGRA->RGBA correction `VulkanRenderTargetBackend::GetData` already
+         * applies because a render target's colour image carries the swapchain format rather than
+         * a plain texture's fixed RGBA8.
+         *
+         * No row flip: Vulkan's framebuffer origin is top-left, so a rendered face is already
+         * stored top-row-first, exactly like this backend's plain-cube upload.
+         *
+         * MSAA resolves into this same image at `vkCmdEndRenderPass` through the render pass's own
+         * `pResolveAttachments`, and a mip chain is regenerated into these same layers by
+         * `FaceProxy::MaybeGenerateMips`, so both are read here without a separate resolve step.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True once the whole region was written; false for an out-of-range
+         *         face/level/region or a staging allocation this device refused.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
         // IVulkanCubeSamplable — returns a VK_IMAGE_VIEW_TYPE_CUBE view over all 6 faces.
         [[nodiscard]] VkImageView GetVkCubeImageView() const override { return cubeView_; }
 

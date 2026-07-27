@@ -175,6 +175,33 @@ namespace CNA::Internal::Backends::D3D11
         /// Real mip-chain level count (1 when `mipMap` was false) -- NOXNA, DX-144 subresource math.
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
+        /**
+         * @brief Reads a RENDERED cube face's mip level back to the CPU.
+         *
+         * REMED-GFX-134. `D3D11TextureCubeBackend::GetData`'s mechanism -- a STAGING copy of the
+         * whole resource followed by `Map` on the requested face/level subresource -- sourced from
+         * `GetSampleableTextureEXT()` so a multisampled target is read through the single-sample
+         * resource `UnbindAsRenderTarget`'s `ResolveSubresource()` already filled, never through
+         * the raw multisample array (which `CopyResource` cannot stage anyway).
+         *
+         * No row flip and no channel swizzle: D3D11's render-target origin is top-left and this
+         * resource is `DXGI_FORMAT_R8G8B8A8_UNORM`, so a rendered face is already stored exactly
+         * as the public contract wants it.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True once the whole region was written; false for an out-of-range
+         *         face/level/region, or a staging texture this device refused to create or map.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
     private:
         /// DX-152: ResolveSubresource() the active face from the MSAA color array into
         /// `resolveTexture_`, called from UnbindAsRenderTarget() before mip regeneration. No-op

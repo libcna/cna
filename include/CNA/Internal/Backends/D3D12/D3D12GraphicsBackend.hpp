@@ -112,6 +112,9 @@ namespace CNA::Internal::Backends::D3D12
         /// proof shape.
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
+        /// REMED-GFX-134: overrides IGraphicsBackend's default so a bound cube face is TRACKED and
+        /// therefore finalized (MSAA resolve + mip regeneration) when the binding changes.
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
@@ -627,6 +630,17 @@ namespace CNA::Internal::Backends::D3D12
         // to call the PREVIOUSLY bound target's own UnbindAsRenderTarget() (which is where
         // GenerateMipsEXT() lives) before restoring the back buffer, not just blindly restore.
         IRenderTargetBackend* currentCustomRT_ = nullptr;
+
+        /// REMED-GFX-134: the same "finalize whatever was previously bound" need as
+        /// `currentCustomRT_`, for a cube face. Nothing tracked a bound RenderTargetCube before, so
+        /// `D3D12RenderTargetCubeBackend::UnbindAsRenderTarget()` -- which is where this backend's
+        /// per-face `ResolveSubresource()` and `GenerateMipsEXT()` live -- was never reached from
+        /// the SetRenderTarget/SetRenderTargets path: a multisampled cube target's resolve resource
+        /// stayed empty and a mipMap=true cube target's levels above 0 were never regenerated.
+        /// Non-owning, same lifetime reasoning as `currentCustomRT_`.
+        IRenderTargetCubeBackend* currentCubeRT_ = nullptr;
+        /// REMED-GFX-134: finalizes and forgets the currently tracked cube target, if any.
+        void FlushPendingCubeResolveEXT();
 
         // DX-106/DX-109: single shared per-resource barrier-state tracker, registered with by every
         // real D3D12 resource this backend creates (vertex/index buffers, textures -- DX-109).

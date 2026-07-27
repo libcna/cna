@@ -535,12 +535,44 @@ namespace CNA::Internal::Backends::D3D11
         currentMRTCount_ = 0;
     }
 
+    // REMED-GFX-134: a bound RenderTargetCube face was never tracked, so its
+    // UnbindAsRenderTarget() -- where this backend's per-face ResolveSubresource() and
+    // GenerateMips() live -- was unreachable from the public SetRenderTarget/SetRenderTargets path.
+    // A multisampled cube target's resolve texture therefore stayed empty and a mipMap=true cube
+    // target's levels above 0 were never regenerated; both read back (and sampled) as untouched
+    // memory. Called at the top of every binding change, exactly like FlushPendingMRTResolveEXT().
+    void D3D11GraphicsBackend::FlushPendingCubeResolveEXT()
+    {
+        if (!currentCubeRT_) return;
+        D3D11RenderTargetCubeBackend* cube = currentCubeRT_;
+        currentCubeRT_ = nullptr;
+        cube->UnbindAsRenderTarget();
+    }
+
+    void D3D11GraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+    {
+        FlushPendingCubeResolveEXT();
+        if (!rt)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
+        rt->BindAsRenderTargetFace(face);
+        currentCubeRT_ = static_cast<D3D11RenderTargetCubeBackend*>(rt);
+    }
+
     void D3D11GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         // DX-143: finalize (MSAA resolve + mip regen) any MRT set that was previously bound via
         // SetRenderTargets() before switching to a single target or the back buffer -- the real
         // gap this task closes (an MRT set's own per-target finalize never ran before this).
         FlushPendingMRTResolveEXT();
+        FlushPendingCubeResolveEXT();
         if (currentCustomRT_) currentCustomRT_->UnbindAsRenderTarget();
         if (!rt)
         {
@@ -568,6 +600,9 @@ namespace CNA::Internal::Backends::D3D11
         // -- handles MRT->MRT, MRT->single-target (via the currentCustomRT_ branch below not
         // applying), and MRT->back-buffer (the count<=0 branch below) transitions all in one place.
         FlushPendingMRTResolveEXT();
+        // REMED-GFX-134: and the same for a prior cube-face bind, whose own finalize was never
+        // reached at all. SetRenderTargetCubeFace() below re-tracks the new one.
+        FlushPendingCubeResolveEXT();
         if (currentCustomRT_)
         {
             currentCustomRT_->UnbindAsRenderTarget();

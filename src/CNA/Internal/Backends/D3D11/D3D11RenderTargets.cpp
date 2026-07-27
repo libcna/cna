@@ -382,6 +382,56 @@ namespace CNA::Internal::Backends::D3D11
                                      DXGI_FORMAT_R8G8B8A8_UNORM);
     }
 
+    bool D3D11RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                               void* data, int dataLength) const
+    {
+        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeBackend's
+        // `return false` default. Same staging-copy mechanism as D3D11TextureCubeBackend::GetData.
+        if (!device_ || !context_ || data == nullptr) return false;
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
+
+        // Always the resolved single-sample resource: the MSAA array cannot be staged, and its
+        // content has already been resolved into this one per face by UnbindAsRenderTarget.
+        ID3D11Texture2D* source = GetSampleableTextureEXT();
+        if (source == nullptr) return false;
+
+        D3D11_TEXTURE2D_DESC desc{};
+        source->GetDesc(&desc);
+        D3D11_TEXTURE2D_DESC stagingDesc = desc;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.BindFlags = 0;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        stagingDesc.MiscFlags = 0;
+
+        ComPtr<ID3D11Texture2D> staging;
+        if (FAILED(device_->CreateTexture2D(&stagingDesc, nullptr, staging.GetAddressOf())))
+            return false;
+        context_->CopyResource(staging.Get(), source);
+
+        const UINT subresource = D3D11CalcSubresource(static_cast<UINT>(level),
+                                                      static_cast<UINT>(face),
+                                                      static_cast<UINT>(levelCount_));
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context_->Map(staging.Get(), subresource, D3D11_MAP_READ, 0, &mapped)))
+            return false;
+
+        auto* dst = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < h; ++row)
+        {
+            const auto* src = static_cast<const std::uint8_t*>(mapped.pData)
+                            + static_cast<std::size_t>(y + row) * mapped.RowPitch
+                            + static_cast<std::size_t>(x) * 4;
+            std::memcpy(dst + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4, src,
+                        static_cast<std::size_t>(w) * 4);
+        }
+        context_->Unmap(staging.Get(), subresource);
+        return true;
+    }
+
     void D3D11RenderTargetCubeBackend::UnbindAsRenderTarget()
     {
         ResolveMsaaEXT();

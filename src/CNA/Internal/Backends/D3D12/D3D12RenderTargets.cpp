@@ -24,6 +24,13 @@ namespace CNA::Internal::Backends::D3D12
             return buf;
         }
 
+        /// REMED-GFX-134: D3D12's own placed-footprint row-pitch alignment, same helper
+        /// D3D12TextureCube.cpp already keeps for the plain-cube readback.
+        UINT AlignUp(UINT value, UINT alignment)
+        {
+            return (value + alignment - 1) & ~(alignment - 1);
+        }
+
         /// Mirrors D3D11RenderTargetBackend's own CalculateMipLevels() exactly (D3D11RenderTargets.cpp)
         /// -- full mip chain down to 1x1.
         int CalculateMipLevels(int w, int h)
@@ -641,6 +648,103 @@ namespace CNA::Internal::Backends::D3D12
 
         if (FAILED(cmdList->Close())) return;
         owner_->ExecuteCommandListAndWaitEXT(cmdList);
+    }
+
+    bool D3D12RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                               void* data, int dataLength) const
+    {
+        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeBackend's
+        // `return false` default. Same readback-heap mechanism as D3D12TextureCubeBackend::GetData.
+        if (!owner_ || data == nullptr) return false;
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
+
+        // Always the resolved single-sample resource: a multisampled one cannot be the source of a
+        // CopyTextureRegion, and UnbindAsRenderTarget has already resolved into this one per face.
+        ID3D12Resource* source = GetSampleableColorResourceEXT();
+        if (source == nullptr) return false;
+
+        const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+        D3D12_HEAP_PROPERTIES readbackHeapProps{};
+        readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+
+        D3D12_RESOURCE_DESC bufDesc{};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = readbackBufferSize;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        ComPtr<ID3D12Resource> readback;
+        HRESULT hr = device_->CreateCommittedResource(
+            &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+        if (FAILED(hr)) return false;
+
+        D3D12_TEXTURE_COPY_LOCATION dst{};
+        dst.pResource = readback.Get();
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        dst.PlacedFootprint.Offset = 0;
+        dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+        dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+        dst.PlacedFootprint.Footprint.Depth = 1;
+        dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+        // DX-144's documented convention: face `f`'s mip `m` is subresource m + f * levelCount_.
+        const UINT subresource =
+            static_cast<UINT>(level) + static_cast<UINT>(face) * static_cast<UINT>(levelCount_);
+
+        D3D12_TEXTURE_COPY_LOCATION src{};
+        src.pResource = source;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        src.SubresourceIndex = subresource;
+
+        D3D12_BOX srcBox{};
+        srcBox.left = static_cast<UINT>(x);
+        srcBox.top = static_cast<UINT>(y);
+        srcBox.front = 0;
+        srcBox.right = static_cast<UINT>(x + w);
+        srcBox.bottom = static_cast<UINT>(y + h);
+        srcBox.back = 1;
+
+        ID3D12CommandAllocator* allocator = owner_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = owner_->GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        auto& tracker = owner_->GetResourceStateTrackerEXT();
+        const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(source);
+        tracker.TransitionTo(cmdList, source, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, &srcBox);
+        tracker.TransitionTo(cmdList, source, priorState); // restore -- this is a read-only readback
+
+        hr = cmdList->Close();
+        if (FAILED(hr)) return false;
+        owner_->ExecuteCommandListAndWaitEXT(cmdList);
+
+        std::uint8_t* mapped = nullptr;
+        const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(readbackBufferSize)};
+        if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return false;
+
+        auto* out = static_cast<std::uint8_t*>(data);
+        for (int row = 0; row < h; ++row)
+        {
+            const std::uint8_t* srcRow = mapped + static_cast<std::size_t>(row) * rowPitch;
+            std::uint8_t* dstRow = out + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
+            std::memcpy(dstRow, srcRow, static_cast<std::size_t>(w) * 4);
+        }
+        const D3D12_RANGE writtenRange{0, 0};
+        readback->Unmap(0, &writtenRange);
+        return true;
     }
 
     void D3D12RenderTargetCubeBackend::UnbindAsRenderTarget()

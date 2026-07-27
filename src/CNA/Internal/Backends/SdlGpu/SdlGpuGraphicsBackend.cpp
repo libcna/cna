@@ -5220,6 +5220,14 @@ namespace CNA::Internal::Backends::SdlGpu
         // REMED-GFX-130: see SdlGpuTexture3DBackend::GetData above.
         if (w <= 0 || h <= 0 || data == nullptr || level < 0 || face < 0 || face >= 6)
             return false;
+        // REMED-GFX-134: a level this cube never allocated has no content to return, and
+        // SDL_DownloadFromGPUTexture answers such a request anyway -- the shared layer would then
+        // convert an untouched transfer buffer into a face. Same for a rectangle that leaves the
+        // level. Refusing here is what makes the public call raise System::NotSupportedException
+        // with the caller's destination untouched.
+        if (level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: TextureCube::GetData: dataLength too small for the requested region");
@@ -5519,6 +5527,8 @@ namespace CNA::Internal::Backends::SdlGpu
         cubeInfo.height = static_cast<Uint32>(size);
         cubeInfo.layer_count_or_depth = 6;
         cubeInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(size, size)) : 1;
+        // REMED-GFX-134: what SDL really allocated, so GetData can refuse a level with no storage.
+        levelCount_ = static_cast<int>(cubeInfo.num_levels);
         cubeInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;  // the cube texture itself is always single-sample
         state_->cubeTexture = SDL_CreateGPUTexture(device, &cubeInfo);
         if (state_->cubeTexture == nullptr)
@@ -5617,6 +5627,14 @@ namespace CNA::Internal::Backends::SdlGpu
         // REMED-GFX-130: see SdlGpuTexture3DBackend::GetData above.
         if (w <= 0 || h <= 0 || data == nullptr || level < 0 || face < 0 || face >= 6)
             return false;
+        // REMED-GFX-134: a level this target never allocated has no content to return, and
+        // SDL_DownloadFromGPUTexture answers such a request anyway -- the shared layer would then
+        // convert an untouched transfer buffer into a face. Same for a rectangle that leaves the
+        // level. Refusing here is what makes the public call raise System::NotSupportedException
+        // with the caller's destination untouched.
+        if (level >= levelCount_) return false;
+        const int levelSize = std::max(1, state_->size >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: RenderTargetCube::GetData: dataLength too small for the requested region");

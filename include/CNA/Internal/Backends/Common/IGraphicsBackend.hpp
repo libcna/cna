@@ -445,13 +445,22 @@ namespace CNA::Internal::Backends
         // ITextureCubeBackend::GetData is deliberately NOT re-declared here: a render-target cube
         // inherits the same `return false` default, which means "this backend cannot read a
         // rendered cube face back to the CPU" and makes `TextureCube::GetData` raise
-        // System::NotSupportedException (REMED-GFX-130). SdlGpu and WebGPU override it with a real
-        // per-face readback; EasyGL, Bgfx, Vulkan, D3D9, D3D11, D3D12 and Headless do not, so a
-        // RenderTargetCube readback is rejected there rather than answered with the shared layer's
-        // own zeroed scratch buffer. Implementing the missing seven needs each backend's own
-        // rendered-face orientation, MSAA-resolve and deferred-draw-flush rules verified against a
-        // real oracle, which is tracked separately (see remediation/REMEDIATION_INDEX.md) rather
-        // than guessed at here.
+        // System::NotSupportedException (REMED-GFX-130).
+        //
+        // REMED-GFX-134 implemented it on every backend that owns a rendered cube resource:
+        // EasyGL, Vulkan, Bgfx, D3D9, D3D11 and D3D12 joined SdlGpu and WebGPU, each reusing the
+        // mechanism its plain-TextureCube sibling already uses in the same file plus that
+        // backend's own rendered-face specifics -- REMED-GFX-067's `originBottomLeft` row
+        // normalization on GL and bgfx, the MSAA resolve, and the deferred-draw flush a
+        // still-bound or not-yet-presented target needs (REMED-GFX-074/075). The public row order
+        // is the one `RenderTarget2D::GetData` already established: top row first.
+        //
+        // Headless keeps the inherited refusal because it rasterizes nothing, and the backends
+        // that create no cube render target at all (Software, SDL_Renderer, ASCII, Canvas, DX3)
+        // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
+        // `TextureCube::GetData` refuses a null backend one step earlier. Every remaining boundary
+        // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
+        // mipMap=true refusal) is likewise a `false`, never invented content.
     };
 
     /**

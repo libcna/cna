@@ -10022,6 +10022,95 @@ namespace CNA::Internal::Backends::Vulkan
         }
     }
 
+    bool VulkanRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                                void* data, int dataLength) const
+    {
+        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeBackend's
+        // `return false` default. Same staging-copy mechanism as VulkanTextureCubeBackend::GetData.
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
+        if (face < 0 || face >= 6) return false;
+        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        const std::size_t regionBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        if (static_cast<std::size_t>(dataLength) < regionBytes) return false;
+
+        // REMED-GFX-074's readback flush, applied to this face's own proxy: a face whose draws are
+        // still queued for Present must be read AFTER them, not before. A no-op when nothing is
+        // pending for this proxy.
+        owner_->FlushDeferredRenderTarget(
+            const_cast<FaceProxy*>(&faceProxies_[static_cast<std::size_t>(face)]));
+
+        VkDevice dev = owner_->device_;
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(regionBytes),
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+        if (mapped == nullptr)
+        {
+            if (stagingBuf != VK_NULL_HANDLE) vkDestroyBuffer(dev, stagingBuf, nullptr);
+            if (stagingMem != VK_NULL_HANDLE) vkFreeMemory(dev, stagingMem, nullptr);
+            return false;
+        }
+
+        // Every level of every layer sits in SHADER_READ_ONLY_OPTIMAL outside a render pass (the
+        // constructor's up-front barrier, the RT render pass's finalLayout, and MaybeGenerateMips'
+        // own restore all agree on that), so only this face layer's requested level moves.
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkImageMemoryBarrier toXfer{};
+        toXfer.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toXfer.oldLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        toXfer.newLayout           = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        toXfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toXfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toXfer.image               = image_;
+        toXfer.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                        static_cast<uint32_t>(level), 1,
+                                        static_cast<uint32_t>(face), 1 };
+        toXfer.srcAccessMask       = VK_ACCESS_SHADER_READ_BIT;
+        toXfer.dstAccessMask       = VK_ACCESS_TRANSFER_READ_BIT;
+        vkCmdPipelineBarrier(cb,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toXfer);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                     static_cast<uint32_t>(level),
+                                     static_cast<uint32_t>(face), 1 };
+        region.imageOffset      = { x, y, 0 };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        vkCmdCopyImageToBuffer(cb, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                stagingBuf, 1, &region);
+
+        VkImageMemoryBarrier toRead = toXfer;
+        std::swap(toRead.oldLayout, toRead.newLayout);
+        std::swap(toRead.srcAccessMask, toRead.dstAccessMask);
+        vkCmdPipelineBarrier(cb,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toRead);
+
+        owner_->EndOneTimeCommands(cb);
+
+        // A cube RENDER TARGET carries the swapchain format (see the constructor), not a plain
+        // TextureCube's fixed RGBA8 -- the same correction VulkanRenderTargetBackend::GetData makes.
+        const bool isBGRA = (owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
+                             owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
+        auto*       dst = static_cast<uint8_t*>(data);
+        const auto* src = static_cast<const uint8_t*>(mapped);
+        for (std::size_t i = 0; i < regionBytes / 4u; ++i) {
+            const std::size_t o = i * 4u;
+            if (isBGRA) { dst[o+0] = src[o+2]; dst[o+1] = src[o+1]; dst[o+2] = src[o+0]; dst[o+3] = src[o+3]; }
+            else        { dst[o+0] = src[o+0]; dst[o+1] = src[o+1]; dst[o+2] = src[o+2]; dst[o+3] = src[o+3]; }
+        }
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
+        return true;
+    }
+
     // Task 907: regenerate this face's mip chain (levels 0..levelCount-1 of the shared 6-layer
     // `image`, this face's own `faceIndex` layer) via a vkCmdBlitImage cascade -- identical
     // mechanism to VulkanRenderTargetBackend::MaybeGenerateMips (Task 878), just scoped to one

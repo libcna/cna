@@ -125,6 +125,35 @@ namespace CNA::Internal::Backends::EasyGL
          */
         [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
                                    const void* data, int dataLength) override;
+        /**
+         * @brief Reads a RENDERED cube face's mip level back to the CPU.
+         *
+         * REMED-GFX-134. `EasyGLTextureCubeBackend::GetData`'s mechanism -- attach the requested
+         * face/level to a temporary FBO and glReadPixels it -- with the one difference a rendered
+         * face has: this content came from rasterization, so it is stored bottom-up in the face's
+         * texel grid exactly as `EasyGLRenderTargetBackend::GetData` already documents for a 2D
+         * target. The requested rectangle is therefore mapped into bottom-up coordinates and the
+         * returned rows are flipped back, so the public result is top-row-first like every other
+         * backend. Applied exactly once, and only here: the plain-cube path stays unflipped
+         * because its content came from `SetData`'s own texel-space upload.
+         *
+         * Whichever face was most recently bound has already been resolved into `cubeTex_` by
+         * `UnbindAsRenderTarget`, so an MSAA target is read through its resolved single-sample
+         * cube image rather than the multisample renderbuffer.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True once the whole region was read; false for an out-of-range face/level/region
+         *         or an incomplete framebuffer.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;

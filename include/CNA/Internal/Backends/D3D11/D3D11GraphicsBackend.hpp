@@ -107,6 +107,9 @@ namespace CNA::Internal::Backends::D3D11
                                                                           int multiSampleCount = 0) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
+        /// REMED-GFX-134: overrides IGraphicsBackend's default so a bound cube face is TRACKED and
+        /// therefore finalized (MSAA resolve + mip regeneration) when the binding changes.
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
@@ -245,6 +248,17 @@ namespace CNA::Internal::Backends::D3D11
         /// ever calls SetRenderTarget2D(nullptr) to signal "go back to the back buffer" rather
         /// than calling the old target's UnbindAsRenderTarget() itself.
         D3D11RenderTargetBackend* currentCustomRT_ = nullptr;
+
+        /// REMED-GFX-134: the same "finalize whatever was previously bound" need as
+        /// `currentCustomRT_`, for a cube face. Nothing tracked a bound RenderTargetCube before, so
+        /// `D3D11RenderTargetCubeBackend::UnbindAsRenderTarget()` -- which is where this backend's
+        /// per-face `ResolveSubresource()` and `GenerateMips()` live -- was never reached from the
+        /// SetRenderTarget/SetRenderTargets path at all: a multisampled cube target's resolve
+        /// texture stayed empty and a mipMap=true cube target's levels above 0 were never
+        /// regenerated. Non-owning, same lifetime reasoning as `currentCustomRT_`.
+        D3D11RenderTargetCubeBackend* currentCubeRT_ = nullptr;
+        /// REMED-GFX-134: finalizes and forgets the currently tracked cube target, if any.
+        void FlushPendingCubeResolveEXT();
 
         // DX-143: same "finalize whatever was previously bound before switching away" need as
         // currentCustomRT_ above, but for the MRT (N>1) path -- SetRenderTargets() deliberately

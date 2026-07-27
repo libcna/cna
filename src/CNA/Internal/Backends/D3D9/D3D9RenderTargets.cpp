@@ -238,6 +238,52 @@ namespace CNA::Internal::Backends::D3D9
                                             "binding RenderTargetCube face");
     }
 
+    bool D3D9RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                              void* data, int dataLength) const
+    {
+        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeBackend's
+        // `return false` default.
+        if (!device_ || !texture_ || data == nullptr) return false;
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        // Recreate() allocates exactly one level, so a higher one has no storage to read.
+        if (level != 0) return false;
+        if (x < 0 || y < 0 || x + w > size_ || y + h > size_) return false;
+        if (dataLength < w * h * 4) return false;
+
+        ComPtr<IDirect3DSurface9> faceSurface;
+        HRESULT hr = texture_->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(face), 0,
+                                                 faceSurface.GetAddressOf());
+        if (FAILED(hr)) return false;
+
+        // Same reason as D3D9RenderTargetBackend::GetData: a D3DUSAGE_RENDERTARGET surface in
+        // D3DPOOL_DEFAULT cannot be locked, and GetRenderTargetData's copy into system memory is
+        // also the synchronisation point.
+        ComPtr<IDirect3DSurface9> staging;
+        hr = device_->CreateOffscreenPlainSurface(
+            static_cast<UINT>(size_), static_cast<UINT>(size_), D3DFMT_A8B8G8R8,
+            D3DPOOL_SYSTEMMEM, staging.GetAddressOf(), nullptr);
+        if (FAILED(hr)) return false;
+
+        hr = device_->GetRenderTargetData(faceSurface.Get(), staging.Get());
+        if (FAILED(hr)) return false;
+
+        RECT rect{ static_cast<LONG>(x), static_cast<LONG>(y),
+                   static_cast<LONG>(x + w), static_cast<LONG>(y + h) };
+        D3DLOCKED_RECT locked{};
+        hr = staging->LockRect(&locked, &rect, D3DLOCK_READONLY);
+        if (FAILED(hr)) return false;
+
+        auto* dst = static_cast<std::uint8_t*>(data);
+        const auto* src = static_cast<const std::uint8_t*>(locked.pBits);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+            std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes,
+                        src + static_cast<std::size_t>(row) * locked.Pitch, rowBytes);
+
+        staging->UnlockRect();
+        return true;
+    }
+
     void D3D9RenderTargetCubeBackend::UnbindAsRenderTarget()
     {
         activeFace_ = -1;

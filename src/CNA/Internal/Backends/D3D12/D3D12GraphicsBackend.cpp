@@ -920,8 +920,41 @@ namespace CNA::Internal::Backends::D3D12
                                                            multiSampleCount);
     }
 
+    // REMED-GFX-134: a bound RenderTargetCube face was never tracked, so its
+    // UnbindAsRenderTarget() -- where this backend's per-face ResolveSubresource() and
+    // GenerateMipsEXT() live -- was unreachable from the public SetRenderTarget/SetRenderTargets
+    // path. A multisampled cube target's resolve resource therefore stayed empty and a
+    // mipMap=true cube target's levels above 0 were never regenerated; both read back (and
+    // sampled) as untouched memory. Same shape as currentCustomRT_'s own DX-144 handling.
+    void D3D12GraphicsBackend::FlushPendingCubeResolveEXT()
+    {
+        if (!currentCubeRT_) return;
+        IRenderTargetCubeBackend* cube = currentCubeRT_;
+        currentCubeRT_ = nullptr;
+        cube->UnbindAsRenderTarget();
+    }
+
+    void D3D12GraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+    {
+        FlushPendingCubeResolveEXT();
+        if (!rt)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
+        rt->BindAsRenderTargetFace(face);
+        currentCubeRT_ = rt;
+    }
+
     void D3D12GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
+        // REMED-GFX-134: finalize a prior cube-face bind too -- see FlushPendingCubeResolveEXT.
+        FlushPendingCubeResolveEXT();
         // DX-144: unbind whatever custom target was PREVIOUSLY bound before switching -- this is
         // where D3D12RenderTargetBackend::UnbindAsRenderTarget() (and therefore GenerateMipsEXT())
         // actually fires. Without this, SetRenderTarget2D(nullptr) blindly restored the back buffer
@@ -959,6 +992,9 @@ namespace CNA::Internal::Backends::D3D12
         // here (bypassing SetRenderTarget2D(nullptr)) must still get its own UnbindAsRenderTarget()
         // call, or its mip chain silently never regenerates. Mirrors
         // D3D11GraphicsBackend::SetRenderTargets()'s own currentCustomRT_ handling.
+        // REMED-GFX-134: and the same for a prior cube-face bind, whose own finalize was never
+        // reached at all. SetRenderTargetCubeFace() below re-tracks the new one.
+        FlushPendingCubeResolveEXT();
         if (currentCustomRT_)
         {
             currentCustomRT_->UnbindAsRenderTarget();

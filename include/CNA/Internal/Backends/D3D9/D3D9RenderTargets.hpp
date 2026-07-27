@@ -166,6 +166,33 @@ namespace CNA::Internal::Backends::D3D9
         /// Real IDirect3DCubeTexture9 (NOXNA).
         [[nodiscard]] IDirect3DCubeTexture9* GetTextureEXT() const { return texture_.Get(); }
 
+        /**
+         * @brief Reads a RENDERED cube face back to the CPU.
+         *
+         * REMED-GFX-134. `D3D9RenderTargetBackend::GetData`'s mechanism, applied to one cube face:
+         * a `D3DUSAGE_RENDERTARGET` surface in `D3DPOOL_DEFAULT` cannot be locked, so the face's
+         * surface is copied into a `D3DPOOL_SYSTEMMEM` offscreen-plain surface with
+         * `GetRenderTargetData` (which also synchronises with the GPU) and that copy is locked.
+         * Not `LockRect` on the cube texture itself, which is what the plain
+         * `D3D9TextureCubeBackend` -- a `D3DPOOL_MANAGED` resource -- can do.
+         *
+         * This target allocates exactly one mip level and no multisampling (see `Recreate` and
+         * `GetMultiSampleCount`), so there is no resolve step and level > 0 is refused.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read; only 0 exists on this target.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True once the whole region was written; false for an out-of-range
+         *         face/level/region or a failed surface copy/lock.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
         void ReleaseDefaultPoolResourceEXT() override;
 
     private:

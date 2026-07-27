@@ -467,7 +467,8 @@ namespace CNA::Internal::Backends::Bgfx
     }
 
     bool BgfxGraphicsBackend::ReadTextureRegionEXT(bgfx::TextureHandle srcTexture, int level,
-                                                   int x, int y, int w, int h, void* data)
+                                                   int x, int y, int w, int h, void* data,
+                                                   int layer)
     {
         // Task 914's proven readback shape (BgfxTextureCubeBackend/BgfxTexture3DBackend::GetData):
         // a temporary BLIT_DST|READ_BACK texture is the only thing bgfx::readTexture accepts.
@@ -491,9 +492,12 @@ namespace CNA::Internal::Backends::Bgfx
         // or it would copy the previous frame's content. bgfx processes views in ascending id
         // order and kBackbufferFlushViewId is the reserved highest id, above both the RT base range
         // and the per-frame segment range (see Detail's own view-id partition comment).
+        // REMED-GFX-134: `layer` is the source array layer -- a cube target's face index. It stays
+        // 0 for the plain 2D render target this helper was written for.
         bgfx::blit(Detail::kBackbufferFlushViewId, readback, 0, 0, 0, 0,
                    srcTexture, static_cast<uint8_t>(level),
-                   static_cast<uint16_t>(x), static_cast<uint16_t>(y), 0,
+                   static_cast<uint16_t>(x), static_cast<uint16_t>(y),
+                   static_cast<uint16_t>(layer),
                    static_cast<uint16_t>(w), static_cast<uint16_t>(h), 1);
 
         const uint32_t targetFrame = bgfx::readTexture(readback, data);
@@ -1028,10 +1032,14 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- BgfxRenderTargetCubeBackend ---
 
-    BgfxRenderTargetCubeBackend::BgfxRenderTargetCubeBackend(int size, int depthFormat, bool mipMap,
+    BgfxRenderTargetCubeBackend::BgfxRenderTargetCubeBackend(BgfxGraphicsBackend* owner, int size,
+                                                              int depthFormat, bool mipMap,
                                                               int requestedMultiSampleCount)
-        : size_(size), viewId_(Detail::AllocateRtViewId())
+        : owner_(owner), size_(size), viewId_(Detail::AllocateRtViewId())
     {
+        // REMED-GFX-134: what bgfx really allocates for this cube, so GetData can refuse a level
+        // that has no storage instead of answering with a clamped one.
+        levelCount_ = mipMap ? BgfxCubeMipLevels(size) : 1;
         // Task 903: BGFX_TEXTURE_RT_MSAA_Xn instead of plain BGFX_TEXTURE_RT when requested --
         // mirrors BgfxRenderTargetBackend's identical Task 878/879 treatment exactly; bgfx
         // resolves the multisampled content into this same cube texture handle internally, no
@@ -1065,7 +1073,10 @@ namespace CNA::Internal::Backends::Bgfx
 
     BgfxRenderTargetCubeBackend::~BgfxRenderTargetCubeBackend()
     {
-        if (bgfx::isValid(fbo))      bgfx::destroy(fbo);
+        // REMED-GFX-134: `fbo` is only an alias into faceFbos_, so it is never destroyed separately.
+        for (auto& faceFbo : faceFbos_)
+            if (bgfx::isValid(faceFbo)) bgfx::destroy(faceFbo);
+        fbo = BGFX_INVALID_HANDLE;
         if (bgfx::isValid(cubeTex))  bgfx::destroy(cubeTex);
         if (bgfx::isValid(depthTex)) bgfx::destroy(depthTex);
         Detail::ReleaseRtViewId(viewId_);
@@ -1073,30 +1084,111 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
     {
-        if (bgfx::isValid(fbo)) bgfx::destroy(fbo);
-        bgfx::Attachment atts[2];
-        atts[0].init(cubeTex, bgfx::Access::Write, static_cast<uint16_t>(face));
-        int numAttachments = 1;
-        if (bgfx::isValid(depthTex))
+        if (face < 0 || face >= 6) return;
+        const auto slot = static_cast<std::size_t>(face);
+        // REMED-GFX-134: create this face's framebuffer once and KEEP it. Destroying the previous
+        // face's handle here left whatever draws were already recorded against it pointing at a
+        // destroyed framebuffer, so the first of several faces bound within one un-advanced bgfx
+        // frame was silently dropped.
+        if (!bgfx::isValid(faceFbos_[slot]))
         {
-            // Task 951: bgfx::Attachment::init()'s _resolve parameter defaults to
-            // BGFX_RESOLVE_AUTO_GEN_MIPS (desired for atts[0]'s colour/cube-face attachment, see
-            // Task 907's own comment above) -- but bgfx hard-asserts if a DEPTH attachment is
-            // given that same default ("Depth textures do not support MSAA resolve"), since
-            // depthTex is never created with hasMips=true (see the constructor above) and mip
-            // auto-regeneration makes no sense for a depth buffer regardless. BGFX_RESOLVE_NONE
-            // is depthTex's own correct, do-nothing resolve mode.
-            atts[1].init(depthTex, bgfx::Access::Write, 0, 1, 0, BGFX_RESOLVE_NONE);
-            numAttachments = 2;
+            bgfx::Attachment atts[2];
+            atts[0].init(cubeTex, bgfx::Access::Write, static_cast<uint16_t>(face));
+            int numAttachments = 1;
+            if (bgfx::isValid(depthTex))
+            {
+                // Task 951: bgfx::Attachment::init()'s _resolve parameter defaults to
+                // BGFX_RESOLVE_AUTO_GEN_MIPS (desired for atts[0]'s colour/cube-face attachment,
+                // see Task 907's own comment above) -- but bgfx hard-asserts if a DEPTH attachment
+                // is given that same default ("Depth textures do not support MSAA resolve"), since
+                // depthTex is never created with hasMips=true (see the constructor above) and mip
+                // auto-regeneration makes no sense for a depth buffer regardless. BGFX_RESOLVE_NONE
+                // is depthTex's own correct, do-nothing resolve mode.
+                atts[1].init(depthTex, bgfx::Access::Write, 0, 1, 0, BGFX_RESOLVE_NONE);
+                numAttachments = 2;
+            }
+            faceFbos_[slot] = bgfx::createFrameBuffer(numAttachments, atts);
         }
-        fbo = bgfx::createFrameBuffer(numAttachments, atts);
-        bgfx::setViewFrameBuffer(viewId_, fbo);
-        bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(size_), static_cast<uint16_t>(size_));
+        fbo = faceFbos_[slot];
+
+        // REMED-GFX-134: only (re)point the BASE view when it has not already recorded a draw this
+        // frame. Once it has, REMED-GFX-018/065's own machinery routes this face onto a fresh
+        // ordered segment view and gives THAT view this framebuffer (see SelectViewportSegment);
+        // re-pointing the base here instead would redirect the earlier face's recorded draws at
+        // this face's attachment, which is exactly how the first face's content was lost.
+        if (owner_ == nullptr || !owner_->BaseViewUsedThisFrameEXT(viewId_))
+        {
+            bgfx::setViewFrameBuffer(viewId_, fbo);
+            bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(size_),
+                              static_cast<uint16_t>(size_));
+        }
     }
 
     void BgfxRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
         bgfx::setViewFrameBuffer(viewId_, BGFX_INVALID_HANDLE);
+    }
+
+    bool BgfxRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                              void* data, int dataLength) const
+    {
+        // REMED-GFX-134: closes the refusal this class inherited from ITextureCubeBackend's
+        // `return false` default.
+        if (owner_ == nullptr || !bgfx::isValid(cubeTex) || data == nullptr) return false;
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
+        if (dataLength < w * h * 4) return false;
+
+        // REMED-GFX-134, this backend's two measured boundaries. `bgfx::blit` reports no error for
+        // either of these and simply copies untouched memory, so answering them would be exactly
+        // the fabricated transparent-black face REMED-GFX-130 removed -- one level further down.
+        //
+        //  * A MULTISAMPLED cube target: bgfx owns the multisample storage behind `cubeTex` and
+        //    exposes no resolved handle a blit can source, and there is no capability bit to ask.
+        //    Measured all-zero on the OpenGL renderer this backend selects here.
+        //  * A mip level above 0: the per-face `BGFX_RESOLVE_AUTO_GEN_MIPS` chain
+        //    `BindAsRenderTargetFace` requests is not regenerated for a cube render target on that
+        //    renderer, so those levels hold nothing that was ever rendered. Level 0 -- and every
+        //    mip of a PLAIN BgfxTextureCubeBackend, whose levels come from SetData -- is exact.
+        //
+        // Both are recorded as independent findings rather than papered over here.
+        if (multiSampleCount > 0) return false;
+        if (level > 0) return false;
+
+        // REMED-GFX-134: complete the current frame BEFORE queueing the readback blit. bgfx runs a
+        // framebuffer's MSAA resolve and its BGFX_RESOLVE_AUTO_GEN_MIPS mip regeneration when it
+        // tears the framebuffer down at frame end, so a blit queued alongside this frame's draws
+        // copies pre-resolve memory -- measurably all-zero for a multisampled cube target and for
+        // every mip level above 0 -- even though it already runs on the reserved highest view id.
+        owner_->CompleteFrameForResolveEXT();
+
+        // REMED-GFX-067: a render target's colour attachment stores its texel memory BOTTOM-UP on
+        // originBottomLeft renderers (OpenGL/GLES/WebGL). BgfxRenderTargetBackend::GetData already
+        // makes this correction for a 2D target; a rendered cube face is rasterized exactly the
+        // same way, so it needs it too -- applied once, here, and never on the plain-TextureCube
+        // path whose content came from an upload instead.
+        const bool bottomUp = bgfx::getCaps()->originBottomLeft;
+        const int srcY = bottomUp ? (levelSize - (y + h)) : y;
+        if (!owner_->ReadTextureRegionEXT(cubeTex, level, x, srcY, w, h, data, face))
+            return false;
+
+        if (bottomUp && h > 1)
+        {
+            auto* pixels = static_cast<std::uint8_t*>(data);
+            const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+            std::vector<std::uint8_t> scratch(rowBytes);
+            for (int topRow = 0; topRow < h / 2; ++topRow)
+            {
+                std::uint8_t* top = pixels + static_cast<std::size_t>(topRow) * rowBytes;
+                std::uint8_t* bottom = pixels + static_cast<std::size_t>(h - 1 - topRow) * rowBytes;
+                std::memcpy(scratch.data(), top, rowBytes);
+                std::memcpy(top, bottom, rowBytes);
+                std::memcpy(bottom, scratch.data(), rowBytes);
+            }
+        }
+        return true;
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> BgfxGraphicsBackend::CreateRenderTargetCube(int size, int depthFormat, bool mipMap, int multiSampleCount)
@@ -1106,7 +1198,7 @@ namespace CNA::Internal::Backends::Bgfx
         // multiSampleCount (Task 903): now wired up via BGFX_TEXTURE_RT_MSAA_Xn, mirroring
         // BgfxRenderTargetBackend's Task 878/879 treatment -- see BgfxRenderTargetCubeBackend's
         // constructor.
-        return std::make_unique<BgfxRenderTargetCubeBackend>(size, depthFormat, mipMap, multiSampleCount);
+        return std::make_unique<BgfxRenderTargetCubeBackend>(this, size, depthFormat, mipMap, multiSampleCount);
     }
 
     // Task 907 finding: the shared IGraphicsBackend default only calls BindAsRenderTargetFace,

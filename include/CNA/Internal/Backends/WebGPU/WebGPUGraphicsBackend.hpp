@@ -282,6 +282,10 @@ namespace CNA::Internal::Backends::WebGPU
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
         /// WEBGPU-114: real per-face CPU readback, same staged-copy technique as
+        /// REMED-GFX-134: refuses an out-of-range face/level/rectangle by returning false (the
+        /// shared layer's deterministic System::NotSupportedException) instead of throwing a raw
+        /// std exception through the public XNA surface, and flushes only when draws are actually
+        /// pending -- flushing unconditionally cleared the very face this call was reading.
         /// `WebGPUTextureCubeBackend::GetData()` (WEBGPU-113); flushes this face's own pending
         /// draws first if it is still the currently-bound render target (mirrors
         /// `WebGPURenderTargetBackend::GetData()`'s identical on-demand-flush pattern).

@@ -1269,13 +1269,26 @@ namespace CNA::Internal::Backends::WebGPU
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
             return false;
         if (face < 0 || face >= 6)
-            throw std::out_of_range("CNA WebGPU: RenderTargetCube.GetData: face must be 0..5");
+            return false;
+        // REMED-GFX-134: this target has exactly one level (WEBGPU-114 refuses a mipMap=true
+        // RenderTargetCube at construction), so a higher level is a capability boundary, not an
+        // argument error. Reporting it as `false` is what turns it into the shared layer's own
+        // deterministic System::NotSupportedException with the caller's destination untouched --
+        // the raw std::invalid_argument this replaces escaped the public XNA surface unchanged,
+        // the same defect shape REMED-GFX-135 already removed from this backend's SetData.
         if (level != 0)
-            throw std::invalid_argument("CNA WebGPU: RenderTargetCube.GetData: mip level > 0 is "
-                                        "not supported on this backend (no mip chain, see "
-                                        "plan_webgpu.md WEBGPU-114)");
+            return false;
+        if (x < 0 || y < 0 || x + w > size_ || y + h > size_)
+            return false;
 
-        if (owner_->currentRenderTargetCubeFace_ == this)
+        // REMED-GFX-134: flush ONLY when there is something queued. This face's render pass always
+        // clears (see RenderPendingDrawsToRenderTargetCubeFace's own comment), so flushing
+        // unconditionally made a GetData on a still-bound face WIPE the very face it was asked to
+        // read and then return the clear colour as content. `framePending_` is set by every Clear()
+        // and Queue*Draw() and cleared by each flush, so this keeps the
+        // SetRenderTarget+draw+GetData-without-unbinding sequence working while leaving an idle
+        // bound target untouched.
+        if (owner_->currentRenderTargetCubeFace_ == this && owner_->framePending_)
             owner_->RenderPendingDrawsToRenderTargetCubeFace(
                 const_cast<WebGPURenderTargetCubeBackend*>(this), owner_->currentRenderTargetCubeFaceIndex_);
 

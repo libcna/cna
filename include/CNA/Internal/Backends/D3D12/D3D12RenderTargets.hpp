@@ -214,6 +214,36 @@ namespace CNA::Internal::Backends::D3D12
         /// subresource-index convention, same as `D3D12TextureCubeBackend`'s own doc comment).
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
+        /**
+         * @brief Reads a RENDERED cube face's mip level back to the CPU.
+         *
+         * REMED-GFX-134. `D3D12TextureCubeBackend::GetData`'s mechanism -- a `D3D12_HEAP_TYPE_READBACK`
+         * buffer, a placed-footprint `CopyTextureRegion` from the face/level subresource with the
+         * required `D3D12_TEXTURE_DATA_PITCH_ALIGNMENT` row pitch, and the shared
+         * `ExecuteCommandListAndWaitEXT` fence -- sourced from `GetSampleableColorResourceEXT()` so a
+         * multisampled target is read through the single-sample resource `UnbindAsRenderTarget`'s
+         * `ResolveSubresource()` already filled.
+         *
+         * The resource's tracked state is restored afterwards: this is a read, and leaving it in
+         * COPY_SOURCE would desynchronise the shared state tracker for the next render pass.
+         *
+         * No row flip and no channel swizzle: D3D12's render-target origin is top-left and this
+         * resource is `DXGI_FORMAT_R8G8B8A8_UNORM`.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True once the whole region was written; false for an out-of-range
+         *         face/level/region, or a readback buffer this device refused to create or map.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
     private:
         /// DX-144: CPU box-filter downsample cascade, per face, base level (0) -> levelCount_-1,
         /// called from UnbindAsRenderTarget(). No-op when mipMap_ is false or levelCount_ is 1.

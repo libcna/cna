@@ -331,7 +331,23 @@ namespace CNA::Internal::Backends::Bgfx
     class BgfxRenderTargetCubeBackend : public IRenderTargetCubeBackend, public IBgfxCubeSamplable
     {
     public:
+        BgfxGraphicsBackend* owner_ = nullptr;
+        /// The currently bound face's framebuffer -- an alias into `faceFbos_`, never separately
+        /// owned (REMED-GFX-134).
         bgfx::FrameBufferHandle fbo = BGFX_INVALID_HANDLE;
+        /**
+         * @brief One lazily created framebuffer per cube face, all kept alive together.
+         *
+         * REMED-GFX-134: this used to be a single handle that `BindAsRenderTargetFace` destroyed
+         * and rebuilt on every face switch. Within one un-advanced bgfx frame that left the
+         * FIRST-bound face's already-recorded draws pointing at a destroyed framebuffer while the
+         * base view had been re-pointed at the newest face, so binding six faces in one frame
+         * rendered five and silently dropped the first.
+         */
+        std::array<bgfx::FrameBufferHandle, 6> faceFbos_ = {{
+            BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE,
+            BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE,
+        }};
         bgfx::TextureHandle cubeTex = BGFX_INVALID_HANDLE;
         // Task 877: single 2D depth/stencil texture shared across all 6 faces (mirrors
         // VulkanRenderTargetCubeBackend's shared depthImage_) -- BGFX_INVALID_HANDLE when the
@@ -346,8 +362,11 @@ namespace CNA::Internal::Backends::Bgfx
         // at construction -- see Detail::AllocateRtViewId()'s comment.
         bgfx::ViewId viewId_ = Detail::kInvalidRtViewId;
 
-        BgfxRenderTargetCubeBackend(int size, int depthFormat, bool mipMap = false,
-                                     int requestedMultiSampleCount = 0);
+        /// Mip levels bgfx really allocated for this cube target (REMED-GFX-134).
+        int levelCount_ = 1;
+
+        BgfxRenderTargetCubeBackend(BgfxGraphicsBackend* owner, int size, int depthFormat,
+                                     bool mipMap = false, int requestedMultiSampleCount = 0);
         ~BgfxRenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -356,6 +375,39 @@ namespace CNA::Internal::Backends::Bgfx
         int GetMultiSampleCount() const override { return multiSampleCount; }
         [[nodiscard]] unsigned int GetGLHandle() const override { return 0; }
         bgfx::TextureHandle GetBgfxCubeTextureHandle() const override { return cubeTex; }
+
+        /**
+         * @brief Reads a RENDERED cube face's mip level back to the CPU.
+         *
+         * REMED-GFX-134. Reuses `BgfxGraphicsBackend::ReadTextureRegionEXT` -- the same
+         * blit-into-a-BLIT_DST|READ_BACK-texture then `bgfx::readTexture()` mechanism
+         * `BgfxRenderTargetBackend::GetData` uses -- with the cube face selected as the source
+         * array layer. Going through that helper rather than
+         * `BgfxTextureCubeBackend::GetData`'s own copy is what makes this correct for a RENDER
+         * TARGET: it issues the blit on the reserved highest view id, so the copy runs AFTER every
+         * render-target and viewport-segment view queued this frame instead of reading the previous
+         * frame's content, and it recycles this backend's per-frame state across the forced
+         * `bgfx::frame()` advance.
+         *
+         * REMED-GFX-067's `originBottomLeft` correction applies here for the same reason it applies
+         * to a 2D target: on OpenGL/GLES/WebGL a rendered attachment stores its texel memory
+         * bottom-up, so the requested rectangle is mapped into bottom-up coordinates and the
+         * returned rows flipped back. A no-op on Vulkan/D3D/Metal.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True once the whole region was written; false for an out-of-range
+         *         face/level/region, a missing BGFX_CAPS_TEXTURE_BLIT/READ_BACK, or a frame that
+         *         never arrives.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
     };
 
     /// bgfx dynamic vertex buffer.
@@ -772,11 +824,47 @@ namespace CNA::Internal::Backends::Bgfx
          * @param w          Width of the requested region, in pixels.
          * @param h          Height of the requested region, in pixels.
          * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param layer      Source array layer -- a cube target's face index (REMED-GFX-134);
+         *                   0 for the plain 2D render target this helper was written for.
          * @return True once the whole region was written; false if the readback texture could not
          *         be created or the deferred read did not complete.
          */
         [[nodiscard]] bool ReadTextureRegionEXT(bgfx::TextureHandle srcTexture, int level,
-                                                int x, int y, int w, int h, void* data);
+                                                int x, int y, int w, int h, void* data,
+                                                int layer = 0);
+        /**
+         * @brief Whether @p baseId has already recorded a draw in the current, un-advanced frame.
+         *
+         * REMED-GFX-134: a render target rebound within one frame must not reconfigure its base
+         * view last-wins -- REMED-GFX-018/065 already route the rebind's own draws onto a fresh
+         * ordered segment view. A cube face's bind therefore has to know whether re-pointing the
+         * base view's framebuffer would destroy an earlier face's recorded work.
+         *
+         * @param baseId The render target's own stable base view id.
+         * @return True when that base view has already been used this frame.
+         */
+        [[nodiscard]] bool BaseViewUsedThisFrameEXT(bgfx::ViewId baseId) const
+        {
+            return baseId < segmentBaseUsed_.size() && segmentBaseUsed_[baseId];
+        }
+        /**
+         * @brief Completes the current bgfx frame so every queued framebuffer RESOLVE has run.
+         *
+         * REMED-GFX-134: bgfx performs a render target's MSAA resolve and its
+         * `BGFX_RESOLVE_AUTO_GEN_MIPS` mip regeneration when it tears the framebuffer down at
+         * frame end, not when the last view referencing it is processed. A readback blit queued in
+         * the same frame as the draws therefore copies PRE-resolve memory even though it runs on
+         * the reserved highest view id -- measurably all-zero for a multisampled cube target and
+         * for any mip level above 0. Advancing one frame first makes the blit read the resolved
+         * result. Carries the same per-frame bookkeeping every other `bgfx::frame()` call site in
+         * this backend does.
+         */
+        void CompleteFrameForResolveEXT()
+        {
+            bgfx::frame();
+            spriteVpValid_ = false;
+            EndFrameSegments();
+        }
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
