@@ -13292,6 +13292,10 @@ from "did not throw" to byte-exact) all remain green.
   declared per backend rather than papered over. Distinct from REMED-GFX-129, which is about an
   explicit `Clear()` being DROPPED on a preserving target. Fixing it changes a shared interface
   signature across twelve backends, deliberately not attempted under this finding.
+  **CLOSED 2026-07-28** — see the REMED-GFX-136 record below: the parameter now exists, both public
+  render targets derive it from one shared mapping, and this file's own VULKAN/WEBGPU contract rows
+  were updated from `preservesOnRebind = false` to `true` in the same commit, so U1/U2 assert the
+  whole preserved face instead of only the region the last pass drew.
 * **REMED-GFX-137** — on EasyGL a rendered cube face and a `SetData`-uploaded one are stored in
   **opposite row orders**: the rasterizer fills the face bottom-up while `glTexSubImage2D` writes
   source row 0 into texel row 0. `GetData` normalizes the rendered case (that is this finding's own
@@ -13358,6 +13362,391 @@ user stashes are untouched.
 - `b6392613 fix(Task REMED-GFX-134): implement honest cube-target colour readback`
 - `69129c54 test(Task REMED-GFX-134): cover faces orientation resolve and capabilities`
 - `docs(remediation): record GFX-134 completion` (this record)
+
+No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
+untouched.
+
+---
+
+## REMED-GFX-136 — `RenderTargetCube` usage/preservation propagation (DONE 2026-07-28)
+
+### Classification
+
+**Real defect, MEDIUM, GRAPHICS, shared-interface information loss.** Not a per-backend bug that two
+backends happened to share: `RenderTargetCube` stores a real `usage_`, reports it through the public
+`RenderTargetUsage` property, and then throws it away at the one call that builds the GPU resource.
+`IGraphicsBackend::CreateRenderTarget2D` has carried a `preserveContents` parameter since the
+backend interface existed; `CreateRenderTargetCube(size, depthFormat, mipMap, multiSampleCount)`
+never did. Every backend therefore had to invent an answer, and the two whose native API forces the
+question — Vulkan (`VkAttachmentLoadOp`) and WebGPU (`WGPULoadOp`) — both invented the same one,
+each with a source comment naming the missing parameter:
+
+* `VulkanRenderTargetCubeBackend`'s constructor built all six face framebuffers against
+  `GetOrCreateRTRenderPass(depthVkFormat_, /*discardContents=*/true)`, commented "this class has no
+  preserveContents concept (unlike VulkanRenderTargetBackend)";
+* `WebGPUGraphicsBackend::RenderPendingDrawsToRenderTargetCubeFace` set
+  `colorAttachment.loadOp = WGPULoadOp_Clear` with `const bool doClearColor = true; // always
+  discard`, commented "has no preserveContents parameter to thread a RenderTargetCube's real
+  `usage_` value through in the first place".
+
+**The information-loss point is exactly one call**, `RenderTargetCube.cpp` line 48. Everything
+downstream of it was already correct on the seven backends whose native API has no load action at
+all.
+
+A second, smaller contradiction turned up while establishing the contract and is fixed here too:
+CNA's two halves disagreed about `PlatformContents`. `GraphicsDevice::SetRenderTargets` clears only
+a `DiscardContents` target (FNA's own `if (clearTarget == DiscardContents) Clear(...)`), so the
+shared layer already treated `PlatformContents` as non-discarding — while `RenderTarget2D` passed
+`usage == RenderTargetUsage::PreserveContents` to the backend, so the backend treated it as
+discarding. Which half won was a per-backend accident.
+
+### The public contract, established rather than assumed
+
+| Question | Answer, and where it comes from |
+|---|---|
+| Does `PreserveContents` guarantee colour across unbind/rebind? | **Yes, exactly.** FNA passes `usage != DiscardContents` to FNA3D as `preserveTargetContents` and issues no clear. |
+| Depth/stencil too? | **No — colour only.** Vulkan's preserving RT render pass has used `LOAD_OP_DONT_CARE` for depth since it existed, and this project has never promised otherwise. Recorded as REMED-GFX-142 below. |
+| What does `DiscardContents` permit? | Previous colour becomes non-preserved — but CNA does **not** leave the replacement undefined: `GraphicsDevice::SetRenderTargets` clears a `DiscardContents` target to `(0,0,0,255)` on every bind, mirroring FNA. That colour is asserted per backend, not assumed. |
+| What does `PlatformContents` map to? | **Preservation**, via FNA's own `usage != DiscardContents`. One mapping, one function. |
+| Does the first bind differ? | A brand-new target has no previous content, so nothing is asserted about texels a first preserving bind did not draw (check **F1** asserts only what it DID draw). No test reads uninitialized native memory. |
+| Is `Clear` still observable independently? | Yes. `Clear()` always wins over the load action on every backend; the producer in this whole battery is drawn geometry, never `Clear()`, so REMED-GFX-129 stays a separate variable. |
+| Is `SetRenderTarget(nullptr)` the boundary? | The boundary is the **bind cycle**, not the route out of it: checks **P6/P7** prove a trip through the backbuffer and through an unrelated `RenderTarget2D` are both transparent to the cube. |
+| Is switching faces a rebind or a distinct subresource? | **Distinct subresource.** **P4/P5/I1** require per-face isolation: rebinding face A changes nothing on the other five. |
+
+### Interface design
+
+Candidate A (pass the enum) was rejected: with `PlatformContents` mapping to the same behaviour as
+`PreserveContents`, no backend has anything to do with the distinction, and a differently-shaped
+cube signature would reintroduce exactly the "two flags that can disagree" hazard this finding is
+about. The chosen shape is **B + one shared mapping helper**:
+
+```cpp
+// include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp
+virtual std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+    int size, int depthFormat, bool preserveContents = false,
+    bool mipMap = false, int multiSampleCount = 0);
+
+// include/Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp
+NOXNA [[nodiscard]] constexpr bool RenderTargetUsagePreservesContentsEXT(RenderTargetUsage) noexcept;
+```
+
+`preserveContents` sits in `CreateRenderTarget2D`'s identical position, so the two factories now read
+the same. Both public targets call the helper — that is the single auditable source of truth.
+
+**Overrides changed (9):** EasyGL, Vulkan, Bgfx, SdlGpu, WebGPU, Headless, D3D9, D3D11, D3D12
+(header + definition each). **Five backends keep `IGraphicsBackend`'s `nullptr` default** and needed
+no change: Software, SDL_Renderer, ASCII, Canvas, DX3.
+
+**Callers changed (8):** `RenderTargetCube.cpp` (the one shared-layer call), plus seven positional
+backend-level calls in `examples/d3d11_smoke_test.cpp` (4) and `examples/d3d12_smoke_test.cpp` (3).
+That audit was mandatory, not cosmetic: a default argument makes an old four-argument call still
+*compile*, silently rebinding `mipMap` to `preserveContents`. Every positional call site in the
+repository was grepped and inspected; the ones passing only `(size, depthFormat)` are unaffected.
+
+**Source compatibility:** the public XNA surface is untouched — no public constructor, method or
+signature changed, and `RenderTargetCube`'s own `RenderTargetUsage` property was already there.
+**Internal ABI:** `IGraphicsBackend` is an internal header and this changes a virtual's signature, so
+every backend must be compiled against the same header revision; they are, in one library per build
+directory. `RenderTarget2D`'s call site changes from the literal `usage == PreserveContents` to the
+helper — a deliberate correction of the contradiction above, whose only observable difference is
+`PlatformContents` on the two backends that honour the flag at all.
+
+### Red-first reproduction
+
+`examples/rendertargetcube_usage_test.cpp`, registered on all fourteen backends. It reuses
+REMED-GFX-134's producer verbatim — drawn geometry, never `Clear()`, an asymmetric five-region
+pattern whose six colours rotate by face index, from a 0/255-only palette that is an exact fixed
+point of sRGB encoding, so every comparison is byte-exact even on WebGPU's sRGB cube target.
+
+The decisive shape is asymmetric on purpose: paint a face completely, unbind, **read it** (proving
+the producer before anything else is claimed), then rebind and draw only a 2x2 marker. "The marker
+landed" is what a discarding backend also achieves, so it is never the oracle — check **P2** reports
+it separately from check **P3**, which asserts the 60 texels the second pass did *not* draw.
+
+A/B, same final test file, same display `:101`, only the production sources swapped
+(`git checkout 0123bf53 -- <6 files>`, then restored):
+
+| Backend | before | after | failing checks before |
+|---|---|---|---|
+| VULKAN | **16/30** | **30/30** | P3, P4, P6, P7, P8, P11, P12, L2, N1, T1, T2, M2, M3, X1 |
+| WEBGPU | **15/30** | **30/30** | the same fourteen, plus **P10** (three bind/unbind cycles that draw NOTHING still wiped the face) and **Q1** |
+
+Every "before" failure reads `got=(0,0,0,255)` where the producer's colour was required: the face
+was cleared on the bind, not preserved.
+
+### The false-positive audit this test needed on itself
+
+Eleven of those preservation checks were written without a flush barrier first, and **passed on
+pre-fix Vulkan**. The reason is architectural: `VulkanGraphicsBackend::RecordCommandBuffer`'s
+Phase 1 collects one entry per unique `VulkanRTSource` and replays *every* queued batch for it
+inside **one** render pass, so a producer pass and a later partial pass issued into the same flush
+window collapse into a single pass whose one load action runs before both — and the producer's
+content survives even on a backend that discards on every bind.
+
+`Settle()` (a discarded whole-face `GetData`, which forces `FlushDeferredRenderTarget`) now separates
+every preservation check's two bind cycles, and its doc comment records why. **Q1** keeps the
+collapsed shape as its own explicit check, so both behaviours stay pinned. This is also what turned
+P4/P6/P7/P8/N1/T1/T2/M2/X1 from green-on-a-broken-backend into the red list above.
+
+A second false positive was caught the same way: **M2** (rebind ONE multisampled face) passed on
+EasyGL, because the shared multisample renderbuffer still held that face. **M3** interleaves a second
+face and shows EasyGL returns face B's content for face A.
+
+| Category | Count |
+|---|---|
+| False-positive-capable checks found | **12** (11 flush-window, 1 single-face MSAA) |
+| Strengthened | **12** (11 barriers + M3 added) |
+| Stale claims corrected in the REMED-GFX-134 oracle | **2** (`preservesOnRebind` for VULKAN and WEBGPU, whose U1/U2 asserted only the last-drawn region) |
+
+### Per-backend mapping
+
+| Backend | How the public usage is honoured | Result |
+|---|---|---|
+| **Vulkan** | `GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_)` per instance; framebuffers and `FaceProxy` render passes both | **fixed here** — PreserveContents exact at runtime |
+| **WebGPU** | `colorAttachment.loadOp = (clearColorPending_ \|\| !target->PreserveContents()) ? Clear : Load` | **fixed here** — PreserveContents exact at runtime |
+| **EasyGL** | No load action: an FBO's colour attachment IS the cube texture and binding never touches it | already correct, now documented and consumed |
+| **Bgfx** | Views sit at `BGFX_CLEAR_NONE` unless `RecordClear` gives them flags | already correct |
+| **SdlGpu** | `SDL_GPU_LOADOP_LOAD` unless that face has a pending `Clear()` | already correct (+ a real MSAA legality fix, below) |
+| **D3D9 / D3D11 / D3D12** | No load action at all; `SetRenderTarget`/`OMSetRenderTargets` leave contents alone | already correct |
+| **Headless** | Rasterizes nothing; no content to preserve or discard | n/a, readback stays the REMED-GFX-130 refusal |
+| **Software / SDL_Renderer / ASCII / Canvas / DX3** | No cube render target — `CreateRenderTargetCube` keeps the `nullptr` default | RenderTargetCube unsupported at creation/bind, deterministic |
+
+### Native load/store actions
+
+**Vulkan**, non-MSAA cube face:
+
+| | colour loadOp | colour storeOp | colour initialLayout | depth/stencil loadOp |
+|---|---|---|---|---|
+| PreserveContents / PlatformContents | `LOAD` | `STORE` | `SHADER_READ_ONLY_OPTIMAL` | `DONT_CARE` |
+| DiscardContents | `CLEAR` | `STORE` | `UNDEFINED` | `CLEAR` |
+
+`finalLayout` is `SHADER_READ_ONLY_OPTIMAL` either way, which is what makes `LOAD` legal on the next
+bind. The constructor's up-front `UNDEFINED -> SHADER_READ_ONLY_OPTIMAL` barrier over all 6 layers x
+all levels — previously taken only when `levelCount_ > 1` — is now also taken whenever the target
+preserves, so a preserving cube's very first bind does not begin a `LOAD` pass on an `UNDEFINED`
+image. Verified with `VK_LAYER_KHRONOS_validation` active in a `Debug` build: **no VUID output**.
+
+**WebGPU**, per cube-face pass: colour `loadOp = Load, storeOp = Store` when preserving and no
+`Clear()` is pending; `loadOp = Clear, storeOp = Store` otherwise. Depth+stencil keep
+`loadOp = Clear, storeOp = Store` unconditionally — deliberately unlike the 2D sibling, because this
+cube's depth/stencil texture is ONE attachment shared by all six faces and "preserving" it would
+hand face A whatever depth face B last wrote.
+
+### Deferred capture
+
+`preserveContents_` is set in each backend's constructor and never mutated, and each pass reads it
+from the target the pass is being built for. Vulkan bakes it even earlier — into the `VkFramebuffer`
+and the `FaceProxy`'s `renderPass` handle, at construction. So no last-live-usage behaviour is
+possible. **P8/P9** exercise it directly: a `PreserveContents` cube and a `DiscardContents` cube,
+interleaved A -> B -> A, each keeping its own policy (**P8** was red before the fix and is green
+after; **P9** was green before and stays green).
+
+### Colour versus depth/stencil
+
+`RenderTargetUsage` is treated as a **colour** contract. **T1/T2** verify that a `Depth24` and a
+`Depth24Stencil8` cube target both preserve their colour exactly across a rebind, i.e. the
+depth/stencil attachment's own load/store actions never corrupt the preserved colour, and that
+colour preservation does not require preserving depth. A depthless (`DepthFormat::None`) target is
+what every other check uses. The three backends with a real load action disagree about depth itself
+— recorded separately as **REMED-GFX-142**, not fixed here.
+
+### MSAA and resolve
+
+Where the prior content lives turns out to decide the answer, and it differs by backend:
+
+| Backend | multisample colour attachment | multisampled PreserveContents |
+|---|---|---|
+| EasyGL | ONE renderbuffer shared by all six faces | **no** — M3 shows face A returns face B's content |
+| Vulkan | ONE `TRANSIENT_ATTACHMENT` image shared by all six faces; `GetOrCreateRTRenderPassMsaa` has no LOAD variant | **no** (not reached in this environment: a cube multisamples only when the backbuffer did, which this test does not request) |
+| SdlGpu | ONE single-layer scratch texture, cycled every pass, resolved away immediately | **no** |
+| Bgfx | n/a — `bgfx::blit` cannot source a multisampled cube attachment on its OpenGL renderer (REMED-GFX-134/138), so there is no honest readback to assert | not measurable |
+| D3D11 | a real 6-layer multisampled array; per-face resolve on unbind | **yes** — M2 and M3 both exact at applied 4x |
+
+No full-face copy was added to paper over any of these: where the native load action cannot preserve
+a resolved face, the boundary is declared and tested, not manufactured. Recorded as
+**REMED-GFX-141**.
+
+One genuine MSAA defect was fixed, because it blocked the task: `SdlGpuGraphicsBackend::
+RenderToTargetCubeFace` set `colorTarget.cycle = true` together with `SDL_GPU_LOADOP_LOAD`, which
+SDL_gpu forbids out loud (`'Cannot cycle color target when load op is LOAD!'`). It became reachable
+the moment a multisampled cube face was bound a second time with no `Clear()` in between — exactly
+what a `PreserveContents` target does — and hung the test process. The shared scratch's previous
+contents are another face's samples anyway, so that path now clears.
+
+### Mips and face isolation
+
+**X1** renders, settles, rebinds and partially redraws level 0 of a `mipMap=true` `PreserveContents`
+cube and requires level 0 to come back exact — mip regeneration on unbind included. On WebGPU, whose
+WEBGPU-114 refuses a `mipMap=true` cube at construction, X1 requires that refusal to stay
+deterministic whatever the usage. **I1** renders all six faces, settles all six, then rebinds and
+marks face 0, and requires the other five to be byte-identical. **P5** is the same claim from the
+other direction. REMED-GFX-137/138/139 and the D3D12 ordinary-cube mip defect were not touched.
+
+### Active-target and readback contract
+
+REMED-GFX-039's rejection of unsafe active-target readback is untouched and still asserted by the
+REMED-GFX-134 suite (`A1/A2`), which is green on every backend that runs it. REMED-GFX-134's exact
+`GetData` is what this whole battery measures with; **P12** additionally requires that reading a face
+neither consumes nor wipes it, and **P11** reads between every pair of bind cycles. No `Present` and
+no extra visible frame is involved anywhere.
+
+### Resource cardinality and performance
+
+The change is descriptor-only.
+
+| Backend | new permanent resources | new cache entries |
+|---|---|---|
+| Vulkan | none | at most **one** extra `VkRenderPass` per distinct depth format — `rtRenderPassLoadByDepthFmt_` already existed for `RenderTarget2D`, so a preserving cube sharing a depth format with a preserving 2D target adds nothing. Framebuffer count per cube is unchanged (6). Pipelines are unaffected: discard and load differ only in `loadOp`/`initialLayout`, neither of which participates in render-pass compatibility, so no pipeline cache key changed. |
+| WebGPU | one `bool` field | none |
+| SdlGpu | none | none |
+| everything else | none | none |
+
+No full-face copy, no per-bind allocation, no duplicate colour storage, no extra `Present`, no added
+frame latency, no sleep. **N1** runs eight interleaved preserve/discard bind cycles and **P11** three
+partial updates with a readback between each; both stay exact and neither leaks under ASan.
+
+### Sanitizers
+
+| Build | Suite | Result |
+|---|---|---|
+| `cmake-build-vulkan-asan` | GFX-136 suite | 30/30, 0 ASan errors |
+| `cmake-build-vulkan-asan` | GFX-134 suite | 55/55, 0 ASan errors |
+| `cmake-build-vulkan-asan` | `rendertargetcube_plural_binding` (GFX-096) | 14/14, 0 ASan errors |
+| `cmake-build-sdlgpu-asan` | GFX-136 suite | 30/30, 0 ASan errors |
+| `cmake-build-sdlgpu-ubsan` | GFX-136 suite | 30/30, 0 runtime errors |
+| `cmake-build-bgfx-asan` | GFX-136 suite | 30/30, 0 ASan errors |
+| `cmake-build-bgfx-ubsan` | GFX-136 suite | 30/30, 0 runtime errors |
+| `cmake-build-software-asan` | GFX-136 suite | 4/4, 0 ASan errors |
+| `cmake-build-software-ubsan` | GFX-136 suite | 4/4, 0 runtime errors |
+
+Covered by those runs: preserve rebind, discard rebind, PlatformContents, face A -> B -> A, two cubes
+with different usage, MSAA, partial updates, target switching, readback after unbind, disposal via
+the GFX-134 suite, and the refused routes. No out-of-bounds access, use-after-free, uninitialized
+load, invalid attachment state, signed overflow or stale face-resource access. There is no WebGPU
+sanitizer build directory in this repository and none was created; WebGPU was measured in its normal
+`cmake-build-webgpu` Debug build instead.
+
+### Cross-backend result categories
+
+| Backend | Category | Evidence |
+|---|---|---|
+| EasyGL | PreserveContents exact at runtime | 30/30, `:101`, OpenGL ES 3.2 Mesa 25.0.7 |
+| Bgfx | PreserveContents exact at runtime | 30/30, `:101`, **OpenGL 2.1** — requested OpenGL, got OpenGL; **Bgfx-on-Vulkan is untested here, not passed** |
+| SdlGpu | PreserveContents exact at runtime | 30/30, `:101`, SDL_gpu Vulkan driver |
+| Vulkan | PreserveContents exact at runtime | 30/30, `:101`, llvmpipe; validation clean |
+| WebGPU | PreserveContents exact at runtime | 30/30, `:101`, wgpu-native v29.0.1.1 |
+| D3D9 | PreserveContents exact at runtime | 30/30, `:99`, Wine + DXVK |
+| D3D11 | PreserveContents exact at runtime, MSAA included | 30/30, `:99`, Wine + DXVK |
+| D3D12 | runtime unavailable for the Game harness, backend contract verified | `cna_test_d3d12_smoke` GFX136a/GFX136b under Wine + vkd3d-proton 3.1.0, `:99`; the Game-harness route still crashes in Wine `dxgi.dll` (DX-100) |
+| Headless | DiscardContents/PreserveContents both inert; readback stays the deterministic refusal | 30/30, `SDL_VIDEODRIVER=dummy` |
+| Software / SDL_Renderer / ASCII / DX3 | RenderTargetCube unsupported at creation/bind | 4/4 each |
+| Canvas | runtime unavailable, source/compile contract verified | Emscripten link of `cna_test_canvas_rendertargetcube_usage` |
+
+### Regression gates
+
+| Gate | Result |
+|---|---|
+| REMED-GFX-018 ClearOptions | green — `ctest -R ClearOptions` on Bgfx is **7/8**: the six `ClearOptionsTest.*` unit cases and `Bgfx_GraphicsDevice_ClearOptions` all pass; the sole failure is the recorded `Bgfx_GraphicsDevice_ClearOptions_Vulkan`, which requests a bgfx renderer this environment does not provide |
+| REMED-GFX-039 active-target validation | green (GFX-134 `A1/A2`) |
+| REMED-GFX-067 Bgfx orientation | green (GFX-134 suite 55/55 on Bgfx) |
+| REMED-GFX-094 cube MSAA boundaries | green (`M1` asserts the applied count against each backend's declared capability) |
+| REMED-GFX-096 cube binding/handoff | `rendertargetcube_plural_binding` **14/14** on EasyGL, Vulkan, SdlGpu, WebGPU, Bgfx |
+| REMED-GFX-127/130 honest readback | green on every backend shard |
+| REMED-GFX-134 exact cube readback | **55/55** on EasyGL, Bgfx, SdlGpu, Vulkan, WebGPU, D3D9, D3D11 |
+| REMED-GFX-135 honest cube/volume SetData | green (`*_CubeVolume_SetDataContract` on every shard) |
+| target switching / face isolation / cube sampling / RT disposal | green (GFX-134 `S4/S5`, GFX-136 `I1/P5/P6/P7`, `*_RenderTargetCube_Sample`, GFX-134 `P1/P2/P3`) |
+
+Full shards, all failures individually matched against the recorded catalogue:
+
+| Shard | Result | Remaining failures |
+|---|---|---|
+| `ctest` (full) Vulkan | **5913/5920** | `XnbContainerFuzzTest`, flaky `DynamicSoundEffectInstanceTest`, `CnjEffectTest`, `CnjStockEffectTest`, `DoesNotSupportWireFrame`, `Vulkan_DepthBias` (= D9-62), flaky `NetworkSessionTest.FindReturnsEmptyCollection` — all recorded |
+| `ctest -R '^WebGPU'` | **36/37** | `WebGPU_Clear_Readback` (sampler AddressMode Wrap/Mirror), recorded |
+| `ctest -R '^EasyGL'` | **252/255** | `EasyGL_RenderTargetCube_DepthFormat`, `EasyGL_DeviceValidation`, `EasyGL_GraphicsDevice_ReferenceStencil` — the same three; the cube one still fails the same depth-buffer colour comparison `(0,128,0)` vs `(0,255,0)` |
+| `ctest -R '^Bgfx'` | **129/135** | the same six recorded (`Bgfx_RenderTarget_Viewport`, `Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_MipChain`, `Bgfx_RenderTargetCube_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, `Bgfx_GraphicsDevice_ClearOptions_Vulkan`) |
+| `ctest -R 'SdlGpu'` | **71/72** | `SdlGpu_RenderState`, recorded |
+| `ctest -R 'Software'` | **31/31** | none |
+| `ctest -R 'Headless'` | **12/13** | `Headless_Smoke` (= REMED-GFX-133), recorded |
+| `ctest -R 'Ascii'` | **16/16** | none |
+| `ctest -R 'SDL_Renderer_'` | **68/72** | the three recorded plus `SDL_Renderer_Demo2D_SmokeTest` **Not Run** (that directory has `CNA_BUILD_EXAMPLES=OFF`) |
+| `ctest -R 'Dx3'` | **13/15** | `Dx3_SpriteBatch`, `Dx3_No3D`, both recorded |
+| `ctest -R 'D3D9'` | **32/32** | none |
+| `ctest -R 'D3D11'` | **22/22** | none |
+| `cna_test_d3d12_smoke` | **ALL PASS** | none |
+
+`cna_reference_dump` still fails to link under the ASCII backend: the recorded **REMED-GFX-132**
+(`BuildAsciiFontAtlas` references `SpriteFont::SpriteFont` from an already-passed archive), unchanged
+and unrelated — every backend library, every ASCII test and `CnaTests` build.
+
+### Independent findings recorded
+
+* **REMED-GFX-140** — `VulkanGraphicsBackend::RecordCommandBuffer` collects **one render pass per
+  unique `VulkanRTSource` per flush** and replays every queued batch for it inside that pass. Two
+  separate bind cycles of the same target within one flush window therefore collapse into one pass,
+  so the second cycle's shared-layer `DiscardContents` clear (and REMED-GFX-129's explicit `Clear()`)
+  is not observed until something forces a flush. Measured here: `Settle()` exists precisely because
+  eleven preservation checks passed on a discarding backend without it. Fixing it needs per-bind-cycle
+  pass segmentation in the deferred queue — bgfx's REMED-GFX-065 "ordered segment view" equivalent —
+  deliberately not attempted under this finding.
+* **REMED-GFX-141** — EasyGL, Vulkan and SdlGpu each allocate **one** multisample colour attachment
+  shared by all six cube faces, so `PreserveContents` cannot be honoured for a multisampled cube
+  face: check **M3** shows EasyGL returning face B's content when face A is rebound. D3D11, whose
+  multisampled cube resource is a real 6-layer array, does honour it. Making the other three match
+  needs six multisample attachments per cube (memory) or a resolved-to-multisample copy on every
+  bind (explicitly ruled out here).
+* **REMED-GFX-142** — `RenderTargetUsage` says nothing about depth/stencil in CNA, and the three
+  backends with a real load action disagree: Vulkan uses `LOAD_OP_DONT_CARE` for depth on a
+  *preserving* target (undefined depth for a depth-tested draw into it — a `RenderTarget2D` defect
+  first, this cube inherits it), WebGPU's `RenderTarget2D` loads depth while its cube deliberately
+  clears it, and SdlGpu loads depth unless a clear is pending. Colour is unaffected either way
+  (**T1/T2**).
+
+### Runtime routes and active renderers
+
+| Route | Display | Renderer actually active |
+|---|---|---|
+| Software / Headless | none / `SDL_VIDEODRIVER=dummy` | CPU |
+| EasyGL | `:101` | OpenGL ES 3.2 Mesa 25.0.7 |
+| Vulkan | `:101` | Vulkan (llvmpipe, LLVM 19.1.7), validation layer active |
+| Bgfx | `:101` | **OpenGL 2.1** — requested OpenGL, got OpenGL; Bgfx-on-Vulkan untested here |
+| SDL_GPU | `:101` | SDL_gpu (Vulkan driver) |
+| WebGPU | `:101` | wgpu-native v29.0.1.1 |
+| SDL_Renderer / ASCII | `:101` | SDL_Renderer |
+| DX3 | `SDL_VIDEODRIVER=dummy` | free-direct |
+| D3D9 | `:99` | Wine + DXVK (`run-wine-dxvk9.sh`) |
+| D3D11 | `:99` | Wine + DXVK (`run-wine-dxvk.sh`) |
+| D3D12 | `:99` | Wine + vkd3d-proton 3.1.0 (`run-wine-vkd3d.sh`) — smoke route only |
+| Canvas | — | Emscripten, compile/link only |
+
+`:0` was not used for any measurement. No display was started and none was stopped.
+
+### Build directories, ccache and displays
+
+Used, **all pre-existing and in-repository**: `cmake-build-debug` (EasyGL), `cmake-build-vulkan`,
+`cmake-build-bgfx`, `cmake-build-sdlgpu`, `cmake-build-webgpu`, `cmake-build-headless`,
+`cmake-build-software`, `cmake-build-sdlrenderer`, `cmake-build-ascii`, `cmake-build-dx3`,
+`cmake-build-canvas`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`,
+`cmake-build-vulkan-asan`, `cmake-build-sdlgpu-asan`, `cmake-build-sdlgpu-ubsan`,
+`cmake-build-bgfx-asan`, `cmake-build-bgfx-ubsan`, `cmake-build-software-asan`,
+`cmake-build-software-ubsan`. `CNA_USE_CCACHE=ON` in every one, verified from each `CMakeCache.txt`
+before the first build.
+
+**No build directory was created**, none was cleaned, deleted or recreated, and **no clean build was
+required**. Every `cmake -S . -B <dir>` was an incremental reconfigure, needed only to refresh the
+`CONFIGURE_DEPENDS` glob so the new test source produced a target. Builds used `-j4`, dropping to
+`-j3` for full-library rebuilds and `-j2` for the sanitizer variants; the package peaked at 77.8 °C
+and parallelism was held down while another session was building. **No build tree was created under
+`/tmp`, `/var/tmp` or `/dev/shm`** — the session scratchpad held only test-output logs and one
+throwaway registration script. `git clean -xfd` was never run, `git stash` was never used, and the
+four pre-existing user stashes are untouched. The A/B evidence above used
+`git checkout 0123bf53 -- <6 files>` followed by `git checkout HEAD -- <same 6 files>`, exactly the
+narrow-file-restore route.
+
+### Commits
+
+- `0123bf53 test(Task REMED-GFX-136): reproduce cube-target usage loss`
+- `166ba659 fix(Task REMED-GFX-136): propagate RenderTargetCube usage semantics`
+- `docs(remediation): record GFX-136 completion` (this record)
 
 No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
 untouched.
