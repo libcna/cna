@@ -2474,7 +2474,7 @@ existing task.
 | REMED-GFX-122 | EasyGL's stock (non-custom-effect) instanced branch ignores `params.startIndex`, `params.baseVertex` and `params.instanceVb` entirely. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — EASYGL COUNTERPART OF REMED-GFX-118 PLUS A DROPPED PER-INSTANCE STREAM; PINNED BY A COMMITTED CURRENT-BEHAVIOUR TEST.** |
 | REMED-GFX-123 | D3D11 and D3D12 issue `DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0)`, dropping public `startIndex` and `baseVertex` on the instanced path. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — REMED-GFX-020/060'S OFFSET DEFECT IN THE ONE D3D PATH THOSE TASKS DID NOT COVER; D3D11 MEASURED 3/16 UNDER WINE+DXVK, D3D12 INSPECTION-ONLY.** |
 | REMED-GFX-124 | Software render targets are write-only: `SoftwareRenderTargetBackend` implements no `ITextureBackend::GetData` and is not a `SoftwareTextureBackend`, so a target can be neither read back nor sampled. | MEDIUM | P2 | REMED-GFX-119 render-target control | **OPEN — `RenderTarget2D::GetData` SILENTLY LEAVES THE CALLER'S BUFFER UNTOUCHED (AN ASSERTION CAN PASS ON AN EMPTY FRAME) AND SAMPLING THE TARGET DRAWS UNTEXTURED WHITE; CAST IS `dynamic_cast`, SO NOT UB.** |
-| REMED-GFX-125 | The XNA vertex structs build `getVertexDeclarationStatic()` from `sizeof(T)`, which includes the `IVertexType` virtual base's vtable, so the declared `VertexStride` exceeds the GPU layout. | MEDIUM | P2 | REMED-GFX-119 stride coverage | **OPEN — HARMLESS FOR `VertexBuffer::SetData` (IT REPACKS AND UPLOADS ITS OWN STRIDE) BUT WRONG FOR THE EXPLICIT-DECLARATION `DrawUserPrimitives` OVERLOAD, WHICH READS RAW CALLER BYTES AT THE DECLARED STRIDE.** |
+| REMED-GFX-125 | The XNA vertex structs build `getVertexDeclarationStatic()` from `sizeof(T)`, which includes the `IVertexType` virtual base's vtable, so the declared `VertexStride` exceeds the GPU layout. | MEDIUM | P2 | REMED-GFX-119 stride coverage | **DONE 2026-07-27 — ALL SEVEN BUILT-IN DECLARATIONS NOW TAKE THEIR STRIDE FROM `sizeof(stream)` AND EVERY ELEMENT OFFSET FROM `offsetof(stream, member)` OF ONE SHARED PACKED STRUCTURE PER TYPE, SO A STRIDE AND ITS ELEMENT LAYOUT CANNOT DIVERGE; A STRIDE-ONLY PATCH WOULD HAVE BEEN A HALF-FIX, SO EIGHT TYPED EXPLICIT-DECLARATION `DrawUser` OVERLOADS CONVERT AN OBJECT ARRAY INTO THAT STREAM EXACTLY ONCE AND THE RAW `const void*` OVERLOADS KEEP THEIR UNCHANGED CALLER-PACKED CONTRACT; DECLARATION AND 64-BIT RANGE VALIDATION ADDED WHERE A `vertexOffset` OF `0x7FFFFFF0` PREVIOUSLY DUMPED CORE; `VertexBuffer` PROVEN UNAFFECTED; 24/24 ON SEVEN RENDERING BACKENDS, SANITIZERS CLEAN, NO ABI OR PUBLIC-FIELD CHANGE.** |
 
 #### REMED-BUILD-010 detail
 
@@ -11291,5 +11291,349 @@ started.
 - `fdf1f5d0 fix(Task REMED-GFX-119): apply Software non-indexed vertex ranges`
 - `a5634131 test(Task REMED-GFX-119): cover range bounds and parity`
 - `docs(remediation): record GFX-119 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-125 — Built-in vertex object layout versus GPU stream layout (DONE 2026-07-27)
+
+### Classification
+
+**Real defect, MEDIUM, GRAPHICS.** A `VertexDeclaration`'s `VertexStride` is the byte distance
+between consecutive GPU vertices. Every built-in XNA vertex structure derived it from `sizeof(T)`,
+which in CNA is an object-model fact rather than a stream fact: `Color` inherits a polymorphic
+`Graphics::PackedVector::IPackedVectorT<UInt32>` base and the multi-element vertex types inherit a
+polymorphic `IVertexType`, so each object carries a vtable pointer and alignment padding and places
+its members at offsets that have nothing to do with the stream. Meanwhile **every element offset in
+the same declarations was already a packed stream offset** (0/12/16/24/…, exactly XNA's layouts), so
+the declarations described the elements of one layout with the stride of another and matched
+neither.
+
+The finding as inherited from REMED-GFX-119 named only `sizeof(T)` and the `IVertexType` vtable.
+Both parts needed correcting before the fix:
+
+- `VertexPositionColor` does **not** inherit `IVertexType` at all and is not polymorphic
+  (`std::is_polymorphic_v` is false). Its inflation comes entirely from the `Color` member, which is
+  polymorphic in its own right — measured `sizeof(Color)` is **24**, alignment 8. The stale comments
+  in `VertexBuffer.cpp` claiming `sizeof(Color) == 16` and `sizeof(VertexPositionColor) == 32` were
+  both wrong by the time this task ran and have been removed.
+- The inflation is never a bare vtable pointer either: it is the vtable **plus** the alignment
+  padding an 8-byte-aligned polymorphic member forces. `VertexPositionColorTexture` is 56 bytes
+  against a 24-byte stream, a 32-byte gap, not 8.
+
+### Complete built-in vertex type inventory
+
+Object sizes and member offsets were measured on this platform (x86-64, GCC, Itanium ABI), not
+assumed. Declared strides are the values the seven `getVertexDeclarationStatic()` functions
+returned before the fix.
+
+| type | `IVertexType` | polymorphic | `sizeof(T)` | object member offsets | GPU stride | declared (before) | declared (after) |
+|---|---|---|---|---|---|---|---|
+| `VertexPositionColor` | no (inflated by `Color`) | no | 40 | 0, 16 | **16** | 40 | **16** |
+| `VertexPositionTexture` | yes | yes | 32 | 8, 20 | **20** | 32 | **20** |
+| `VertexPositionColorTexture` | yes | yes | 56 | 8, 24, 48 | **24** | 56 | **24** |
+| `VertexPositionNormalTexture` | yes | yes | 40 | 8, 20, 32 | **32** | 40 | **32** |
+| `VertexPositionNormalTextureSkinned` (NOXNA) | yes | yes | 64 | 8, 20, 32, 40, 56 | **52** | 64 | **52** |
+| `VertexPositionNormalTangentTexture` (NOXNA) | yes | yes | 56 | 8, 20, 32, 48 | **48** | 56 | **48** |
+| `VertexPositionNormalTangentTextureSkinned` (NOXNA) | yes | yes | 80 | 8, 20, 32, 48, 56, 72 | **68** | 80 | **68** |
+
+Not one object member offset equals its declared element offset for any of the seven types, and no
+type's object size equals its stream stride. `Vector2`, `Vector3` and `Vector4` are non-polymorphic
+standard-layout types (8/12/16 bytes) and are not part of the problem; `Color` is (24 bytes,
+non-standard-layout, non-trivially-copyable).
+
+Path usage per type, and the final status of each:
+
+| type | used by `VertexBuffer` typed `SetData` | inferred `DrawUser` | explicit-declaration `DrawUser` | final status |
+|---|---|---|---|---|
+| `VertexPositionColor` | yes | yes | yes (new typed overloads) | corrected |
+| `VertexPositionTexture` | yes | yes | yes (new typed overloads) | corrected |
+| `VertexPositionColorTexture` | yes | yes | yes (new typed overloads) | corrected |
+| `VertexPositionNormalTexture` | yes | yes | yes (new typed overloads) | corrected |
+| `VertexPositionNormalTextureSkinned` | yes | no | no | corrected; streamable via typed `SetData` and via a caller-packed raw upload |
+| `VertexPositionNormalTangentTexture` | no | no | no | corrected; **explicit capability boundary** — no object-to-stream conversion exists, so it is streamable only through a caller-packed raw upload |
+| `VertexPositionNormalTangentTextureSkinned` | no | no | no | corrected; same explicit capability boundary |
+
+### Pre-fix reproduction
+
+`tests/Microsoft/Xna/Framework/Graphics/BuiltInVertexLayoutTests.cpp`, committed before the fix.
+Section A is pure layout and runs on every backend; Section B renders a five-slot fixture (one
+triangle per slot, one distinct colour per slot, so the *lit slots* name the vertex range that
+actually reached the rasterizer) through every `DrawUser` path; Section C is the SDL_GPU
+render-target equivalent; Section D pins validation; Section E covers the types with no rendering
+path of their own.
+
+Measured on Software before any correction: **5 passed, 14 failed, 1 dumped core.**
+
+| observation | pre-fix result |
+|---|---|
+| declared stride vs packed element extent, all seven types | 40/32/56/40/64/56/80 against 16/20/24/32/52/48/68 |
+| `VertexPositionColor` objects + own static declaration, non-indexed | rejected: `SoftwareGraphicsBackend::DrawPrimitivesEx: unsupported vertex stride (only 16/20/24/32/52 supported in v1)` |
+| same, indexed, 16- and 32-bit | rejected with the `DrawIndexedPrimitivesEx` form of the same message |
+| `VertexPositionColorTexture` / `Texture` / `NormalTexture` objects + own static declaration | rejected the same way |
+| inferred vs explicit declaration agreement | explicit throws; inferred renders |
+| element reaching past its own declared stride | reached the backend unchecked |
+| empty (default-constructed) declaration | reached the backend, which failed on `stride_in_bytes must be > 0` |
+| negative `vertexOffset` / `numVertices` / `indexOffset` | `vertexOffset` and `indexOffset` threw **nothing at all** |
+| `vertexOffset` `0x7FFFFFF0` at stride 16 | out-of-bounds pointer formed; **process dumped core** |
+| packed custom POD control through the raw `const void*` overload | passed (its contract was already correct) |
+| `VertexBuffer` typed `SetData` + `DrawPrimitives` | passed (it never read the declared stride) |
+
+Software's `unsupported vertex stride` rejection is the benign outcome and is why the defect had
+gone unnoticed: a backend that accepts arbitrary strides reads misaligned attributes instead. Both
+kinds of consequence were reproduced — the rejection on Software, and the out-of-bounds pointer,
+which is backend-independent because it is formed in `GraphicsDevice` before any backend call.
+
+### Object representation versus GPU stream — the architecture actually chosen
+
+A stride-only patch was explicitly rejected. Changing the declared stride to the packed extent
+without anything else would leave the raw `const void*` overloads walking an object array at the
+packed stride, so the second vertex would begin inside the first object's trailing bytes. The four
+candidate architectures were assessed against what this tree can actually support:
+
+- **(A) make the public vertex structs standard-layout/POD.** Achievable only for the types that
+  contain no `Color`, and only by removing `IVertexType` — which would delete
+  `getVertexDeclarationProperty()` from the public API. `VertexPositionColor` and
+  `VertexPositionColorTexture` could not follow, because `Color` is polymorphic through
+  `IPackedVector` and is used across the whole tree. A partial (A) leaves an inconsistent set.
+- **(B) separate `IVertexType` from virtual dispatch.** Same public-API deletion, and it does not
+  help the two `Color`-bearing types at all.
+- **(C) convert built-in vertex values into an explicit GPU-stream representation.** This is what
+  the tree already did in `VertexBuffer`'s five typed `SetData` overloads and `GraphicsDevice`'s
+  four typed inferred `DrawUser` overloads, each with its own private packed struct.
+- **(D)** — not needed.
+
+**(C) was chosen and completed**, because it was already the established convention and the only
+one that covers all seven types without a public API rewrite. What was missing was that the
+convention had never reached the declarations or the explicit-declaration draws, and that each
+packer defined its own private copy of the layout.
+
+New `include/CNA/Internal/Graphics/BuiltInVertexStreams.hpp` holds **one packed structure per
+built-in type — the stream itself** — with `static_assert`s pinning its size and every member
+offset. Each declaration now takes its stride from `sizeof(stream)` and every element offset from
+`offsetof(stream, member)`, so a stride and its element layout cannot diverge; `VertexBuffer`'s five
+typed packers and `GraphicsDevice`'s packers are now aliases of the same structures, and one
+`Pack()` overload per convertible type is the only object-to-stream conversion in the tree.
+`VertexPositionColor::getVertexDeclarationStatic()` moved from its header to its `.cpp` so no public
+XNA header includes a CNA internal one.
+
+### `IVertexType` design result
+
+`IVertexType` declares one pure virtual `getVertexDeclarationProperty()` and a virtual destructor,
+and every implementer returns its own static declaration. XNA's `IVertexType` is a value-type
+interface with no such object cost; C++ cannot reproduce that with normal inheritance. The contract
+does require dynamic dispatch as currently written — the property is virtual and inherited by value
+structures — so the vtable is real and not removable without deleting a public member.
+
+**No change was made to `IVertexType` or to any inheritance relationship.** The vtable is not a
+defect; treating its size as a GPU stride was. Making the object and the stream two separate,
+explicitly related layouts is the smaller and safer repair, and it is the only one that covers the
+`Color`-bearing types.
+
+### Explicit `DrawUser` paths
+
+The raw `const void*` overloads keep their unchanged contract: *the caller already supplied a GPU
+vertex stream at the declared stride.* Eight new typed overloads —
+
+- `DrawUserPrimitives(PrimitiveType, const T*, int, int, const VertexDeclaration&)`
+- `DrawUserIndexedPrimitives(PrimitiveType, const T*, int, int, const std::uint16_t*, int, int, const VertexDeclaration&)`
+- the same with `const std::uint32_t*`
+
+for `T` in `VertexPositionColor`, `VertexPositionTexture`, `VertexPositionColorTexture`,
+`VertexPositionNormalTexture` — convert an object array into that stream and hand the stream to the
+raw overload. Overload resolution alone routes an object array to the typed form; a `const void*`
+or any other pointer still selects the raw form.
+
+The conversion applies exactly once by construction:
+
+- the **vertex offset** is applied in objects, inside the typed wrapper, and the delegated raw call
+  receives `vertexOffset` 0, so it is never re-applied in bytes;
+- the **index offset** is left in indices and applied by the raw overload alone;
+- a **correctly packed custom POD** vertex never enters a typed overload at all, so it cannot be
+  packed twice — pinned by the packed-POD control tests, non-indexed and indexed;
+- `sizeof(T)` is used only to walk the source object array, never as a stride.
+
+The packed stream is written into the existing per-device `userVertexScratch_`, which the delegated
+raw overload does not touch (it uses `userIndexScratch_` for indices), so there is no aliasing
+between the two.
+
+### Validation contract
+
+Added to every explicit-declaration path, evaluated before any source byte is read and before any
+backend call, after the existing `no effect has been applied` and `primitiveCount` checks so no
+existing error ordering changed:
+
+| condition | exception |
+|---|---|
+| declaration with no elements, or a non-positive stride | `System::ArgumentException` |
+| element offset negative, unknown format, or `offset + formatSize > stride` | `System::ArgumentException` |
+| typed object array whose declaration stride is not that type's stream stride | `System::ArgumentException` |
+| negative `vertexOffset`, `numVertices` or `indexOffset` | `System::ArgumentOutOfRangeException` |
+| `(first + count) * elementSize` exceeding `Int32` | `System::ArgumentOutOfRangeException` |
+
+All range arithmetic is 64-bit. Ranges are **rejected, never clamped**, and no runtime reflection
+was introduced: a raw `const void*` source is never inspected or reinterpreted, it is simply
+consumed at the declared stride as it always was.
+
+### `VertexBuffer`
+
+Proven unaffected, in both directions. `VertexBuffer::SetData` repacks every built-in type into its
+GPU stream and uploads *that* stride, so it never read the declared one; the pre-fix run has its
+typed `SetData` + `DrawPrimitives` case passing while every explicit-declaration case fails, and the
+post-fix frame is the same. Its behaviour was preserved exactly — the five typed packers changed
+only from private struct definitions to aliases of the shared streams, byte-identical layouts, and
+`GetData` reinterprets the same shadow with the same structures.
+
+One `VertexBuffer` path did change, for the better: `SetDataRaw` requires the buffer's declared
+stride and the upload stride to agree, so before this correction **none of the seven built-in
+declarations could be used with it at all**. All seven now accept a hand-packed stream at their own
+declared stride and reject one at any other stride — the whole-inventory proof that the declared
+stride *is* the stream stride, and the only streaming route the two tangent types have.
+
+### Source and ABI impact
+
+**Additive; no ABI break.**
+
+- No public field, element order, format, usage index, constructor, operator or inheritance
+  relationship changed.
+- **No type's `sizeof`, alignment, standard-layout or trivially-copyable property changed** — the
+  object layouts are untouched; only the description of the *stream* changed.
+- `VertexPositionColor::getVertexDeclarationStatic()` moved from an inline header definition to its
+  `.cpp`. Same signature, same semantics, same static storage; source-compatible.
+- Twelve new public overloads (eight typed explicit-declaration `DrawUser` forms plus their
+  declarations) and two new private member templates. Purely additive.
+- Behavioural change for callers: a call that passed a built-in vertex array *and* a
+  `VertexDeclaration` now binds to the typed overload and renders correctly instead of producing
+  garbage or a backend rejection. A declaration whose stride is not that type's stream stride is now
+  rejected instead of silently reinterpreted. No existing correct call site changes meaning — every
+  explicit-declaration call site in `tests/` and `examples/` passes a hand-packed POD array and
+  still binds to the raw overload.
+
+### Cross-backend parity
+
+The defect and the fix are entirely in the public layer, so backend production was not expected to
+change and did not.
+
+| backend | new suite | notes |
+|---|---|---|
+| Software | **24/24** | pre-fix 5/14/crash on this backend |
+| EasyGL | **24/24** | |
+| Vulkan | **24/24** | |
+| WebGPU | **24/24** | |
+| bgfx (OpenGL renderer) | **24/24** | |
+| bgfx (Vulkan renderer) | **24/24** | |
+| D3D9 (Wine) | **24/24** | |
+| D3D11 (Wine + DXVK) | **24/24** | |
+| SDL_GPU | **14/14** | render-target oracle only; no backbuffer readback |
+| Headless | **13/13** | layout and validation sections only |
+
+Graphics regression filter (`DrawUser`, draw ranges, indexed, `VertexBuffer`, `VertexDeclaration`,
+vertex types, SpriteBatch, model, effects, instancing, point lists, morph targets, plus the new
+suite): Software 1292/1294, EasyGL 1302/1304, Vulkan 1300/1305, WebGPU 1323/1326, bgfx 1336/1339,
+SDL_GPU 1279/1282, Headless 1251/1252. Full Software `CnaTests` **5682 passed of 5728**.
+
+Every failure in those runs is pre-existing and was A/B-proven against the pre-fix tree, not
+assumed:
+
+- `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly` — identical message
+  (`The VertexDeclaration contains an element outside the uploaded vertex stride`) on both sides;
+  the fuzzer's fixed-seed mutation produces a nonsense declaration and the existing `VertexBuffer`
+  guard rejects it. Independent finding, not this task's.
+- `CnjEffectTest.LoadsRealCnjFixture` and `CnjStockEffectTest.CustomGlslEffectStillWorks` on
+  Vulkan/WebGPU/bgfx/SDL_GPU — `IsEffectValid()` false on both sides; GLSL `ShaderEffect` support,
+  unrelated to vertex layout.
+- `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` and
+  `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` on Software — failing
+  identically on both sides.
+- `TwoProcessLoopbackTest.HostMigration…` — a 30-second networking timeout, unrelated.
+
+Example harnesses: `cna_test_software_indexed_addressing` **41/41** (REMED-GFX-110),
+`cna_test_software_3d_viewport` **25/25** (REMED-GFX-079), `cna_test_software_effects` **5/5**,
+`cna_test_software_smoke` **6/6**. All Software, EasyGL and SDL_GPU example targets compile.
+
+One backend capability boundary was met and honoured rather than worked around: D3D9's `BasicEffect`
+exposes the stride-32 position/normal/texcoord layout **only** with lighting enabled
+(`plan_dx9.md` D9-82b — `lighting=false vertexColor=false texture=true` has no vertex layout at
+all). The `VertexPositionNormalTexture` cases now draw with lighting enabled and a white ambient
+term, which is both the faithful use of a normal-bearing vertex and the portable one. No production
+code was changed for it.
+
+### Sanitizers
+
+`cmake-build-software-ubsan` (`CNA_SANITIZE=undefined`) and `cmake-build-software-asan`
+(`CNA_SANITIZE=address`), over the built-in vertex, `DrawUser`, draw-range, indexed, `VertexBuffer`,
+`VertexDeclaration`, vertex-type, point-list and morph-target suites — multiple consecutive built-in
+vertices, explicit and inferred declarations, indexed and non-indexed, nonzero source offsets,
+too-small stride rejection and the boundary byte ranges:
+
+- UBSan **314 passed / 1 skipped / 0 failed**, zero `runtime error` lines.
+- ASan **314 passed / 1 skipped / 0 failed**, zero `AddressSanitizer` reports.
+
+The one skip is `IndexedDrawDeferredTest.BasicIndexedTriangleStripSupportsBothIndexWidths`,
+Software's documented `TriangleList`-only v1 boundary. No out-of-bounds read, no invalid pointer
+formation, no alignment issue, no vtable or object-lifetime misuse, no integer overflow. The
+pre-fix core dump on the `0x7FFFFFF0` case is the counterpart evidence.
+
+### Performance
+
+Not zero, and not claimed to be. A typed explicit-declaration draw adds one pass over the requested
+source range to write the packed stream — the same work the typed inferred overloads have always
+done — into the existing per-device `userVertexScratch_`, which grows only when a larger range is
+requested, so a steady-state draw performs **no heap allocation**. The raw `const void*` overloads
+are unchanged apart from one declaration walk (elements only, typically two or three) and two 64-bit
+range checks per draw. The two legacy `const void*` overloads keep their existing per-draw
+`std::vector`; that was not touched. No extra frame, wait, synchronization, buffer recreation, or
+backend-specific copy.
+
+### Source, shader and generated artifacts
+
+Production files: `include/CNA/Internal/Graphics/BuiltInVertexStreams.hpp` (new),
+`include/Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp`,
+`include/Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp`,
+`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`,
+`src/Microsoft/Xna/Framework/Graphics/VertexBuffer.cpp` and the seven
+`src/Microsoft/Xna/Framework/Graphics/VertexPosition*.cpp` declaration definitions, plus the one
+test file. No `.sc` shader source, no `bgfx_shaders.hpp`, no HLSL bytecode, no WGSL, no SPIR-V and
+no other generated artifact changed. **All fourteen backend libraries compile incrementally:**
+SDL_Renderer, EasyGL, bgfx, Vulkan, WebGPU, Headless, Software, D3D11, D3D12, Canvas, ASCII, DX3,
+D3D9 and SDL_GPU.
+
+### Build directories, ccache and displays
+
+Build directories used, all pre-existing and in-repository, all incremental:
+`cmake-build-software`, `cmake-build-software-ubsan`, `cmake-build-software-asan`,
+`cmake-build-debug` (EasyGL), `cmake-build-vulkan`, `cmake-build-webgpu`, `cmake-build-bgfx`,
+`cmake-build-sdlgpu`, `cmake-build-headless`, `cmake-build-sdlrenderer`, `cmake-build-ascii`,
+`cmake-build-dx3`, `cmake-build-canvas`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`,
+`cmake-build-d3d12-mingw`.
+
+`CNA_USE_CCACHE=ON` in every one of them and ccache was active throughout. **No new build directory
+was created and none was cleaned, deleted or recreated**; no clean build was required. No build tree
+was created under `/tmp`, `/var/tmp` or `/dev/shm` — the session scratchpad held only small logs,
+two saved patches and one throwaway `sizeof`/`offsetof` probe translation unit. `git clean -xfd` was
+never run, `git stash` was never used, and all four pre-existing user stashes are intact. Every
+build used `-j4`.
+
+Xvfb: the shared `:101` served every Linux backend run and the UBSan and ASan runs, and `:0` served
+the Wine D3D9 and D3D11 runs. **No display was started and none was stopped**; shared `:99` and
+`:101` were left running.
+
+Red-first and A/B comparisons were done by saving the working diff to the session scratchpad and
+restoring the tracked files with `git checkout -- <paths>` / `git checkout HEAD~1 -- <paths>`; the
+repository was never switched to an older commit and no history was rewritten.
+
+### Independent findings
+
+None allocated. The `XnbContainerFuzzTest` model-fixture failure was A/B-proven pre-existing and
+belongs to the XNB container/fuzz area rather than to vertex layout; it is already visible in the
+Software baseline.
+
+### Commits
+
+- `47339344 test(Task REMED-GFX-125): reproduce built-in vertex declaration stride mismatch`
+- `7403c96c fix(Task REMED-GFX-125): separate built-in vertex object and GPU stream layouts`
+- `48c8fe2e test(Task REMED-GFX-125): cover vertex types and DrawUser parity`
+- `docs(remediation): record GFX-125 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
