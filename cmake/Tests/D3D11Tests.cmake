@@ -154,6 +154,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_register_backend_test(NAME D3D11_SpriteBatch_CustomViewport COMMAND ${_d3d11_spritebatch_custom_viewport_cmd}
         TIMEOUT 60 LABELS "D3D11")
 
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
+    # fallback zero-initialized its own scratch buffer, handed it to ITextureBackend::GetData (whose
+    # interface default did nothing) and converted it for the caller regardless, so a backend with no
+    # readback returned a complete, uniformly transparent-black frame that satisfied both "the
+    # destination was overwritten" and any transparent-black content expectation.
+    cna_d3d11_test(cna_test_d3d11_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_texture2d_getdata_contract_cmd cna_test_d3d11_texture2d_getdata_contract)
+    cna_register_backend_test(NAME D3D11_Texture2D_GetDataContract
+        COMMAND ${_d3d11_texture2d_getdata_contract_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
     # REMED-GFX-077 runtime verification for D3D11 lives inside cna_test_d3d11_smoke (Check GFX077):
     # D3D11 has no public RenderTarget2D GPU-readback path (only the back buffer via
     # GetBackBufferData / the backend's staging-copy), so ColorWriteChannels/MultiSampleMask are

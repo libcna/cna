@@ -42,4 +42,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_headless_test(cna_test_headless_trace_diff examples/headless_trace_diff_test.cpp)
     cna_register_backend_test(NAME Headless_TraceDiff COMMAND cna_test_headless_trace_diff
         TIMEOUT 30 LABELS "Headless")
+
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. This backend executes no
+    # rasterization at all, so it is the one that must REJECT render-target colour readback: pre-fix
+    # it answered with the shared layer's own zero-initialized scratch buffer, i.e. a complete,
+    # uniformly transparent-black "rendered" frame it had never rendered.
+    cna_headless_test(cna_test_headless_texture2d_getdata_contract
+                      examples/texture2d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_Texture2D_GetDataContract
+        COMMAND cna_test_headless_texture2d_getdata_contract
+        TIMEOUT 30 LABELS "Headless")
 endif()

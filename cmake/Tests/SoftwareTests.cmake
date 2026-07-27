@@ -128,6 +128,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertarget_readback
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
+    # fallback zero-initialized its own scratch buffer, handed it to ITextureBackend::GetData (whose
+    # interface default did nothing) and converted it for the caller regardless, so a backend with no
+    # readback returned a complete, uniformly transparent-black frame that satisfied both "the
+    # destination was overwritten" and any transparent-black content expectation.
+    cna_software_test(cna_test_software_texture2d_getdata_contract
+                      examples/texture2d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Software_Texture2D_GetDataContract
+        COMMAND cna_test_software_texture2d_getdata_contract
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.

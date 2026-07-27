@@ -1025,5 +1025,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_SpriteBatch_CustomViewport COMMAND cna_test_bgfx_spritebatch_custom_viewport
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
+    # fallback zero-initialized its own scratch buffer, handed it to ITextureBackend::GetData (whose
+    # interface default did nothing) and converted it for the caller regardless, so a backend with no
+    # readback returned a complete, uniformly transparent-black frame that satisfied both "the
+    # destination was overwritten" and any transparent-black content expectation.
+    cna_bgfx_test(cna_test_bgfx_texture2d_getdata_contract
+                  examples/texture2d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Bgfx_Texture2D_GetDataContract COMMAND cna_test_bgfx_texture2d_getdata_contract
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
 endif()

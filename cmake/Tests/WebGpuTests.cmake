@@ -272,4 +272,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_compile_definitions(cna_test_webgpu_colorwritechannels PRIVATE GFX077_MULTISAMPLEMASK_SUPPORTED)
     cna_register_backend_test(NAME WebGPU_ColorWriteChannels COMMAND cna_test_webgpu_colorwritechannels
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
+    # fallback zero-initialized its own scratch buffer, handed it to ITextureBackend::GetData (whose
+    # interface default did nothing) and converted it for the caller regardless, so a backend with no
+    # readback returned a complete, uniformly transparent-black frame that satisfied both "the
+    # destination was overwritten" and any transparent-black content expectation.
+    cna_webgpu_test(cna_test_webgpu_texture2d_getdata_contract
+                    examples/texture2d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME WebGPU_Texture2D_GetDataContract COMMAND cna_test_webgpu_texture2d_getdata_contract
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

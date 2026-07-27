@@ -46,4 +46,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_ascii_test(cna_test_ascii_throwno3d examples/ascii_throwno3d_test.cpp)
     cna_register_backend_test(NAME Ascii_ThrowNo3D COMMAND cna_test_ascii_throwno3d
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. This backend's render targets are
+    # the wrapped SdlGraphicsBackend's own SDL_TEXTUREACCESS_TARGET textures, so it inherits that
+    # backend's readback capability; the check belongs here too because the wrapper is what a game
+    # actually runs against.
+    cna_ascii_test(cna_test_ascii_texture2d_getdata_contract
+                   examples/texture2d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Ascii_Texture2D_GetDataContract COMMAND cna_test_ascii_texture2d_getdata_contract
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

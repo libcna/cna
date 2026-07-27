@@ -33,4 +33,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # dxgi.dll; a permanently-registered, always-crashing CTest would just be noise. Built so a
     # developer/script can still run it by hand for a real, up-to-date reading.
     cna_d3d12_test(cna_diag_d3d12_swapchain examples/d3d12_swapchain_diag.cpp)
+
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. Built but deliberately NOT
+    # registered as a CTest, for exactly the reason cna_diag_d3d12_swapchain above is not: this is a
+    # Game-harness test, so it constructs a window and swap chain, which DX-100's spike already
+    # found crashes under this dev loop's vanilla Wine dxgi.dll. Building it keeps D3D12's readback
+    # implementation compile-verified and runnable by hand on real Windows.
+    cna_d3d12_test(cna_test_d3d12_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
 endif()

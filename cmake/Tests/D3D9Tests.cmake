@@ -256,4 +256,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         cna_register_backend_test(NAME D3D9_SpriteBatch_CustomEffect COMMAND ${_d3d9_sb_customeffect_cmd}
             TIMEOUT 60 LABELS "D3D9" ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
     endif()
+
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
+    # fallback zero-initialized its own scratch buffer, handed it to ITextureBackend::GetData (whose
+    # interface default did nothing) and converted it for the caller regardless, so a backend with no
+    # readback returned a complete, uniformly transparent-black frame that satisfied both "the
+    # destination was overwritten" and any transparent-black content expectation.
+    cna_d3d9_test(cna_test_d3d9_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_texture2d_getdata_contract_cmd cna_test_d3d9_texture2d_getdata_contract)
+    cna_register_backend_test(NAME D3D9_Texture2D_GetDataContract
+        COMMAND ${_d3d9_texture2d_getdata_contract_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 endif()

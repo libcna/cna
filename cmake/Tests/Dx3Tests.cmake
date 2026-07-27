@@ -71,4 +71,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_dx3_test(cna_test_dx3_logical_transform examples/dx3_logical_transform_test.cpp)
     cna_register_backend_test(NAME Dx3_LogicalTransform COMMAND cna_test_dx3_logical_transform
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
+    # reject the request deterministically -- never fabricate one. Pre-fix the shared render-target
+    # fallback zero-initialized its own scratch buffer, handed it to ITextureBackend::GetData (whose
+    # interface default did nothing) and converted it for the caller regardless, so a backend with no
+    # readback returned a complete, uniformly transparent-black frame that satisfied both "the
+    # destination was overwritten" and any transparent-black content expectation.
+    cna_dx3_test(cna_test_dx3_texture2d_getdata_contract
+                 examples/texture2d_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Dx3_Texture2D_GetDataContract COMMAND cna_test_dx3_texture2d_getdata_contract
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 endif()
