@@ -806,10 +806,15 @@ TEST_F(BuiltInVertexLayoutTest, PositionNormalTextureObjectsWithTheirOwnStaticDe
         for (const Vector3& corner : SlotTriangle(layout, slot))
             vertices.emplace_back(corner, Vector3(0.0f, 0.0f, 1.0f), Vector2(0.5f, 0.5f));
 
+    // A normal-bearing vertex belongs to the lit layout: the position/normal/texcoord stream is
+    // the one every backend exposes with lighting on, and D3D9 exposes it only that way. Ambient
+    // alone keeps the lit colour independent of any light direction.
     device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
     BasicEffect effect(device);
     effect.setTextureEnabledProperty(true);
     effect.setTextureProperty(&white);
+    effect.setLightingEnabledProperty(true);
+    effect.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
     effect.Apply();
     device.SetVertexBuffer(nullptr);
     device.Clear(Color::Black);
@@ -820,6 +825,124 @@ TEST_F(BuiltInVertexLayoutTest, PositionNormalTextureObjectsWithTheirOwnStaticDe
     ExpectExactlySlots(
         CaptureBackbuffer(device, layout.width, layout.height), layout, 1, 3,
         "VertexPositionNormalTexture objects + static declaration", false);
+}
+
+// The three remaining multi-element families through the indexed explicit-declaration path, each
+// with a nonzero source vertex offset and a nonzero startIndex. A stride error in any of them
+// lands somewhere other than the requested slot, and the three strides (20, 24, 32) differ, so a
+// single hardcoded stride cannot satisfy all three.
+TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexedRendersEveryTexturedFamily)
+{
+    RequireLayoutRendering();
+    const SlotLayout layout = BackbufferLayout();
+    const std::array<Color, kSlotCount> colors = SlotColors();
+
+    Texture2D white(device, 2, 2);
+    const std::array<Color, 4> whitePixels{
+        Color::White, Color::White, Color::White, Color::White};
+    white.SetData(whitePixels.data(), 4);
+
+    std::vector<VertexPositionTexture> positionTexture;
+    std::vector<VertexPositionColorTexture> positionColorTexture;
+    std::vector<VertexPositionNormalTexture> positionNormalTexture;
+    for (int slot = 0; slot < kSlotCount; ++slot)
+    {
+        for (const Vector3& corner : SlotTriangle(layout, slot))
+        {
+            positionTexture.emplace_back(corner, Vector2(0.5f, 0.5f));
+            positionColorTexture.emplace_back(
+                corner, colors[static_cast<std::size_t>(slot)], Vector2(0.5f, 0.5f));
+            positionNormalTexture.emplace_back(
+                corner, Vector3(0.0f, 0.0f, 1.0f), Vector2(0.5f, 0.5f));
+        }
+    }
+
+    // Rebased at vertex 3 (slot 1); indexOffset 3 skips three decoy indices, so local 3,4,5 name
+    // slot 2. Both offsets are nonzero and carried in different units.
+    const std::array<std::uint16_t, 6> indices{0, 1, 2, 3, 4, 5};
+
+    device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+    BasicEffect effect(device);
+    effect.setTextureEnabledProperty(true);
+    effect.setTextureProperty(&white);
+    device.SetVertexBuffer(nullptr);
+
+    effect.Apply();
+    device.Clear(Color::Black);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, positionTexture.data(), 3, 6, indices.data(), 3, 1,
+        VertexPositionTexture::getVertexDeclarationStatic());
+    ExpectExactlySlots(
+        CaptureBackbuffer(device, layout.width, layout.height), layout, 2, 1,
+        "VertexPositionTexture indexed, stride 20", false);
+
+    effect.VertexColorEnabled = true;
+    effect.Apply();
+    device.Clear(Color::Black);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, positionColorTexture.data(), 3, 6, indices.data(), 3, 1,
+        VertexPositionColorTexture::getVertexDeclarationStatic());
+    ExpectExactlySlots(
+        CaptureBackbuffer(device, layout.width, layout.height), layout, 2, 1,
+        "VertexPositionColorTexture indexed, stride 24", true);
+
+    // The position/normal/texcoord stream is the lit layout on every backend, and D3D9 exposes it
+    // only with lighting enabled; ambient alone keeps the result light-direction independent.
+    effect.VertexColorEnabled = false;
+    effect.setLightingEnabledProperty(true);
+    effect.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+    effect.Apply();
+    device.Clear(Color::Black);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, positionNormalTexture.data(), 3, 6, indices.data(), 3, 1,
+        VertexPositionNormalTexture::getVertexDeclarationStatic());
+    ExpectExactlySlots(
+        CaptureBackbuffer(device, layout.width, layout.height), layout, 2, 1,
+        "VertexPositionNormalTexture indexed, stride 32", false);
+}
+
+// The indexed counterpart of the packed-POD control: the raw overload's contract is that the
+// caller already supplied a stream, and it must still consume one byte-for-byte.
+TEST_F(BuiltInVertexLayoutTest, PackedPodControlMatchesTheObjectArrayResultWhenIndexed)
+{
+    RequireLayoutRendering();
+    const SlotLayout layout = BackbufferLayout();
+    const std::array<Color, kSlotCount> colors = SlotColors();
+
+    std::vector<VertexPositionColor> vertices;
+    std::vector<PackedPositionColor> packed;
+    for (int slot = 0; slot < kSlotCount; ++slot)
+    {
+        for (const Vector3& corner : SlotTriangle(layout, slot))
+        {
+            vertices.emplace_back(corner, colors[static_cast<std::size_t>(slot)]);
+            packed.push_back(Pack(vertices.back()));
+        }
+    }
+    const std::array<std::uint16_t, 6> indices{0, 1, 2, 3, 4, 5};
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    device.SetVertexBuffer(nullptr);
+
+    effect.Apply();
+    device.Clear(Color::Black);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, vertices.data(), 3, 6, indices.data(), 3, 1,
+        VertexPositionColor::getVertexDeclarationStatic());
+    const FrameSnapshot fromObjects = CaptureBackbuffer(device, layout.width, layout.height);
+
+    effect.Apply();
+    device.Clear(Color::Black);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList, static_cast<const void*>(packed.data()), 3, 6,
+        indices.data(), 3, 1, PackedPositionColorDeclaration());
+    const FrameSnapshot fromStream = CaptureBackbuffer(device, layout.width, layout.height);
+
+    ExpectExactlySlots(fromObjects, layout, 2, 1, "indexed object array", true);
+    ExpectExactlySlots(fromStream, layout, 2, 1, "indexed packed POD control", true);
+    EXPECT_EQ(fromObjects.pixels, fromStream.pixels)
+        << "the object array and the equivalent packed stream produced different frames";
 }
 
 // VertexBuffer was never affected -- it repacks through its typed SetData overloads and uploads
@@ -1026,6 +1149,8 @@ TEST_F(BuiltInVertexValidationTest, TypedObjectArrayRejectsAForeignStride)
 // a stream at any other stride is not.
 TEST_F(BuiltInVertexValidationTest, RawUploadMatchesTheBuiltInStaticDeclarationStride)
 {
+    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "Backend explicitly does not support vertex buffers";
     VertexBuffer buffer(
         device, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
     std::array<PackedPositionColor, 3> packed{};
@@ -1034,4 +1159,79 @@ TEST_F(BuiltInVertexValidationTest, RawUploadMatchesTheBuiltInStaticDeclarationS
 
     EXPECT_NO_THROW(buffer.SetDataRaw(packed.data(), 3, 16));
     EXPECT_THROW(buffer.SetDataRaw(packed.data(), 3, 24), System::ArgumentException);
+}
+
+// =========================================================================================
+// Section E — the remaining built-in types, which have no rendering path of their own
+// =========================================================================================
+//
+// VertexPositionNormalTextureSkinned has a typed VertexBuffer::SetData, so its own stream is
+// reachable and round-trippable. VertexPositionNormalTangentTexture and
+// VertexPositionNormalTangentTextureSkinned have neither a typed SetData nor a typed DrawUser
+// overload: they carry no object-to-stream conversion at all, which is an explicit capability
+// boundary rather than an oversight. All three are streamable only through a caller-packed raw
+// upload, and the raw upload path is exactly the one that demands the declared stride and the
+// upload stride agree -- so before this correction none of the seven built-in declarations could
+// be used with it.
+
+// Every built-in type, including the three with no rendering path: a stream packed at the
+// declared stride is accepted through the buffer's own declaration, and one at any other stride
+// is not. This is the whole-inventory proof that the declared stride *is* the stream stride.
+TEST_F(BuiltInVertexValidationTest, EveryBuiltInDeclarationAcceptsARawUploadAtItsOwnStride)
+{
+    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "Backend explicitly does not support vertex buffers";
+    for (const BuiltInLayout& row : BuiltInLayouts())
+    {
+        const int stride = row.declaration->getVertexStrideProperty();
+        ASSERT_EQ(row.gpuStride, stride) << row.name;
+
+        // Three vertices of the exact declared stride, with a distinct byte pattern per vertex so
+        // an accepted upload is genuinely the caller's stream and not a zero-filled placeholder.
+        std::vector<std::uint8_t> stream(static_cast<std::size_t>(stride) * 3);
+        for (std::size_t i = 0; i < stream.size(); ++i)
+            stream[i] = static_cast<std::uint8_t>(i & 0xFF);
+
+        VertexBuffer buffer(device, *row.declaration, 3, BufferUsage::None);
+        EXPECT_NO_THROW(buffer.SetDataRaw(stream.data(), 3, stride))
+            << row.name << ": a stream at the declared stride " << stride << " was refused";
+        EXPECT_THROW(buffer.SetDataRaw(stream.data(), 3, stride + 4), System::ArgumentException)
+            << row.name << ": a stream at a foreign stride was accepted";
+        EXPECT_THROW(buffer.SetDataRaw(stream.data(), 3, stride - 4), System::ArgumentException)
+            << row.name << ": a stream at a foreign stride was accepted";
+    }
+}
+
+// The skinned type's own values, through its typed SetData and back out through GetData. Its
+// stream carries every element family the built-in set uses -- float3, float2, float4 and a
+// packed byte4 -- so a shifted element in the 52-byte layout shows up as a wrong value rather
+// than as a size mismatch.
+TEST_F(BuiltInVertexValidationTest, SkinnedVertexBufferRoundTripsEveryElementFamily)
+{
+    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "Backend explicitly does not support vertex buffers";
+    const std::array<VertexPositionNormalTextureSkinned, 2> source{
+        VertexPositionNormalTextureSkinned(
+            Vector3(1.0f, 2.0f, 3.0f), Vector3(0.0f, 1.0f, 0.0f), Vector2(0.25f, 0.75f),
+            Vector4(0.5f, 0.25f, 0.125f, 0.0625f), std::array<std::uint8_t, 4>{1, 2, 3, 4}),
+        VertexPositionNormalTextureSkinned(
+            Vector3(4.0f, 5.0f, 6.0f), Vector3(1.0f, 0.0f, 0.0f), Vector2(0.5f, 0.125f),
+            Vector4(1.0f, 2.0f, 3.0f, 4.0f), std::array<std::uint8_t, 4>{5, 6, 7, 8})};
+
+    VertexBuffer buffer(
+        device, VertexPositionNormalTextureSkinned::getVertexDeclarationStatic(), 2,
+        BufferUsage::None);
+    buffer.SetData(source.data(), 2);
+
+    std::array<VertexPositionNormalTextureSkinned, 2> readBack{};
+    buffer.GetData(readBack.data(), 2);
+
+    for (std::size_t i = 0; i < source.size(); ++i)
+    {
+        EXPECT_EQ(source[i].Position, readBack[i].Position) << "vertex " << i;
+        EXPECT_EQ(source[i].Normal, readBack[i].Normal) << "vertex " << i;
+        EXPECT_EQ(source[i].TextureCoordinate, readBack[i].TextureCoordinate) << "vertex " << i;
+        EXPECT_EQ(source[i].BlendWeight, readBack[i].BlendWeight) << "vertex " << i;
+        EXPECT_EQ(source[i].BlendIndices, readBack[i].BlendIndices) << "vertex " << i;
+    }
 }
