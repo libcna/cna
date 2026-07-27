@@ -817,11 +817,15 @@ namespace CNA::Internal::Backends::SdlGpu
             RenderStateSnapshot renderState;
         };
 
-        // REMED-GFX-117: the native arguments one indexed draw submits, resolved once from the
-        // public XNA draw parameters and then carried by value on the draw command. All three are
-        // in SDL_GPU's own units: `firstIndex` is an index *element* offset (never a byte offset),
-        // `vertexOffset` is the signed value SDL adds to each decoded index before vertex fetch,
-        // and `indexCount` is the exact topology-derived number of indices the draw consumes.
+        /**
+         * @brief REMED-GFX-117: the native arguments one indexed draw submits.
+         *
+         * Resolved once from the public XNA draw parameters and then carried by value on the draw
+         * command, so a deferred draw keeps its own range. All three are in SDL_GPU's own units:
+         * `firstIndex` is an index *element* offset (never a byte offset), `vertexOffset` is the
+         * signed value SDL adds to each decoded index before vertex fetch, and `indexCount` is the
+         * exact topology-derived number of indices the draw consumes.
+         */
         struct NativeIndexedRange
         {
             Uint32 indexCount = 0;    ///< SDL_DrawGPUIndexedPrimitives `num_indices`
