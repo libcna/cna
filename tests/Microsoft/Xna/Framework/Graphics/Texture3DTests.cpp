@@ -42,6 +42,22 @@ using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 
 // -----------------------------------------------------------------------
+// REMED-GFX-130: does THIS build's backend actually read a volume back?
+//
+// Texture3D::GetData now has exactly two outcomes -- the resource's real content, or a
+// deterministic System::NotSupportedException with the caller's destination untouched. ASCII is the
+// one backend where Texture3D CONSTRUCTS (it keeps IGraphicsBackend::SupportsCapability's own
+// `return true` default) while IGraphicsBackend::CreateTexture3D keeps its nullptr default, so no
+// volume storage exists behind it; every other backend that reaches these tests has real storage
+// (the fixture below skips the ones that report no GraphicsCapability::Texture3D at all).
+// -----------------------------------------------------------------------
+#if defined(CNA_BACKEND_ASCII)
+constexpr bool kVolumeReadbackSupported = false;
+#else
+constexpr bool kVolumeReadbackSupported = true;
+#endif
+
+// -----------------------------------------------------------------------
 // Constructor / properties
 // -----------------------------------------------------------------------
 
@@ -300,11 +316,35 @@ TEST_F(Texture3DTest, GetDataBoxLeftNotLessThanRightThrowsOutOfRange)
     EXPECT_THROW(tex.GetData(0, 2, 0, 2, 2, 0, 1, buf.data(), 0, 4), std::out_of_range);
 }
 
-TEST_F(Texture3DTest, GetDataBoxWithinBoundsDoesNotThrow)
+// REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
+// nothing about what GetData produced -- a backend that read nothing and a backend that read the
+// slice correctly both passed it. It now asserts the real outcome for this backend.
+TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSliceOrRejectsDeterministically)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
-    std::vector<Color> buf(4, Color(0, 0, 0, 0));
-    EXPECT_NO_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
+    const Color uploaded[8] = {
+        Color(11, 111, 21, 191), Color(12, 112, 22, 192),
+        Color(13, 113, 23, 193), Color(14, 114, 24, 194),
+        Color(15, 115, 25, 195), Color(16, 116, 26, 196),
+        Color(17, 117, 27, 197), Color(18, 118, 28, 198),
+    };
+    tex.SetData(uploaded, 8);
+
+    const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
+    std::vector<Color> buf(4, sentinel);
+    if (kVolumeReadbackSupported)
+    {
+        ASSERT_NO_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
+        for (int i = 0; i < 4; ++i)
+            EXPECT_EQ(buf[i].getPackedValueProperty(), uploaded[i].getPackedValueProperty()) << i;
+    }
+    else
+    {
+        EXPECT_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4),
+                     System::NotSupportedException);
+        for (int i = 0; i < 4; ++i)
+            EXPECT_EQ(buf[i].getPackedValueProperty(), sentinel.getPackedValueProperty()) << i;
+    }
 }
 
 // Task 913: see the identical SetData test above for the full rationale.

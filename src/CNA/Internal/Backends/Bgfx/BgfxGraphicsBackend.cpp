@@ -553,10 +553,13 @@ namespace CNA::Internal::Backends::Bgfx
     // blit() doc comment), then bgfx::readTexture() reads that temporary texture directly into the
     // caller's buffer. Confirmed BGFX_CAPS_TEXTURE_BLIT/READ_BACK are both supported in this
     // project's Xvfb/llvmpipe/OpenGL sandbox via a throwaway caps-log check before implementing.
-    void BgfxTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool BgfxTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                          void* data, int dataLength) const
     {
-        if (!bgfx::isValid(handle) || !data || dataLength <= 0 || w <= 0 || h <= 0) return;
+        // REMED-GFX-130: each of these used to be a silent `return`, which the shared layer turned
+        // into a complete transparent-black face instead of a refusal.
+        if (!bgfx::isValid(handle) || !data || dataLength <= 0 || w <= 0 || h <= 0) return false;
+        if (face < 0 || face >= 6 || level < 0 || dataLength < w * h * 4) return false;
 
         const bgfx::TextureHandle readback = bgfx::createTexture2D(
             static_cast<uint16_t>(w), static_cast<uint16_t>(h),
@@ -572,7 +575,7 @@ namespace CNA::Internal::Backends::Bgfx
             std::cerr << "CNA: bgfx TextureCube::GetData readback texture creation failed -- "
                           "BGFX_CAPS_TEXTURE_BLIT/READ_BACK may not be supported on "
                        << bgfx::getRendererName(bgfx::getRendererType()) << "\n";
-            return;
+            return false;
         }
 
         bgfx::blit(0, readback, 0, 0, 0, 0,
@@ -581,9 +584,10 @@ namespace CNA::Internal::Backends::Bgfx
                    static_cast<uint16_t>(w), static_cast<uint16_t>(h), 1);
 
         const uint32_t targetFrame = bgfx::readTexture(readback, data);
-        AdvanceFramesUntil(targetFrame);
+        const bool completed = AdvanceFramesUntil(targetFrame);
 
         bgfx::destroy(readback);
+        return completed;
     }
 
     std::unique_ptr<ITextureCubeBackend> BgfxGraphicsBackend::CreateTextureCube(
@@ -631,11 +635,13 @@ namespace CNA::Internal::Backends::Bgfx
     // itself a 3D texture (sized to the requested w/h/depth region) rather than a plain 2D one,
     // since a 3D source's _depth argument applies to blit regardless of the destination's own
     // dimensionality and this keeps both sides symmetric.
-    void BgfxTexture3DBackend::GetData(int level, int x, int y, int z,
+    bool BgfxTexture3DBackend::GetData(int level, int x, int y, int z,
                                        int w, int h, int depth,
                                        void* data, int dataLength) const
     {
-        if (!bgfx::isValid(handle) || !data || dataLength <= 0 || w <= 0 || h <= 0 || depth <= 0) return;
+        // REMED-GFX-130: see BgfxTextureCubeBackend::GetData -- silent returns fabricated a volume.
+        if (!bgfx::isValid(handle) || !data || dataLength <= 0 || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (level < 0 || dataLength < w * h * depth * 4) return false;
 
         const bgfx::TextureHandle readback = bgfx::createTexture3D(
             static_cast<uint16_t>(w), static_cast<uint16_t>(h), static_cast<uint16_t>(depth),
@@ -648,7 +654,7 @@ namespace CNA::Internal::Backends::Bgfx
             std::cerr << "CNA: bgfx Texture3D::GetData readback texture creation failed -- "
                           "BGFX_CAPS_TEXTURE_BLIT/READ_BACK may not be supported on "
                        << bgfx::getRendererName(bgfx::getRendererType()) << "\n";
-            return;
+            return false;
         }
 
         bgfx::blit(0, readback, 0, 0, 0, 0,
@@ -657,9 +663,10 @@ namespace CNA::Internal::Backends::Bgfx
                    static_cast<uint16_t>(w), static_cast<uint16_t>(h), static_cast<uint16_t>(depth));
 
         const uint32_t targetFrame = bgfx::readTexture(readback, data);
-        AdvanceFramesUntil(targetFrame);
+        const bool completed = AdvanceFramesUntil(targetFrame);
 
         bgfx::destroy(readback);
+        return completed;
     }
 
     std::unique_ptr<ITexture3DBackend> BgfxGraphicsBackend::CreateTexture3D(

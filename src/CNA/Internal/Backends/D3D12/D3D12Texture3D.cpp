@@ -200,10 +200,13 @@ namespace CNA::Internal::Backends::D3D12
         backend_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
     }
 
-    void D3D12Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
-                                        void* data, int /*dataLength*/) const
+    bool D3D12Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                        void* data, int dataLength) const
     {
-        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return;
+        // REMED-GFX-130: each silent `return` here became a complete transparent-black volume once
+        // the shared layer converted its own zeroed scratch buffer regardless.
+        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (data == nullptr || dataLength < w * h * depth * 4) return false;
 
         const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT slicePitch = rowPitch * static_cast<UINT>(h);
@@ -226,7 +229,7 @@ namespace CNA::Internal::Backends::D3D12
         HRESULT hr = backend_->GetDeviceEXT()->CreateCommittedResource(
             &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
-        if (FAILED(hr)) return;
+        if (FAILED(hr)) return false;
 
         D3D12_TEXTURE_COPY_LOCATION dst{};
         dst.pResource = readback.Get();
@@ -263,12 +266,12 @@ namespace CNA::Internal::Backends::D3D12
         tracker.TransitionTo(cmdList, texture_.Get(), priorState); // restore -- this is a read-only readback
 
         hr = cmdList->Close();
-        if (FAILED(hr)) return;
+        if (FAILED(hr)) return false;
         backend_->ExecuteCommandListAndWaitEXT(cmdList);
 
         uint8_t* mapped = nullptr;
         const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(readbackBufferSize)};
-        if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return;
+        if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return false;
 
         uint8_t* out = static_cast<uint8_t*>(data);
         for (int slice = 0; slice < depth; ++slice)
@@ -286,5 +289,6 @@ namespace CNA::Internal::Backends::D3D12
         }
         const D3D12_RANGE writtenRange{0, 0};
         readback->Unmap(0, &writtenRange);
+        return true;
     }
 }

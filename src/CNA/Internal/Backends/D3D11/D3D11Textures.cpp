@@ -135,10 +135,13 @@ namespace CNA::Internal::Backends::D3D11
                                     static_cast<UINT>(w) * 4, static_cast<UINT>(w) * static_cast<UINT>(h) * 4);
     }
 
-    void D3D11TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
-                                          void* data, int /*dataLength*/) const
+    bool D3D11TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                          void* data, int dataLength) const
     {
-        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+        // REMED-GFX-130: each silent `return` here became a complete transparent-black face once
+        // the shared layer converted its own zeroed scratch buffer regardless.
+        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (data == nullptr || dataLength < w * h * 4) return false;
 
         D3D11_TEXTURE2D_DESC desc{};
         texture_->GetDesc(&desc);
@@ -149,13 +152,13 @@ namespace CNA::Internal::Backends::D3D11
         stagingDesc.MiscFlags = 0;
 
         ComPtr<ID3D11Texture2D> staging;
-        if (FAILED(device_->CreateTexture2D(&stagingDesc, nullptr, staging.GetAddressOf()))) return;
+        if (FAILED(device_->CreateTexture2D(&stagingDesc, nullptr, staging.GetAddressOf()))) return false;
         context_->CopyResource(staging.Get(), texture_.Get());
 
         const UINT subresource = D3D11CalcSubresource(static_cast<UINT>(level), static_cast<UINT>(face),
                                                        static_cast<UINT>(mipLevels_));
         D3D11_MAPPED_SUBRESOURCE mapped{};
-        if (FAILED(context_->Map(staging.Get(), subresource, D3D11_MAP_READ, 0, &mapped))) return;
+        if (FAILED(context_->Map(staging.Get(), subresource, D3D11_MAP_READ, 0, &mapped))) return false;
 
         uint8_t* dst = static_cast<uint8_t*>(data);
         for (int row = 0; row < h; ++row)
@@ -167,6 +170,7 @@ namespace CNA::Internal::Backends::D3D11
                        static_cast<std::size_t>(w) * 4);
         }
         context_->Unmap(staging.Get(), subresource);
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -213,10 +217,12 @@ namespace CNA::Internal::Backends::D3D11
                                     static_cast<UINT>(w) * 4, static_cast<UINT>(w) * static_cast<UINT>(h) * 4);
     }
 
-    void D3D11Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
-                                        void* data, int /*dataLength*/) const
+    bool D3D11Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                        void* data, int dataLength) const
     {
-        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return;
+        // REMED-GFX-130: see D3D11TextureCubeBackend::GetData above.
+        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (data == nullptr || dataLength < w * h * depth * 4) return false;
 
         D3D11_TEXTURE3D_DESC desc{};
         texture_->GetDesc(&desc);
@@ -227,11 +233,11 @@ namespace CNA::Internal::Backends::D3D11
         stagingDesc.MiscFlags = 0;
 
         ComPtr<ID3D11Texture3D> staging;
-        if (FAILED(device_->CreateTexture3D(&stagingDesc, nullptr, staging.GetAddressOf()))) return;
+        if (FAILED(device_->CreateTexture3D(&stagingDesc, nullptr, staging.GetAddressOf()))) return false;
         context_->CopyResource(staging.Get(), texture_.Get());
 
         D3D11_MAPPED_SUBRESOURCE mapped{};
-        if (FAILED(context_->Map(staging.Get(), static_cast<UINT>(level), D3D11_MAP_READ, 0, &mapped))) return;
+        if (FAILED(context_->Map(staging.Get(), static_cast<UINT>(level), D3D11_MAP_READ, 0, &mapped))) return false;
 
         uint8_t* dst = static_cast<uint8_t*>(data);
         for (int slice = 0; slice < depth; ++slice)
@@ -249,5 +255,6 @@ namespace CNA::Internal::Backends::D3D11
             }
         }
         context_->Unmap(staging.Get(), static_cast<UINT>(level));
+        return true;
     }
 }

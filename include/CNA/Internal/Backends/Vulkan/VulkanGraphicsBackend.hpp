@@ -538,9 +538,13 @@ namespace CNA::Internal::Backends::Vulkan
         void SetData(int level, int x, int y, int z,
                      int w, int h, int depth,
                      const void* data, int dataLength) override;
-        void GetData(int level, int x, int y, int z,
-                     int w, int h, int depth,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once the staging copy has filled the whole requested box;
+        /// false when this texture has no usable image (torn-down owner/device) or the staging
+        /// buffer could not be mapped, so the shared layer rejects the read instead of converting
+        /// its own zeroed scratch buffer into a fabricated volume.
+        [[nodiscard]] bool GetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   void* data, int dataLength) const override;
 
     private:
         VulkanGraphicsBackend* owner_ = nullptr;
@@ -563,8 +567,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
-        void GetData(int face, int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: same explicit completion contract as VulkanTexture3DBackend::GetData --
+        /// true only once the staging copy has filled the whole requested face rectangle.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /** @brief Returns the Vulkan cube image view for sampling. */
         [[nodiscard]] VkImageView GetImageView()        const { return imageView_; }

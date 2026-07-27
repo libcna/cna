@@ -1367,11 +1367,17 @@ namespace CNA::Internal::Backends::Software
         }
     }
 
-    void SoftwareTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
-                                             void* data, int) const
+    bool SoftwareTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                             void* data, int dataLength) const
     {
+        // REMED-GFX-130: every rejection below used to be a silent `return`, which the shared layer
+        // turned into a complete transparent-black face rather than a refusal.
         if (level != 0 || data == nullptr || face < 0 || face > 5)
-            return;
+            return false;
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > size_ || y + h > size_)
+            return false;
+        if (dataLength < w * h * 4)
+            return false;
         auto* dst = static_cast<std::uint8_t*>(data);
         const std::vector<std::uint8_t>& pixels = faces_[static_cast<std::size_t>(face)];
         const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
@@ -1383,6 +1389,7 @@ namespace CNA::Internal::Backends::Software
                      pixels.begin() + static_cast<std::ptrdiff_t>(srcOffset) + static_cast<std::ptrdiff_t>(rowBytes),
                      dst + static_cast<std::size_t>(row) * rowBytes);
         }
+        return true;
     }
 
     // ---- SoftwareRenderTargetBackend ----

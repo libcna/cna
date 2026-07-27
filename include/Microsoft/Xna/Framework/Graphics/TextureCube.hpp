@@ -108,12 +108,27 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads data from a sub-rectangle of a mip level on the specified cube face.
          *
+         * REMED-GFX-130: every overload above delegates here, so this describes all three. The call
+         * has exactly two outcomes. It either writes the requested region's real content into
+         * @p data starting at @p startIndex, or it throws and leaves @p data byte-for-byte
+         * untouched -- there is no partially written or fabricated result. Elements of @p data
+         * outside `[startIndex, startIndex + width * height)` are never modified, even when the
+         * caller passes an @p elementCount larger than the region.
+         *
          * @param face         The cube map face to read from.
          * @param level        Mip level to read (0 = full size).
          * @param rect         Sub-rectangle to read, or nullptr for the entire level.
          * @param data         Output array to receive the Color data.
          * @param startIndex   First element within @p data to write to.
-         * @param elementCount Number of Color elements to read.
+         * @param elementCount Number of Color elements to read; must be at least the number of
+         *                     texels in the requested region.
+         * @throws System::ObjectDisposedException if this texture has been disposed.
+         * @throws System::NotSupportedException if this graphics backend cannot read the requested
+         *         cube face/mip level back to the CPU (including backends that create no cube-map
+         *         resource at all).
+         * @throws std::invalid_argument if @p data is null.
+         * @throws std::out_of_range if @p face, @p level, @p startIndex, @p elementCount or the
+         *         rectangle is out of range.
          */
         void GetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                      Color* data, int startIndex, int elementCount) const;

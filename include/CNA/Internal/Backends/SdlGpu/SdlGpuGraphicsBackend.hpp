@@ -144,8 +144,12 @@ namespace CNA::Internal::Backends::SdlGpu
 
         void SetData(int level, int x, int y, int z, int w, int h, int depth,
                     const void* data, int dataLength) override;
-        void GetData(int level, int x, int y, int z, int w, int h, int depth,
-                    void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
+        /// box has been copied out of the transfer buffer; false for an empty request. Every other
+        /// failure already throws, and the shared layer converts false into a deterministic
+        /// System::NotSupportedException rather than fabricating a volume.
+        [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   void* data, int dataLength) const override;
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
@@ -351,8 +355,10 @@ namespace CNA::Internal::Backends::SdlGpu
          * segfaulted; see that row's notes in `plan_sdlgpu.md`). Flushes any pending frame first so
          * the read reflects this frame's draws, not stale/uninitialized GPU memory.
          */
-        void GetData(int face, int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
+        /// face rectangle has been copied out of the transfer buffer; false for an empty request.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /** @brief Returns the single-sample, sampleable cube texture. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }
@@ -405,8 +411,10 @@ namespace CNA::Internal::Backends::SdlGpu
 
         void SetData(int face, int level, int x, int y, int w, int h,
                     const void* data, int dataLength) override;
-        void GetData(int face, int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
+        /// face rectangle has been copied out of the transfer buffer; false for an empty request.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /** @brief Returns the underlying `SDL_GPUTexture`. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return texture_; }

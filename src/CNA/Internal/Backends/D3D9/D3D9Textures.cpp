@@ -126,16 +126,19 @@ namespace CNA::Internal::Backends::D3D9
         texture_->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), static_cast<UINT>(level));
     }
 
-    void D3D9TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
-                                         void* data, int /*dataLength*/) const
+    bool D3D9TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                         void* data, int dataLength) const
     {
-        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+        // REMED-GFX-130: each silent `return` here became a complete transparent-black face once
+        // the shared layer converted its own zeroed scratch buffer regardless.
+        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (data == nullptr || dataLength < w * h * 4) return false;
 
         RECT rect{ x, y, x + w, y + h };
         D3DLOCKED_RECT locked{};
         const HRESULT hr = texture_->LockRect(static_cast<D3DCUBEMAP_FACES>(face),
                                               static_cast<UINT>(level), &locked, &rect, D3DLOCK_READONLY);
-        if (FAILED(hr)) return;
+        if (FAILED(hr)) return false;
 
         auto* dst = static_cast<uint8_t*>(data);
         const auto* src = static_cast<const uint8_t*>(locked.pBits);
@@ -146,6 +149,7 @@ namespace CNA::Internal::Backends::D3D9
                         src + static_cast<std::size_t>(row) * locked.Pitch, rowBytes);
         }
         texture_->UnlockRect(static_cast<D3DCUBEMAP_FACES>(face), static_cast<UINT>(level));
+        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -202,10 +206,12 @@ namespace CNA::Internal::Backends::D3D9
         texture_->UnlockBox(static_cast<UINT>(level));
     }
 
-    void D3D9Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
-                                       void* data, int /*dataLength*/) const
+    bool D3D9Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                       void* data, int dataLength) const
     {
-        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return;
+        // REMED-GFX-130: see D3D9TextureCubeBackend::GetData above.
+        if (level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (data == nullptr || dataLength < w * h * depth * 4) return false;
 
         D3DBOX box{};
         box.Left = static_cast<UINT>(x);
@@ -217,7 +223,7 @@ namespace CNA::Internal::Backends::D3D9
 
         D3DLOCKED_BOX locked{};
         const HRESULT hr = texture_->LockBox(static_cast<UINT>(level), &locked, &box, D3DLOCK_READONLY);
-        if (FAILED(hr)) return;
+        if (FAILED(hr)) return false;
 
         auto* dst = static_cast<uint8_t*>(data);
         const auto* src = static_cast<const uint8_t*>(locked.pBits);
@@ -235,5 +241,6 @@ namespace CNA::Internal::Backends::D3D9
             }
         }
         texture_->UnlockBox(static_cast<UINT>(level));
+        return true;
     }
 }

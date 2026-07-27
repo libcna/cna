@@ -5,6 +5,7 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -183,6 +184,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture3D::GetData(int level, int left, int top, int right, int bottom, int front, int back,
                             Color* data, int startIndex, int elementCount) const
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("Texture3D");
         if (!data)
             throw std::invalid_argument("Texture3D::GetData: data must not be null");
         if (elementCount <= 0)
@@ -193,15 +196,40 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture3D::GetData: level must be >= 0");
         if (left < 0 || left >= right || top < 0 || top >= bottom || front < 0 || front >= back)
             throw std::out_of_range("Texture3D::GetData: box position/size is invalid");
-        if (elementCount < (right - left) * (bottom - top) * (back - front))
+
+        const int boxW = right - left;
+        const int boxH = bottom - top;
+        const int boxD = back - front;
+        if (elementCount < boxW * boxH * boxD)
             throw std::out_of_range("Texture3D::GetData: elementCount is less than the number of voxels in the requested region");
         Texture::ValidateGetDataFormat(format_, 4);
 
-        if (!backend_) return;
-        std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);
-        backend_->GetData(level, left, top, front,
-                          right - left, bottom - top, back - front,
-                          rgba.data(), static_cast<int>(rgba.size()));
-        rgbaToColors(rgba, data, startIndex, elementCount);
+        // REMED-GFX-130 -- see TextureCube::GetData for the full reasoning. `rgba` is scratch memory
+        // this layer zero-initializes, so it is never handed to the caller unless the backend
+        // reports it filled the whole box; otherwise the caller's `data` stays byte-for-byte as it
+        // was and the missing capability is raised. A null backend (ASCII keeps
+        // IGraphicsBackend::CreateTexture3D's nullptr default while still reporting
+        // GraphicsCapability::Texture3D through SupportsCapability's own `return true` default) is
+        // the same answer one step earlier: no volume storage exists, so there is nothing to read.
+        if (!backend_)
+        {
+            throw System::NotSupportedException(
+                "Texture3D::GetData: this graphics backend creates no volume texture resource, so "
+                "its content cannot be read back");
+        }
+
+        // Sized to the REQUESTED BOX, not to elementCount -- see TextureCube::GetData's identical
+        // note: a larger elementCount would otherwise return this buffer's untouched tail as content.
+        std::vector<uint8_t> rgba(
+            static_cast<std::size_t>(boxW) * static_cast<std::size_t>(boxH) *
+            static_cast<std::size_t>(boxD) * 4, 0);
+        if (!backend_->GetData(level, left, top, front, boxW, boxH, boxD,
+                               rgba.data(), static_cast<int>(rgba.size())))
+        {
+            throw System::NotSupportedException(
+                "Texture3D::GetData: this graphics backend cannot read a volume texture back to the "
+                "CPU at the requested mip level");
+        }
+        rgbaToColors(rgba, data, startIndex, boxW * boxH * boxD);
     }
 }

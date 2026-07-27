@@ -211,8 +211,12 @@ namespace CNA::Internal::Backends::Bgfx
                      const void* data, int dataLength) override;
         /// Task 914: real GPU readback via a temporary BGFX_TEXTURE_BLIT_DST|BGFX_TEXTURE_READ_BACK
         /// 2D texture (blit the requested face/mip/region into it, then bgfx::readTexture()).
-        void GetData(int face, int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once bgfx has advanced to the frame that completes the
+        /// readback; false when BGFX_CAPS_TEXTURE_BLIT/READ_BACK is unavailable on the selected
+        /// renderer or the frame never arrives, so the shared layer rejects the read instead of
+        /// converting its own zeroed scratch buffer into a fabricated face.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
     };
 
     /// bgfx-backed 3D (volume) texture.
@@ -229,10 +233,11 @@ namespace CNA::Internal::Backends::Bgfx
                      const void* data, int dataLength) override;
         /// Task 914: real GPU readback via a temporary BGFX_TEXTURE_BLIT_DST|BGFX_TEXTURE_READ_BACK
         /// 3D texture sized to the requested region (blit from the requested mip/offset, then
-        /// bgfx::readTexture()).
-        void GetData(int level, int x, int y, int z,
-                     int w, int h, int depth,
-                     void* data, int dataLength) const override;
+        /// bgfx::readTexture()). REMED-GFX-130: same explicit completion contract as
+        /// BgfxTextureCubeBackend::GetData above.
+        [[nodiscard]] bool GetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   void* data, int dataLength) const override;
     };
 
     /// bgfx-backed 2D render target (bgfx framebuffer with color + depth textures).

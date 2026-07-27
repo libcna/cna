@@ -79,29 +79,37 @@ protected:
             cube.SetData(CubeMapFace::NegativeX, negX.data(), 16);
             // REMED-GFX-127 false-positive audit: these two checks used to be `check(true, ...)`
             // -- they asserted nothing at all about what GetData produced, so any behaviour
-            // whatsoever passed them. What the Headless cube/3D backends actually do is measured
-            // and PINNED here instead: SetData is recorded but not stored, and GetData OVERWRITES
-            // the caller's whole destination with zeros. That is the same fabrication REMED-GFX-127
-            // removed from the Texture2D path -- an unwritten resource answered with invented
-            // content rather than an honest refusal -- surviving on the separate
-            // ITextureCubeBackend/ITexture3DBackend interfaces, which that finding did not cover.
-            // The destinations are pre-filled with a NON-ZERO sentinel so "the buffer was zeroed by
-            // GetData" is distinguishable from "the buffer was already zero".
-            std::vector<Color> readPosX(16, Color(0xCD, 0xCD, 0xCD, 0xCD));
-            std::vector<Color> readNegX(16, Color(0xA5, 0xA5, 0xA5, 0xA5));
-            cube.GetData(CubeMapFace::PositiveX, readPosX.data(), 16);
-            cube.GetData(CubeMapFace::NegativeX, readNegX.data(), 16);
-            const auto allTransparentBlack = [](const std::vector<Color>& v) {
-                for (const Color& c : v)
-                    if (c.getRProperty() || c.getGProperty() || c.getBProperty() || c.getAProperty())
-                        return false;
+            // whatsoever passed them. They were then strengthened to PIN what the Headless cube
+            // backend actually did: SetData recorded but not stored, and GetData overwriting the
+            // caller's whole destination with zeros -- the same fabrication REMED-GFX-127 removed
+            // from the Texture2D path, surviving on the separate ITextureCubeBackend interface.
+            //
+            // REMED-GFX-130 has now closed that: this backend stores no pixel data by design, so
+            // its cube readback refuses instead of inventing one. The sentinel pre-fill stays --
+            // it is what proves the rejection leaves the caller's destination byte-for-byte
+            // untouched, which "an exception was thrown" alone would not.
+            const Color sentinelCD(0xCD, 0xCD, 0xCD, 0xCD);
+            const Color sentinelA5(0xA5, 0xA5, 0xA5, 0xA5);
+            std::vector<Color> readPosX(16, sentinelCD);
+            std::vector<Color> readNegX(16, sentinelA5);
+            bool threwPosX = false, threwNegX = false;
+            try { cube.GetData(CubeMapFace::PositiveX, readPosX.data(), 16); }
+            catch (const System::NotSupportedException&) { threwPosX = true; }
+            catch (...) {}
+            try { cube.GetData(CubeMapFace::NegativeX, readNegX.data(), 16); }
+            catch (const System::NotSupportedException&) { threwNegX = true; }
+            catch (...) {}
+            const auto allEqual = [](const std::vector<Color>& v, const Color& c) {
+                for (const Color& got : v)
+                    if (got.getPackedValueProperty() != c.getPackedValueProperty()) return false;
                 return true;
             };
-            check(allTransparentBlack(readPosX) && allTransparentBlack(readNegX),
-                  "TextureCube: GetData() on two independent faces overwrites the caller's whole "
-                  "destination with transparent black -- the SetData() input is NOT stored, and "
-                  "this fabricated result is recorded, not blessed (REMED-GFX-127's sibling on "
-                  "ITextureCubeBackend)");
+            check(threwPosX && threwNegX &&
+                      allEqual(readPosX, sentinelCD) && allEqual(readNegX, sentinelA5),
+                  "TextureCube: GetData() on two independent faces throws a deterministic "
+                  "System::NotSupportedException and leaves BOTH destinations byte-for-byte at "
+                  "their non-zero sentinels -- this backend stores no pixel data, so it refuses "
+                  "rather than fabricating a transparent-black face (REMED-GFX-130)");
         }
 
         // Check B: Texture3D construction is REJECTED on this backend.

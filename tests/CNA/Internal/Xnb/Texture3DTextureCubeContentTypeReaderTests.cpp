@@ -38,6 +38,23 @@ using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
 
+// -----------------------------------------------------------------------
+// REMED-GFX-130: does THIS build's backend actually read a cube face back? See the identical
+// constant (and its full rationale) in tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
+// -----------------------------------------------------------------------
+#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_HEADLESS)
+constexpr bool kCubeLevel0ReadbackSupported = false;
+constexpr bool kCubeMipReadbackSupported    = false;
+#elif defined(CNA_BACKEND_SOFTWARE)
+// SOFTWARE-82 stores level 0 only -- no cube mip storage in v1.
+constexpr bool kCubeLevel0ReadbackSupported = true;
+constexpr bool kCubeMipReadbackSupported    = false;
+#else
+constexpr bool kCubeLevel0ReadbackSupported = true;
+constexpr bool kCubeMipReadbackSupported    = true;
+#endif
+
 namespace
 {
     std::string ReadWholeFile(const std::string& path)
@@ -86,21 +103,52 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     // (a corrupted DXT1 decode would very likely produce an exception or all-zero output, not a
     // plausible non-degenerate image) -- spot-check level 0 (64x64) and the smallest levels (the
     // sub-4x4 DXT1 block-rounding edge cases, 2x2 and 1x1, each still exactly one 8-byte block).
-    std::vector<Color> level0(64 * 64, Color(0, 0, 0, 0));
-    cube.GetData(CubeMapFace::PositiveX, level0.data(), static_cast<int>(level0.size()));
-    bool sawNonUniform = false;
-    for (std::size_t i = 1; i < level0.size(); ++i)
+    //
+    // REMED-GFX-130: the readback half of this test is only meaningful where the backend really
+    // reads a cube face back. It used to be issued unconditionally, and the smallest-level check
+    // was a bare EXPECT_NO_THROW that asserted nothing at all -- a backend answering with the
+    // shared layer's fabricated transparent-black face passed it. Both halves now assert the real
+    // outcome for this backend, and the sentinel proves the rejection path writes nothing.
+    const Color sentinel(0xA5, 0xA5, 0xA5, 0xA5);
+    std::vector<Color> level0(64 * 64, sentinel);
+    Color onePixel = sentinel;
+    if (kCubeLevel0ReadbackSupported)
     {
-        if (level0[i].getPackedValueProperty() != level0[0].getPackedValueProperty())
+        ASSERT_NO_THROW(cube.GetData(CubeMapFace::PositiveX, level0.data(),
+                                     static_cast<int>(level0.size())));
+        bool sawNonUniform = false;
+        for (std::size_t i = 1; i < level0.size(); ++i)
         {
-            sawNonUniform = true;
-            break;
+            if (level0[i].getPackedValueProperty() != level0[0].getPackedValueProperty())
+            {
+                sawNonUniform = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(sawNonUniform) << "level 0 should not decode to a uniformly flat image";
+
+        // The smallest mip level (1x1) is the sub-4x4 DXT1 block-rounding edge case. Software
+        // stores no cube mip levels at all, so only the mip-capable backends assert content here.
+        if (kCubeMipReadbackSupported)
+        {
+            ASSERT_NO_THROW(cube.GetData(CubeMapFace::NegativeZ, 6, nullptr, &onePixel, 0, 1));
+            EXPECT_NE(onePixel.getPackedValueProperty(), sentinel.getPackedValueProperty())
+                << "the 1x1 mip level should decode to a real texel";
+        }
+        else
+        {
+            EXPECT_THROW(cube.GetData(CubeMapFace::NegativeZ, 6, nullptr, &onePixel, 0, 1),
+                         System::NotSupportedException);
+            EXPECT_EQ(onePixel.getPackedValueProperty(), sentinel.getPackedValueProperty());
         }
     }
-    EXPECT_TRUE(sawNonUniform) << "level 0 should not decode to a uniformly flat image";
-
-    Color onePixel(0, 0, 0, 0);
-    EXPECT_NO_THROW(cube.GetData(CubeMapFace::NegativeZ, 6, nullptr, &onePixel, 0, 1));
+    else
+    {
+        EXPECT_THROW(cube.GetData(CubeMapFace::PositiveX, level0.data(),
+                                  static_cast<int>(level0.size())),
+                     System::NotSupportedException);
+        EXPECT_EQ(level0[0].getPackedValueProperty(), sentinel.getPackedValueProperty());
+    }
 }
 
 // REMED-CONTENT-004: Texture3D is a documented, backend-dependent capability -- Headless has no

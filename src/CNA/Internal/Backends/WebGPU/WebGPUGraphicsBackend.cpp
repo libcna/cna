@@ -988,11 +988,13 @@ namespace CNA::Internal::Backends::WebGPU
     // WEBGPU-113: real per-face CPU readback, same staged-copy/row-alignment/async-map technique
     // as WebGPUTextureBackend::GetData() (WEBGPU-51) -- origin.z = face selects the array layer,
     // matching SetData()'s own established convention above. Always RGBA8Unorm, so no BGRA swap.
-    void WebGPUTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool WebGPUTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
+        // REMED-GFX-130: this guard used to be a silent `return`, which the shared layer turned
+        // into a complete transparent-black face instead of a refusal.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
-            return;
+            return false;
         if (face < 0 || face >= 6)
             throw std::out_of_range("CNA WebGPU: TextureCube.GetData: face must be 0..5");
         if (level < 0 || level >= mipLevels_)
@@ -1053,32 +1055,38 @@ namespace CNA::Internal::Backends::WebGPU
             wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        // REMED-GFX-130: this branch used to memset the caller's destination to zero and return as
+        // if the readback had succeeded -- the same fabrication the shared layer was doing, one
+        // level down. Report the failure instead; the caller's buffer is left exactly as it was.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
         {
-            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+            wgpuBufferUnmap(readbackBuffer);
+            wgpuBufferRelease(readbackBuffer);
+            return false;
         }
-        else
+        // Any texel outside the level is not content this texture holds, so the request as a whole
+        // cannot be answered -- refuse rather than pad the gap with zeros.
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
         {
-            for (int row = 0; row < h; ++row)
+            wgpuBufferUnmap(readbackBuffer);
+            wgpuBufferRelease(readbackBuffer);
+            return false;
+        }
+        for (int row = 0; row < h; ++row)
+        {
+            const int sy = y + row;
+            for (int col = 0; col < w; ++col)
             {
-                const int sy = y + row;
-                for (int col = 0; col < w; ++col)
-                {
-                    const int sx = x + col;
-                    std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
-                    if (sx < 0 || sx >= levelSize || sy < 0 || sy >= levelSize)
-                    {
-                        d[0] = d[1] = d[2] = d[3] = 0;
-                        continue;
-                    }
-                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
-                                            static_cast<std::size_t>(sx) * 4;
-                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
-                }
+                const int sx = x + col;
+                std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
+                const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
+                                        static_cast<std::size_t>(sx) * 4;
+                d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
             }
         }
         wgpuBufferUnmap(readbackBuffer);
         wgpuBufferRelease(readbackBuffer);
+        return true;
     }
 
     // WEBGPU-114: see this class's own header doc comment for the full architecture summary.
@@ -1249,11 +1257,12 @@ namespace CNA::Internal::Backends::WebGPU
     // technique as WebGPUTextureCubeBackend::GetData() (WEBGPU-113), plus the on-demand-flush
     // check WebGPURenderTargetBackend::GetData() (WEBGPU-53/54) established for a still-bound
     // render target.
-    void WebGPURenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool WebGPURenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
+        // REMED-GFX-130: as above -- a silent `return` was converted into a fabricated face.
         if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
-            return;
+            return false;
         if (face < 0 || face >= 6)
             throw std::out_of_range("CNA WebGPU: RenderTargetCube.GetData: face must be 0..5");
         if (level != 0)
@@ -1322,33 +1331,31 @@ namespace CNA::Internal::Backends::WebGPU
                              colorFormat_ == WGPUTextureFormat_BGRA8UnormSrgb);
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
-        if (mapped == nullptr || static_cast<std::size_t>(dataLength) < requiredLength)
+        // REMED-GFX-130: this branch used to memset the caller's destination to zero and return as
+        // if the readback had succeeded. Report the failure instead.
+        if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength ||
+            x < 0 || y < 0 || x + w > size_ || y + h > size_)
         {
-            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+            wgpuBufferUnmap(readbackBuffer);
+            wgpuBufferRelease(readbackBuffer);
+            return false;
         }
-        else
+        for (int row = 0; row < h; ++row)
         {
-            for (int row = 0; row < h; ++row)
+            const int sy = y + row;
+            for (int col = 0; col < w; ++col)
             {
-                const int sy = y + row;
-                for (int col = 0; col < w; ++col)
-                {
-                    const int sx = x + col;
-                    std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
-                    if (sx < 0 || sx >= size_ || sy < 0 || sy >= size_)
-                    {
-                        d[0] = d[1] = d[2] = d[3] = 0;
-                        continue;
-                    }
-                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
-                                            static_cast<std::size_t>(sx) * 4;
-                    if (isBgra) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
-                    else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
-                }
+                const int sx = x + col;
+                std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
+                const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
+                                        static_cast<std::size_t>(sx) * 4;
+                if (isBgra) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
+                else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
             }
         }
         wgpuBufferUnmap(readbackBuffer);
         wgpuBufferRelease(readbackBuffer);
+        return true;
     }
 
     // WEBGPU-57/112: a plain WGPUTextureDimension_3D volume texture -- upload/readback only (no
@@ -1421,12 +1428,13 @@ namespace CNA::Internal::Backends::WebGPU
     // (WEBGPU-51), extended to a 3rd (depth) dimension: the WHOLE requested level's volume is
     // copied to a temporary readback buffer (alignedBytesPerRow * levelHeight * levelDepth), then
     // the x/y/z/w/h/depth sub-volume is extracted from the mapped memory on the CPU side.
-    void WebGPUTexture3DBackend::GetData(int level, int x, int y, int z,
+    bool WebGPUTexture3DBackend::GetData(int level, int x, int y, int z,
                                           int w, int h, int depth,
                                           void* data, int dataLength) const
     {
+        // REMED-GFX-130: as above -- a silent `return` was converted into a fabricated volume.
         if (owner_ == nullptr || w <= 0 || h <= 0 || depth <= 0 || data == nullptr)
-            return;
+            return false;
         if (level < 0 || level >= mipLevels_)
             throw std::out_of_range("CNA WebGPU: Texture3D.GetData: level out of range");
 
@@ -1490,38 +1498,37 @@ namespace CNA::Internal::Backends::WebGPU
         auto* out = static_cast<std::uint8_t*>(data);
         const std::size_t requiredLength =
             static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * static_cast<std::size_t>(depth) * 4u;
-        if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
+        // REMED-GFX-130: this branch used to memset the caller's destination to zero and return as
+        // if the readback had succeeded. Report the failure instead; likewise a box that reaches
+        // outside the level is refused rather than padded with zeros.
+        if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength ||
+            x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelDepth)
         {
-            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+            wgpuBufferUnmap(readbackBuffer);
+            wgpuBufferRelease(readbackBuffer);
+            return false;
         }
-        else
+        for (int slice = 0; slice < depth; ++slice)
         {
-            for (int slice = 0; slice < depth; ++slice)
+            const int sz = z + slice;
+            for (int row = 0; row < h; ++row)
             {
-                const int sz = z + slice;
-                for (int row = 0; row < h; ++row)
+                const int sy = y + row;
+                for (int col = 0; col < w; ++col)
                 {
-                    const int sy = y + row;
-                    for (int col = 0; col < w; ++col)
-                    {
-                        const int sx = x + col;
-                        std::uint8_t* d = out + (static_cast<std::size_t>(slice) * w * h +
-                                                 static_cast<std::size_t>(row) * w + col) * 4;
-                        if (sx < 0 || sx >= levelW || sy < 0 || sy >= levelH || sz < 0 || sz >= levelDepth)
-                        {
-                            d[0] = d[1] = d[2] = d[3] = 0;
-                            continue;
-                        }
-                        const std::uint8_t* s = mapped + static_cast<std::size_t>(sz) * sliceBytes +
-                                                static_cast<std::size_t>(sy) * bytesPerRow +
-                                                static_cast<std::size_t>(sx) * 4;
-                        d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
-                    }
+                    const int sx = x + col;
+                    std::uint8_t* d = out + (static_cast<std::size_t>(slice) * w * h +
+                                             static_cast<std::size_t>(row) * w + col) * 4;
+                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sz) * sliceBytes +
+                                            static_cast<std::size_t>(sy) * bytesPerRow +
+                                            static_cast<std::size_t>(sx) * 4;
+                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
                 }
             }
         }
         wgpuBufferUnmap(readbackBuffer);
         wgpuBufferRelease(readbackBuffer);
+        return true;
     }
 
     WebGPURenderTargetBackend::WebGPURenderTargetBackend(WebGPUGraphicsBackend& owner, int width, int height,

@@ -143,6 +143,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Reads data from a sub-volume of the specified mip level.
          *
+         * REMED-GFX-130: both overloads above delegate here, so this describes all three. The call
+         * has exactly two outcomes. It either writes the requested box's real content into @p data
+         * starting at @p startIndex -- slice by slice front to back, each slice row-major with the
+         * top row first -- or it throws and leaves @p data byte-for-byte untouched. There is no
+         * partially written or fabricated result, and elements outside
+         * `[startIndex, startIndex + width * height * depth)` are never modified.
+         *
          * @param level        Mip level to read (0 = full size).
          * @param left         Left boundary of the sub-volume in texels.
          * @param top          Top boundary of the sub-volume in texels.
@@ -152,7 +159,15 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param back         Back boundary (exclusive) in texels.
          * @param data         Output array to receive the Color data.
          * @param startIndex   First element within @p data to write to.
-         * @param elementCount Number of Color elements to read.
+         * @param elementCount Number of Color elements to read; must be at least the number of
+         *                     voxels in the requested box.
+         * @throws System::ObjectDisposedException if this texture has been disposed.
+         * @throws System::NotSupportedException if this graphics backend cannot read the requested
+         *         volume/mip level back to the CPU (including backends that create no volume
+         *         resource at all).
+         * @throws std::invalid_argument if @p data is null.
+         * @throws std::out_of_range if @p level, @p startIndex, @p elementCount or the box is out
+         *         of range.
          */
         void GetData(int level, int left, int top, int right, int bottom, int front, int back,
                      Color* data, int startIndex, int elementCount) const;

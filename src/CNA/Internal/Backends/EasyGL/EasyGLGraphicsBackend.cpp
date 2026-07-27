@@ -177,10 +177,16 @@ namespace CNA::Internal::Backends::EasyGL
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
     }
 
-    void EasyGLTexture3DBackend::GetData(int level, int x, int y, int z,
+    bool EasyGLTexture3DBackend::GetData(int level, int x, int y, int z,
                                           int w, int h, int depth,
-                                          void* data, int /*dataLength*/) const
+                                          void* data, int dataLength) const
     {
+        // REMED-GFX-130: every early-out below used to be impossible to express -- this method
+        // returned void, so the shared layer converted its own zeroed scratch buffer into a
+        // complete transparent-black volume whenever nothing was actually read.
+        if (data == nullptr || level < 0 || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (dataLength < w * h * depth * 4) return false;
+
         // GLES3 does not have glGetTexImage. Use a temporary FBO per Z-slice
         // with glReadPixels to read back the pixel data.
         const int bytesPerPixel = 4; // RGBA8
@@ -191,11 +197,15 @@ namespace CNA::Internal::Backends::EasyGL
         fbo.bind(::easygl::FramebufferTarget::Framebuffer);
         fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
 
+        bool complete = true;
         for (int slice = z; slice < z + depth; ++slice)
         {
             fbo.attach_texture_layer(::easygl::FramebufferTarget::Framebuffer,
                                      ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                                      tex_, level, slice);
+            // A slice whose attachment is not framebuffer-complete reads back nothing at all, so
+            // the requested box would only be partly written -- report that, never half-succeed.
+            if (!fbo.is_complete(::easygl::FramebufferTarget::Framebuffer)) { complete = false; break; }
             ::metagl::glReadPixels(x, y, w, h,
                                    ::metagl::PixelFormat::Rgba,
                                    ::metagl::PixelType::UnsignedByte,
@@ -204,6 +214,7 @@ namespace CNA::Internal::Backends::EasyGL
         }
 
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+        return complete;
     }
 
     void EasyGLTextureCubeBackend::BindGL() const
@@ -222,10 +233,13 @@ namespace CNA::Internal::Backends::EasyGL
                               data);
     }
 
-    void EasyGLTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
-                                            void* data, int /*dataLength*/) const
+    bool EasyGLTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                            void* data, int dataLength) const
     {
-        if (face < 0 || face >= 6) return;
+        // REMED-GFX-130: the face guard used to be a silent `return`, which the shared layer turned
+        // into a complete transparent-black face rather than a refusal.
+        if (face < 0 || face >= 6 || data == nullptr || level < 0 || w <= 0 || h <= 0) return false;
+        if (dataLength < w * h * 4) return false;
 
         ::easygl::Framebuffer fbo;
         fbo.create();
@@ -236,12 +250,17 @@ namespace CNA::Internal::Backends::EasyGL
                               tex_, level);
         fbo.set_read_buffer(::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
 
-        ::metagl::glReadPixels(x, y, w, h,
-                               ::metagl::PixelFormat::Rgba,
-                               ::metagl::PixelType::UnsignedByte,
-                               data);
+        const bool complete = fbo.is_complete(::easygl::FramebufferTarget::Framebuffer);
+        if (complete)
+        {
+            ::metagl::glReadPixels(x, y, w, h,
+                                   ::metagl::PixelFormat::Rgba,
+                                   ::metagl::PixelType::UnsignedByte,
+                                   data);
+        }
 
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+        return complete;
     }
 
     // --- EasyGLEffectBackend ---

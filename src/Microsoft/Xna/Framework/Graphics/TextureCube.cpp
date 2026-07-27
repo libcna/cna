@@ -7,6 +7,7 @@
 #include "System/IO/Stream.hpp"
 #include "System/FormatException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -184,6 +185,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void TextureCube::GetData(CubeMapFace face, int level, const Microsoft::Xna::Framework::Rectangle* rect,
                               Color* data, int startIndex, int elementCount) const
     {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("TextureCube");
         if (!IsValidCubeMapFace(face))
             throw std::out_of_range("TextureCube::GetData: face is not a valid CubeMapFace value");
         if (!data)
@@ -198,17 +201,40 @@ namespace Microsoft::Xna::Framework::Graphics
         const int levelSize = mipDim(size_, level);
         int x = 0, y = 0, w = levelSize, h = levelSize;
         if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
-        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelSize || y + h > levelSize)
             throw std::out_of_range("TextureCube::GetData: rectangle out of texture bounds");
         if (elementCount < w * h)
             throw std::out_of_range("TextureCube::GetData: elementCount is less than the number of pixels in the requested region");
         Texture::ValidateGetDataFormat(format_, 4);
 
-        if (!backend_) return;
-        std::vector<uint8_t> rgba(static_cast<std::size_t>(elementCount) * 4);
-        backend_->GetData(static_cast<int>(face), level, x, y, w, h,
-                          rgba.data(), static_cast<int>(rgba.size()));
-        rgbaToColors(rgba, data, startIndex, elementCount);
+        // REMED-GFX-130 (REMED-GFX-127's contract, applied to ITextureCubeBackend). `rgba` is
+        // scratch memory THIS layer owns and zero-initializes, so converting it unconditionally is
+        // not "leaving the caller's buffer untouched" when the backend has no readback -- it
+        // fabricates a complete transparent-black cube face. Conversion happens only when the
+        // backend reports it wrote the whole region; otherwise the caller's `data` is left
+        // byte-for-byte as it was and the missing capability is raised instead of being answered
+        // with invented content. A backend that was never created at all (SDL_Renderer, ASCII,
+        // Canvas, DX3 keep IGraphicsBackend::CreateTextureCube's nullptr default) is the same
+        // answer reached one step earlier: no storage exists, so there is nothing to return.
+        if (!backend_)
+        {
+            throw System::NotSupportedException(
+                "TextureCube::GetData: this graphics backend creates no cube-map texture resource, "
+                "so a cube face's content cannot be read back");
+        }
+
+        // Sized to the REQUESTED REGION, not to elementCount: the backend fills exactly w*h texels,
+        // so a larger elementCount would otherwise hand the caller this buffer's untouched tail as
+        // if it were content.
+        std::vector<uint8_t> rgba(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
+        if (!backend_->GetData(static_cast<int>(face), level, x, y, w, h,
+                               rgba.data(), static_cast<int>(rgba.size())))
+        {
+            throw System::NotSupportedException(
+                "TextureCube::GetData: this graphics backend cannot read a cube face back to the "
+                "CPU at the requested mip level");
+        }
+        rgbaToColors(rgba, data, startIndex, w * h);
     }
 
     namespace

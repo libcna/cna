@@ -220,8 +220,12 @@ namespace CNA::Internal::Backends::WebGPU
         /// technique as `WebGPUTextureBackend::GetData()` (WEBGPU-51), with `origin.z = face`
         /// selecting the requested array layer (this backend's cube-face convention: 0=+X, 1=-X,
         /// 2=+Y, 3=-Y, 4=+Z, 5=-Z, matching `IRenderTargetCubeBackend`'s own documented mapping).
-        void GetData(int face, int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only when the whole requested face rectangle was written; false
+        /// when the readback buffer could not be mapped or the request reaches outside the level.
+        /// Pre-fix that failure path `memset` the caller's destination to zero and returned as if
+        /// it had succeeded -- the same fabrication the shared layer was doing, one level down.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         /// The single `WGPUTextureViewDimension_Cube` view sampled by `texture_cube<f32>` in
@@ -275,8 +279,12 @@ namespace CNA::Internal::Backends::WebGPU
         /// `WebGPUTextureCubeBackend::GetData()` (WEBGPU-113); flushes this face's own pending
         /// draws first if it is still the currently-bound render target (mirrors
         /// `WebGPURenderTargetBackend::GetData()`'s identical on-demand-flush pattern).
-        void GetData(int face, int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only when the whole requested face rectangle was written; false
+        /// when the readback buffer could not be mapped or the request reaches outside the level.
+        /// Pre-fix that failure path `memset` the caller's destination to zero and returned as if
+        /// it had succeeded -- the same fabrication the shared layer was doing, one level down.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         /// The whole-cube sampling view (all 6 layers) -- IWebGPUCubeSamplable's contract.
@@ -329,9 +337,10 @@ namespace CNA::Internal::Backends::WebGPU
         /// to a temporary readback buffer sized `alignedBytesPerRow * levelHeight * levelDepth`,
         /// then the @p x,@p y,@p z,@p w,@p h,@p depth sub-volume is extracted from the mapped
         /// memory on the CPU side.
-        void GetData(int level, int x, int y, int z,
-                    int w, int h, int depth,
-                    void* data, int dataLength) const override;
+        /// REMED-GFX-130: same explicit completion contract as WebGPUTextureCubeBackend::GetData.
+        [[nodiscard]] bool GetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
 

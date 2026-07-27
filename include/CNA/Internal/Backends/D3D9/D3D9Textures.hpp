@@ -65,8 +65,11 @@ namespace CNA::Internal::Backends::D3D9
 
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
-        void GetData(int face, int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once the whole requested face rectangle has been copied out of
+        /// the locked surface; false for an out-of-range face/level or a failed LockRect, so the
+        /// shared layer rejects the read instead of fabricating a transparent-black face.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const { return size_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
@@ -90,8 +93,10 @@ namespace CNA::Internal::Backends::D3D9
 
         void SetData(int level, int x, int y, int z, int w, int h, int depth,
                      const void* data, int dataLength) override;
-        void GetData(int level, int x, int y, int z, int w, int h, int depth,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: same explicit completion contract as D3D9TextureCubeBackend::GetData,
+        /// applied to LockBox's row pitch and slice pitch.
+        [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }

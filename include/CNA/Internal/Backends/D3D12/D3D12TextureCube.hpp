@@ -43,8 +43,12 @@ namespace CNA::Internal::Backends::D3D12
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
 
-        void GetData(int face, int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once the READBACK-heap copy has completed and the whole
+        /// requested face rectangle has been unpacked from it; false for an out-of-range
+        /// face/level or a failed resource creation/command-list close/Map, so the shared layer
+        /// rejects the read instead of fabricating a transparent-black face.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const { return size_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }

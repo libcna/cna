@@ -307,8 +307,9 @@ namespace CNA::Internal::Backends::Headless
     {
         resourceId_ = state_->registry.Register("TextureCube", state_->CurrentDebugLabel());
         state_->stats.textureCubesCreated++;
-        for (auto& face : facePixels_)
-            face.assign(static_cast<std::size_t>(size) * static_cast<std::size_t>(size) * 4u, 0u);
+        // REMED-GFX-130: the six zero-filled face buffers this constructor used to allocate were
+        // never written by SetData and existed only to be handed back by GetData, i.e. they were
+        // the fabrication itself. GetData now refuses instead, so the storage has no purpose.
         state_->RecordTrace("CreateTextureCube", "size=" + std::to_string(size));
     }
 
@@ -329,13 +330,6 @@ namespace CNA::Internal::Backends::Headless
         state_->RecordTrace("TextureCube::SetData", "face=" + std::to_string(face));
     }
 
-    void HeadlessTextureCubeBackend::GetData(int face, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
-                                         void* data, int dataLength) const
-    {
-        if (data == nullptr || dataLength <= 0) return;
-        std::fill_n(static_cast<std::uint8_t*>(data), dataLength, std::uint8_t{0});
-    }
-
     // ---- HeadlessTexture3DBackend ----
 
     HeadlessTexture3DBackend::HeadlessTexture3DBackend(std::shared_ptr<HeadlessSharedState> state, int w, int h, int depth,
@@ -345,8 +339,8 @@ namespace CNA::Internal::Backends::Headless
     {
         resourceId_ = state_->registry.Register("Texture3D", state_->CurrentDebugLabel());
         state_->stats.textures3DCreated++;
-        voxels_.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
-                       static_cast<std::size_t>(depth) * 4u, 0u);
+        // REMED-GFX-130: same as the cube backend above -- the zero-filled voxel buffer was never
+        // written by SetData and existed only for GetData to return, so it is gone with it.
         state_->RecordTrace("CreateTexture3D", "size=" + std::to_string(w) + "x" + std::to_string(h) +
                             "x" + std::to_string(depth));
     }
@@ -364,12 +358,6 @@ namespace CNA::Internal::Backends::Headless
                "HeadlessTexture3DBackend::SetData: negative sub-volume");
         Require(state_, dataLength >= 0, "HeadlessTexture3DBackend::SetData: negative dataLength");
         state_->RecordTrace("Texture3D::SetData", "");
-    }
-
-    void HeadlessTexture3DBackend::GetData(int, int, int, int, int, int, int, void* data, int dataLength) const
-    {
-        if (data == nullptr || dataLength <= 0) return;
-        std::fill_n(static_cast<std::uint8_t*>(data), dataLength, std::uint8_t{0});
     }
 
     // ---- HeadlessEffectBackend ----

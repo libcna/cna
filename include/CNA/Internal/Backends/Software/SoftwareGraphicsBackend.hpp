@@ -210,8 +210,20 @@ namespace CNA::Internal::Backends::Software
 
         void SetData(int face, int level, int x, int y, int w, int h,
                     const void* data, int dataLength) override;
-        void GetData(int face, int level, int x, int y, int w, int h,
-                    void* data, int dataLength) const override;
+        /**
+         * @brief Reads one face's stored RGBA8 sub-rectangle back from this backend's CPU shadow.
+         *
+         * REMED-GFX-130. `faces_` IS this resource's authoritative content here -- SetData writes
+         * straight into it and the rasterizer's cube sampler reads straight out of it -- so mip 0
+         * returns exact data. Mip levels above 0 are not stored at all (see this class's own header
+         * comment), and reporting false for them is the point of the finding: the shared layer used
+         * to convert its own zeroed scratch buffer into a complete transparent-black face instead.
+         *
+         * @return True when the whole requested region was copied out of the shadow; false for an
+         *         unstored mip level, an out-of-range face or an out-of-bounds rectangle.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSize() const { return size_; }
         /// Real RGBA8 pixel storage for one of the 6 faces (CubeMapFace ordinal 0-5), size*size*4

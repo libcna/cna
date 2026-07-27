@@ -30,8 +30,10 @@ namespace CNA::Internal::Backends::D3D12
 
         void SetData(int level, int x, int y, int z, int w, int h, int depth,
                      const void* data, int dataLength) override;
-        void GetData(int level, int x, int y, int z, int w, int h, int depth,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: same explicit completion contract as D3D12TextureCubeBackend::GetData,
+        /// applied to the placed footprint's RowPitch and slice pitch.
+        [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   void* data, int dataLength) const override;
 
         [[nodiscard]] int GetWidthEXT() const { return width_; }
         [[nodiscard]] int GetHeightEXT() const { return height_; }

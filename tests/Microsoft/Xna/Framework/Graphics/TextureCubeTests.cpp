@@ -49,6 +49,27 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 
 // -----------------------------------------------------------------------
+// REMED-GFX-130: does THIS build's backend actually read a cube face back?
+//
+// TextureCube::GetData now has exactly two outcomes -- the resource's real content, or a
+// deterministic System::NotSupportedException with the caller's destination untouched. Before that
+// finding the shared layer converted its own zero-initialized scratch buffer for the caller
+// regardless, so "GetData did not throw" and "GetData produced transparent black" were satisfied by
+// a backend that had read nothing at all. The tests below therefore assert the real outcome for
+// this backend rather than merely that the call returned.
+//
+// SDL_Renderer, ASCII, Canvas and DX3 keep IGraphicsBackend::CreateTextureCube's nullptr default
+// (no cube resource exists at all); Headless stores no pixel data by design. Every other backend
+// reads level 0 back exactly -- Software only at level 0, since it stores no cube mip levels.
+// -----------------------------------------------------------------------
+#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_HEADLESS)
+constexpr bool kCubeLevel0ReadbackSupported = false;
+#else
+constexpr bool kCubeLevel0ReadbackSupported = true;
+#endif
+
+// -----------------------------------------------------------------------
 // Constructor / properties
 // -----------------------------------------------------------------------
 
@@ -267,12 +288,34 @@ TEST_F(TextureCubeTest, GetDataRectOutOfBoundsThrowsOutOfRange)
     EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 4), std::out_of_range);
 }
 
-TEST_F(TextureCubeTest, GetDataRectWithinBoundsDoesNotThrow)
+// REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
+// nothing about what GetData produced -- a backend that read nothing and a backend that read the
+// texel correctly both passed it. It now asserts the real outcome: the uploaded texel on a backend
+// with cube readback, and a deterministic rejection that leaves the destination untouched on one
+// without.
+TEST_F(TextureCubeTest, GetDataRectWithinBoundsReturnsUploadedTexelOrRejectsDeterministically)
 {
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
-    Color buf[1] = { Color(0, 0, 0, 0) };
+    const Color uploaded[4] = {
+        Color(17, 200, 33, 199), Color(18, 201, 34, 198),
+        Color(19, 202, 35, 197), Color(20, 203, 36, 196),
+    };
+    tex.SetData(CubeMapFace::PositiveX, uploaded, 4);
+
+    const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
+    Color buf[1] = { sentinel };
     const Rectangle rect(0, 0, 1, 1);
-    EXPECT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1));
+    if (kCubeLevel0ReadbackSupported)
+    {
+        ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1));
+        EXPECT_EQ(buf[0].getPackedValueProperty(), uploaded[0].getPackedValueProperty());
+    }
+    else
+    {
+        EXPECT_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1),
+                     System::NotSupportedException);
+        EXPECT_EQ(buf[0].getPackedValueProperty(), sentinel.getPackedValueProperty());
+    }
 }
 
 // Task 913: see the identical SetData test above for the full rationale.
@@ -608,18 +651,26 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
         // elementCount must match width*height, same contract as SetData's identical overload —
         // it is not an arbitrary partial-read count), so read all 4x4=16 texels and just check
         // the first (every texel is the same solid colour by construction).
-        std::vector<Color> got(16, Color(0, 0, 0, 0));
-        tex.GetData(faces[i], got.data(), 16);
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_BGFX)
-        // Vulkan's own GetData is real as of Task 865; Bgfx's real readback path landed in
-        // Task 914 (this exclusion previously also covered Bgfx, before that fix -- Task 458
-        // found it stale and confirmed real GetData data on Bgfx here). SDL_Renderer excludes
-        // this assertion: TextureCube construction succeeds silently with a null backend there
-        // (BLOCKED, Task 725), so GetData leaves the buffer untouched at its zero-initialized
-        // default rather than returning real data.
-        EXPECT_EQ(got[0].getRProperty(), expected[i].getRProperty()) << "face " << i;
-        EXPECT_EQ(got[0].getGProperty(), expected[i].getGProperty()) << "face " << i;
-        EXPECT_EQ(got[0].getBProperty(), expected[i].getBProperty()) << "face " << i;
-#endif
+        // REMED-GFX-130 false-positive audit: the readback used to be issued unconditionally and
+        // only asserted on three named backends, so every other backend ran a call whose result was
+        // never checked -- including the ones that answered with a fabricated transparent-black
+        // face. Both halves are now asserted: the decoded colour where the backend really reads a
+        // cube face back, and the deterministic rejection (destination untouched) where it cannot.
+        const Color sentinel(0xA5, 0xA5, 0xA5, 0xA5);
+        std::vector<Color> got(16, sentinel);
+        if (kCubeLevel0ReadbackSupported)
+        {
+            ASSERT_NO_THROW(tex.GetData(faces[i], got.data(), 16));
+            EXPECT_EQ(got[0].getRProperty(), expected[i].getRProperty()) << "face " << i;
+            EXPECT_EQ(got[0].getGProperty(), expected[i].getGProperty()) << "face " << i;
+            EXPECT_EQ(got[0].getBProperty(), expected[i].getBProperty()) << "face " << i;
+        }
+        else
+        {
+            EXPECT_THROW(tex.GetData(faces[i], got.data(), 16), System::NotSupportedException)
+                << "face " << i;
+            EXPECT_EQ(got[0].getPackedValueProperty(), sentinel.getPackedValueProperty())
+                << "face " << i;
+        }
     }
 }

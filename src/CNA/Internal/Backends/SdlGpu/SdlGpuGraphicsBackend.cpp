@@ -5035,11 +5035,13 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
     }
 
-    void SdlGpuTexture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+    bool SdlGpuTexture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
                                          void* data, int dataLength) const
     {
-        if (w <= 0 || h <= 0 || depth <= 0)
-            return;
+        // REMED-GFX-130: a silent `return` here was converted by the shared layer into a complete
+        // transparent-black volume rather than a refusal.
+        if (w <= 0 || h <= 0 || depth <= 0 || data == nullptr || level < 0)
+            return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * static_cast<Uint32>(depth) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: Texture3D::GetData: dataLength too small for the requested region");
@@ -5094,6 +5096,7 @@ namespace CNA::Internal::Backends::SdlGpu
         std::memcpy(data, mapped, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return true;
     }
 
     // ---- SdlGpuTextureCubeBackend (Phase SDLGPU-9, SDLGPU-51) ----
@@ -5197,11 +5200,12 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
     }
 
-    void SdlGpuTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool SdlGpuTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
-        if (w <= 0 || h <= 0)
-            return;
+        // REMED-GFX-130: see SdlGpuTexture3DBackend::GetData above.
+        if (w <= 0 || h <= 0 || data == nullptr || level < 0 || face < 0 || face >= 6)
+            return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: TextureCube::GetData: dataLength too small for the requested region");
@@ -5256,6 +5260,7 @@ namespace CNA::Internal::Backends::SdlGpu
         std::memcpy(data, mapped, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return true;
     }
 
     // ---- SdlGpuRenderTargetBackend (Phase SDLGPU-8, SDLGPU-35) ----
@@ -5592,11 +5597,12 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    void SdlGpuRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool SdlGpuRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                                 void* data, int dataLength) const
     {
-        if (w <= 0 || h <= 0)
-            return;
+        // REMED-GFX-130: see SdlGpuTexture3DBackend::GetData above.
+        if (w <= 0 || h <= 0 || data == nullptr || level < 0 || face < 0 || face >= 6)
+            return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: RenderTargetCube::GetData: dataLength too small for the requested region");
@@ -5655,6 +5661,7 @@ namespace CNA::Internal::Backends::SdlGpu
         std::memcpy(data, mapped, sizeBytes);
         SDL_UnmapGPUTransferBuffer(device, transferBuffer);
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return true;
     }
 
     // ---- SdlGpuVertexBufferBackend ----

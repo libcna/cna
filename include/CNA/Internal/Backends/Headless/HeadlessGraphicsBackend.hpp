@@ -327,8 +327,27 @@ namespace CNA::Internal::Backends::Headless
 
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
-        void GetData(int face, int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        /**
+         * @brief Reports that this backend cannot read a cube face back.
+         *
+         * REMED-GFX-130. Stated explicitly rather than inherited, for the same reviewed reason
+         * `HeadlessRenderTargetBackend::GetData` states it: this backend stores no pixel data at
+         * all -- `SetData` above validates its arguments and records a trace entry, it does not
+         * write anything -- so a cube face's content does not exist here in any form it could
+         * return. Pre-fix this method did the opposite and actively `std::fill_n`'d the caller's
+         * whole destination with zeros, which is indistinguishable from a real readback of a cube
+         * that genuinely holds transparent black. The six zero-filled `facePixels_` buffers that
+         * backed that answer are gone with it: diagnostic storage no successful `SetData` ever
+         * wrote must never be offered as content.
+         *
+         * @return Always false.
+         */
+        [[nodiscard]] bool GetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/,
+                                   int /*w*/, int /*h*/,
+                                   void* /*data*/, int /*dataLength*/) const override
+        {
+            return false;
+        }
 
         [[nodiscard]] int Size() const { return size_; }
 
@@ -338,7 +357,6 @@ namespace CNA::Internal::Backends::Headless
         int size_ = 0;
         bool mipMap_ = false;
         int surfaceFormat_ = 0;
-        std::array<std::vector<std::uint8_t>, 6> facePixels_;
     };
 
     class HeadlessTexture3DBackend final : public ITexture3DBackend
@@ -350,8 +368,23 @@ namespace CNA::Internal::Backends::Headless
 
         void SetData(int level, int x, int y, int z, int w, int h, int depth,
                      const void* data, int dataLength) override;
-        void GetData(int level, int x, int y, int z, int w, int h, int depth,
-                     void* data, int dataLength) const override;
+        /**
+         * @brief Reports that this backend cannot read a volume texture back.
+         *
+         * REMED-GFX-130, same reviewed reasoning as `HeadlessTextureCubeBackend::GetData`. This
+         * class is additionally unreachable through the public API: REMED-CONTENT-004 made
+         * `Texture3D`'s constructor fail on a device that reports no
+         * `GraphicsCapability::Texture3D`, which this backend does not. It states its refusal
+         * anyway so the answer does not depend on that one gate staying in place.
+         *
+         * @return Always false.
+         */
+        [[nodiscard]] bool GetData(int /*level*/, int /*x*/, int /*y*/, int /*z*/,
+                                   int /*w*/, int /*h*/, int /*depth*/,
+                                   void* /*data*/, int /*dataLength*/) const override
+        {
+            return false;
+        }
 
         [[nodiscard]] int Width() const { return width_; }
         [[nodiscard]] int Height() const { return height_; }
@@ -363,7 +396,6 @@ namespace CNA::Internal::Backends::Headless
         int width_ = 0, height_ = 0, depth_ = 0;
         bool mipMap_ = false;
         int surfaceFormat_ = 0;
-        std::vector<std::uint8_t> voxels_;
     };
 
     class HeadlessEffectBackend final : public IEffectBackend

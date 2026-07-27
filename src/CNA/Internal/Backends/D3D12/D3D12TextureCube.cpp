@@ -174,10 +174,12 @@ namespace CNA::Internal::Backends::D3D12
         backend_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
     }
 
-    void D3D12TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
-                                          void* data, int /*dataLength*/) const
+    bool D3D12TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                          void* data, int dataLength) const
     {
-        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+        // REMED-GFX-130: see D3D12Texture3DBackend::GetData -- silent returns fabricated a face.
+        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return false;
+        if (data == nullptr || dataLength < w * h * 4) return false;
 
         const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
         const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
@@ -199,7 +201,7 @@ namespace CNA::Internal::Backends::D3D12
         HRESULT hr = backend_->GetDeviceEXT()->CreateCommittedResource(
             &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
-        if (FAILED(hr)) return;
+        if (FAILED(hr)) return false;
 
         D3D12_TEXTURE_COPY_LOCATION dst{};
         dst.pResource = readback.Get();
@@ -240,12 +242,12 @@ namespace CNA::Internal::Backends::D3D12
         tracker.TransitionTo(cmdList, texture_.Get(), priorState); // restore -- this is a read-only readback
 
         hr = cmdList->Close();
-        if (FAILED(hr)) return;
+        if (FAILED(hr)) return false;
         backend_->ExecuteCommandListAndWaitEXT(cmdList);
 
         uint8_t* mapped = nullptr;
         const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(readbackBufferSize)};
-        if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return;
+        if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return false;
 
         uint8_t* out = static_cast<uint8_t*>(data);
         for (int row = 0; row < h; ++row)
@@ -256,5 +258,6 @@ namespace CNA::Internal::Backends::D3D12
         }
         const D3D12_RANGE writtenRange{0, 0};
         readback->Unmap(0, &writtenRange);
+        return true;
     }
 }

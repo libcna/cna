@@ -147,9 +147,13 @@ namespace CNA::Internal::Backends::EasyGL
                      int w, int h, int depth,
                      const void* data, int dataLength) override;
 
-        void GetData(int level, int x, int y, int z,
-                     int w, int h, int depth,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once every requested Z slice has been read back through the
+        /// temporary FBO below; false when the request is out of range or an FBO attachment for
+        /// some slice is not framebuffer-complete, so the shared layer rejects the read instead of
+        /// converting its own zeroed scratch buffer into a fabricated volume.
+        [[nodiscard]] bool GetData(int level, int x, int y, int z,
+                                   int w, int h, int depth,
+                                   void* data, int dataLength) const override;
 
         /// Binds this volume texture to the currently active GL texture unit.
         void BindGL() const override;
@@ -171,8 +175,11 @@ namespace CNA::Internal::Backends::EasyGL
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
 
-        void GetData(int face, int level, int x, int y, int w, int h,
-                     void* data, int dataLength) const override;
+        /// REMED-GFX-130: true only once the requested face/mip rectangle has been read back
+        /// through the temporary FBO below; false for an out-of-range face or an incomplete
+        /// framebuffer, so the shared layer rejects the read instead of fabricating a face.
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /// Binds this cube map to the currently active GL texture unit.
         void BindGL() const override;

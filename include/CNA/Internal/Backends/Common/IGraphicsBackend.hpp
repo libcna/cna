@@ -189,9 +189,41 @@ namespace CNA::Internal::Backends
         /** @brief Uploads raw byte data to a sub-rectangle of a single cube face. */
         virtual void SetData(int face, int level, int x, int y, int w, int h,
                              const void* data, int dataLength) = 0;
-        /** @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face. No-op by default. */
-        virtual void GetData(int face, int level, int x, int y, int w, int h,
-                             void* data, int dataLength) const {}
+        /**
+         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face.
+         *
+         * REMED-GFX-130, extending REMED-GFX-127's contract to this interface. Returns **true only
+         * when the complete requested region was written into @p data**, and false when this
+         * backend performed no readback at all. There is no third state: an implementation that
+         * fails part-way through, or that cannot complete the transfer, must return false rather
+         * than reporting a partially written buffer as success.
+         *
+         * The default is `false` -- "this backend has no cube-map readback" -- because a silent
+         * no-op default was worse than useless here. `TextureCube::GetData` hands this method a
+         * scratch buffer it zero-initialized itself and converts the result for the caller, so a
+         * no-op default did not leave the caller's destination untouched: it fabricated a complete,
+         * uniformly transparent-black cube face that passed both "did GetData write anything?" and
+         * any expectation whose content happened to be transparent black. The shared layer now
+         * converts only on `true` and raises `System::NotSupportedException` on `false`, so the one
+         * thing an unimplemented backend can never do is answer with content it never read.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; exactly w * h * 4.
+         * @return True if the whole region was written; false if this backend read nothing back.
+         */
+        [[nodiscard]] virtual bool GetData(int face, int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+        {
+            (void)face; (void)level; (void)x; (void)y; (void)w; (void)h;
+            (void)data; (void)dataLength;
+            return false;
+        }
         /// Binds this cube map to the currently active GL texture unit. No-op on non-GL backends.
         virtual void BindGL() const {}
     };
@@ -205,10 +237,33 @@ namespace CNA::Internal::Backends
         virtual void SetData(int level, int x, int y, int z,
                              int w, int h, int depth,
                              const void* data, int dataLength) = 0;
-        /** @brief Reads back raw RGBA8 pixels from a sub-volume of the given mip level. No-op by default. */
-        virtual void GetData(int level, int x, int y, int z,
-                             int w, int h, int depth,
-                             void* data, int dataLength) const {}
+        /**
+         * @brief Reads back raw RGBA8 voxels from a sub-volume of the given mip level.
+         *
+         * REMED-GFX-130. Identical contract to `ITextureCubeBackend::GetData` above -- see its
+         * documentation for why the default is `false` rather than a silent no-op. `data` receives
+         * the requested box slice by slice (front to back), each slice as tightly packed RGBA8 rows
+         * with the top row first, so the row pitch is `w * 4` and the slice pitch is `w * h * 4`.
+         *
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested box, in voxels.
+         * @param y          Top edge of the requested box, in voxels.
+         * @param z          Front edge of the requested box, in voxels.
+         * @param w          Width of the requested box, in voxels.
+         * @param h          Height of the requested box, in voxels.
+         * @param depth      Depth of the requested box, in voxels.
+         * @param data       Destination for the tightly packed RGBA8 box.
+         * @param dataLength Size of @p data in bytes; exactly w * h * depth * 4.
+         * @return True if the whole box was written; false if this backend read nothing back.
+         */
+        [[nodiscard]] virtual bool GetData(int level, int x, int y, int z,
+                                           int w, int h, int depth,
+                                           void* data, int dataLength) const
+        {
+            (void)level; (void)x; (void)y; (void)z; (void)w; (void)h; (void)depth;
+            (void)data; (void)dataLength;
+            return false;
+        }
         /// Binds this volume texture to the currently active GL texture unit. No-op on non-GL backends.
         virtual void BindGL() const {}
     };
@@ -321,6 +376,17 @@ namespace CNA::Internal::Backends
         // ITextureCubeBackend — render targets do not support CPU-side SetData; no-op by default.
         void SetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
                      const void* /*data*/, int /*dataLength*/) override {}
+
+        // ITextureCubeBackend::GetData is deliberately NOT re-declared here: a render-target cube
+        // inherits the same `return false` default, which means "this backend cannot read a
+        // rendered cube face back to the CPU" and makes `TextureCube::GetData` raise
+        // System::NotSupportedException (REMED-GFX-130). SdlGpu and WebGPU override it with a real
+        // per-face readback; EasyGL, Bgfx, Vulkan, D3D9, D3D11, D3D12 and Headless do not, so a
+        // RenderTargetCube readback is rejected there rather than answered with the shared layer's
+        // own zeroed scratch buffer. Implementing the missing seven needs each backend's own
+        // rendered-face orientation, MSAA-resolve and deferred-draw-flush rules verified against a
+        // real oracle, which is tracked separately (see remediation/REMEDIATION_INDEX.md) rather
+        // than guessed at here.
     };
 
     /**

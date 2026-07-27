@@ -9329,11 +9329,15 @@ namespace CNA::Internal::Backends::Vulkan
 
     // Task 865: real GPU readback via vkCmdCopyImageToBuffer + a host-visible staging buffer,
     // mirroring SetData's upload path in reverse.
-    void VulkanTexture3DBackend::GetData(int level, int x, int y, int z,
+    bool VulkanTexture3DBackend::GetData(int level, int x, int y, int z,
                                           int w, int h, int depth,
                                           void* data, int dataLength) const
     {
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return;
+        // REMED-GFX-130: this guard used to be a silent `return`, which the shared layer turned
+        // into a complete transparent-black volume instead of a refusal.
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
+        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0 || depth <= 0) return false;
+        if (dataLength < w * h * depth * 4) return false;
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -9343,6 +9347,14 @@ namespace CNA::Internal::Backends::Vulkan
             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
+        // A failed allocation leaves `mapped` null; copying from it would be undefined behaviour
+        // and reporting success would be the same fabrication one level down.
+        if (mapped == nullptr)
+        {
+            if (stagingBuf != VK_NULL_HANDLE) vkDestroyBuffer(dev, stagingBuf, nullptr);
+            if (stagingMem != VK_NULL_HANDLE) vkFreeMemory(dev, stagingMem, nullptr);
+            return false;
+        }
 
         // As in SetData, transition only the selected mip and restore it in the same submission.
         VkCommandBuffer cb = owner_->BeginOneTimeCommands();
@@ -9361,10 +9373,13 @@ namespace CNA::Internal::Backends::Vulkan
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         owner_->EndOneTimeCommands(cb);
 
-        std::memcpy(data, mapped, static_cast<size_t>(dataLength));
+        std::memcpy(data, mapped,
+                    static_cast<size_t>(w) * static_cast<size_t>(h) *
+                    static_cast<size_t>(depth) * 4u);
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
+        return true;
     }
 
     // --- VulkanTextureCubeBackend ---
@@ -9517,11 +9532,15 @@ namespace CNA::Internal::Backends::Vulkan
     // mirroring SetData's per-face upload path in reverse (inline barriers scoped to just the
     // target face layer, mirroring SetData's own approach -- the shared TransitionImageLayout
     // helper always transitions layer 0 only, so it can't be reused for an arbitrary cube face).
-    void VulkanTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+    bool VulkanTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
-        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return;
-        if (face < 0 || face >= 6) return;
+        // REMED-GFX-130: these guards used to be silent `return`s, which the shared layer turned
+        // into a complete transparent-black face instead of a refusal.
+        if (!owner_ || image_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
+        if (face < 0 || face >= 6) return false;
+        if (level < 0 || level >= levelCount_ || w <= 0 || h <= 0) return false;
+        if (dataLength < w * h * 4) return false;
         VkDevice dev = owner_->device_;
 
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -9531,6 +9550,12 @@ namespace CNA::Internal::Backends::Vulkan
             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
+        if (mapped == nullptr)
+        {
+            if (stagingBuf != VK_NULL_HANDLE) vkDestroyBuffer(dev, stagingBuf, nullptr);
+            if (stagingMem != VK_NULL_HANDLE) vkFreeMemory(dev, stagingMem, nullptr);
+            return false;
+        }
 
         // Transition only the target face layer to TRANSFER_SRC_OPTIMAL.
         VkCommandBuffer cb = owner_->BeginOneTimeCommands();
@@ -9568,10 +9593,11 @@ namespace CNA::Internal::Backends::Vulkan
 
         owner_->EndOneTimeCommands(cb);
 
-        std::memcpy(data, mapped, static_cast<size_t>(dataLength));
+        std::memcpy(data, mapped, static_cast<size_t>(w) * static_cast<size_t>(h) * 4u);
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
+        return true;
     }
 
     // --- VulkanOcclusionQueryBackend ---
