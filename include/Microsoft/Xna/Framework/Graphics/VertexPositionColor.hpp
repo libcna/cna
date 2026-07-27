@@ -43,27 +43,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Returns the static vertex declaration describing the layout of this vertex type.
+         *
+         * The declaration describes the packed GPU vertex stream — a 16-byte stride carrying a
+         * float3 position and a colour packed as four bytes — not the C++ object, whose size also
+         * covers the vtable `Color` brings in and the padding its alignment forces.
+         *
          * @return Const reference to the VertexDeclaration for VertexPositionColor.
          */
-        [[nodiscard]] static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration& getVertexDeclarationStatic()
-        {
-            using ::Microsoft::Xna::Framework::Graphics::VertexElement;
-            using ::Microsoft::Xna::Framework::Graphics::VertexElementFormat;
-            using ::Microsoft::Xna::Framework::Graphics::VertexElementUsage;
-            static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration decl(
-                static_cast<int>(sizeof(VertexPositionColor)),
-                {
-                    VertexElement(0,
-                                  VertexElementFormat::Vector3,
-                                  VertexElementUsage::Position,
-                                  0),
-                    VertexElement(static_cast<int>(sizeof(::Microsoft::Xna::Framework::Vector3)),
-                                  VertexElementFormat::Color,
-                                  VertexElementUsage::Color,
-                                  0),
-                });
-            return decl;
-        }
+        [[nodiscard]] static const ::Microsoft::Xna::Framework::Graphics::VertexDeclaration& getVertexDeclarationStatic();
 
         /**
          * @brief Tests equality by comparing Position and Color.

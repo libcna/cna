@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
@@ -40,6 +41,7 @@
 #include <string>
 #include <vector>
 
+#include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -879,21 +881,12 @@ namespace Microsoft::Xna::Framework::Graphics
         // vertexData points to an array of VertexPositionColor starting at vertexOffset.
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
 
-        // Pack into the compact GPU layout that the backend expects (16 bytes: vec3 + 4 ubytes).
-        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; };
-        static_assert(sizeof(GpuVertex) == 16, "GpuVertex must be 16 bytes");
+        // Pack into the GPU stream this vertex type's VertexDeclaration describes.
+        using GpuVertex = CNA::Internal::Graphics::PositionColorStream;
 
         std::vector<GpuVertex> packed(static_cast<std::size_t>(totalVerts));
         for (int i = 0; i < totalVerts; ++i)
-        {
-            packed[i].x = vertices[i].Position.X;
-            packed[i].y = vertices[i].Position.Y;
-            packed[i].z = vertices[i].Position.Z;
-            packed[i].r = static_cast<std::uint8_t>(vertices[i].Color.getRProperty());
-            packed[i].g = static_cast<std::uint8_t>(vertices[i].Color.getGProperty());
-            packed[i].b = static_cast<std::uint8_t>(vertices[i].Color.getBProperty());
-            packed[i].a = static_cast<std::uint8_t>(vertices[i].Color.getAProperty());
-        }
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[i]);
 
         // Upload to a temporary vertex buffer and draw.
         auto tmpVb = backend_->CreateVertexBuffer(totalVerts);
@@ -938,20 +931,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Pack vertices from caller array (assumed VertexPositionColor layout).
         const auto* vertices = static_cast<const VertexPositionColor*>(vertexData) + vertexOffset;
-        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; };
-        static_assert(sizeof(GpuVertex) == 16, "GpuVertex must be 16 bytes");
+        using GpuVertex = CNA::Internal::Graphics::PositionColorStream;
 
         std::vector<GpuVertex> packed(static_cast<std::size_t>(numVertices));
         for (int i = 0; i < numVertices; ++i)
-        {
-            packed[i].x = vertices[i].Position.X;
-            packed[i].y = vertices[i].Position.Y;
-            packed[i].z = vertices[i].Position.Z;
-            packed[i].r = static_cast<std::uint8_t>(vertices[i].Color.getRProperty());
-            packed[i].g = static_cast<std::uint8_t>(vertices[i].Color.getGProperty());
-            packed[i].b = static_cast<std::uint8_t>(vertices[i].Color.getBProperty());
-            packed[i].a = static_cast<std::uint8_t>(vertices[i].Color.getAProperty());
-        }
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[i]);
 
         // Copy 16-bit indices with offset applied.
         const auto* indices = static_cast<const std::uint16_t*>(indexData) + indexOffset;
@@ -997,16 +981,91 @@ namespace Microsoft::Xna::Framework::Graphics
             return GraphicsDevice::PrimitiveVerts(type, primitiveCount);
         }
 
-        // GPU-layout packed structs (no vtable, exact stride).
-        struct GpuVPC  { float x,y,z; std::uint8_t r,g,b,a; };                        // 16
-        struct GpuVPT  { float x,y,z,u,v; };                                           // 20
-        struct GpuVPCT { float x,y,z; std::uint8_t r,g,b,a; float u,v; };             // 24
-        struct GpuVPNT { float x,y,z, nx,ny,nz, u,v; };                               // 32
+        // The GPU vertex streams of the built-in types, shared with their VertexDeclarations and
+        // with VertexBuffer so a stride can never be described in two places at once.
+        using GpuVPC  = CNA::Internal::Graphics::PositionColorStream;         // 16
+        using GpuVPT  = CNA::Internal::Graphics::PositionTextureStream;       // 20
+        using GpuVPCT = CNA::Internal::Graphics::PositionColorTextureStream;  // 24
+        using GpuVPNT = CNA::Internal::Graphics::PositionNormalTextureStream; // 32
 
-        static_assert(sizeof(GpuVPC)  == 16);
-        static_assert(sizeof(GpuVPT)  == 20);
-        static_assert(sizeof(GpuVPCT) == 24);
-        static_assert(sizeof(GpuVPNT) == 32);
+        int VertexElementFormatByteSize(VertexElementFormat format)
+        {
+            switch (format)
+            {
+                case VertexElementFormat::Single: return 4;
+                case VertexElementFormat::Vector2: return 8;
+                case VertexElementFormat::Vector3: return 12;
+                case VertexElementFormat::Vector4: return 16;
+                case VertexElementFormat::Color:
+                case VertexElementFormat::Byte4:
+                case VertexElementFormat::Short2:
+                case VertexElementFormat::NormalizedShort2:
+                case VertexElementFormat::HalfVector2:
+                    return 4;
+                case VertexElementFormat::Short4:
+                case VertexElementFormat::NormalizedShort4:
+                case VertexElementFormat::HalfVector4:
+                    return 8;
+            }
+            return 0;
+        }
+
+        // A declaration handed to a DrawUser overload is the only description of the source
+        // bytes, so it has to describe a stream at all before a single byte is read: at least one
+        // element, a positive stride, and no element reaching past that stride into what would be
+        // the next vertex.
+        int ValidateUserVertexDeclaration(const VertexDeclaration& declaration)
+        {
+            const int stride = declaration.getVertexStrideProperty();
+            const std::vector<VertexElement>& elements = declaration.GetVertexElements();
+            if (elements.empty() || stride <= 0)
+            {
+                throw System::ArgumentException(
+                    "The VertexDeclaration must describe at least one element and a positive "
+                    "vertex stride.",
+                    "vertexDeclaration");
+            }
+            for (const VertexElement& element : elements)
+            {
+                const int offset = element.getOffsetProperty();
+                const int size =
+                    VertexElementFormatByteSize(element.getVertexElementFormatProperty());
+                if (offset < 0 || size <= 0 || offset > stride - size)
+                {
+                    throw System::ArgumentException(
+                        "The VertexDeclaration contains an element outside its own vertex stride.",
+                        "vertexDeclaration");
+                }
+            }
+            return stride;
+        }
+
+        // Source ranges are checked in 64 bits and rejected, never clamped: a range that would
+        // wrap a 32-bit byte count must not silently address a small offset instead.
+        void ValidateUserSourceRange(std::int64_t first,
+                                     std::int64_t count,
+                                     std::int64_t elementSize,
+                                     const char* firstName,
+                                     const char* countName)
+        {
+            if (first < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    firstName, std::to_string(first), "This parameter must be non-negative.");
+            }
+            if (count < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    countName, std::to_string(count), "This parameter must be non-negative.");
+            }
+            if ((first + count) * elementSize >
+                static_cast<std::int64_t>(std::numeric_limits<int>::max()))
+            {
+                throw System::ArgumentOutOfRangeException(
+                    firstName, std::to_string(first),
+                    "The requested source byte range is too large.");
+            }
+        }
     }
 
     // Grows the scratch buffer only when the requested size exceeds current capacity, so
@@ -1036,10 +1095,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPC)));
         for (int i = 0; i < n; ++i)
         {
-            const auto& v = data[offset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Color.getRProperty(), v.Color.getGProperty(),
-                          v.Color.getBProperty(), v.Color.getAProperty() };
+            packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
         auto vb = backend_->CreateVertexBuffer(n);
         vb->SetData(packed, n, sizeof(GpuVPC));
@@ -1062,9 +1118,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPT)));
         for (int i = 0; i < n; ++i)
         {
-            const auto& v = data[offset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
         auto vb = backend_->CreateVertexBuffer(n);
         vb->SetData(packed, n, sizeof(GpuVPT));
@@ -1087,11 +1141,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPCT)));
         for (int i = 0; i < n; ++i)
         {
-            const auto& v = data[offset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Color.getRProperty(), v.Color.getGProperty(),
-                          v.Color.getBProperty(), v.Color.getAProperty(),
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
         auto vb = backend_->CreateVertexBuffer(n);
         vb->SetData(packed, n, sizeof(GpuVPCT));
@@ -1114,10 +1164,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(GpuVPNT)));
         for (int i = 0; i < n; ++i)
         {
-            const auto& v = data[offset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Normal.X, v.Normal.Y, v.Normal.Z,
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(data[offset + i]);
         }
         auto vb = backend_->CreateVertexBuffer(n);
         vb->SetData(packed, n, sizeof(GpuVPNT));
@@ -1129,6 +1176,11 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     // DrawUserPrimitives — explicit VertexDeclaration (FNA second generic overload)
+    //
+    // The source is a GPU vertex stream the caller already packed: the declaration is the only
+    // description of it, so the bytes are consumed exactly at the declared stride and nothing is
+    // converted here. An array of a built-in vertex structure is not such a stream and reaches
+    // this overload only after the typed overload below has packed it.
     void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
                                             const void* vertexData, int vertexOffset,
                                             int primitiveCount,
@@ -1138,8 +1190,9 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
         const int n      = VertexCountForUserPrimitives(type, primitiveCount);
-        const int stride = vertexDeclaration.getVertexStrideProperty();
+        ValidateUserSourceRange(vertexOffset, n, stride, "vertexOffset", "primitiveCount");
         // Apply vertexOffset in bytes then upload n vertices worth of raw data.
         const auto* src = static_cast<const std::uint8_t*>(vertexData)
                           + static_cast<std::ptrdiff_t>(vertexOffset) * stride;
@@ -1151,6 +1204,74 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
         applySamplerStatesToBackend();
         backend_->DrawPrimitivesEx(*vb, world, view, proj, type, primitiveCount, p);
+    }
+
+    // The object-to-stream conversion for the explicit-declaration draws. It runs here and only
+    // here: the packed stream is then handed to the raw overload above, which consumes it exactly
+    // as it consumes a caller-packed one.
+    template <typename VertexT>
+    void GraphicsDevice::DrawUserPrimitivesFromObjects(
+        PrimitiveType type, const VertexT* vertexData, int vertexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
+        if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
+        {
+            throw System::ArgumentException(
+                "The VertexDeclaration's VertexStride is not the GPU vertex stream stride of the "
+                "supplied vertex type.",
+                "vertexDeclaration");
+        }
+        const int n = VertexCountForUserPrimitives(type, primitiveCount);
+        ValidateUserSourceRange(vertexOffset, n, static_cast<std::int64_t>(sizeof(VertexT)),
+                                "vertexOffset", "primitiveCount");
+        auto* packed = static_cast<Stream*>(
+            AcquireUserVertexScratch(static_cast<std::size_t>(n) * sizeof(Stream)));
+        for (int i = 0; i < n; ++i)
+            packed[i] = CNA::Internal::Graphics::Pack(vertexData[vertexOffset + i]);
+        DrawUserPrimitives(type, static_cast<const void*>(packed), 0, primitiveCount,
+                           vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const VertexPositionColor* vertexData, int vertexOffset,
+                                            int primitiveCount,
+                                            const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserPrimitivesFromObjects(type, vertexData, vertexOffset, primitiveCount,
+                                      vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const VertexPositionTexture* vertexData,
+                                            int vertexOffset, int primitiveCount,
+                                            const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserPrimitivesFromObjects(type, vertexData, vertexOffset, primitiveCount,
+                                      vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const VertexPositionColorTexture* vertexData,
+                                            int vertexOffset, int primitiveCount,
+                                            const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserPrimitivesFromObjects(type, vertexData, vertexOffset, primitiveCount,
+                                      vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserPrimitives(PrimitiveType type,
+                                            const VertexPositionNormalTexture* vertexData,
+                                            int vertexOffset, int primitiveCount,
+                                            const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserPrimitivesFromObjects(type, vertexData, vertexOffset, primitiveCount,
+                                      vertexDeclaration);
     }
 
     // -----------------------------------------------------------------------
@@ -1186,10 +1307,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
-            const auto& v = vertices[vOffset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Color.getRProperty(), v.Color.getGProperty(),
-                          v.Color.getBProperty(), v.Color.getAProperty() };
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[vOffset + i]);
         }
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
@@ -1216,9 +1334,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
-            const auto& v = vertices[vOffset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[vOffset + i]);
         }
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
@@ -1245,11 +1361,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
-            const auto& v = vertices[vOffset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Color.getRProperty(), v.Color.getGProperty(),
-                          v.Color.getBProperty(), v.Color.getAProperty(),
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[vOffset + i]);
         }
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
@@ -1276,10 +1388,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
-            const auto& v = vertices[vOffset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Normal.X, v.Normal.Y, v.Normal.Z,
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[vOffset + i]);
         }
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
@@ -1308,10 +1417,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPC*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPC)));
         for (int i = 0; i < numVerts; ++i)
         {
-            const auto& v = vertices[vOffset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Color.getRProperty(), v.Color.getGProperty(),
-                          v.Color.getBProperty(), v.Color.getAProperty() };
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[vOffset + i]);
         }
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
@@ -1338,9 +1444,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPT)));
         for (int i = 0; i < numVerts; ++i)
         {
-            const auto& v = vertices[vOffset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[vOffset + i]);
         }
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
@@ -1367,11 +1471,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPCT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPCT)));
         for (int i = 0; i < numVerts; ++i)
         {
-            const auto& v = vertices[vOffset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Color.getRProperty(), v.Color.getGProperty(),
-                          v.Color.getBProperty(), v.Color.getAProperty(),
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[vOffset + i]);
         }
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
@@ -1398,10 +1498,7 @@ namespace Microsoft::Xna::Framework::Graphics
         auto* packed = static_cast<GpuVPNT*>(AcquireUserVertexScratch(static_cast<std::size_t>(numVerts) * sizeof(GpuVPNT)));
         for (int i = 0; i < numVerts; ++i)
         {
-            const auto& v = vertices[vOffset + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Normal.X, v.Normal.Y, v.Normal.Z,
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
+            packed[i] = CNA::Internal::Graphics::Pack(vertices[vOffset + i]);
         }
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indices + iOffset, indices + iOffset + ic, idx);
@@ -1417,6 +1514,9 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     // DrawUserIndexedPrimitives — explicit VertexDeclaration (FNA second generic overloads)
+    //
+    // Same contract as the non-indexed raw overload: the source is a caller-packed GPU vertex
+    // stream, consumed at the declared stride with no conversion.
 
     void GraphicsDevice::DrawUserIndexedPrimitives(PrimitiveType type,
                                                    const void* vertexData, int vOffset, int numVerts,
@@ -1427,8 +1527,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
+        const int stride = ValidateUserVertexDeclaration(vd);
         const int ic     = IndexCountForPrimitives(type, primCount);
-        const int stride = vd.getVertexStrideProperty();
+        ValidateUserSourceRange(vOffset, numVerts, stride, "vertexOffset", "numVertices");
+        ValidateUserSourceRange(iOffset, ic, static_cast<std::int64_t>(sizeof(std::uint16_t)),
+                                "indexOffset", "primitiveCount");
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = backend_->CreateVertexBuffer(numVerts);
@@ -1454,8 +1557,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!currentEffect_)
             throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primCount, "primitiveCount");
+        const int stride = ValidateUserVertexDeclaration(vd);
         const int ic     = IndexCountForPrimitives(type, primCount);
-        const int stride = vd.getVertexStrideProperty();
+        ValidateUserSourceRange(vOffset, numVerts, stride, "vertexOffset", "numVertices");
+        ValidateUserSourceRange(iOffset, ic, static_cast<std::int64_t>(sizeof(std::uint32_t)),
+                                "indexOffset", "primitiveCount");
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = backend_->CreateVertexBuffer(numVerts);
@@ -1470,6 +1576,120 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Backends::GpuDrawParams p; currentEffect_->FillGpuDrawParams(p);
         applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(*vb, *ib, world, view, proj, type, primCount, p);
+    }
+
+    // The indexed object-to-stream conversion. Like its non-indexed sibling it packs the source
+    // range once and then delegates to the raw overload, so the vertex offset is applied in
+    // objects here and never again in bytes downstream, while the index offset stays in indices
+    // and is applied by the raw overload alone.
+    template <typename VertexT, typename IndexT>
+    void GraphicsDevice::DrawUserIndexedPrimitivesFromObjects(
+        PrimitiveType type, const VertexT* vertexData, int vertexOffset, int numVertices,
+        const IndexT* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        using Stream = CNA::Internal::Graphics::VertexStream<VertexT>;
+        if (!backend_) return;
+        if (!currentEffect_)
+            throw std::runtime_error("GraphicsDevice::DrawUserIndexedPrimitives: no effect has been applied.");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
+        const int stride = ValidateUserVertexDeclaration(vertexDeclaration);
+        if (stride != CNA::Internal::Graphics::VertexStreamStride<VertexT>)
+        {
+            throw System::ArgumentException(
+                "The VertexDeclaration's VertexStride is not the GPU vertex stream stride of the "
+                "supplied vertex type.",
+                "vertexDeclaration");
+        }
+        ValidateUserSourceRange(vertexOffset, numVertices,
+                                static_cast<std::int64_t>(sizeof(VertexT)),
+                                "vertexOffset", "numVertices");
+        auto* packed = static_cast<Stream*>(
+            AcquireUserVertexScratch(static_cast<std::size_t>(numVertices) * sizeof(Stream)));
+        for (int i = 0; i < numVertices; ++i)
+            packed[i] = CNA::Internal::Graphics::Pack(vertexData[vertexOffset + i]);
+        DrawUserIndexedPrimitives(type, static_cast<const void*>(packed), 0, numVertices,
+                                  indexData, indexOffset, primitiveCount, vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(
+        PrimitiveType type, const VertexPositionColor* vertexData, int vertexOffset,
+        int numVertices, const std::uint16_t* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserIndexedPrimitivesFromObjects(type, vertexData, vertexOffset, numVertices,
+                                             indexData, indexOffset, primitiveCount,
+                                             vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(
+        PrimitiveType type, const VertexPositionTexture* vertexData, int vertexOffset,
+        int numVertices, const std::uint16_t* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserIndexedPrimitivesFromObjects(type, vertexData, vertexOffset, numVertices,
+                                             indexData, indexOffset, primitiveCount,
+                                             vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(
+        PrimitiveType type, const VertexPositionColorTexture* vertexData, int vertexOffset,
+        int numVertices, const std::uint16_t* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserIndexedPrimitivesFromObjects(type, vertexData, vertexOffset, numVertices,
+                                             indexData, indexOffset, primitiveCount,
+                                             vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(
+        PrimitiveType type, const VertexPositionNormalTexture* vertexData, int vertexOffset,
+        int numVertices, const std::uint16_t* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserIndexedPrimitivesFromObjects(type, vertexData, vertexOffset, numVertices,
+                                             indexData, indexOffset, primitiveCount,
+                                             vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(
+        PrimitiveType type, const VertexPositionColor* vertexData, int vertexOffset,
+        int numVertices, const std::uint32_t* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserIndexedPrimitivesFromObjects(type, vertexData, vertexOffset, numVertices,
+                                             indexData, indexOffset, primitiveCount,
+                                             vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(
+        PrimitiveType type, const VertexPositionTexture* vertexData, int vertexOffset,
+        int numVertices, const std::uint32_t* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserIndexedPrimitivesFromObjects(type, vertexData, vertexOffset, numVertices,
+                                             indexData, indexOffset, primitiveCount,
+                                             vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(
+        PrimitiveType type, const VertexPositionColorTexture* vertexData, int vertexOffset,
+        int numVertices, const std::uint32_t* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserIndexedPrimitivesFromObjects(type, vertexData, vertexOffset, numVertices,
+                                             indexData, indexOffset, primitiveCount,
+                                             vertexDeclaration);
+    }
+
+    void GraphicsDevice::DrawUserIndexedPrimitives(
+        PrimitiveType type, const VertexPositionNormalTexture* vertexData, int vertexOffset,
+        int numVertices, const std::uint32_t* indexData, int indexOffset, int primitiveCount,
+        const VertexDeclaration& vertexDeclaration)
+    {
+        DrawUserIndexedPrimitivesFromObjects(type, vertexData, vertexOffset, numVertices,
+                                             indexData, indexOffset, primitiveCount,
+                                             vertexDeclaration);
     }
 
     CNA::Internal::Backends::IGraphicsBackend& GraphicsDevice::GetBackend() const

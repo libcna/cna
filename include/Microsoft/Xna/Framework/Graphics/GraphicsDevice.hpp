@@ -422,15 +422,84 @@ namespace Microsoft::Xna::Framework::Graphics
          * primitiveCount, VertexDeclaration) overload.  The raw bytes are uploaded to a
          * transient vertex buffer using the stride from @p vertexDeclaration.
          *
+         * @p vertexData must already be a GPU vertex stream at the declared stride. The built-in
+         * vertex structures are not such a stream — they carry vtable and padding bytes — so an
+         * array of them is drawn through the matching typed overload below instead.
+         *
          * @param primitiveType      The type of primitive to draw.
          * @param vertexData         Pointer to the raw vertex data.
          * @param vertexOffset       Offset into @p vertexData (in vertices).
          * @param primitiveCount     Number of primitives to draw.
          * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration has no elements, a
+         *         non-positive stride, or an element reaching past its own stride.
+         * @throws System::ArgumentOutOfRangeException if @p vertexOffset is negative, if
+         *         @p primitiveCount is not positive, or if the source byte range overflows.
          */
         void DrawUserPrimitives(PrimitiveType primitiveType, const void* vertexData,
                                 int vertexOffset, int primitiveCount,
                                 const VertexDeclaration& vertexDeclaration);
+
+        /**
+         * @brief Draws non-indexed primitives from a VertexPositionColor array with an explicit
+         *        VertexDeclaration.
+         *
+         * The vertex values are converted into the GPU stream @p vertexDeclaration describes, so
+         * no object-model byte ever reaches a backend.
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserPrimitives(PrimitiveType primitiveType,
+                                const VertexPositionColor* vertexData, int vertexOffset,
+                                int primitiveCount, const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws non-indexed primitives from a VertexPositionTexture array with an explicit
+         *        VertexDeclaration.
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserPrimitives(PrimitiveType primitiveType,
+                                const VertexPositionTexture* vertexData, int vertexOffset,
+                                int primitiveCount, const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws non-indexed primitives from a VertexPositionColorTexture array with an
+         *        explicit VertexDeclaration.
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserPrimitives(PrimitiveType primitiveType,
+                                const VertexPositionColorTexture* vertexData, int vertexOffset,
+                                int primitiveCount, const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws non-indexed primitives from a VertexPositionNormalTexture array with an
+         *        explicit VertexDeclaration.
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserPrimitives(PrimitiveType primitiveType,
+                                const VertexPositionNormalTexture* vertexData, int vertexOffset,
+                                int primitiveCount, const VertexDeclaration& vertexDeclaration);
         /**
          * @brief Draws non-indexed primitives from a user-supplied VertexPositionColor array.
          * @param primitiveType  The type of primitive to draw.
@@ -593,6 +662,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * Matches FNA's second generic overload: `DrawUserIndexedPrimitives<T>(…, short[], …, VertexDeclaration)`.
          * Use this when the vertex type does not implement IVertexType and the layout must be supplied explicitly.
          *
+         * @p vertexData must already be a GPU vertex stream at the declared stride; an array of a
+         * built-in vertex structure is drawn through the matching typed overload below instead.
+         *
          * @param primitiveType      The type of primitive to draw.
          * @param vertexData         Pointer to the raw vertex array.
          * @param vertexOffset       Offset into @p vertexData (in vertices).
@@ -601,6 +673,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param indexOffset        Offset into @p indexData (in indices).
          * @param primitiveCount     Number of primitives to draw.
          * @param vertexDeclaration  Describes the vertex layout (stride and element semantics).
+         * @throws System::ArgumentException if @p vertexDeclaration has no elements, a
+         *         non-positive stride, or an element reaching past its own stride.
+         * @throws System::ArgumentOutOfRangeException if an offset or count is negative, if
+         *         @p primitiveCount is not positive, or if a source byte range overflows.
          */
         void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
                                        const void* vertexData, int vertexOffset, int numVertices,
@@ -608,10 +684,96 @@ namespace Microsoft::Xna::Framework::Graphics
                                        const VertexDeclaration& vertexDeclaration);
 
         /**
+         * @brief Draws indexed VertexPositionColor primitives with an explicit VertexDeclaration
+         *        (16-bit indices).
+         *
+         * The vertex values are converted into the GPU stream @p vertexDeclaration describes, so
+         * no object-model byte ever reaches a backend.
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index; indices are relative to it.
+         * @param numVertices        Number of vertices to convert.
+         * @param indexData          Pointer to the 16-bit index array.
+         * @param indexOffset        Starting index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionColor* vertexData, int vertexOffset,
+                                       int numVertices, const std::uint16_t* indexData,
+                                       int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws indexed VertexPositionTexture primitives with an explicit
+         *        VertexDeclaration (16-bit indices).
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index; indices are relative to it.
+         * @param numVertices        Number of vertices to convert.
+         * @param indexData          Pointer to the 16-bit index array.
+         * @param indexOffset        Starting index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionTexture* vertexData, int vertexOffset,
+                                       int numVertices, const std::uint16_t* indexData,
+                                       int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws indexed VertexPositionColorTexture primitives with an explicit
+         *        VertexDeclaration (16-bit indices).
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index; indices are relative to it.
+         * @param numVertices        Number of vertices to convert.
+         * @param indexData          Pointer to the 16-bit index array.
+         * @param indexOffset        Starting index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionColorTexture* vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::uint16_t* indexData, int indexOffset,
+                                       int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws indexed VertexPositionNormalTexture primitives with an explicit
+         *        VertexDeclaration (16-bit indices).
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index; indices are relative to it.
+         * @param numVertices        Number of vertices to convert.
+         * @param indexData          Pointer to the 16-bit index array.
+         * @param indexOffset        Starting index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionNormalTexture* vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::uint16_t* indexData, int indexOffset,
+                                       int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+
+        /**
          * @brief Draws indexed primitives from user-supplied arrays with an explicit vertex layout (32-bit indices).
          *
          * Matches FNA's second generic overload: `DrawUserIndexedPrimitives<T>(…, int[], …, VertexDeclaration)`.
          * Use this when the vertex type does not implement IVertexType and the layout must be supplied explicitly.
+         *
+         * @p vertexData must already be a GPU vertex stream at the declared stride; an array of a
+         * built-in vertex structure is drawn through the matching typed overload below instead.
          *
          * @param primitiveType      The type of primitive to draw.
          * @param vertexData         Pointer to the raw vertex array.
@@ -621,10 +783,97 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param indexOffset        Offset into @p indexData (in indices).
          * @param primitiveCount     Number of primitives to draw.
          * @param vertexDeclaration  Describes the vertex layout (stride and element semantics).
+         * @throws System::ArgumentException if @p vertexDeclaration has no elements, a
+         *         non-positive stride, or an element reaching past its own stride.
+         * @throws System::ArgumentOutOfRangeException if an offset or count is negative, if
+         *         @p primitiveCount is not positive, or if a source byte range overflows.
          */
         void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
                                        const void* vertexData, int vertexOffset, int numVertices,
                                        const std::uint32_t* indexData, int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+
+        /**
+         * @brief Draws indexed VertexPositionColor primitives with an explicit VertexDeclaration
+         *        (32-bit indices).
+         *
+         * The vertex values are converted into the GPU stream @p vertexDeclaration describes, so
+         * no object-model byte ever reaches a backend.
+         *
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index; indices are relative to it.
+         * @param numVertices        Number of vertices to convert.
+         * @param indexData          Pointer to the 32-bit index array.
+         * @param indexOffset        Starting index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionColor* vertexData, int vertexOffset,
+                                       int numVertices, const std::uint32_t* indexData,
+                                       int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws indexed VertexPositionTexture primitives with an explicit
+         *        VertexDeclaration (32-bit indices).
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index; indices are relative to it.
+         * @param numVertices        Number of vertices to convert.
+         * @param indexData          Pointer to the 32-bit index array.
+         * @param indexOffset        Starting index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionTexture* vertexData, int vertexOffset,
+                                       int numVertices, const std::uint32_t* indexData,
+                                       int indexOffset, int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws indexed VertexPositionColorTexture primitives with an explicit
+         *        VertexDeclaration (32-bit indices).
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index; indices are relative to it.
+         * @param numVertices        Number of vertices to convert.
+         * @param indexData          Pointer to the 32-bit index array.
+         * @param indexOffset        Starting index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionColorTexture* vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::uint32_t* indexData, int indexOffset,
+                                       int primitiveCount,
+                                       const VertexDeclaration& vertexDeclaration);
+        /**
+         * @brief Draws indexed VertexPositionNormalTexture primitives with an explicit
+         *        VertexDeclaration (32-bit indices).
+         * @param primitiveType      The type of primitive to draw.
+         * @param vertexData         Pointer to the vertex array.
+         * @param vertexOffset       Starting vertex index; indices are relative to it.
+         * @param numVertices        Number of vertices to convert.
+         * @param indexData          Pointer to the 32-bit index array.
+         * @param indexOffset        Starting index.
+         * @param primitiveCount     Number of primitives to draw.
+         * @param vertexDeclaration  Describes the layout and stride of each vertex.
+         * @throws System::ArgumentException if @p vertexDeclaration's stride is not this vertex
+         *         type's GPU stream stride, or an element reaches past that stride.
+         */
+        void DrawUserIndexedPrimitives(PrimitiveType primitiveType,
+                                       const VertexPositionNormalTexture* vertexData,
+                                       int vertexOffset, int numVertices,
+                                       const std::uint32_t* indexData, int indexOffset,
+                                       int primitiveCount,
                                        const VertexDeclaration& vertexDeclaration);
 
         // --- NOXNA helpers (not in XNA 4.0) ---
@@ -877,6 +1126,20 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<std::uint8_t> userIndexScratch_;
         [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
         [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
+
+        // The one object-to-GPU-stream conversion behind every built-in vertex type's explicit
+        // VertexDeclaration draw: the values are packed into the stream that type's declaration
+        // describes, and the packed stream is then consumed by the raw overloads exactly like a
+        // caller-packed one, so no path can apply the conversion twice.
+        template <typename VertexT>
+        void DrawUserPrimitivesFromObjects(PrimitiveType primitiveType, const VertexT* vertexData,
+                                           int vertexOffset, int primitiveCount,
+                                           const VertexDeclaration& vertexDeclaration);
+        template <typename VertexT, typename IndexT>
+        void DrawUserIndexedPrimitivesFromObjects(
+            PrimitiveType primitiveType, const VertexT* vertexData, int vertexOffset,
+            int numVertices, const IndexT* indexData, int indexOffset, int primitiveCount,
+            const VertexDeclaration& vertexDeclaration);
 
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const;
         [[nodiscard]] SDL_Window* GetWindowInternal() const;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -166,10 +167,10 @@ namespace Microsoft::Xna::Framework::Graphics
                     "stride");
             }
 
-            // Typed CNA vertices are packed into their compact GPU layout because the C++ object
-            // types contain ABI-only vtable/padding bytes. Their declarations can therefore have
-            // an inflated public C++ stride, but every declared element still has to fit in the
-            // compact bytes actually sent to the backend.
+            // Typed CNA vertices are packed into their GPU stream because the C++ object types
+            // contain ABI-only vtable/padding bytes. A built-in type's own declaration already
+            // describes exactly that stream, but this buffer may carry any declaration the caller
+            // chose, so every declared element still has to fit in the bytes actually uploaded.
             for (const VertexElement& element : declarationElements)
             {
                 const int offset = element.getOffsetProperty();
@@ -242,16 +243,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                        SetDataOptions options,
                                        bool useOptions)
     {
-        // VertexPositionColor contains a Color member that inherits from a virtual
-        // base class (IPackedVector), so sizeof(Color) == 16 (vtable + data + padding)
-        // and sizeof(VertexPositionColor) == 32, not 16. The EasyGL 3D shader pipeline
-        // expects a compact 16-byte layout: vec3 position + 4 ubytes RGBA. We pack
-        // the vertex data into that compact form here before uploading to the GPU.
-        struct GpuVertex {
-            float x, y, z;
-            std::uint8_t r, g, b, a;
-        };
-        static_assert(sizeof(GpuVertex) == 16, "GpuVertex must be exactly 16 bytes");
+        // The C++ object is not the GPU stream: Color inherits a polymorphic IPackedVector
+        // base, so a VertexPositionColor carries a vtable pointer and alignment padding that
+        // never reach a backend. Pack into the stream this type's VertexDeclaration describes.
+        using GpuVertex = CNA::Internal::Graphics::PositionColorStream;
 
         if (!ValidateSetDataRange(data,
                                   startIndex,
@@ -290,8 +285,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; };
-        static_assert(sizeof(GpuVertex) == 16, "GpuVertex must be exactly 16 bytes");
+        using GpuVertex = CNA::Internal::Graphics::PositionColorStream;
         if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
             > cpuShadow_.size())
             throw System::ArgumentOutOfRangeException(
@@ -323,14 +317,9 @@ namespace Microsoft::Xna::Framework::Graphics
                                        SetDataOptions options,
                                        bool useOptions)
     {
-        // VertexPositionColorTexture has a virtual base (IVertexType) so its sizeof
-        // includes a vtable pointer. Pack into the GPU layout: float3 + ubyte4 + float2 = 24 bytes.
-        struct GpuVertex {
-            float x, y, z;
-            std::uint8_t r, g, b, a;
-            float u, v;
-        };
-        static_assert(sizeof(GpuVertex) == 24, "GpuVertex (VPC+T) must be 24 bytes");
+        // The IVertexType base is polymorphic here, so the object carries a vtable pointer the
+        // stream must not. Pack into the stream this type's VertexDeclaration describes.
+        using GpuVertex = CNA::Internal::Graphics::PositionColorTextureStream;
 
         if (!ValidateSetDataRange(data,
                                   startIndex,
@@ -371,8 +360,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
-        static_assert(sizeof(GpuVertex) == 24, "GpuVertex (VPC+T) must be 24 bytes");
+        using GpuVertex = CNA::Internal::Graphics::PositionColorTextureStream;
         if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
             > cpuShadow_.size())
             throw System::ArgumentOutOfRangeException(
@@ -405,14 +393,9 @@ namespace Microsoft::Xna::Framework::Graphics
                                        SetDataOptions options,
                                        bool useOptions)
     {
-        // VertexPositionNormalTexture has a virtual base (IVertexType). Pack into
-        // GPU layout: float3 position + float3 normal + float2 texcoord = 32 bytes.
-        struct GpuVertex {
-            float x, y, z;
-            float nx, ny, nz;
-            float u, v;
-        };
-        static_assert(sizeof(GpuVertex) == 32, "GpuVertex (VPNT) must be 32 bytes");
+        // The IVertexType base is polymorphic here, so the object carries a vtable pointer the
+        // stream must not. Pack into the stream this type's VertexDeclaration describes.
+        using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureStream;
 
         if (!ValidateSetDataRange(data,
                                   startIndex,
@@ -452,8 +435,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-        struct GpuVertex { float x, y, z, nx, ny, nz, u, v; };
-        static_assert(sizeof(GpuVertex) == 32, "GpuVertex (VPNT) must be 32 bytes");
+        using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureStream;
         if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
             > cpuShadow_.size())
             throw System::ArgumentOutOfRangeException(
@@ -486,13 +468,9 @@ namespace Microsoft::Xna::Framework::Graphics
                                        SetDataOptions options,
                                        bool useOptions)
     {
-        // VertexPositionTexture has a virtual base (IVertexType). Pack into
-        // GPU layout: float3 position + float2 texcoord = 20 bytes.
-        struct GpuVertex {
-            float x, y, z;
-            float u, v;
-        };
-        static_assert(sizeof(GpuVertex) == 20, "GpuVertex (VPT) must be 20 bytes");
+        // The IVertexType base is polymorphic here, so the object carries a vtable pointer the
+        // stream must not. Pack into the stream this type's VertexDeclaration describes.
+        using GpuVertex = CNA::Internal::Graphics::PositionTextureStream;
 
         if (!ValidateSetDataRange(data,
                                   startIndex,
@@ -529,8 +507,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-        struct GpuVertex { float x, y, z, u, v; };
-        static_assert(sizeof(GpuVertex) == 20, "GpuVertex (VPT) must be 20 bytes");
+        using GpuVertex = CNA::Internal::Graphics::PositionTextureStream;
         if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
             > cpuShadow_.size())
             throw System::ArgumentOutOfRangeException(
@@ -563,17 +540,9 @@ namespace Microsoft::Xna::Framework::Graphics
         SetDataOptions options,
         bool useOptions)
     {
-        // VertexPositionNormalTextureSkinned has a virtual base (IVertexType). Pack into
-        // GPU layout: float3 position + float3 normal + float2 texcoord + float4 weights
-        // + byte4 indices = 52 bytes.
-        struct GpuVertex {
-            float x, y, z;
-            float nx, ny, nz;
-            float u, v;
-            float w0, w1, w2, w3;
-            std::uint8_t i0, i1, i2, i3;
-        };
-        static_assert(sizeof(GpuVertex) == 52, "GpuVertex (VPNTSkinned) must be 52 bytes");
+        // The IVertexType base is polymorphic here, so the object carries a vtable pointer the
+        // stream must not. Pack into the stream this type's VertexDeclaration describes.
+        using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureSkinnedStream;
 
         if (!ValidateSetDataRange(data,
                                   startIndex,
@@ -621,14 +590,7 @@ namespace Microsoft::Xna::Framework::Graphics
         if (bufferUsage_ == BufferUsage::WriteOnly)
             throw System::NotSupportedException(
                 "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
-        struct GpuVertex {
-            float x, y, z;
-            float nx, ny, nz;
-            float u, v;
-            float w0, w1, w2, w3;
-            std::uint8_t i0, i1, i2, i3;
-        };
-        static_assert(sizeof(GpuVertex) == 52, "GpuVertex (VPNTSkinned) must be 52 bytes");
+        using GpuVertex = CNA::Internal::Graphics::PositionNormalTextureSkinnedStream;
         if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
             > cpuShadow_.size())
             throw System::ArgumentOutOfRangeException(
