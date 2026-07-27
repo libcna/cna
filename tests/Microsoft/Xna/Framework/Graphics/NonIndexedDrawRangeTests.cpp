@@ -68,6 +68,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -103,6 +105,8 @@ using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+using Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture;
+using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
 using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 using Microsoft::Xna::Framework::Graphics::Viewport;
 
@@ -565,6 +569,27 @@ namespace
             expected += std::to_string(firstSlot + i);
         }
         return expected.empty() ? "none" : expected;
+    }
+
+    /// Clip-space corners of one slot's triangle, so several vertex layouts can be built from the
+    /// same geometry and the only thing that differs between them is the declared stride.
+    std::array<Vector3, 3> SlotTrianglePositions(const SlotLayout& layout, int slot)
+    {
+        const float cx = layout.CenterX(slot);
+        const float hw = layout.HalfWidth();
+        const float midY = layout.MidY();
+        const float hh = layout.HalfHeight();
+        const auto toClip = [&](float pixelX, float pixelY) {
+            return Vector3(
+                (2.0f * pixelX / static_cast<float>(layout.width)) - 1.0f,
+                1.0f - (2.0f * pixelY / static_cast<float>(layout.height)),
+                0.5f);
+        };
+        return {
+            toClip(cx - hw, midY + hh),
+            toClip(cx + hw, midY + hh),
+            toClip(cx, midY - hh),
+        };
     }
 
     const char* TopologyName(PrimitiveType primitive)
@@ -1756,5 +1781,195 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeeps
         before.CountLitInColumns(0, layout.width, Color::Black),
         after.CountLitInColumns(0, layout.width, Color::Black))
         << "the valid draw rendered a different number of pixels after a rejected range";
+}
+
+// vertexStart is an element offset, so its byte position is the element index times the buffer's
+// own declared stride. Every test above uses the 16-byte VertexPositionColor layout alone, which a
+// hardcoded stride would satisfy just as well; these three layouts (20, 24 and 32 bytes) request
+// the identical element range and must light the identical slots. Colour is deliberately not
+// asserted -- two of these layouts carry none -- because the slot a triangle lands in is what the
+// stride scaling determines.
+TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartScalesByTheDeclaredStride)
+{
+    RequireRangeRendering();
+
+    const SlotLayout layout = BackbufferLayout();
+    BasicEffect effect(device);
+    // Untextured on purpose: two of the layouts below have no colour channel, so the fixed
+    // white diffuse colour is what renders, and no sampler state can influence the result.
+    effect.setTextureEnabledProperty(false);
+    effect.VertexColorEnabled = false;
+
+    // Slots 3, 4 and 5 -- element range [9, 18) of the seven-triangle fixture.
+    constexpr int kVertexStart = 9;
+    constexpr int kPrimitiveCount = 3;
+    const char* const expectedSlots = "3,4,5";
+
+    std::vector<VertexPositionTexture> positionTexture;
+    std::vector<VertexPositionColorTexture> positionColorTexture;
+    std::vector<VertexPositionNormalTexture> positionNormalTexture;
+    for (int slot = 0; slot < kSlotCount; ++slot)
+    {
+        for (const Vector3& corner : SlotTrianglePositions(layout, slot))
+        {
+            positionTexture.emplace_back(corner, Vector2(0.0f, 0.0f));
+            positionColorTexture.emplace_back(corner, Color::Lime, Vector2(0.0f, 0.0f));
+            positionNormalTexture.emplace_back(
+                corner, Vector3(0.0f, 0.0f, 1.0f), Vector2(0.0f, 0.0f));
+        }
+    }
+    const int vertexCount = kSlotCount * 3;
+
+    const auto drawAndDescribe = [&](VertexBuffer& vertexBuffer) {
+        effect.Apply();
+        device.Clear(Color::Black);
+        device.SetVertexBuffer(&vertexBuffer);
+        device.DrawPrimitives(
+            PrimitiveType::TriangleList, kVertexStart, kPrimitiveCount);
+        const FrameSnapshot pixels =
+            CaptureBackbuffer(device, layout.width, layout.height);
+        return DescribeLitSlots(pixels, layout, Color::Black);
+    };
+
+    {
+        VertexBuffer buffer(
+            device, VertexPositionTexture::getVertexDeclarationStatic(), vertexCount,
+            BufferUsage::None);
+        buffer.SetData(positionTexture.data(), vertexCount);
+        EXPECT_EQ(expectedSlots, drawAndDescribe(buffer))
+            << "stride 20 (VertexPositionTexture) consumed a different element range";
+    }
+    {
+        VertexBuffer buffer(
+            device, VertexPositionColorTexture::getVertexDeclarationStatic(), vertexCount,
+            BufferUsage::None);
+        buffer.SetData(positionColorTexture.data(), vertexCount);
+        EXPECT_EQ(expectedSlots, drawAndDescribe(buffer))
+            << "stride 24 (VertexPositionColorTexture) consumed a different element range";
+    }
+    {
+        VertexBuffer buffer(
+            device, VertexPositionNormalTexture::getVertexDeclarationStatic(), vertexCount,
+            BufferUsage::None);
+        buffer.SetData(positionNormalTexture.data(), vertexCount);
+        EXPECT_EQ(expectedSlots, drawAndDescribe(buffer))
+            << "stride 32 (VertexPositionNormalTexture) consumed a different element range";
+    }
+
+    // The explicit-VertexDeclaration DrawUserPrimitives overload (REMED-GFX-043) reaches the same
+    // backend entry point with a rebased copy and vertexStart 0, so it must light the same slots
+    // from the same source offset -- the double-apply guard at a non-16-byte stride.
+    //
+    // Its source array is packed by hand rather than reusing positionColorTexture above: this
+    // overload reads raw bytes at the declared stride, and the XNA vertex structs all carry a
+    // vtable from their IVertexType virtual base, so sizeof(VertexPositionColorTexture) -- and
+    // therefore its static VertexDeclaration's VertexStride -- is larger than the 24-byte GPU
+    // layout. The persistent VertexBuffer cases above are unaffected because VertexBuffer::SetData
+    // repacks into the GPU layout and uploads its own stride. That mismatch is its own finding
+    // (REMED-GFX-125), not a draw-range question.
+    struct PackedPositionColorTexture
+    {
+        float x, y, z;
+        std::uint8_t r, g, b, a;
+        float u, v;
+    };
+    static_assert(sizeof(PackedPositionColorTexture) == 24);
+    const VertexDeclaration packedDeclaration(
+        24,
+        {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            VertexElement(
+                16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+        });
+    std::vector<PackedPositionColorTexture> packedSource;
+    packedSource.reserve(static_cast<std::size_t>(vertexCount));
+    for (const VertexPositionColorTexture& vertex : positionColorTexture)
+    {
+        packedSource.push_back(PackedPositionColorTexture{
+            vertex.Position.X, vertex.Position.Y, vertex.Position.Z,
+            vertex.Color.getRProperty(), vertex.Color.getGProperty(),
+            vertex.Color.getBProperty(), vertex.Color.getAProperty(),
+            vertex.TextureCoordinate.X, vertex.TextureCoordinate.Y});
+    }
+
+    device.SetVertexBuffer(nullptr);
+    effect.Apply();
+    device.Clear(Color::Black);
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList,
+        static_cast<const void*>(packedSource.data()),
+        kVertexStart,
+        kPrimitiveCount,
+        packedDeclaration);
+    const FrameSnapshot userPixels =
+        CaptureBackbuffer(device, layout.width, layout.height);
+    EXPECT_EQ(expectedSlots, DescribeLitSlots(userPixels, layout, Color::Black))
+        << "the explicit-declaration DrawUserPrimitives overload consumed a different range";
+}
+
+// Two buffers, alternating A -> B -> A in one frame with a different range each time. Software
+// executes every draw immediately, so this pins that no range or buffer identity leaks from one
+// draw into the next and that the two buffers stay independent.
+TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangesStayIndependentAcrossTwoBuffers)
+{
+    RequireRangeRendering();
+
+    const SlotLayout layout = BackbufferLayout();
+    std::vector<VertexPositionColor> bufferAVertices;
+    std::vector<VertexPositionColor> bufferBVertices;
+    ProbePoint firstProbe;
+    ProbePoint middleProbe;
+    ProbePoint lastProbe;
+    // Buffer A owns slots 0 and 6 in distinct colours; buffer B owns slot 3. Everything else in
+    // either buffer is a magenta decoy, so any range or buffer that leaks shows up as magenta.
+    AppendListPrimitive(
+        layout, PrimitiveType::TriangleList, 0, Color::Red, 0.5f, bufferAVertices, &firstProbe);
+    for (int slot = 1; slot <= 5; ++slot)
+        AppendListPrimitive(
+            layout, PrimitiveType::TriangleList, slot, Color::Magenta, 0.5f,
+            bufferAVertices, nullptr);
+    AppendListPrimitive(
+        layout, PrimitiveType::TriangleList, 6, Color::Blue, 0.5f, bufferAVertices, &lastProbe);
+    for (int slot = 0; slot < kSlotCount; ++slot)
+        AppendListPrimitive(
+            layout, PrimitiveType::TriangleList, slot,
+            slot == 3 ? Color::Lime : Color::Magenta, 0.5f, bufferBVertices,
+            slot == 3 ? &middleProbe : nullptr);
+
+    const int vertexCount = kSlotCount * 3;
+    VertexBuffer bufferA(
+        device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
+    bufferA.SetData(bufferAVertices.data(), vertexCount);
+    DynamicVertexBuffer bufferB(
+        device, PositionColorDeclaration(), vertexCount, BufferUsage::None);
+    bufferB.SetData(bufferBVertices.data(), 0, vertexCount, SetDataOptions::None);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+
+    device.SetVertexBuffer(&bufferA);
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);   // A, first range
+    device.SetVertexBuffer(&bufferB);
+    device.DrawPrimitives(PrimitiveType::TriangleList, 9, 1);   // B, middle range
+    device.SetVertexBuffer(&bufferA);
+    device.DrawPrimitives(PrimitiveType::TriangleList, 18, 1);  // A again, final range
+
+    const FrameSnapshot pixels =
+        CaptureBackbuffer(device, layout.width, layout.height);
+    EXPECT_TRUE(pixels.HasExactWithin(
+        static_cast<int>(firstProbe.pixelX), static_cast<int>(firstProbe.pixelY), 2, Color::Red))
+        << "the first draw lost its own buffer or range";
+    EXPECT_TRUE(pixels.HasExactWithin(
+        static_cast<int>(middleProbe.pixelX), static_cast<int>(middleProbe.pixelY), 2,
+        Color::Lime))
+        << "the second draw lost its own buffer or range";
+    EXPECT_TRUE(pixels.HasExactWithin(
+        static_cast<int>(lastProbe.pixelX), static_cast<int>(lastProbe.pixelY), 2, Color::Blue))
+        << "the third draw lost its own buffer or range";
+    EXPECT_EQ(0, pixels.CountExact(Color::Magenta))
+        << "a draw consumed vertices outside its own range (actual slots "
+        << DescribeLitSlots(pixels, layout, Color::Black) << ')';
 }
 #endif
