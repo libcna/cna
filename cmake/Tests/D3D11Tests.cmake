@@ -176,6 +176,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${_d3d11_cube_volume_getdata_contract_cmd}
         TIMEOUT 60 LABELS "D3D11")
 
+    # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
+    # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
+    # readback itself implemented on only two backends, so a rendered cube face had no byte-exact
+    # public oracle anywhere else. Drawn geometry (never Clear -- see REMED-GFX-129) paints an
+    # asymmetric five-region pattern whose colours rotate per face, so a flip, a rotation, a wrong
+    # array layer/subresource, a stale face or an unresolved multisample surface all fail.
+    cna_d3d11_test(cna_test_d3d11_rendertargetcube_getdata_contract
+                   examples/rendertargetcube_getdata_contract_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_rendertargetcube_getdata_contract_cmd cna_test_d3d11_rendertargetcube_getdata_contract)
+    cna_register_backend_test(NAME D3D11_RenderTargetCube_GetDataContract
+        COMMAND ${_d3d11_rendertargetcube_getdata_contract_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
