@@ -5,6 +5,7 @@
 #include "CNA/LogCategory.hpp"
 #include "CNA/Internal/Backends/SdlGpu/shaders/spirv_shaders.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -14,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -2485,6 +2487,116 @@ namespace CNA::Internal::Backends::SdlGpu
         return PrimitiveVertexCount(primitive, primitiveCount);
     }
 
+    SdlGpuGraphicsBackend::NativeIndexedRange SdlGpuGraphicsBackend::ResolveIndexedRange(
+        const SdlGpuIndexBufferBackend& ib, const SdlGpuVertexBufferBackend& vb,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams* params) const
+    {
+        const int startIndex = params != nullptr ? params->startIndex : 0;
+        const int baseVertex = params != nullptr ? params->baseVertex : 0;
+        const int minVertexIndex = params != nullptr ? params->minVertexIndex : 0;
+        const int numVertices = params != nullptr ? params->numVertices : 0;
+
+        if (primitiveCount <= 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "CNA SDL_GPU: an indexed draw must consume at least one primitive.");
+        }
+        if (startIndex < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "startIndex", std::to_string(startIndex),
+                "CNA SDL_GPU: startIndex is an index-element offset and cannot be negative.");
+        }
+        if (baseVertex < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "baseVertex", std::to_string(baseVertex),
+                "CNA SDL_GPU: baseVertex cannot be negative.");
+        }
+        if (minVertexIndex < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "minVertexIndex", std::to_string(minVertexIndex),
+                "CNA SDL_GPU: minVertexIndex cannot be negative.");
+        }
+        if (numVertices < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "numVertices", std::to_string(numVertices),
+                "CNA SDL_GPU: numVertices cannot be negative.");
+        }
+
+        // Computed in 64-bit so an overflowing request is rejected instead of wrapping, exactly as
+        // GraphicsDevice's own CheckedPrimitiveElementCount does for the public entry points.
+        std::int64_t consumedIndexCount = 0;
+        switch (primitive)
+        {
+            case PrimitiveType::TriangleList:
+                consumedIndexCount = static_cast<std::int64_t>(primitiveCount) * 3;
+                break;
+            case PrimitiveType::TriangleStrip:
+                consumedIndexCount = static_cast<std::int64_t>(primitiveCount) + 2;
+                break;
+            case PrimitiveType::LineList:
+                consumedIndexCount = static_cast<std::int64_t>(primitiveCount) * 2;
+                break;
+            case PrimitiveType::LineStrip:
+                consumedIndexCount = static_cast<std::int64_t>(primitiveCount) + 1;
+                break;
+            case PrimitiveType::PointListEXT:
+                consumedIndexCount = primitiveCount;
+                break;
+            default:
+                throw std::invalid_argument("CNA SDL_GPU: unsupported primitive topology");
+        }
+
+        const std::int64_t availableIndexCount = static_cast<std::int64_t>(ib.GetIndexCount());
+        if (static_cast<std::int64_t>(startIndex) > availableIndexCount ||
+            consumedIndexCount > availableIndexCount - static_cast<std::int64_t>(startIndex))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "CNA SDL_GPU: the requested index range exceeds the bound index buffer.");
+        }
+
+        // baseVertex shifts every decoded index, so the caller-declared decoded range
+        // [minVertexIndex, minVertexIndex + numVertices) must still land inside the bound vertex
+        // buffer once shifted. The hints never change addressing; they only bound it. A zero
+        // numVertices means the caller declared no range at all -- the DrawUser* path, whose data
+        // GraphicsDevice has already copied and rebased -- so only baseVertex itself is checked.
+        const std::int64_t availableVertexCount = static_cast<std::int64_t>(vb.GetVertexCount());
+        const std::int64_t declaredVertexEnd = static_cast<std::int64_t>(baseVertex) +
+                                               static_cast<std::int64_t>(minVertexIndex) +
+                                               static_cast<std::int64_t>(numVertices);
+        if (static_cast<std::int64_t>(baseVertex) > availableVertexCount ||
+            (numVertices > 0 && declaredVertexEnd > availableVertexCount))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "baseVertex", std::to_string(baseVertex),
+                "CNA SDL_GPU: the declared vertex range exceeds the bound vertex buffer.");
+        }
+
+        // SDL takes num_indices/first_index as Uint32 and vertex_offset as Sint32; reject anything
+        // the native argument types cannot represent rather than narrowing it silently.
+        if (consumedIndexCount > static_cast<std::int64_t>(std::numeric_limits<Uint32>::max()) ||
+            static_cast<std::int64_t>(startIndex) >
+                static_cast<std::int64_t>(std::numeric_limits<Uint32>::max()) ||
+            static_cast<std::int64_t>(baseVertex) >
+                static_cast<std::int64_t>(std::numeric_limits<Sint32>::max()))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "CNA SDL_GPU: the requested indexed draw range is too large for SDL_gpu.");
+        }
+
+        NativeIndexedRange range;
+        range.indexCount = static_cast<Uint32>(consumedIndexCount);
+        range.firstIndex = static_cast<Uint32>(startIndex);
+        range.vertexOffset = static_cast<Sint32>(baseVertex);
+        return range;
+    }
+
     void SdlGpuGraphicsBackend::CreateColoredResources(ConstructionResources& resources)
     {
         SDL_GPUShaderCreateInfo vsInfo{};
@@ -2848,7 +2960,10 @@ namespace CNA::Internal::Backends::SdlGpu
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
             command.indexData = sdlGpuIb.ShadowData();
-            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            // REMED-GFX-117: startIndex/baseVertex reach the native draw through the one
+            // shared resolver, never a default-zero literal.
+            ApplyIndexedRange(
+                command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
         }
         else
@@ -2896,7 +3011,8 @@ namespace CNA::Internal::Backends::SdlGpu
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
             command.indexData = sdlGpuIb.ShadowData();
-            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            ApplyIndexedRange(
+                command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
         }
         else
@@ -2945,7 +3061,8 @@ namespace CNA::Internal::Backends::SdlGpu
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
             command.indexData = sdlGpuIb.ShadowData();
-            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            ApplyIndexedRange(
+                command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
         }
         else
@@ -3644,7 +3761,8 @@ namespace CNA::Internal::Backends::SdlGpu
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
             command.indexData = sdlGpuIb.ShadowData();
-            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            ApplyIndexedRange(
+                command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
         }
         else
@@ -3697,7 +3815,8 @@ namespace CNA::Internal::Backends::SdlGpu
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
             command.indexData = sdlGpuIb.ShadowData();
-            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            ApplyIndexedRange(
+                command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
         }
         else
@@ -3763,7 +3882,8 @@ namespace CNA::Internal::Backends::SdlGpu
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
             command.indexData = sdlGpuIb.ShadowData();
-            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            ApplyIndexedRange(
+                command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
         }
         else
@@ -3816,7 +3936,8 @@ namespace CNA::Internal::Backends::SdlGpu
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
             command.indexData = sdlGpuIb.ShadowData();
-            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            ApplyIndexedRange(
+                command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
         }
         else
@@ -3887,7 +4008,8 @@ namespace CNA::Internal::Backends::SdlGpu
             command.indexed = true;
             command.index32 = sdlGpuIb.IsThirtyTwoBit();
             command.indexData = sdlGpuIb.ShadowData();
-            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            ApplyIndexedRange(
+                command, sdlGpuIb, sdlGpuVb, primitive, primitiveCount, &params);
             command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
         }
         else
@@ -3931,7 +4053,8 @@ namespace CNA::Internal::Backends::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(
+                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
         }
         else
         {
@@ -3973,7 +4096,8 @@ namespace CNA::Internal::Backends::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(
+                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
         }
         else
         {
@@ -4018,7 +4142,8 @@ namespace CNA::Internal::Backends::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(
+                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
         }
         else
         {
@@ -4064,7 +4189,8 @@ namespace CNA::Internal::Backends::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(
+                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
         }
         else
         {
@@ -4126,7 +4252,8 @@ namespace CNA::Internal::Backends::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(
+                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
         }
         else
         {
@@ -4289,7 +4416,8 @@ namespace CNA::Internal::Backends::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(
+                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
         }
         else
         {
@@ -4331,7 +4459,8 @@ namespace CNA::Internal::Backends::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(
+                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
         }
         else
         {
@@ -4371,7 +4500,8 @@ namespace CNA::Internal::Backends::SdlGpu
             ibBinding.buffer = command.uploadedIndexBuffer;
             SDL_BindGPUIndexBuffer(pass, &ibBinding,
                                    command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(
+                pass, command.indexCount, 1, command.firstIndex, command.vertexOffset, 0);
         }
         else
         {

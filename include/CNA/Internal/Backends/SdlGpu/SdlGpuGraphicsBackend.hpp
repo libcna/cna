@@ -817,6 +817,18 @@ namespace CNA::Internal::Backends::SdlGpu
             RenderStateSnapshot renderState;
         };
 
+        // REMED-GFX-117: the native arguments one indexed draw submits, resolved once from the
+        // public XNA draw parameters and then carried by value on the draw command. All three are
+        // in SDL_GPU's own units: `firstIndex` is an index *element* offset (never a byte offset),
+        // `vertexOffset` is the signed value SDL adds to each decoded index before vertex fetch,
+        // and `indexCount` is the exact topology-derived number of indices the draw consumes.
+        struct NativeIndexedRange
+        {
+            Uint32 indexCount = 0;    ///< SDL_DrawGPUIndexedPrimitives `num_indices`
+            Uint32 firstIndex = 0;    ///< SDL_DrawGPUIndexedPrimitives `first_index`
+            Sint32 vertexOffset = 0;  ///< SDL_DrawGPUIndexedPrimitives `vertex_offset`
+        };
+
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d draw commands.
         // Vertex/index data is shadow-copied at Draw-call time (see
         // SdlGpuVertexBufferBackend::ShadowData()'s own rationale) and re-uploaded into a
@@ -831,6 +843,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};  ///< mirrors VulkanGraphicsBackend::FillExtPushConst()'s 128-byte layout
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -854,6 +868,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -880,6 +896,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};
             std::array<float, 56> lightUniforms{};  ///< LitLightParams: 10 vec4 + 1 mat4 = 224 bytes
@@ -909,6 +927,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};  ///< [20..23]=alphaTest params, [24]=vertexColorEnabled (no lighting/ambient slots needed)
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -939,6 +959,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -975,6 +997,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 24> uniforms{};       ///< PC: mvp(16) + diffuseColor(4) + emissiveAmount(4)
             std::array<float, 48> envMapUniforms{}; ///< EnvMapParams: world(16) + 8 vec4 (32) = 48 floats
@@ -1013,6 +1037,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
             std::array<float, 72 * 16> boneUniforms{}; ///< BoneBlock: 72 mat4 = 1152 floats (4608 bytes), uploaded as a storage buffer
@@ -1049,6 +1075,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool index32 = false;
             Uint32 vertexCount = 0;
             Uint32 indexCount = 0;
+            Uint32 firstIndex = 0;    ///< REMED-GFX-117: public startIndex, in index elements
+            Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};          ///< PC (FillExtUniforms's existing layout)
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
@@ -1596,6 +1624,33 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] SDL_GPUPrimitiveType ToTopology(PrimitiveType primitive) const;
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
+
+        // REMED-GFX-117: the single place the public indexed draw range becomes native
+        // SDL_DrawGPUIndexedPrimitives arguments. Every one of this backend's eight indexed
+        // pipeline families routes through it, so no family can silently fall back to a
+        // default-zero offset again. Validates the requested range against the bound buffers and
+        // against the native argument types before any conversion, and throws rather than clamping.
+        [[nodiscard]] NativeIndexedRange ResolveIndexedRange(
+            const SdlGpuIndexBufferBackend& ib, const SdlGpuVertexBufferBackend& vb,
+            PrimitiveType primitive, int primitiveCount, const GpuDrawParams* params) const;
+
+        // Convenience wrapper: resolves the range once and copies it onto whichever draw-command
+        // family is being queued. `params` is null only for the DrawUser* path, whose vertex and
+        // index data GraphicsDevice has already copied and rebased, so its native offsets are
+        // legitimately zero.
+        template<typename CommandT>
+        void ApplyIndexedRange(CommandT& command,
+                               const SdlGpuIndexBufferBackend& ib,
+                               const SdlGpuVertexBufferBackend& vb,
+                               PrimitiveType primitive, int primitiveCount,
+                               const GpuDrawParams* params) const
+        {
+            const NativeIndexedRange range =
+                ResolveIndexedRange(ib, vb, primitive, primitiveCount, params);
+            command.indexCount = range.indexCount;
+            command.firstIndex = range.firstIndex;
+            command.vertexOffset = range.vertexOffset;
+        }
 
         // Phase SDLGPU-8: renders one off-screen render target's own pass (all draws/sprites
         // queued against it, across every shader family) and regenerates its mip chain afterward
