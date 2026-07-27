@@ -145,6 +145,10 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/IO/MemoryStream.hpp"
 
+#include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
+
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -3382,6 +3386,79 @@ int main()
               "the exact color into BOTH independently-readable GPU resources (plan_dx.md DX-117)");
 
         backend.SetRenderTarget2D(nullptr);
+
+        // ---- REMED-GFX-127: the public ITextureBackend::GetData override this backend gained ----
+        // ---- must return the target's real pixels and report that it did. Asserted against the ----
+        // ---- already-proven ReadBackRenderTargetFull oracle above, so a wrong readback cannot ----
+        // ---- pass by agreeing with itself, and against a NON-ZERO destination pre-fill, so the ----
+        // ---- pre-fix behaviour (the shared layer converting its own zeroed scratch buffer) ----
+        // ---- would fail decisively. This backend cannot run the shared Game-harness contract ----
+        // ---- test in this dev loop (no window/swap chain under vanilla Wine's dxgi), so this is ----
+        // ---- where D3D12's readback gets real runtime evidence. ----
+        {
+            auto rtRead = backend.CreateRenderTarget2D(kRtWidth, kRtHeight, /*depthFormat=*/0);
+            auto* rtReadImpl = dynamic_cast<D3D12RenderTargetBackend*>(rtRead.get());
+            backend.SetRenderTarget2D(rtRead.get());
+            backend.Clear(1.0f, 0.0f, 1.0f, 0.2f); // 255/0/255/51 -- alpha neither 0 nor 255
+            backend.SetRenderTarget2D(nullptr);
+
+            const auto oracle = ReadBackRenderTargetFull(backend, rtReadImpl->GetColorResourceEXT(),
+                                                          kRtWidth, kRtHeight);
+
+            // Whole level, into a destination pre-filled with a sentinel that is not the content.
+            std::vector<uint8_t> full(static_cast<std::size_t>(kRtWidth) * kRtHeight * 4, 0xCDu);
+            const bool fullOk = rtReadImpl->GetData(0, 0, 0, kRtWidth, kRtHeight,
+                                                    full.data(), static_cast<int>(full.size()));
+            Check(fullOk, "GFX127a: D3D12RenderTargetBackend::GetData reports a completed readback");
+            Check(full == oracle,
+                  "GFX127b: D3D12RenderTargetBackend::GetData returns byte-identical content to the "
+                  "independent readback oracle (REMED-GFX-127)");
+            Check(full[centerIdx + 0] == 255 && full[centerIdx + 1] == 0 &&
+                  full[centerIdx + 2] == 255 && full[centerIdx + 3] == 51,
+                  "GFX127c: the returned content is the exact rendered colour, alpha included -- "
+                  "not a fabricated transparent-black frame (REMED-GFX-127)");
+
+            // A sub-rectangle, checked against the same oracle row by row.
+            constexpr int kRx = 7, kRy = 5, kRw = 9, kRh = 3;
+            std::vector<uint8_t> rect(static_cast<std::size_t>(kRw) * kRh * 4, 0xA5u);
+            const bool rectOk = rtReadImpl->GetData(0, kRx, kRy, kRw, kRh,
+                                                    rect.data(), static_cast<int>(rect.size()));
+            bool rectExact = rectOk;
+            for (int row = 0; row < kRh && rectExact; ++row)
+                for (int col = 0; col < kRw; ++col)
+                {
+                    const std::size_t d = (static_cast<std::size_t>(row) * kRw + col) * 4;
+                    const std::size_t o = ((static_cast<std::size_t>(kRy + row) * kRtWidth) + kRx + col) * 4;
+                    if (rect[d + 0] != oracle[o + 0] || rect[d + 1] != oracle[o + 1] ||
+                        rect[d + 2] != oracle[o + 2] || rect[d + 3] != oracle[o + 3])
+                    {
+                        rectExact = false;
+                        break;
+                    }
+                }
+            Check(rectExact,
+                  "GFX127d: a sub-rectangle readback matches the oracle at the requested offset "
+                  "(REMED-GFX-127)");
+
+            // Deterministic rejection, with the destination left untouched.
+            std::vector<uint8_t> untouched(static_cast<std::size_t>(kRw) * kRh * 4, 0xA5u);
+            bool threwOutOfRange = false;
+            try { (void)rtReadImpl->GetData(0, kRtWidth - 1, 0, 8, 8, untouched.data(),
+                                            static_cast<int>(untouched.size())); }
+            catch (const System::ArgumentOutOfRangeException&) { threwOutOfRange = true; }
+            catch (...) {}
+            bool threwNotSupported = false;
+            try { (void)rtReadImpl->GetData(4, 0, 0, kRw, kRh, untouched.data(),
+                                            static_cast<int>(untouched.size())); }
+            catch (const System::NotSupportedException&) { threwNotSupported = true; }
+            catch (...) {}
+            const bool stillSentinel =
+                std::all_of(untouched.begin(), untouched.end(), [](uint8_t b) { return b == 0xA5u; });
+            Check(threwOutOfRange && threwNotSupported && stillSentinel,
+                  "GFX127e: a rectangle leaving the target and a nonexistent mip level are both "
+                  "rejected deterministically, with the destination byte-for-byte untouched "
+                  "(REMED-GFX-127)");
+        }
 
         // ---- RenderTargetCube: real construction + face-0 bind+clear+readback. ----
         auto rtCube = backend.CreateRenderTargetCube(kRtWidth, 0);

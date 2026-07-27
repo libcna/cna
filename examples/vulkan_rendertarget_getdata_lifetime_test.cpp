@@ -58,7 +58,15 @@ namespace
     bool IsRed(const Color& c)   { return c.getRProperty() >= 200 && c.getGProperty() <= 60 && c.getBProperty() <= 60; }
     bool IsGreen(const Color& c) { return c.getGProperty() >= 200 && c.getRProperty() <= 60 && c.getBProperty() <= 60; }
     bool IsBlue(const Color& c)  { return c.getBProperty() >= 200 && c.getRProperty() <= 60 && c.getGProperty() <= 60; }
-    bool IsBlack(const Color& c) { return c.getRProperty() < 40 && c.getGProperty() < 40 && c.getBProperty() < 40; }
+    // REMED-GFX-127 false-positive audit: this predicate used to ignore alpha entirely, so a pixel
+    // GetData never wrote -- the fabricated transparent black the shared layer produced from a
+    // backend with no readback -- satisfied it just as well as the opaque Color::Black clear it is
+    // meant to recognise. Every clear this file performs is opaque, so requiring alpha 255 costs
+    // nothing and makes "an unwritten readback" fail here.
+    bool IsBlack(const Color& c) { return c.getRProperty() < 40 && c.getGProperty() < 40 && c.getBProperty() < 40
+                                          && c.getAProperty() == 255; }
+    bool IsFabricated(const Color& c) { return c.getRProperty() == 0 && c.getGProperty() == 0 &&
+                                               c.getBProperty() == 0 && c.getAProperty() == 0; }
 }
 
 class GetDataLifetimeTest : public Game
@@ -145,6 +153,11 @@ protected:
             check(IsBlack(at(pix, 2, 2)), "S1c far corner is the BLACK clear before Present");
             check(redN >= 250 && redN <= 400,
                   "S1d red pixel count ~= 20x16 (=320): " + std::to_string(redN));
+            // REMED-GFX-127: no part of a readback may be content GetData never actually read. An
+            // opaque clear plus an opaque sprite leaves no transparent-black pixel anywhere, so a
+            // single one means fabricated bytes reached the caller.
+            check(countIf(pix, IsFabricated) == 0,
+                  "S1e not one pixel of the readback is fabricated transparent black");
         }
 
         // --- Scene 2: two batches into one RT, both visible before Present (compositing). ----

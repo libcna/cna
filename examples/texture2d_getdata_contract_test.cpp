@@ -600,6 +600,88 @@ class Texture2DGetDataContractTest : public Game
             }
         }
 
+        // B8: the same rectangle set Section A applies to an ordinary texture -- one pixel, the
+        // final row, the final column and the lower-right corner -- so an off-by-one in a
+        // backend's row-pitch or origin handling cannot hide in the interior.
+        if (kRtContract == RtContract::Exact)
+        {
+            struct RectCase { Rectangle rect; const char* name; };
+            const RectCase cases[] = {
+                {Rectangle(0, 0, 1, 1), "B8a one pixel at the origin"},
+                {Rectangle(kW - 1, kH - 1, 1, 1), "B8b lower-right corner pixel"},
+                {Rectangle(0, kH - 1, kW, 1), "B8c final row"},
+                {Rectangle(kW - 1, 0, 1, kH), "B8d final column"},
+                {Rectangle(5, 2, 6, 4), "B8e middle rectangle"},
+            };
+            for (const RectCase& c : cases)
+            {
+                const int count = c.rect.Width * c.rect.Height;
+                std::vector<Color> got(static_cast<std::size_t>(count), SentinelA5());
+                bool threw = false;
+                try { target.GetData(0, &c.rect, got.data(), 0, count); }
+                catch (...) { threw = true; }
+                bool exact = !threw;
+                std::string detail;
+                for (int row = 0; row < c.rect.Height && exact; ++row)
+                    for (int col = 0; col < c.rect.Width; ++col)
+                    {
+                        const Color expected = PatternPixel(c.rect.X + col, c.rect.Y + row);
+                        const Color actual = got[static_cast<std::size_t>(row) * c.rect.Width + col];
+                        if (!Same(actual, expected))
+                        {
+                            exact = false;
+                            detail = " at (" + std::to_string(col) + "," + std::to_string(row) +
+                                     "): " + ColorText(actual) + " != " + ColorText(expected);
+                            break;
+                        }
+                    }
+                check(exact, std::string(c.name) + " of the render target is exact" + detail +
+                                 (threw ? " [threw]" : ""));
+            }
+        }
+
+        // B9: reading a target that is STILL BOUND, on a target of its own so the rebind cannot
+        // disturb anything above (RenderTargetUsage::DiscardContents legitimately wipes a target
+        // when it is bound again). Backends differ on whether they can serve an active-target read
+        // -- some flush their pending work and can, others cannot -- so this asserts only the
+        // property this finding is about: whichever way it goes, the answer must be honest, the
+        // exact content or a deterministic rejection, never a fabricated frame reported as success.
+        {
+            RenderTarget2D live(dev, kW, kH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                                RenderTargetUsage::DiscardContents);
+            dev.SetRenderTarget(&live);
+            ResetState(dev);
+            dev.Clear(Color(0, 0, 0, 255));
+            FillRect(dev, Rectangle(0, 0, kW, kH), Background());
+            FillRect(dev, Rectangle(0, 0, kBlock, kBlock), BlockTopLeft());
+            FillRect(dev, Rectangle(kW - kBlock, 0, kBlock, kBlock), BlockTopRight());
+            FillRect(dev, Rectangle(0, kH - kBlock, kBlock, kBlock), BlockBottomLeft());
+            FillRect(dev, Rectangle(kW - kBlock, kH - kBlock, kBlock, kBlock), BlockBottomRight());
+
+            std::vector<Color> got(static_cast<std::size_t>(kW) * kH, SentinelCD());
+            bool threw = false;
+            std::string what;
+            try { live.GetData(got.data(), 0, static_cast<int>(got.size())); }
+            catch (const std::exception& e) { threw = true; what = e.what(); }
+            catch (...) { threw = true; what = "(non-std exception)"; }
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetState(dev);
+
+            std::size_t exactPixels = 0;
+            for (int y = 0; y < kH; ++y)
+                for (int x = 0; x < kW; ++x)
+                    if (Same(got[static_cast<std::size_t>(y) * kW + x], PatternPixel(x, y)))
+                        ++exactPixels;
+            const bool honest = threw ? (CountSame(got, SentinelCD()) == got.size())
+                                      : (exactPixels == got.size());
+            check(honest,
+                  "B9 reading a still-bound render target either returns its exact content or is "
+                  "rejected with the destination untouched" +
+                      (threw ? (" [threw " + what + "]")
+                             : (" [exact " + std::to_string(exactPixels) + "/" +
+                                std::to_string(got.size()) + "]")));
+        }
+
         // B5: two live targets keep separate storage.
         {
             RenderTarget2D second(dev, kW, kH, false, SurfaceFormat::Color, DepthFormat::None, 0,

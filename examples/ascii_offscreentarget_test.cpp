@@ -95,8 +95,10 @@ protected:
         dev.SetRenderTarget(&explicitRt);
         {
             // GraphicsDevice::GetBackBufferData reads whatever is currently bound (here,
-            // explicitRt) -- Texture2D::GetData would need a CPU-side shadow copy this backend
-            // doesn't populate for render targets, which isn't what this check is testing anyway.
+            // explicitRt), which is what this check is testing. (The former claim that
+            // Texture2D::GetData "would need a CPU-side shadow copy this backend doesn't populate"
+            // no longer holds: REMED-GFX-127 gave the wrapped SdlRenderer target a real
+            // SDL_RenderReadPixels readback, covered by Ascii_Texture2D_GetDataContract.)
             std::vector<Color> pixel(1, Color(0, 0, 0, 0));
             dev.GetBackBufferData(&onePixel, pixel.data(), 0, 1);
             check(ColorEquals(pixel[0], colorB),

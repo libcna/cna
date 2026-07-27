@@ -4,9 +4,11 @@
 // TextureCube, Texture3D, RenderTarget2D, RenderTargetCube, custom ShaderEffect, and HeadlessTrace
 // mode were all implemented and reachable, but only exercised by code inspection, not a real test.
 //
-// Check A -- TextureCube construction + SetData()/GetData() on 2 different faces (round-trips
-//   through HeadlessTextureCubeBackend's independent per-face pixel storage, not one shared buffer).
-// Check B -- Texture3D construction + SetData()/GetData() round-trip.
+// Check A -- TextureCube construction + SetData()/GetData() on 2 different faces: what this
+//   backend really produces (a transparent-black overwrite of the caller's destination) is pinned,
+//   not blessed -- see the check's own comment (REMED-GFX-127 false-positive audit).
+// Check B -- Texture3D construction is REJECTED (this backend reports no
+//   GraphicsCapability::Texture3D, REMED-CONTENT-004).
 // Check C -- RenderTarget2D: SetRenderTarget()/SetRenderTarget(nullptr) doesn't throw, and
 //   GetViewportSize() genuinely reflects the bound target's own size while it's active.
 // Check D -- RenderTargetCube: SetRenderTarget() for 2 different faces doesn't throw.
@@ -37,6 +39,8 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+
+#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -73,25 +77,55 @@ protected:
             std::vector<Color> negX(16, Color::Blue);
             cube.SetData(CubeMapFace::PositiveX, posX.data(), 16);
             cube.SetData(CubeMapFace::NegativeX, negX.data(), 16);
-            std::vector<Color> readPosX(16, Color::Black);
-            std::vector<Color> readNegX(16, Color::Black);
+            // REMED-GFX-127 false-positive audit: these two checks used to be `check(true, ...)`
+            // -- they asserted nothing at all about what GetData produced, so any behaviour
+            // whatsoever passed them. What the Headless cube/3D backends actually do is measured
+            // and PINNED here instead: SetData is recorded but not stored, and GetData OVERWRITES
+            // the caller's whole destination with zeros. That is the same fabrication REMED-GFX-127
+            // removed from the Texture2D path -- an unwritten resource answered with invented
+            // content rather than an honest refusal -- surviving on the separate
+            // ITextureCubeBackend/ITexture3DBackend interfaces, which that finding did not cover.
+            // The destinations are pre-filled with a NON-ZERO sentinel so "the buffer was zeroed by
+            // GetData" is distinguishable from "the buffer was already zero".
+            std::vector<Color> readPosX(16, Color(0xCD, 0xCD, 0xCD, 0xCD));
+            std::vector<Color> readNegX(16, Color(0xA5, 0xA5, 0xA5, 0xA5));
             cube.GetData(CubeMapFace::PositiveX, readPosX.data(), 16);
             cube.GetData(CubeMapFace::NegativeX, readNegX.data(), 16);
-            // The Headless backend never renders, so GetData() legitimately returns zeroed
-            // placeholder bytes (see HeadlessTextureCubeBackend::GetData()), not the SetData()
-            // input -- this check instead proves both calls completed without throwing and
-            // independently, one call per face, not a single shared buffer silently aliasing them.
-            check(true, "TextureCube: SetData()/GetData() complete on two independent faces without throwing");
+            const auto allTransparentBlack = [](const std::vector<Color>& v) {
+                for (const Color& c : v)
+                    if (c.getRProperty() || c.getGProperty() || c.getBProperty() || c.getAProperty())
+                        return false;
+                return true;
+            };
+            check(allTransparentBlack(readPosX) && allTransparentBlack(readNegX),
+                  "TextureCube: GetData() on two independent faces overwrites the caller's whole "
+                  "destination with transparent black -- the SetData() input is NOT stored, and "
+                  "this fabricated result is recorded, not blessed (REMED-GFX-127's sibling on "
+                  "ITextureCubeBackend)");
         }
 
-        // Check B: Texture3D SetData()/GetData().
+        // Check B: Texture3D construction is REJECTED on this backend.
+        //
+        // This check used to construct a Texture3D and `check(true, ...)` the SetData/GetData pair.
+        // REMED-CONTENT-004 since made Texture3D's constructor throw when the device does not
+        // report GraphicsCapability::Texture3D, which Headless does not -- so the old body aborted
+        // the whole executable on an uncaught System::NotSupportedException before any later check
+        // ran, and this test has been failing for that reason independently of what it asserts.
+        // Verified by A/B: the unmodified pre-REMED-GFX-127 file aborts identically. The honest
+        // assertion is the documented rejection itself.
         {
-            Texture3D tex3d(dev, 2, 2, 2, false, SurfaceFormat::Color);
-            std::vector<Color> voxels(8, Color::Green);
-            tex3d.SetData(voxels.data(), 8);
-            std::vector<Color> readBack(8, Color::Black);
-            tex3d.GetData(readBack.data(), 8);
-            check(true, "Texture3D: SetData()/GetData() complete without throwing");
+            bool threw = false;
+            try
+            {
+                Texture3D tex3d(dev, 2, 2, 2, false, SurfaceFormat::Color);
+                std::vector<Color> voxels(8, Color::Green);
+                tex3d.SetData(voxels.data(), 8);
+            }
+            catch (const System::NotSupportedException&) { threw = true; }
+            check(threw,
+                  "Texture3D: construction is rejected with System::NotSupportedException -- this "
+                  "backend reports no GraphicsCapability::Texture3D and must not silently accept "
+                  "volume data (REMED-CONTENT-004)");
         }
 
         // Check C: RenderTarget2D bind/unbind, viewport reflects the bound target's own size.
@@ -160,7 +194,9 @@ protected:
             const HeadlessStatistics& stats = backend.GetStatistics();
             const bool countsOk =
                 stats.textureCubesCreated == baseline.textureCubesCreated + 1 &&
-                stats.textures3DCreated == baseline.textures3DCreated + 1 &&
+                // Check B's Texture3D is now rejected before any backend resource is created
+                // (REMED-CONTENT-004), so this counter must NOT move.
+                stats.textures3DCreated == baseline.textures3DCreated &&
                 stats.renderTargetsCreated == baseline.renderTargetsCreated + 1 &&
                 stats.renderTargetCubesCreated == baseline.renderTargetCubesCreated + 1 &&
                 stats.effectsCreated == baseline.effectsCreated + 1;

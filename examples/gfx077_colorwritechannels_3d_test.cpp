@@ -162,8 +162,11 @@ class Gfx077ColorWriteChannels3DTest : public Game
         DrawQuad(dev);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         // Full-texture readback (rect==nullptr, elementCount==total): the portable path that hits
-        // every backend's RenderTarget2D GPU-readback fallback (a 1x1-rect read requires a CPU-side
-        // shadow the GPU-only RT does not have, and reads back all zeros on D3D11/D3D9).
+        // every backend's RenderTarget2D GPU-readback fallback. This comment previously recorded
+        // that a 1x1-rect read "reads back all zeros on D3D11/D3D9" -- that was the REMED-GFX-127
+        // fabrication, not a property of the rectangle overload: the rectangle path does reach the
+        // backend, it simply had no readback to reach on those backends. Both now return real
+        // content; the whole-level read is kept here because it is what this GFX-077 scene asserts.
         std::vector<Color> pix(static_cast<std::size_t>(kRtW) * kRtH, Color(0, 0, 0, 0));
         target->GetData(0, nullptr, pix.data(), 0, static_cast<int>(pix.size()));
         return pix[static_cast<std::size_t>(kRtH / 2) * kRtW + kRtW / 2];
