@@ -103,6 +103,25 @@ namespace CNA::Internal::Backends::Ascii
         /// 2D-only reality SDL_RENDERER already has (design decision 9's Phase G7 reuse).
         [[nodiscard]] bool SupportsDepthStencil() const override;
 
+        /**
+         * @brief Reports that this 2D-only backend supports none of the enumerated capabilities.
+         *
+         * REMED-GFX-130. This class inherits `IGraphicsBackend` directly rather than wrapping
+         * `SdlGraphicsBackend`'s own override, so it was still answering
+         * `IGraphicsBackend::SupportsCapability`'s `return true` default for everything -- including
+         * `GraphicsCapability::Texture3D`, which it does not have: `CreateTexture3D()` keeps the
+         * shared nullptr-returning default. A `Texture3D` therefore constructed successfully here
+         * with no storage behind it, and every `SetData` was silently discarded, which is exactly
+         * the situation REMED-CONTENT-004 removed from Headless and Software by making the
+         * capability report honest. Same answer as the wrapped SDL_RENDERER backend gives.
+         *
+         * @return Always false.
+         */
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        {
+            return false;
+        }
+
         // 3D pipeline: NOT supported, same as the wrapped SDL_RENDERER backend. Forwards to
         // SdlGraphicsBackend's own ThrowNo3D-driven implementations rather than re-declaring them
         // (plan_ascii.md design decision 10 / Phase G7).

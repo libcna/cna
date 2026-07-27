@@ -42,22 +42,6 @@ using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 
 // -----------------------------------------------------------------------
-// REMED-GFX-130: does THIS build's backend actually read a volume back?
-//
-// Texture3D::GetData now has exactly two outcomes -- the resource's real content, or a
-// deterministic System::NotSupportedException with the caller's destination untouched. ASCII is the
-// one backend where Texture3D CONSTRUCTS (it keeps IGraphicsBackend::SupportsCapability's own
-// `return true` default) while IGraphicsBackend::CreateTexture3D keeps its nullptr default, so no
-// volume storage exists behind it; every other backend that reaches these tests has real storage
-// (the fixture below skips the ones that report no GraphicsCapability::Texture3D at all).
-// -----------------------------------------------------------------------
-#if defined(CNA_BACKEND_ASCII)
-constexpr bool kVolumeReadbackSupported = false;
-#else
-constexpr bool kVolumeReadbackSupported = true;
-#endif
-
-// -----------------------------------------------------------------------
 // Constructor / properties
 // -----------------------------------------------------------------------
 
@@ -318,8 +302,8 @@ TEST_F(Texture3DTest, GetDataBoxLeftNotLessThanRightThrowsOutOfRange)
 
 // REMED-GFX-130 false-positive audit: this test used to be a bare EXPECT_NO_THROW, which asserted
 // nothing about what GetData produced -- a backend that read nothing and a backend that read the
-// slice correctly both passed it. It now asserts the real outcome for this backend.
-TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSliceOrRejectsDeterministically)
+// slice correctly both passed it. It now asserts the uploaded content itself.
+TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSlice)
 {
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     const Color uploaded[8] = {
@@ -330,21 +314,15 @@ TEST_F(Texture3DTest, GetDataBoxWithinBoundsReturnsUploadedSliceOrRejectsDetermi
     };
     tex.SetData(uploaded, 8);
 
+    // Every backend that reaches this point reports GraphicsCapability::Texture3D (the fixture
+    // skips the ones that do not), and REMED-GFX-130 made that report honest everywhere -- ASCII
+    // used to answer true from IGraphicsBackend::SupportsCapability's own default while creating
+    // no volume resource at all. So real content is the only acceptable outcome here.
     const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
     std::vector<Color> buf(4, sentinel);
-    if (kVolumeReadbackSupported)
-    {
-        ASSERT_NO_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
-        for (int i = 0; i < 4; ++i)
-            EXPECT_EQ(buf[i].getPackedValueProperty(), uploaded[i].getPackedValueProperty()) << i;
-    }
-    else
-    {
-        EXPECT_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4),
-                     System::NotSupportedException);
-        for (int i = 0; i < 4; ++i)
-            EXPECT_EQ(buf[i].getPackedValueProperty(), sentinel.getPackedValueProperty()) << i;
-    }
+    ASSERT_NO_THROW(tex.GetData(0, 0, 0, 2, 2, 0, 1, buf.data(), 0, 4));
+    for (int i = 0; i < 4; ++i)
+        EXPECT_EQ(buf[i].getPackedValueProperty(), uploaded[i].getPackedValueProperty()) << i;
 }
 
 // Task 913: see the identical SetData test above for the full rationale.

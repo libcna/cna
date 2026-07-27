@@ -143,11 +143,13 @@ namespace
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_BACKEND_ASCII)
-    // Same 2D-only cube situation as SDL_RENDERER. Texture3D DOES construct here (this backend
-    // keeps IGraphicsBackend::SupportsCapability's `return true` default) but has no storage
-    // behind it, so its readback must be refused rather than answered with invented content.
+    // Same 2D-only situation as SDL_RENDERER. Texture3D used to CONSTRUCT here, because this
+    // backend inherits IGraphicsBackend directly and was still answering SupportsCapability's own
+    // `return true` default while CreateTexture3D returned nullptr -- a volume resource with no
+    // storage behind it. REMED-GFX-130 made that report honest, so construction is now refused
+    // exactly as it is on Headless and Software (REMED-CONTENT-004's own mechanism).
     constexpr Contract kContract{"ASCII", false, Support::Unsupported, Support::Unsupported,
-                                 true, Support::Unsupported, Support::Unsupported, false};
+                                 false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};

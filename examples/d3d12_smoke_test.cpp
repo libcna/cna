@@ -4315,12 +4315,27 @@ int main()
         }
         tex3d->SetData(0, 1, 1, 0, 2, 2, 2, uploadData.data(), static_cast<int>(uploadData.size()));
 
+        // REMED-GFX-130: GetData now reports whether it actually completed the transfer -- the
+        // return value IS the contract, so it is asserted rather than discarded.
         std::vector<uint8_t> readback(uploadData.size(), 0);
-        tex3d->GetData(0, 1, 1, 0, 2, 2, 2, readback.data(), static_cast<int>(readback.size()));
-
+        const bool volOk = tex3d->GetData(0, 1, 1, 0, 2, 2, 2, readback.data(),
+                                          static_cast<int>(readback.size()));
+        Check(volOk, "GFX130a: D3D12Texture3DBackend::GetData reports a completed readback");
         Check(readback == uploadData,
               "CC2: D3D12Texture3DBackend::SetData()/GetData() round-trip EXACT bytes for a real "
               "off-center sub-volume upload, including the per-Z-slice color difference (plan_dx.md DX-122)");
+
+        // REMED-GFX-130: an out-of-range mip level must report false WITHOUT writing one byte, so
+        // the shared layer raises System::NotSupportedException instead of converting its own
+        // zeroed scratch buffer into a fabricated volume.
+        std::vector<uint8_t> poisoned(uploadData.size(), 0xAB);
+        const bool badLevel = tex3d->GetData(9, 0, 0, 0, 2, 2, 2, poisoned.data(),
+                                             static_cast<int>(poisoned.size()));
+        bool poisonIntact = true;
+        for (uint8_t b : poisoned) if (b != 0xAB) { poisonIntact = false; break; }
+        Check(!badLevel && poisonIntact,
+              "GFX130b: D3D12Texture3DBackend::GetData rejects an out-of-range mip level and leaves "
+              "the caller's buffer byte-for-byte untouched (REMED-GFX-130)");
     }
 
     // ---- plan_dx.md DX-123: D3D12TextureCubeBackend::GetData() -- real readback, mirroring
@@ -4343,10 +4358,23 @@ int main()
         ddCube.SetData(/*face=*/2, /*level=*/0, /*x=*/4, /*y=*/0, 4, 4, face2Data.data(), static_cast<int>(face2Data.size()));
         ddCube.SetData(/*face=*/4, /*level=*/0, /*x=*/0, /*y=*/4, 4, 4, face4Data.data(), static_cast<int>(face4Data.size()));
 
+        // REMED-GFX-130: as above -- the completion result is part of the contract.
         std::vector<uint8_t> readbackFace2(face2Data.size(), 0);
         std::vector<uint8_t> readbackFace4(face4Data.size(), 0);
-        ddCube.GetData(/*face=*/2, /*level=*/0, /*x=*/4, /*y=*/0, 4, 4, readbackFace2.data(), static_cast<int>(readbackFace2.size()));
-        ddCube.GetData(/*face=*/4, /*level=*/0, /*x=*/0, /*y=*/4, 4, 4, readbackFace4.data(), static_cast<int>(readbackFace4.size()));
+        const bool face2Ok = ddCube.GetData(/*face=*/2, /*level=*/0, /*x=*/4, /*y=*/0, 4, 4, readbackFace2.data(), static_cast<int>(readbackFace2.size()));
+        const bool face4Ok = ddCube.GetData(/*face=*/4, /*level=*/0, /*x=*/0, /*y=*/4, 4, 4, readbackFace4.data(), static_cast<int>(readbackFace4.size()));
+        Check(face2Ok && face4Ok,
+              "GFX130c: D3D12TextureCubeBackend::GetData reports a completed readback on both faces");
+
+        // REMED-GFX-130: an out-of-range cube face must report false without writing anything.
+        std::vector<uint8_t> poisonedFace(face2Data.size(), 0xAB);
+        const bool badFace = ddCube.GetData(/*face=*/6, /*level=*/0, /*x=*/0, /*y=*/0, 4, 4,
+                                            poisonedFace.data(), static_cast<int>(poisonedFace.size()));
+        bool facePoisonIntact = true;
+        for (uint8_t b : poisonedFace) if (b != 0xAB) { facePoisonIntact = false; break; }
+        Check(!badFace && facePoisonIntact,
+              "GFX130d: D3D12TextureCubeBackend::GetData rejects an out-of-range CubeMapFace and "
+              "leaves the caller's buffer byte-for-byte untouched (REMED-GFX-130)");
 
         Check(readbackFace2 == face2Data,
               "DD1: D3D12TextureCubeBackend::GetData() round-trips EXACT bytes for a real off-center "
@@ -4359,7 +4387,7 @@ int main()
         // A never-written region of face 2 must read back as the texture's real zero-initialized
         // GPU content, not stale/uninitialized CPU memory -- a genuine live-GPU readback proof.
         std::vector<uint8_t> untouchedRegion(4 * 4 * 4, 0xAB); // poison the CPU buffer first
-        ddCube.GetData(/*face=*/2, /*level=*/0, /*x=*/0, /*y=*/0, 4, 4, untouchedRegion.data(), static_cast<int>(untouchedRegion.size()));
+        (void)ddCube.GetData(/*face=*/2, /*level=*/0, /*x=*/0, /*y=*/0, 4, 4, untouchedRegion.data(), static_cast<int>(untouchedRegion.size()));
         bool untouchedIsZero = true;
         for (std::size_t i = 0; i < untouchedRegion.size(); ++i)
             if (untouchedRegion[i] != 0) { untouchedIsZero = false; break; }
