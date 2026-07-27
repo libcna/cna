@@ -2466,9 +2466,10 @@ existing task.
 | REMED-GFX-114 | Vulkan, D3D9, D3D11 and D3D12 route `PointListEXT` through their triangle-list default and count zero vertices for it. | MEDIUM | P2 | REMED-GFX-111 cross-backend controls | **OPEN — SAME DEFECT CLASS AS REMED-GFX-111 IN FOUR OTHER BACKENDS; 0/13 MEASURED ON VULKAN, D3D11 AND D3D9.** |
 | REMED-GFX-115 | Bgfx Vulkan point pipelines emit `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because the SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-111 validation inspection | **OPEN — SHADER-DECLARATION GAP IN 15 BGFX 3D VERTEX SHADERS; PIXELS CORRECT ON THE TESTED DRIVER, SIZE FORMALLY UNDEFINED.** |
 | REMED-GFX-116 | WebGPU's deferred 3D render pass resolves `GraphicsDevice.Viewport` live at flush time instead of capturing it per queued draw. | MEDIUM | P2 | REMED-GFX-111 viewport control | **OPEN — SAME CLASS AS REMED-GFX-062/063/064/065; THE SPRITEBATCH PATH WAS FIXED UNDER REMED-GFX-072, THE 3D PATH WAS NOT.** |
-| REMED-GFX-117 | SDL_GPU passes literal `0` for `first_index`/`vertex_offset` at all eight native indexed draw sites, dropping public `startIndex`/`baseVertex`. | MEDIUM | P2 | REMED-GFX-111 SDL_GPU control | **OPEN — SDL_GPU COUNTERPART OF REMED-GFX-020/060/107.** |
+| REMED-GFX-117 | SDL_GPU passes literal `0` for `first_index`/`vertex_offset` at all eight native indexed draw sites, dropping public `startIndex`/`baseVertex`. | MEDIUM | P2 | REMED-GFX-111 SDL_GPU control | **DONE 2026-07-27 — ALL EIGHT SITES NOW RESOLVE `first_index = startIndex` (INDEX ELEMENTS) AND `vertex_offset = baseVertex` (APPLIED ONCE) THROUGH ONE SHARED `ResolveIndexedRange`, CARRIED BY VALUE ON EACH DEFERRED DRAW COMMAND; 16-/32-BIT, STATIC/DYNAMIC, ALL FIVE TOPOLOGIES, ALL EIGHT PIPELINE FAMILIES, DRAWUSER, A→B→A, TARGETS, STATE, INVALID-RANGE REJECTION, SANITIZERS, CLEAN VALIDATION AND EIGHT CROSS-BACKEND CONTROLS PASS.** |
 | REMED-GFX-118 | Bgfx `DrawInstancedPrimitivesEx` binds complete vertex and index buffers, dropping public `baseVertex`, `startIndex` and the topology-derived index count. | MEDIUM | P2 | REMED-GFX-113 draw-path inventory | **OPEN — REMED-GFX-107'S INDEXED DEFECT CLASS IN THE ONE BGFX PATH GFX-107 DID NOT COVER.** |
 | REMED-GFX-119 | Software's non-indexed raster paths never apply `vertexStart`; they read from element zero and only enforce `primitiveCount` against the buffer size. | MEDIUM | P2 | REMED-GFX-113 cross-backend controls | **OPEN — SOFTWARE COUNTERPART OF REMED-GFX-113'S OFFSET HALF; PINNED BY A COMMITTED CURRENT-BEHAVIOUR TEST.** |
+| REMED-GFX-120 | SDL_GPU's point-topology graphics pipelines raise `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because its SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-117 validation inspection | **OPEN — SDL_GPU COUNTERPART OF REMED-GFX-115; PIXELS CORRECT ON THE TESTED DRIVER, POINT SIZE FORMALLY UNDEFINED WITHOUT `maintenance5`.** |
 
 #### REMED-BUILD-010 detail
 
@@ -10413,5 +10414,327 @@ validation-layer settings file). `git clean -xfd` was never run. Every build use
 - `0cdd7ee5 fix(Task REMED-GFX-113): bind exact Bgfx non-indexed vertex ranges`
 - `8412d2e8 test(Task REMED-GFX-113): cover the native binding and Bgfx range cardinality`
 - `docs(remediation): record GFX-113 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-117 — SDL_GPU indexed `first_index`/`vertex_offset` propagation (DONE 2026-07-27)
+
+### Classification
+
+This is a **real SDL_GPU production defect: a native argument omission repeated identically at all
+eight indexed draw sites**. It is not a topology, shader-output, vertex-declaration, culling, depth,
+readback-timing, pipeline-cache or SDL API-limitation problem, and it is not a public-capture gap —
+`GpuDrawParams` has carried `startIndex`/`baseVertex` correctly since REMED-GFX-104.
+
+Every native call read literally:
+
+```cpp
+SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+```
+
+so `first_index` and `vertex_offset` were hardcoded zero. The eight `Queue*Draw` functions read only
+`params.vertexStart` (the **non-indexed** offset, which they apply by slicing the shadowed vertex
+copy) and never `params.startIndex` or `params.baseVertex`; the eight draw-command structs had no
+field to carry them. Only the topology-derived index count survived into the native draw. This is
+the SDL_GPU counterpart of REMED-GFX-020 (D3D11), REMED-GFX-060 (D3D9) and REMED-GFX-107 (Bgfx).
+
+The classification was proven, not assumed. The suite separates four properties:
+
+1. **A zero-offset control renders correctly.** The same geometry, topology, vertex declaration,
+   `CullNone`, `DepthStencilState.None` and render-target readback path, with the intended triangle
+   already at index 0 / vertex 0, produced exact `Color::Red` — so nothing in the pipeline other
+   than the offsets themselves could explain the failures.
+2. **`startIndex` alone was ignored** — the element-zero prefix decoy rendered instead.
+3. **`baseVertex` alone was ignored, not applied twice** — the *unbased* decoy rendered (888 exact
+   pixels) while the double-based decoy stayed black, which distinguishes a dropped offset from a
+   doubled one.
+4. **Both together were ignored**, and `primitiveCount` alone still bounded the consumed count.
+
+Pre-fix measurements, all through `RenderTarget2D::GetData` on a 128×128 `SurfaceFormat.Color`
+target (SDL_GPU implements no backbuffer readback at all, so this is its only exact-pixel oracle):
+
+| case | topology | index width | startIndex | baseVertex | minVertexIndex | numVertices | primitiveCount | derived index count | native `first_index` | native `vertex_offset` | actual pixels |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| startIndex only | TriangleList | 16-bit | 3 | 0 | 3 | 3 | 1 | 3 | `0` | `0` | 888 exact `Lime` (element-zero prefix decoy) at NDC 0.0; `Red` absent at −0.65 |
+| baseVertex only | TriangleList | 16-bit | 0 | 3 | 0 | 3 | 1 | 3 | `0` | `0` | 888 exact `Lime` (unbased decoy); `Red` absent; `Blue` (double-based decoy) absent |
+| both | TriangleList | 16-bit | 3 | 3 | 0 | 9 | 1 | 3 | `0` | `0` | 888 exact `Lime` at NDC −0.75 (unbased decoy); `Red` absent at 0.25 |
+
+### The eight native indexed draw sites
+
+Every site was inventoried in source and then exercised at runtime through its own public stock
+effect. All eight passed `first_index = 0` and `vertex_offset = 0`; none reconstructed the values
+in any other way — the eight lines were byte-identical.
+
+| # | Pipeline family | Stride(s) | Queue function | Issue function | Old native arguments | Corrected native arguments |
+|---|---|---|---|---|---|---|
+| 1 | `colored3d` (simple/colored draws) | 16 | `QueueColoredDraw` | `IssueColoredDraw` | `(indexCount, 1, 0, 0, 0)` | `(indexCount, 1, firstIndex, vertexOffset, 0)` |
+| 2 | `textured3d` / `colored_textured3d` (stock) | 20 / 24 | `QueueTexturedDraw` | `IssueTexturedDraw` | `(indexCount, 1, 0, 0, 0)` | `(indexCount, 1, firstIndex, vertexOffset, 0)` |
+| 3 | `lit_textured3d` (stock) | 32 | `QueueLitTexturedDraw` | `IssueLitTexturedDraw` | `(indexCount, 1, 0, 0, 0)` | `(indexCount, 1, firstIndex, vertexOffset, 0)` |
+| 4 | `alpha_test3d` (stock) | 20 / 24 / 32 | `QueueAlphaTestDraw` | `IssueAlphaTestDraw` | `(indexCount, 1, 0, 0, 0)` | `(indexCount, 1, firstIndex, vertexOffset, 0)` |
+| 5 | `dual_texture3d` (stock) | 20 / 24 | `QueueDualTextureDraw` | `IssueDualTextureDraw` | `(indexCount, 1, 0, 0, 0)` | `(indexCount, 1, firstIndex, vertexOffset, 0)` |
+| 6 | `env_map3d` (stock) | 32 | `QueueEnvMapDraw` | `IssueEnvMapDraw` | `(indexCount, 1, 0, 0, 0)` | `(indexCount, 1, firstIndex, vertexOffset, 0)` |
+| 7 | `skinned3d` (skinned variant) | 52 / 56 | `QueueSkinnedDraw` | `IssueSkinnedDraw` | `(indexCount, 1, 0, 0, 0)` | `(indexCount, 1, firstIndex, vertexOffset, 0)` |
+| 8 | `pbr3d` / `pbr_skinned3d` (PBR variant) | 48 / 68 | `QueuePbrDraw` | `IssuePbrDraw` | `(indexCount, 1, 0, 0, 0)` | `(indexCount, 1, firstIndex, vertexOffset, 0)` |
+
+Three further classifications complete the inventory:
+
+- **Instanced indexed:** SDL_GPU does not override `IGraphicsBackend::DrawInstancedPrimitivesEx`,
+  whose base implementation throws `std::runtime_error`. There is no SDL_GPU instanced indexed
+  path, so none of the eight sites is instanced and `num_instances` stays `1` /
+  `first_instance` stays `0`. Nothing was added.
+- **Custom effects:** `SdlGpuEffectBackend` is wired only into the SpriteBatch path
+  (`SdlGpuSpriteBatchBackend::Draw` → `QueueSprite`); the 3D dispatch does not read
+  `params.customEffectBackend` at all. A custom-effect indexed 3D draw is therefore routed to
+  whichever stock stride-dispatched family matches and is corrected by the same change. SpriteBatch
+  itself is non-indexed (`SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0)`) and untouched.
+- **The stride fallback is unreachable, not a default-zero path.** `DrawIndexedPrimitivesEx` ends
+  in `DrawIndexedColoredPrimitives(...)`, which discards `params`. That line is reached only when
+  the stride is not 16 (every stride-16 draw returns earlier), and `QueueColoredDraw` rejects any
+  non-16 stride with `std::invalid_argument`, so the fallback always throws and can never submit a
+  zero-offset draw.
+
+No affected site remains on a default-zero compatibility path: the literal `0, 0` arguments no
+longer exist anywhere in the backend, and `ResolveIndexedRange` is the only producer of the three
+native values.
+
+### Installed SDL_GPU semantics and units
+
+From the pinned prebuilt SDL **3.5.0** this tree builds against
+(`.sdl-prebuilt-Linux-x86_64/install/include/SDL3/SDL_gpu.h:3563`):
+
+```c
+extern SDL_DECLSPEC void SDLCALL SDL_DrawGPUIndexedPrimitives(
+    SDL_GPURenderPass *render_pass,
+    Uint32 num_indices,
+    Uint32 num_instances,
+    Uint32 first_index,
+    Sint32 vertex_offset,
+    Uint32 first_instance);
+```
+
+- `num_indices` — indices drawn **per instance**, in index elements.
+- `num_instances` — instance count; CNA submits `1`.
+- `first_index` — "the starting index within the index buffer": an index **element** offset, *not*
+  a byte offset. This matters because the alternative reading (bytes) would have silently worked
+  for the 16-bit case at even offsets and broken 32-bit indices.
+- `vertex_offset` — `Sint32`, "value added to vertex index before indexing into the vertex buffer".
+  SDL genuinely supports a negative offset; CNA's public contract rejects negative `baseVertex`
+  earlier, so the signedness is preserved in the conversion but never exercised negatively.
+- `first_instance` — CNA submits `0`.
+
+### The production correction
+
+`SdlGpuGraphicsBackend` gained one nested value type and one resolver:
+
+```cpp
+struct NativeIndexedRange { Uint32 indexCount; Uint32 firstIndex; Sint32 vertexOffset; };
+
+NativeIndexedRange ResolveIndexedRange(const SdlGpuIndexBufferBackend& ib,
+                                       const SdlGpuVertexBufferBackend& vb,
+                                       PrimitiveType primitive, int primitiveCount,
+                                       const GpuDrawParams* params) const;
+```
+
+plus a one-line `ApplyIndexedRange` wrapper that copies the resolved triple onto whichever of the
+eight draw-command families is being queued. Each command struct carries `firstIndex`/`vertexOffset`
+**by value** alongside its existing `indexCount`, so a deferred draw keeps its own arguments and no
+live "last set" state can leak between queued draws.
+
+Public/native conversion:
+
+| public | native | conversion |
+|---|---|---|
+| `startIndex` (`int`, index elements) | `first_index` (`Uint32`) | range-checked, then `static_cast<Uint32>` |
+| `baseVertex` (`int`) | `vertex_offset` (`Sint32`) | range-checked, then `static_cast<Sint32>` — signedness preserved |
+| `primitiveCount` + topology | `num_indices` (`Uint32`) | derived in `std::int64_t`, range-checked, then `static_cast<Uint32>` |
+| `minVertexIndex`, `numVertices` | — | validation hints only; never used as an address |
+
+`minVertexIndex` is never used as `first_index` or `vertex_offset`.
+
+The whole index buffer is still uploaded verbatim into the transient per-frame `SDL_GPUBuffer`
+(`UploadSceneDrawData`), so `first_index` addresses the same elements the caller indexed; the
+vertex upload still begins at the *non-indexed* `vertexStart`, which is always `0` on an indexed
+draw, so `vertex_offset` is applied exactly once and never composes with a second offset.
+
+### Public validation
+
+`GraphicsDevice::DrawIndexedPrimitives` already rejected the whole invalid set (REMED-GFX-104/107),
+and `ResolveIndexedRange` now repeats the checks at the backend boundary so nothing can reach SDL
+through a future internal caller. Both throw `System::ArgumentOutOfRangeException` with the XNA
+argument names and **never clamp**:
+
+- negative `startIndex`, `baseVertex`, `minVertexIndex`, `numVertices`;
+- non-positive `primitiveCount`;
+- `startIndex` past the bound index buffer;
+- `startIndex` + the topology-derived consumed count past the bound index buffer;
+- `baseVertex` + `minVertexIndex` + `numVertices` past the bound vertex buffer;
+- an unsupported topology (`std::invalid_argument`, unchanged);
+- arithmetic overflow — the consumed count is derived in `std::int64_t`, so
+  `primitiveCount = INT_MAX` on `TriangleList` is rejected instead of wrapping;
+- any value the native `Uint32`/`Sint32` arguments cannot represent.
+
+One deliberate backend-side nuance: `numVertices == 0` means *no declared range*, not an invalid
+argument. The typed `DrawUserIndexedPrimitives` overloads leave that field at its default, so
+rejecting zero there would have broken every user-primitive draw; a negative value is still
+rejected, and the public entry point still enforces `numVertices > 0` for real indexed draws.
+
+### The DrawUser distinction, proven rather than assumed
+
+`GraphicsDevice::DrawUserIndexedPrimitives` copies the caller's vertices from `vertexOffset` and its
+indices from `indexOffset` into fresh temporary buffers before dispatching, and then calls the
+backend either with no parameters at all (the `void*` overload, via `DrawIndexedColoredPrimitives`)
+or with a `GpuDrawParams` whose `startIndex`/`baseVertex` are default zero (the typed overloads).
+Its native offsets must therefore stay zero — passing the public offsets a second time would apply
+them twice. The suite exercises **both** halves separately (an index offset that selects a
+different index triple, and a vertex offset that selects a different vertex triple), so a
+double-applied offset would render the decoy. Both pass before and after the fix, which is exactly
+the expected signature of a path the defect never touched.
+
+### Results
+
+New permanent regression `tests/.../SdlGpuIndexedDrawRangeTests.cpp`: **2/27 → 27/27**. The two
+that pass pre-fix are the zero-offset isolation control and the DrawUser test — the only two cases
+the defect did not touch. Coverage, all via `RenderTarget2D::GetData`:
+
+| dimension | result |
+|---|---|
+| `startIndex` alone | element-exact range selected; prefix and suffix decoys absent |
+| `baseVertex` alone | added exactly once; unbased and double-based decoys both absent |
+| combined | selected slot exact; three decoy colours absent |
+| `primitiveCount` | exact topology-derived consumed count; based suffix never drawn |
+| 16-bit indices | correct |
+| 32-bit indices | correct |
+| static `VertexBuffer`/`IndexBuffer` | correct |
+| `DynamicVertexBuffer`/`DynamicIndexBuffer` | correct |
+| TriangleList | correct |
+| TriangleStrip | correct (2 primitives → exactly 4 indices) |
+| LineList | correct |
+| LineStrip | correct (1 primitive → exactly 2 indices) |
+| `PointListEXT` | correct — exactly 3 lit pixels for 3 requested points, decoys absent |
+| stock effects, all eight families | correct (see the site table) |
+| custom-effect 3D draws | routed to the stock families; corrected by the same change |
+| DrawUser (indexed) | native offsets stay zero, both offsets honoured by GraphicsDevice |
+| instanced indexed | not applicable — deterministically rejected by the base class |
+| A→B→A, two buffer pairs | each draw kept its own `startIndex`/`baseVertex`/`primitiveCount` |
+| A→B→A, two render targets | each target received only its own draws |
+| post-queue source mutation | queued draws unchanged |
+| source disposal after queueing | safe; queued draw still rendered |
+| invalid ranges | all ten cases rejected before SDL submission; the one valid draw still rendered |
+| depthless render target | correct |
+| depth-backed render target (`Depth24Stencil8`) | correct |
+| Viewport, ScissorRectangle, RasterizerState (incl. REMED-GFX-051 `DepthBias`/`SlopeScaleDepthBias`), BlendState, DepthStencilState | none disturbs addressing |
+
+Full SDL_GPU `CnaTests`: **5706 tests, 5697 passed, 5 skipped, 4 failed** — the same four failures
+(`XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`,
+`CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`) A/B-proven pre-existing by rebuilding the
+tree with the production change reverted and re-running exactly those four, which failed identically.
+
+Prior regression gates, all green: REMED-GFX-043 explicit `VertexDeclaration`, GFX-054/GFX-103
+empty uploads, GFX-104 capture, GFX-105 strip compatibility, GFX-107 Bgfx indexed semantics,
+GFX-108 32-bit index creation, GFX-109 buffer versioning, GFX-110 Software indexed addressing,
+GFX-111 topology mapping, GFX-113 Bgfx non-indexed ranges, GFX-051 SDL_GPU DepthBias and
+GFX-097/GFX-098 SDL_GPU pipeline compatibility.
+
+### SDL_GPU Vulkan validation
+
+SDL_GPU selected its Vulkan driver with the Khronos validation layers explicitly enabled
+(`SDL chose gpu backend 'vulkan'`, `Validation layers enabled`, `Vulkan Conformance 1.3.1.1` on
+llvmpipe). The complete 5706-test run contains exactly two distinct VUIDs, both pre-existing and
+both attributed:
+
+- `VUID-vkDestroyDevice-device-05137` ×44 — leaked `VkImage`/`VkImageView` at device teardown,
+  raised only by `GraphicsDeviceValidationTest.SetRenderTargets_*` and
+  `TextureCollectionValidationTest.*`. **Identical count before and after** the change and unrelated
+  to draw arguments.
+- `VUID-VkGraphicsPipelineCreateInfo-topology-08773` ×4 — SDL_GPU's point-topology pipelines write
+  no `PointSize`. Two occurrences come from the pre-existing REMED-GFX-111 SDL_GPU control; two are
+  newly *surfaced* (not caused) by this task's indexed point-range test, which legitimately creates
+  a point pipeline. Recorded separately as **REMED-GFX-120**, the SDL_GPU counterpart of
+  REMED-GFX-115.
+
+No SDL_gpu error, no device loss, no draw-parameter conversion error and no out-of-range native
+call appears anywhere in the output.
+
+### Cross-backend controls
+
+Equivalent public indexed controls (`IndexedDrawDeferredTest`, `PointListPrimitiveTest`,
+`NonIndexedDrawRangeTest`, plus the new SDL_GPU suite where it compiles):
+
+| backend | result |
+|---|---|
+| SDL_GPU | **33/33** (includes the 27 new regressions) |
+| Vulkan | **30/30** |
+| WebGPU | **50/50** |
+| EasyGL | **44/44** |
+| Bgfx (OpenGL) | **60/60** |
+| Software | **19 passed, 1 documented skip** (its `TriangleList`-only v1 raster boundary) |
+| D3D11 (Wine + DXVK) | **26/26** |
+| D3D9 (Wine + DXVK) | **26/26** |
+| Headless | **4/4** |
+
+Only SDL_GPU production changed. One new independent issue was found and recorded separately
+(REMED-GFX-120); no other backend regressed.
+
+### Sanitizers
+
+Focused runs over `SdlGpuIndexedDrawRangeTest`, `IndexedDrawDeferredTest`, `PointListPrimitiveTest`
+and `NonIndexedDrawRangeTest` — `startIndex` zero and nonzero, `baseVertex` zero and positive,
+combined addressing, invalid ranges, 16- and 32-bit indices, and A→B→A:
+
+- **ASan** (`cmake-build-sdlgpu-asan`): **33/33**, no `AddressSanitizer` report of any kind.
+- **UBSan** (`cmake-build-sdlgpu-ubsan`): **33/33**, zero `runtime error:` reports. The tree is genuinely instrumented (14 `__ubsan_handle_*` symbols in the binary; the ASan tree carries 12 `__asan_report_*`).
+
+No invalid access, narrowing UB, signed overflow or lifetime error. The negative-`baseVertex` case
+SDL's `Sint32` would permit is rejected by CNA's public contract before conversion, so it is
+covered as a rejection rather than as an addressing mode.
+
+### Performance
+
+The change is pure parameter propagation. Each draw command carries two extra scalars (8 bytes),
+resolved once at queue time by one non-allocating function. There is no per-draw allocation, no
+buffer copying to avoid offsets, no new pipeline per offset, no extra submission, no wait, no
+`Present`, no extra frame and no one-frame latency. Every `GetOrCreatePipeline*` cache key is
+unchanged and none contains `startIndex` or `baseVertex`.
+
+### New finding
+
+- **REMED-GFX-120** — SDL_GPU's point-topology graphics pipelines emit
+  `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because its SPIR-V vertex shaders write no
+  `PointSize`. Points rasterize correctly on the tested llvmpipe driver, but the point size is
+  formally undefined on any driver without `maintenance5`. Pre-existing since REMED-GFX-111 gave
+  SDL_GPU native point topology; the SDL_GPU counterpart of REMED-GFX-115 (Bgfx). Closing it needs
+  `gl_PointSize` in the SDL_GPU 3D vertex shaders and regeneration of `spirv_shaders.hpp` —
+  deliberately outside an indexed-addressing task's scope.
+
+### Build directories, ccache and storage policy
+
+| Directory | Backend / variant | ccache | Status |
+|---|---|---|---|
+| `cmake-build-sdlgpu` | SDL_GPU | yes | reused |
+| `cmake-build-sdlgpu-asan` | SDL_GPU + ASan | yes | reused |
+| `cmake-build-sdlgpu-ubsan` | SDL_GPU + UBSan | yes | **created** |
+| `cmake-build-vulkan` · `cmake-build-webgpu` · `cmake-build-debug` (EasyGL) · `cmake-build-bgfx` · `cmake-build-software` · `cmake-build-headless` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-sdlrenderer` · `cmake-build-dx3` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other twelve | yes | reused |
+
+`cmake-build-sdlgpu-ubsan` is the one new directory. No SDL_GPU UndefinedBehaviorSanitizer tree
+existed (`cmake-build-software-ubsan` and `cmake-build-bgfx-ubsan` build other backends, so neither
+compiles `SdlGpuGraphicsBackend.cpp`), and UBSan cover of this task's new 64-bit range arithmetic
+and `Uint32`/`Sint32` narrowing is required. It is a stable in-repository directory configured with
+`-DCNA_SANITIZE=undefined -DCNA_USE_CCACHE=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache`, reusable by
+later sessions.
+
+No build directory was deleted, cleaned or recreated; no clean build was required; no build tree was
+created under `/tmp`, `/var/tmp` or `/dev/shm`. `/tmp` held only test logs. Builds ran at `-j4`, and
+the two sanitizer trees at `-j3`. All fourteen backend libraries compile incrementally: ASCII, Bgfx,
+Canvas, D3D9, D3D11, D3D12, DX3, EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan and
+WebGPU. No shader source and no generated artifact changed.
+
+**Commits:**
+
+- `cf8eb39e test(Task REMED-GFX-117): reproduce SDL GPU indexed offset loss`
+- `fcce95f7 fix(Task REMED-GFX-117): propagate SDL GPU indexed draw offsets`
+- `db4aa914 test(Task REMED-GFX-117): cover indexed paths and deferred capture`
+- `c82fb5f7 docs(Task REMED-GFX-117): Doxygen the SDL GPU native indexed range`
+- `docs(remediation): record GFX-117 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
