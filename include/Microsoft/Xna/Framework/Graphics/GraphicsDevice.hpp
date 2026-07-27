@@ -373,14 +373,28 @@ namespace Microsoft::Xna::Framework::Graphics
                                    int baseVertex, int minVertexIndex,
                                    int numVertices, int startIndex, int primitiveCount);
         /**
-         * @brief Draws instanced indexed primitives.
+         * @brief Draws @p instanceCount instances of one indexed geometry range.
+         *
+         * The geometry range takes the same contract as `DrawIndexedPrimitives`: @p startIndex is
+         * an index-element offset, @p primitiveCount fixes the exact topology-derived index count,
+         * and @p baseVertex is added to every decoded index exactly once. @p instanceCount is
+         * independent of that range — it never widens or narrows the consumed geometry, and the
+         * geometry never changes how many instances are submitted. The per-instance data comes from
+         * the bound `VertexBufferBinding` whose instance frequency is greater than zero.
+         *
          * @param primitiveType  The type of primitive to draw.
-         * @param baseVertex     Offset added to each index.
-         * @param minVertexIndex Minimum vertex index referenced.
+         * @param baseVertex     Offset added to each index before reading from the vertex buffer.
+         * @param minVertexIndex Minimum vertex index among the referenced vertices.
          * @param numVertices    Number of vertices referenced.
-         * @param startIndex     Start index in the index buffer.
+         * @param startIndex     Location in the index buffer to start reading.
          * @param primitiveCount Number of primitives per instance.
          * @param instanceCount  Number of instances to draw.
+         * @throws std::runtime_error if no vertex buffer, index buffer or effect is bound.
+         * @throws System::ArgumentOutOfRangeException if @p primitiveCount, @p numVertices or
+         *         @p instanceCount is not positive; if @p baseVertex, @p minVertexIndex or
+         *         @p startIndex is negative; if the requested index range leaves the bound index
+         *         buffer; if the declared vertex range leaves the bound vertex buffer after
+         *         @p baseVertex; or if @p instanceCount exceeds the bound per-instance buffer.
          */
         void DrawInstancedPrimitives(PrimitiveType primitiveType,
                                      int baseVertex, int minVertexIndex,
