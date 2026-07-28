@@ -2478,7 +2478,7 @@ existing task.
 | REMED-GFX-126 | Software reports a `MultiSampleCount` it never implements: `SoftwareRenderTargetBackend::GetMultiSampleCount()` returns the requested power-of-two-rounded count although the rasterizer writes one sample per pixel and stores no per-sample data. | LOW | P3 | REMED-GFX-124 multisample boundary | **OPEN — CONTRADICTS `IRenderTargetBackend::GetMultiSampleCount`'S OWN "0 IF NOT SUPPORTED BY THIS BACKEND" CONTRACT AND FNA'S `FNA3D_GetMaxMultiSampleCount` SEMANTICS; READBACK AND SAMPLING ARE UNAFFECTED, SO THIS IS A REPORTING DEFECT. VALUE PINNED BY `Software_RenderTargetReadback` CHECK H3.** |
 | REMED-GFX-127 | `Texture2D::GetData`'s render-target fallback zero-initialized the scratch buffer it handed the backend and converted it for the caller regardless, so a backend with no readback returned a fabricated, fully written transparent-black frame. | MEDIUM | P2 | REMED-GFX-124 pre-fix measurement | **DONE 2026-07-27 — REPRODUCED ON SEVEN BACKENDS (SDL_RENDERER, BGFX, ASCII, DX3, HEADLESS, D3D9, D3D11) AT `sentinelSurvivors=0/128`, `fabricated=128`, `exact=0`, NO EXCEPTION — THE SENTINEL ORACLE PASSES ON EVERY ONE. FIXED BY MAKING `ITextureBackend::GetData` RETURN `bool` (TRUE ONLY FOR A COMPLETE REGION, `[[nodiscard]]` DEFAULT FALSE) AND CONVERTING ONLY ON TRUE, ELSE `System::NotSupportedException` WITH THE DESTINATION UNTOUCHED. REAL READBACK IMPLEMENTED ON SDL_RENDERER/ASCII, BGFX, DX3, D3D9, D3D11, D3D12 AND CANVAS USING EACH BACKEND'S OWN ESTABLISHED MECHANISM; HEADLESS REFUSES EXPLICITLY; TWO WEBGPU `memset`-TO-ZERO-AND-SUCCEED SITES CLOSED. NEW SHARED SUITE 39/39 ON ELEVEN RUNTIME BACKENDS, 34/34 HEADLESS, D3D12 VIA 5 NEW SMOKE CHECKS (247/247), CANVAS COMPILE-VERIFIED; ASAN/UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-129/130/131/132/133.** |
 | REMED-GFX-128 | `Texture2D::GetData`'s two overloads give `startIndex` opposite meanings: a SOURCE offset in `GetData(Color*, int, int)` and a DESTINATION offset in the rectangle overload. | LOW | P3 | REMED-GFX-124 destination-offset coverage | **OPEN — XNA/FNA DEFINE `startIndex` AS THE DESTINATION ARRAY OFFSET IN BOTH; FOR A RENDER TARGET THE DIVERGENCE IS MASKED BY THE WHOLE-LEVEL OVERLOAD'S `startIndex == 0` GATE, WHICH THROWS `std::runtime_error` INSTEAD OF READING. BOTH BEHAVIOURS PINNED BY CHECKS D7/D8/E10.** |
-| REMED-GFX-129 | Vulkan builds a `PreserveContents` render target's pass with `VK_ATTACHMENT_LOAD_OP_LOAD` and delivers the clear colour only through the load op, so an explicit `GraphicsDevice.Clear()` on such a target is silently dropped. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **OPEN — MEASURED: A PRESERVECONTENTS TARGET CLEARED TO `(0,255,255,128)` AND THEN PAINTED READ BACK WITH THE SPRITE BLOCKS EXACT AND ALL 64 BACKGROUND PIXELS `(0,0,0,0)`. XNA/FNA SCOPE `PreserveContents` TO SET-TIME DISCARD, NOT TO WHETHER `Clear()` WORKS.** |
+| REMED-GFX-129 | Vulkan builds a `PreserveContents` render target's pass with `VK_ATTACHMENT_LOAD_OP_LOAD` and delivers the clear colour only through the load op, so an explicit `GraphicsDevice.Clear()` on such a target is silently dropped. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **OPEN — MEASURED: A PRESERVECONTENTS TARGET CLEARED TO `(0,255,255,128)` AND THEN PAINTED READ BACK WITH THE SPRITE BLOCKS EXACT AND ALL 64 BACKGROUND PIXELS `(0,0,0,0)`. XNA/FNA SCOPE `PreserveContents` TO SET-TIME DISCARD, NOT TO WHETHER `Clear()` WORKS. RE-MEASURED AND NARROWED UNDER REMED-GFX-140 (2026-07-28), STILL OPEN AND **NOT** A SYMPTOM OF THAT FINDING'S PASS COLLAPSING: CHECKS `X1`/`X2`/`X3` OF `examples/rendertarget_pass_boundary_test.cpp` DROP THE CLEAR IDENTICALLY WITH ONE BIND CYCLE, WITH A SECOND CYCLE THAT IS NOW GENUINELY ITS OWN NATIVE PASS, AND AFTER A DRAW INSIDE ONE CYCLE. THE WHOLE ROOT CAUSE IS THAT THE CLEAR COLOUR IS DELIVERED ONLY THROUGH THE PASS LOAD OP AND A PASS HAS EXACTLY ONE; FIXING IT NEEDS A REAL `vkCmdClearAttachments` PATH.** |
 | REMED-GFX-130 | `ITextureCubeBackend::GetData`/`ITexture3DBackend::GetData` kept the no-op `void` default and the public cube/volume `GetData` converted their own zeroed scratch buffer regardless, so `TextureCube`/`Texture3D` readback fabricated the frame REMED-GFX-127 removed from `Texture2D`. | MEDIUM | P2 | REMED-GFX-127 interface survey | **DONE 2026-07-27 — REPRODUCED ON FIVE BACKENDS: HEADLESS 17/33 (`fabricated=64/64`, `sentinelSurvivors=0`, NO EXCEPTION — ITS `GetData` ACTIVELY ZERO-FILLED THE CALLER WHILE `SetData` STORED NOTHING), SOFTWARE 31/33 (CUBE MIP 1 `fabricated=16/16`), SDL_RENDERER 19/33, DX3 19/33, ASCII 32/56 (CUBE **AND** A `Texture3D` THAT CONSTRUCTED WITH NO STORAGE). FIXED BY MAKING BOTH INTERFACES RETURN `[[nodiscard]] bool` (TRUE ONLY FOR A COMPLETE REGION, DEFAULT FALSE), SIZING THE SHARED SCRATCH TO THE REQUESTED REGION RATHER THAN `elementCount`, REFUSING A NULL BACKEND, AND THROWING `ObjectDisposedException` AFTER DISPOSE. THREE WEBGPU `memset`-TO-ZERO-AND-SUCCEED SITES AND EASYGL'S PER-SLICE HALF-READ CLOSED; HEADLESS REFUSES EXPLICITLY AND ITS ZERO-FILLED CUBE/VOXEL STORAGE IS DELETED; ASCII'S FALSE `GraphicsCapability::Texture3D` CLAIM CORRECTED. NEW SHARED SUITE 56/56 ON EASYGL/VULKAN/BGFX/SDL_GPU/WEBGPU/D3D9/D3D11 AND 33/33 ON SOFTWARE/HEADLESS/SDL_RENDERER/ASCII/DX3; D3D12 VIA 4 NEW SMOKE CHECKS (251/251); CANVAS COMPILE-VERIFIED. ASAN+UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-134/135.** |
 | REMED-GFX-131 | WebGPU configures an `*UnormSrgb` surface format and creates render targets with it, so a mid-tone channel written through the render pass comes back gamma-encoded (128 -> 188) unlike XNA's non-sRGB `SurfaceFormat.Color`. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **OPEN — ALPHA AND THE 0/255 FIXED POINTS ARE UNAFFECTED, WHICH IS WHY EXISTING SATURATED-COLOUR WEBGPU RENDER-TARGET TESTS NEVER SAW IT.** |
 | REMED-GFX-132 | `cna_reference_dump` links `CNA` without the `--start-group` wrapper its own build-system comment says it needs, so it fails to link under the ASCII backend. | LOW | P3 | REMED-GFX-127 build matrix | **OPEN — `BuildAsciiFontAtlas` REFERENCES `SpriteFont::SpriteFont` FROM AN ALREADY-PASSED ARCHIVE. EVERY BACKEND LIBRARY, EVERY ASCII TEST AND `CnaTests` BUILD; ONLY THIS TOOL TARGET FAILS.** |
@@ -13750,3 +13750,306 @@ narrow-file-restore route.
 
 No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
 untouched.
+
+---
+
+## REMED-GFX-140 — deferred Vulkan render-pass boundaries (DONE 2026-07-28)
+
+### Classification
+
+**A real defect in `VulkanGraphicsBackend::RecordCommandBuffer`, plus a second, independent defect in
+the shared per-frame vertex/index arena that had to be fixed with it.** Not a test artefact, not a
+driver behaviour, and — importantly — **not** the cause of REMED-GFX-129, which was re-measured here
+and left open with a narrower root cause.
+
+### Exact lost-boundary mechanism
+
+Phase 1 built `usedRTs`, the list of **unique** `VulkanRTSource*` referenced this flush, and gave
+each one a single `vkCmdBeginRenderPass` … `vkCmdEndRenderPass` inside which `drawSpritesFor(rt)` and
+`draw3DFor(rt)` replayed **every** entry whose `rt` matched. Target identity was the only grouping
+key the deferred queues carried, so two public bind cycles of one target were indistinguishable:
+
+| public sequence | pre-fix native | required |
+|---|---|---|
+| `SetRenderTarget(A); Draw; SetRenderTarget(null); SetRenderTarget(A); Draw; SetRenderTarget(null)` | **1** pass, 2 draws | 2 passes |
+| `A; Draw; null; B; Draw; null; A; Draw; null` | **2** passes (A, B) | 3 passes (A, B, A) |
+| `A; Draw; null;` ×3 | **1** pass, 3 draws | 3 passes |
+
+Consequences, each reproduced independently rather than assumed:
+
+| claimed consequence | verdict | evidence |
+|---|---|---|
+| the second load action never occurs | **real** | `S1` — a `DiscardContents` target's second bind returned the first cycle's whole pattern |
+| `PreserveContents` tests pass without a reload | **real** | REMED-GFX-136's `Settle()` exists for exactly this; `S2` shows the two shapes are pixel-identical on a preserving target |
+| `DiscardContents` not applied at the correct bind | **real** | `S1`, `S4`, `S8`, `S12`, `C1`, `P3`, `P5`, `R1` |
+| `Clear()` attached to the wrong logical pass | **real** | `S3` — a `Clear()` in the second cycle ran before the first cycle's draws |
+| viewport/scissor leaking between cycles | **real** | `S10`, `S11` — the second cycle's sub-viewport/scissor applied to a pass that had already drawn cycle 1 |
+| A → B → A misrepresented | **real** | `S4`, `S12` |
+| cube face A → B → A collapsing by resource identity | **real** | `C1` — each face proxy is its own `VulkanRTSource`, so it is the *same-face rebind* that merged |
+| tests observing one pass where several were asked for | **real** | 47 → 83 native `vkCmdBeginRenderPass` for the same battery |
+| MRT bind cycles merging | **NOT real** | `SetRenderTargets` retires the old `VulkanMRTProxy` and builds a new one, so each MRT bind was already a distinct source; `M1` passed pre-fix |
+| two independent targets losing each other's *content* | **NOT real as stated, but a different defect is** | `S5` passed; the arena defect below is a *geometry* loss, not a content one |
+
+### Second defect found in the same path
+
+`drawSpritesFor` and `draw3DFor` each declared `vbOff = ibOff = instVbOff = 0` **inside** the lambda,
+so every pass restarted the shared per-frame arena cursor at 0. Every `memcpy` into that arena
+happens while *recording*; the GPU reads it only after `vkQueueSubmit`. A pass recorded later in the
+same command buffer therefore overwrote the exact bytes an earlier pass had already bound, and the
+earlier pass drew the **later** pass's geometry.
+
+It was invisible to every existing fixture because they draw *identical rectangles* and vary only the
+source texture, which lives in the per-draw descriptor set, not in the arena. Instrumenting the
+memcpy proved three targets in one command buffer all writing at `vbOff=0`. New check `P6` differs in
+GEOMETRY and catches it; strengthening `vulkan_render_target_usage_test.cpp` catches it in colour
+too, because its third target is recorded FIRST and so is not the last writer.
+
+Segmentation makes fixing it mandatory — one target's two cycles are now two passes over one arena —
+so the cursors are hoisted to the whole record and each pass owns a disjoint range.
+
+### Corrected segment architecture
+
+Design **B** of the four offered (a monotonically increasing segment id captured on every bind
+cycle), because it needs no new command type in the deferred stream, no per-draw allocation, and no
+change to how entries are stored or ordered:
+
+* `uint64_t currentSegment_`, advanced by `BeginRenderPassSegmentEXT(rt)`, which replaces **all nine**
+  assignments of `currentRT_` (2D bind/unbind, 2D destructor, `SetRenderTarget2D`, `SetRenderTargets`
+  null/single/MRT, cube face bind/unbind, cube destructor). It advances on *every* call, including a
+  rebind of the same target — that is the whole point.
+* `Pending3DDraw::segment`, tagged in `PushPending3DDraw`, the single choke point all six draw
+  call sites already route through, so no site can forget it.
+* `PendingBatch { snapshot, rt, segment }` replaces the old `pair<snapshot, rt>`; the segment is
+  captured at SpriteBatch `Begin()` alongside `activeRT_`, for the same reason — the batch belongs to
+  the cycle that opened it even if `End()` runs after the unbind.
+* `clearedRTs_` → `pendingClears_`, a per-segment record carrying `rt` **and the clear values**.
+* Phase 1 builds one `PassSegment` per id from the three queues, `std::sort`s by id, and records each
+  in its own native pass. Entry order within a segment is unchanged. An empty segment produces no
+  pass. `RecordMode::RenderTargetsOnly` keeps *every* segment naming `onlyRT`, not just one.
+
+Requirements checked against the design: every bind cycle is a distinct segment ✓; object identity
+alone never merges segments ✓; face, mip, usage, load/store action and attachment set all ride on the
+`VulkanRTSource` the segment names ✓; unbind closes the segment ✓; rebind opens a new one ✓; entry
+order preserved ✓; caches stay compatibility-keyed ✓; no renderer flush between segments ✓; no heap
+allocation per draw ✓.
+
+### Clear values
+
+Previously every pass began with the frame-global `clearR_`/`clearG_`/`clearB_`/`clearA_`/
+`clearDepth_`/`clearStencil_` **as they stood at record time**, so the frame's last `Clear()` supplied
+the colour for every earlier pass too. They now belong to the segment that issued them. Within one
+segment the last `Clear()` still wins, because Vulkan delivers the colour through the pass load op
+and a pass has exactly one — that is REMED-GFX-129's limitation, deliberately not widened. A segment
+with no explicit `Clear()` falls back to the frame-global values, which is byte-identical to the
+pre-fix behaviour and only ever reachable on a preserving pass, whose `LOAD_OP_LOAD` never reads them.
+
+### Native pass counts and object cardinality
+
+Same binary, same final test file, LD_PRELOAD interposer on the real entry points (no production
+instrumentation, no `api_dump` layer available here):
+
+| | pre-fix | post-fix |
+|---|---|---|
+| checks | **26/42** | **42/42** |
+| `vkCmdBeginRenderPass` | 47 | **83** |
+| `vkCmdEndRenderPass` | 47 | **83** |
+| `vkCreateRenderPass` | 6 | **6** |
+| `vkCreateFramebuffer` | 69 | **69** |
+| `vkCreateImageView` | 117 | **117** |
+| `vkAllocateCommandBuffers` | 206 | **206** |
+| `vkQueueSubmit` | 210 | **210** |
+
+Per check, the boundary is exact: `S1`'s two logical cycles 1 → **2** native begins, `S8`'s three
+1 → **3**. Begins equal ends in both runs — no unmatched or overlapping pass. **Six** `VkRenderPass`
+objects serve **83** logical passes, and not one framebuffer, image view, command buffer or submit was
+added: segment ids are a grouping key, never a cache key.
+
+### Performance
+
+Added: **+36 native begin/end pairs** across the battery, i.e. exactly the boundaries the public
+contract requires. Not added: no full queue or device flush per target switch, no `vkDeviceWaitIdle`
+per segment, no `Present`, no extra rendered frame, no full-target copy to establish a boundary, no
+permanent allocation per pass, no per-draw render-pass creation. The one genuine extra cost is
+`MaybeGenerateMips`, now run once per segment rather than once per target per flush — required, since
+each pass's result needs its own mip chain, and a no-op unless the target actually owns mips.
+
+### REMED-GFX-129 — outcome B, still OPEN with a narrower root cause
+
+Re-measured, not resolved. Checks `X1`/`X2`/`X3` reproduce it three ways:
+
+| check | shape | result (identical before and after this fix) |
+|---|---|---|
+| `X1` | `Clear()` in the ONLY bind cycle of a `PreserveContents` target | dropped; marker exact, background `(0,0,0,0)`, never the clear colour |
+| `X2` | `Clear()` in a SECOND bind cycle, which is now genuinely its own native pass | dropped; the first cycle's pattern shows through, 64/64 |
+| `X3` | draw, then `Clear()`, then draw, inside ONE cycle | the earlier draw survives, 64/64 |
+
+`X1` alone settles the classification: with one cycle there is nothing to collapse. The whole root
+cause is that `GetOrCreateRTRenderPass` delivers the clear colour **only** through the pass load op
+and a preserving pass uses `LOAD_OP_LOAD` — there is no `vkCmdClearAttachments` path anywhere in the
+backend — which is equally why a clear issued after a draw cannot wipe it. Fixing it needs that path;
+GFX-140 deliberately did not add one, and the index row is updated with this narrower statement.
+REMED-GFX-018's `ClearOptions` semantics are untouched (`Vulkan_GraphicsDevice_ClearOptions` green).
+
+### Viewport / scissor / MRT / cube / MSAA / layouts
+
+* **Viewport, scissor** — `S10`/`S11`: a sub-viewport and a scissor set in the second cycle now apply
+  to that cycle's pass only. Per-draw and per-batch capture (REMED-GFX-013/062/070) is untouched;
+  segmentation neither introduced nor hid a live-state capture defect. Four backends turned out to
+  ignore a sub-Viewport (and DX3 a scissor) for a SpriteBatch fill — pre-existing, declared per
+  backend, not this task's subject.
+* **MRT** — `M1`/`M2`: two cycles of `{a,b}`, then `{a,b}` → `{a,c}`. Both green post-fix; `M1` was
+  already green pre-fix because each `SetRenderTargets` builds a fresh `VulkanMRTProxy`. REMED-GFX-095
+  (MRT + MSAA) and REMED-GFX-096 (plural/cube binding) stay green.
+* **Cube** — `C1`/`C2`: face 0 → face 1 → face 0 under both usages, plus REMED-GFX-134's 56/56 and
+  REMED-GFX-136's 30/30 unchanged.
+* **MSAA** — `K1`/`K2` on a genuinely multisampled `RenderTarget2D` (`applied=4`; Vulkan only
+  multisamples a target when the backbuffer is multisampled, so the file requests one there). Each
+  segment's resolve completes before the next segment loads; the readback after all queued segments
+  is exact. REMED-GFX-141 (one multisample attachment shared across six cube faces) is untouched —
+  the canonical MSAA case here is non-cube for exactly that reason.
+* **Layouts and barriers** — a preserving pass's `initialLayout = SHADER_READ_ONLY_OPTIMAL` is what
+  the previous pass's `finalLayout` already leaves, and a discarding pass takes `UNDEFINED`, so
+  back-to-back segments on one image need no new barrier; colour → transfer-source readback, colour →
+  sampled texture, A → B, face A → face B, MSAA → resolve and depth reuse all keep the transitions
+  they had. No `vkDeviceWaitIdle` was introduced.
+
+### Validation
+
+**Standard Vulkan validation: clean** — zero `[Vulkan Validation]` messages across the whole battery,
+with `VK_LOADER_DEBUG=layer` confirming `VkLayer_khronos_validation` really loaded (a zero count from
+an absent layer would mean nothing).
+
+**Synchronization validation** (opt-in, apparently never run before in this repo) reports two hazard
+classes, **measured identical before and after the fix** — 14 messages pre-fix, 15 post-fix, the one
+extra being one more preserving pass in the larger test file, and no new class:
+
+1. `READ_AFTER_WRITE`: a `LOAD_OP_LOAD` colour attachment read is not synchronized against the layout
+   transition the same `vkCmdBeginRenderPass` performs — `deps[0].dstAccessMask` lacks
+   `VK_ACCESS_COLOR_ATTACHMENT_READ_BIT`. Fires once per preserving pass, independent of adjacency.
+2. `WRITE_AFTER_READ`: the backbuffer pass versus `vkAcquireNextImageKHR`.
+
+Both recorded as **REMED-GFX-144** and deliberately not fixed here: `GetOrCreateRTRenderPass`'s own
+source comment records that its dependency masks were made byte-identical to `CreateRenderPass()`'s
+after live validation errors from a depth-tested draw into a non-MSAA target, so changing them needs
+its own regression pass over every pipeline reused across the two render passes.
+
+### False-positive test audit
+
+Scope: the directly relevant Vulkan render-target tests, not a repository-wide rewrite.
+
+| file | finding | action |
+|---|---|---|
+| `vulkan_render_target_usage_test.cpp` | records two targets into one command buffer in frame 0 and never inspects the result; reads `rt_discard` only after a discard wiped it; `rt_preserve`'s uniform fill is indistinguishable from any other target's | **strengthened** — third target, recorded FIRST, distinct colour, two draws differing in geometry, both halves asserted byte-exact before anything is rebound. A/B **4/5 → 5/5**, pre-fix reading the SECOND target's green |
+| `rendertargetcube_usage_test.cpp` | `Settle()`'s doc asserted the collapsing as current behaviour; `Q1`'s doc called collapsing something a deferred backend "may legitimately" do | **corrected** — the barrier stays (a preservation check must prove an earlier pass's content is reloaded by a later one) but the collapsing is recorded as fixed and the new file named as the one that enforces the boundary with no barrier |
+| its **eleven** `Settle()`-dependent preservation checks | already recorded by REMED-GFX-136 as false-positive-capable and already strengthened there | re-verified, 30/30 |
+| `vulkan_rt_roundtrip_test.cpp` (Task 875) | Clear-only round trip, one bind cycle | not false-positive-capable for this finding; green |
+
+Found: **2 files, 13 checks** (2 new + 11 already recorded). Strengthened: **2 files**. Findings whose
+evidence depended on them: REMED-GFX-136's preservation claim, which the barrier already protected.
+
+### Cross-backend controls
+
+Public fixtures only; **only Vulkan production changed.**
+
+| backend | result | display / route |
+|---|---|---|
+| VULKAN | **42/42** | `:101`, Vulkan (llvmpipe, LLVM 19.1.7), validation layer active |
+| EASYGL | **41/41** | `:101`, OpenGL ES 3.2 Mesa 25.0.7 |
+| D3D9 | **41/41** | `:99`, Wine + DXVK (`run-wine-dxvk9.sh`) |
+| D3D11 | **41/41** | `:99`, Wine + DXVK (`run-wine-dxvk.sh`) |
+| WEBGPU | **40/40** | `:101`, wgpu-native v29.0.1.1 |
+| BGFX | **39/39** | `:101`, OpenGL |
+| SOFTWARE | **38/38** | `SDL_VIDEODRIVER=dummy`, CPU |
+| SDL_RENDERER | **38/38** | `:101`, SDL_Renderer |
+| ASCII | **38/38** | `:101`, SDL_Renderer |
+| DX3 | **38/38** | `SDL_VIDEODRIVER=dummy`, free-direct |
+| HEADLESS | **30/30** | `SDL_VIDEODRIVER=dummy`, no rasterization |
+| SDL_GPU | **28/28** | `:101`, SDL_gpu (Vulkan driver) — declares `segmentsBindCycles = false`, REMED-GFX-145 |
+| CANVAS | compile+link | Emscripten |
+| D3D12 | compile+link | DX-100's Wine `dxgi!d3d12_swapchain_init` null dereference still blocks every windowed D3D12 test; D3D11 is the runtime D3D control |
+
+`:0` was not used for any measurement. No display was started and none was stopped.
+
+### Regression gates
+
+| gate | result |
+|---|---|
+| REMED-GFX-018 `ClearOptions` | green (in the Vulkan shard) |
+| REMED-GFX-039 active-target validation | green |
+| REMED-GFX-093 Texture3D transitions | green |
+| REMED-GFX-095 MRT + MSAA | green |
+| REMED-GFX-096 plural target / cube binding | green |
+| REMED-GFX-112 index-arena alignment | green |
+| REMED-GFX-127 / 130 honest readback | green |
+| REMED-GFX-134 cube readback | **56/56** |
+| REMED-GFX-136 usage suite | **30/30** |
+| viewport / scissor / target sampling / disposal | green |
+| `ctest -R '^Vulkan'` | **167/168** — only `Vulkan_DepthBias`, pre-recorded |
+| `ctest` (full) Vulkan | **5915/5921** — `XnbContainerFuzzTest`, `CnjEffectTest`, `CnjStockEffectTest`, `DoesNotSupportWireFrame`, `Vulkan_DepthBias` all pre-recorded, plus `AudioCategoryTest.PauseOnParentCategoryPausesCueInChildCategory`, proven a parallel-load flake (3/3 in isolation) |
+| `ctest -R PassBoundary` in every registered dir | 1/1 in EasyGL, Bgfx, SdlGpu, WebGPU, SDL_Renderer, ASCII, Software, Headless, DX3, D3D9, D3D11 |
+
+### Sanitizers
+
+| build | tests | result |
+|---|---|---|
+| `cmake-build-vulkan-asan` | pass-boundary, RT usage, cube usage | 42/42, 5/5, 30/30 — **0** ASan reports |
+| `cmake-build-vulkan-ubsan` (**new**) | same three | 42/42, 5/5, 30/30 — **0** runtime errors |
+| `cmake-build-software-asan` / `-ubsan` | pass-boundary | 38/38 each — clean |
+| `cmake-build-sdlgpu-asan` | pass-boundary | 28/28 — clean |
+
+### Independent findings recorded
+
+* **REMED-GFX-143** — the backbuffer keeps one trailing pass, so backbuffer and render-target cycles
+  cannot interleave. Nothing observable in a render target changes (`S6` covers exactly that sequence
+  and passes); what breaks is a game that samples a target onto the backbuffer and then renders into
+  that target again. Fixing it needs a `LOAD_OP_LOAD` swapchain pass variant plus threading the MSAA
+  resolve, readback copy and final layout onto the last backbuffer segment.
+* **REMED-GFX-144** — the two pre-existing synchronization-validation hazard classes above.
+* **REMED-GFX-145** — SdlGpu collapses bind cycles exactly as Vulkan did, 19/37 with the identical
+  signature, not fixed here (Vulkan-only scope).
+* `SupportsCapability(GraphicsCapability::MultipleRenderTargets)` has **no override on any backend**
+  and `IGraphicsBackend`'s default answers `true`, so Software claims MRT support while its
+  `SetRenderTargets` throws outright. The battery probes with the bind itself instead; noted here
+  rather than raised as a graphics-rendering finding.
+
+### Source, shader and generated-artifact changes
+
+Two production files: `include/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp` and
+`src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`. No public API changed. **No shader,
+bytecode or other generated artifact changed.**
+
+### Build directories, ccache and displays
+
+Used, all in-repository: `cmake-build-vulkan`, `cmake-build-debug` (EasyGL), `cmake-build-bgfx`,
+`cmake-build-sdlgpu`, `cmake-build-webgpu`, `cmake-build-software`, `cmake-build-sdlrenderer`,
+`cmake-build-ascii`, `cmake-build-headless`, `cmake-build-dx3`, `cmake-build-canvas`,
+`cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`,
+`cmake-build-vulkan-asan`, `cmake-build-software-asan`, `cmake-build-software-ubsan`,
+`cmake-build-sdlgpu-asan` — **all pre-existing and reused**, `CNA_USE_CCACHE=ON` verified in every
+`CMakeCache.txt` before the first build.
+
+**One directory was created: `cmake-build-vulkan-ubsan`** (`CNA_SANITIZE=undefined`,
+`CNA_USE_CCACHE=ON`, `CNA_TEST_DISPLAY=:101`). No reusable Vulkan+UBSan configuration existed, and the
+production change is Vulkan-only, so UBSan coverage of it was not obtainable from any other tree. It
+is persistent and in-repository, so the next session reuses it.
+
+No build directory was cleaned, deleted or recreated; **no clean build was required** (every other
+`cmake -S . -B <dir>` was an incremental reconfigure, needed only to refresh the `CONFIGURE_DEPENDS`
+glob so the new test source produced a target). Builds used `-j3`, dropping to `-j2` for sanitizer
+and cross-compiled variants; the package stayed between 62 °C and 73 °C. **No build tree was created
+under `/tmp`, `/var/tmp` or `/dev/shm`** — the session scratchpad held only logs, one registration
+script, and the ~10 KB LD_PRELOAD counting shim used for the native-pass measurements.
+
+`git clean -xfd` was never run, `git stash` was never used, and the four pre-existing user stashes are
+untouched. Every A/B measurement restored exactly two files via
+`git show <commit>:<path> > <path>` and put the working copies back afterwards.
+
+### Commits
+
+- `3c4d24d0 test(Task REMED-GFX-140): reproduce Vulkan render-pass collapsing`
+- `2ef24462 fix(Task REMED-GFX-140): preserve deferred Vulkan pass boundaries`
+- `d02efbc8 test(Task REMED-GFX-140): cover pass ordering and target parity`
+- `be1dae6e test(Task REMED-GFX-140): declare per-backend pass-boundary contracts`
+- `docs(remediation): record GFX-140 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
