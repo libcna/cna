@@ -437,4 +437,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_SpriteBatch_Begin_RasterizerState_Scissor
         COMMAND cna_test_webgpu_spritebatch_begin_rasterizerstate_scissor
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format, so a mid-tone channel
+    # must survive Clear/draw/sample/readback unchanged. Every pre-existing WebGPU colour fixture
+    # used an RGB palette drawn only from {0, 255} -- both exact fixed points of sRGB encoding --
+    # so the sRGB render-target format was invisible to all of them.
+    cna_webgpu_test(cna_test_webgpu_colorspace_midtone
+                    examples/colorspace_midtone_contract_test.cpp)
+    cna_register_backend_test(NAME WebGPU_ColorSpace_MidTone COMMAND cna_test_webgpu_colorspace_midtone
+        TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
