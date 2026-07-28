@@ -448,6 +448,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # so the sRGB render-target format was invisible to all of them.
     cna_webgpu_test(cna_test_webgpu_colorspace_midtone
                     examples/colorspace_midtone_contract_test.cpp)
+    # For GetUncapturedErrorCountEXT(): the fix changes a resource format and introduces a
+    # view-format reinterpretation, so the suite asserts wgpu-native reported no validation error.
+    target_link_libraries(cna_test_webgpu_colorspace_midtone PRIVATE WebGPU::WebGPU)
     cna_register_backend_test(NAME WebGPU_ColorSpace_MidTone COMMAND cna_test_webgpu_colorspace_midtone
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

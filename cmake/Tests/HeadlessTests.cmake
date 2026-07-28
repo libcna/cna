@@ -48,6 +48,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     # rasterization at all, so it is the one that must REJECT render-target colour readback: pre-fix
     # it answered with the shared layer's own zero-initialized scratch buffer, i.e. a complete,
     # uniformly transparent-black "rendered" frame it had never rendered.
+    # REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format, so a mid-tone channel
+    # must survive Clear/draw/sample/readback unchanged. Registered here as a cross-backend control:
+    # the defect was WebGPU-local (its render targets used the swapchain's *UnormSrgb format), and
+    # these runs are what establish that byte-exact identity is CNA's existing behaviour everywhere
+    # else rather than a value invented for the fix.
+    cna_headless_test(cna_test_headless_colorspace_midtone
+        examples/colorspace_midtone_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_ColorSpace_MidTone COMMAND cna_test_headless_colorspace_midtone
+        TIMEOUT 120 LABELS "Headless")
+
     cna_headless_test(cna_test_headless_texture2d_getdata_contract
                       examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Headless_Texture2D_GetDataContract

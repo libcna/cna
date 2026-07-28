@@ -1165,6 +1165,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # caller regardless, so a backend with no readback returned a complete, uniformly
         # transparent-black frame that satisfied both "the destination was overwritten" and any
         # transparent-black content expectation.
+        # REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format, so a mid-tone channel
+        # must survive Clear/draw/sample/readback unchanged. Registered here as a cross-backend control:
+        # the defect was WebGPU-local (its render targets used the swapchain's *UnormSrgb format), and
+        # these runs are what establish that byte-exact identity is CNA's existing behaviour everywhere
+        # else rather than a value invented for the fix.
+        cna_vulkan_test(cna_test_vulkan_colorspace_midtone
+            examples/colorspace_midtone_contract_test.cpp)
+        cna_register_backend_test(NAME Vulkan_ColorSpace_MidTone COMMAND cna_test_vulkan_colorspace_midtone
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_texture2d_getdata_contract
                         examples/texture2d_getdata_contract_test.cpp)
         cna_register_backend_test(NAME Vulkan_Texture2D_GetDataContract COMMAND cna_test_vulkan_texture2d_getdata_contract
