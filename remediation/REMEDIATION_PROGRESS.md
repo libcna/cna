@@ -14390,8 +14390,10 @@ invalid native state.
   covers exactly that sequence and passes); what breaks is a game that samples a target onto the
   backbuffer and then renders into that target again. Fixing it needs the swapchain pass to become
   segment-aware with a `SDL_GPU_LOADOP_LOAD` variant, and the presentation, depth-clear state and
-  cube mip regeneration threaded onto the last backbuffer segment only. Deliberately out of scope:
-  REMED-GFX-143 is the open task for this class and this note extends it to SdlGpu.
+  cube mip regeneration threaded onto the last backbuffer segment only. Deliberately out of scope
+  here: REMED-GFX-143 was the open task for this class and this note extended it to SdlGpu.
+  **Closed under GFX-143 itself on 2026-07-28**, which owned both backends; this task's oracle is
+  unchanged at 39/39 across that change.
 * **One `VUID-vkCmdDraw-None-09600` inside SDL's own Vulkan renderer**, in
   `cna_test_sdlgpu_rendertargetcube_usage`: a cube array layer the command buffer expects in
   `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` is found in `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`
@@ -14439,5 +14441,413 @@ D3D11 and D3D12 controls. `:0` was not used for any measurement; no display was 
 - `70f40127 fix(Task REMED-GFX-145): preserve deferred SDL GPU pass boundaries`
 - `a50e65b6 test(Task REMED-GFX-145): cover pass ordering and upload isolation`
 - `docs(remediation): record GFX-145 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-143 — deferred backbuffer / render-target command order (DONE 2026-07-28)
+
+### Backend scope
+
+**Vulkan AND SdlGpu**, both authoritative. `REMEDIATION_INDEX.md`'s GFX-143 row records the Vulkan
+mechanism and then states that *"SdlGpu has the identical class, measured under REMED-GFX-145 and
+deliberately left here"*, listing what the SdlGpu fix needs; REMED-GFX-145's own record closes with
+*"REMED-GFX-143 is the open task for this class and this note extends it to SdlGpu."* The SdlGpu
+counterpart therefore has no separate identifier and none was allocated — it is GFX-143's second
+half, not a silently absorbed ticket. No other backend's production code was touched.
+
+### Classification and root cause
+
+Not a synchronization, cache or resource-lifetime defect: a **logical command-segmentation** defect,
+and specifically the one segmentation boundary REMED-GFX-140 and REMED-GFX-145 each stopped short of.
+
+Both backends kept a two-part recorder. Every render-target bind cycle got its own native pass, in
+public order, and then the **backbuffer** was emitted as ONE pass at the end of the command buffer:
+
+* Vulkan — `RecordCommandBuffer`'s Phase 2 opened one swapchain render pass after every off-screen
+  pass and called `drawSpritesFor(nullptr, kAllSegments, …)` / `draw3DFor(nullptr, kAllSegments)`.
+  `kAllSegments` was a sentinel meaning "no segment filter", so every backbuffer entry of the frame
+  replayed inside that one pass regardless of when it was issued.
+* SdlGpu — `EnsureFrameRendered` walked `passSegments_`, then opened one swapchain pass and called
+  `RenderQueuedDraws(..., kSwapchainSegment)`, whose filter was `if (segment != kSwapchainSegment &&
+  ref.segment != segment) continue;` — the same escape by a different name.
+
+Of the nine candidate causes the ticket lists, four were true and five were not. TRUE: backbuffer
+commands carried no usable segment id (Vulkan tagged them but the filter ignored it; SdlGpu gave them
+a sentinel); `SetRenderTarget(nullptr)` did not open a backbuffer segment; clear values were
+frame-global on the backbuffer; the presentation architecture assumed one backbuffer pass per frame.
+FALSE: backbuffer draws were **not** in a separate queue (they share `activeBatches_`/`pending3D_`
+and `drawOrder_` with target draws); the swapchain pass was not recorded after *every* target,
+just once after all of them; swapchain acquisition was never the constraint (Vulkan acquires in
+`SubmitFrame` before recording, SdlGpu in `EnsureFrameRendered` before its first pass, and both can
+enter the acquired image many times); viewport and scissor were already captured **per draw**
+(REMED-GFX-062/064/068), so they were never read live in the trailing pass; and target and backbuffer
+queues were replayed from one ordered stream already — only the backbuffer's *pass boundaries* were
+missing.
+
+"One present per frame" was never the problem, and was never confused with "one backbuffer render
+pass per frame": both APIs allow many passes into one acquired image before presentation, and the
+fix uses exactly that.
+
+### Pre-fix public sequence and native order
+
+    Clear(black)
+    SetRenderTarget(t); fill t RED;   SetRenderTarget(nullptr); draw t at LEFT
+    SetRenderTarget(t); fill t GREEN; SetRenderTarget(nullptr); draw t at RIGHT
+    GetBackBufferData                       // the only readback, after everything is queued
+
+Requested: `bb(clear) ; t(RED) ; bb(draw RED) ; t(GREEN) ; bb(draw GREEN)` → left RED, right GREEN.
+Executed: `t(RED) ; t(GREEN) ; bb(clear, draw, draw)` → **both** consumers sampled the final GREEN.
+
+Measured, not asserted. Under an `LD_PRELOAD` interposer of the real entry points (no production
+instrumentation), classifying each pass by its render area on Vulkan and by comparing its colour
+target against the pointer returned by `SDL_WaitAndAcquireGPUSwapchainTexture` on SdlGpu:
+
+| | pre-fix pass order | post-fix pass order |
+|---|---|---|
+| Vulkan, check A1's command buffer | `8x8, 8x8, 64x64` | `64x64, 8x8, 64x64, 8x8, 64x64` |
+| Vulkan, check A5's command buffer | `8x8, 8x8, 8x8, 64x64` | `64x64, 8x8, 8x8, 64x64, 8x8, 64x64` |
+| SdlGpu, every frame | `T,T,…,T,B` | `B,T,B,T,B,…` |
+
+Nothing observable in a render target changes, which is why the class survived two segmentation
+fixes: GFX-140's `S6` covers exactly the interleaving sequence and passes both before and after. The
+ordinary XNA pattern — render into targets, then compose them onto the backbuffer — is already the
+order a trailing pass produces. What breaks is the reverse.
+
+### Corrected architecture
+
+One ordered stream of bind cycles, backbuffer cycles included.
+
+**Vulkan.** Phase 1 and Phase 2 are gone. A `PassSegment` whose `rt` is `nullptr` is a backbuffer
+cycle and is recorded by ascending segment id alongside the off-screen ones; `kAllSegments` was
+deleted outright, so `drawSpritesFor`/`draw3DFor` filter strictly on the segment every entry already
+carried. `GetOrCreateSwapchainRenderPass` supplies the load/store variant a second, third … entry
+into the same acquired image needs, keyed on `(msaa, loadColor, loadDepth, loadStencil,
+storeForNext)`. The all-clear/no-store combination **is** `renderPass_`/`renderPassMsaa_`, returned
+as-is, so a frame with one backbuffer cycle creates no variant and records byte-for-byte the pass it
+always did. Clears became per-aspect and per-segment (`PendingClear::wantColor/wantDepth/wantStencil`),
+and `NoteRenderTargetClearEXT` no longer skips the backbuffer. A synthetic final backbuffer segment
+guarantees the swapchain image is still written, stored and left in `PRESENT_SRC_KHR` on a frame that
+drew nothing to it.
+
+**SdlGpu.** A `PassSegment` with neither `rt` nor `cube` is a backbuffer cycle.
+`BeginBackbufferSegment` opens one at construction, on every `EndRenderTargetSegment` (i.e. every
+unbind), and in `ReopenSegmentForBoundTarget` when a mid-frame flush rebuilds the list with nothing
+bound. `EnsureFrameRendered` dispatches each segment to `RenderToTarget`, `RenderToTargetCubeFace` or
+the new `RenderToSwapchain`, and `RenderQueuedDraws`'s filter is now simply `ref.segment != segment`.
+The LAST backbuffer segment always gets its pass; empty earlier ones issue none.
+
+Requirements met: `SetRenderTarget(nullptr)` opens a backbuffer segment; leaving closes it; returning
+opens a new one; both kinds replay from one ordered stream; one swapchain image is acquired once and
+reused across every backbuffer segment of the frame; presentation stays once per frame; empty
+segments issue no native pass; segment identity is a grouping key and never a cache key; no submit or
+fence wait per segment; and no heap allocation per draw was introduced (the segment list is one small
+vector per frame).
+
+### Native pass counts and object cardinality
+
+Same test binary, same fixture, `LD_PRELOAD` interposers:
+
+| Vulkan counter | pre → post | | SdlGpu counter | pre → post |
+|---|---|---|---|---|
+| checks | **17/29 → 29/29** | | checks (structural only) | see below |
+| `vkCmdBeginRenderPass` | 83 → **137** | | `SDL_BeginGPURenderPass` | 61 → **115** |
+| `vkCmdEndRenderPass` | 83 → **137** | | `SDL_EndGPURenderPass` | 61 → **115** |
+| `vkCreateRenderPass` | 4 → **8** | | `SDL_BeginGPUCopyPass` | 22 → 22 |
+| `vkCreateFramebuffer` | 46 → 46 | | `SDL_CreateGPUGraphicsPipeline` | 6 → 6 |
+| `vkCreateImageView` | 76 → 76 | | `SDL_CreateGPUTexture` | 29 → 29 |
+| `vkCreateGraphicsPipelines` | 6 → 6 | | `SDL_CreateGPUBuffer` | 30 → 30 |
+| `vkAllocateCommandBuffers` | 47 → 47 | | `SDL_CreateGPUTransferBuffer` | 38 → 38 |
+| `vkBeginCommandBuffer` | 73 → 73 | | `SDL_AcquireGPUCommandBuffer` | 21 → 21 |
+| `vkQueueSubmit` | 73 → 73 | | `SDL_SubmitGPUCommandBuffer` | 16 → 16 |
+| `vkAcquireNextImageKHR` | 27 → 27 | | swapchain acquisitions | 5 → 5 |
+| `vkQueuePresentKHR` | 27 → 27 | | `SDL_WaitForGPUFences` | 5 → 5 |
+| `vkWaitForFences` | 52 → 52 | | every `Release*` vs its `Create*` | equal in both runs |
+| `vkCmdPipelineBarrier` | 91 → **145** | | | |
+
+Begins equal ends in every run. **Exactly the additional begin/end pairs the contract requires and
+nothing else**: no extra command buffer, submit, fence wait, swapchain acquisition, presentation,
+pipeline, framebuffer, image view or permanent resource on either backend. The two real additions
+are Vulkan's four bounded, permanent swapchain load/store variants (`vkCreateRenderPass` 4 → 8; the
+cache is capped at 32 combinations by construction and dropped with the swapchain) and one
+`vkCmdPipelineBarrier` per backbuffer cycle after the first (+54, matching the +54 passes exactly).
+
+Of SdlGpu's 59 backbuffer passes, **25 use `SDL_GPU_LOADOP_LOAD` and 34 `CLEAR`**, tracking the
+fixture's actual `Clear()` calls rather than a blanket re-clear.
+
+### Producer → consumer
+
+`A1` is the decisive check and the whole task in one line: produce into a target, consume it on the
+backbuffer, produce into it again, consume it again — **17/29 → 29/29 on Vulkan** with left RED /
+right GREEN instead of GREEN / GREEN. Around it: `A2` proves the forward order (a backbuffer draw
+issued before a producer stays before it) still works, so the fix does not reorder the other way;
+`A3` overlaps the two consumers so a swapped pair changes the *layout*, not just a hue; `A4` and
+`R1` run three and seventeen produce/consume cycles in one frame; `A5` is backbuffer → target A →
+target B → backbuffer with two targets of IDENTICAL dimensions, format and usage, so no
+size/format/identity shortcut can pass it; `M1` does the same through an MRT attachment set and `M2`
+around a cube-face cycle. No artificial flush, readback, fence, sleep or extra frame sits between any
+producer and its consumer — the only readback in each check happens after every command of that check
+is queued.
+
+A cube face sampled BY the backbuffer is not publicly expressible through `SpriteBatch` (a
+`RenderTargetCube` is a `TextureCube`, and `SpriteBatch::Draw` takes a `Texture2D`), so `M2` asserts
+the backbuffer stripes around the cube cycle and the cube's own face content instead. Recorded, not
+glossed.
+
+### Clear / load / store
+
+`C1` — a `Clear()` in a LATER backbuffer cycle wipes the earlier cycle's full-cover draw and only its
+own draw survives (pre-fix the frame's last clear colour was applied *once, first*, so RED appeared
+nowhere). `C2` — a later cycle LOADS what the earlier one stored instead of clearing again. `C3` —
+three cycles with the Clear in the middle one. `C5` — a colour-only Clear in a later cycle applies to
+colour and leaves the depth an earlier cycle wrote intact. `C4` — a Clear issued AFTER a draw inside
+ONE cycle is declared per backend and asserted either way; Vulkan, SdlGpu and WebGPU deliver a
+backbuffer clear only through the pass load op, so it cannot wipe that draw, exactly the boundary
+REMED-GFX-129 records for render targets. `C6` — `Clear(ClearOptions::DepthBuffer, …)` alone is
+declared and asserted either way; Vulkan drops it, and what C6 pins there is that COLOUR was not
+wiped by it.
+
+REMED-GFX-018's `ClearOptions` semantics are preserved: `Clear(ClearOptions, …)` still routes through
+the same seven `GraphicsDevice` dispatch arms, and the aspect flags added to `PendingClear` are
+consumed only by the backbuffer path. A frame with one backbuffer cycle clears exactly as before.
+
+**REMED-GFX-129 was not begun and is unchanged**: its `X1`/`X2`/`X3` checks in GFX-140's oracle still
+report the same declared behaviour, and the render-target clear path was not touched.
+
+### Viewport / scissor / state
+
+Already segment-local before this task and verified to have stayed so: every batch and every 3D draw
+carries its own captured `Viewport` (`MinDepth`/`MaxDepth` included), `ScissorRectangle`,
+`RasterizerState.ScissorTestEnable`, `BlendState`, `DepthStencilState` and `BlendFactor`, applied per
+draw inside the pass (REMED-GFX-013/062/064/068/070). The pass-level viewport and scissor are only a
+default that every draw overrides. `V1` and `V2` drive three backbuffer cycles under three different
+sub-Viewports and three different `ScissorRectangle`s in an A → B → A pattern and both pass — no
+trailing pass resolves anything using the final live state.
+
+### Backbuffer depth / stencil
+
+Every backbuffer segment shares ONE depth/stencil attachment, which is why the load/store variants
+matter. `D1` — depth written in one backbuffer cycle still rejects a farther draw in a LATER cycle
+across an intervening render-target cycle, while untouched depth still accepts. `D2` — a depth write
+inside a render-target pass does not reject a later backbuffer draw (the targets are created with
+`DepthFormat::None` deliberately: a target owning no depth at all cannot be the source, so the check
+can only fail if the backbuffer's depth attachment leaked into the target's pass). Vulkan's variants
+carry depth `STORE` on every non-final backbuffer segment and `LOAD` unless the segment cleared that
+aspect; SdlGpu's depth/stencil `store_op` was already `STORE` and its `load_op` is now per segment.
+
+### Validation
+
+Vulkan, Khronos validation with **synchronization validation enabled**, layer proved loaded
+(`VK_LOADER_DEBUG=layer` shows `Insert instance layer "VK_LAYER_KHRONOS_validation"`), active
+renderer llvmpipe:
+
+| fixture | class | pre → post |
+|---|---|---|
+| this task's | `vkCmdBeginRenderPass` loadOp-vs-layout-transition READ_AFTER_WRITE | 53 → **0** |
+| this task's | `vkQueueSubmit` WRITE_AFTER_READ vs `vkAcquireNextImageKHR` | 27 → **27** |
+| GFX-140's oracle | loadOp-vs-layout-transition | 15 → **0** |
+| GFX-140's oracle | acquire WRITE_AFTER_READ | 5 → **5** |
+
+Standard (non-sync) validation is **clean, zero messages**, before and after.
+
+The loadOp class is REMED-GFX-144's, and the backbuffer's new `LOAD` variants would have multiplied
+it 53 → 104. Rather than ship that, the one missing access bit was added:
+`VK_ACCESS_COLOR_ATTACHMENT_READ_BIT` in the entry subpass dependency, at **all six** render-pass
+creation sites so the byte-identical dependency masks Task 905 requires for cross-pass pipeline
+compatibility stay identical. A `LOAD_OP_LOAD` colour attachment *is* a colour-attachment read; the
+bit was simply absent. **REMED-GFX-144 is NOT begun and stays open** for its other class (the
+acquire-vs-first-write hazard, unchanged 5 → 5 and 27 → 27); its loadOp class is incidentally
+resolved and must be re-measured under its own ticket rather than assumed closed.
+
+Between two backbuffer cycles an explicit `vkCmdPipelineBarrier` orders the later cycle's load and
+layout transition after the earlier one's colour and depth writes. Honest note, recorded in the
+source too: **removing that barrier changes nothing** under synchronization validation or on
+llvmpipe, A/B-measured. It is kept because the spec-level dependency genuinely is absent — neither
+side's subpass dependency provides the chain and those masks must stay identical — not because a tool
+reported it.
+
+SdlGpu, same settings, SDL_gpu's Vulkan renderer confirmed and the layer proved loaded: **zero**
+messages on this task's fixture, on GFX-145's oracle and on the upload suite. The one pre-existing
+`VUID-vkCmdDraw-None-09600` inside SDL's own Vulkan renderer in `cna_test_sdlgpu_rendertargetcube_usage`
+is A/B-measured **identical, 2 → 2 with the same text**, and keeps its REMED-GFX-145 attribution.
+
+### The public oracle, and where it cannot see
+
+`examples/backbuffer_pass_order_test.cpp`, shared by all fourteen backends, 29 checks. Every asserted
+region is a full-height vertical stripe, so nothing depends on whether a backend's backbuffer readback
+or render-target sampling is Y-flipped; the palette is 0/255-only, an exact fixed point of sRGB, so
+every comparison is byte-exact including on sRGB backends. Distinctive GEOMETRY as well as
+distinctive colour: `U1` gives each of four backbuffer cycles a different stripe and `U2` does the
+same with a different vertex buffer per cycle, because a shared per-frame vertex arena whose cursor
+restarted per pass is exactly the defect REMED-GFX-140 had to fix alongside its segmentation, and
+splitting the backbuffer into several passes over that one arena is the same shape. Both pass on both
+backends: the cursors are already hoisted to the whole record on Vulkan, and SdlGpu allocates
+per-command buffers and indexes sprite storage by position.
+
+**SdlGpu has no public backbuffer oracle at all** — it has no `ReadBackbuffer` override, so
+`GraphicsDevice::GetBackBufferData` raises. That is a real hole and it is recorded, not papered over:
+the fixture was restructured so every backend ISSUES its whole public command sequence and only the
+pixel judgement is gated, which turns 26 skipped sequences into 26 executed ones on SdlGpu and
+Headless. The SdlGpu fix is therefore verified structurally (pass order, load actions and cardinality
+under the interposer) plus by the render-target-side checks that do run, with the semantics pinned
+byte-exactly on Vulkan — whose corrected architecture is the same — and on EasyGL as the
+immediate-mode control. Giving SdlGpu a real backbuffer readback is a capability addition and belongs
+to the REMED-GFX-127/130 family, not here.
+
+### False-positive audit
+
+Four directly relevant files found, four strengthened.
+
+* `vulkan_rt_roundtrip_test.cpp` — the one genuine false positive: an artificial
+  `GetBackBufferData` sat BETWEEN the producer and the consumer, with a comment explaining that the
+  frame-global clear-colour scalar would otherwise be overwritten before the target's pass ran.
+  Removed; producer and consumer now sit in one frame with nothing between them. **Attribution,
+  A/B-measured: the barrier-free form already passes with REMED-GFX-140 alone**, so GFX-140 removed
+  the need and this audit removed the crutch — it is not credited to GFX-143.
+* `vulkan_rendertargetcube_sample_test.cpp` and `vulkan_rendertarget_scissor_test.cpp` documented
+  `RecordCommandBuffer`'s two-phase shape as current behaviour ("Phase 2 (backbuffer pass)",
+  "executes both phases"). Corrected to the ordered-stream architecture.
+* `SdlGpuGraphicsBackend.hpp`'s `kSwapchainSegment` doc said the value means "no segment filter at
+  all" for "the swapchain's own trailing pass". It is now the pre-first-cycle sentinel and nothing
+  else.
+
+No previously recorded finding's evidence depended on the removed barrier: the roundtrip test still
+passes 2/2. The other shapes the audit looked for — identical geometry in all cycles, varying only
+textures, inspecting only the final backbuffer command, an extra frame hiding same-frame ordering —
+are already covered by REMED-GFX-140's and REMED-GFX-145's own audits and by this fixture's `U1`/`U2`
+and single-readback discipline.
+
+### Performance impact
+
+Additional native passes only, and only when a frame actually interleaves: +54 begin/end pairs on
+each backend's fixture. Submits, fence waits, swapchain acquisitions and presentations are **all
+unchanged**. No forced `Present`, no extra visible frame, no full backbuffer copy, no per-segment
+allocation, no pipeline keyed on a segment id. Vulkan adds four permanent render-pass objects
+(bounded by construction, freed with the swapchain) and one lightweight `VkMemoryBarrier` per extra
+backbuffer cycle; SdlGpu adds nothing permanent at all. MSAA keeps its resolve on every backbuffer
+segment rather than only the last — dropping `pResolveAttachments` would change the subpass shape and
+break render-pass compatibility with every pipeline already created against `renderPassMsaa_` — so an
+intermediate resolve is redundant, not wrong, and is paid only by an interleaving MSAA frame.
+
+### Cross-backend controls (only Vulkan and SdlGpu production changed)
+
+| backend | result | notes |
+|---|---|---|
+| VULKAN | **29/29** | `:101`, llvmpipe — 17/29 pre-fix |
+| SDL_GPU | **29/29** | `:101`, SDL_gpu Vulkan renderer — 26 sequences issued, judged structurally |
+| EASYGL | **29/29** | `:101` — the immediate-mode control, 29/29 *before* any fix, which is what proved every expectation in the file is XNA-correct |
+| BGFX | **29/29** | `:101`, OpenGL 2.1 |
+| WEBGPU | **29/29** | `:101` |
+| D3D9 | **29/29** | `:99`, Wine + DXVK 2.6.0 |
+| D3D11 | **29/29** | `:99`, Wine + DXVK 2.6.0 |
+| HEADLESS | **29/29** | rasterizes nothing; every sequence issued and legal |
+| SOFTWARE | **28/28** | |
+| SDL_RENDERER | **28/28** | `:101` |
+| ASCII | **28/28** | `:101` |
+| DX3 | **28/28** | `SDL_VIDEODRIVER=dummy` |
+| CANVAS | compile-verified | Emscripten target; produces `.js`/`.wasm`, no native binary |
+| D3D12 | compile-verified | faults under Wine/vkd3d with a null-pointer page fault at an identical address on REMED-GFX-140's existing fixture too — pre-existing, and D3D12 registers only its Smoke ctest |
+
+### Regression gates
+
+| gate | result |
+|---|---|
+| REMED-GFX-140 Vulkan segmentation oracle | **44/44** |
+| REMED-GFX-145 SdlGpu segmentation oracle | **39/39** |
+| REMED-GFX-145 SdlGpu upload / 3D suite | **17/17** |
+| REMED-GFX-095 MRT + MSAA (`sdlgpu_mrt`) | **45/45** |
+| REMED-GFX-136 Vulkan RT usage | **5/5** |
+| REMED-GFX-134 cube readback (Vulkan / SdlGpu usage) | **30/30** each |
+| REMED-GFX-018 / 039 / 096 / 117 / 124 / 127 / 130, target sampling and disposal | green in the shards below |
+| `ctest -R '^Vulkan'` | **168/169** — only `Vulkan_DepthBias`, pre-recorded |
+| `ctest -R '^SdlGpu'` | **72/73** — only `SdlGpu_RenderState`, A/B-re-proven pre-existing (aborts with the same `Cannot present while render targets are bound` before and after) |
+| `ctest` (full) in `cmake-build-vulkan` | **5915/5922** — `XnbContainerFuzzTest`, `CnjEffectTest`, `CnjStockEffectTest`, `DoesNotSupportWireFrame` and `Vulkan_DepthBias` all pre-recorded by REMED-GFX-140, plus `ENetDiscoveryServiceTest.ReplyToQueryOnly…` and `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount`, both proven parallel-load flakes (3/3 in isolation) |
+| all fourteen backend libraries | build incrementally |
+
+### Sanitizers
+
+Sanitizer runtimes proved linked by symbol (`__asan_` ×39, `__ubsan_` ×15 in the respective binaries),
+not merely by directory name.
+
+| build | tests | result |
+|---|---|---|
+| `cmake-build-vulkan-asan` | backbuffer order, GFX-140 oracle | 29/29, 44/44 — **0** reports |
+| `cmake-build-vulkan-ubsan` | same two | 29/29, 44/44 — **0** reports |
+| `cmake-build-sdlgpu-asan` | backbuffer order, GFX-145 oracle, upload/3D | 29/29, 39/39, 17/17 — **0** |
+| `cmake-build-sdlgpu-ubsan` | same three | 29/29, 39/39, 17/17 — **0** |
+| `cmake-build-software-asan` / `-ubsan` | backbuffer order | 28/28 each — **0** |
+
+Coverage across those: backbuffer → target → backbuffer, producer → consumer, SpriteBatch/3D
+interleaving, cube and MRT cycles, per-cycle viewport and scissor changes, distinctive geometry,
+repeated frames and target disposal. No invalid access, use-after-free, arena overwrite, stale
+swapchain view, integer overflow or command-lifetime error.
+
+### Independent findings recorded (none fixed here)
+
+* **Vulkan replays all sprites then all 3D draws inside ONE bind cycle.** `activeBatches_` and
+  `pending3D_` are two queues and every pass drains the first then the second, so a 3D draw issued
+  BEFORE a sprite still lands on top of it (check `O3`). A distinct root cause from segment
+  boundaries — the cross-segment case `O1`/`O2` is what GFX-143 fixes and both pass unconditionally.
+  Fixing it means one unified draw order, which SdlGpu already has (`drawOrder_`).
+* **bgfx has the same intra-cycle sprite/3D ordering defect**, measured identically (`O3`). Every
+  other check passes on bgfx, so it already interleaves backbuffer and target work correctly.
+* **WebGPU does not clip a BACKBUFFER SpriteBatch fill with `GraphicsDevice.ScissorRectangle` at
+  all**, though its render-target scissor works (GFX-140's `S11` passes). Check `V2`.
+* **WebGPU's backbuffer clear is load-op-only**, like Vulkan's: a `Clear()` after a draw inside one
+  cycle cannot wipe that draw (check `C4`).
+* **Vulkan drops `Clear(ClearOptions::DepthBuffer, …)` entirely.** `VulkanGraphicsBackend::ClearDepth`
+  is the one clear entry point that records no clear request at all, so a depth-only clear never
+  reaches a pass. Deliberately not widened here (it touches the REMED-GFX-129/142 clear surface);
+  check `C6` pins the current behaviour and that colour is not wiped by it.
+* **bgfx raises from `SetDepthTestEnabled`/`SetDepthWriteEnabled`** ("not yet wired into bgfx state
+  flags"). Only the NOXNA pair is affected; `DepthStencilState` works.
+
+### Source, shader and generated-artifact changes
+
+Four production files: `include/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp`,
+`src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`,
+`include/CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp` and
+`src/CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.cpp`. No public API changed. **No shader,
+bytecode or other generated artifact changed.**
+
+### Build directories, ccache and displays
+
+Used, all in-repository and **all pre-existing and reused — no build directory was created**:
+`cmake-build-vulkan`, `cmake-build-sdlgpu`, `cmake-build-debug` (EasyGL), `cmake-build-bgfx`,
+`cmake-build-webgpu`, `cmake-build-software`, `cmake-build-sdlrenderer`, `cmake-build-ascii`,
+`cmake-build-headless`, `cmake-build-dx3`, `cmake-build-canvas`, `cmake-build-d3d9-mingw`,
+`cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`, `cmake-build-vulkan-asan`,
+`cmake-build-vulkan-ubsan`, `cmake-build-sdlgpu-asan`, `cmake-build-sdlgpu-ubsan`,
+`cmake-build-software-asan`, `cmake-build-software-ubsan`. `CNA_USE_CCACHE=ON` was verified in every
+`CMakeCache.txt` before the first build.
+
+No build directory was cleaned, deleted or recreated; **no clean build was required or performed.**
+Each tree was reconfigured incrementally (`cmake -S . -B <dir>`) once, only to refresh the
+`CONFIGURE_DEPENDS` glob so the new test source produced a target. Maximum parallelism `-j4`,
+dropped to `-j2` for sanitizer, cross-compiled and post-thermal builds. **Thermal management:** the
+package reached 89.8 °C during the cross-backend build sweep and 86.0 °C at the start of the
+sanitizer builds; parallelism was voluntarily reduced to `-j2` and test runs were interleaved with
+builds until it returned to 63–73 °C, where it stayed for the rest of the session. **No build tree
+was created under `/tmp`, `/var/tmp` or `/dev/shm`** — the session scratchpad held only logs, the
+validation settings file and two ~17 KB `LD_PRELOAD` counting shims.
+
+`git clean -xfd` was never run, `git stash` was never used, and the four pre-existing user stashes are
+untouched. Every A/B measurement restored exactly two files with `git checkout <commit> -- <path>`
+and put the working copies back afterwards; `git status` was checked clean each time.
+
+Displays: **`:101`** for every native Linux run (Vulkan, SdlGpu, EasyGL, Bgfx, WebGPU, SDL_Renderer,
+ASCII, Software, Headless), `SDL_VIDEODRIVER=dummy` for DX3, and **`:99`** only for the Wine D3D9,
+D3D11 and D3D12 controls. **`:0` was not used for any measurement**; no display was started or
+stopped.
+
+### Commits
+
+- `8cd84819 test(Task REMED-GFX-143): reproduce deferred backbuffer reordering`
+- `5a541657 fix(Task REMED-GFX-143): interleave Vulkan backbuffer and target segments`
+- `27387b08 fix(Task REMED-GFX-143): interleave SdlGpu backbuffer and target segments`
+- `f209c3a6 test(Task REMED-GFX-143): cover every backend and record three independent findings`
+- `dae1a75e test(Task REMED-GFX-143): strengthen false positives found by the audit`
+- `docs(remediation): record GFX-143 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
