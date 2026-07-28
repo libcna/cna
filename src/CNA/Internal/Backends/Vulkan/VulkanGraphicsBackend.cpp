@@ -1920,7 +1920,25 @@ namespace CNA::Internal::Backends::Vulkan
         // prior frame's depth writes, intermittently corrupting depth-tested draws.
         renderPassDeps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
         renderPassDeps[0].dstSubpass      = 0;
-        renderPassDeps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        // REMED-GFX-144: COLOR_ATTACHMENT_OUTPUT leads this mask, and on the swapchain passes it is
+        // load-bearing. vkCmdBeginRenderPass performs the attachment's automatic initialLayout
+        // transition, which is a WRITE, and that transition is ordered only by THIS dependency: it
+        // happens-after the availability operations of the first synchronization scope (srcStageMask)
+        // and happens-before the visibility operations of the second (dstStageMask). SubmitFrame
+        // waits the vkAcquireNextImageKHR semaphore with pWaitDstStageMask =
+        // COLOR_ATTACHMENT_OUTPUT, so the wait blocks COLOR_ATTACHMENT_OUTPUT and every later stage
+        // -- and nothing earlier. Without COLOR_ATTACHMENT_OUTPUT here, every stage in this
+        // dependency's src scope (FRAGMENT_SHADER, EARLY/LATE_FRAGMENT_TESTS) precedes the waited
+        // stage while dstStageMask still demands the transition complete before EARLY_FRAGMENT_TESTS,
+        // so the transition was free to run BEFORE the acquire semaphore signalled -- writing an
+        // image the presentation engine had not yet released. Khronos synchronization validation
+        // reported it as one WRITE_AFTER_READ per acquire, vkCmdBeginRenderPass versus
+        // vkAcquireNextImageKHR, prior_access SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_ACQUIRE_READ_SYNCVAL.
+        // Widening a dependency's FIRST scope only adds ordering, so the same bit is added at all six
+        // render-pass creation sites, keeping the byte-identical masks Task 905 requires; measured,
+        // the three swapchain sites are the ones that clear the hazard.
+        renderPassDeps[0].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                                             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                                             VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         renderPassDeps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
@@ -2011,7 +2029,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkSubpassDependency deps[2]{};
         deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
         deps[0].dstSubpass      = 0;
-        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        // REMED-GFX-144: see CreateRenderPass(). COLOR_ATTACHMENT_OUTPUT must lead this mask so that
+        // vkCmdBeginRenderPass's automatic initialLayout transition is ordered after the acquire
+        // semaphore, which SubmitFrame waits at exactly that stage. Identical at all six sites.
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
@@ -2188,7 +2210,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkSubpassDependency deps[2]{};
         deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
         deps[0].dstSubpass      = 0;
-        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        // REMED-GFX-144: see CreateRenderPass(). COLOR_ATTACHMENT_OUTPUT must lead this mask so that
+        // vkCmdBeginRenderPass's automatic initialLayout transition is ordered after the acquire
+        // semaphore, which SubmitFrame waits at exactly that stage. Identical at all six sites.
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
@@ -2299,7 +2325,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkSubpassDependency deps[2]{};
         deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
         deps[0].dstSubpass      = 0;
-        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        // REMED-GFX-144: see CreateRenderPass(). COLOR_ATTACHMENT_OUTPUT must lead this mask so that
+        // vkCmdBeginRenderPass's automatic initialLayout transition is ordered after the acquire
+        // semaphore, which SubmitFrame waits at exactly that stage. Identical at all six sites.
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
@@ -2413,7 +2443,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkSubpassDependency deps[2]{};
         deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
         deps[0].dstSubpass      = 0;
-        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        // REMED-GFX-144: see CreateRenderPass(). COLOR_ATTACHMENT_OUTPUT must lead this mask so that
+        // vkCmdBeginRenderPass's automatic initialLayout transition is ordered after the acquire
+        // semaphore, which SubmitFrame waits at exactly that stage. Identical at all six sites.
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                                   VK_PIPELINE_STAGE_TRANSFER_BIT;
         deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
@@ -3260,7 +3294,11 @@ namespace CNA::Internal::Backends::Vulkan
         // depth-buffer writes (shared depth image) before clearing/testing depth this frame.
         deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
         deps[0].dstSubpass      = 0;
-        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+        // REMED-GFX-144: see CreateRenderPass(). COLOR_ATTACHMENT_OUTPUT must lead this mask so that
+        // vkCmdBeginRenderPass's automatic initialLayout transition is ordered after the acquire
+        // semaphore, which SubmitFrame waits at exactly that stage. Identical at all six sites.
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
                                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
                                    VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
         deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
