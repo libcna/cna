@@ -300,6 +300,68 @@ class SdlGpuMrtTest : public Game
         Check(exact, "ColorWriteChannels0–3 apply to their corresponding four MRT slots");
     }
 
+    /**
+     * @brief REMED-GFX-145: TWO MRT bind cycles in ONE flush window, with the attachment SET
+     *        changing between them and no `GetData` in between.
+     *
+     * Every other MRT check above ends its bind cycle with a `GetData`, which on this deferred
+     * backend flushes the whole frame -- so each of them is its own flush window by construction
+     * and none can tell one merged native pass from two logical ones. That made the whole file
+     * false-positive-capable for a defect it looks well placed to catch. Here both cycles are
+     * queued before anything is read.
+     *
+     * `{A,B}` then `{A,C}`: the attachment set used to live on the primary's shared GPU state, so
+     * the second bind rewrote the first cycle's set and `B` -- still flagged an MRT sibling, and no
+     * longer in anyone's list -- was skipped by the per-target pass loop and never rendered at all.
+     * Asserting B's own cycle-1 value is what catches that; asserting A's cycle-2 value is what
+     * catches the two cycles being merged into one load action.
+     */
+    void RunMrtSegmentBoundaryCheck(GraphicsDevice& dev)
+    {
+        DepthStencilState noDepth = DepthStencilState::None;
+        RasterizerState noCull = RasterizerState::CullNone;
+        ShaderEffect& effect = *mrtEffects_[1];  // two declared fragment outputs
+
+        const auto cycle = [&](RenderTarget2D* extra, float r, float g, float b) {
+            dev.SetRenderTargets(std::vector<RenderTargetBinding>{
+                RenderTargetBinding(rtMrtAltA_.get()), RenderTargetBinding(extra)});
+            dev.Clear(Color(0, 0, 0, 0));
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setDepthStencilStateProperty(noDepth);
+            dev.setRasterizerStateProperty(noCull);
+            dev.setViewportProperty(Viewport(0, 0, kRTSize, kRTSize));
+            dev.setScissorRectangleProperty(Rectangle(0, 0, kRTSize, kRTSize));
+            effect.SetUniformVec4("color", r, g, b, 1.0f);
+            SpriteBatch sb(dev);
+            sb.Begin(SpriteSortMode::Immediate, BlendState::Opaque, nullptr, &noDepth, &noCull,
+                     &effect);
+            sb.Draw(*whiteTex_, Rectangle(0, 0, kRTSize, kRTSize), Rectangle(0, 0, 1, 1),
+                    Color::White);
+            sb.End();
+            dev.SetRenderTargets(std::vector<RenderTargetBinding>{});
+        };
+
+        // Cycle 1 writes 0.2/0.4/0.8 -> (51,102,204); cycle 2 writes 0.8/0.2/0.4 -> (204,51,102).
+        // outColorB is (g,b,r) of outColorA, so B holds (102,204,51) and C holds (51,102,204).
+        cycle(rtMrtAltB_.get(), 0.2f, 0.4f, 0.8f);
+        cycle(rtMrtAltC_.get(), 0.8f, 0.2f, 0.4f);
+
+        const Rectangle centre(kRTSize / 2, kRTSize / 2, 1, 1);
+        Color a(0, 0, 0, 0), b(0, 0, 0, 0), c(0, 0, 0, 0);
+        rtMrtAltA_->GetData(0, &centre, &a, 0, 1);
+        rtMrtAltB_->GetData(0, &centre, &b, 0, 1);
+        rtMrtAltC_->GetData(0, &centre, &c, 0, 1);
+        Check(Matches(a, Color(204, 51, 102, 255)),
+              "MRT bind cycles in ONE flush window: attachment 0 ends at the SECOND cycle's own "
+              "output, not both cycles composed into one pass");
+        Check(Matches(b, Color(102, 204, 51, 255)),
+              "MRT bind cycles in ONE flush window: the attachment dropped from the set still "
+              "received its OWN cycle's second output");
+        Check(Matches(c, Color(51, 102, 204, 255)),
+              "MRT bind cycles in ONE flush window: the attachment added to the set received the "
+              "second cycle's second output");
+    }
+
 protected:
     void LoadContent() override
     {
@@ -460,6 +522,8 @@ protected:
                 cacheStep(primary, 3, masks, 7, "3 targets per-slot masks (new write state)");
                 cacheStep(primary, 3, BlendState::Opaque, 7, "return all write masks (reuse)");
                 RunMrtWriteMaskCheck(dev);
+                stage = "MRT bind-cycle boundaries in one flush window";
+                RunMrtSegmentBoundaryCheck(dev);
             }
             catch (const std::exception& e)
             {
@@ -487,8 +551,8 @@ protected:
 
         if (frame_ == kTotalFrames)
         {
-            std::printf("=== %d/42 PASS ===\n", passCount_);
-            result_ = (passCount_ == 42) ? 0 : 1;
+            std::printf("=== %d/45 PASS ===\n", passCount_);
+            result_ = (passCount_ == 45) ? 0 : 1;
             Exit();
         }
     }

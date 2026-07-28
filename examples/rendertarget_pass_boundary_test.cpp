@@ -310,7 +310,7 @@ class RenderTargetPassBoundaryTest : public Game
     std::unique_ptr<SpriteBatch> spriteBatch_;
     std::array<std::unique_ptr<Texture2D>, 6> solids_;
     /// P-series targets: queued in the battery frame, read only in the frame AFTER Present.
-    std::unique_ptr<RenderTarget2D> pa_, pb_, pc_;
+    std::unique_ptr<RenderTarget2D> pa_, pb_, pc_, pd_, pe_;
     int phase_ = 0;
     int passCount_ = 0;
     int totalCount_ = 0;
@@ -1152,9 +1152,21 @@ class RenderTargetPassBoundaryTest : public Game
         CyclePattern(dev, *pb_, 1);
         CyclePattern(dev, *pc_, 0);
         CycleMark(dev, *pc_, 0, 0, kPalette[2]);
+        // P7: the producer pattern draws the SAME rectangles in every round -- only the source
+        // texture differs -- so pa_/pb_/pc_ cannot see a shared vertex arena whose cursor restarts
+        // per pass being overwritten between them. These two differ in GEOMETRY: if one pass's
+        // vertices were replaced by a later pass's before the queue was submitted, the marker
+        // would land in the wrong corner. P6 makes the same measurement, but only on a backend
+        // that can read its backbuffer -- SdlGpu cannot, so that route skips there and this one,
+        // riding the ordinary Present path, is the only place the question gets asked
+        // (REMED-GFX-145's own false-positive audit).
+        pd_ = MakeTarget(dev, RenderTargetUsage::DiscardContents);
+        pe_ = MakeTarget(dev, RenderTargetUsage::DiscardContents);
+        CycleMark(dev, *pd_, 0, 0, kPalette[1]);
+        CycleMark(dev, *pe_, kRT - kMark, kRT - kMark, kPalette[5]);
     }
 
-    /// P1/P2/P3 -- read what the Present path actually produced.
+    /// P1/P2/P3/P7 -- read what the Present path actually produced.
     void RunPresentPathChecks()
     {
         if (kContract.readback != Support::Exact)
@@ -1172,6 +1184,14 @@ class RenderTargetPassBoundaryTest : public Game
               kContract.readback,
               "P3 present path: a target bound twice before Present still gets two separate "
               "cycles");
+        Judge(ProbeTarget(*pd_, ExpectedBaseWithMark(DiscardColour(), 0, 0, kPalette[1])),
+              kContract.readback,
+              "P7 present-path vertex arena: the first target's own GEOMETRY survives the "
+              "recording of the second target's pass, with no backbuffer readback involved");
+        Judge(ProbeTarget(*pe_, ExpectedBaseWithMark(DiscardColour(), kRT - kMark, kRT - kMark,
+                                                     kPalette[5])),
+              kContract.readback,
+              "P7 present-path vertex arena: the second target's own geometry is exact");
     }
 
     /**

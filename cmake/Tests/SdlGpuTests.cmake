@@ -319,6 +319,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_RenderTarget_PassBoundary COMMAND cna_test_sdlgpu_rendertarget_pass_boundary
         TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-145: the SDL_GPU-specific half of the same contract. The shared oracle above drives
+    # SpriteBatch only and scopes itself to colour, so it cannot see a segment filter that works for
+    # `DrawKind::Sprite` and not for the eight 3D families, a transient upload arena aliasing
+    # between passes (its producer draws identical rectangles and varies only the texture), or a
+    # depth/stencil load action attached to the wrong bind cycle. This one asks all three, with
+    # geometry that differs left-from-right and with REMED-GFX-117's startIndex/baseVertex issued
+    # inside a SECOND logical pass.
+    cna_sdlgpu_test(cna_test_sdlgpu_pass_boundary_upload
+                    examples/sdlgpu_pass_boundary_upload_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_PassBoundary_Upload COMMAND cna_test_sdlgpu_pass_boundary_upload
+        TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
