@@ -2480,7 +2480,7 @@ existing task.
 | REMED-GFX-128 | `Texture2D::GetData`'s two overloads give `startIndex` opposite meanings: a SOURCE offset in `GetData(Color*, int, int)` and a DESTINATION offset in the rectangle overload. | LOW | P3 | REMED-GFX-124 destination-offset coverage | **OPEN — XNA/FNA DEFINE `startIndex` AS THE DESTINATION ARRAY OFFSET IN BOTH; FOR A RENDER TARGET THE DIVERGENCE IS MASKED BY THE WHOLE-LEVEL OVERLOAD'S `startIndex == 0` GATE, WHICH THROWS `std::runtime_error` INSTEAD OF READING. BOTH BEHAVIOURS PINNED BY CHECKS D7/D8/E10.** |
 | REMED-GFX-129 | Vulkan delivered a clear ONLY through the render-pass load action, so `Clear()` was not an ordered command at all: it was dropped on a `PreserveContents` target, it ran before a draw it was issued after, two clears in one bind cycle collapsed into one, and `ClearDepth` recorded no request whatsoever. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **DONE 2026-07-28 — REPRODUCED RED-FIRST AT 3/34 ON A NEW SHARED ORDERED-CLEAR SUITE, 124/232 ON REMED-GFX-018's CLEAROPTIONS SUITE (REGISTERED ON VULKAN FOR THE FIRST TIME) AND 41/44 ON GFX-140's X1/X2/X3, EVERY MEASUREMENT A/B AGAINST PRE-FIX PRODUCTION WITH THE FINAL TEST FILES. FIXED BY STAMPING EVERY DEFERRED ENTRY WITH ITS POSITION IN THE PUBLIC COMMAND STREAM, MAKING `PendingClear` ONE RECORD PER PUBLIC `Clear()`, AND REPLAYING EACH SEGMENT AS `draws -> vkCmdClearAttachments -> draws`. LOAD-OP FOLDING KEPT ONLY FOR A CLEAR THAT PRECEDES EVERY DRAW OF A CYCLE WHOSE PASS CLEARS ANYWAY. **34/34, 232/232, 44/44**; STANDARD AND SYNCHRONIZATION VALIDATION CLEAN WITH THE LAYER PROVED LOADED; `vkCmdClearAttachments` 0 -> 111/59/4 WITH EVERY OTHER NATIVE COUNTER UNCHANGED; ASAN/UBSAN CLEAN; 9 CROSS-BACKEND CONTROLS GREEN; ALL FOURTEEN BACKEND LIBRARIES BUILD; FOUR FALSE-POSITIVE-CAPABLE FILES STRENGTHENED.** |
 | REMED-GFX-130 | `ITextureCubeBackend::GetData`/`ITexture3DBackend::GetData` kept the no-op `void` default and the public cube/volume `GetData` converted their own zeroed scratch buffer regardless, so `TextureCube`/`Texture3D` readback fabricated the frame REMED-GFX-127 removed from `Texture2D`. | MEDIUM | P2 | REMED-GFX-127 interface survey | **DONE 2026-07-27 — REPRODUCED ON FIVE BACKENDS: HEADLESS 17/33 (`fabricated=64/64`, `sentinelSurvivors=0`, NO EXCEPTION — ITS `GetData` ACTIVELY ZERO-FILLED THE CALLER WHILE `SetData` STORED NOTHING), SOFTWARE 31/33 (CUBE MIP 1 `fabricated=16/16`), SDL_RENDERER 19/33, DX3 19/33, ASCII 32/56 (CUBE **AND** A `Texture3D` THAT CONSTRUCTED WITH NO STORAGE). FIXED BY MAKING BOTH INTERFACES RETURN `[[nodiscard]] bool` (TRUE ONLY FOR A COMPLETE REGION, DEFAULT FALSE), SIZING THE SHARED SCRATCH TO THE REQUESTED REGION RATHER THAN `elementCount`, REFUSING A NULL BACKEND, AND THROWING `ObjectDisposedException` AFTER DISPOSE. THREE WEBGPU `memset`-TO-ZERO-AND-SUCCEED SITES AND EASYGL'S PER-SLICE HALF-READ CLOSED; HEADLESS REFUSES EXPLICITLY AND ITS ZERO-FILLED CUBE/VOXEL STORAGE IS DELETED; ASCII'S FALSE `GraphicsCapability::Texture3D` CLAIM CORRECTED. NEW SHARED SUITE 56/56 ON EASYGL/VULKAN/BGFX/SDL_GPU/WEBGPU/D3D9/D3D11 AND 33/33 ON SOFTWARE/HEADLESS/SDL_RENDERER/ASCII/DX3; D3D12 VIA 4 NEW SMOKE CHECKS (251/251); CANVAS COMPILE-VERIFIED. ASAN+UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-134/135.** |
-| REMED-GFX-131 | WebGPU configures an `*UnormSrgb` surface format and creates render targets with it, so a mid-tone channel written through the render pass comes back gamma-encoded (128 -> 188) unlike XNA's non-sRGB `SurfaceFormat.Color`. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **OPEN — ALPHA AND THE 0/255 FIXED POINTS ARE UNAFFECTED, WHICH IS WHY EXISTING SATURATED-COLOUR WEBGPU RENDER-TARGET TESTS NEVER SAW IT.** |
+| REMED-GFX-131 | WebGPU configured an `*UnormSrgb` surface format and created render targets with it, so a mid-tone channel written through the render pass came back gamma-encoded (128 -> 188) unlike XNA's non-sRGB `SurfaceFormat.Color`. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **DONE 2026-07-28 — MEASURED AS EXACTLY ONE STANDARD LINEAR-TO-SRGB ENCODE ON R, G AND B INDEPENDENTLY; `surfaceFormat_` IS NOW ALWAYS NON-SRGB, WITH A `viewFormats` REINTERPRETATION FOR SRGB-ONLY SURFACES. FOUR FIXTURES HAD ASSERTED THE ENCODED VALUES AND WERE CORRECTED. SPAWNED GFX-147/148.** |
 | REMED-GFX-132 | `cna_reference_dump` links `CNA` without the `--start-group` wrapper its own build-system comment says it needs, so it fails to link under the ASCII backend. | LOW | P3 | REMED-GFX-127 build matrix | **OPEN — `BuildAsciiFontAtlas` REFERENCES `SpriteFont::SpriteFont` FROM AN ALREADY-PASSED ARCHIVE. EVERY BACKEND LIBRARY, EVERY ASCII TEST AND `CnaTests` BUILD; ONLY THIS TOOL TARGET FAILS.** |
 | REMED-GFX-133 | `headless_smoke_test` Check F catches `HeadlessValidationException` for an out-of-range indexed draw that REMED-GFX-110's shared validation now rejects with `System::ArgumentOutOfRangeException` first, so the exception escapes and aborts the executable. | LOW | P3 | REMED-GFX-127 regression matrix | **OPEN — A/B-PROVEN PRE-EXISTING (THE PRE-REMED-GFX-127 SOURCES ABORT IDENTICALLY). WHETHER THE SHARED LAYER OR THE HEADLESS MODE DIAL SHOULD OWN THE REJECTION IS A CONTRACT QUESTION.** |
 
@@ -12363,7 +12363,7 @@ Five, none of which belongs inside an honest-readback correction.
   destination while `SetData` stores nothing.
 - **REMED-GFX-131** — WebGPU render targets use an `*UnormSrgb` format, so a mid-tone channel comes
   back gamma-encoded (128 → 188). Alpha and the 0/255 fixed points are unaffected, which is why
-  saturated-colour tests never saw it.
+  saturated-colour tests never saw it. *(closed 2026-07-28 — see its own record below.)*
 - **REMED-GFX-132** — `cna_reference_dump` links `CNA` without the `--start-group` wrapper its own
   build-system comment says it needs, so it cannot link under the ASCII backend.
 - **REMED-GFX-133** — `headless_smoke_test` Check F catches `HeadlessValidationException` for a
@@ -16705,5 +16705,244 @@ generated artifact changed.
 - `ce069126 fix(Task REMED-GFX-146): capture WebGPU scissor per draw`
 - `c52fcdc4 test(Task REMED-GFX-146): cover cardinality, cross-backend and state parity`
 - `docs(remediation): record GFX-146 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-131 — WebGPU render targets were sRGB (DONE, 2026-07-28)
+
+### Classification and root cause
+
+One root cause, in one place. `WebGPUGraphicsBackend::ConfigureSurface` chose the surface format
+from a preference list that put `BGRA8UnormSrgb` and `RGBA8UnormSrgb` **ahead of** their non-sRGB
+counterparts, and stored it in `surfaceFormat_`. That single member then served three roles at once:
+the surface configuration, the colour-target format every `GetOrCreatePipeline*` hardcodes, and —
+via `colorFormat_ = owner_->surfaceFormat_` in both `WebGPURenderTargetBackend` and
+`WebGPURenderTargetCubeBackend` — the actual texture format of every offscreen colour attachment.
+
+So the hardware applied a linear-to-sRGB encode as the render pass **stored** each fragment, and
+`RenderTarget2D::GetData` / `RenderTargetCube::GetData` handed those encoded bytes straight to game
+code. It was not a shader, a clear-value conversion, a swizzle, a readback conversion or a
+premultiplication: legs B (clear), C (vertex colour) and D (sampled texture) all reproduce it
+identically, which is only possible if the store itself is where the transformation happens.
+
+### The authoritative Color / sRGB contract
+
+| Question | Answer | Authority |
+|---|---|---|
+| Is `SurfaceFormat::Color` an ordinary 8-bit UNORM byte format? | **Yes.** | `SurfaceFormat.hpp`: *"Unsigned 32-bit ARGB pixel format storing 8 bits per channel"* — with no mention of a transfer function |
+| Does CNA expose distinct sRGB formats? | **Yes** — `ColorSrgbEXT`, `Dxt5SrgbEXT`, `Bc7SrgbEXT`. | `ColorSrgbEXT` is documented as *"values are sRGB-encoded and read as linear in shaders"*; `D3DFormatMapping` maps `Color`→`R8G8B8A8_UNORM` and `ColorSrgbEXT`→`R8G8B8A8_UNORM_SRGB` |
+| Should `GetData` return the stored bytes or linearized values? | **The stored bytes**, unchanged. | REMED-GFX-127/130/134's honest-readback contract |
+| Should `Color(128, …)` written through `Clear` or an opaque draw read back as exactly 128? | **Yes.** | Now asserted on seven backends |
+| Is automatic sRGB decode allowed when sampling `SurfaceFormat::Color`? | **No.** | It is a UNORM format |
+| Is automatic sRGB encode allowed when rendering to `SurfaceFormat::Color`? | **No.** | The defect |
+| Must render targets and ordinary textures share colour semantics? | **Yes** — and `IGraphicsBackend::CreateRenderTarget2D`/`CreateRenderTargetCube` take no `SurfaceFormat` at all, so a backend render target is *always* `Color` | Interface signature |
+| Does the backbuffer have a separate contract? | **No, in CNA.** XNA's default `BackBufferFormat` is `SurfaceFormat.Color` | `VulkanGraphicsBackend::CreateSwapchain` decides this exact question the other way, in a comment: *"An SRGB swapchain format would apply an automatic linear-to-sRGB encode to every presented pixel regardless of content, which XNA/FNA does not do by default. Prefer UNORM."* |
+
+WebGPU was the sole outlier among fourteen backends.
+
+### Measured pre-fix transfer function
+
+Printed by the fixture itself, per channel, so it is measured rather than asserted. R, G and B were
+**identical**, which rules out any channel-specific cause:
+
+| input | normalized | identity | srgb-encode | srgb-decode | actual | hypothesis |
+|---|---|---|---|---|---|---|
+| 0 | 0.000000 | 0 | 0 | 0 | **0** | identity (fixed point) |
+| 1 | 0.003922 | 1 | 13 | 0 | **13** | srgb-encode |
+| 16 | 0.062745 | 16 | 71 | 1 | **71** | srgb-encode |
+| 32 | 0.125490 | 32 | 99 | 4 | **99** | srgb-encode |
+| 64 | 0.250980 | 64 | 137 | 13 | **137** | srgb-encode |
+| 96 | 0.376471 | 96 | 165 | 30 | **165** | srgb-encode |
+| 127 | 0.498039 | 127 | 187 | 54 | **187** | srgb-encode |
+| **128** | 0.501961 | 128 | 188 | 55 | **188** | srgb-encode |
+| 129 | 0.505882 | 129 | 189 | 56 | **188** | srgb-encode (±1, 8-bit rounding) |
+| 160 | 0.627451 | 160 | 208 | 90 | **207** | srgb-encode (±1) |
+| 192 | 0.752941 | 192 | 225 | 134 | **225** | srgb-encode |
+| 224 | 0.878431 | 224 | 241 | 190 | **241** | srgb-encode |
+| 254 | 0.996078 | 254 | 255 | 253 | **255** | srgb-encode |
+| 255 | 1.000000 | 255 | 255 | 255 | **255** | identity (fixed point) |
+
+Exactly **one** standard IEC 61966-2-1 encode — not a decode, not a double conversion, not gamma
+2.2 (which misses near 0). Alpha was byte-exact throughout, e.g. the cube face wrote `(128,128,127,64)`
+and read `(188,188,187,64)`, confirming alpha stays linear in an sRGB format. That is also why every
+pre-existing fixture missed this: 0 and 255 are exact fixed points, and the WebGPU render-target,
+cube, MSAA and readback fixtures all used an RGB palette drawn only from `{0, 255}`.
+
+### Format mapping, old and new
+
+| Resource | Before | After |
+|---|---|---|
+| Surface configuration | `BGRA8UnormSrgb` (preferred first) | `BGRA8Unorm` (preferred first); an sRGB format only if the surface offers nothing else |
+| Backbuffer view | default view = the configured format | explicit view in `surfaceFormat_` (non-sRGB), legal via `viewFormats` when the configured format is sRGB |
+| Backbuffer MSAA colour | `surfaceFormat_` | `surfaceFormat_` (now non-sRGB) |
+| `RenderTarget2D` colour + MSAA colour | `surfaceFormat_` | `surfaceFormat_` (now non-sRGB) |
+| `RenderTargetCube` colour, cube view, 6 face views | `surfaceFormat_` | `surfaceFormat_` (now non-sRGB) |
+| Plain `Texture2D` / `TextureCube` / `Texture3D` | `RGBA8Unorm` | unchanged — **it was already correct** |
+| Every pipeline's `target.format` | `surfaceFormat_` | unchanged expression, non-sRGB value |
+| Depth / stencil | `Depth24PlusStencil8` | unchanged |
+
+`surfaceFormat_` is now defined as CNA's `SurfaceFormat::Color` mapping and is always non-sRGB; the
+new `surfaceConfiguredFormat_` records what the surface itself was configured with. Only the transfer
+function is ever dropped, never channel order, so the BGRA readback swizzle in all three readback
+paths is unaffected. On this adapter the selected format moved from `BGRA8UnormSrgb` (28) to
+`BGRA8Unorm` (27) and the `viewFormats` fallback stayed unused.
+
+### Results per leg
+
+| Leg | What it isolates | Before | After |
+|---|---|---|---|
+| A1–A5 | CPU `SetData` → `Texture2D::GetData`, full/rect/offset/repeat | **PASS** (112/112) | PASS |
+| B1 | `RenderTarget2D` `Clear`(mid-tone) → `GetData`, 14 clears | 0/14 | **14/14** |
+| B2 | same on a `PreserveContents` target | 0/14 | **14/14** |
+| C1 | vertex-colour draw → `GetData`, 14 colours | 2/14 | **14/14** |
+| D1 | sample `Texture2D` → `RenderTarget2D` → `GetData` | 8/112 px | **112/112 px** |
+| E1 | `RenderTarget2D` A → sampled → B | 8/112 px | **112/112 px** |
+| F1/F2 | repeated readback stable, source unmutated | F1 pass, F2 fail | **PASS** |
+| G1 | `RenderTargetCube` face | `(188,188,187,64)` | **`(128,128,127,64)`** |
+| H1/H2 | rectangle and destination-offset regions | FAIL | **PASS** |
+| I1 | `NonPremultiplied` mid-tone over mid-tone | `(177,142,197)` | **`(113,70,143)`** vs expected `(113,69,143)` |
+| I2 | `Additive` mid-tone over mid-tone | `(168,223,232)` | **`(100,188,205)`** exact |
+| V1 | `GetUncapturedErrorCountEXT()` | — | **0** |
+
+Leg A passing *before* the fix is itself recorded (check A5): plain textures already used
+`RGBA8Unorm`, so ordinary textures and render targets did not share colour semantics on this backend
+alone. Alpha was correct before and after in every leg, including `I1`'s blended alpha of 191.
+
+Blending is not a separate cause. Once the attachment stores plain bytes, the native blend produces
+the byte-space result CNA's other backends already produce — `I2` moved from a gamma-space value to
+`src + dst` exactly. CNA's historical blending contract was matched, not redesigned.
+
+### Explicit sRGB boundary and the swapchain
+
+`ColorSrgbEXT`, `Dxt5SrgbEXT` and `Bc7SrgbEXT` remain untouched: no explicit sRGB format was
+converted to a linear one, and no public API changed. The WebGPU backend has never mapped
+`SurfaceFormat` for render targets at all — the interface gives it no format to map — so there is no
+explicit-sRGB render-target path here to preserve or to break.
+
+The swapchain was **not** treated as out of scope, because CNA has already decided it: XNA's default
+`BackBufferFormat` is `SurfaceFormat.Color`, and Vulkan's swapchain selection resolves this identical
+question with a comment saying so. Aligning WebGPU with that is the fix, not a side effect — and the
+`viewFormats` fallback means a surface that can only be *configured* as sRGB still presents CNA's
+bytes unchanged. No independent swapchain-presentation defect was found.
+
+### False-positive test audit
+
+Six fixtures were examined; **four asserted the encoded values and were corrected**, and two had
+documented the blind spot in a comment instead of closing it.
+
+| Fixture | What it did | Now |
+|---|---|---|
+| `webgpu_spritebatch_blendstate_test.cpp` | `SrgbByte()` for RGB + `LinearAlphaByte()` for alpha, tolerance 5 | one `UnormByte()` for all four channels |
+| `webgpu_basiceffect_preferperpixellighting_test.cpp` | expected 187/203 | **127/152 — exactly what EasyGL, Vulkan and Bgfx already read for the same scene** |
+| `webgpu_skinnedeffect_world_normal_test.cpp` | `LinearToSrgb(N·L)` | `N·L * 255`; the helper is deleted |
+| `rendertargetcube_plural_binding_test.cpp` | WebGPU-only `CNA_GFX096_EXPECT_SRGB_ENCODED` fork in a **shared** fixture | fork and CMake define removed; still passes on EasyGL, Bgfx, Vulkan, SdlGpu and WebGPU |
+| `texture2d_getdata_contract_test.cpp` | comment: RGB restricted to 0/255 *because* of this defect | left as is — REMED-GFX-127 owns it; this file now covers the gap |
+| `rendertargetcube_getdata_contract_test.cpp` | same restriction, same reason | as above |
+
+The third row is the strongest evidence the fix is right rather than merely self-consistent: those
+two numbers were not chosen, they were what three unrelated backends had been reading all along.
+
+### Cardinality and performance
+
+No new work at runtime. The fix changes a format *value* and replaces one null view descriptor with
+an explicit one — the same single view object.
+
+| Measure | Before | After |
+|---|---|---|
+| Sprite pipeline cache across a 64-`BlendFactor` sweep | 8 → 8 | 8 → 8 |
+| Pipeline-cache key dimensions | format is already a field; one value | unchanged, value 28 → 27 |
+| Textures / texture views / bind groups / render passes / submits | — | unchanged |
+| Staging and readback buffers | — | unchanged |
+| Per-pixel CPU conversion | none | none |
+| Extra frame, submit or wait | none | none |
+| Shader variants | none | none |
+
+### Cross-backend controls
+
+The fixture is registered on seven backends precisely so byte-exact identity is shown to be CNA's
+existing behaviour rather than a value invented for this fix. **Only WebGPU production changed.**
+
+| Backend | Result |
+|---|---|
+| WEBGPU | **18/18** (17 + `V1` validation) |
+| SOFTWARE | 17/17 |
+| EASYGL | 17/17 |
+| VULKAN | 17/17 |
+| BGFX | 17/17 |
+| SDL_GPU | 17/17 |
+| HEADLESS | 14/14 on its declared `NotSupportedException` rejection contract |
+
+### Regression gates
+
+WebGPU-labelled shard: **48/49**. The single miss, `WebGPU_Clear_Readback`, is A/B-proven
+pre-existing — with the pre-fix backend restored it fails at an identical **7/10** on the identical
+three checks (50%-alpha blend, `AddressMode=Wrap`, `AddressMode=Mirror`). Full `cmake-build-webgpu`
+suite: 5819/5825, down from 5815/5825 before the fix; all six remaining failures A/B-proven
+pre-existing (`XnbContainerFuzzTest`, `CnjEffectTest`, `CnjStockEffectTest`,
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`,
+`GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`, `WebGPU_Clear_Readback`).
+
+GFX-039 validation, GFX-090, GFX-100, GFX-102, GFX-104/105, GFX-116, GFX-146, GFX-124/127/130/134,
+GFX-136/142, RenderTargetCube, MSAA, `SetData`/`GetData`, SpriteBatch, target switching and disposal
+all green. WebGPU stencil and ordered mid-cycle `Clear` were not started.
+
+### WebGPU validation and sanitizers
+
+`GetUncapturedErrorCountEXT()` is **0** after every leg (check `V1`), which is the gate on the two
+things the fix could have got wrong natively: an unsupported renderable format and an illegal
+base/view format pair. No validation was silenced.
+
+ASan+UBSan (`CNA_SANITIZE=address,undefined`) over the new suite **18/18 with zero reports**, plus
+`webgpu_texture2d_getdata_contract`, `webgpu_rendertargetcube_getdata_contract`, `webgpu_msaa`,
+`webgpu_spritebatch_blendstate` and `webgpu_rendertarget2d` — all exit 0, zero reports.
+
+### Independent findings recorded, not fixed
+
+Running the fixture on the cross-backend controls surfaced two divergences that are neither WebGPU
+nor colour-space. Neither can be caused by this task, which touches WebGPU files only. Both are
+**declared per backend in the fixture**, so it pins them rather than tolerating them, and every
+colour comparison stays byte-exact on those backends.
+
+- **REMED-GFX-147** — EasyGL samples a `RenderTarget2D` bottom-up. Leg D (plain `Texture2D`) is
+  exactly top-down in the same run, so the asymmetry is in render-target sampling alone. The EasyGL
+  counterpart of REMED-GFX-067's bgfx finding.
+- **REMED-GFX-148** — Software's `BlendState::Additive` stores the source only, dropping the
+  destination term. Its `NonPremultiplied` blend against the identical destination in the identical
+  frame is correct, so the destination is present and `Additive` alone discards it.
+
+### Source and generated-artifact changes
+
+Two production files: `WebGPUGraphicsBackend.hpp` (+19 lines) and `WebGPUGraphicsBackend.cpp`
+(+83/-9). **No shader source, no WGSL, and no generated artifact changed** — which is itself part of
+the result: the correction is in the resource/view format, not in a per-shader gamma workaround.
+
+### Build directories, ccache and displays
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-webgpu` | WEBGPU | yes | reused |
+| `cmake-build-webgpu-asan-ubsan` | WEBGPU + ASan + UBSan | yes | reused |
+| `cmake-build-debug` (EasyGL) · `cmake-build-vulkan` · `cmake-build-bgfx` · `cmake-build-sdlgpu` · `cmake-build-software` · `cmake-build-headless` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-dx3` · `cmake-build-sdlrenderer` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other thirteen | yes | reused |
+
+**No build directory was created, cleaned, deleted or recreated**; every configure was incremental
+and the existing `cmake-build-webgpu/_deps/wgpu-native-v29.0.1.1` extraction was reused with no
+download. No build tree was created under `/tmp`, `/var/tmp` or `/dev/shm` — the scratchpad held only
+logs and two backend-file backups used for the A/B measurement. All fourteen backend libraries
+compile incrementally: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12, DX3, EasyGL, Headless, SDL_GPU,
+SDL_Renderer, Software, Vulkan and WebGPU.
+
+Virtual display **`:101`** throughout (pre-existing and shared; not created and not stopped). No
+`pkill`, `killall` or kill-by-name was used at any point. Thermals: started at **53.8 °C**, peaked at
+**~75 °C**, never approached 85 °C, no pause needed; maximum parallelism **2 jobs**, with **1 job**
+for the first builds.
+
+### Commits
+
+- `359e7ec9 test(Task REMED-GFX-131): reproduce WebGPU mid-tone colour conversion`
+- `9cd4eb0f fix(Task REMED-GFX-131): correct WebGPU Color format semantics`
+- `b172ca2b test(Task REMED-GFX-131): cover colour-space paths and backend parity`
+- `docs(remediation): record GFX-131 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
