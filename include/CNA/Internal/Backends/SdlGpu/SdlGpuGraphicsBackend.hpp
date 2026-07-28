@@ -170,15 +170,16 @@ namespace CNA::Internal::Backends::SdlGpu
     // (EnsureFrameRendered). A RenderTarget2D destroyed as a short-lived local variable -- inside
     // one Draw() call, before Present() ever runs -- must still have ITS OWN pending Clear()/draws
     // execute correctly (e.g. if something else, like a SpriteBatch draw queued the same frame,
-    // samples its contents). Since usedRenderTargetsThisFrame_/a queued DrawTarget may still need
-    // to reference this target's GPU state well after the SdlGpuRenderTargetBackend wrapper itself
-    // has been destroyed, the actual GPU texture handles + clear-pending state live here, in a
-    // separate, shared_ptr-owned struct -- NOT directly on the wrapper. usedRenderTargetsThisFrame_
-    // and every queued DrawTarget hold (or are kept alive by something that holds) a shared_ptr to
-    // this struct, so it survives exactly as long as anything still needs it, regardless of the
-    // wrapper's own C++ lifetime. This struct's own destructor defers the actual GPU release via
-    // QueueTextureRelease (see that method's own doc comment for why release itself must also be
-    // deferred, not just the C++ object holding the handles).
+    // samples its contents). Since a pending pass segment / a queued DrawTarget may still need to
+    // reference this target's GPU state well after the SdlGpuRenderTargetBackend wrapper itself
+    // has been destroyed, the actual GPU texture handles + first-use clear state live here, in a
+    // separate, shared_ptr-owned struct -- NOT directly on the wrapper. Every pending
+    // SdlGpuGraphicsBackend::PassSegment and every queued DrawTarget hold (or are kept alive by
+    // something that holds) a shared_ptr to this struct, so it survives exactly as long as
+    // anything still needs it, regardless of the wrapper's own C++ lifetime. This struct's own
+    // destructor defers the actual GPU release via QueueTextureRelease (see that method's own doc
+    // comment for why release itself must also be deferred, not just the C++ object holding the
+    // handles).
     struct SdlGpuRenderTarget2DState
     {
         SdlGpuGraphicsBackend* owner = nullptr;
@@ -195,18 +196,15 @@ namespace CNA::Internal::Backends::SdlGpu
         // only ever sees this GPU-state struct via DrawTarget, not the (possibly already-destroyed)
         // wrapper -- see this struct's own doc comment above.
         SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
-        // SDLGPU-37 (real MRT): non-empty only on the PRIMARY (rts[0]) of the most recent
-        // SetRenderTargets(count>1) call -- RenderToTarget() builds ONE render pass with
-        // 1+mrtSiblings.size() SDL_GPUColorTargetInfo entries instead of just this target's own,
-        // making "several SDL_GPUColorTargetInfo entries in one render pass" real rather than
-        // aspirational. Each sibling's own clearColor/clearColorPending etc. (set via
-        // Clear()'s existing currentExtraMrtTargets_ propagation) are read directly off its own
-        // state here -- no separate bookkeeping needed.
-        std::vector<std::shared_ptr<SdlGpuRenderTarget2DState>> mrtSiblings;
-        // True on any target bound as rts[1..] of the most recent SetRenderTargets(count>1) call --
-        // tells EnsureFrameRendered's per-target loop to skip this target's own separate pass,
-        // since its primary's multi-attachment pass above already covers it.
-        bool isMrtSibling = false;
+        // REMED-GFX-145: FIRST-USE clear state only, NOT "a Clear() is queued".
+        //
+        // These say "no render pass has ever written this resource, so a LOAD would read
+        // uninitialized GPU memory" -- the very first segment that records this target therefore
+        // begins with SDL_GPU_LOADOP_CLEAR of the values below, and consumes the flag. An explicit
+        // GraphicsDevice.Clear() no longer lands here at all: it belongs to the ONE bind cycle it
+        // was issued in and is carried by SdlGpuGraphicsBackend::PassSegment. Routing it through
+        // the target instead was half of this finding's root cause -- the frame's LAST Clear() then
+        // supplied the colour for the target's single merged pass.
         bool clearColorPending = true;
         bool clearDepthPending = true;
         bool clearStencilPending = false;
@@ -279,18 +277,17 @@ namespace CNA::Internal::Backends::SdlGpu
          */
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 
-        /** @brief Queues a color-only clear, consumed on this target's next render pass. NOXNA. */
-        NOXNA void QueueClear(SDL_FColor color) { state_->clearColor = color; state_->clearColorPending = true; }
-        /** @brief Queues a depth clear, consumed on this target's next render pass. NOXNA. */
-        NOXNA void QueueClearDepth(float depth) { state_->clearDepth = depth; state_->clearDepthPending = true; }
-        /** @brief Queues a stencil clear, consumed on this target's next render pass. NOXNA. */
-        NOXNA void QueueClearStencil(Uint8 stencil) { state_->clearStencil = stencil; state_->clearStencilPending = true; }
         /**
-         * @brief Registers this target for its own pass this frame without making it the current
-         * draw target (SDLGPU-37: an "extra" MRT target — bound and clearable, but draws still go
-         * only to the primary target). NOXNA — internal use only.
+         * @brief Adds this target as an extra colour attachment of the render-pass segment the
+         * primary `rts[0]` bind just opened (SDLGPU-37: an "extra" MRT target — a real simultaneous
+         * attachment of that ONE pass, but stock single-output draws still write attachment 0 only).
+         *
+         * REMED-GFX-145: the attachment set belongs to the bind CYCLE, not to the target, so it is
+         * recorded on the segment rather than on either target's shared state — `{a,b}` followed by
+         * `{a,c}` leaves `b` an attachment of the first segment instead of silently dropping it.
+         * NOXNA — internal use only.
          */
-        NOXNA void MarkUsedThisFrame();
+        NOXNA void AttachToCurrentSegment();
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
@@ -318,6 +315,9 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUTexture* depthTexture = nullptr;
         /// Same rationale as SdlGpuRenderTarget2DState::sampleCount.
         SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
+        /// REMED-GFX-145: per-face FIRST-USE clear state only — same meaning (and same reason) as
+        /// SdlGpuRenderTarget2DState's own clear fields. An explicit Clear() belongs to the bind
+        /// cycle that issued it and lives on SdlGpuGraphicsBackend::PassSegment instead.
         std::array<bool, 6> clearColorPending{true, true, true, true, true, true};
         std::array<bool, 6> clearDepthPending{true, true, true, true, true, true};
         std::array<bool, 6> clearStencilPending{};
@@ -383,13 +383,6 @@ namespace CNA::Internal::Backends::SdlGpu
         /** @brief Returns the shared, backend-internal GPU state this cube's rendering operates
          * on -- kept alive independent of this wrapper's own lifetime. NOXNA. */
         NOXNA [[nodiscard]] const std::shared_ptr<SdlGpuRenderTargetCubeState>& State() const { return state_; }
-
-        /** @brief Queues a color-only clear for @p face, consumed on that face's next render pass. NOXNA. */
-        NOXNA void QueueClear(int face, SDL_FColor color) { state_->clearColor[face] = color; state_->clearColorPending[face] = true; }
-        /** @brief Queues a depth clear for @p face, consumed on that face's next render pass. NOXNA. */
-        NOXNA void QueueClearDepth(int face, float depth) { state_->clearDepth[face] = depth; state_->clearDepthPending[face] = true; }
-        /** @brief Queues a stencil clear for @p face, consumed on that face's next render pass. NOXNA. */
-        NOXNA void QueueClearStencil(int face, Uint8 stencil) { state_->clearStencil[face] = stencil; state_->clearStencilPending[face] = true; }
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
@@ -686,6 +679,15 @@ namespace CNA::Internal::Backends::SdlGpu
             float r, g, b, a;
         };
 
+        /**
+         * @brief REMED-GFX-145: the segment id reserved for the swapchain.
+         *
+         * Real segment ids start at 1, so a draw issued with no render target bound never matches
+         * any render-target segment's replay filter, and the swapchain's own trailing pass asks
+         * for this value to mean "no segment filter at all".
+         */
+        static constexpr std::uint64_t kSwapchainSegment = 0;
+
         // Identifies which render pass a queued draw/sprite belongs to: the swapchain (both null,
         // face -1), a RenderTarget2D (rt set), or one face of a RenderTargetCube (cube + face
         // set). At most one of rt/cube is ever set, matching this backend's single-current-target
@@ -694,8 +696,8 @@ namespace CNA::Internal::Backends::SdlGpu
         // SdlGpuRenderTargetCubeBackend wrapper -- a DrawCommand carrying this must remain valid
         // to compare/render even if the wrapper is destroyed before Present() (see
         // SdlGpuRenderTarget2DState's own doc comment). Safe as a raw (non-owning) pointer here
-        // because usedRenderTargetsThisFrame_/usedRenderTargetCubeFacesThisFrame_ hold the actual
-        // owning shared_ptr for the entire duration of one EnsureFrameRendered() call.
+        // because passSegments_ holds the actual owning shared_ptr for the entire duration of one
+        // EnsureFrameRendered() call.
         struct DrawTarget
         {
             const SdlGpuRenderTarget2DState* rt = nullptr;
@@ -707,6 +709,39 @@ namespace CNA::Internal::Backends::SdlGpu
                 return rt == other.rt && cube == other.cube && face == other.face;
             }
             bool operator!=(const DrawTarget& other) const { return !(*this == other); }
+        };
+
+        /**
+         * @brief REMED-GFX-145: ONE public render-target bind/unbind cycle, i.e. exactly one
+         * native `SDL_BeginGPURenderPass`/`SDL_EndGPURenderPass` pair.
+         *
+         * The deferred queues used to carry only a `DrawTarget`, and `EnsureFrameRendered` gave
+         * each DISTINCT target one pass holding every draw ever queued against it that frame. Two
+         * public cycles of one target were then indistinguishable, so the second cycle's load
+         * action never happened, its `Clear()` ran before the first cycle's draws, and `A -> B -> A`
+         * became two passes instead of three. A segment is opened by every bind (including a rebind
+         * of the same resource, face, mip or MRT set), closed by every unbind, and appended to
+         * `passSegments_` in exactly the order the cycles were opened -- so replay is public order
+         * by construction, with no sort and no per-draw allocation.
+         */
+        struct PassSegment
+        {
+            std::uint64_t id = 0;
+            /// Exactly one of `rt` / `cube` is set; `cube` also carries `face`.
+            std::shared_ptr<SdlGpuRenderTarget2DState> rt;
+            std::shared_ptr<SdlGpuRenderTargetCubeState> cube;
+            int face = -1;
+            /// SDLGPU-37 real MRT: `rts[1..]` of the `SetRenderTargets` call that opened THIS cycle.
+            std::vector<std::shared_ptr<SdlGpuRenderTarget2DState>> extraAttachments;
+            /// An explicit GraphicsDevice.Clear() issued while this cycle was bound. Within one
+            /// segment the last Clear() still wins, because SDL_gpu delivers the colour through the
+            /// pass load op and a pass has exactly one (the boundary REMED-GFX-129 records).
+            bool clearColorRequested = false;
+            bool clearDepthRequested = false;
+            bool clearStencilRequested = false;
+            SDL_FColor clearColor{0.0f, 0.0f, 0.0f, 1.0f};
+            float clearDepth = 1.0f;
+            Uint8 clearStencil = 0;
         };
 
         // Adversarial-review finding #4: which per-family queue a QueuedDrawRef points into.
@@ -721,6 +756,14 @@ namespace CNA::Internal::Backends::SdlGpu
         {
             DrawKind kind;
             std::size_t index;
+            // REMED-GFX-145: the logical render-pass segment (one public bind/unbind cycle) this
+            // draw was issued inside; 0 = the swapchain. Target IDENTITY is not enough to group
+            // draws into passes -- two bind cycles of ONE target are two passes with two load
+            // actions, two clear states and two viewport/scissor regimes, and grouping by
+            // DrawTarget alone silently merged them. Assigned in PushDrawOrder from
+            // currentSegment_, the single choke point every Queue*Draw()/QueueSprite() already
+            // routes through.
+            std::uint64_t segment = 0;
             // REMED-GFX-064: the GraphicsDevice.Viewport live when this draw was queued, captured
             // per-draw (PushDrawOrder) and replayed via SDL_SetGPUViewport in RenderQueuedDraws.
             // viewportSet=false (or a zero-size rect) => the pass's full render-target extents.
@@ -1460,12 +1503,12 @@ namespace CNA::Internal::Backends::SdlGpu
 
         // Real architectural fix for a render-target-destroyed-before-flush use-after-free: a
         // RenderTarget2D/RenderTargetCube's destructor already purges itself from
-        // usedRenderTargetsThisFrame_/usedRenderTargetCubeFacesThisFrame_ (so EnsureFrameRendered
+        // the pending pass segments (so EnsureFrameRendered
         // never dereferences a dangling C++ object), but its OWN GPU texture handles must NOT be
         // released immediately -- some OTHER still-pending (not yet submitted) draw command may
         // sample this texture as an INPUT (SpriteBatch drawing this render target's contents
         // elsewhere, or EnvironmentMapEffect sampling it as a cube map) via a raw SDL_GPUTexture*
-        // captured at Queue*Draw() time, independent of usedRenderTargetsThisFrame_ entirely.
+        // captured at Queue*Draw() time, independent of the pending pass segments entirely.
         // SDL_ReleaseGPUTexture() itself already defers the underlying GPU memory free until safe
         // (per SDL_gpu.h's own doc comment) -- but the HANDLE becomes invalid for any FURTHER API
         // call the instant it's released, so it must not be released while anything might still
@@ -1649,9 +1692,14 @@ namespace CNA::Internal::Backends::SdlGpu
         // loops used to skip it -- only the ORDER changed, not the readiness rules. boundPipeline
         // is now tracked globally across every kind, not just within one family, so consecutive
         // same-pipeline draws of DIFFERENT kinds also skip a redundant rebind.
+        // REMED-GFX-145: @p segment restricts the replay to the ONE bind cycle this pass
+        // represents; kSwapchainSegment means "every draw whose DrawTarget is the swapchain,
+        // whichever cycle it was issued in", which is what the single trailing backbuffer pass
+        // still needs (interleaving backbuffer work BETWEEN target segments is REMED-GFX-143).
         void RenderQueuedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const DrawTarget& target,
                               SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                              SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount = 1);
+                              SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount = 1,
+                              std::uint64_t segment = kSwapchainSegment);
         // Releases every transient buffer UploadSceneDrawData created, and clears all 3 queues --
         // safe to call immediately after SDL_SubmitGPUCommandBuffer (SDL_gpu defers the actual
         // free until the GPU is done, per SDL_ReleaseGPUBuffer's own documented contract).
@@ -1687,14 +1735,31 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexOffset = range.vertexOffset;
         }
 
-        // Phase SDLGPU-8: renders one off-screen render target's own pass (all draws/sprites
-        // queued against it, across every shader family) and regenerates its mip chain afterward
-        // if requested -- called once per distinct target used this frame, before the swapchain
-        // pass itself (see EnsureFrameRendered's per-target grouping).
-        void RenderToTarget(SDL_GPUCommandBuffer* cmd, const std::shared_ptr<SdlGpuRenderTarget2DState>& target);
-        // Phase SDLGPU-8 (SDLGPU-36): renders one RenderTargetCube face's own pass -- called once
-        // per distinct (cube, face) pair used this frame, before the swapchain pass.
-        void RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube, int face);
+        // Phase SDLGPU-8: renders ONE off-screen render-target segment's own pass (the draws and
+        // sprites queued inside that one bind cycle, across every shader family) and regenerates
+        // its mip chain afterward if requested. REMED-GFX-145: called once per SEGMENT, not once
+        // per distinct target -- all before the swapchain pass itself.
+        void RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment);
+        // Phase SDLGPU-8 (SDLGPU-36): renders ONE RenderTargetCube-face segment's own pass.
+        // REMED-GFX-145: once per bind cycle of that face, not once per distinct (cube, face).
+        void RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const PassSegment& segment);
+        // REMED-GFX-145: opens a new logical render-pass segment for whatever was just bound, and
+        // makes it the segment every subsequent Queue*Draw()/QueueSprite()/Clear() belongs to.
+        // Called from EVERY bind site, including a rebind of the target that is already current --
+        // that is precisely the case the old target-identity grouping could not represent.
+        void BeginRenderTargetSegment(const std::shared_ptr<SdlGpuRenderTarget2DState>& rt);
+        void BeginCubeFaceSegment(const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube, int face);
+        /// Closes the open segment; subsequent work belongs to the swapchain until the next bind.
+        void EndRenderTargetSegment();
+        /// The open segment, or null when the swapchain is current.
+        [[nodiscard]] PassSegment* CurrentSegment();
+        /// Re-opens a segment for whatever is still bound after a mid-frame flush cleared the
+        /// segment list, so draws issued after that flush are not silently dropped.
+        void ReopenSegmentForBoundTarget();
+        /// True when a resource this segment names has never been written by any pass, so this
+        /// segment must run even with no draws and no explicit Clear() -- otherwise the texture
+        /// stays uninitialized and a later LOAD reads garbage.
+        [[nodiscard]] static bool SegmentOwesFirstUseClear(const PassSegment& segment);
         // Returns the DrawTarget matching whichever target (swapchain/2D RT/cube face) is
         // currently bound -- 2D and cube binding are mutually exclusive (see
         // SdlGpuRenderTargetBackend::BindAsRenderTarget/SdlGpuRenderTargetCubeBackend::BindAsRenderTargetFace).
@@ -1836,35 +1901,32 @@ namespace CNA::Internal::Backends::SdlGpu
 
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
 
-        // Phase SDLGPU-8: nullptr = the swapchain is the active target. usedRenderTargetsThisFrame_
-        // preserves first-bind order so EnsureFrameRendered renders each in that order, all before
-        // the swapchain's own pass (see RenderToTarget/EnsureFrameRendered) -- every Clear()/draw
-        // call recorded against the same target within one frame is accumulated into that target's
-        // single pass, regardless of how many times SetRenderTarget2D re-selected it meanwhile.
+        // Phase SDLGPU-8: nullptr = the swapchain is the active target. REMED-GFX-145: which pass a
+        // draw belongs to is decided by its SEGMENT (passSegments_ below), not by this pointer --
+        // this only answers "what is bound right now" for CurrentDrawTarget()/Clear() routing.
         SdlGpuRenderTargetBackend* currentRenderTarget_ = nullptr;
-        // Holds the actual owning shared_ptr -- keeps a target's GPU state alive for its own
-        // pending Clear()/draws even if the SdlGpuRenderTargetBackend wrapper is destroyed before
-        // Present() (see SdlGpuRenderTarget2DState's own doc comment).
-        std::vector<std::shared_ptr<SdlGpuRenderTarget2DState>> usedRenderTargetsThisFrame_;
 
         // See QueueTextureRelease's own doc comment -- GPU texture handles from a destroyed
         // render target, deferred until the next successful command-buffer submit.
         std::vector<SDL_GPUTexture*> pendingTextureReleases_;
 
-        // SDLGPU-36: mirrors currentRenderTarget_/usedRenderTargetsThisFrame_ for RenderTargetCube
-        // faces -- currentRenderTarget_ and currentRenderTargetCube_ are mutually exclusive (binding
-        // one clears the other, matching SetRenderTarget2D/SetRenderTargetCubeFace's real XNA
-        // single-current-target semantics).
+        // SDLGPU-36: mirrors currentRenderTarget_ for RenderTargetCube faces -- currentRenderTarget_
+        // and currentRenderTargetCube_ are mutually exclusive (binding one clears the other,
+        // matching SetRenderTarget2D/SetRenderTargetCubeFace's real XNA single-current-target
+        // semantics).
         SdlGpuRenderTargetCubeBackend* currentRenderTargetCube_ = nullptr;
         int currentActiveCubeFace_ = -1;
-        // Same rationale as usedRenderTargetsThisFrame_ above.
-        std::vector<std::pair<std::shared_ptr<SdlGpuRenderTargetCubeState>, int>> usedRenderTargetCubeFacesThisFrame_;
 
-        // SDLGPU-37: "extra" MRT targets (rts[1..count-1] of the most recent SetRenderTargets()
-        // call) -- bound (via MarkUsedThisFrame(), so they get their own pass) and independently
-        // cleared (Clear()/ClearXxx() propagate here too), but currentRenderTarget_ always stays
-        // rts[0] since draws remain single-target (see SetRenderTargets's own doc comment).
-        std::vector<SdlGpuRenderTargetBackend*> currentExtraMrtTargets_;
+        // REMED-GFX-145: every public render-target bind cycle of this frame, in the exact order
+        // the cycles were opened. Holds the owning shared_ptr, so a target's GPU state stays alive
+        // for its own pending Clear()/draws even if the wrapper is destroyed before Present() (see
+        // SdlGpuRenderTarget2DState's own doc comment). Cleared, like every other queue, right
+        // after a successful submit.
+        std::vector<PassSegment> passSegments_;
+        /// The open segment's id, or kSwapchainSegment when no render target is bound.
+        std::uint64_t currentSegment_ = kSwapchainSegment;
+        /// Monotonically increasing; never reused within a frame, never a cache key.
+        std::uint64_t nextSegmentId_ = 1;
 
         int physicalWidth_ = 0;
         int physicalHeight_ = 0;

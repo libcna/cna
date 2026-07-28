@@ -1188,20 +1188,41 @@ namespace CNA::Internal::Backends::SdlGpu
         UploadSpriteVertexData(cmd);
         UploadSceneDrawData(cmd);
 
-        // Phase SDLGPU-8: every off-screen render target (2D and cube face) used this frame gets
-        // its own pass FIRST, in first-bind order, so a target bound-then-unbound earlier in the
-        // frame can safely be sampled by a later swapchain-targeted draw within the same frame
-        // (SDLGPU-35's own "bound in one pass, sampled in a later pass" contract). A target with
-        // isMrtSibling set is rendered as an extra attachment of its primary's own multi-attachment
-        // pass below, not as its own separate pass (SDLGPU-37: real MRT).
-        for (const auto& target : usedRenderTargetsThisFrame_)
+        // Phase SDLGPU-8 / REMED-GFX-145: every off-screen render-pass SEGMENT (one public bind
+        // cycle of a RenderTarget2D or of one RenderTargetCube face) gets its own native pass
+        // FIRST, in the exact order the cycles were opened, so a target bound-then-unbound earlier
+        // in the frame can safely be sampled by a later swapchain-targeted draw within the same
+        // frame (SDLGPU-35's own "bound in one pass, sampled in a later pass" contract) AND two
+        // cycles of ONE target stay two passes with two load actions. An MRT extra is an
+        // attachment of the segment its primary bind opened, never a segment of its own
+        // (SDLGPU-37: real MRT).
         {
-            if (target->isMrtSibling)
-                continue;
-            RenderToTarget(cmd, target);
+            // One walk over drawOrder_ answers "does this segment draw anything" for every
+            // segment at once; a segment that neither draws, clears, nor still owes a resource its
+            // first-use initialization needs no native pass at all.
+            std::vector<std::uint64_t> segmentsWithDraws;
+            segmentsWithDraws.reserve(drawOrder_.size());
+            for (const QueuedDrawRef& ref : drawOrder_)
+                if (ref.segment != kSwapchainSegment)
+                    segmentsWithDraws.push_back(ref.segment);
+            std::sort(segmentsWithDraws.begin(), segmentsWithDraws.end());
+            segmentsWithDraws.erase(std::unique(segmentsWithDraws.begin(), segmentsWithDraws.end()),
+                                    segmentsWithDraws.end());
+
+            for (const PassSegment& segment : passSegments_)
+            {
+                const bool draws = std::binary_search(segmentsWithDraws.begin(),
+                                                      segmentsWithDraws.end(), segment.id);
+                const bool clears = segment.clearColorRequested || segment.clearDepthRequested ||
+                                    segment.clearStencilRequested;
+                if (!draws && !clears && !SegmentOwesFirstUseClear(segment))
+                    continue;
+                if (segment.rt != nullptr)
+                    RenderToTarget(cmd, segment);
+                else if (segment.cube != nullptr)
+                    RenderToTargetCubeFace(cmd, segment);
+            }
         }
-        for (auto& [cube, face] : usedRenderTargetCubeFacesThisFrame_)
-            RenderToTargetCubeFace(cmd, cube, face);
 
         SDL_GPUColorTargetInfo colorTarget{};
         colorTarget.texture = swapchainTexture;
@@ -1244,15 +1265,18 @@ namespace CNA::Internal::Backends::SdlGpu
         // (per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass, but
         // is otherwise fine any time before submit). No per-layer control on this call -- it
         // regenerates all 6 faces' chains; harmless for a face untouched this frame (same
-        // unchanged level-0 data produces an identical result).
+        // unchanged level-0 data produces an identical result). Once per CUBE, not once per
+        // segment: every face's final content for this frame is already stored by now.
         {
             std::vector<SdlGpuRenderTargetCubeState*> mipRegenerated;
-            for (auto& [cube, face] : usedRenderTargetCubeFacesThisFrame_)
+            for (const PassSegment& segment : passSegments_)
             {
-                if (cube->mipMap && std::find(mipRegenerated.begin(), mipRegenerated.end(), cube.get()) == mipRegenerated.end())
+                SdlGpuRenderTargetCubeState* cube = segment.cube.get();
+                if (cube != nullptr && cube->mipMap &&
+                    std::find(mipRegenerated.begin(), mipRegenerated.end(), cube) == mipRegenerated.end())
                 {
                     SDL_GenerateMipmapsForGPUTexture(cmd, cube->cubeTexture);
-                    mipRegenerated.push_back(cube.get());
+                    mipRegenerated.push_back(cube);
                 }
             }
         }
@@ -1277,20 +1301,15 @@ namespace CNA::Internal::Backends::SdlGpu
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
-        for (auto& target : usedRenderTargetsThisFrame_)
-        {
-            target->clearColorPending = false;
-            target->clearDepthPending = false;
-            target->clearStencilPending = false;
-        }
-        usedRenderTargetsThisFrame_.clear();
-        for (auto& [cube, face] : usedRenderTargetCubeFacesThisFrame_)
-        {
-            cube->clearColorPending[face] = false;
-            cube->clearDepthPending[face] = false;
-            cube->clearStencilPending[face] = false;
-        }
-        usedRenderTargetCubeFacesThisFrame_.clear();
+        // REMED-GFX-145: the per-resource FIRST-USE clear flags are consumed by whichever segment
+        // actually recorded that resource (RenderToTarget/RenderToTargetCubeFace do it), not here
+        // -- a skipped empty segment must leave a still-uninitialized texture owing its clear.
+        passSegments_.clear();
+        // A flush can happen while a target is still bound (a GetData or Present issued without
+        // unbinding first). The segment list is gone, so re-open one for whatever is current;
+        // otherwise every later draw of this cycle would carry an id no segment answers to and
+        // would never be recorded at all.
+        ReopenSegmentForBoundTarget();
             framePending_ = false;
             return true;
         }
@@ -1307,14 +1326,20 @@ namespace CNA::Internal::Backends::SdlGpu
 
     namespace
     {
-        // Shared by RenderToTarget's primary + each SDLGPU-37 MRT sibling -- fills one
-        // SDL_GPUColorTargetInfo entry from a render-target state exactly like the single-target
-        // case always did.
-        void FillColorTargetInfo(SDL_GPUColorTargetInfo& out, const SdlGpuRenderTarget2DState& state)
+        // Shared by RenderToTarget's primary + each SDLGPU-37 MRT extra attachment -- fills one
+        // SDL_GPUColorTargetInfo entry.
+        //
+        // REMED-GFX-145: the load action belongs to the SEGMENT, not to the resource. An explicit
+        // Clear() inside this bind cycle wins; otherwise the resource's own first-use flag decides
+        // whether this is the pass that must initialize it; otherwise LOAD, which is what makes a
+        // second cycle genuinely reload what the first cycle stored.
+        void FillColorTargetInfo(SDL_GPUColorTargetInfo& out, const SdlGpuRenderTarget2DState& state,
+                                 bool segmentClearsColor, SDL_FColor segmentClearColor)
         {
             out.texture = state.msaaTexture != nullptr ? state.msaaTexture : state.colorTexture;
-            out.clear_color = state.clearColor;
-            out.load_op = state.clearColorPending ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            out.clear_color = segmentClearsColor ? segmentClearColor : state.clearColor;
+            out.load_op = (segmentClearsColor || state.clearColorPending) ? SDL_GPU_LOADOP_CLEAR
+                                                                         : SDL_GPU_LOADOP_LOAD;
             if (state.msaaTexture != nullptr)
             {
                 out.resolve_texture = state.colorTexture;
@@ -1327,18 +1352,39 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderToTarget(SDL_GPUCommandBuffer* cmd, const std::shared_ptr<SdlGpuRenderTarget2DState>& target)
+    bool SdlGpuGraphicsBackend::SegmentOwesFirstUseClear(const PassSegment& segment)
+    {
+        if (segment.cube != nullptr)
+        {
+            const int face = segment.face;
+            if (face < 0 || face >= 6) return false;
+            return segment.cube->clearColorPending[face] || segment.cube->clearDepthPending[face] ||
+                   segment.cube->clearStencilPending[face];
+        }
+        if (segment.rt == nullptr) return false;
+        if (segment.rt->clearColorPending || segment.rt->clearDepthPending ||
+            segment.rt->clearStencilPending)
+            return true;
+        for (const auto& extra : segment.extraAttachments)
+            if (extra->clearColorPending) return true;
+        return false;
+    }
+
+    void SdlGpuGraphicsBackend::RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment)
     {
         constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        const std::shared_ptr<SdlGpuRenderTarget2DState>& target = segment.rt;
 
-        // SDLGPU-37: real MRT -- target->mrtSiblings is non-empty only when this target is the
-        // primary (rts[0]) of the most recent SetRenderTargets(count>1) call, in which case this
-        // one render pass gets 1+mrtSiblings.size() real simultaneous color attachments, not just
-        // this target's own.
-        std::vector<SDL_GPUColorTargetInfo> colorTargets(1 + target->mrtSiblings.size());
-        FillColorTargetInfo(colorTargets[0], *target);
-        for (std::size_t i = 0; i < target->mrtSiblings.size(); ++i)
-            FillColorTargetInfo(colorTargets[i + 1], *target->mrtSiblings[i]);
+        // SDLGPU-37: real MRT -- extraAttachments holds rts[1..] of the SetRenderTargets(count>1)
+        // call that opened THIS cycle, so this one render pass gets 1+extraAttachments.size() real
+        // simultaneous color attachments. REMED-GFX-145: recorded per segment rather than on the
+        // primary's shared state, so a later {a,c} bind cannot retroactively drop b out of the
+        // earlier {a,b} pass.
+        std::vector<SDL_GPUColorTargetInfo> colorTargets(1 + segment.extraAttachments.size());
+        FillColorTargetInfo(colorTargets[0], *target, segment.clearColorRequested, segment.clearColor);
+        for (std::size_t i = 0; i < segment.extraAttachments.size(); ++i)
+            FillColorTargetInfo(colorTargets[i + 1], *segment.extraAttachments[i],
+                                segment.clearColorRequested, segment.clearColor);
         const int colorTargetCount = static_cast<int>(colorTargets.size());
 
         SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
@@ -1346,11 +1392,16 @@ namespace CNA::Internal::Backends::SdlGpu
         if (hasDepth)
         {
             depthStencilTarget.texture = target->depthTexture;
-            depthStencilTarget.clear_depth = target->clearDepth;
-            depthStencilTarget.load_op = target->clearDepthPending ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.clear_depth = segment.clearDepthRequested ? segment.clearDepth
+                                                                         : target->clearDepth;
+            depthStencilTarget.load_op = (segment.clearDepthRequested || target->clearDepthPending)
+                                             ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
             depthStencilTarget.store_op = SDL_GPU_STOREOP_STORE;
-            depthStencilTarget.clear_stencil = target->clearStencil;
-            depthStencilTarget.stencil_load_op = target->clearStencilPending ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.clear_stencil = segment.clearStencilRequested ? segment.clearStencil
+                                                                             : target->clearStencil;
+            depthStencilTarget.stencil_load_op =
+                (segment.clearStencilRequested || target->clearStencilPending) ? SDL_GPU_LOADOP_CLEAR
+                                                                              : SDL_GPU_LOADOP_LOAD;
             depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
         }
 
@@ -1361,22 +1412,37 @@ namespace CNA::Internal::Backends::SdlGpu
         const DrawTarget dt{target.get(), nullptr, -1};
         RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount,
                           hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID,
-                          colorTargetCount);
+                          colorTargetCount, segment.id);
         passOwner.End();
+
+        // Whatever this pass just stored is this resource's content from here on: a LATER segment
+        // of the same resource must LOAD it, not clear it again.
+        target->clearColorPending = false;
+        target->clearDepthPending = false;
+        target->clearStencilPending = false;
+        for (const auto& extra : segment.extraAttachments)
+        {
+            extra->clearColorPending = false;
+            extra->clearDepthPending = false;
+            extra->clearStencilPending = false;
+        }
 
         // Per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass --
         // matches FNA3D's OPENGL_ResolveTarget semantics (mip chain regenerated once this target's
-        // contents are final for the frame).
+        // contents are final for the frame). Per segment, since each segment's result is what any
+        // LATER segment or the swapchain pass may sample.
         if (target->mipMap)
             SDL_GenerateMipmapsForGPUTexture(cmd, target->colorTexture);
-        for (const auto& sibling : target->mrtSiblings)
-            if (sibling->mipMap)
-                SDL_GenerateMipmapsForGPUTexture(cmd, sibling->colorTexture);
+        for (const auto& extra : segment.extraAttachments)
+            if (extra->mipMap)
+                SDL_GenerateMipmapsForGPUTexture(cmd, extra->colorTexture);
     }
 
-    void SdlGpuGraphicsBackend::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube, int face)
+    void SdlGpuGraphicsBackend::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const PassSegment& segment)
     {
         constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube = segment.cube;
+        const int face = segment.face;
 
         SDL_GPUColorTargetInfo colorTarget{};
         if (cube->msaaTexture != nullptr)
@@ -1391,7 +1457,8 @@ namespace CNA::Internal::Backends::SdlGpu
             colorTarget.texture = cube->cubeTexture;
             colorTarget.layer_or_depth_plane = static_cast<Uint32>(face);
         }
-        colorTarget.clear_color = cube->clearColor[face];
+        colorTarget.clear_color = segment.clearColorRequested ? segment.clearColor
+                                                              : cube->clearColor[face];
         // REMED-GFX-136: LOAD is what makes a single-sample cube face preserve its contents across
         // bind cycles -- but it is ILLEGAL together with the cycle flag the multisampled path below
         // must set, and SDL_gpu says so out loud ('Cannot cycle color target when load op is
@@ -1401,8 +1468,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // face's samples anyway -- see the cycle comment below -- so CLEAR is both the legal and
         // the honest choice here, and multisampled cube targets are recorded as not preserving.
         const bool cubeMsaa = cube->msaaTexture != nullptr;
-        colorTarget.load_op = (cube->clearColorPending[face] || cubeMsaa) ? SDL_GPU_LOADOP_CLEAR
-                                                                         : SDL_GPU_LOADOP_LOAD;
+        colorTarget.load_op =
+            (segment.clearColorRequested || cube->clearColorPending[face] || cubeMsaa)
+                ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
         // msaaTexture is reused across every face's own pass this frame (it's a disposable scratch
         // resource, immediately resolved away each time) -- SDL_gpu's own doc comment on this cycle
         // flag says reusing a bound resource across passes without cycling "will produce unexpected
@@ -1430,11 +1498,17 @@ namespace CNA::Internal::Backends::SdlGpu
         if (hasDepth)
         {
             depthStencilTarget.texture = cube->depthTexture;
-            depthStencilTarget.clear_depth = cube->clearDepth[face];
-            depthStencilTarget.load_op = cube->clearDepthPending[face] ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.clear_depth = segment.clearDepthRequested ? segment.clearDepth
+                                                                         : cube->clearDepth[face];
+            depthStencilTarget.load_op =
+                (segment.clearDepthRequested || cube->clearDepthPending[face]) ? SDL_GPU_LOADOP_CLEAR
+                                                                               : SDL_GPU_LOADOP_LOAD;
             depthStencilTarget.store_op = SDL_GPU_STOREOP_STORE;
-            depthStencilTarget.clear_stencil = cube->clearStencil[face];
-            depthStencilTarget.stencil_load_op = cube->clearStencilPending[face] ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.clear_stencil = segment.clearStencilRequested
+                                                   ? segment.clearStencil : cube->clearStencil[face];
+            depthStencilTarget.stencil_load_op =
+                (segment.clearStencilRequested || cube->clearStencilPending[face])
+                    ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
             depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
         }
 
@@ -1443,21 +1517,76 @@ namespace CNA::Internal::Backends::SdlGpu
         // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{nullptr, cube.get(), face};
         RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount,
-                          hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID);
+                          hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID, 1,
+                          segment.id);
         passOwner.End();
+
+        // Same rationale as RenderToTarget's: this face now HAS content, so a later cycle of it
+        // must LOAD rather than clear again.
+        cube->clearColorPending[face] = false;
+        cube->clearDepthPending[face] = false;
+        cube->clearStencilPending[face] = false;
+    }
+
+    SdlGpuGraphicsBackend::PassSegment* SdlGpuGraphicsBackend::CurrentSegment()
+    {
+        if (currentSegment_ == kSwapchainSegment || passSegments_.empty())
+            return nullptr;
+        // Segments are appended on bind and never reordered, so the open one is always the last.
+        PassSegment& back = passSegments_.back();
+        return back.id == currentSegment_ ? &back : nullptr;
+    }
+
+    void SdlGpuGraphicsBackend::BeginRenderTargetSegment(
+        const std::shared_ptr<SdlGpuRenderTarget2DState>& rt)
+    {
+        PassSegment segment;
+        segment.id = nextSegmentId_++;
+        segment.rt = rt;
+        passSegments_.push_back(std::move(segment));
+        currentSegment_ = passSegments_.back().id;
+        framePending_ = true;
+    }
+
+    void SdlGpuGraphicsBackend::BeginCubeFaceSegment(
+        const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube, int face)
+    {
+        PassSegment segment;
+        segment.id = nextSegmentId_++;
+        segment.cube = cube;
+        segment.face = face;
+        passSegments_.push_back(std::move(segment));
+        currentSegment_ = passSegments_.back().id;
+        framePending_ = true;
+    }
+
+    void SdlGpuGraphicsBackend::EndRenderTargetSegment()
+    {
+        currentSegment_ = kSwapchainSegment;
+    }
+
+    void SdlGpuGraphicsBackend::ReopenSegmentForBoundTarget()
+    {
+        currentSegment_ = kSwapchainSegment;
+        if (currentRenderTargetCube_ != nullptr && currentActiveCubeFace_ >= 0)
+            BeginCubeFaceSegment(currentRenderTargetCube_->State(), currentActiveCubeFace_);
+        else if (currentRenderTarget_ != nullptr)
+            BeginRenderTargetSegment(currentRenderTarget_->State());
+        // Re-opening must not itself make the frame look dirty -- nothing has been queued yet.
+        framePending_ = false;
     }
 
     void SdlGpuGraphicsBackend::Clear(float r, float g, float b, float a)
     {
-        if (currentRenderTargetCube_ != nullptr)
+        // REMED-GFX-145: an explicit Clear() belongs to the ONE bind cycle it was issued in, not to
+        // the target. It used to be stored on the target state, so the frame's LAST Clear() decided
+        // the load-op colour of that target's single merged pass and every earlier cycle's clear
+        // was lost. The segment also covers every MRT attachment of that same cycle, which is what
+        // the old currentExtraMrtTargets_ propagation did by hand.
+        if (PassSegment* segment = CurrentSegment())
         {
-            currentRenderTargetCube_->QueueClear(currentActiveCubeFace_, SDL_FColor{r, g, b, a});
-        }
-        else if (currentRenderTarget_ != nullptr)
-        {
-            currentRenderTarget_->QueueClear(SDL_FColor{r, g, b, a});
-            for (SdlGpuRenderTargetBackend* extra : currentExtraMrtTargets_)
-                extra->QueueClear(SDL_FColor{r, g, b, a});
+            segment->clearColorRequested = true;
+            segment->clearColor = SDL_FColor{r, g, b, a};
         }
         else
         {
@@ -1475,15 +1604,11 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::ClearDepth(float depth)
     {
-        if (currentRenderTargetCube_ != nullptr)
+        // REMED-GFX-145: per bind cycle, exactly like Clear() above.
+        if (PassSegment* segment = CurrentSegment())
         {
-            currentRenderTargetCube_->QueueClearDepth(currentActiveCubeFace_, depth);
-        }
-        else if (currentRenderTarget_ != nullptr)
-        {
-            currentRenderTarget_->QueueClearDepth(depth);
-            for (SdlGpuRenderTargetBackend* extra : currentExtraMrtTargets_)
-                extra->QueueClearDepth(depth);
+            segment->clearDepthRequested = true;
+            segment->clearDepth = depth;
         }
         else
         {
@@ -1495,15 +1620,11 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::ClearStencil(int stencil)
     {
-        if (currentRenderTargetCube_ != nullptr)
+        // REMED-GFX-145: per bind cycle, exactly like Clear() above.
+        if (PassSegment* segment = CurrentSegment())
         {
-            currentRenderTargetCube_->QueueClearStencil(currentActiveCubeFace_, static_cast<Uint8>(stencil));
-        }
-        else if (currentRenderTarget_ != nullptr)
-        {
-            currentRenderTarget_->QueueClearStencil(static_cast<Uint8>(stencil));
-            for (SdlGpuRenderTargetBackend* extra : currentExtraMrtTargets_)
-                extra->QueueClearStencil(static_cast<Uint8>(stencil));
+            segment->clearStencilRequested = true;
+            segment->clearStencil = static_cast<Uint8>(stencil);
         }
         else
         {
@@ -1914,7 +2035,10 @@ namespace CNA::Internal::Backends::SdlGpu
         // REMED-GFX-064/068/069: snapshot the current viewport, scissor AND blend factor into the
         // ref so a later SetRenderTarget reset / SetViewport / SetScissorRect / ApplyRasterizerState
         // / SetBlendFactor change never retroactively alters an already-queued draw's dynamic state.
-        QueuedDrawRef ref{kind, index, viewportSet_, viewportX_, viewportY_,
+        // REMED-GFX-145: the segment is snapshotted here too, and for the same reason -- this is
+        // the single choke point every Queue*Draw()/QueueSprite() already routes through, so no
+        // call site can forget which bind cycle its draw belongs to.
+        QueuedDrawRef ref{kind, index, currentSegment_, viewportSet_, viewportX_, viewportY_,
                           viewportW_, viewportH_, viewportMinDepth_, viewportMaxDepth_};
         ref.scissorEnabled = scissorEnabled_;
         ref.scissorX = scissorX_;
@@ -1995,13 +2119,11 @@ namespace CNA::Internal::Backends::SdlGpu
         if (rt != nullptr)
         {
             auto* backend = static_cast<SdlGpuRenderTargetBackend*>(rt);
+            // REMED-GFX-145: this opens a NEW segment even when `rt` is already the current target.
+            // A stale attachment set can no longer leak in from an earlier SetRenderTargets call
+            // either -- the set lives on the segment, and this one starts empty (SetRenderTargets
+            // repopulates it right after this call when count>1).
             backend->BindAsRenderTarget();
-            // A stale mrtSiblings/isMrtSibling from an earlier SetRenderTargets(count>1) call
-            // (this same target as either a primary or an extra) must not silently carry over into
-            // a plain single-target bind -- SetRenderTargets() itself repopulates these right after
-            // this call when count>1, so this reset is always safe to do unconditionally here.
-            backend->State()->isMrtSibling = false;
-            backend->State()->mrtSiblings.clear();
         }
         else
         {
@@ -2043,7 +2165,6 @@ namespace CNA::Internal::Backends::SdlGpu
     void SdlGpuGraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
-        currentExtraMrtTargets_.clear();
         if (count <= 0 || renderTargets == nullptr)
         {
             SetRenderTarget2D(nullptr);
@@ -2066,20 +2187,15 @@ namespace CNA::Internal::Backends::SdlGpu
         // in this codebase declares more than one fragment output, matching this project's
         // D3D11/D3D12 stock-effect behavior. A custom multi-output ShaderEffect drawn as a sprite
         // WHILE this binding is active genuinely renders into all `count` targets simultaneously,
-        // in one real render pass (see RenderToTarget's own mrtSiblings-driven multi-attachment
+        // in one real render pass (see RenderToTarget's own segment-attachment-driven multi-attachment
         // build) -- extra targets are no longer just Clear()-only placeholders.
         SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
-        auto* primary = static_cast<SdlGpuRenderTargetBackend*>(
-            renderTargets[0].GetRenderTarget2D());
         for (int i = 1; i < count; ++i)
         {
             auto* extra = static_cast<SdlGpuRenderTargetBackend*>(
                 renderTargets[i].GetRenderTarget2D());
-            extra->MarkUsedThisFrame();
-            extra->State()->isMrtSibling = true;
-            extra->State()->mrtSiblings.clear();  // an extra doesn't carry its own sibling list
-            primary->State()->mrtSiblings.push_back(extra->State());
-            currentExtraMrtTargets_.push_back(extra);
+            // REMED-GFX-145: an extra attachment of the segment the primary bind just opened.
+            extra->AttachToCurrentSegment();
         }
     }
 
@@ -4538,7 +4654,8 @@ namespace CNA::Internal::Backends::SdlGpu
                                                   const DrawTarget& target, SDL_GPUTextureFormat colorFormat,
                                                   SDL_GPUSampleCount sampleCount,
                                                   SDL_GPUTextureFormat depthStencilFormat,
-                                                  int colorTargetCount)
+                                                  int colorTargetCount,
+                                                  std::uint64_t segment)
     {
         const float viewportSize[2] = {
             static_cast<float>(target.rt != nullptr ? target.rt->width
@@ -4549,6 +4666,11 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUGraphicsPipeline* boundPipeline = nullptr;
         for (const QueuedDrawRef& ref : drawOrder_)
         {
+            // REMED-GFX-145: a render-target pass replays ONE bind cycle. Target identity alone
+            // would replay every cycle of that target -- exactly the collapsing this fixes. The
+            // swapchain's trailing pass passes kSwapchainSegment and keeps its target-only filter.
+            if (segment != kSwapchainSegment && ref.segment != segment)
+                continue;
             // REMED-GFX-064: apply this draw's own captured GraphicsDevice.Viewport before it is
             // issued. SDL_SetGPUViewport is pass-state that persists until changed, so setting it
             // per draw makes each draw honor the viewport it was enqueued under -- essential here
@@ -5401,10 +5523,14 @@ namespace CNA::Internal::Backends::SdlGpu
     SdlGpuRenderTargetBackend::~SdlGpuRenderTargetBackend()
     {
         if (owner_->currentRenderTarget_ == this)
+        {
             owner_->currentRenderTarget_ = nullptr;
-        // state_ itself is NOT removed from usedRenderTargetsThisFrame_ here -- if it's still
-        // referenced there (or by a queued DrawCommand's DrawTarget), this shared_ptr going out of
-        // scope just drops OUR reference; the state survives via those other references until
+            // Destroying the bound target ends its bind cycle exactly like an explicit unbind.
+            owner_->EndRenderTargetSegment();
+        }
+        // state_ itself is NOT removed from the pending segments here -- if it's still referenced
+        // there (or by a queued DrawCommand's DrawTarget), this shared_ptr going out of scope just
+        // drops OUR reference; the state survives via those other references until
         // EnsureFrameRendered() finishes with it, so this target's own pending Clear()/draws still
         // render correctly even though this wrapper is gone. See SdlGpuRenderTarget2DState's own
         // doc comment.
@@ -5420,23 +5546,26 @@ namespace CNA::Internal::Backends::SdlGpu
             owner_->currentRenderTargetCube_ = nullptr;
             owner_->currentActiveCubeFace_ = -1;
         }
-        MarkUsedThisFrame();
+        // REMED-GFX-145: unconditionally a NEW logical pass, including a rebind of the target that
+        // is already current -- that rebind is a real boundary (its own load action, clear state,
+        // viewport and scissor), and treating it as "no change" was this finding's whole subject.
+        owner_->BeginRenderTargetSegment(state_);
     }
 
-    void SdlGpuRenderTargetBackend::MarkUsedThisFrame()
+    void SdlGpuRenderTargetBackend::AttachToCurrentSegment()
     {
-        auto& used = owner_->usedRenderTargetsThisFrame_;
-        const bool alreadyUsed = std::any_of(used.begin(), used.end(),
-            [this](const std::shared_ptr<SdlGpuRenderTarget2DState>& sp) { return sp.get() == state_.get(); });
-        if (!alreadyUsed)
-            used.push_back(state_);
+        if (SdlGpuGraphicsBackend::PassSegment* segment = owner_->CurrentSegment())
+            segment->extraAttachments.push_back(state_);
         owner_->framePending_ = true;
     }
 
     void SdlGpuRenderTargetBackend::UnbindAsRenderTarget()
     {
         if (owner_->currentRenderTarget_ == this)
+        {
             owner_->currentRenderTarget_ = nullptr;
+            owner_->EndRenderTargetSegment();
+        }
     }
 
     bool SdlGpuRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
@@ -5513,7 +5642,7 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         // Deferred -- see SdlGpuRenderTarget2DState's own destructor / QueueTextureRelease's doc
         // comment for why (some other still-pending draw may sample cubeTexture as an
-        // EnvironmentMapEffect input, independent of usedRenderTargetCubeFacesThisFrame_).
+        // EnvironmentMapEffect input, independent of the pending pass segments).
         owner->QueueTextureRelease(depthTexture);
         owner->QueueTextureRelease(msaaTexture);
         owner->QueueTextureRelease(cubeTexture);
@@ -5611,8 +5740,9 @@ namespace CNA::Internal::Backends::SdlGpu
         {
             owner_->currentRenderTargetCube_ = nullptr;
             owner_->currentActiveCubeFace_ = -1;
+            owner_->EndRenderTargetSegment();
         }
-        // state_ is NOT removed from usedRenderTargetCubeFacesThisFrame_ here -- same rationale as
+        // state_ is NOT removed from the pending segments here -- same rationale as
         // SdlGpuRenderTargetBackend's own destructor (see SdlGpuRenderTarget2DState's doc comment).
     }
 
@@ -5623,12 +5753,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // Mutually exclusive with a bound RenderTarget2D -- matches real XNA single-current-target
         // semantics (SetRenderTargetCubeFace always replaces whatever was there).
         owner_->currentRenderTarget_ = nullptr;
-        auto& used = owner_->usedRenderTargetCubeFacesThisFrame_;
-        const bool alreadyUsed = std::any_of(used.begin(), used.end(),
-            [this, face](const auto& pair) { return pair.first.get() == state_.get() && pair.second == face; });
-        if (!alreadyUsed)
-            used.push_back(std::make_pair(state_, face));
-        owner_->framePending_ = true;
+        // REMED-GFX-145: a new logical pass per bind, so face A -> face B -> face A is three
+        // passes. The FACE rides on the segment, so a rebind of the SAME face is a boundary too.
+        owner_->BeginCubeFaceSegment(state_, face);
     }
 
     void SdlGpuRenderTargetCubeBackend::UnbindAsRenderTarget()
@@ -5637,6 +5764,7 @@ namespace CNA::Internal::Backends::SdlGpu
         {
             owner_->currentRenderTargetCube_ = nullptr;
             owner_->currentActiveCubeFace_ = -1;
+            owner_->EndRenderTargetSegment();
         }
     }
 
