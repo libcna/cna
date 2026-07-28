@@ -16442,3 +16442,268 @@ generated artifact changed.
 - `docs(remediation): record GFX-116 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-146 — WebGPU resolved the SCISSOR from live state at flush time (DONE, 2026-07-28)
+
+**Priority** MEDIUM · **Lane** GRAPHICS · **Status** DONE · **Backend changed** WebGPU only
+
+### Ticket identity
+
+This finding was recorded twice in prose and never allocated an identifier. REMED-GFX-116's closure
+listed *"WebGPU still resolves the SCISSOR rectangle from live state at record time — deliberately
+out of scope"*, and REMED-GFX-143's listed *"WebGPU does not clip a BACKBUFFER SpriteBatch fill with
+`GraphicsDevice.ScissorRectangle` at all, though its render-target scissor works"*. The index ended
+at `REMED-GFX-145`, so `REMED-GFX-146` is the first free identifier and it owns **both** recorded
+observations. No separate ticket existed for either, so no higher-priority sibling had to be chosen.
+
+### Classification: one root cause, not two
+
+The two recorded observations are the same mechanism seen from two sides.
+
+All three render-pass recorders — `EnsureFrameRendered` (backbuffer),
+`RenderPendingDrawsToRenderTarget` and `RenderPendingDrawsToRenderTargetCubeFace` — issued exactly
+one `wgpuRenderPassEncoderSetScissorRect` at the top of the pass, computed from the live
+`scissorEnabled_`/`scissorX_`/`scissorY_`/`scissorW_`/`scissorH_` members. Deferring the RECORDING is
+legal; resolving the value late is not.
+
+`SetRenderTarget` resets `ScissorRectangle` to the newly bound target's full size on every bind
+(FNA parity, `ResetViewportAndScissorForRenderTarget`), so an ordinary bind cycle **always** ended
+with the full rectangle live. The backbuffer pass was never *missing* a scissor call — it resolved
+the same live state, and GFX-143's check `V2` restores the full rectangle before its single read, so
+every already-queued batch replayed unclipped. GFX-140's `S11` looked correct for the same reason in
+reverse: its render-target cycles are separated by a target switch, which IS the flush on this
+backend, so live state still matched.
+
+Of the candidate causes enumerated for this class, four were true and the rest were not:
+
+| candidate | verdict |
+|---|---|
+| queued command structures contain no scissor snapshot | **true** — all eleven had none |
+| only mutable backend scissor state is read during replay | **true** |
+| native scissor is set once at pass start | **true** — measured, one call per pass |
+| `ScissorTestEnable` captured but the rectangle not | false — neither was captured |
+| the rectangle captured but the enable state live | false — neither was captured |
+| backbuffer and render-target pass creation differ | **false** — identical model, identical defect |
+| scissor omitted specifically from the swapchain pass | **false** — the call was always there |
+| SpriteBatch and 3D differ | false — both resolved live |
+| indexed/non-indexed families differ | false |
+| target-relative coordinate conversion differs | false — no Y conversion is applied at all |
+| a default full-target scissor overwrites a captured rectangle | **true**, in the sense that the pass-level call WAS the only rectangle |
+
+### Pre-fix native evidence
+
+An `LD_PRELOAD` interposer of the real `wgpuRenderPassEncoderSetScissorRect` /
+`wgpuRenderPassEncoderSetViewport`, over the identical final fixture:
+
+| | pre-fix | post-fix |
+|---|---|---|
+| native `setScissorRect` calls | **52** | **143** |
+| of which the full render target `0 0 64 48` | **40** | 44 |
+| native `setViewport` calls | **59** | **59** |
+
+Pre-fix, 40 of 52 calls were the full render target — the rectangle `SetRenderTarget` restores on
+unbind — and never any rectangle a draw had actually been issued under. `setViewport` is unchanged,
+so REMED-GFX-116's mechanism is untouched.
+
+### Affected command inventory
+
+Eleven deferred command structures, all previously carrying no scissor state and all now carrying a
+`WebGPUScissorSnapshot` by value. The capture sites match the command-vector `push_back` sites
+one-for-one, so no family can omit the snapshot.
+
+| family | struct | capture | replay | pre-fix | status |
+|---|---|---|---|---|---|
+| Colored3D (incl. `DrawUser`, indexed 16/32-bit) | `ColoredDrawCommand` | `QueueColoredDraw` | `RenderColoredDraws` | live | fixed |
+| Textured3D / ColoredTextured3D | `TexturedDrawCommand` | `QueueTexturedDraw` | `RenderTexturedDraws` | live | fixed |
+| LitTextured3D | `LitTexturedDrawCommand` | `QueueLitTexturedDraw` | `RenderLitTexturedDraws` | live | fixed |
+| AlphaTest3D | `AlphaTestDrawCommand` | `QueueAlphaTestDraw` | `RenderAlphaTestDraws` | live | fixed |
+| DualTexture3D | `DualTextureDrawCommand` | `QueueDualTextureDraw` | `RenderDualTextureDraws` | live | fixed |
+| EnvMap3D | `EnvMapDrawCommand` | `QueueEnvMapDraw` | `RenderEnvMapDraws` | live | fixed |
+| Instanced3D | `InstancedDrawCommand` | `DrawInstancedPrimitivesEx` | `RenderInstancedDraws` | live | fixed |
+| Pbr3D | `PbrDrawCommand` | `QueuePbrDraw` | `RenderPbrDraws` | live | fixed |
+| Skinned3D | `SkinnedDrawCommand` | `QueueSkinnedDraw` | `RenderSkinnedDraws` | live | fixed |
+| SkinnedPbr3D | `SkinnedPbrDrawCommand` | `QueueSkinnedPbrDraw` | `RenderSkinnedPbrDraws` | live | fixed |
+| SpriteBatch | `SpriteCommand` | `QueueSprite` | `RenderSprites` | live | fixed |
+
+Passes: backbuffer, RenderTarget2D and cube face all replaced their live-state block with
+`BeginPassScissor()`. The internal mip-blit pass keeps its own full-target call — nothing public is
+queued into it.
+
+### Corrected capture architecture
+
+`WebGPUScissorSnapshot { bool enabled; int x, y, width, height; }` — an immutable by-value snapshot
+taken at the public enqueue choke point, beside REMED-GFX-116's `WebGPUViewportSnapshot`. Both halves
+travel together: a snapshot carrying only the rectangle would still be wrong, because a bind cycle
+always ends with the target's full rectangle live.
+
+* `CaptureScissor()` — called by all eleven queue paths at the public draw call.
+* `BeginPassScissor(pass, w, h)` — opens each recorder at the whole target, deliberately not the live
+  rectangle, and records it as applied.
+* `ApplyDrawScissor(pass, snapshot)` — the only place a captured value becomes native pass state.
+
+A disabled scissor test resolves to the whole attachment, which is what "disabled" means on an API
+with no separate scissor-test toggle. An enabled rectangle is clipped to the attachment in **signed**
+arithmetic, with the edge sums formed in **64 bits**, before anything reaches the unsigned native
+call, so a negative X/Y or a rectangle hanging off the target cannot wrap through `uint32_t`.
+Width/Height are measured from the UNCLAMPED origin, so an off-target left edge keeps its on-target
+part instead of being shifted right. Ranges are clipped, never rejected — the contract this backend
+already had. No pointer into mutable state, no per-draw heap allocation, no pipeline cache key.
+
+### Public scissor contract established and preserved
+
+| question | answer, as enforced by the fixture |
+|---|---|
+| applies only when `RasterizerState.ScissorTestEnable` | yes — `K1` (disabled ignores the rectangle), `K2` (enabled → disabled → enabled in one cycle) |
+| coordinate origin | target-relative, top-left; `B1` proves the conversion is applied exactly once |
+| backbuffer | same contract — `F3`, `I2`, `F2`, `F4` |
+| RenderTarget2D | same contract — `A1`, `A2`, `C1`–`C8` |
+| cube face | same recorder, structurally covered by the shared `BeginPassScissor`/`ApplyDrawScissor` path |
+| interaction with Viewport | intersection — `J1`, `J2`, `J3` (both vary independently, A→B→A each) |
+| target switching | `SetRenderTarget` resets the rectangle; earlier commands keep theirs — `F1`, `F2`, `F4`, `L2` |
+| clipping at target boundaries | clipped, not wrapped — `E2` |
+| empty rectangles | declared per backend, asserted both ways — `E1` |
+| partially / wholly outside | clipped (or rejected on Headless, declared) — `E2`, `E3` |
+| MinDepth/MaxDepth independence | `J4` |
+| SpriteBatch and 3D | `I1`–`I5`, `I3` interleaves them in one cycle |
+
+A deferred draw uses the complete scissor state active at the exact public draw call; later changes
+affect only later draws. Scissor is never replaced by viewport (`J2` fails if it were).
+
+### Red-first reproduction
+
+`examples/deferred_scissor_capture_test.cpp`, **4/47 → 47/47**. Every sequence is queued whole — no
+`GetData`, `Present`, explicit flush, fence, sleep, extra frame or render-target switch between two
+draws — and observed exactly once at the end, with the rectangle restored to the whole target first,
+so "resolve at flush time" and "capture at queue time" predict different images. The four pre-fix
+passes are the controls (whole-target rectangle, scissor test disabled, viewport-bounds-the-draw, and
+the one target read whose last live rectangle happens to be right).
+
+Geometry and colour separate every wrong implementation: every draw under its own rectangle, all
+under the final one, the rectangle ignored, applied as a VIEWPORT, X/Y dropped, Width/Height dropped,
+the offset applied twice, and Y flipped each produce a distinct asserted layout. Covered separately:
+nonzero X, nonzero Y, reduced Width, reduced Height, centre rectangle, the final row and column, the
+first row and column, the whole rectangle, an odd 33×25 target, degenerate rectangles, partially and
+wholly outside rectangles.
+
+### Backbuffer
+
+WebGPU has an honest public backbuffer oracle (`ReadBackbuffer` flushes, then maps a real readback
+buffer), so no structural substitute was needed. `F3` (3D A→B→A), `I2` (SpriteBatch A→B→A), `F2`
+(backbuffer → target → backbuffer) and `F4` (scissor A → target → scissor B) are byte-exact on a
+0/255-only palette, an exact fixed point of sRGB encoding. Independently, GFX-143's `V2` — which
+declared this backend unable to clip a backbuffer SpriteBatch fill — measured **28/29 → 29/29**.
+
+### Cardinality and performance
+
+`examples/webgpu_scissor_cardinality_test.cpp`, **23/23**, read from live backend counters:
+
+| sequence | measured |
+|---|---|
+| four rectangles, one bind cycle | 1 render pass, 1 submit, **5** native calls, 0 new pipelines, **1** setViewport |
+| four identical rectangles | **2** native calls |
+| 32 distinct rectangles | 0 new Colored3D or sprite pipelines, 1 pass |
+| boundary set (final row/column, degenerate, overhanging, outside) | 0 new pipelines, 1 pass, 1 submit |
+| `ScissorTestEnable` on → off → on | **4** native calls, 0 new pipelines, 1 pass |
+| three repeated frames | 1 pass and 9 calls each, stable |
+| three SpriteBatch rectangles | **4** native calls, ≤1 new sprite pipeline |
+| four backbuffer rectangles | **5** native calls, 1 pass, 1 submit |
+
+No render-pass split, no pipeline per rectangle, no persistent cache entry, no extra submit, wait or
+frame. A native call is issued only when the effective rectangle changes.
+
+### Validation
+
+Run with the backend's uncaptured-error callback active and asserted: **0** errors through every
+rectangle used, including the boundary ones. Nothing silenced.
+
+### Cross-backend controls (only WebGPU production changed)
+
+| backend | result |
+|---|---|
+| WEBGPU | **4/47 → 47/47** |
+| VULKAN · EASYGL · BGFX · SDL_GPU · SOFTWARE · D3D11 · D3D9 | **47/47** |
+| HEADLESS | **46/46** |
+
+D3D11 and D3D9 ran under Wine on the virtual display `:101`; `:0` was not used.
+
+### Independent findings recorded, not fixed here
+
+* **A degenerate (zero-width or zero-height) `ScissorRectangle` does not clip on Vulkan, EasyGL, bgfx
+  or SdlGpu.** Two distinct mechanisms: `VulkanGraphicsBackend`'s `computeScissor` returns the WHOLE
+  framebuffer for `sw == 0 || sh == 0`, while `EasyGLGraphicsBackend::SetScissorRect` returns early on
+  `w <= 0 || h <= 0` and leaves the previously installed rectangle in place. WebGPU, Software, D3D11
+  and D3D9 take the natural hardware semantics and rasterize nothing. Declared per backend and
+  asserted EXACTLY in both directions (check `E1`), not standardised away — the same treatment
+  REMED-GFX-129 gave the clear-rectangle divergence.
+* **Headless rejects an out-of-bounds `ScissorRectangle`** with `HeadlessValidationException`
+  (HEADLESS-23) instead of clipping. Legitimate for the validation backend; checks `E2`/`E3` assert
+  the rejection so it is not an untested exemption.
+* **`Bgfx_RenderTarget_Viewport` fails all-black in this environment.** Its target compiles no file
+  this task touched and no bgfx production changed; environmental, attributed by construction.
+
+### False-positive test audit
+
+Four directly relevant tests inspected; **three** strengthened, each A/B-proven against pre-fix
+production with the final test file.
+
+| Test | Verdict |
+|---|---|
+| `webgpu_graphicsstate_test.cpp` check E | **Masked this finding.** One rectangle, and it reads back BEFORE restoring, so the live rectangle at flush time is still the one the draw was issued under — it passes whether the backend captures per draw or resolves late. **Strengthened** with check H (two rectangles, restore, one read): A/B **7/8 → 8/8**. |
+| `backbuffer_pass_order_test.cpp` `V2` | Declared `backbufferSpriteScissorApplies` false for WebGPU on REMED-GFX-143's reading. That was the symptom, not a second cause. **Strengthened** by turning the declaration over and correcting the note: A/B **28/29 → 29/29**. |
+| `spritebatch_begin_rasterizerstate_scissor_test.cpp` | Registered for SdlGpu and Vulkan but never WebGPU, on no recorded grounds. **Strengthened** by registering it (**4/4**) — and it passes pre-fix too, because its render-target round trip is itself the flush. Recorded as blind rather than credited. |
+| `deferred_viewport_capture_test.cpp` `J1`/`J2` | Correct as a viewport control, but documented the live-state scissor as current behaviour. Claim corrected; the checks are otherwise unchanged. |
+
+### Regression gates
+
+Full WebGPU shard **47/48**. The one miss, `WebGPU_Clear_Readback`, was A/B-re-measured against
+pre-fix production and is **byte-identical at 7/10** with the same three failing checks (50%-alpha
+sprite blending and sampler `AddressMode` Wrap/Mirror) either side — pre-existing and unrelated.
+
+Green: `WebGPU_Deferred_Viewport` **39/39** (REMED-GFX-116), `WebGPU_Viewport_Cardinality`,
+`WebGPU_SpriteBatch_BlendState` (GFX-102), `WebGPU_SpriteBatch_CustomViewport`,
+`WebGPU_SpriteBatch_ViewportSwitch`, `WebGPU_RenderTarget_PassBoundary` (GFX-140),
+`WebGPU_Backbuffer_PassOrder` (GFX-143), `WebGPU_GraphicsDevice_OrderedClear`,
+`WebGPU_RenderTarget2D`, `WebGPU_Msaa`, every `RenderTargetCube` contract test, and all ten stock
+effect families. Vulkan scissor/viewport gates **4/4**.
+
+### Sanitizers
+
+Reusing the retained `cmake-build-webgpu-asan-ubsan` (ASan + UBSan). Runtimes proved linked by symbol
+(`__asan_` ×39, `__ubsan_` ×15), not by directory name.
+
+| fixture | result |
+|---|---|
+| `cna_test_webgpu_deferred_scissor` | 47/47 — **0** ASan reports, **0** UBSan runtime errors |
+| `cna_test_webgpu_scissor_cardinality` | 23/23 — **0** / **0** |
+| `cna_test_webgpu_deferred_viewport` | 39/39 — **0** / **0** |
+
+Coverage across those: A→B→A, signed/unsigned boundaries, empty and edge rectangles, SpriteBatch,
+indexed and non-indexed, DrawUser, multiple targets, buffer update and disposal after queueing, and
+repeated frames.
+
+### Build directories, ccache and storage policy
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-webgpu` | WEBGPU | yes | reused |
+| `cmake-build-webgpu-asan-ubsan` | WEBGPU + ASan + UBSan | yes | reused |
+| `cmake-build-vulkan` · `cmake-build-debug` (EasyGL) · `cmake-build-bgfx` · `cmake-build-sdlgpu` · `cmake-build-software` · `cmake-build-headless` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-dx3` · `cmake-build-sdlrenderer` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other thirteen | yes | reused |
+
+**No build directory was created, cleaned, deleted or recreated.** Every configure was incremental.
+No build tree was created under `/tmp`, `/var/tmp` or `/dev/shm`; the scratchpad held only logs, the
+LD_PRELOAD interposer and two backend-file backups used for the A/B measurements. Maximum parallelism
+was **2 jobs**, and **1 job** for the first builds while another session's compilers were running.
+All fourteen backend libraries compile incrementally: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12, DX3,
+EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan and WebGPU. No shader source and no
+generated artifact changed.
+
+### Commits
+
+- `87ce1b8c test(Task REMED-GFX-146): reproduce deferred WebGPU scissor loss`
+- `ce069126 fix(Task REMED-GFX-146): capture WebGPU scissor per draw`
+- `c52fcdc4 test(Task REMED-GFX-146): cover cardinality, cross-backend and state parity`
+- `docs(remediation): record GFX-146 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
