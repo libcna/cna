@@ -405,4 +405,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_link_libraries(cna_test_webgpu_viewport_cardinality PRIVATE WebGPU::WebGPU)
     cna_register_backend_test(NAME WebGPU_Viewport_Cardinality COMMAND cna_test_webgpu_viewport_cardinality
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-146: the scissor counterpart of REMED-GFX-116. All three render-pass recorders
+    # issued one wgpuRenderPassEncoderSetScissorRect at the top of the pass from the live
+    # scissorEnabled_/scissorX_/scissorY_/scissorW_/scissorH_ members, so several rectangles in one
+    # bind cycle collapsed last-wins and the full-target rectangle SetRenderTarget installs on every
+    # bind unclipped every already-queued draw. Every sequence here is queued whole, with no
+    # GetData/Present/flush/target switch in between, and observed exactly once at its end.
+    cna_webgpu_test(cna_test_webgpu_deferred_scissor
+                    examples/deferred_scissor_capture_test.cpp)
+    cna_register_backend_test(NAME WebGPU_Deferred_Scissor COMMAND cna_test_webgpu_deferred_scissor
+        TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
