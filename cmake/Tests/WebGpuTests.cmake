@@ -374,4 +374,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/texturecube_texture3d_setdata_contract_test.cpp)
     cna_register_backend_test(NAME WebGPU_CubeVolume_SetDataContract COMMAND cna_test_webgpu_cube_volume_setdata_contract
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-116: every deferred draw must execute under the GraphicsDevice.Viewport active at
+    # its own public call. All three of this backend's render-pass recorders applied the viewport
+    # once, at the top of the pass, from the live viewport*_ members -- so two viewports in one bind
+    # cycle collapsed last-wins and an ordinary restore before the flush promoted every queued draw
+    # to the whole target. Every sequence here is queued whole, with no GetData/Present/flush/target
+    # switch in between, and observed exactly once at its end.
+    cna_webgpu_test(cna_test_webgpu_deferred_viewport
+                    examples/deferred_viewport_capture_test.cpp)
+    cna_register_backend_test(NAME WebGPU_Deferred_Viewport COMMAND cna_test_webgpu_deferred_viewport
+        TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
