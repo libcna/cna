@@ -137,12 +137,14 @@ namespace
     constexpr Contract kContract{"SOFTWARE", false, Support::Unsupported, false, false,
                                  false, Support::Unsupported, false, true, false};
 #elif defined(CNA_BACKEND_EASYGL)
-    // `msaaPreserves` false: measured, not assumed. This backend allocates ONE multisample colour
-    // renderbuffer shared by all six faces (the same allocation choice Vulkan and SdlGpu make), so
-    // rebinding a multisampled face reloads whichever face was rendered last -- check M3 proves it
-    // by interleaving a second face. Single-sample cube targets preserve exactly.
+    // `msaaPreserves` was false here, measured: this backend allocated ONE multisample colour
+    // renderbuffer shared by all six faces (the same allocation choice Vulkan and SdlGpu made), so
+    // rebinding a multisampled face reloaded whichever face was rendered last, and check M3 proved
+    // it by interleaving a second face. REMED-GFX-141 gave every face its own renderbuffer, so it
+    // is now true and M2/M3 require exact content -- the boundary this file recorded is closed, and
+    // examples/rendertargetcube_msaa_face_test.cpp is the fuller oracle for it.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, true,
-                                 true, Support::Exact, false, true, false};
+                                 true, Support::Exact, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
     // `msaaReadback` Unsupported: bgfx::blit reports success and copies untouched memory from a
     // multisampled cube attachment on the OpenGL renderer this backend selects, so
@@ -162,13 +164,13 @@ namespace
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, true,
                                  false, Support::Exact, false, false, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
-    // `msaaPreserves` false: this backend's multisampled cube target renders into ONE shared
-    // single-layer scratch texture that must be cycled on every pass (see
-    // SdlGpuGraphicsBackend::RenderToTargetCubeFace) and is resolved away into the real face
-    // immediately -- so there is nothing per-face to load back. Single-sample cube targets
-    // preserve exactly.
+    // `msaaPreserves` was false here: this backend's multisampled cube target rendered into ONE
+    // shared single-layer scratch texture that had to be cycled on every pass and was resolved away
+    // immediately, so there was nothing per-face to load back. REMED-GFX-141 gave every face its own
+    // texture, dropped the cycling and switched a preserving target to
+    // SDL_GPU_STOREOP_RESOLVE_AND_STORE, so it is now true and M2/M3 require exact content.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, true,
-                                 true, Support::Exact, false, true, false};
+                                 true, Support::Exact, true, true, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", false, Support::Unsupported, false, false,
                                  false, Support::Unsupported, false, true, false};
@@ -1098,9 +1100,10 @@ class RenderTargetCubeUsageTest : public Game
 
         // M3: whether the preserved content came from the RESOLVED face or from a multisample
         // scratch surface shared between faces. A backend whose MSAA attachment is one shared
-        // resource (which is how both this project's Vulkan and SdlGpu cube targets allocate it)
-        // would pass M2 -- one face, nothing else in between -- while actually reloading the LAST
-        // face's unresolved samples. Face A -> face B -> face A separates the two.
+        // resource -- which is how EasyGL, Vulkan and SdlGpu all allocated it until REMED-GFX-141 --
+        // passes M2 (one face, nothing else in between) while actually reloading the LAST face's
+        // samples. Face A -> face B -> face A separates the two, and this is the check that first
+        // measured the defect.
         RenderTargetCube seq(dev, kCube, false, SurfaceFormat::Color, DepthFormat::None,
                              kMsaaRequest, RenderTargetUsage::PreserveContents);
         RenderFace(dev, seq, 0, 0);

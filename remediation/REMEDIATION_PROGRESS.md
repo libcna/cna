@@ -13566,6 +13566,18 @@ No full-face copy was added to paper over any of these: where the native load ac
 a resolved face, the boundary is declared and tested, not manufactured. Recorded as
 **REMED-GFX-141**.
 
+> **Superseded 2026-07-28 by REMED-GFX-141.** The table above is the pre-fix measurement and is kept
+> as the evidence it was. All three backends now allocate SIX per-face multisample colour surfaces
+> (six renderbuffers on EasyGL, one six-array-layer image with a per-face view plus a real
+> `LOAD_OP_LOAD` MSAA render pass on Vulkan, six single-layer textures with
+> `SDL_GPU_STOREOP_RESOLVE_AND_STORE` on SdlGpu), so `msaaPreserves` in this file's contract table is
+> **true** for EasyGL and SdlGpu and `M2`/`M3` require exact content rather than recording a
+> boundary. Still no full-face copy, no per-bind allocation and no per-bind wait anywhere. Vulkan's
+> row stays "not reached" only because THIS file does not request a multisampled backbuffer;
+> `examples/rendertargetcube_msaa_face_test.cpp` does, and measures it directly. Bgfx is still not
+> measurable. This suite is unchanged at **30/30** on EASYGL, SDL_GPU, VULKAN, WEBGPU, BGFX and
+> HEADLESS.
+
 One genuine MSAA defect was fixed, because it blocked the task: `SdlGpuGraphicsBackend::
 RenderToTargetCubeFace` set `colorTarget.cycle = true` together with `SDL_GPU_LOADOP_LOAD`, which
 SDL_gpu forbids out loud (`'Cannot cycle color target when load op is LOAD!'`). It became reachable
@@ -13693,7 +13705,8 @@ and unrelated — every backend library, every ASCII test and `CnaTests` build.
   face: check **M3** shows EasyGL returning face B's content when face A is rebound. D3D11, whose
   multisampled cube resource is a real 6-layer array, does honour it. Making the other three match
   needs six multisample attachments per cube (memory) or a resolved-to-multisample copy on every
-  bind (explicitly ruled out here).
+  bind (explicitly ruled out here). **CLOSED 2026-07-28** — six per-face attachments is what was
+  built, and the resolved-to-multisample copy stayed ruled out.
 * **REMED-GFX-142** — `RenderTargetUsage` says nothing about depth/stencil in CNA, and the three
   backends with a real load action disagree: Vulkan uses `LOAD_OP_DONT_CARE` for depth on a
   *preserving* target (undefined depth for a depth-tested draw into it — a `RenderTarget2D` defect
@@ -15369,7 +15382,7 @@ only when
 1. it is the segment's FIRST clear, and
 2. its order precedes every draw in the segment, and
 3. the pass clears its colour attachments anyway —
-   `VulkanRTSource::ColorLoadOpIsClearEXT()`, false exactly for a non-MSAA `PreserveContents` target
+   `VulkanRTSource::ColorLoadOpIsClearEXT()`, false exactly for a non-MSAA `PreserveContents` target (**REMED-GFX-141**: false for a MULTISAMPLED preserving cube face too, once its render pass gained a real `LOAD_OP_LOAD` variant — the predicate is now `!preserveContents` on both legs and the ordered-clear rule is identical for a multisampled and a single-sample face)
    (the MSAA and MRT passes are `DiscardContents`-shaped unconditionally, and the cube face proxy now
    mirrors its owner's usage so it can answer for itself).
 
@@ -15565,6 +15578,302 @@ with no further pause needed, and no heavy matrices were run concurrently. Final
 - `c11f937a fix(Task REMED-GFX-129): record explicit Vulkan clear commands`
 - `71b6fdef test(Task REMED-GFX-129): cover colour depth stencil and ordering`
 - `docs(remediation): record GFX-129 completion` (this record)
+
+No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
+untouched.
+
+---
+
+## REMED-GFX-141 — one multisample colour attachment shared across six cube faces (2026-07-28)
+
+**DONE.** Every face of a multisampled `RenderTargetCube` now owns its own multisample colour
+storage, so a `PreserveContents` face reloads ITS OWN samples and resolves them into ITS OWN cube
+layer. Authoritative scope was EasyGL, Vulkan and SdlGpu (REMED-GFX-136's own record), and it held:
+those three are the only backends that both engage cube MSAA and got it wrong.
+
+### The mechanism, per backend — traced, not assumed
+
+All three allocated exactly ONE multisample colour surface per cube target and pointed every face at
+it, on the same reasoning: only one face is ever rendered into at a time. That is true while a face
+is being PRODUCED and false the moment one is RELOADED. The resolved single-sample cube layer still
+held the correct content, which is why a full redraw and an immediate readback both passed — the
+defect only appears when a face is revisited for a PARTIAL update after another face was rendered.
+
+| Backend | old multisample colour storage | what a rebound preserving face actually loaded |
+|---|---|---|
+| EasyGL | ONE `msaaColorRbo_` renderbuffer, attached to `fbo_` at construction and never re-attached — a renderbuffer carries no face identity at all | **the other face**: 60 of face 0's 64 texels came back as face 1's pattern |
+| Vulkan | ONE single-layer `TRANSIENT_ATTACHMENT` `msaaColorImage_`, **and** `GetOrCreateRTRenderPassMsaa` had no `LOAD` variant whatsoever | **opaque black** (the frame clear colour) — so even the ONE-face case failed, a second independent half of the root cause |
+| SdlGpu | ONE single-layer scratch `msaaTexture` that had to be cycled every pass, because its previous contents belonged to another face — and cycling is illegal with `SDL_GPU_LOADOP_LOAD` | **transparent black** from the cycled/cleared scratch |
+
+Three different pre-fix signatures for one finding, and the oracle's per-face contamination counter
+distinguishes them: EasyGL reports 60 contaminated texels, Vulkan and SdlGpu report 0 because they
+never showed a stale face at all — they showed a wiped one.
+
+### Corrected storage architecture
+
+| Backend | new multisample colour storage | per-face view / attachment | resolve pairing |
+|---|---|---|---|
+| EasyGL | **six** multisample renderbuffers, `msaaColorRbos_[6]` | `BindAsRenderTargetFace` attaches this face's own renderbuffer — the exact counterpart of the non-MSAA branch that already re-attaches this face's own cube image | `UnbindAsRenderTarget` blits `fbo_` (now this face's storage) into `resolveFbo_` with this face's cube image attached |
+| Vulkan | ONE image with **six array layers** (`arrayLayers = 6`), no cube-compatible flag — it is never sampled | six `msaaColorViews_[face]`, `baseArrayLayer = face`, one per face framebuffer | render pass `pResolveAttachments` → `faceViews_[face]` (layer `face` of `image_`) |
+| SdlGpu | **six** single-layer 2D textures, `msaaTextures[6]` — a real 6-layer MSAA array is impossible, SDL_gpu forbids `sample_count > 1` on any array texture | `colorTarget.texture = msaaTextures[face]`, `layer_or_depth_plane = 0` on a texture belonging to exactly one face | `resolve_texture = cubeTexture`, `resolve_layer = face` |
+
+GL has no load action, so a face's samples simply survive until something draws over them — which is
+all `PreserveContents` ever needed. The other two needed a real load action as well:
+
+* **Vulkan** — `GetOrCreateRTRenderPassMsaa` gained a `discardContents` parameter and a second
+  depth-format-keyed cache. The load variant uses `LOAD_OP_LOAD` + `STORE_OP_STORE` and keeps the
+  multisample attachment in `COLOR_ATTACHMENT_OPTIMAL` in and out, which is what the previous pass's
+  `finalLayout` already leaves, so back-to-back cycles need no new barrier. The FIRST bind gets one
+  up-front `UNDEFINED → COLOR_ATTACHMENT_OPTIMAL` transition of all six layers at construction (the
+  counterpart of the existing `image_` barrier), so the layout is legal; the shared layer's discard
+  clear or the target's own first full draw is what makes the CONTENT defined — the same
+  "a brand-new preserving target has no previous content" rule the non-MSAA load variant always had.
+  `TRANSIENT_ATTACHMENT` is dropped for a preserving target, because its samples must genuinely
+  survive between passes, which is the opposite of what "transient" declares. The two variants are
+  render-pass-compatible (load/store ops and layouts take no part in compatibility) and their
+  subpass dependency masks are byte-identical, so **no pipeline cache key changed** and every
+  pipeline already created against the clear variant still serves the load one.
+* **SdlGpu** — with one texture per face there is nothing to cycle and nothing stale to load, so
+  `cycle = false` and the load rule becomes exactly the single-sample leg's: an explicit `Clear()`
+  in this cycle wins, else this face's own first-use flag, else `LOAD`. `preserveContents`, threaded
+  in by REMED-GFX-136 and deliberately unused there, finally has a consumer: it selects
+  `SDL_GPU_STOREOP_RESOLVE_AND_STORE` over plain `RESOLVE`, which explicitly leaves the multisample
+  contents undefined — the store half of the same defect the shared texture was the allocation half
+  of. A discarding target keeps plain `RESOLVE`; the shared layer clears it on every bind, so its
+  samples are never loaded.
+
+`VulkanRenderTargetCubeBackend::FaceProxy::ColorLoadOpIsClearEXT()` returned
+`(msaaFramebuffer != VK_NULL_HANDLE) || !preserveContents` — the MSAA leg forced a clear because it
+had no choice. It is now `!preserveContents` on both legs, so REMED-GFX-129's rule (fold a leading
+`Clear()` into the load action on a discarding target, record an ordered `vkCmdClearAttachments`
+otherwise) applies identically whether the face is multisampled or not.
+
+### Complete backend inventory
+
+| Backend | supported sample counts | multisample colour storage | MSAA face/layer allocations | resolve storage | face-specific view/FB | PreserveContents source on rebind | pre-fix | class |
+|---|---|---|---|---|---|---|---|---|
+| EasyGL | up to 4x (`GL_MAX_SAMPLES`), clamped | 6 renderbuffers (was 1) | **6** | the cube texture's own face image | yes — per-face renderbuffer re-attached on bind; one FBO | that face's own renderbuffer | **14/32**, face B's content | **C → B/A** |
+| Vulkan | backbuffer's `sampleCount_` (4x here); a cube multisamples only when the device did | 1 image × **6 array layers** (was 1 layer) | **6** | layer `face` of the 6-layer single-sample cube image | yes — `msaaColorViews_[face]` + `msaaFramebuffers_[face]` | that face's own layer, via `LOAD_OP_LOAD` | **12/32**, opaque black | **C → B** |
+| SdlGpu | device-clamped (4x here) | 6 single-layer 2D textures (was 1) | **6** | layer `face` of the `TEXTURETYPE_CUBE` texture | yes — one texture per face | that face's own texture, via `LOADOP_LOAD` | **12/32**, transparent black | **C → B** |
+| D3D11 | device-clamped (4x here) | 6-slice `DXGI_SAMPLE_DESC` array | **6** | separate single-sample `MISC_TEXTURECUBE` resource | yes — one `Texture2DMSArray` RTV per slice | that face's own slice; `ResolveSubresource` on unbind | **32/32** | **B** (unchanged) |
+| D3D12 | device-clamped | `DepthOrArraySize = 6` at the requested sample count | **6** | separate single-sample resource | yes — one `D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY` view per face, `ResolveMsaaEXT` uses `srcSubresource = activeFace_` | that face's own slice | source-verified | **B** (unchanged) |
+| Bgfx | 4x applied | inside bgfx's own `BGFX_TEXTURE_RT_MSAA_Xn` cube texture | opaque to CNA | the same cube handle (bgfx resolves internally) | per-face `bgfx::Attachment` + framebuffer | **not measurable** — `bgfx::blit` reports success over untouched memory from a multisampled cube attachment (REMED-GFX-134/138), so `GetData` refuses | **32/32** (every MSAA content check is that refusal) | **not measurable** |
+| WebGPU | — | none | 0 | — | — | — | **9/9** — `CreateRenderTargetCube` ignores `multiSampleCount` outright (WEBGPU-114's own scope) | **D** |
+| D3D9 | — | none | 0 | — | — | — | **9/9** — `Recreate()` allocates a plain `D3DUSAGE_RENDERTARGET` cube; `GetMultiSampleCount()` is 0 by construction | **D** |
+| Headless | reports the requested count | none — nothing is rasterized | 0 | — | — | REMED-GFX-130's deterministic refusal | **32/32** | **D** |
+| Software / SDL_Renderer / ASCII / Canvas / DX3 | — | — | — | — | — | — | **1/1** — no `RenderTargetCube` at all | **E** |
+
+Nothing already correct was touched for symmetry: D3D11 and D3D12 production is byte-unchanged.
+
+### The oracle
+
+`examples/rendertargetcube_msaa_face_test.cpp`, registered on all fourteen backends. It reuses
+REMED-GFX-134/136's asymmetric five-region face producer verbatim — drawn geometry, never `Clear()`,
+a 0/255-only palette that is an exact fixed point of sRGB encoding, so every comparison is
+byte-exact — and adds the shape the shared attachment cannot survive: paint face A completely, paint
+face B completely, rebind A and draw ONLY a small marker, read the WHOLE of A.
+
+**Nothing forces a flush between the producer and the rebind**: no `Settle()`, no `Present`, no
+intermediate `GetData`, no wait. REMED-GFX-136 needed exactly such a barrier and REMED-GFX-140
+(Vulkan) and REMED-GFX-145 (SdlGpu) are what removed the need for it, so the whole public sequence is
+queued first and read once at the end. A readback barrier in the middle would hide precisely the
+resolve-ordering half of this finding.
+
+| check | what it pins |
+|---|---|
+| `M1` | the applied sample count matches this backend's declared capability — an MSAA check that silently degraded to single-sample would be a false positive |
+| `F1`/`F1b`/`F2` | the canonical A → B → partial-A reproduction, plus a **contaminated-texel counter** (texels holding face B's pattern where face A's differs; exactly 0 on a correct backend) and the reverse claim that face B is untouched, so a "fix" that merely wiped something cannot pass |
+| `F3.0`–`F3.5`, `F4` | all six faces produced in one order, revisited with a partial update in a second (shuffled) order, read in a third — with per-face-pair contamination reported. This is the check five of six faces fail on a shared attachment |
+| `F5a`, `F5.0`–`F5.5` | the sample-count-one control: the identical sequence at `multiSampleCount = 0` |
+| `F6` | `DiscardContents` still reads the shared layer's `(0,0,0,255)` outside the new draw — preservation must NOT leak into it |
+| `F7` | `PlatformContents` preserves, per FNA's `usage != DiscardContents` |
+| `F8` | one face only — the degenerate case a shared attachment also passes on EasyGL/SdlGpu, and which Vulkan failed for its own second reason |
+| `F9a`/`F9b` | two independent cube targets interleaved, each with a different pattern variant |
+| `F10`/`F11` | cube → `RenderTarget2D` → cube, and cube → backbuffer → cube |
+| `F12` | four consecutive `PreserveContents` cycles of one face, each drawing a single texel, accumulating into one marker block |
+| `F13` | disposal and recreation — a fresh target inherits nothing and preserves its own faces |
+| `F14`/`F15` | `Depth24` and `Depth24Stencil8` do not corrupt the preserved COLOUR |
+| `F16a`/`F16b`/`F16c` | repeated readback is stable and reading one face neither consumes nor disturbs another — the resolve is idempotent, not a one-shot drain |
+| `E1` | on a backend with no cube target, a multisampled `RenderTargetCube` is refused deterministically |
+
+Framebuffer completeness per face is asserted by consequence rather than by a separate probe: an
+incomplete per-face render FBO would rasterize nothing and its resolve would produce garbage, so
+`F3.0`–`F3.5` coming back 64/64 each is what proves all six render targets are complete and correctly
+attached.
+
+### False-positive test audit
+
+Within the directly relevant cube/MSAA fixtures:
+
+| fixture | weakness found | outcome |
+|---|---|---|
+| `rendertargetcube_usage_test.cpp` `M2` | one face, nothing in between — passes on a shared attachment | already known and already compensated by its own `M3`; **left as the declared boundary it was written to be**, and `M3`'s recorded EasyGL "face B" result is what this finding started from |
+| `bgfx_rendertargetcube_msaa_test.cpp` | uses `DepthFormat::None` only, and asserts the applied count rather than any content | **the gap it masked was a process abort**: bgfx hard-asserts on a depth-backed multisampled cube (see below). Not strengthened in place — the new oracle covers depth-backed MSAA on every backend, which is what reached it |
+| `vulkan_rendertargetcube_msaa_test.cpp` | applied-count and structural claims only | unchanged; content is the new oracle's job |
+| `vulkan_cube_mrt_binding_test.cpp` | asserted that same-cube multi-face MSAA is **rejected** — an assertion of the defect itself | **strengthened**: it now asserts the case is accepted, wires two distinct per-face sources, and resolves each to its own face (checked by content, not just by handle identity). 14/15 → 15/15 |
+
+Found: **4**. Strengthened: **1** (plus **1** whole new file). Deliberately left as declared
+boundaries: **2**.
+
+### Independent findings
+
+* **Fixed here, because it aborts the process.** `BgfxRenderTargetCubeBackend`'s depth texture was
+  created with the MSAA flag alone. bgfx's `isFrameBufferValid` refuses a multisampled depth
+  attachment whose TEXTURE lacks `BGFX_TEXTURE_RT_WRITE_ONLY` or `BGFX_TEXTURE_MSAA_SAMPLE` —
+  *"Frame buffer depth MSAA texture cannot be resolved"* — and it reads the texture's creation flags,
+  not the attachment's resolve mode, which Task 951 had already set to `BGFX_RESOLVE_NONE`. So every
+  depth-backed multisampled `RenderTargetCube` ever constructed on that backend aborted at its first
+  `BindAsRenderTargetFace`. Unnoticed because every existing bgfx cube MSAA check uses
+  `DepthFormat::None`; this task's oracle is the first thing to combine the two. `WRITE_ONLY` is that
+  texture's own truth — never sampled, never read back, never resolved.
+* **Recorded, NOT fixed.** `BgfxRenderTargetBackend`'s 2D leg has the **identical** omission: its
+  depth texture also carries only `msaaFlag`, and `createFrameBuffer(num, handles, destroy)` runs the
+  same validation. A depth-backed multisampled `RenderTarget2D` on bgfx should therefore abort the
+  same way. Not reached by this task's oracle (which is cube-only) and not covered by any existing
+  fixture, so it is stated as the source-level claim it is rather than measured here.
+* **Recorded, NOT fixed.** Vulkan's multisampled `RenderTarget2D` still discards on
+  `PreserveContents`: `VulkanRenderTargetBackend` deliberately keeps asking
+  `GetOrCreateRTRenderPassMsaa` for the CLEAR variant. That is the SAME missing-load-variant half of
+  this root cause, on a target that has no second face to alias, so it is a distinct claim needing
+  its own cross-backend oracle rather than a symmetry edit made here without one.
+* **Recorded, NOT fixed.** `d3d12_smoke_test.cpp` cannot absorb a GFX-141 backend-level check.
+  Measured, not assumed: adding one multisampled cube costs 6 RTV descriptors, and DX-103's fixed
+  64-entry RTV heap has no free list, so that file's own `MM0`/`MM1` mip cube then starves
+  (237 PASS / 0 FAIL either way, but the last two checks disappear). The addition was reverted.
+
+### Resource cardinality, lifetime and memory
+
+| Backend | permanent multisample surfaces per cube target | per-face views | framebuffers / passes | created per bind | destroyed |
+|---|---|---|---|---|---|
+| EasyGL | 1 → **6** renderbuffers | n/a (renderbuffers are the attachment) | 1 render FBO + 1 resolve FBO, unchanged | **none** | all six via `release_gl_handle_only` / RAII; recreated on context loss by `CreateResources` |
+| Vulkan | 1 image (1 layer) → **1 image (6 layers)** | 1 → **6** `VkImageView` | 6 framebuffers, unchanged; **at most one extra cached `VkRenderPass` per depth format** | **none** | all six views + the image + its memory retired exactly once through the frame-fence queue (REMED-GFX-075) |
+| SdlGpu | 1 → **6** textures | n/a | passes unchanged | **none** | all six through `QueueTextureRelease`, exactly once each |
+
+Memory per cube target: `size * size * samples * 4 * 6` bytes for colour (an 8×8 4x cube is 6 KiB;
+a 512×512 4x cube is 24 MiB), plus depth/stencil **only where it was already allocated** — the shared
+single depth surface per cube is untouched, and no sixfold depth allocation was introduced. Two cube
+targets own strictly independent resources (`F9`), disposal returns to baseline (`F13`), and nothing
+grows per bind or per frame (`F12`). Submission count, presentation count and pipeline count are
+unchanged; no full-face compatibility copy, no per-face `vkDeviceWaitIdle`, no per-bind fence wait and
+no per-pass resource creation was introduced anywhere.
+
+### Depth/stencil and mip boundaries
+
+Colour correctness was established first on depthless (`DepthFormat::None`) targets — every check
+except `F14`/`F15` uses one. `F14`/`F15` then add `Depth24` and `Depth24Stencil8` and require the
+preserved COLOUR to stay exact, i.e. the depth attachment's own load/store actions never corrupt it.
+**Nothing is claimed about depth preservation**: Vulkan's MSAA render pass keeps `LOAD_OP_CLEAR` /
+`STORE_OP_DONT_CARE` for depth in BOTH variants, so REMED-GFX-142's open disagreement is neither
+widened nor silently resolved, and no per-face depth attachment was allocated because colour
+correctness never required one.
+
+Mips: level 0 is the canonical renderable level and the only one asserted. No affected backend claims
+renderable multisampled non-zero cube mips — SdlGpu forces `mipMap = false` when MSAA is engaged,
+D3D12 does the same, and Vulkan's MSAA image is `mipLevels = 1` by construction. REMED-GFX-138 (bgfx
+cube mip regeneration), REMED-GFX-139 (D3D9 mip allocation) and the separately recorded D3D12
+ordinary-cube mip defect were not touched.
+
+### Validation
+
+| route | standard | synchronization | evidence the layer really loaded |
+|---|---|---|---|
+| Vulkan, the GFX-141 oracle | **0** errors/warnings/VUIDs | **0** hazards | `VK_LOADER_DEBUG=layer` → `Loading layer library libVkLayer_khronos_validation.so` |
+| Vulkan, `rendertargetcube_usage` / `_getdata_contract` / `cube_mrt_binding` / `rtcube` / cube msaa / sample / mip / `rendertarget_pass_boundary` / `backbuffer_pass_order` / `swapchain_sync` / `ordered_clear` | **0** | **0** | same |
+| SdlGpu (Vulkan driver), the oracle + `rendertargetcube_usage` / `_getdata_contract` / `rendertargetcube` / `rendertarget_pass_boundary` / `backbuffer_pass_order` / `ordered_clear` | **0** | **0** | same, layer loaded twice (device + SDL) |
+
+Synchronization validation used `validate_sync = true`, `syncval_submit_time_validation = true`,
+`enable_message_limit = false` — REMED-GFX-144's own settings. Image-view layer ranges, framebuffer
+attachment compatibility, sample-count matching, resolve-attachment pairing, image-layout hazards and
+load/store hazards all pass with the six-layer image and the new LOAD variant; no SDL_GPU invalid
+pass configuration and no device loss. Nothing was suppressed. EasyGL: framebuffer completeness for
+all six faces is proven by `F3.0`–`F3.5` being byte-exact (see the oracle section).
+
+### Cross-backend matrix
+
+| Backend | category | result | route |
+|---|---|---|---|
+| EasyGL | exact multisampled PreserveContents | **14/32 → 32/32**, applied 4x | `:101`, OpenGL ES 3.2 Mesa 25.0.7 |
+| Vulkan | exact multisampled PreserveContents | **12/32 → 32/32**, applied 4x | `:101`, llvmpipe LLVM 19.1.7, validation active |
+| SdlGpu | exact multisampled PreserveContents | **12/32 → 32/32**, applied 4x | `:101`, SDL_gpu Vulkan driver, debug mode |
+| D3D11 | exact multisampled PreserveContents | **32/32**, applied 4x, production unmodified | `:99`, Wine + DXVK 2.6.0 |
+| Bgfx | cube MSAA readback unsupported | **32/32** — every MSAA content check is the declared `NotSupportedException` | `:101`, requested OpenGL, active **OpenGL 2.1** |
+| Headless | RenderTargetCube readback unsupported | **32/32** | `SDL_VIDEODRIVER=dummy` |
+| WebGPU | cube MSAA rejected/ignored | **9/9**, applied 0 | `:101`, wgpu-native v29.0.1.1 |
+| D3D9 | cube MSAA not allocated | **9/9**, applied 0 | `:99`, Wine + DXVK (`run-wine-dxvk9.sh`) |
+| Software / SDL_Renderer / ASCII / DX3 | RenderTargetCube unsupported | **1/1** each | `:101` (`dummy` for DX3) |
+| Canvas | runtime unavailable, source/compile contract verified | builds and links on the Emscripten toolchain | — |
+| D3D12 | runtime unavailable for this fixture; source contract verified | every Game-harness example page-faults before its first check under this vkd3d-proton route — **A/B-proven** on the pre-existing `rendertargetcube_usage` and `_getdata_contract` binaries too, so it is the route, not this task | `:99`, Wine + vkd3d-proton |
+
+No rejected capability is described as functional MSAA support anywhere in that table.
+
+### Regression gates
+
+| suite | result | notes |
+|---|---|---|
+| `ctest -R '^EasyGL_'` | **255/258** | `EasyGL_RenderTargetCube_DepthFormat`, `EasyGL_DeviceValidation`, `EasyGL_GraphicsDevice_ReferenceStencil` — the same three long-recorded, the cube one with the identical `(0,128,0)` vs `(0,255,0)` signature, and its source contains no MSAA at all |
+| `ctest -R '^Vulkan'` | **172/173** | only `Vulkan_DepthBias`, pre-recorded |
+| `ctest -R '^SdlGpu'` | **74/75** | only `SdlGpu_RenderState`, pre-recorded, same `Cannot present while render targets are bound` abort |
+| `ctest -R '^Bgfx'` | **130/136** | the same six pre-recorded; `Bgfx_RenderTargetCube_DepthFormat` contains no MSAA, so the depth-flag fix is a literal no-op for it |
+| REMED-GFX-134 cube readback | **55/55** on Vulkan and SdlGpu | |
+| REMED-GFX-136 usage | **30/30** on Vulkan, SdlGpu and EasyGL | |
+| REMED-GFX-129 ordered clear | **34/34** Vulkan, **31/31** SdlGpu | |
+| REMED-GFX-140 / 145 pass boundary | **44/44** Vulkan, **39/39** SdlGpu | |
+| REMED-GFX-143 backbuffer order | **29/29** on both | |
+| REMED-GFX-096 plural binding, REMED-GFX-094 MSAA capability, REMED-GFX-095 MRT+MSAA, REMED-GFX-018 `ClearOptions`, REMED-GFX-039 active-target validation, REMED-GFX-127/130 honest readback, REMED-GFX-144 swapchain sync | green within the shards above | |
+| `cna_test_d3d12_smoke` | **237 PASS / 0 FAIL** | unchanged; its trailing RTV-heap exhaustion is pre-existing and identical with and without any GFX-141 addition |
+
+### Sanitizers
+
+| tree | fixtures | result |
+|---|---|---|
+| `cmake-build-easygl-asan` (**new**) | the oracle 32/32, GFX-136 30/30, GFX-134 55/55 | clean |
+| `cmake-build-vulkan-asan` | the oracle 32/32, GFX-136 30/30, GFX-134 55/55, cube MRT 15/15 | clean |
+| `cmake-build-vulkan-ubsan` | the oracle 32/32 | clean |
+| `cmake-build-sdlgpu-asan` | the oracle 32/32, GFX-136 30/30, GFX-134 55/55 | clean |
+| `cmake-build-bgfx-asan` / `-ubsan` | the oracle 32/32 | clean |
+
+No invalid access, use-after-free, layer-index error, resource double release, overflow or stale face
+reference — over six-face traversal, A → B → A, partial `PreserveContents` updates, two cube targets,
+repeated cycles, disposal, recreation and depth-backed colour controls.
+
+### Build directories, ccache, displays and thermal
+
+Reused incrementally, all pre-existing: `cmake-build-debug` (EasyGL), `cmake-build-vulkan`,
+`cmake-build-sdlgpu`, `cmake-build-bgfx`, `cmake-build-webgpu`, `cmake-build-headless`,
+`cmake-build-software`, `cmake-build-sdlrenderer`, `cmake-build-ascii`, `cmake-build-canvas`,
+`cmake-build-dx3`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`,
+`cmake-build-vulkan-asan`, `cmake-build-vulkan-ubsan`, `cmake-build-sdlgpu-asan`,
+`cmake-build-bgfx-asan`, `cmake-build-bgfx-ubsan`.
+
+**One new directory: `cmake-build-easygl-asan`**, strictly necessary because no sanitizer tree for
+the `EASYGL` backend existed and EasyGL is one of the three backends whose resource lifetime this
+task changed (one renderbuffer becomes six). Configured with `CNA_SANITIZE=address`,
+`CNA_USE_CCACHE=ON` and both compiler launchers set to `ccache`, matching the existing sanitizer
+trees; it is covered by `.gitignore`'s `cmake-build-*/`.
+
+`CNA_USE_CCACHE=ON` in every tree used. **No build tree was created under `/tmp`, `/var/tmp` or
+`/dev/shm`** — the session scratchpad held only validation logs and a `vk_layer_settings.txt`.
+No directory was cleaned, deleted or recreated; **no clean build occurred** — every configure was
+incremental and every build rebuilt changed targets only. `git stash`, `git clean -xfd` and
+`git reset --hard` were never run and the four pre-existing user stashes are untouched.
+**Maximum build parallelism was `-j2` throughout**, sanitizer variants included.
+
+Displays: shared Xvfb **`:101`** for every native route (EasyGL, Vulkan, SdlGpu, Bgfx, WebGPU,
+SDL_Renderer, ASCII and all sanitizer runs); **`:99`** for the Wine D3D9/D3D11/D3D12 routes; Headless
+and DX3 used `SDL_VIDEODRIVER=dummy`. **No display was started and none was stopped, and no `:0`
+measurement was taken.**
+
+Thermal: started at **53 °C**. Peak **81.8 °C** during the headless/software test build, and **79.1 °C**
+during the EasyGL ASan run, which triggered one cooling pause down to **63.9 °C**; every other build
+stayed within **56–77 °C** at `-j2`, and no two heavy matrices were ever run concurrently. Final
+**64 °C**.
+
+### Commits
+
+- `07171020 test(Task REMED-GFX-141): reproduce cube MSAA face aliasing`
+- `773dace7 fix(Task REMED-GFX-141): isolate multisample cube-face colour storage`
+- `66264f6e test(Task REMED-GFX-141): cover all faces preserve and resolve`
+- `docs(remediation): record GFX-141 completion` (this record)
 
 No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
 untouched.
