@@ -13405,7 +13405,7 @@ discarding. Which half won was a per-backend accident.
 | Question | Answer, and where it comes from |
 |---|---|
 | Does `PreserveContents` guarantee colour across unbind/rebind? | **Yes, exactly.** FNA passes `usage != DiscardContents` to FNA3D as `preserveTargetContents` and issues no clear. |
-| Depth/stencil too? | **No — colour only.** Vulkan's preserving RT render pass has used `LOAD_OP_DONT_CARE` for depth since it existed, and this project has never promised otherwise. Recorded as REMED-GFX-142 below. |
+| Depth/stencil too? | **Not established here — and the answer turned out to be yes.** This finding scoped itself to colour because Vulkan's preserving RT render pass had used `LOAD_OP_DONT_CARE` for depth since it existed and the project had never promised otherwise; it recorded the disagreement as REMED-GFX-142. **Reconciled 2026-07-28:** REMED-GFX-142 established from FNA3D's own header (`preserveTargetContents` stores the *"color/depth/stencil"* contents) that the same flag governs all three aspects, and made every backend honour it. Nothing in THIS finding's evidence changes — `T1`/`T2` measured that depth never corrupts the preserved colour, which is still exactly what they measure. |
 | What does `DiscardContents` permit? | Previous colour becomes non-preserved — but CNA does **not** leave the replacement undefined: `GraphicsDevice::SetRenderTargets` clears a `DiscardContents` target to `(0,0,0,255)` on every bind, mirroring FNA. That colour is asserted per backend, not assumed. |
 | What does `PlatformContents` map to? | **Preservation**, via FNA's own `usage != DiscardContents`. One mapping, one function. |
 | Does the first bind differ? | A brand-new target has no previous content, so nothing is asserted about texels a first preserving bind did not draw (check **F1** asserts only what it DID draw). No test reads uninitialized native memory. |
@@ -13549,6 +13549,13 @@ depth/stencil attachment's own load/store actions never corrupt the preserved co
 colour preservation does not require preserving depth. A depthless (`DepthFormat::None`) target is
 what every other check uses. The three backends with a real load action disagree about depth itself
 — recorded separately as **REMED-GFX-142**, not fixed here.
+
+> **Reconciled 2026-07-28 by REMED-GFX-142.** "Colour contract" was this finding's scope, not the
+> whole contract: `RenderTargetUsage` governs colour, depth AND stencil, per FNA3D's own header, and
+> all three are now preserved on every backend. What T1/T2 assert is unchanged and still correct —
+> they are the COLOUR-independence half, and REMED-GFX-142's K1/K3/K4/K5 are the matching
+> depth/stencil-independence half. `PlatformContents` maps the same way for all three aspects,
+> through the same one `RenderTargetUsagePreservesContentsEXT()` this finding introduced.
 
 ### MSAA and resolve
 
@@ -13713,6 +13720,14 @@ and unrelated — every backend library, every ASCII test and `CnaTests` build.
   first, this cube inherits it), WebGPU's `RenderTarget2D` loads depth while its cube deliberately
   clears it, and SdlGpu loads depth unless a clear is pending. Colour is unaffected either way
   (**T1/T2**).
+  **CLOSED 2026-07-28** — see the REMED-GFX-142 record below. FNA3D's own header settles it
+  (`preserveTargetContents` stores the "color/depth/stencil" contents), so the answer was LOAD, and
+  SdlGpu turned out to be the one already right. Five defects, only two of them the load actions
+  named here: the shared `DiscardContents` bind clear never asked for `Stencil`,
+  `GraphicsDevice::Clear` dropped every depth/stencil clear issued while a cube was bound, EasyGL's
+  colour-only `Clear()` wiped depth, Vulkan used DONT_CARE/DONT_CARE, and WebGPU's cube hardcoded a
+  clear. Cube depth stays ONE per-target buffer — FNA allocates exactly one per cube — so no
+  per-face depth storage was added.
 
 ### Runtime routes and active renderers
 
@@ -15767,6 +15782,15 @@ preserved COLOUR to stay exact, i.e. the depth attachment's own load/store actio
 widened nor silently resolved, and no per-face depth attachment was allocated because colour
 correctness never required one.
 
+> **Reconciled 2026-07-28 by REMED-GFX-142.** Both those Vulkan MSAA depth ops now follow the same
+> `discardContents` rule the colour attachment does, so a multisampled preserving target keeps its
+> depth samples. The second half of the sentence above is not just still true but is now the
+> established contract: cube depth/stencil is ONE per-target buffer shared by all six faces
+> (FNA allocates exactly one `glDepthStencilBuffer` per `RenderTargetCube`), so this finding's
+> six-per-face COLOUR architecture deliberately does NOT extend to depth, and no per-face depth
+> attachment exists on any backend. `F14`/`F15` are unchanged and still measure exactly what they
+> measured.
+
 Mips: level 0 is the canonical renderable level and the only one asserted. No affected backend claims
 renderable multisampled non-zero cube mips — SdlGpu forces `mipMap = false` when MSAA is engaged,
 D3D12 does the same, and Vulkan's MSAA image is `mipLevels = 1` by construction. REMED-GFX-138 (bgfx
@@ -15874,6 +15898,293 @@ stayed within **56–77 °C** at `-j2`, and no two heavy matrices were ever run 
 - `773dace7 fix(Task REMED-GFX-141): isolate multisample cube-face colour storage`
 - `66264f6e test(Task REMED-GFX-141): cover all faces preserve and resolve`
 - `docs(remediation): record GFX-141 completion` (this record)
+
+No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
+untouched.
+
+---
+
+## REMED-GFX-142 — the render-target depth/stencil lifetime contract (2026-07-28)
+
+REMED-GFX-136 established `RenderTargetUsage` as a COLOUR contract and recorded, as an open
+question, that the three backends with a real load action disagreed about depth. This closes it —
+by establishing what the contract actually is before touching a line of backend code, then making
+every backend honour that.
+
+### The public contract, established rather than assumed
+
+The question was: does `RenderTargetUsage` apply to (A) colour only, (B) colour and depth,
+(C) colour, depth and stencil, or (D) is depth/stencil platform-defined? The reference answers **C**
+in words, and it is not ambiguous.
+
+| Question | Answer, and where it comes from |
+|---|---|
+| Does `PreserveContents` guarantee DEPTH preservation? | **Yes.** FNA3D's public header documents `FNA3D_SetRenderTargets`' `preserveTargetContents` as *"Set this to 1 to store the **color/depth/stencil** contents for future use"* — all three aspects, named. FNA passes exactly `usage != DiscardContents` for that byte. |
+| Does it guarantee STENCIL preservation? | **Yes**, by the same sentence and the same flag. There is no separate stencil switch anywhere in FNA or FNA3D. |
+| Does `DiscardContents` require clearing, or merely permit undefined contents? | **Requires a deterministic clear.** FNA's `GraphicsDevice.SetRenderTargets` ends with `Clear(ClearOptions.Target \| ClearOptions.DepthBuffer \| ClearOptions.Stencil, DiscardColor, Viewport.MaxDepth, 0)`. So: colour `(0,0,0,255)`, depth `1.0`, stencil `0`. Nothing is left undefined and no backend may advertise preservation. |
+| Does `PlatformContents` map independently for depth/stencil? | **No — one mapping for all three.** `RenderTargetUsagePreservesContentsEXT()` is `usage != DiscardContents`, and REMED-GFX-136 already made it the single function both public targets call. No enum value falls through a default. |
+| Persistence across unbind/rebind? | **Yes** (checks D1–D5, S1–S3). |
+| Across target A → target B → target A? | **Yes**, each target keeps its own (D6, S4). |
+| Across cube face A → face B → face A? | **The faces share one buffer.** FNA's `RenderTargetCube` allocates exactly ONE `glDepthStencilBuffer` for the whole cube, so depth/stencil is a per-TARGET resource and face B sees whatever face A wrote. This is the OPPOSITE of REMED-GFX-141's per-face COLOUR conclusion and it is why **no per-face depth storage was added anywhere**. Check **U2** is the discriminator and REQUIRES the shared answer. |
+| Across a backbuffer transition? | **Yes** — the route out of the bind cycle is irrelevant, and clearing the backbuffer's own depth in between changes nothing (D7). |
+| Across MSAA resolve cycles? | **Yes.** Depth is never resolved (FNA allocates one multisampled depth renderbuffer and reads it back through nothing), so preserving it means the MULTISAMPLE attachment itself survives (D8, U4). No fake depth resolve was introduced. |
+| Across device reset/recreation? | **No.** Nothing survives device recreation; the contract is per-device-lifetime. |
+| Are contents observable only indirectly? | **Yes** — only through what a later depth-tested or stencil-tested draw does. No check here reads native depth or stencil memory. |
+| First bind of a brand-new target? | Nothing is asserted: there is no previous content to preserve. Same rule REMED-GFX-136 set for colour. |
+
+All three FNA3D drivers agree with the header, which is what makes it a contract rather than one
+platform's habit: the OpenGL driver ignores `preserveTargetContents` outright because an FBO's
+depth/stencil attachment simply persists; D3D11 ignores it because `OMSetRenderTargets` has no load
+action and a DSV persists; the SDL_GPU driver uses `LOADOP_LOAD` for depth and stencil unless a
+clear is pending and stores both unconditionally (*"We always have to store just in case changing
+render state breaks the render pass"*).
+
+### The defects — five, plus a sixth the fix surfaced
+
+None of these was the same defect as another, and only two were the load actions the finding named.
+
+| # | Where | What |
+|---|---|---|
+| 1 | `GraphicsDevice::SetRenderTargets` (both overloads) | The `DiscardContents` bind clear asked for `Target \| DepthBuffer` and **never `Stencil`**, so a discarded target kept its previous stencil for ever — neither preservation nor discard. |
+| 2 | `GraphicsDevice::Clear(ClearOptions, ...)` | Decided "does this target have a depth buffer" with `dynamic_cast<RenderTarget2D*>` **alone**. A bound `RenderTargetCube` fell through to `false`, so `options &= ClearOptions::Target` silently dropped **every** `ClearOptions::DepthBuffer` and `ClearOptions::Stencil` issued while a cube face was bound — on every backend, whatever depth format the cube had. `SetRenderTargets` already asked both target kinds; this was the same question at the other call site. |
+| 3 | `EasyGLGraphicsBackend::Clear(r,g,b,a)` | The colour-ONLY entry point issued `ClearFlags::Color \| ClearFlags::Depth`, so asking XNA to clear just the colour target wiped the depth buffer with it. The only backend that did this. |
+| 4 | `VulkanGraphicsBackend::GetOrCreateRTRenderPass` / `...Msaa` | `LOAD_OP_DONT_CARE` + `STORE_OP_DONT_CARE` for depth and stencil in the **preserving** variant, and an unconditional `LOAD_OP_CLEAR` in the MSAA variant. DONT_CARE makes contents *undefined*; llvmpipe retains the memory, which is precisely why this looked correct here and would not on a tiler. |
+| 5 | `WebGPUGraphicsBackend::RenderPendingDrawsToRenderTargetCubeFace` | Hardcoded `WGPULoadOp_Clear` for both aspects, with a source comment reasoning that one attachment shared by six faces would "hand face A whatever depth face B last wrote". FNA hands it exactly that. |
+| 6 | `VulkanGraphicsBackend::RecordCommandBuffer` (**surfaced by fixing 4**) | With depth genuinely shared between faces, REMED-GFX-074's single-target readback flush became wrong: it filtered recorded segments by `seg.rt == onlyRT`, which is right for colour (each face owns its layer) and wrong for one depth image shared by six faces. Reading face B replayed only face B's bind cycles, so face A's depth writes were still pending and face B's own earlier depth clear landed **after** them. |
+
+Defect 6 was the only judgement call. It is inseparable: before this task Vulkan's cube depth was
+`DONT_CARE`, so nothing cross-face could carry and the reordering was invisible; the moment depth
+genuinely persists, leaving it means Vulkan advertises a shared-depth contract it does not deliver.
+The fix is Vulkan-local — a `VulkanRTSource::DepthStencilOwnerEXT()` whose default `this` leaves
+every other source at the identical pointer comparison, used at **all three** sites that decide what
+to record, what to reset and what to consume, so Present never replays a face the flush emitted.
+"Exactly one target's passes and nothing else" still holds: a `RenderTargetCube` is one target.
+
+### Backend classification
+
+Classes: **A** already matches · **B** preserved only accidentally · **C** discarded contrary to the
+contract · **D** claimed preservation the storage cannot support · **E** capability unsupported ·
+**F** intentionally platform-defined.
+
+| Backend | RT2D depth formats | RTCube depth | depth alloc | stencil alloc | per-target/face | MSAA depth | load on Preserve (before → after) | load on Discard | store | class | fixed? |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| EasyGL | 16/24/24S8 | 16/24/24S8 | renderbuffer per target | same combined RB | per target, shared by 6 faces | multisampled RB | *(no load action)* — GL FBO persists | shared-layer clear | implicit | **A** for the load action, **C** for defect 3 | yes (3) |
+| Vulkan | 16/24/24S8 | 16/24/24S8 | one non-transient `VkImage` per target | same image | per target, shared by 6 faces | promoted in place to `sampleCount_` | `DONT_CARE` → **`LOAD`** (both aspects, both legs) | `CLEAR` | `DONT_CARE` → **`STORE`** | **B** (llvmpipe retention) → **A** | yes (4, 6) |
+| Bgfx | 16/24/24S8 | 16/24/24S8 | per-target attachment | same | per target | n/a here | views left at `BGFX_CLEAR_NONE` — persists | shared-layer clear | implicit | **A** | no |
+| SDL_GPU | 16/24/24S8 | 16/24/24S8 | `SDL_GPUTexture` per target | same | per target, `layer_count 1` | multisampled texture | `clearX ? CLEAR : LOAD` — already FNA3D-shaped | `CLEAR` | `STORE` | **A** | no |
+| WebGPU | 16/24/24S8 | 16/24/24S8 | depth texture per target | same | per target | n/a (cube MSAA not engaged) | RT2D already `Load`; **cube `Clear` → `clearPending \|\| discard`** | `Clear` | `Store` | **C** (cube) → **A** | yes (5) |
+| D3D9 | 16/24/24S8 | 16/24/24S8 | depth surface per target | same | per target | n/a | *(no load action)* — surface persists | shared-layer clear | implicit | **A** | no |
+| D3D11 | 16/24/24S8 | 16/24/24S8 | DSV per target | same | per target | multisampled | *(no load action)* — DSV persists | shared-layer clear | implicit | **A** | no |
+| D3D12 | 16/24/24S8 | 16/24/24S8 | DSV per target | same | per target | multisampled | *(no load action)* | shared-layer clear | implicit | **A** | no |
+| Software | 16/24/24S8 | — (no cube) | `std::vector<float>` per framebuffer | **none** | per target | n/a | CPU buffer persists | shared-layer clear | n/a | **A** for depth, **E** for stencil | no |
+| Headless | reported | reported | none (rasterises nothing) | none | n/a | n/a | n/a | n/a | n/a | **E** | no |
+| SDL_Renderer / ASCII / Canvas / DX3 | none | none | none | none | n/a | n/a | n/a | n/a | n/a | **E** | no |
+
+Everything in class **A** was left alone: correct production is not rewritten for symmetry.
+`Software`'s stencil is a real **E** — `SoftwareGraphicsBackend::ClearStencil` is an empty body and
+nothing rasterises a stencil test — so the file declares it and claims no stencil result there.
+
+### Cube-face depth/stencil storage — the decision, and why nothing grew
+
+The question the finding raised was whether preservation forces six independent depth surfaces, one
+six-layer resource, or one shared attachment. **None of them.** FNA allocates one
+`glDepthStencilBuffer` per `RenderTargetCube` and every CNA backend already mirrored that, so the
+correct answer was the storage already in place, and the work was to stop throwing its contents
+away. Check U2 pins this down in a way nothing else can: it paints both faces, clears both depths,
+writes depth `0.25` into face A's band 0, then draws face B's band 0 at `0.50` — shared depth
+rejects it (face B keeps its paint colour), per-face depth would accept it. The shared answer is
+REQUIRED, so a later change that quietly grows six depth surfaces turns this red.
+
+### Colour versus depth/stencil, kept separate
+
+This is deliberately not a second REMED-GFX-136. Four checks prove the aspects are independent:
+**K5** clears COLOUR alone and requires depth to survive it; **K1** clears DEPTH alone and requires
+colour to survive it (band 1 still carries the producer colour); **K3** clears depth and requires
+STENCIL to survive; **K4** clears stencil and requires DEPTH to survive. Band 1 of every depth
+sequence is a standing colour control, so "depth was lost" can never be reported when what actually
+happened is that colour was lost — the failure mode that would have turned this task into a
+colour finding.
+
+### Ordered `Clear` interaction (REMED-GFX-129 preserved)
+
+`RenderTargetUsage` governs bind-time behaviour; an explicit `Clear()` is an ordered command that
+overrides it. Verified: Preserve bind without Clear (D1–D3), Preserve + `ClearDepth` (K1), Preserve
++ `ClearStencil` (K2), per-aspect independence (K3/K4/K5), Discard bind without an explicit Clear
+(D4), Discard bind + explicit Clear (K6), draw → Clear → draw within one cycle (K7), and a second
+bind-cycle Clear (K1/K2 are exactly that). No backend uses its load-action policy to drop an ordered
+clear; Vulkan's folding rule is untouched, because folding is gated on `ColorLoadOpIsClearEXT()`,
+which is false for every preserving target, so a preserving target's clears were already all going
+through `vkCmdClearAttachments`.
+
+### Independent findings — recorded, deliberately NOT fixed
+
+Each is declared as a falsifiable contract field, so the check asserts the honest measured outcome
+and turns **red the day the backend is fixed** rather than quietly staying green.
+
+* **WebGPU never enables the stencil test.** `ApplyDepthStencilState` stores the state and never
+  bakes it into any pipeline's `WGPUStencilFaceState` (deferred as WEBGPU-83), so every fragment
+  passes. Check **C2** measures it directly — the gate colour appears in band 2, where a working
+  stencil test must reject. No stencil-preservation result is claimed for WebGPU.
+* **SdlGpu and WebGPU have no ordered mid-cycle `Clear`.** A `Clear()` recorded after a draw in the
+  same bind cycle is delivered through the pass load action, so it cannot wipe that draw — REMED-GFX-129's
+  subject, implemented on Vulkan only. Check **K7**, contract field `orderedClearInCycle`.
+* **bgfx aborts on a multisampled depth-backed `RenderTarget2D`** — `bgfx::isFrameBufferValid`
+  refuses the depth attachment for want of `BGFX_TEXTURE_RT_WRITE_ONLY`. This is exactly the 2D leg
+  REMED-GFX-141 fixed on the cube side and recorded here; check **D8** must not trip it, so it never
+  builds the target there (field `msaaDepthRT2D`).
+* **Vulkan's multisampled `RenderTarget2D` leg hardcodes `discardContents=true`**, discarding colour
+  AND depth on a `PreserveContents` target — REMED-GFX-141's recorded finding, whose cube sibling
+  correctly passes `!preserveContents_`. Check **D8** asserts the discarding outcome there (field
+  `msaaRt2dPreserves`).
+* **Vulkan's MRT render pass** (`GetOrCreateMRTRenderPass`) ignores `RenderTargetUsage` entirely —
+  `LOAD_OP_CLEAR` for every colour attachment and for depth/stencil, regardless. Fixing only its
+  depth half would be incoherent while its colour half is the finding above, so it is recorded, not
+  touched.
+
+### False-positive test audit
+
+| Test | Why it could not have caught this | Outcome |
+|---|---|---|
+| `rendertarget2d_depth_test` | Clears depth, then draws near/far — **all inside ONE bind cycle**. Proves depth works *within* a pass, never *across* one. | Gap now covered by the new oracle's C1, which is deliberately the same shape so "C1 passes, D1 fails" isolates the bind cycle as the only variable. Left unmodified: it is narrow, not wrong. |
+| `graphicsdevice_depth_contract_test` | Same — A/B/C/A state restoration, one bind cycle, backbuffer only. Never rebinds a target. | Same. |
+| `rendertargetcube_usage_test` (GFX-136) | `T1`/`T2` assert only that a depth attachment does not corrupt COLOUR, and its header stated depth was *"NOT covered by the colour guarantee"*. | **Strengthened**: that sentence described the pre-fix measurement as if it were the contract and is the single most misleading line this task found. Corrected to record what the file actually asserts and to point at the new oracle. |
+| `rendertargetcube_msaa_face_test` (GFX-141) | Every cube MSAA check uses `DepthFormat::None`, so no multisampled depth path is exercised at all — which is also why bgfx's multisampled-depth abort had never been seen. | Gap covered by U4 and D8; the file's own delegation comment was already correct. |
+| `rendertarget_pass_boundary_test` | Says depth is *"outside the colour contract"*, which reads as "absent" rather than "separate". | **Strengthened** to point at the oracle. |
+| `sdlgpu_pass_boundary_upload_test` | Cites REMED-GFX-142 as an open question. | **Strengthened** to cite the oracle. |
+| `easygl_rendertargetcube_depthformat_test` | Not a false positive — a genuine RED signal (`(0,128,0)`, a cube depth-gating failure) that had been carried as an accepted pre-existing failure. | **Fixed by consequence** (defect 2). Now passes; EasyGL 256/259 → 257/259. |
+
+**Six false-positive-capable files found, four strengthened**, one fixed by consequence, two left
+unmodified as narrow-but-correct with their gap named and now covered.
+
+### Resource cardinality, memory and performance
+
+| Resource | Change |
+|---|---|
+| depth images / renderbuffers / textures | **none** — one per RT2D, one per cube, exactly as before |
+| stencil resources | **none** — combined with depth, as every backend already allocated |
+| cube-face views, framebuffers | **none** |
+| render-pass variants (Vulkan) | **none** — the four caches (clear/load × single/MSAA, keyed by depth format) already existed from REMED-GFX-136/141; only the *contents* of the load variants' depth attachment description changed, adding no key dimension |
+| command buffers, per-frame submits/waits | **none** |
+| one-time submits | **+1 per preserving depth-backed `RenderTargetCube`, at construction only** — the depth layout barrier needs its own `BeginOneTimeCommands` because the cube's colour init barrier runs before the depth image exists. `RenderTarget2D` adds **none**: its depth barrier rides the existing colour init command buffer. |
+| per-bind cost | **none added** — no depth copy, no readback or rehydration, no queue/device wait, no `Present`, no extra frame, no per-pass resource recreation |
+| permanent memory | **0 bytes.** The six-surface cost REMED-GFX-141 paid for colour is explicitly NOT paid again for depth: FNA's one-buffer-per-cube is the contract, so `size × size × samples × depthBytes × 6` was never allocated. |
+
+Bounded, exactly-once destruction and no aliasing between two targets are covered by D6/S4 (two live
+targets keep their own depth and stencil) and X4 (dispose a depth-backed target, then a fresh one
+still preserves its own), all clean under ASan.
+
+### Cross-backend results
+
+| Backend | Route / display | Pre-fix | Post-fix | Note |
+|---|---|---|---|---|
+| EASYGL | `:101`, OpenGL ES 3.2 Mesa 25.0.7 | **26/29** (S3, K5, U4) | **29/29** | |
+| VULKAN | `:101`, Vulkan llvmpipe, validation active | **27/29** (U1, U4) | **29/29** | |
+| WEBGPU | `:101`, wgpu-native v29.0.1.1 | **27/29** (U1, U2) | **29/29** | stencil declared unsupported |
+| BGFX | `:101`, **OpenGL 2.1** | **27/29** (S3, U1) | **29/29** | |
+| SDL_GPU | `:101`, SDL_gpu Vulkan driver | **28/29** (S3) | **29/29** | already FNA3D-shaped |
+| SOFTWARE | none | 29/29 | **29/29** | stencil = declared boundary |
+| HEADLESS | `SDL_VIDEODRIVER=dummy` | 29/29 | **29/29** | rasterises nothing |
+| SDL_RENDERER / ASCII | `:101`, SDL_Renderer | — | **29/29** | legality only, no 3D path |
+| DX3 | `SDL_VIDEODRIVER=dummy` | — | **29/29** | legality only |
+| CANVAS | Emscripten | — | compile/link verified | |
+| D3D9 / D3D11 / D3D12 | Wine | — | **compile + link only** | see below |
+
+The D3D runtime was **not** available this session and is reported as such rather than skipped
+quietly: SDL under Wine fails `SDL_InitSubSystem(SDL_INIT_VIDEO)` with *"No displays available"* on
+`:99` and on a freshly-created Xvfb alike, and the **known-good `cna_test_d3d11_smoke.exe` fails
+identically**, so it is the environment and not this change. `:0` was not used for any measurement,
+per this task's own instruction. The disposable `:103` created for that probe was stopped; `:99` and
+`:101` were left running and untouched.
+
+### Validation
+
+| Route | Result |
+|---|---|
+| Vulkan standard validation | **0** VUIDs / errors (`VK_LOADER_DEBUG=layer` confirms `libVkLayer_khronos_validation.so` loaded) |
+| Vulkan **synchronization** validation | **0** hazards — no `SYNC-`, `WRITE_AFTER_*` or `READ_AFTER_*` |
+| SDL_GPU Vulkan route (`SDL_GPU_DEBUGMODE=1`, `SDL_GPU_VALIDATE=1`) | **0** errors, validation layer loaded |
+| WebGPU error callbacks (`RUST_LOG=wgpu_core=warn,wgpu_hal=warn`) | **0** errors / warnings / panics |
+| EasyGL (`MESA_DEBUG=1`) | **0** GL errors, no incomplete framebuffer |
+
+Nothing was suppressed. No invalid load/store op, aspect mismatch, attachment-lifetime, shared-depth
+aliasing, sample-count-mismatch, invalid-cycling or layout hazard was reported.
+
+### Sanitizers
+
+| Directory | Result |
+|---|---|
+| `cmake-build-vulkan-asan` | 29/29, **0** ASan errors |
+| `cmake-build-easygl-asan` | 29/29, **0** ASan errors |
+| `cmake-build-sdlgpu-asan` | 29/29, **0** ASan errors |
+| `cmake-build-software-asan` | 29/29, **0** ASan errors |
+| `cmake-build-vulkan-ubsan` | 29/29, **0** runtime errors |
+| `cmake-build-sdlgpu-ubsan` | 29/29, **0** runtime errors |
+| `cmake-build-software-ubsan` | 29/29, **0** runtime errors |
+
+No invalid access, stale attachment, use-after-free, double release, integer overflow or layer-index
+error, across depth and stencil preservation, all three usage values, RT2D, cube faces, MSAA, two
+live targets, repeated cycles, disposal and the invalid-capability combinations (X1–X4).
+
+### Regressions
+
+Every backend's full suite, with each failure A/B-confirmed against the pre-fix production by narrow
+per-file restore (`git checkout 6f659eef -- <5 files>`), never a stash and never a tree checkout.
+
+| Backend | Result | Failures |
+|---|---|---|
+| Vulkan | **173/174** | `Vulkan_DepthBias` — pre-existing (`NEXT.md` D9-62), uses no render target at all |
+| EasyGL | **257/259** (was 256/259) | `EasyGL_DeviceValidation`, `EasyGL_GraphicsDevice_ReferenceStencil` — both fail pre-fix; `EasyGL_RenderTargetCube_DepthFormat` **now passes** |
+| SdlGpu | **48/49** | `SdlGpu_RenderState` — aborts pre-fix too |
+| WebGPU | **41/42** | `WebGPU_Clear_Readback` — fails pre-fix too |
+| Bgfx | **134/140** | all six fail pre-fix too |
+| Software | **27/27** | — |
+| Headless | **16/17** | `Headless_Smoke` — aborts pre-fix too |
+| SDL_Renderer | **73/77** | all fail pre-fix too |
+| ASCII | **15/15** | (an unrelated `cna_test_ascii_quantizer` link failure against `SpriteFont` is pre-existing and touches none of these files) |
+| DX3 | **17/19** | `Dx3_SpriteBatch`, `Dx3_No3D` — fail pre-fix too |
+
+The named gates all stay green inside those runs: GFX-018 `ClearOptions`, GFX-030 Software depth
+semantics, GFX-039 active-target validation, GFX-083 depth bias, GFX-094/095 MSAA/MRT, GFX-096 cube
+binding, GFX-124/127/130/134 readback, GFX-136 usage (**30/30**), GFX-140/143/145 ordering,
+GFX-144 synchronization, GFX-129 ordered clears, GFX-141 cube MSAA colour (**32/32**), and
+`rendertarget_pass_boundary` (**43/43**).
+
+### Build directories, ccache and displays
+
+Used, **all pre-existing and in-repository**: `cmake-build-debug` (EasyGL), `cmake-build-vulkan`,
+`cmake-build-bgfx`, `cmake-build-sdlgpu`, `cmake-build-webgpu`, `cmake-build-headless`,
+`cmake-build-software`, `cmake-build-sdlrenderer`, `cmake-build-ascii`, `cmake-build-dx3`,
+`cmake-build-canvas`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`,
+`cmake-build-vulkan-asan`, `cmake-build-easygl-asan`, `cmake-build-sdlgpu-asan`,
+`cmake-build-software-asan`, `cmake-build-vulkan-ubsan`, `cmake-build-sdlgpu-ubsan`,
+`cmake-build-software-ubsan`. `CNA_USE_CCACHE=ON` / `CMAKE_CXX_COMPILER_LAUNCHER=ccache` verified in
+every one before the first build, and `CNA_TEST_DISPLAY=:101` in each native dir.
+
+**No build directory was created**, none was cleaned, deleted or recreated, and **no clean build was
+required** — every `cmake -S . -B <dir>` was an incremental reconfigure, needed only to refresh the
+`CONFIGURE_DEPENDS` glob so the new test source produced a target. **No build tree was created under
+`/tmp`, `/var/tmp` or `/dev/shm`**; the session scratchpad held only logs, a registration script, a
+validation-settings JSON and the five saved production files used for A/B. `git clean -xfd` was never
+run, `git stash` was never used, and the four pre-existing user stashes are untouched.
+
+Parallelism: **`-j2` maximum**, dropped to **`-j1`** for every sanitizer build and while another
+session held the CPU. Thermals: started at **54 °C**; the package reached **87 °C** during the first
+full EasyGL library build and **90 °C** later, and work paused for cooling both times — the second
+excursion was traced to a **concurrent build in another session** (load average 23, `cc1plus`/`as`),
+not to this task, and sanitizer builds were held at `-j1` until it subsided. Steady state during
+measurement was **52–77 °C**; final reading **72 °C**.
+
+Displays: **`:101`** for every native backend, `SDL_VIDEODRIVER=dummy` for Software/Headless/DX3.
+`:99` was used only to attempt the Wine D3D controls. A disposable **`:103`** was created solely to
+prove the Wine "No displays available" failure was not specific to `:99`, and was stopped again;
+`:99` and `:101` were left running. **`:0` was never used.**
+
+### Commits
+
+- `6f659eef test(Task REMED-GFX-142): reproduce depth stencil preservation disagreement`
+- `a18df8fb fix(Task REMED-GFX-142): apply explicit render-target depth stencil policy`
+- `f2c322b3 test(Task REMED-GFX-142): cover targets faces and multisampling`
+- `docs(remediation): record GFX-142 completion` (this record)
 
 No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
 untouched.
