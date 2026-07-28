@@ -41,7 +41,8 @@
 //     is asserted as an exact colour, never as "anything but the old content".
 //   * PreserveContents / PlatformContents -- the colour survives a full unbind/rebind cycle
 //     exactly (REMED-GFX-136's contract, `usage != DiscardContents`).
-//   * Depth/stencil -- outside the colour contract (REMED-GFX-142). Nothing here asserts depth.
+//   * Depth/stencil -- its own contract, established by REMED-GFX-142 and enforced by
+//     `examples/rendertarget_depthstencil_usage_test`. Nothing here asserts depth.
 //   * An explicit Clear() inside a bind cycle -- REMED-GFX-129 records that Vulkan drops it on a
 //     PreserveContents target, because the clear colour is delivered ONLY through the render
 //     pass's load op and there is no vkCmdClearAttachments path. That is a SEPARATE defect from

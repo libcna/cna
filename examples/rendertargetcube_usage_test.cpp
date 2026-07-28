@@ -39,10 +39,16 @@
 //     DiscardContents target (so the shared layer already treated PlatformContents as
 //     non-discarding), while RenderTarget2D passed `usage == PreserveContents` to the backend (so
 //     the backend treated it as discarding). Whichever half won was a per-backend accident.
-//   * Depth/stencil -- NOT covered by the colour guarantee. Vulkan's PreserveContents render pass
-//     uses LOAD_OP_DONT_CARE for depth and always has (see GetOrCreateRTRenderPass). What this
-//     file asserts about depth is only that a depth/stencil attachment never corrupts the
-//     preserved COLOUR.
+//   * Depth/stencil -- a SEPARATE guarantee, not a missing one, and not this file's subject.
+//     REMED-GFX-142 later established from FNA3D's own header ("Set this to 1 to store the
+//     color/depth/stencil contents for future use") that RenderTargetUsage governs all three
+//     aspects, and made every backend honour that; `examples/rendertarget_depthstencil_usage_test`
+//     is its oracle. What THIS file asserts about depth is only that a depth/stencil attachment
+//     never corrupts the preserved COLOUR (checks T1/T2), which is exactly the independence the
+//     two contracts need from each other. It said "not covered by the colour guarantee, Vulkan's
+//     PreserveContents render pass uses LOAD_OP_DONT_CARE for depth and always has" while that was
+//     the measured state; it is no longer, so the claim is corrected here rather than left to read
+//     as a contract.
 //   * First bind -- a brand-new target has no previous content, so nothing is asserted about the
 //     texels a first PreserveContents bind did not draw. Only that the bind is legal and the
 //     texels that WERE drawn are exact.

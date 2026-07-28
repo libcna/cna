@@ -20,7 +20,8 @@
 //     `spriteVertexBuffer_` (offset = the sprite's index in `spriteCommands_`) and the per-command
 //     `uploadedVertexBuffer`/`uploadedIndexBuffer` the 3D families allocate.
 //
-//  3. Depth and stencil load actions. The shared oracle scopes itself to colour (depth is
+//  3. Depth and stencil load actions. The shared oracle scopes itself to colour (depth has its own
+//     contract and its own oracle, `examples/rendertarget_depthstencil_usage_test`, established by
 //     REMED-GFX-142), so nothing there can see a depth clear attached to the wrong bind cycle --
 //     and the depth attachment's load op is chosen by exactly the same per-segment code as the
 //     colour one.

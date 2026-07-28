@@ -31,8 +31,40 @@ namespace Microsoft::Xna::Framework::Graphics
      * PreserveContents` instead, so the shared layer and the backend disagreed about
      * `PlatformContents` and whichever one a given backend happened to honour decided the result.
      *
+     * @par What is preserved
+     * REMED-GFX-142: **colour, depth AND stencil** -- all three, not colour alone. FNA3D's public
+     * header documents the flag this maps to as "Set this to 1 to store the color/depth/stencil
+     * contents for future use", and all three of its drivers agree (an OpenGL FBO attachment and a
+     * D3D11 DSV simply persist; its SDL_GPU driver loads both depth and stencil unless a clear is
+     * pending and always stores them). So for `PreserveContents` and `PlatformContents`:
+     * - colour, depth and stencil each survive a full unbind/rebind cycle,
+     * - across a trip through another render target or through the backbuffer,
+     * - at sample count 1 and under multisampling, where the MULTISAMPLE depth attachment itself
+     *   survives (depth is never resolved),
+     * - and for `RenderTargetCube`, depth/stencil is ONE per-TARGET buffer shared by all six faces,
+     *   exactly as FNA allocates it (a single `glDepthStencilBuffer` per cube), so switching faces
+     *   neither switches depth buffers nor gives you a fresh one. Colour is per-face; depth is not.
+     *
+     * @par What DiscardContents replaces it with
+     * Not "undefined": `GraphicsDevice::SetRenderTargets` clears a `DiscardContents` target on every
+     * bind, mirroring FNA's own `Clear(ClearOptions.Target | ClearOptions.DepthBuffer |
+     * ClearOptions.Stencil, DiscardColor, Viewport.MaxDepth, 0)` -- colour to `(0, 0, 0, 255)`,
+     * depth to 1.0, stencil to 0. A backend is free to deliver that through a native clear load
+     * action, but the observable result is that deterministic triple.
+     *
+     * An explicit `Clear()` issued inside a bind cycle is a separate, ordered command that always
+     * wins over the bind-time behaviour (REMED-GFX-129), and it is per-aspect: clearing depth never
+     * touches stencil or colour, and vice versa.
+     *
+     * Contents of a target that has never been rendered into are not specified -- a brand-new
+     * preserving target has no previous content to preserve. Nothing survives device recreation.
+     * Depth and stencil are observable only indirectly, through what a later depth-tested or
+     * stencil-tested draw does; `examples/rendertarget_depthstencil_usage_test` is the oracle that
+     * enforces every clause above on all fourteen backends.
+     *
      * @param usage The public usage the render target was constructed with.
-     * @return True when the backend must load this target's existing contents when it is bound.
+     * @return True when the backend must load this target's existing colour, depth and stencil
+     *         contents when it is bound.
      */
     NOXNA [[nodiscard]] constexpr bool RenderTargetUsagePreservesContentsEXT(RenderTargetUsage usage) noexcept
     {
