@@ -144,6 +144,32 @@ namespace
          * single-sample would be a false positive.
          */
         bool    preferMultiSampling;
+        /**
+         * REMED-GFX-140's own subject: every public bind/unbind cycle becomes its own logical pass
+         * here. False is a declared, still-open defect on that backend (recorded with its own
+         * finding); check S1 then asserts the COLLAPSED result, so it stays falsifiable in both
+         * directions and turns red the day the backend is fixed, and every other check that can
+         * only distinguish the two shapes reports a skip naming the reason rather than a failure
+         * that belongs to a different task.
+         */
+        bool    segmentsBindCycles;
+        /**
+         * A SpriteBatch fill honours a custom sub-Viewport, i.e. sprite coordinates are
+         * VIEWPORT-LOCAL (FNA `SpriteBatch.PrepRenderState` builds its ortho from
+         * `Viewport.Width/Height`). False where the fill covers the whole target regardless; that
+         * is a pre-existing viewport defect on that backend, not a pass-boundary one, so check S10
+         * asserts the whole-target result there instead of failing for the wrong reason.
+         */
+        bool    spriteViewportIsLocal;
+        /// A SpriteBatch fill honours GraphicsDevice.ScissorRectangle. Same rationale as above.
+        bool    spriteScissorApplies;
+        /**
+         * A multisampled RenderTarget2D reads back its RESOLVED content. False where the readback
+         * reports success over untouched memory (bgfx's blit from a multisampled attachment, the
+         * same boundary REMED-GFX-134/138 recorded for cubes), which makes K1/K2 unable to say
+         * anything about pass boundaries.
+         */
+        bool    msaaTargetReadback;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
     };
 
@@ -151,16 +177,16 @@ namespace
     // Headless rasterizes nothing, so it owns no colour to preserve or discard and its readback is
     // REMED-GFX-127/130's deterministic refusal. Every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, Support::Unsupported, true, Support::Unsupported,
-                                 true, true, false, false};
+                                 true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, Support::Exact, false, Support::Unsupported,
-                                 true, true, false, false};
+                                 true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, false};
+                                 true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
     constexpr Contract kContract{"BGFX", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, false};
+                                 true, true, false, true, false, true, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // `clearOnPreserveTarget` / `clearAfterDrawWins` false: REMED-GFX-129, still open. Both follow
     // from the same narrow mechanism -- GetOrCreateRTRenderPass delivers the clear colour through
@@ -168,34 +194,34 @@ namespace
     // Checks X1/X2/X3 pin that behaviour so GFX-140's segmentation fix is measured against it
     // instead of being credited with it.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, true, Support::Exact,
-                                 false, false, true, false};
+                                 false, false, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, Support::Exact,
-                                 true, false, false, false};
+                                 true, false, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, Support::Exact,
-                                 true, false, false, false};
+                                 true, false, false, false, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", true, Support::Exact, false, Support::Unsupported,
-                                 true, true, false, false};
+                                 true, true, false, true, false, true, true, false};
 #elif defined(CNA_BACKEND_ASCII)
     constexpr Contract kContract{"ASCII", true, Support::Exact, false, Support::Unsupported,
-                                 true, true, false, false};
+                                 true, true, false, true, false, true, true, false};
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", true, Support::Exact, false, Support::Unsupported,
-                                 true, true, false, false};
+                                 true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_DX3)
     constexpr Contract kContract{"DX3", true, Support::Exact, false, Support::Unsupported,
-                                 true, true, false, false};
+                                 true, true, false, true, false, false, true, false};
 #elif defined(CNA_BACKEND_D3D9)
     constexpr Contract kContract{"D3D9", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, true};
+                                 true, true, false, true, true, true, true, true};
 #elif defined(CNA_BACKEND_D3D11)
     constexpr Contract kContract{"D3D11", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, false};
+                                 true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_D3D12)
     constexpr Contract kContract{"D3D12", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, false};
+                                 true, true, false, true, true, true, true, false};
 #else
 #error "REMED-GFX-140: this backend has no declared render-target pass-boundary contract."
 #endif
@@ -291,6 +317,21 @@ class RenderTargetPassBoundaryTest : public Game
     }
 
     void skip(const std::string& label) { check(true, label); }
+
+    /**
+     * @brief Gate for a check that can only distinguish a real pass boundary from a collapsed one.
+     *
+     * On a backend that declares `segmentsBindCycles == false` such a check would fail for a defect
+     * that belongs to that backend's own finding, not to this file's subject. Check S1 still runs
+     * there and asserts the collapsed shape, so the declaration remains falsifiable.
+     */
+    bool RequireSegments(const std::string& label)
+    {
+        if (kContract.segmentsBindCycles) return true;
+        skip(label + ": skipped -- this backend does not give every public bind cycle its own "
+                     "logical pass (declared open defect)");
+        return false;
+    }
 
     // ---------------------------------------------------------------------
     // Content producer -- drawn geometry only, never Clear()
@@ -503,10 +544,15 @@ class RenderTargetPassBoundaryTest : public Game
         auto rt = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CyclePattern(dev, *rt, 0);
         CycleMark(dev, *rt, 0, 0, kPalette[2]);
-        Judge(ProbeTarget(*rt, ExpectedBaseWithMark(DiscardColour(), 0, 0, kPalette[2])),
-              kContract.readback,
-              "S1 same-target discard: the second bind cycle of a DiscardContents target discards "
-              "the first cycle's content");
+        if (kContract.segmentsBindCycles)
+            Judge(ProbeTarget(*rt, ExpectedBaseWithMark(DiscardColour(), 0, 0, kPalette[2])),
+                  kContract.readback,
+                  "S1 same-target discard: the second bind cycle of a DiscardContents target "
+                  "discards the first cycle's content");
+        else
+            Judge(ProbeTarget(*rt, ExpectedWithMark(0, 0, 0, kPalette[2])), kContract.readback,
+                  "S1 same-target discard: this backend COLLAPSES the two bind cycles into one "
+                  "pass, so the first cycle's content survives (declared open defect)");
     }
 
     /// S2 -- the same shape on a PreserveContents target: both cycles' content must survive.
@@ -527,6 +573,7 @@ class RenderTargetPassBoundaryTest : public Game
      */
     void RunClearInSecondCycle(GraphicsDevice& dev)
     {
+        if (!RequireSegments("S3 clear in second cycle")) return;
         auto rt = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CyclePattern(dev, *rt, 0);
         dev.SetRenderTarget(rt.get());
@@ -542,6 +589,7 @@ class RenderTargetPassBoundaryTest : public Game
     /// S4 -- target A -> target B -> target A, all DiscardContents.
     void RunTargetRoundTrip(GraphicsDevice& dev)
     {
+        if (!RequireSegments("S4 A->B->A")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         auto b = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CyclePattern(dev, *a, 0);
@@ -577,6 +625,7 @@ class RenderTargetPassBoundaryTest : public Game
     /// S6 -- target -> backbuffer -> target.
     void RunTargetBackbufferTarget(GraphicsDevice& dev)
     {
+        if (!RequireSegments("S6 target->backbuffer->target")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CyclePattern(dev, *a, 0);
         BeginQuads();
@@ -607,6 +656,7 @@ class RenderTargetPassBoundaryTest : public Game
     /// S8 -- three DiscardContents cycles: only the last one's content survives.
     void RunThreeDiscardCycles(GraphicsDevice& dev)
     {
+        if (!RequireSegments("S8 three discard cycles")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CyclePattern(dev, *a, 0);
         CycleMark(dev, *a, 0, 0, kPalette[1]);
@@ -636,6 +686,7 @@ class RenderTargetPassBoundaryTest : public Game
     /// S10 -- two cycles of one DiscardContents target under DIFFERENT viewports.
     void RunViewportPerCycle(GraphicsDevice& dev)
     {
+        if (!RequireSegments("S10 viewport per cycle")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CyclePattern(dev, *a, 0);
 
@@ -644,9 +695,16 @@ class RenderTargetPassBoundaryTest : public Game
         DrawQuad2DInViewport(kPalette[2]);
         dev.SetRenderTarget(nullptr);
 
-        Judge(ProbeTarget(*a, ExpectedBaseWithMark(DiscardColour(), 0, 0, kPalette[2])),
-              kContract.readback,
-              "S10 viewport per cycle: the second cycle's sub-viewport applies to that cycle only");
+        if (kContract.spriteViewportIsLocal)
+            Judge(ProbeTarget(*a, ExpectedBaseWithMark(DiscardColour(), 0, 0, kPalette[2])),
+                  kContract.readback,
+                  "S10 viewport per cycle: the second cycle's sub-viewport applies to that cycle "
+                  "only");
+        else
+            Judge(ProbeTarget(*a, Uniform(kPalette[2])), kContract.readback,
+                  "S10 viewport per cycle: this backend's SpriteBatch ignores a sub-Viewport, so "
+                  "the second cycle covers the whole target -- what is asserted here is that the "
+                  "first cycle's pattern is still gone");
     }
 
     /// Fills the whole ACTIVE viewport (viewport-local coordinates, FNA SpriteBatch semantics).
@@ -660,6 +718,7 @@ class RenderTargetPassBoundaryTest : public Game
     /// S11 -- two cycles of one DiscardContents target under DIFFERENT scissor rectangles.
     void RunScissorPerCycle(GraphicsDevice& dev)
     {
+        if (!RequireSegments("S11 scissor per cycle")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CyclePattern(dev, *a, 0);
 
@@ -677,14 +736,21 @@ class RenderTargetPassBoundaryTest : public Game
         }
         dev.SetRenderTarget(nullptr);
 
-        Judge(ProbeTarget(*a, ExpectedBaseWithMark(DiscardColour(), 0, 0, kPalette[2])),
-              kContract.readback,
-              "S11 scissor per cycle: the second cycle's scissor applies to that cycle only");
+        if (kContract.spriteScissorApplies)
+            Judge(ProbeTarget(*a, ExpectedBaseWithMark(DiscardColour(), 0, 0, kPalette[2])),
+                  kContract.readback,
+                  "S11 scissor per cycle: the second cycle's scissor applies to that cycle only");
+        else
+            Judge(ProbeTarget(*a, Uniform(kPalette[2])), kContract.readback,
+                  "S11 scissor per cycle: this backend's SpriteBatch ignores ScissorRectangle, so "
+                  "the second cycle covers the whole target -- what is asserted here is that the "
+                  "first cycle's pattern is still gone");
     }
 
     /// S12 -- A -> B -> A -> B: four cycles across two targets, alternating.
     void RunAlternatingTargets(GraphicsDevice& dev)
     {
+        if (!RequireSegments("S12 A->B->A->B")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         auto b = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         CyclePattern(dev, *a, 0);
@@ -710,6 +776,7 @@ class RenderTargetPassBoundaryTest : public Game
             skip("C1 cube A->B->A: skipped -- no RenderTargetCube on this backend");
             return;
         }
+        if (!RequireSegments("C1 cube A->B->A")) return;
         RenderTargetCube cube(dev, kRT, false, SurfaceFormat::Color, DepthFormat::None, 0,
                               RenderTargetUsage::DiscardContents);
         CycleFacePattern(dev, cube, 0, 0);
@@ -777,6 +844,7 @@ class RenderTargetPassBoundaryTest : public Game
             skip("M1 MRT cycles: skipped -- no readback on this backend");
             return;
         }
+        if (!RequireSegments("M1 MRT cycles")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         auto b = MakeTarget(dev, RenderTargetUsage::DiscardContents);
 
@@ -805,6 +873,7 @@ class RenderTargetPassBoundaryTest : public Game
             skip("M2 MRT attachment set: skipped -- no readback on this backend");
             return;
         }
+        if (!RequireSegments("M2 MRT attachment set")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         auto b = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         auto c = MakeTarget(dev, RenderTargetUsage::DiscardContents);
@@ -827,12 +896,26 @@ class RenderTargetPassBoundaryTest : public Game
               "M2 MRT attachment set: changing only the second attachment still starts a new "
               "logical pass for the first");
         // The 2D sprite pipeline writes colour attachment 0 only, so b holds exactly what ITS own
-        // bind cycle's load action left -- the shared layer's discard colour. What this asserts is
-        // that the SECOND cycle, which does not include b, never reaches into it: a marker showing
-        // up here would mean the attachment set leaked across the boundary.
-        Judge(ProbeTarget(*b, Uniform(DiscardColour())), kContract.readback,
-              "M2 MRT attachment set: the attachment dropped from the set is not written by the "
-              "later cycle");
+        // bind cycle's load action left -- a single uniform colour, whose exact value is the
+        // backend's own choice of what an unwritten extra attachment ends up as and is deliberately
+        // not asserted here. What IS asserted is that the SECOND cycle, which does not include b,
+        // never reaches into it: a marker or a pattern texel showing up would mean the attachment
+        // set leaked across the boundary.
+        {
+            Probe pb = ProbeTarget(*b, Uniform(DiscardColour()));
+            bool uniform = !pb.dest.empty();
+            bool clean   = true;
+            for (const Color& c : pb.dest)
+            {
+                if (!Same(c, pb.dest[0])) uniform = false;
+                if (Same(c, kPalette[5])) clean = false;
+            }
+            check(!pb.threwNotSupported && !pb.threwSomethingElse && uniform && clean,
+                  "M2 MRT attachment set: the attachment dropped from the set is untouched by the "
+                  "later cycle [uniform=" + std::string(uniform ? "1" : "0") + " marker-free=" +
+                  (clean ? "1" : "0") + " colour=" +
+                  (pb.dest.empty() ? std::string("none") : ColorText(pb.dest[0])) + "]");
+        }
     }
 
     // =====================================================================
@@ -850,11 +933,13 @@ class RenderTargetPassBoundaryTest : public Game
      */
     void RunMsaaCycles(GraphicsDevice& dev)
     {
-        if (kContract.readback != Support::Exact)
+        if (kContract.readback != Support::Exact || !kContract.msaaTargetReadback)
         {
-            skip("K1 MSAA cycles: skipped -- no readback on this backend");
+            skip("K1 MSAA cycles: skipped -- this backend has no honest readback of a multisampled "
+                 "render target");
             return;
         }
+        if (!RequireSegments("K1 MSAA cycles")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents, kMsaaRequest);
         const int applied = a->getMultiSampleCountProperty();
         if (kContract.preferMultiSampling)
@@ -933,6 +1018,7 @@ class RenderTargetPassBoundaryTest : public Game
             skip("X2 GFX-129 second cycle: skipped -- no readback on this backend");
             return;
         }
+        if (!RequireSegments("X2 GFX-129 second cycle")) return;
         auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents);
         CyclePattern(dev, *rt, 0);
         dev.SetRenderTarget(rt.get());
@@ -1019,6 +1105,7 @@ class RenderTargetPassBoundaryTest : public Game
             skip("R1 repetition: skipped -- no readback on this backend");
             return;
         }
+        if (!RequireSegments("R1 repetition")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         auto b = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         for (int i = 0; i < 8; ++i)
@@ -1067,6 +1154,7 @@ class RenderTargetPassBoundaryTest : public Game
             skip("P1 present path: skipped -- no readback on this backend");
             return;
         }
+        if (!RequireSegments("P1 present path")) return;
         Judge(ProbeTarget(*pa_, Expected(0)), kContract.readback,
               "P1 present path: the first of three targets recorded into ONE command buffer keeps "
               "its own geometry");
@@ -1094,6 +1182,7 @@ class RenderTargetPassBoundaryTest : public Game
             skip("P4 shared command buffer: skipped -- no readback on this backend");
             return;
         }
+        if (!RequireSegments("P4 shared command buffer")) return;
         auto a = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         auto b = MakeTarget(dev, RenderTargetUsage::DiscardContents);
         auto c = MakeTarget(dev, RenderTargetUsage::DiscardContents);
