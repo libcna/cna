@@ -14851,3 +14851,369 @@ stopped.
 - `docs(remediation): record GFX-143 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-144 — Vulkan swapchain-acquire synchronization hazard (DONE 2026-07-28)
+
+**Result: DONE — a real missing synchronization dependency (category A), fixed.** Not a false
+positive, not a WSI limitation, not a validation-layer artefact.
+
+### Reconciling the historical record with the current tree
+
+REMED-GFX-140 recorded **two** hazard classes, measured together (14 → 15 messages across that
+fix), and fixed neither. They are not one finding and must not be reported as one:
+
+| # | class | recorded by | status on the current tree |
+|---|---|---|---|
+| 1 | `READ_AFTER_WRITE` — a `LOAD_OP_LOAD` colour attachment read not synchronized against the layout transition the same `vkCmdBeginRenderPass` performs | REMED-GFX-140 | **RESOLVED before this task**, by REMED-GFX-143 |
+| 2 | `WRITE_AFTER_READ` — `vkCmdBeginRenderPass` versus `vkAcquireNextImageKHR` | REMED-GFX-140 | **this task's subject** |
+
+Class 1 was resolved incidentally: REMED-GFX-143's new backbuffer `LOAD` variants would have
+multiplied it 53 → 104, so rather than ship that it added the missing
+`VK_ACCESS_COLOR_ATTACHMENT_READ_BIT` to `deps[0].dstAccessMask` at all six render-pass creation
+sites. Its own record required the resolution to be **re-measured under this ticket rather than
+assumed closed**, and it is:
+
+| fixture | loadOp class, measured here, PRE-fix |
+|---|---|
+| `examples/backbuffer_pass_order_test.cpp` | **0** |
+| `examples/rendertarget_pass_boundary_test.cpp` | **0** |
+
+Confirmed resolved. **No production change for class 1 is made under GFX-144**; the access bit
+stays credited to REMED-GFX-143.
+
+Every remaining message on the current tree is one class, one message id, one shape. Grouped by
+exact resource, access, command and submission, all of them are:
+
+```
+Validation Error: [ SYNC-HAZARD-WRITE-AFTER-READ ] | MessageID = 0x376bc9df
+vkQueueSubmit(): WRITE_AFTER_READ hazard detected. vkCmdBeginRenderPass writes to resource,
+which was previously read by vkAcquireNextImageKHR (submitted on VkQueue ...).
+The current synchronization defines the destination stage mask as
+VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+but to prevent this hazard, it must include VK_PIPELINE_STAGE_2_NONE.
+Vulkan insight: an execution dependency is sufficient to prevent this hazard.
+[Extra properties]
+  message_type   = SubmitTimeError
+  hazard_type    = WRITE_AFTER_READ
+  prior_access   = SYNC_PRESENT_ENGINE_SYNCVAL_PRESENT_ACQUIRE_READ_SYNCVAL
+  read_barriers  = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
+  command        = vkCmdBeginRenderPass
+```
+
+Resource: the acquired swapchain image. Queue: the single graphics/present queue (llvmpipe).
+Command buffer: the frame slot's primary buffer — the layer's *"from the secondary
+VkCommandBuffer"* wording is a message-formatting quirk of layer 1.4.309, this backend allocates
+`VK_COMMAND_BUFFER_LEVEL_PRIMARY` at all three of its allocation sites and executes no secondaries.
+Frequency: **exactly one per acquired frame**, on the FIRST backbuffer pass of the submission; later
+backbuffer segments in the same command buffer are already ordered behind it.
+
+Counts are only meaningful with the layer's ten-repeat cap lifted
+(`enable_message_limit = false`). With the default cap the same run reports 10, which is how a
+count can silently become a floor.
+
+### Root cause
+
+`SubmitFrame` waits the acquire semaphore with
+
+```cpp
+VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+```
+
+A semaphore wait blocks the stages named in `pWaitDstStageMask` and every LATER stage of every
+command in the batch — and nothing earlier. That is exactly what `read_barriers` reports:
+`COLOR_ATTACHMENT_OUTPUT|BOTTOM_OF_PIPE`.
+
+The first thing the batch does to the acquired image is `vkCmdBeginRenderPass`, whose automatic
+`initialLayout` transition is a **write**. A layout transition is not the stage of a command; it is
+ordered solely by the render pass's `VK_SUBPASS_EXTERNAL → 0` dependency, happening after the
+availability operations of that dependency's FIRST synchronization scope (`srcStageMask`) and
+before the visibility operations of its second (`dstStageMask`).
+
+That first scope was
+
+```cpp
+deps[0].srcStageMask = FRAGMENT_SHADER | EARLY_FRAGMENT_TESTS | LATE_FRAGMENT_TESTS;
+deps[0].dstStageMask = COLOR_ATTACHMENT_OUTPUT | EARLY_FRAGMENT_TESTS;
+```
+
+**Every stage in it precedes `COLOR_ATTACHMENT_OUTPUT` in pipeline order**, while `dstStageMask`
+demanded the transition complete before `EARLY_FRAGMENT_TESTS` — a stage the wait does not block.
+So the transition was free to execute before the acquire semaphore signalled, writing an image the
+presentation engine had not finished reading. Category **A**, a real missing dependency: the
+semaphore itself is correct, its *destination stage* simply did not reach the write.
+
+The fix adds `VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT` to that first scope, placing the
+transition at precisely the stage the wait blocks. `srcAccessMask` is untouched — the layer's own
+"an execution dependency is sufficient" is correct for a WRITE_AFTER_READ.
+
+Candidates B–I were considered and rejected on evidence: semaphore and fence lifetimes are correct
+(below), no swapchain image is reused before reacquisition, no command buffer or frame slot is
+reused while pending, no barrier is missing an access bit for this hazard, recreation lifetime is
+sound, and the message is not a false positive — the required ordering genuinely was absent at the
+spec level, independently of the tool.
+
+### Attribution: which sites matter
+
+Measured, by patching only the three swapchain sites and rebuilding:
+
+| sites patched | `backbuffer_pass_order` | `rendertarget_pass_boundary` |
+|---|---|---|
+| none (baseline) | 27 | 5 |
+| the three SWAPCHAIN passes only | **0** | **0** |
+| all six | **0** | **0** |
+
+The three swapchain sites (`CreateRenderPass`, `CreateRenderPassMsaa`,
+`GetOrCreateSwapchainRenderPass`) are what clears the hazard; the three render-target sites
+(`GetOrCreateRTRenderPass`, `GetOrCreateRTRenderPassMsaa`, `GetOrCreateMRTRenderPass`) never touch
+a swapchain image and cannot have it. The bit is nonetheless added to all six, so the
+byte-identical dependency masks Task 905 established from live validation errors stay identical —
+the same choice REMED-GFX-143 made for `COLOR_ATTACHMENT_READ`. Widening a dependency's FIRST
+synchronization scope only ever adds ordering, so it cannot introduce a hazard on a pass that did
+not have one. (`GetOrCreateMRTRenderPass` was already not byte-identical: its src scope is
+`FRAGMENT_SHADER|TRANSFER`. Recorded, not changed beyond the added bit.)
+
+### Validation, before and after
+
+Khronos validation layer 1.4.309.0, layer proved loaded, llvmpipe, `validate_sync = true`,
+`syncval_submit_time_validation = true`, `enable_message_limit = false`, display `:101`:
+
+| fixture | class | pre → post |
+|---|---|---|
+| `examples/backbuffer_pass_order_test.cpp` | acquire WRITE_AFTER_READ | **27 → 0** |
+| `examples/rendertarget_pass_boundary_test.cpp` | acquire WRITE_AFTER_READ | **5 → 0** |
+| `examples/vulkan_swapchain_sync_test.cpp` | acquire WRITE_AFTER_READ | **28 → 0** |
+| all three | loadOp READ_AFTER_WRITE | **0 → 0** (already resolved by GFX-143) |
+| all three | VUIDs, generic validation errors, warnings | **0 → 0** |
+
+Loader-only informational output (`Insert instance layer "VK_LAYER_KHRONOS_validation"`) is what
+proves the layer loaded and is not counted as a message. SdlGpu, unchanged production, same
+settings: **0 → 0**.
+
+The 28 pre-fix hazards in the new fixture are exactly its 28 acquired frames — one per frame,
+across ordinary frames, a readback frame, interleaved frames and post-recreation frames.
+
+### The frame-in-flight and image-ownership model
+
+Documented precisely, and asserted by the new test rather than described:
+
+| | |
+|---|---|
+| frame slots (`MaxFramesInFlight`) | **2**, compile-time constant |
+| swapchain images | **4** on llvmpipe here; read at runtime, never assumed |
+| per frame slot | one `imageAvailableSemaphores_`, one `renderFinishedSemaphores_`, one `inFlightFences_`, one primary command buffer |
+| per swapchain image | one `VkImageView` and one `VkFramebuffer`; **no** per-image fence or semaphore |
+| frame index vs image index | independent: `currentFrame_` advances modulo 2 after each present, `imageIndex` is whatever the acquire returns |
+| fence wait | once at the top of `SubmitFrame`, on THIS slot's fence, before anything else |
+| fence reset | after a successful acquire, exactly once, immediately before the record |
+| command buffer reset | `vkResetCommandBuffer` after that fence wait, so the buffer is provably not pending |
+| image reusable | when the presentation engine hands it back through an acquire |
+
+**Is image-in-flight tracking required?** No, and the reason is structural rather than incidental.
+An image can only be re-acquired after it has been presented, and its present waits on the
+`renderFinished` semaphore signalled by the submission that rendered it, so that submission has
+completed before the image can come back. A frame-slot fence is therefore never being asked to
+stand in for ownership of an arbitrary image — the acquire already carries that guarantee. Adding
+an `imagesInFlight_` array would be redundant state, not a fix, so none is added. What the model
+DOES depend on is that the frame-slot fence guards the slot's own command buffer and per-frame
+arenas, which it does.
+
+The test asserts the parts that could silently stop being true: **both** frame slots used, **all
+four** distinct swapchain image indices acquired, and the counts unchanged across a recreation.
+
+### Acquire semaphore, present semaphore, fences
+
+* The submission that uses the acquired image waits `imageAvailableSemaphores_[currentFrame_]` —
+  the exact semaphore that acquire signalled, in the same iteration.
+* It cannot be reused while signalled or pending: the slot's fence wait at the top of `SubmitFrame`
+  proves the previous submission that consumed it has completed.
+* Its destination stage now covers the earliest actual access to the image — the render pass's
+  layout transition — which is the whole of this fix.
+* No command touches the image before that wait. Off-screen render-target segments recorded earlier
+  in the same command buffer touch only their own attachments, and no acquire wait is added to
+  anything on their account.
+* Several backbuffer segments in one command buffer stay covered by the one acquire dependency: the
+  first pass's transition is now ordered after the semaphore, and REMED-GFX-143's explicit
+  `vkCmdPipelineBarrier` orders each later segment behind the previous one.
+* `renderFinishedSemaphores_[currentFrame_]` is signalled by that same submission and waited by
+  `vkQueuePresentKHR`; `FinishDeferredPresent` uses the same slot's semaphore, because
+  `SubmitFrame(true)` returns before advancing `currentFrame_`.
+* A failed acquire cannot strand a fence: `VK_ERROR_OUT_OF_DATE_KHR` returns **before**
+  `vkResetFences`, so the slot's fence is left signalled and the next attempt proceeds normally.
+  `VK_SUBOPTIMAL_KHR` is a success code and is treated as one, which is correct — the semaphore
+  IS signalled in that case.
+* The architecture keeps `graphicsQueue_` and `presentQueue_` separate handles and does not assume
+  they are the same, even though llvmpipe resolves them to one queue here.
+
+### Swapchain recreation
+
+Driven for real in the regression through `GraphicsDeviceManager::ApplyChanges()` at 64×64 → 128×128,
+and reached naturally twice more during start-up: the run records **2 → 3** recreations across the
+resize alone. `RecreateSwapchain` performs one bounded `vkDeviceWaitIdle` at the moment of
+destruction — permitted, and the only device-wide wait in the backend; there is none on an ordinary
+frame. Old views and framebuffers are destroyed only inside that wait. Frame-slot semaphores,
+fences and command buffers are deliberately **not** recreated: they are indexed by frame slot and
+never by image, so their count is fixed for the backend's lifetime and no resizing of per-image
+tracking is required. The observed-image record is reset with the new swapchain, since an index
+that was unreachable before may now be acquired; the test re-verifies image variety afterwards.
+Rendering after recreation is asserted byte-exact at the new size.
+
+### Resource cardinality
+
+Measured over a 28-frame run with three readbacks and a live resize:
+
+| object | count | grows per frame? | grows per recreation? |
+|---|---|---|---|
+| frame fences | 2 | no | no |
+| image-available semaphores | 2 | no | no |
+| render-finished semaphores | 2 | no | no |
+| frame command buffers | 2 | no | no |
+| command pools | 1 | no | no |
+| image-in-flight entries | 0 (none needed, above) | — | — |
+| swapchain images / views / framebuffers | 4 each | no | replaced 1:1, old set released exactly once inside the recreation's device wait |
+| permanent render-pass objects | unchanged by this fix (no new variant, no new pipeline) | no | no |
+
+Check `D1` asserts the four frame-slot counts are identical to the values read before the first
+frame — after every frame, every readback and every recreation.
+
+### Performance
+
+Per rendered frame, before and after, identical:
+
+| | count |
+|---|---|
+| `vkAcquireNextImageKHR` | 1 |
+| frame `vkQueueSubmit` | 1 |
+| `vkQueuePresentKHR` | 1 |
+| frame fence waits | 1, plus 1 more only on a frame that serves a deferred `GetBackBufferData` |
+| new CPU waits | none |
+| new semaphore/fence allocations | none |
+| frames in flight | 2, unchanged |
+
+Measured on the 28-frame run: acquire 28, submit 28, present 28, fence waits 31 = 28 + 3 readbacks.
+The fix is one extra bit in a subpass dependency's first synchronization scope; it adds no
+submission, no barrier command, no pipeline and no object. Nothing is serialized: off-screen work
+recorded before the first backbuffer segment is still unblocked by the acquire.
+
+### The regression, and why it cannot go green by losing its measurement
+
+`examples/vulkan_swapchain_sync_test.cpp`, 25 checks, registered as `Vulkan_Swapchain_Sync`.
+**21/25 pre-fix → 25/25 post-fix**, with the four red checks being precisely the four hazard
+classifications. Three independent kinds of assertion, because each alone is a false positive
+waiting to happen:
+
+1. **Classified validation.** Synchronization validation is requested IN PROCESS through
+   `VkValidationFeaturesEXT`, so the check cannot degrade because a runner dropped an environment
+   variable. `VK_EXT_layer_settings` — queried from the layer, not assumed, because requesting an
+   absent instance extension fails `vkCreateInstance` — lifts the ten-repeat cap so counts are
+   real. Messages are classified by `pMessageIdName` (`SYNC-HAZARD-WRITE-AFTER-READ`), never by
+   matching one diagnostic sentence, with `"hazard detected"` as a fallback so a layer that omits
+   the id name cannot reclassify a hazard into the "other" bucket. Check `L1` asserts the layer is
+   actually loaded, so a zero count is a measurement rather than an absence of one.
+2. **The frame model.** `A2` every frame slot used, `A3`/`C3` more than one distinct swapchain image
+   index acquired (4 of 4 observed), `A4`/`D3` one acquire = one submit = one present, `A5`/`D4`
+   bounded fence waits, `C2` the resize really recreated the swapchain, `D1` no per-frame object
+   growth.
+3. **Exact pixels.** `A7` after the plain run, `B1` on REMED-GFX-143's interleaving, `C1` after the
+   recreation — full-height vertical stripes from a 0/255-only palette, byte-exact.
+
+One trap is recorded in the source because it silently defeats the whole file:
+`SetSyncValidationEnabledEXT` must be called **before the Game is constructed**. The backend creates
+its `VkInstance` during construction, well before `Initialize()` runs; calling it from `Initialize()`
+produces an instance without synchronization validation and every hazard check then passes for the
+wrong reason. That was measured, not guessed — it is why `L1` exists as a separate check.
+
+### False-positive test audit
+
+Scope: the directly relevant Vulkan synchronization and validation tests, not a repository-wide
+sweep. Of the 169 sources registered for Vulkan, the ones making a validation or
+synchronization claim were examined; **two were false-positive-capable and both were strengthened**.
+
+| file | finding | action |
+|---|---|---|
+| `tests/.../IndexedDrawDeferredTests.cpp` | the repository's ONLY pre-existing test that makes a Vulkan validation message fatal (REMED-GFX-112). Asserts the message list did not grow — but a missing layer clears `sEnableValidation`, installs no messenger and leaves that list empty forever, so every assertion passes vacuously. Enables standard validation only, so this whole class was invisible to it | **strengthened** — asserts `IsValidationActiveEXT()` first, so a missing layer fails loudly; records why it deliberately keeps standard validation and names the file that enforces the synchronization claim |
+| `examples/vulkan_rtcube_test.cpp` | claimed a blue centre pixel *"proves the 6 cube-face passes completed cleanly and did not corrupt the backbuffer colour"* — one frame, one readback, one pixel, standard validation only, and a ±50 tolerance band. It reported a clean pass throughout the entire life of this hazard, re-measured | **corrected and tightened** — the claim now says what it really measures (attachment routing), and the judgement is byte-exact `(0,0,255)`, an exact fixed point of sRGB. Measured at exactly `(0,0,255)` before and after, so the tightening is not a guess |
+| `examples/backbuffer_pass_order_test.cpp`, `examples/rendertarget_pass_boundary_test.cpp` | two frames, no synchronization validation, no resize — but they are ORDERING oracles and claim nothing about synchronization | not false-positive-capable for this finding; used unchanged as the pre/post measurement fixtures |
+
+### Validation matrix and regression gates
+
+| run | result |
+|---|---|
+| standard Vulkan validation, whole battery | **clean, 0 messages** |
+| synchronization validation, three fixtures | **0 hazards** (27/5/28 → 0/0/0) |
+| `Vulkan_Swapchain_Sync` (this task) | **25/25** |
+| REMED-GFX-140 segmentation oracle | **44/44** |
+| REMED-GFX-143 backbuffer interleaving | **29/29** |
+| REMED-GFX-136 `Vulkan_RenderTarget_Usage` | Passed |
+| REMED-GFX-134 cube readback / `Vulkan_RenderTargetCube_*` (8 tests) | all Passed |
+| REMED-GFX-093 / 095 / 096 / 112 gates | Passed (image transitions, MRT+MSAA, target/cube binding, index-arena alignment) |
+| resize / recreation | `C1`/`C2` green; `Vulkan_Viewport_ResetAfterResize` Passed |
+| `ctest -R '^Vulkan'` | **169/170** |
+| ASan, three fixtures (`cmake-build-vulkan-asan`) | 25/25, 29/29, 44/44 — **0 reports**, runtime proved linked |
+| UBSan, three fixtures (`cmake-build-vulkan-ubsan`) | 25/25, 29/29, 44/44 — **0 reports**, runtime proved linked |
+
+The single `ctest` miss is `Vulkan_DepthBias`, A/B-re-proven pre-existing: **3/4 → 3/4 with the same
+failing check** (`DepthBias=-1e6 (flat)`), pre-recorded by REMED-GFX-140 and unrelated to
+synchronization. **REMED-GFX-129 was not begun and is unchanged.**
+
+### Cross-backend controls
+
+Only Vulkan production changed. The one shared file touched
+(`tests/.../IndexedDrawDeferredTests.cpp`, inside `#ifdef CNA_BACKEND_VULKAN`) was compiled and run
+elsewhere to prove nothing shared moved:
+
+| backend | `IndexedDrawDeferred*` | `backbuffer_pass_order` | `rendertarget_pass_boundary` |
+|---|---|---|---|
+| VULKAN | 19/19 | 29/29 | 44/44 |
+| EASYGL | 17/17 | 29/29 | 43/43 |
+| SOFTWARE | 16/16 | 28/28 | 40/40 |
+| SDL_GPU | 4/4 | 29/29 | 39/39 |
+| HEADLESS | 3/3 | 29/29 | 30/30 |
+
+SdlGpu additionally re-measured under synchronization validation: **0 hazards**, unchanged.
+**All fourteen backend graphics libraries compile incrementally**: ASCII, BGFX, CANVAS, D3D9,
+D3D11, D3D12, DX3, EASYGL, HEADLESS, SDL_GPU, SDL_RENDERER, SOFTWARE, VULKAN, WEBGPU.
+
+### Independent findings recorded, not fixed
+
+* The Khronos layer's message text says *"from the secondary VkCommandBuffer"* for a command in a
+  PRIMARY buffer (layer 1.4.309.0) — a layer-side wording artefact, noted so a future reader does
+  not go hunting for secondaries this backend does not use.
+* The same layer renders the required stage as `VK_PIPELINE_STAGE_2_NONE`, which no stage mask can
+  literally "include". It is the present engine's pseudo-stage leaking into a message template; the
+  actionable content is `prior_access` and `read_barriers`, not that sentence — which is exactly why
+  the regression classifies on `pMessageIdName` instead.
+* `GetOrCreateMRTRenderPass`'s entry dependency was already NOT byte-identical to the other five
+  (`FRAGMENT_SHADER|TRANSFER` rather than the fragment/depth set), so Task 905's stated invariant
+  was already partial before this task. Left as found apart from the added bit.
+
+### Build directories, environment and thermals
+
+| directory | reused or new | ccache |
+|---|---|---|
+| `cmake-build-vulkan` | reused | `CNA_USE_CCACHE=ON`, `CMAKE_CXX_COMPILER_LAUNCHER=ccache` |
+| `cmake-build-vulkan-asan` | reused | ON |
+| `cmake-build-vulkan-ubsan` | reused | ON |
+| `cmake-build-{ascii,bgfx,canvas,d3d9-mingw,d3d11-mingw,d3d12-mingw,debug,dx3,headless,sdlgpu,sdlrenderer,software,webgpu}` | reused | ON |
+
+No build directory was created, cleaned, deleted or recreated; no clean build occurred; no build
+tree was created under `/tmp`, `/var/tmp` or `/dev/shm`. The three Vulkan directories needed an
+incremental `cmake -S . -B <dir>` reconfigure only to register the new test target — the caches were
+preserved, not regenerated. Maximum build parallelism **-j2** throughout. Scratchpad held only
+logs, the layer settings file and source snapshots for the A/B runs.
+
+Display `:101` (Xvfb, already running, shared — not stopped, not restarted); `:0` was not used for
+any measurement and `:99` was not needed. Thermals: start **40.0 °C** package, observed peak
+**82.8 °C** after the first fixture battery, at which point builds were paused until the package
+returned to **58.6 °C**; the rest of the campaign ran at 66–73 °C. Parallelism was never raised
+above two jobs and never needed to be reduced below it.
+
+### Commits
+
+- `981d202b test(Task REMED-GFX-144): reproduce Vulkan acquire synchronization hazard`
+- `a4fca65f fix(Task REMED-GFX-144): correct Vulkan swapchain synchronization`
+- `da94e768 test(Task REMED-GFX-144): strengthen false positives found by the audit`
+- `docs(remediation): record GFX-144 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
