@@ -152,10 +152,14 @@ namespace
         bool    backbufferDepthOnlyClear;
         /// The backbuffer has a real depth buffer, so the depth-ordering checks mean something.
         bool    backbufferDepth;
-        /// A SpriteBatch fill honours a custom sub-Viewport (sprite coordinates viewport-local).
-        bool    spriteViewportIsLocal;
-        /// A SpriteBatch fill honours GraphicsDevice.ScissorRectangle.
-        bool    spriteScissorApplies;
+        /**
+         * A SpriteBatch fill on the BACKBUFFER honours a custom sub-Viewport, i.e. sprite
+         * coordinates are viewport-local. Declared separately from the render-target answer
+         * REMED-GFX-140 measures: a backend can honour one and not the other.
+         */
+        bool    backbufferSpriteViewportIsLocal;
+        /// A SpriteBatch fill on the BACKBUFFER honours GraphicsDevice.ScissorRectangle.
+        bool    backbufferSpriteScissorApplies;
         /// 3D draws (BasicEffect over VertexPositionColor) rasterize here.
         bool    draws3D;
         bool    wantHiDefProfile;  ///< Request GraphicsProfile::HiDef.
@@ -173,8 +177,13 @@ namespace
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
+    // `mixedQueuesKeepPublicOrder` false: measured. bgfx has the same shape as Vulkan -- sprites
+    // and 3D draws live in separate queues and every view replays one family after the other -- so
+    // within ONE bind cycle a 3D draw issued before a sprite still lands on top of it. Recorded as
+    // an independent finding by REMED-GFX-143, distinct from segment boundaries: every other check
+    // in this file passes here, so bgfx already interleaves backbuffer and target work correctly.
     constexpr Contract kContract{"BGFX", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, false, true, true, false};
+                                 true, true, false, true, true, true, false, true, true, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // REMED-GFX-143's primary subject. `orderedBackbufferSegments` was false until this task:
     // Phase 2 of RecordCommandBuffer was one trailing swapchain pass passed `kAllSegments`.
@@ -187,8 +196,14 @@ namespace
     constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
                                  true, true, false, false, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
+    // `clearAfterDrawWinsOnBackbuffer` false: WebGPU delivers a backbuffer clear colour only
+    // through the render-pass load op, the same mechanism REMED-GFX-140 records for its render
+    // targets, so a Clear() after a draw inside ONE cycle cannot wipe that draw.
+    // `backbufferSpriteScissorApplies` false: a measured, pre-existing WebGPU gap recorded as an
+    // independent finding by REMED-GFX-143 -- its RENDER-TARGET scissor works (GFX-140's S11
+    // passes), but a backbuffer SpriteBatch fill is not clipped by ScissorRectangle at all.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, true, true, true, true, true, false};
+                                 true, true, true, false, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override, so `GetBackBufferData` raises and this file's
     // backbuffer oracle cannot run here at all. REMED-GFX-143's SdlGpu half is measured
@@ -198,16 +213,16 @@ namespace
                                  true, true, true, false, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, false, true, false, false, false};
+                                 false, true, true, true, true, false, false, true, false, false};
 #elif defined(CNA_BACKEND_ASCII)
     constexpr Contract kContract{"ASCII", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, false, true, false, false, false};
+                                 false, true, true, true, true, false, false, true, false, false};
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", Support::Exact, true, Support::Exact,
                                  false, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_DX3)
     constexpr Contract kContract{"DX3", Support::Exact, true, Support::Exact,
-                                 false, true, true, true, true, false, false, true, false, false};
+                                 false, true, true, true, true, false, false, false, false, false};
 #elif defined(CNA_BACKEND_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, true};
@@ -412,8 +427,11 @@ class BackbufferPassOrderTest : public Game
     {
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.setBlendStateProperty(BlendState::Opaque);
-        dev.SetDepthTestEnabled(depth);
-        dev.SetDepthWriteEnabled(depth);
+        // DepthStencilState, not the NOXNA SetDepthTestEnabled/SetDepthWriteEnabled pair: bgfx
+        // raises outright from those ("not yet wired into bgfx state flags"), and this is the XNA
+        // route anyway. Default = test and write enabled, None = neither.
+        DepthStencilState ds = depth ? DepthStencilState::Default : DepthStencilState::None;
+        dev.setDepthStencilStateProperty(ds);
         fx_->Apply();
     }
 
@@ -995,7 +1013,7 @@ class BackbufferPassOrderTest : public Game
 
         if (!CanJudgeBackbuffer(label)) return;
         if (!CanJudgeOrder(label)) return;
-        if (kContract.spriteViewportIsLocal)
+        if (kContract.backbufferSpriteViewportIsLocal)
         {
             // Stripe 0's left half is the third cycle's blue, its right half the first cycle's
             // red; probe positions inside stripe 0 straddle that split, so assert it directly.
@@ -1020,7 +1038,7 @@ class BackbufferPassOrderTest : public Game
     void RunScissorPerCycle(GraphicsDevice& dev)
     {
         const std::string label = "V2 scissor per cycle";
-        if (!kContract.spriteScissorApplies)
+        if (!kContract.backbufferSpriteScissorApplies)
         {
             skip(label + ": skipped -- this backend's SpriteBatch ignores ScissorRectangle");
             return;
@@ -1264,23 +1282,29 @@ protected:
         white_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
             dev, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255}));
 
-        fx_ = std::make_unique<BasicEffect>(dev);
-        fx_->VertexColorEnabled = true;
-        fx_->setWorldProperty(Matrix::getIdentityProperty());
-        fx_->setViewProperty(Matrix::getIdentityProperty());
-        fx_->setProjectionProperty(Matrix::getIdentityProperty());
-
-        for (int s = 0; s < kStripes; ++s)
+        // A 2D-only backend raises from VertexBuffer's constructor outright ("SDL_Renderer does not
+        // support 3D: CreateVertexBuffer"), so the 3D resources are built only where the contract
+        // says 3D rasterizes at all. Every check that touches them is gated on the same flag.
+        if (kContract.draws3D)
         {
-            const float x0 = -1.0f + static_cast<float>(s) * (2.0f / kStripes);
-            const float x1 = x0 + (2.0f / kStripes);
-            nearStripeVb_[static_cast<std::size_t>(s)] =
-                MakeVb(dev, Quad(x0, x1, 0.3f, kGreen));
-            farStripeVb_[static_cast<std::size_t>(s)] =
-                MakeVb(dev, Quad(x0, x1, 0.7f, kCyan));
+            fx_ = std::make_unique<BasicEffect>(dev);
+            fx_->VertexColorEnabled = true;
+            fx_->setWorldProperty(Matrix::getIdentityProperty());
+            fx_->setViewProperty(Matrix::getIdentityProperty());
+            fx_->setProjectionProperty(Matrix::getIdentityProperty());
+
+            for (int s = 0; s < kStripes; ++s)
+            {
+                const float x0 = -1.0f + static_cast<float>(s) * (2.0f / kStripes);
+                const float x1 = x0 + (2.0f / kStripes);
+                nearStripeVb_[static_cast<std::size_t>(s)] =
+                    MakeVb(dev, Quad(x0, x1, 0.3f, kGreen));
+                farStripeVb_[static_cast<std::size_t>(s)] =
+                    MakeVb(dev, Quad(x0, x1, 0.7f, kCyan));
+            }
+            nearFullVb_ = MakeVb(dev, Quad(-1.0f, 1.0f, 0.3f, kGreen));
+            farFullVb_  = MakeVb(dev, Quad(-1.0f, 1.0f, 0.7f, kCyan));
         }
-        nearFullVb_ = MakeVb(dev, Quad(-1.0f, 1.0f, 0.3f, kGreen));
-        farFullVb_  = MakeVb(dev, Quad(-1.0f, 1.0f, 0.7f, kCyan));
     }
 
     void Draw(const GameTime&) override
