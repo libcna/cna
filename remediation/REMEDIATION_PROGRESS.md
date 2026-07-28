@@ -2465,7 +2465,7 @@ existing task.
 | REMED-GFX-113 | Bgfx non-indexed draws bind the whole bound vertex buffer, ignoring the public `vertexStart` and `primitiveCount` for every topology. | MEDIUM | P2 | REMED-GFX-111 count verification | **DONE 2026-07-27 — `DrawPrimitivesEx` NOW BINDS THE EXACT `[vertexStart, vertexStart + PrimitiveVerts)` ELEMENT RANGE; `GraphicsDevice::DrawPrimitives` GAINED THE MATCHING 64-BIT PUBLIC GUARD; ALL FIVE TOPOLOGIES, STATIC/DYNAMIC, A→B→A, TARGETS, CARDINALITY, BOTH RENDERER ROUTES, SANITIZERS AND EIGHT CROSS-BACKEND CONTROLS PASS.** |
 | REMED-GFX-114 | Vulkan, D3D9, D3D11 and D3D12 route `PointListEXT` through their triangle-list default and count zero vertices for it. | MEDIUM | P2 | REMED-GFX-111 cross-backend controls | **OPEN — SAME DEFECT CLASS AS REMED-GFX-111 IN FOUR OTHER BACKENDS; 0/13 MEASURED ON VULKAN, D3D11 AND D3D9.** |
 | REMED-GFX-115 | Bgfx Vulkan point pipelines emit `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because the SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-111 validation inspection | **OPEN — SHADER-DECLARATION GAP IN 15 BGFX 3D VERTEX SHADERS; PIXELS CORRECT ON THE TESTED DRIVER, SIZE FORMALLY UNDEFINED.** |
-| REMED-GFX-116 | WebGPU's deferred 3D render pass resolves `GraphicsDevice.Viewport` live at flush time instead of capturing it per queued draw. | MEDIUM | P2 | REMED-GFX-111 viewport control | **OPEN — SAME CLASS AS REMED-GFX-062/063/064/065; THE SPRITEBATCH PATH WAS FIXED UNDER REMED-GFX-072, THE 3D PATH WAS NOT.** |
+| REMED-GFX-116 | WebGPU's deferred draws resolved `GraphicsDevice.Viewport` live at flush time instead of capturing it per queued draw. | MEDIUM | P2 | REMED-GFX-111 viewport control | **DONE 2026-07-28** — all ten 3D command structs plus the SpriteBatch full-target case now carry the complete Viewport by value; see the REMED-GFX-116 section. |
 | REMED-GFX-117 | SDL_GPU passes literal `0` for `first_index`/`vertex_offset` at all eight native indexed draw sites, dropping public `startIndex`/`baseVertex`. | MEDIUM | P2 | REMED-GFX-111 SDL_GPU control | **DONE 2026-07-27 — ALL EIGHT SITES NOW RESOLVE `first_index = startIndex` (INDEX ELEMENTS) AND `vertex_offset = baseVertex` (APPLIED ONCE) THROUGH ONE SHARED `ResolveIndexedRange`, CARRIED BY VALUE ON EACH DEFERRED DRAW COMMAND; 16-/32-BIT, STATIC/DYNAMIC, ALL FIVE TOPOLOGIES, ALL EIGHT PIPELINE FAMILIES, DRAWUSER, A→B→A, TARGETS, STATE, INVALID-RANGE REJECTION, SANITIZERS, CLEAN VALIDATION AND EIGHT CROSS-BACKEND CONTROLS PASS.** |
 | REMED-GFX-118 | Bgfx `DrawInstancedPrimitivesEx` binds complete vertex and index buffers, dropping public `baseVertex`, `startIndex` and the topology-derived index count. | MEDIUM | P2 | REMED-GFX-113 draw-path inventory | **DONE 2026-07-27 — THE INSTANCED PATH NOW BINDS `setIndexBuffer(handle, startIndex, PrimitiveVerts)` AND `setVertexBuffer(0, handle, baseVertex, remainder)`, THE SAME EXACT-RANGE MODEL REMED-GFX-107 ESTABLISHED; `GraphicsDevice::DrawInstancedPrimitives` GAINED THE MATCHING 64-BIT PUBLIC GUARD PLUS AN INSTANCE-STREAM CAPACITY CHECK; 16-/32-BIT, STATIC/DYNAMIC, EVERY MAPPED TOPOLOGY, A→B→A, TARGETS, STATE, CARDINALITY, BOTH RENDERER ROUTES, SANITIZERS AND FIVE CROSS-BACKEND CONTROLS PASS.** |
 | REMED-GFX-119 | Software's non-indexed raster paths never apply `vertexStart`; they read from element zero and only enforce `primitiveCount` against the buffer size. | MEDIUM | P2 | REMED-GFX-113 cross-backend controls | **DONE 2026-07-27 — `DrawPrimitivesEx` NOW FETCHES VERTEX `vertexStart + local` FOR `local` IN `[0, PrimitiveElementCount)`, WITH `vertexStart` A VERTEX-ELEMENT OFFSET AND THE STRIDE MULTIPLY ONLY AFTER VALIDATION; BOTH NON-INDEXED CPU PATHS SHARE ONE 64-BIT `ValidateNonIndexedAddressing` THAT REJECTS RATHER THAN CLAMPS BEFORE ANY STORAGE ACCESS; `primitiveCount` WAS MEASURED ALREADY CORRECT AND ONLY THE OFFSET WAS LOST; DRAWUSER PRESERVED AS THE ORACLE; THREE STRIDES, STATIC/DYNAMIC, TWO-BUFFER A→B→A, VALID→INVALID→VALID, TOPOLOGY REJECTION, SANITIZERS AND NINE CROSS-BACKEND CONTROLS PASS.** |
@@ -10121,9 +10121,10 @@ cause with its own defect class.
   `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because the SPIR-V vertex shaders write no
   `PointSize`. Needs `gl_PointSize` under `BGFX_SHADER_LANGUAGE_SPIRV` in 15 vertex shaders plus
   `bgfx_shaders.hpp` regeneration.
-- **REMED-GFX-116** — WebGPU's deferred 3D render pass resolves `GraphicsDevice.Viewport` from live
+- **REMED-GFX-116** — WebGPU's deferred render passes resolved `GraphicsDevice.Viewport` from live
   backend state once per pass instead of capturing it per queued draw (its SpriteBatch path was
-  fixed under REMED-GFX-072; the 3D path was not). Same class as REMED-GFX-062/063/064/065.
+  only partly fixed under REMED-GFX-072; the 3D path was not at all). Same class as
+  REMED-GFX-062/063/064/065. **Closed 2026-07-28** — see the REMED-GFX-116 section.
 - **REMED-GFX-117** — SDL_GPU passes literal `0` for `first_index` and `vertex_offset` at all eight
   `SDL_DrawGPUIndexedPrimitives` sites, dropping public `startIndex`/`baseVertex`. The SDL_GPU
   counterpart of REMED-GFX-020/060/107.
@@ -16188,3 +16189,256 @@ prove the Wine "No displays available" failure was not specific to `:99`, and wa
 
 No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
 untouched.
+
+---
+
+## REMED-GFX-116 — the deferred WebGPU Viewport (2026-07-28)
+
+REMED-GFX-111's sub-viewport control read the backbuffer **before** restoring the Viewport, and that
+one ordering change exposed this: WebGPU's deferred render passes did not carry a Viewport at all.
+
+### Classification — two omissions in one mechanism, not one
+
+This backend records **one native render pass per bind cycle**, in three places:
+`EnsureFrameRendered()` (backbuffer), `RenderPendingDrawsToRenderTarget()` (RenderTarget2D) and
+`RenderPendingDrawsToRenderTargetCubeFace()` (one cube face). Each of the three issued **exactly one**
+`wgpuRenderPassEncoderSetViewport` at the top of its pass, computed from the live backend members
+`viewportSet_` / `viewportX_` / `viewportY_` / `viewportW_` / `viewportH_` / `viewportMinDepth_` /
+`viewportMaxDepth_`. Deferring the *recording* is legal; *resolving* the value at record time is not.
+
+| Candidate cause | Verdict |
+|---|---|
+| Queued commands contain no viewport field | **Yes — all ten 3D draw-command structs.** `ColoredDrawCommand`, `TexturedDrawCommand`, `LitTexturedDrawCommand`, `AlphaTestDrawCommand`, `DualTextureDrawCommand`, `EnvMapDrawCommand`, `InstancedDrawCommand`, `PbrDrawCommand`, `SkinnedDrawCommand`, `SkinnedPbrDrawCommand` all carried depth/blend/cull/bias by value and no viewport whatsoever. |
+| Only a pointer/reference to mutable viewport state is retained | No. There was nothing to point at — the field did not exist. |
+| `Issue*Draw` reads `currentViewport_` | No. The `Render*Draws()` replay loops never mentioned the viewport; the pass-level block was the only reader. |
+| Viewport is set only once when the render pass begins | **Yes.** That is the whole 3D half. |
+| Render-target groups use the final viewport | No grouping exists — a target switch flushes eagerly, so a "group" is exactly one bind cycle. |
+| Backbuffer and offscreen passes differ | No. All three recorders had the identical block; the cube one clamped against `GetSize()` instead of width/height, which is the only difference. |
+| Indexed and non-indexed paths differ | No. They share one struct and one replay loop per family (`indexed` is a flag). |
+| Stock-effect families differ | No. Uniformly absent in all ten. |
+| SpriteBatch has a separate correct snapshot | **Partly — and that partial capture is the second omission.** REMED-GFX-072 gave `SpriteCommand` a viewport, but `QueueSprite` filled it in **only when the viewport was a genuine sub-region** of the target (`customViewport`). A target-relative sprite carried nothing, and `RenderSprites` skipped its per-draw override entirely unless *some* sprite in the batch was custom — so a full-target sprite was replayed under whatever viewport was live at flush time. |
+| Viewport is overwritten during target switching | No. |
+| MinDepth/MaxDepth omitted even where the rectangle is captured | **Yes, in the sprite path** — the GFX-072 capture was gated on the *rectangle* differing, so a full-target viewport with a narrowed depth range recorded neither. |
+
+### Pre-fix native `wgpuRenderPassEncoderSetViewport` values
+
+For the canonical A → B → A sequence on a 64×48 `RenderTarget2D`
+
+```
+Viewport = (0,0,32,48)   draw RED   full-NDC quad
+Viewport = (32,0,32,48)  draw BLUE  full-NDC quad
+Viewport = (0,0,32,48)   draw GREEN quad over NDC [-0.5,0.5]^2
+Viewport = (0,0,64,48)   (an ordinary restore)
+unbind, read once
+```
+
+the pass recorded **one** call, `SetViewport(pass, 0, 0, 64, 48, 0.0, 1.0)` — the restored value —
+and all three draws executed under it. The observable result was the whole target blue with a green
+band across the middle; probe (4,4) read `(0,0,255,255)` where `(255,0,0,255)` was required.
+
+### Corrected capture architecture — design A
+
+`WebGPUViewportSnapshot` holds all six XNA `Viewport` fields plus a `set` flag, by value:
+
+* `CaptureViewport()` is called by every `Queue*Draw()` and by `QueueSprite()`, at the public draw
+  call, so the value can never observe a later `SetViewport()`.
+* `BeginPassViewport()` opens each pass with the **whole target** — deliberately not the live
+  viewport — and records what it applied in `WebGPUPassViewportState`.
+* `ApplyDrawViewport()` is the only thing that turns a captured value back into native state. It
+  clamps with exactly the arithmetic the pass-level block used, and skips the native call when the
+  six resulting values already match. Correctness does not depend on that skip.
+
+Designs B (a viewport-state id into a per-frame table) and C (per-segment viewport) were rejected:
+B adds an indirection and a table lifetime for no benefit over a 32-byte value, and C requires every
+draw in a segment to share a viewport, which is precisely the case that fails. No `Render*Draws()`
+may read `viewportX_` and friends any more; the three live-state blocks are gone.
+### Affected draw-family inventory
+
+Every deferred family, its command structure, where the value is captured and where it is replayed.
+"Pixel-verified" means a check in `examples/deferred_viewport_capture_test.cpp` distinguishes the
+captured viewport from the live one for that family specifically.
+
+| Family | Command struct | Viewport by value | Native viewport set | Pre-fix | Status |
+|---|---|---|---|---|---|
+| coloured / simple 3D (`DrawColoredPrimitives`, `DrawIndexedColoredPrimitives`, stride-16 `DrawPrimitivesEx`) | `ColoredDrawCommand` | `QueueColoredDraw` | `RenderColoredDraws` | live pass value | fixed, pixel-verified (A1, A2, B1, C1–C10, D1, E1, E2, F1–F3, G1, G2, K1, K2) |
+| textured (stride 20) and coloured-textured (stride 24) | `TexturedDrawCommand` | `QueueTexturedDraw` | `RenderTexturedDraws` | live pass value | fixed, pixel-verified (H1) |
+| lit textured (stride 32, per-pixel and vertex-lit) | `LitTexturedDrawCommand` | `QueueLitTexturedDraw` | `RenderLitTexturedDraws` | live pass value | fixed, pixel-verified (H2) |
+| alpha test | `AlphaTestDrawCommand` | `QueueAlphaTestDraw` | `RenderAlphaTestDraws` | live pass value | fixed, pixel-verified (H3) |
+| dual texture | `DualTextureDrawCommand` | `QueueDualTextureDraw` | `RenderDualTextureDraws` | live pass value | fixed, pixel-verified (H4) |
+| environment map | `EnvMapDrawCommand` | `QueueEnvMapDraw` | `RenderEnvMapDraws` | live pass value | fixed, pixel-verified (H5) |
+| skinned | `SkinnedDrawCommand` | `QueueSkinnedDraw` | `RenderSkinnedDraws` | live pass value | fixed, pixel-verified (H6) |
+| PBR | `PbrDrawCommand` | `QueuePbrDraw` | `RenderPbrDraws` | live pass value | fixed, pixel-verified (H7) |
+| skinned PBR | `SkinnedPbrDrawCommand` | `QueueSkinnedPbrDraw` | `RenderSkinnedPbrDraws` | live pass value | fixed, pixel-verified (H8) |
+| instanced | `InstancedDrawCommand` | `DrawInstancedPrimitivesEx` | `RenderInstancedDraws` | live pass value | fixed; **verified structurally, not by a viewport-discriminating pixel check** — the public instanced route needs per-instance `VertexBufferBinding` plumbing that the existing WebGPU instanced coverage deliberately bypasses at the `IGraphicsBackend` level. Its own family test `WebGPU_Instanced3D` stays green. |
+| SpriteBatch | `SpriteCommand` | `QueueSprite` (now unconditional) | `RenderSprites` | live pass value unless some sprite in the batch was sub-region | fixed, pixel-verified (I1, I2) |
+| indexed vs non-indexed | shared `indexed` flag in every struct above | one capture per command | one apply per command | identical | fixed, pixel-verified (G1) |
+| `DrawUserPrimitives` / `DrawUserIndexedPrimitives` | staged through the same `Queue*Draw` entry points | as above | as above | identical | fixed, pixel-verified (G1) |
+
+`RenderTargetCube` faces run the same eleven replay loops through the same
+`BeginPassViewport`/`ApplyDrawViewport` pair, so no per-face code exists.
+
+### What the fixture measures, and the red-first result
+
+`examples/deferred_viewport_capture_test.cpp` queues each sequence whole — no `GetData`, `Present`,
+explicit flush, fence, sleep, extra frame or render-target switch between the draws — and observes it
+exactly once at the end, with the viewport restored to the whole target first. Against the pre-fix
+backend it scored **4/37**; against the corrected one **37/37**.
+
+The four that passed pre-fix are informative rather than noise: `C6` (a full-target viewport, which
+cannot discriminate), `F1 (A second cycle)` and `F2 (target)` (whose asserted region happens to be
+the same either way), and `I1` — the SpriteBatch A → 3D B → SpriteBatch A sequence, which passed
+because *all three* of its sprite batches used sub-region viewports, exactly the case REMED-GFX-072
+already captured. `I2`, the same shape with a **full-target** batch, failed pre-fix. That pair is the
+empirical evidence for the SpriteBatch classification above.
+
+Component coverage is asserted one field at a time (`C1` nonzero X, `C2` nonzero Y, `C3` reduced
+width, `C4` reduced height, `C5` all four, `C6` full target, `C7` the final row and column as a 1×1
+viewport, `C8`/`C9` last-column and last-row strips, `C10` a centre rectangle), each with the pixels
+just outside the rectangle asserted black, plus `D1` on an odd 33×25 target. `B1` splits the target
+horizontally so a Y flip anywhere in the chain swaps two colours.
+
+`MinDepth`/`MaxDepth` are measured through the **depth test**, never by inspecting native arguments:
+`E1` draws red at clip depth 0.8 under range [0.0,0.5] (window 0.40) and blue at clip 0.0 under range
+[0.5,1.0] (window 0.50), so LessEqual keeps red — ignore the ranges and the raw depths reverse the
+outcome to blue. `E2` combines a narrowed range with a sub-rectangle.
+
+### SpriteBatch classification
+
+SpriteBatch had a **partial** snapshot, and the two halves are now separated cleanly:
+`viewportCustom` decides only how the NDC was baked at enqueue (viewport-local for a genuine
+sub-region, target-relative otherwise), and the snapshot decides where the rasterizer puts it. Since
+a target-relative sprite's snapshot *is* the whole target by construction, the old "reset to the
+whole target" branch and the new unconditional apply produce byte-identical native calls for every
+case GFX-072 already handled — what changed is that the value now exists for the cases it did not.
+This is the same state-capture mechanism, not a separate one, so it is fixed here rather than
+recorded separately.
+
+### Viewport / scissor boundary
+
+Scissor is deliberately untouched. `J1` uses a stable scissor narrower than the target as a control
+and asserts both viewports are clipped by it identically; `J2` puts a viewport strictly inside the
+scissor and asserts the viewport still bounds the draw. The fixture resets its scissor state only
+**after** the unbind, because this backend still resolves the *scissor* rectangle from live state when
+it records the pass — a separately recorded, deliberately unfixed finding — and resetting before the
+flush would have erased the control.
+
+### Static audit — every family, not just the tested ones
+
+A structural pass over the corrected sources reports: all **11** command structs
+(`SpriteCommand` plus the ten 3D families) carry `WebGPUViewportSnapshot viewport{}`; there are
+exactly **11** `command.viewport = CaptureViewport()` capture sites and **11**
+`ApplyDrawViewport(pass, command.viewport)` replay sites; `BeginPassViewport` is called by exactly
+the **3** pass recorders; and the only functions that still read `viewportX_` and friends are
+`SetViewport()` (the setter), `CaptureViewport()` (the capture point) and `QueueSprite()` (at
+enqueue, for the NDC-baking decision). No `Render*Draws()` reads live viewport state.
+
+### Resource and state cardinality
+
+Measured from the live backend, before and after each public sequence
+(`examples/webgpu_viewport_cardinality_test.cpp`, 13/13):
+
+| Sequence | Render passes | Submits | Native `setViewport` | New pipeline variants |
+|---|---|---|---|---|
+| four different viewports, one bind cycle | 1 | 1 | 5 (one pass-open + one per transition) | 0 Colored3D |
+| four draws sharing one viewport | 1 | 1 | **2** — the redundant three are skipped | 0 |
+| 32 distinct rectangles + 32 distinct depth ranges | 1 | 1 | — | 0 Colored3D, 0 sprite |
+| three SpriteBatch cycles under three viewports | 1 | 1 | 4 | ≤1 sprite |
+| the same eight-viewport cycle repeated three times | 1 each, flat | — | — | — |
+
+Per-frame command storage grows by `sizeof(WebGPUViewportSnapshot)` (24 bytes: one `bool`, four
+`int`, two `float`) per queued draw and is released with the frame's command vectors. There is no
+heap allocation per draw, no render-pass split, no extra submit or wait, no buffer or texture copy,
+no `Present` and no extra frame. Uncaptured WebGPU validation errors: **0**.
+
+### Verification
+
+| Route | Result |
+|---|---|
+| `WebGPU_Deferred_Viewport` (the fixture) | **4/37 pre-fix → 39/39 post-fix** (37 checks at the red-first commit, 39 after the PBR families were added) |
+| `WebGPU_Viewport_Cardinality` | **13/13** |
+| `WebGPU_SpriteBatch_CustomViewport` (now incl. Check D) | **13/13** |
+| `WebGPU_SpriteBatch_ViewportSwitch` (newly registered here) | **6/6** |
+| `ctest -L WebGPU` | **44/45** — the one failure is `WebGPU_Clear_Readback`, A/B-proven pre-existing below |
+| Vulkan / EasyGL / SDL_GPU / Bgfx controls | **39/39** each |
+| Software control | **39/39** (PbrEffect and SkinnedPbrEffect report a capability boundary: strides 48/68 are unsupported there) |
+| Headless control | **38/38** (EnvironmentMapEffect reports a capability boundary: no cube texture) |
+| Bgfx / Vulkan / EasyGL `spritebatch_custom_viewport` | **13/13** each |
+| D3D11 and D3D9 controls | **built, environment-blocked** — see below |
+| ASan + UBSan (WebGPU) | fixture **39/39**, cardinality **13/13**, zero `runtime error` lines, zero `AddressSanitizer` reports |
+
+`WebGPU_Clear_Readback` fails **7/10** identically on the pre-fix and the corrected backend
+(re-measured for this task by restoring both backend files from `HEAD` and rebuilding): the sampler
+`AddressMode` Wrap/Mirror pair recorded since REMED-GFX-072, plus the 50 %-alpha blend check, which
+belongs to the separately recorded WebGPU sRGB mid-tone finding. Nothing in it touches viewport
+state.
+
+### D3D11 / D3D9 — environment-blocked, not skipped
+
+Both controls compile and link in `cmake-build-d3d11-mingw` / `cmake-build-d3d9-mingw`. Every Wine
+run — the new control **and** the existing known-good `*_backbuffer_pass_order` control, on `:101`
+and on `:99` — terminates identically:
+
+```
+terminate called after throwing an instance of 'std::runtime_error'
+  what():  SDL_InitSubSystem(SDL_INIT_VIDEO) failed: No displays available
+```
+
+DXVK itself initialises (the adapter/memory-type log lines appear first), so this is SDL video
+initialisation under Wine on a virtual display, not the backend and not this change. Reported as
+**environment-unverified**. `:0` was not used.
+
+### False-positive test audit
+
+Four directly relevant viewport tests were inspected; **two** were strengthened and the exact gaps
+they masked are named.
+
+| Test | Verdict |
+|---|---|
+| `spritebatch_custom_viewport_test.cpp` | **Masked the sprite half of this finding.** Check A sets a sub-Viewport, draws, restores and reads — deferral-sensitive, and it is what GFX-072 fixed. Check B never changes the viewport at all ("one viewport for the whole frame"), and Check C repeats A's shape. Nothing tested the converse — a FULL-TARGET batch followed by a viewport change — which is exactly the case a capture-only-if-custom rule gets wrong, and nothing tested MinDepth/MaxDepth. **Strengthened** with Check D (three assertions). |
+| `spritebatch_viewport_switch_test.cpp` | Correct and strong, but **not registered for WebGPU** on the basis of a "per-pass last-wins limitation" note. **Strengthened** by registering it and correcting the note. Empirically it would already have passed pre-fix — all three of its batches use sub-region viewports, the case GFX-072 captured — which is itself the evidence for the SpriteBatch classification above. |
+| `backbuffer_pass_order_test.cpp` check V1 | Genuinely covers per-cycle viewports, but every cycle is separated by a `SetRenderTarget` — which on this backend forces a flush. It therefore cannot see a within-cycle defect. Left alone: per-cycle ordering is REMED-GFX-143's subject and the new fixture covers the within-cycle case on every backend. |
+| `viewport_reset_after_resize_test.cpp` | Not registered for WebGPU and about resize-time defaults, not deferral. Unchanged. |
+
+### Independent findings recorded, not fixed here
+
+* **Bgfx ignores `Viewport.MinDepth`/`MaxDepth`.** `bgfx::setViewRect` carries no depth range and
+  bgfx has no per-view depth-range call, so both fields reach nothing. Every X/Y/Width/Height check
+  in the fixture passes on bgfx, which isolates this to the depth remap. Declared in the fixture's
+  bgfx contract and asserted as the ignored outcome (checks E1/E2) so the declaration turns red the
+  day bgfx gains one.
+* **WebGPU still resolves the SCISSOR rectangle from live state at record time.** Deliberately out
+  of scope; the fixture's scissor control (J1/J2) resets its scissor state only after the unbind so
+  the control stays valid, and `J1`/`J2` prove per-draw viewport capture did not disturb it.
+* Software supports vertex strides 16/20/24/32/52 only, so `PbrEffect` (48) and `SkinnedPbrEffect`
+  (68) raise there; Headless raises for `EnvironmentMapEffect` with a null environment map. Both are
+  reported by the fixture as capability boundaries rather than failures. No new functionality added.
+
+### Build directories, ccache and storage policy
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-webgpu` | WEBGPU | yes | reused |
+| `cmake-build-webgpu-asan-ubsan` | WEBGPU + ASan + UBSan | yes | **newly created** |
+| `cmake-build-vulkan` · `cmake-build-debug` (EasyGL) · `cmake-build-bgfx` · `cmake-build-sdlgpu` · `cmake-build-software` · `cmake-build-headless` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-dx3` · `cmake-build-sdlrenderer` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other thirteen | yes | reused |
+
+The sanitizer tree was created because no WebGPU sanitizer directory existed and the changed code is
+WebGPU-only — an existing Vulkan or Software sanitizer tree would not instrument a single line of
+it. It is a stable in-repository directory, configured with `CNA_SANITIZE=address,undefined`,
+`CNA_USE_CCACHE=ON`, `CNA_TEST_DISPLAY=:101` and `CNA_WEBGPU_ROOT` pointed at the wgpu-native
+package already extracted under `cmake-build-webgpu/_deps`, so nothing was re-downloaded. No build
+directory was deleted, cleaned or recreated; no build tree was created under `/tmp`, `/var/tmp` or
+`/dev/shm`; `/tmp` held only logs and the two backend-file backups used for the A/B measurements.
+Maximum parallelism was **2 jobs**, dropped to **1** whenever the package approached 85 °C.
+
+All fourteen backend libraries compile incrementally: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12, DX3,
+EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan and WebGPU. No shader source and no
+generated artifact changed.
+
+### Commits
+
+- `757729d4 test(Task REMED-GFX-116): reproduce deferred WebGPU viewport loss`
+- `cf68a5f8 fix(Task REMED-GFX-116): capture WebGPU viewport per draw`
+- `92b75fe7 test(Task REMED-GFX-116): cover state cardinality and cross-backend controls`
+- `docs(remediation): record GFX-116 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
