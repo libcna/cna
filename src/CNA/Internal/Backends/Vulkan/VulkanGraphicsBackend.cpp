@@ -1442,6 +1442,8 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& [fmt, rp] : rtRenderPassMsaaByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         rtRenderPassMsaaByDepthFmt_.clear();
+        // REMED-GFX-143: the per-load/store swapchain variants share renderPass_'s lifetime.
+        DestroySwapchainPassVariants();
         if (renderPass_       != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,       nullptr); renderPass_       = VK_NULL_HANDLE; }
         for (auto& [n, rp] : mrtRenderPasses_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
@@ -1846,7 +1848,16 @@ namespace CNA::Internal::Backends::Vulkan
                                             VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         renderPassDeps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
                                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        // REMED-GFX-143: COLOR_ATTACHMENT_READ was missing here and at every other render pass in
+        // this backend. A VK_ATTACHMENT_LOAD_OP_LOAD colour attachment IS a colour-attachment read,
+        // and without the bit the entry dependency does not cover it, so synchronization validation
+        // reports "attachment loadOp access is not synchronized with the attachment layout
+        // transition" for every loading pass. The backbuffer's own LOAD variants (see
+        // GetOrCreateSwapchainRenderPass) would otherwise multiply that pre-existing class rather
+        // than merely inherit it, and the bit is added at ALL SIX sites so the byte-identical
+        // dependency masks Task 905 requires for cross-pass pipeline compatibility stay identical.
         renderPassDeps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
                                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         renderPassDeps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
@@ -1870,6 +1881,172 @@ namespace CNA::Internal::Backends::Vulkan
         ci.dependencyCount = 2; ci.pDependencies = renderPassDeps;
         if (vkCreateRenderPass(device_, &ci, nullptr, &renderPass_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass failed");
+    }
+
+    // REMED-GFX-143: see SwapchainPassKey in the header. The all-clear/no-store combination IS
+    // renderPass_/renderPassMsaa_, returned as-is so a frame with a single backbuffer cycle creates
+    // no variant and records byte-for-byte the pass it always did. Everything else differs from
+    // those only in load/store ops and initial layouts -- which render-pass compatibility ignores
+    // -- so every existing pipeline and every existing per-image VkFramebuffer stays valid.
+    VkRenderPass VulkanGraphicsBackend::GetOrCreateSwapchainRenderPass(const SwapchainPassKey& key)
+    {
+        if (!key.loadColor && !key.loadDepth && !key.loadStencil && !key.storeForNext)
+            return key.msaa ? renderPassMsaa_ : renderPass_;
+
+        const uint32_t bits = key.Bits();
+        auto it = swapchainPassVariants_.find(bits);
+        if (it != swapchainPassVariants_.end()) return it->second;
+
+        const VkAttachmentLoadOp colorLoad =
+            key.loadColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        const VkAttachmentLoadOp depthLoad =
+            key.loadDepth ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        const VkAttachmentLoadOp stencilLoad =
+            key.loadStencil ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        // A following backbuffer segment loads whatever this one leaves behind; the last segment of
+        // the frame keeps the pre-fix DONT_CARE for everything the presentation does not read.
+        const VkAttachmentStoreOp handOver =
+            key.storeForNext ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+        VkAttachmentDescription depthAtt{};
+        depthAtt.format         = depthFormat_;
+        depthAtt.samples        = key.msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        depthAtt.loadOp         = depthLoad;
+        depthAtt.storeOp        = handOver;
+        depthAtt.stencilLoadOp  = stencilLoad;
+        depthAtt.stencilStoreOp = handOver;
+        // A LOAD of either aspect needs the layout the previous backbuffer segment's finalLayout
+        // left the shared depth image in; a full clear can keep UNDEFINED, as the base pass does.
+        depthAtt.initialLayout  = (key.loadDepth || key.loadStencil)
+                                      ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                                      : VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        // Byte-identical to CreateRenderPass()/CreateRenderPassMsaa() and to every RT pass. Task
+        // 905 established -- from live validation errors -- that this backend's render passes must
+        // keep IDENTICAL subpass dependencies for pipelines created against one to be usable in
+        // another, so a variant must not narrow or widen them. The extra ordering a second entry
+        // into the same image needs (its load reading what the previous entry's colour/depth writes
+        // produced) is issued as an explicit vkCmdPipelineBarrier between the two passes in
+        // RecordCommandBuffer instead.
+        VkSubpassDependency deps[2]{};
+        deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[0].dstSubpass      = 0;
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                  VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+        deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+        deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        deps[1].srcSubpass      = 0;
+        deps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[1].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT;
+        deps[1].srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+        deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+        VkRenderPass rp = VK_NULL_HANDLE;
+        if (key.msaa)
+        {
+            // att0 multisampled colour, att1 the swapchain resolve target, att2 multisampled depth.
+            // The resolve is deliberately kept on EVERY backbuffer segment rather than only the
+            // last: dropping pResolveAttachments would change the subpass shape and break
+            // render-pass compatibility with every pipeline already created against
+            // renderPassMsaa_. att0 is LOADed/STOREd across segments instead, so the final resolve
+            // carries every segment's work and an intermediate resolve is redundant, not wrong.
+            VkAttachmentDescription colorAtt{};
+            colorAtt.format         = swapchainFormat_;
+            colorAtt.samples        = sampleCount_;
+            colorAtt.loadOp         = colorLoad;
+            colorAtt.storeOp        = handOver;
+            colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            colorAtt.initialLayout  = key.loadColor ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                                    : VK_IMAGE_LAYOUT_UNDEFINED;
+            colorAtt.finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+            VkAttachmentDescription resolveAtt{};
+            resolveAtt.format         = swapchainFormat_;
+            resolveAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
+            resolveAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            resolveAtt.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+            resolveAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            resolveAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            // The resolve rewrites the whole render area, which is always the full extent here, so
+            // the previous segment's resolved content never needs loading.
+            resolveAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+            resolveAtt.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+            VkAttachmentReference colorRef  { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+            VkAttachmentReference resolveRef{ 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+            VkAttachmentReference depthRef  { 2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+            VkSubpassDescription sub{};
+            sub.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+            sub.colorAttachmentCount    = 1;
+            sub.pColorAttachments       = &colorRef;
+            sub.pResolveAttachments     = &resolveRef;
+            sub.pDepthStencilAttachment = &depthRef;
+
+            VkAttachmentDescription atts[] = { colorAtt, resolveAtt, depthAtt };
+            VkRenderPassCreateInfo ci{};
+            ci.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+            ci.attachmentCount = 3; ci.pAttachments  = atts;
+            ci.subpassCount    = 1; ci.pSubpasses    = &sub;
+            ci.dependencyCount = 2; ci.pDependencies = deps;
+            if (vkCreateRenderPass(device_, &ci, nullptr, &rp) != VK_SUCCESS)
+                throw std::runtime_error("vkCreateRenderPass (swapchain MSAA variant) failed");
+        }
+        else
+        {
+            VkAttachmentDescription colorAtt{};
+            colorAtt.format         = swapchainFormat_;
+            colorAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
+            colorAtt.loadOp         = colorLoad;
+            colorAtt.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+            colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            // A LOAD reads the image the previous backbuffer segment left in PRESENT_SRC_KHR (that
+            // pass's finalLayout); the render pass transitions it to COLOR_ATTACHMENT_OPTIMAL for
+            // the subpass and back on exit, so the image is presentable after every segment.
+            colorAtt.initialLayout  = key.loadColor ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+                                                    : VK_IMAGE_LAYOUT_UNDEFINED;
+            colorAtt.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+            VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+            VkAttachmentReference depthRef{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+            VkSubpassDescription sub{};
+            sub.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+            sub.colorAttachmentCount    = 1;
+            sub.pColorAttachments       = &colorRef;
+            sub.pDepthStencilAttachment = &depthRef;
+
+            VkAttachmentDescription atts[] = { colorAtt, depthAtt };
+            VkRenderPassCreateInfo ci{};
+            ci.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+            ci.attachmentCount = 2; ci.pAttachments  = atts;
+            ci.subpassCount    = 1; ci.pSubpasses    = &sub;
+            ci.dependencyCount = 2; ci.pDependencies = deps;
+            if (vkCreateRenderPass(device_, &ci, nullptr, &rp) != VK_SUCCESS)
+                throw std::runtime_error("vkCreateRenderPass (swapchain variant) failed");
+        }
+        swapchainPassVariants_[bits] = rp;
+        return rp;
+    }
+
+    void VulkanGraphicsBackend::DestroySwapchainPassVariants()
+    {
+        for (auto& entry : swapchainPassVariants_)
+            if (entry.second != VK_NULL_HANDLE)
+                vkDestroyRenderPass(device_, entry.second, nullptr);
+        swapchainPassVariants_.clear();
     }
 
     VkRenderPass VulkanGraphicsBackend::GetOrCreateRTRenderPass(VkFormat depthFmt, bool discardContents)
@@ -1940,6 +2117,7 @@ namespace CNA::Internal::Backends::Vulkan
         deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
@@ -2050,6 +2228,7 @@ namespace CNA::Internal::Backends::Vulkan
         deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
@@ -2161,6 +2340,7 @@ namespace CNA::Internal::Backends::Vulkan
                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
         deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
         deps[1].srcSubpass      = 0;
@@ -3003,6 +3183,7 @@ namespace CNA::Internal::Backends::Vulkan
         deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT |
                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
         deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
@@ -6624,12 +6805,8 @@ namespace CNA::Internal::Backends::Vulkan
         readbackStagingValid_ = false;  // new frame content invalidates the readback cache
         // Task 875: mark the currently-bound RT as needing its render pass recorded this frame,
         // even if no draw call follows.
-        NoteRenderTargetClearEXT();
+        NoteRenderTargetClearEXT(true, false, false);
     }
-
-    // REMED-GFX-140: passed as the segment filter by the backbuffer pass, which is not
-    // segmented (see Phase 2's own comment) and replays every entry queued against the backbuffer.
-    static constexpr uint64_t kAllSegments = ~static_cast<uint64_t>(0);
 
     void VulkanGraphicsBackend::RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex,
                                                     RecordMode mode, VulkanRTSource* onlyRT)
@@ -6753,9 +6930,10 @@ namespace CNA::Internal::Backends::Vulkan
                 const auto& snapshot = entry.snapshot;
                 VulkanRTSource* batchRT = entry.rt;
                 if (batchRT != targetRT) continue;
-                // kAllSegments replays every batch for this target in one pass -- the backbuffer
-                // pass's own long-standing behaviour, deliberately unchanged (see Phase 2).
-                if (segment != kAllSegments && entry.segment != segment) continue;
+                // REMED-GFX-140/143: one pass per bind cycle, backbuffer cycles included, so a
+                // batch belongs to exactly the segment it was issued in. There is no longer any
+                // "replay everything for this target" mode.
+                if (entry.segment != segment) continue;
                 const auto& verts = snapshot->vertices;
                 const auto& inds  = snapshot->indices;
                 const auto& draws = snapshot->draws;
@@ -6935,7 +7113,7 @@ namespace CNA::Internal::Backends::Vulkan
             VulkanOcclusionQueryBackend* openQuery = nullptr;
             for (const auto& draw : pending3D_) {
                 if (draw.rt != targetRT) continue;
-                if (segment != kAllSegments && draw.segment != segment) continue;
+                if (draw.segment != segment) continue;
                 if (draw.isMarker) {
                     if (pfnCmdInsertDebugLabel_) {
                         VkDebugUtilsLabelEXT lbl{};
@@ -7320,7 +7498,7 @@ namespace CNA::Internal::Backends::Vulkan
             }
         };
 
-        // ---- Phase 1: off-screen RT passes, ONE per logical bind cycle ----
+        // ---- One ordered stream of passes: every bind cycle, off-screen AND backbuffer ----
         // REMED-GFX-140: this used to collect the UNIQUE render-target sources referenced this
         // frame and give each of them a single pass holding every batch and draw queued against it.
         // That threw away the boundary between two public bind cycles of the same target: they
@@ -7329,35 +7507,57 @@ namespace CNA::Internal::Backends::Vulkan
         // and every entry carries the segment it was issued in, so rebinding the same target
         // creates a genuinely new pass. Ordering is by segment id, i.e. exactly the public order in
         // which the cycles were opened; A -> B -> A therefore records three passes, not two.
+        //
+        // REMED-GFX-143: the BACKBUFFER joins that stream. It used to be a separate Phase 2 recorded
+        // after every off-screen pass and passed `kAllSegments`, so every backbuffer draw of the
+        // frame was replayed inside one trailing swapchain pass regardless of when the game issued
+        // it. `bind t; draw; unbind; draw t onto the backbuffer; bind t; draw; unbind; draw t onto
+        // the backbuffer` therefore ran both of t's passes first and BOTH backbuffer draws sampled
+        // the final content. A segment whose rt is nullptr is now a backbuffer cycle recorded in the
+        // same ascending-id order as the rest; the swapchain image is acquired once and entered once
+        // per cycle (GetOrCreateSwapchainRenderPass supplies the LOAD variant), and presentation
+        // stays once per frame.
         struct PassSegment {
             uint64_t        id        = 0;
-            VulkanRTSource* rt        = nullptr;
+            VulkanRTSource* rt        = nullptr;   ///< nullptr = the backbuffer.
             bool            hasClear  = false;
             float           r = 0.f, g = 0.f, b = 0.f, a = 1.f;
             float           depth     = 1.0f;
             int             stencil   = 0;
+            bool            clearColor   = false;  ///< REMED-GFX-143: per-aspect, backbuffer only.
+            bool            clearDepth   = false;
+            bool            clearStencil = false;
+            bool            isBackbuffer = false;  ///< Distinguishes "the backbuffer" from "unset".
         };
         std::vector<PassSegment> segments;
         auto segmentFor = [&segments](uint64_t id, VulkanRTSource* rt) -> PassSegment& {
             for (auto& seg : segments)
                 if (seg.id == id) return seg;
-            segments.push_back(PassSegment{ id, rt, false, 0.f, 0.f, 0.f, 1.f, 1.0f, 0 });
+            PassSegment fresh;
+            fresh.id = id;
+            fresh.rt = rt;
+            fresh.isBackbuffer = (rt == nullptr);
+            segments.push_back(fresh);
             return segments.back();
         };
         // Task 875: a segment whose only content is a Clear() still needs its render pass recorded
         // (matches FNA/XNA, where Clear() takes effect regardless of what is drawn afterward) —
-        // otherwise the target's colour image never leaves VK_IMAGE_LAYOUT_UNDEFINED.
+        // otherwise the target's colour image never leaves VK_IMAGE_LAYOUT_UNDEFINED. REMED-GFX-143:
+        // a backbuffer Clear() opens a segment for the same reason -- a frame whose only backbuffer
+        // command in a cycle is a Clear() must still get that cycle's own load action.
         for (const auto& c : pendingClears_) {
-            if (!c.rt) continue;
             PassSegment& seg = segmentFor(c.segment, c.rt);
             seg.hasClear = true;
             seg.r = c.r; seg.g = c.g; seg.b = c.b; seg.a = c.a;
             seg.depth = c.depth; seg.stencil = c.stencil;
+            seg.clearColor   = seg.clearColor   || c.wantColor;
+            seg.clearDepth   = seg.clearDepth   || c.wantDepth;
+            seg.clearStencil = seg.clearStencil || c.wantStencil;
         }
         for (const auto& entry : activeBatches_)
-            if (entry.rt) (void) segmentFor(entry.segment, entry.rt);
+            (void) segmentFor(entry.segment, entry.rt);
         for (const auto& draw : pending3D_)
-            if (draw.rt) (void) segmentFor(draw.segment, draw.rt);
+            (void) segmentFor(draw.segment, draw.rt);
         std::sort(segments.begin(), segments.end(),
                   [](const PassSegment& l, const PassSegment& r) { return l.id < r.id; });
 
@@ -7366,13 +7566,144 @@ namespace CNA::Internal::Backends::Vulkan
         // work, so keeping every segment that names it (even one whose only entry was a bare
         // Clear()) is always correct and never touches an untouched target. REMED-GFX-140: it is
         // "segments", plural — a target bound twice before its first readback owes two passes here
-        // just as it does at Present.
+        // just as it does at Present. `onlyRT` is never null, so this also drops every backbuffer
+        // segment, leaving the backbuffer's pending work for the real Present exactly as before.
         if (rtOnly)
             segments.erase(std::remove_if(segments.begin(), segments.end(),
                                [onlyRT](const PassSegment& seg) { return seg.rt != onlyRT; }),
                            segments.end());
 
+        // REMED-GFX-143: the swapchain image must be cleared/stored and left in PRESENT_SRC_KHR
+        // every rendered frame even when the game drew nothing to it, which the single trailing pass
+        // guaranteed for free. A synthetic final backbuffer segment does it: with no clear of its
+        // own it takes exactly the frame-global values the old Phase 2 read, so a frame with no
+        // backbuffer work records byte-for-byte the pass it always did.
+        const bool hasMsaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) && (renderPassMsaa_ != VK_NULL_HANDLE);
+        std::size_t backbufferSegments = 0;
+        if (!rtOnly) {
+            for (const auto& seg : segments)
+                if (seg.isBackbuffer) ++backbufferSegments;
+            if (backbufferSegments == 0) {
+                PassSegment tail;
+                tail.id = ~static_cast<uint64_t>(0);
+                tail.isBackbuffer = true;
+                segments.push_back(tail);
+                backbufferSegments = 1;
+            }
+        }
+        std::size_t backbufferSeen = 0;
+
         for (const auto& seg : segments) {
+            if (seg.isBackbuffer) {
+                ++backbufferSeen;
+                const bool isFirstBackbuffer = (backbufferSeen == 1);
+                const bool isLastBackbuffer  = (backbufferSeen == backbufferSegments);
+                // The FIRST backbuffer cycle of the frame always clears, exactly as the single
+                // trailing pass did -- the acquired swapchain image's content is undefined and a
+                // game that never calls Clear() must still get clearR_. Later cycles LOAD what the
+                // earlier one stored unless they issued their own Clear(), per aspect: a colour-only
+                // Clear() in a later cycle must not throw away the depth an earlier cycle wrote.
+                SwapchainPassKey key;
+                key.msaa         = hasMsaa;
+                key.loadColor    = !isFirstBackbuffer && !seg.clearColor;
+                key.loadDepth    = !isFirstBackbuffer && !seg.clearDepth;
+                key.loadStencil  = !isFirstBackbuffer && !seg.clearStencil;
+                key.storeForNext = !isLastBackbuffer;
+
+                // A second entry into the same image needs its LOAD (and its initialLayout
+                // transition) ordered after the previous entry's colour and depth writes. Neither
+                // side's external subpass dependency provides that chain -- the exiting pass's
+                // dep[1] makes colour writes available to FRAGMENT_SHADER/TRANSFER reads only, and
+                // the entering pass's dep[0] waits on shader reads and depth writes, not on
+                // COLOR_ATTACHMENT_OUTPUT -- and those masks must stay byte-identical across every
+                // render pass here for pipelines to remain cross-pass compatible (Task 905). So the
+                // dependency is issued as an explicit barrier instead, emitted only BETWEEN
+                // backbuffer cycles, which means a frame with one cycle pays nothing.
+                //
+                // Honest note on the evidence: neither Khronos synchronization validation nor
+                // llvmpipe exhibits a hazard when this barrier is removed (measured, A/B, with the
+                // layer proved loaded). It is kept because the spec-level dependency genuinely is
+                // absent, not because a tool reported it -- a discrete GPU that reorders passes
+                // would be free to run the load before the write.
+                if (!isFirstBackbuffer) {
+                    VkMemoryBarrier mb{};
+                    mb.sType         = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+                    mb.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    mb.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                       VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                    vkCmdPipelineBarrier(cb,
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                        0, 1, &mb, 0, nullptr, 0, nullptr);
+                }
+
+                // This cycle's own clear values; an aspect it did not clear falls back to the
+                // frame-global value, which is byte-for-byte what the old single pass used.
+                const float segR = seg.clearColor ? seg.r : clearR_;
+                const float segG = seg.clearColor ? seg.g : clearG_;
+                const float segB = seg.clearColor ? seg.b : clearB_;
+                const float segA = seg.clearColor ? seg.a : clearA_;
+                const float segDepth   = (seg.clearDepth   || seg.clearStencil) ? seg.depth   : clearDepth_;
+                const int   segStencil = (seg.clearDepth   || seg.clearStencil) ? seg.stencil : clearStencil_;
+                // MSAA render pass: att0=MSAA color, att1=resolve(swapchain), att2=depth — 3 clear
+                // values. Non-MSAA render pass: att0=swapchain color, att1=depth — 2 clear values.
+                VkClearValue cv[3]{};
+                cv[0].color = { { segR, segG, segB, segA } };
+                if (hasMsaa) {
+                    cv[1].color        = {};
+                    cv[2].depthStencil = { segDepth, static_cast<uint32_t>(segStencil) };
+                } else {
+                    cv[1].depthStencil = { segDepth, static_cast<uint32_t>(segStencil) };
+                }
+                VkRenderPassBeginInfo rp{};
+                rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+                rp.renderPass      = GetOrCreateSwapchainRenderPass(key);
+                rp.framebuffer     = swapchainFramebuffers_[imageIndex];
+                rp.renderArea      = { {0, 0}, swapchainExtent_ };
+                rp.clearValueCount = hasMsaa ? 3u : 2u;
+                rp.pClearValues    = cv;
+                vkCmdBeginRenderPass(cb, &rp, VK_SUBPASS_CONTENTS_INLINE);
+
+                VkViewport vp{};
+                if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0) {
+                    // Task 880: honor a custom sub-region Viewport for the backbuffer pass. This is
+                    // only the pass-level default -- every batch and every 3D draw overrides it from
+                    // its own captured state (REMED-GFX-062), so it is already cycle-local.
+                    vp.x = static_cast<float>(viewportX_);
+                    vp.y = static_cast<float>(viewportY_);
+                    vp.width    = static_cast<float>(viewportW_);
+                    vp.height   = static_cast<float>(viewportH_);
+                    vp.minDepth = viewportMinDepth_;
+                    vp.maxDepth = viewportMaxDepth_;
+                } else {
+                    vp.x = 0; vp.y = 0;
+                    vp.width  = static_cast<float>(swapchainExtent_.width);
+                    vp.height = static_cast<float>(swapchainExtent_.height);
+                    vp.minDepth = 0.f; vp.maxDepth = 1.f;
+                }
+                vkCmdSetViewport(cb, 0, 1, &vp);
+                {
+                    VkRect2D sc{ {0, 0}, swapchainExtent_ };
+                    if (scissorEnabled_ && scissorW_ > 0 && scissorH_ > 0)
+                        sc = { {scissorX_, scissorY_}, {scissorW_, scissorH_} };
+                    vkCmdSetScissor(cb, 0, 1, &sc);
+                }
+                const float vpW2D = (virtualWidth_  > 0) ? static_cast<float>(virtualWidth_)
+                                                          : static_cast<float>(swapchainExtent_.width);
+                const float vpH2D = (virtualHeight_ > 0) ? static_cast<float>(virtualHeight_)
+                                                          : static_cast<float>(swapchainExtent_.height);
+                drawSpritesFor(nullptr, seg.id, vpW2D, vpH2D);
+                draw3DFor(nullptr, seg.id);
+
+                vkCmdEndRenderPass(cb);
+                continue;
+            }
+
             VulkanRTSource* rt = seg.rt;
             const uint32_t nColor = rt->GetColorAttachmentCount();
             const bool rtMsaa = rt->WantsMsaa();
@@ -7447,67 +7778,12 @@ namespace CNA::Internal::Backends::Vulkan
             return;
         }
 
-        // ---- Phase 2: backbuffer pass ----
-        const bool hasMsaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) && (renderPassMsaa_ != VK_NULL_HANDLE);
-        // MSAA render pass: att0=MSAA color, att1=resolve(swapchain), att2=depth — 3 clear values.
-        // Non-MSAA render pass: att0=swapchain color, att1=depth — 2 clear values.
-        VkClearValue cv[3]{};
-        cv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
-        if (hasMsaa) {
-            cv[1].color        = {};
-            cv[2].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
-        } else {
-            cv[1].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
-        }
-        VkRenderPassBeginInfo rp{};
-        rp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rp.renderPass      = hasMsaa ? renderPassMsaa_ : renderPass_;
-        rp.framebuffer     = swapchainFramebuffers_[imageIndex];
-        rp.renderArea      = { {0, 0}, swapchainExtent_ };
-        rp.clearValueCount = hasMsaa ? 3u : 2u;
-        rp.pClearValues    = cv;
-        vkCmdBeginRenderPass(cb, &rp, VK_SUBPASS_CONTENTS_INLINE);
-
-        VkViewport vp{};
-        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0) {
-            // Task 880: honor a custom sub-region Viewport for the backbuffer pass.
-            vp.x = static_cast<float>(viewportX_);
-            vp.y = static_cast<float>(viewportY_);
-            vp.width    = static_cast<float>(viewportW_);
-            vp.height   = static_cast<float>(viewportH_);
-            vp.minDepth = viewportMinDepth_;
-            vp.maxDepth = viewportMaxDepth_;
-        } else {
-            vp.x = 0; vp.y = 0;
-            vp.width  = static_cast<float>(swapchainExtent_.width);
-            vp.height = static_cast<float>(swapchainExtent_.height);
-            vp.minDepth = 0.f; vp.maxDepth = 1.f;
-        }
-        vkCmdSetViewport(cb, 0, 1, &vp);
-        {
-            VkRect2D sc{ {0, 0}, swapchainExtent_ };
-            if (scissorEnabled_ && scissorW_ > 0 && scissorH_ > 0)
-                sc = { {scissorX_, scissorY_}, {scissorW_, scissorH_} };
-            vkCmdSetScissor(cb, 0, 1, &sc);
-        }
-        const float vpW2D = (virtualWidth_  > 0) ? static_cast<float>(virtualWidth_)
-                                                  : static_cast<float>(swapchainExtent_.width);
-        const float vpH2D = (virtualHeight_ > 0) ? static_cast<float>(virtualHeight_)
-                                                  : static_cast<float>(swapchainExtent_.height);
-        // The backbuffer keeps ONE pass per frame: its load action, MSAA resolve, deferred
-        // readback copy and PRESENT_SRC_KHR final layout all belong to the swapchain image this
-        // frame acquired, so every backbuffer bind cycle of the frame is replayed here in public
-        // order inside it (kAllSegments). Render targets are what REMED-GFX-140 segments; the
-        // interleaving of backbuffer work BETWEEN two render-target segments is recorded separately
-        // as REMED-GFX-143 rather than being changed under this task.
-        drawSpritesFor(nullptr, kAllSegments, vpW2D, vpH2D);
-        draw3DFor(nullptr, kAllSegments);
-
+        // REMED-GFX-143: every backbuffer cycle was recorded in the ordered stream above, so what
+        // used to be Phase 2 -- one trailing swapchain pass replaying the frame's whole backbuffer
+        // queue -- is gone. Only the deferred entries still need consuming here.
         activeBatches_.clear();
         pending3D_.clear();
         pendingClears_.clear();
-
-        vkCmdEndRenderPass(cb);
 
         // If ReadBackbuffer queued a deferred readback, copy the swapchain image
         // to the staging buffer NOW — before vkQueuePresentKHR hands the image to
@@ -7807,6 +8083,10 @@ namespace CNA::Internal::Backends::Vulkan
             cache.clear();
         };
         clearPipelineCache(pipelines2DMsaaByDepthFmt_);
+        // REMED-GFX-143: a swapchain load/store variant bakes in swapchainFormat_, sampleCount_ and
+        // depthFormat_ exactly as the base passes do, so every one is dropped here and lazily
+        // recreated against the new configuration.
+        DestroySwapchainPassVariants();
         if (renderPassMsaa_ != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPassMsaa_, nullptr); renderPassMsaa_ = VK_NULL_HANDLE; }
         for (auto& [fmt, rp] : rtRenderPassMsaaByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
@@ -7878,25 +8158,35 @@ namespace CNA::Internal::Backends::Vulkan
 
     // REMED-GFX-140 / Task 875: record this bind cycle's clear values, and mark the cycle as
     // needing its render pass recorded even with no draw call (matching FNA/XNA, where Clear()
-    // takes effect regardless of what is drawn afterwards). Nothing is recorded while the
-    // backbuffer is bound: Phase 2 keeps reading the frame-global clear values it always has.
-    void VulkanGraphicsBackend::NoteRenderTargetClearEXT()
+    // takes effect regardless of what is drawn afterwards).
+    //
+    // REMED-GFX-143: the BACKBUFFER is recorded too (currentRT_ == nullptr). It used to be skipped
+    // because there was exactly one swapchain pass per frame, which simply read the frame-global
+    // clearR_/clearDepth_/clearStencil_ as they stood at record time -- so the frame's LAST Clear()
+    // supplied the colour for the whole frame's backbuffer work and an earlier cycle's Clear() was
+    // both mistimed and lost. A backbuffer cycle now owns its clear exactly as an off-screen cycle
+    // does, and `wantColor`/`wantDepth`/`wantStencil` say which aspects it asked for so a later
+    // cycle can clear one and LOAD the others.
+    void VulkanGraphicsBackend::NoteRenderTargetClearEXT(bool color, bool depth, bool stencil)
     {
-        if (!currentRT_) return;
         for (auto& c : pendingClears_) {
             if (c.segment == currentSegment_) {
-                // A second Clear() inside one bind cycle: Vulkan delivers the colour through the
-                // pass load op and a pass has exactly one, so the last one wins. REMED-GFX-129 owns
-                // that limitation; it is deliberately not widened here.
+                // A second Clear() inside one bind cycle: Vulkan delivers the values through the
+                // pass load op and a pass has exactly one, so the last one wins per aspect.
+                // REMED-GFX-129 owns that limitation; it is deliberately not widened here.
                 c.rt = currentRT_;
                 c.r = clearR_; c.g = clearG_; c.b = clearB_; c.a = clearA_;
                 c.depth = clearDepth_; c.stencil = clearStencil_;
+                c.wantColor   = c.wantColor   || color;
+                c.wantDepth   = c.wantDepth   || depth;
+                c.wantStencil = c.wantStencil || stencil;
                 return;
             }
         }
         pendingClears_.push_back({ currentSegment_, currentRT_,
                                    clearR_, clearG_, clearB_, clearA_,
-                                   clearDepth_, clearStencil_ });
+                                   clearDepth_, clearStencil_,
+                                   color, depth, stencil });
     }
 
     void VulkanGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -7940,7 +8230,7 @@ namespace CNA::Internal::Backends::Vulkan
         clearDepth_ = depth;
         readbackStagingValid_ = false;  // new frame content invalidates the readback cache
         // Task 875: see Clear()'s identical fix.
-        NoteRenderTargetClearEXT();
+        NoteRenderTargetClearEXT(true, true, false);
     }
 
     void VulkanGraphicsBackend::ClearDepth(float depth) { clearDepth_ = depth; readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
@@ -7955,7 +8245,7 @@ namespace CNA::Internal::Backends::Vulkan
     {
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
-        NoteRenderTargetClearEXT();
+        NoteRenderTargetClearEXT(false, false, true);
     }
 
     void VulkanGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
@@ -7963,7 +8253,7 @@ namespace CNA::Internal::Backends::Vulkan
         clearDepth_ = depth;
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
-        NoteRenderTargetClearEXT();
+        NoteRenderTargetClearEXT(false, true, true);
     }
 
     void VulkanGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
@@ -7971,7 +8261,7 @@ namespace CNA::Internal::Backends::Vulkan
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
-        NoteRenderTargetClearEXT();
+        NoteRenderTargetClearEXT(true, false, true);
     }
 
     void VulkanGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
@@ -7980,7 +8270,7 @@ namespace CNA::Internal::Backends::Vulkan
         clearDepth_ = depth;
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
-        NoteRenderTargetClearEXT();
+        NoteRenderTargetClearEXT(true, true, true);
     }
 
     void VulkanGraphicsBackend::SetDepthTestEnabled(bool v)  { depthTestEnabled_  = v; }

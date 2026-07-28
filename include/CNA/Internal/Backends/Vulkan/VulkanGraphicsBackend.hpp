@@ -1135,6 +1135,50 @@ namespace CNA::Internal::Backends::Vulkan
         std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
+        /**
+         * @brief REMED-GFX-143: swapchain render passes that can be ENTERED MORE THAN ONCE a frame.
+         *
+         * The backbuffer used to get exactly one pass per command buffer, so `renderPass_` /
+         * `renderPassMsaa_` could hardcode "clear everything on entry, store only what is
+         * presented". A frame that interleaves backbuffer and render-target cycles needs a second,
+         * third ... entry into the SAME acquired swapchain image, and those must LOAD what the
+         * previous entry stored instead of clearing it, and STORE what a following entry will load.
+         * Variants are keyed on the four bits that decide it -- see SwapchainPassKey -- and the
+         * all-clear/no-store combination is answered with `renderPass_`/`renderPassMsaa_`
+         * themselves, so a frame with one backbuffer cycle creates no variant at all and behaves
+         * byte-for-byte as before.
+         *
+         * Every variant is render-pass-COMPATIBLE with `renderPass_`/`renderPassMsaa_`: identical
+         * attachment formats, sample counts, subpass shape and (deliberately byte-identical, see
+         * Task 905 in GetOrCreateRTRenderPass) subpass dependencies, differing only in load/store
+         * operations and initial layouts, which compatibility ignores. Existing pipelines and the
+         * existing per-image VkFramebuffers are therefore reused unchanged -- no pipeline and no
+         * framebuffer is ever created per segment.
+         */
+        struct SwapchainPassKey {
+            bool msaa       = false;  ///< The 3-attachment MSAA colour/resolve/depth shape.
+            bool loadColor  = false;  ///< Colour LOAD (a previous backbuffer segment stored it).
+            bool loadDepth  = false;  ///< Depth LOAD.
+            bool loadStencil = false; ///< Stencil LOAD.
+            bool storeForNext = false;///< Another backbuffer segment follows and may LOAD this one.
+
+            [[nodiscard]] uint32_t Bits() const
+            {
+                return (msaa ? 1u : 0u) | (loadColor ? 2u : 0u) | (loadDepth ? 4u : 0u) |
+                       (loadStencil ? 8u : 0u) | (storeForNext ? 16u : 0u);
+            }
+        };
+        std::unordered_map<uint32_t, VkRenderPass> swapchainPassVariants_;
+        /**
+         * @brief Returns the swapchain render pass matching @p key, creating it on first use.
+         *
+         * @param key Which load/store shape this backbuffer segment needs.
+         * @return A render pass compatible with renderPass_/renderPassMsaa_.
+         */
+        VkRenderPass GetOrCreateSwapchainRenderPass(const SwapchainPassKey& key);
+        /// Destroys every cached swapchain pass variant (swapchain recreation / shutdown).
+        void DestroySwapchainPassVariants();
+
         // --- Depth buffer (recreated with swapchain) ---
         VkFormat        depthFormat_    = VK_FORMAT_UNDEFINED;
         VkImage         depthImage_     = VK_NULL_HANDLE;
@@ -1550,10 +1594,25 @@ namespace CNA::Internal::Backends::Vulkan
             float           r = 0.f, g = 0.f, b = 0.f, a = 1.f;
             float           depth   = 1.0f;
             int             stencil = 0;
+            // REMED-GFX-143: which aspects the Clear() actually asked for. A render-target pass
+            // takes its load action from the target's usage and needs only the values, so this is
+            // read by the BACKBUFFER path, where one segment may clear colour while loading the
+            // depth an earlier segment wrote (and the other way round). An aspect that was not
+            // requested falls back to the frame-global clearR_/clearDepth_/clearStencil_, which is
+            // byte-for-byte what a single trailing pass used to do for every aspect.
+            bool            wantColor   = false;
+            bool            wantDepth   = false;
+            bool            wantStencil = false;
         };
         std::vector<PendingClear> pendingClears_;
-        /// Records (or updates) this bind cycle's clear values. REMED-GFX-140 / Task 875.
-        void NoteRenderTargetClearEXT();
+        /**
+         * @brief Records (or updates) this bind cycle's clear values. REMED-GFX-140/143, Task 875.
+         *
+         * @param color   The caller cleared the colour target.
+         * @param depth   The caller cleared the depth buffer.
+         * @param stencil The caller cleared the stencil buffer.
+         */
+        void NoteRenderTargetClearEXT(bool color, bool depth, bool stencil);
 
         // REMED-GFX-075: deferred-resource retirement queue -- the generic ownership mechanism that
         // makes the whole-frame deferred renderer memory-safe against a SOURCE resource
@@ -1654,6 +1713,12 @@ namespace CNA::Internal::Backends::Vulkan
         // grouping key, never a cache key -- render passes and framebuffers stay keyed on
         // compatibility (depth format, attachment identity), so many segments share one
         // VkRenderPass and one VkFramebuffer.
+        //
+        // REMED-GFX-143: this includes the BACKBUFFER. A segment whose rt is nullptr is a
+        // backbuffer bind cycle and is recorded in the same ascending-id stream as the off-screen
+        // ones, so `bind t; draw; unbind; draw to the backbuffer; bind t; draw; unbind; draw to the
+        // backbuffer` records four passes in that order instead of two target passes followed by
+        // one swapchain pass holding both backbuffer draws.
         uint64_t                   currentSegment_ = 0;
         /// Advances the segment counter and binds @p rt (nullptr = backbuffer). REMED-GFX-140.
         void BeginRenderPassSegmentEXT(VulkanRTSource* rt);
