@@ -1029,6 +1029,12 @@ namespace CNA::Internal::Backends::SdlGpu
         // fallible initialization and registration have succeeded.
         resources.CommitTo(*this);
 
+        // REMED-GFX-143: the backbuffer is the initially selected target and owns a real segment,
+        // so open its first bind cycle here. Without it every draw issued before the first
+        // SetRenderTarget would carry the kSwapchainSegment sentinel that no segment answers to and
+        // would never be recorded at all.
+        BeginBackbufferSegment();
+
         SDL_Log("[SDL_GPU] Backend initialised (%dx%d), debug mode %s",
                 physicalWidth_, physicalHeight_, debugModeEnabled_ ? "enabled" : "disabled");
     }
@@ -1203,63 +1209,46 @@ namespace CNA::Internal::Backends::SdlGpu
             std::vector<std::uint64_t> segmentsWithDraws;
             segmentsWithDraws.reserve(drawOrder_.size());
             for (const QueuedDrawRef& ref : drawOrder_)
-                if (ref.segment != kSwapchainSegment)
-                    segmentsWithDraws.push_back(ref.segment);
+                segmentsWithDraws.push_back(ref.segment);
             std::sort(segmentsWithDraws.begin(), segmentsWithDraws.end());
             segmentsWithDraws.erase(std::unique(segmentsWithDraws.begin(), segmentsWithDraws.end()),
                                     segmentsWithDraws.end());
 
-            for (const PassSegment& segment : passSegments_)
+            // REMED-GFX-143: the acquired swapchain texture must be written and left presentable
+            // every rendered frame even when the game drew nothing to it, which the unconditional
+            // trailing pass gave for free. The LAST backbuffer segment always gets its pass, so a
+            // frame with no backbuffer work records exactly the one pass it always did; empty
+            // EARLIER backbuffer segments issue none.
+            std::size_t lastBackbuffer = passSegments_.size();
+            for (std::size_t i = 0; i < passSegments_.size(); ++i)
+                if (passSegments_[i].rt == nullptr && passSegments_[i].cube == nullptr)
+                    lastBackbuffer = i;
+            bool firstBackbufferPass = true;
+
+            for (std::size_t i = 0; i < passSegments_.size(); ++i)
             {
+                const PassSegment& segment = passSegments_[i];
+                const bool isBackbuffer = (segment.rt == nullptr && segment.cube == nullptr);
                 const bool draws = std::binary_search(segmentsWithDraws.begin(),
                                                       segmentsWithDraws.end(), segment.id);
                 const bool clears = segment.clearColorRequested || segment.clearDepthRequested ||
                                     segment.clearStencilRequested;
+                if (isBackbuffer)
+                {
+                    if (!draws && !clears && i != lastBackbuffer)
+                        continue;
+                    RenderToSwapchain(cmd, segment, swapchainTexture, firstBackbufferPass);
+                    firstBackbufferPass = false;
+                    continue;
+                }
                 if (!draws && !clears && !SegmentOwesFirstUseClear(segment))
                     continue;
                 if (segment.rt != nullptr)
                     RenderToTarget(cmd, segment);
-                else if (segment.cube != nullptr)
+                else
                     RenderToTargetCubeFace(cmd, segment);
             }
         }
-
-        SDL_GPUColorTargetInfo colorTarget{};
-        colorTarget.texture = swapchainTexture;
-        colorTarget.clear_color = clearColor_;
-        colorTarget.load_op = clearColorPending_ ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-        colorTarget.store_op = SDL_GPU_STOREOP_STORE;
-
-        SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
-        if (depthStencilTexture_ != nullptr)
-        {
-            depthStencilTarget.texture = depthStencilTexture_;
-            depthStencilTarget.clear_depth = clearDepth_;
-            depthStencilTarget.load_op = clearDepthPending_ ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-            depthStencilTarget.store_op = SDL_GPU_STOREOP_STORE;
-            depthStencilTarget.clear_stencil = clearStencil_;
-            depthStencilTarget.stencil_load_op = clearStencilPending_ ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-            depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
-        }
-
-        const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
-        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
-            cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
-        RenderPassOwner passOwner(pass);
-        // REMED-GFX-068: the scissor (like the viewport, REMED-GFX-064) is applied PER DRAW inside
-        // RenderQueuedDraws from each queued draw's own captured state, not once per pass here -- a
-        // per-pass read of the live scissor would apply the post-unbind full-backbuffer rect (see
-        // ApplyScissorForRef / QueuedDrawRef). SDL sets a default full-target scissor at pass begin,
-        // which each draw's ApplyScissorForRef then overrides.
-        // Real chronological draw order (adversarial-review finding #4) -- see drawOrder_'s own
-        // doc comment; replaces the old fixed "all 3D families, then all sprites" sequence.
-        const DrawTarget swapchainTarget{};
-        // The swapchain surface is never MSAA in this backend -- SDL_GPU_SAMPLECOUNT_1 always.
-        RenderQueuedDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1,
-                          depthStencilTexture_ != nullptr
-                              ? depthStencilFormat_
-                              : SDL_GPU_TEXTUREFORMAT_INVALID);
-        passOwner.End();
 
         // Cube mip regen is real GPU work -- must happen on this command buffer BEFORE submission
         // (per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass, but
@@ -1368,6 +1357,67 @@ namespace CNA::Internal::Backends::SdlGpu
         for (const auto& extra : segment.extraAttachments)
             if (extra->clearColorPending) return true;
         return false;
+    }
+
+    // REMED-GFX-143: one backbuffer bind cycle, into the swapchain texture acquired ONCE for this
+    // frame. This replaces the single trailing swapchain pass, which was passed kSwapchainSegment
+    // and so replayed every backbuffer draw of the frame regardless of when it was issued. Load
+    // actions are per cycle and per aspect: a cycle that issued its own Clear() clears that aspect,
+    // anything else LOADs what the previous cycle stored, which is what makes a later cycle compose
+    // with an earlier one instead of wiping or re-clearing it. The pre-fix rule -- clear only if a
+    // Clear() was actually issued, otherwise load the acquired texture -- is preserved exactly, so a
+    // frame with one backbuffer cycle is byte-for-byte unchanged. The frame-global
+    // clearColor_/clearColorPending_ trio survives as the fallback for a Clear() issued while no
+    // segment is open at all (the kSwapchainSegment sentinel state, reachable only before the first
+    // cycle is opened) and is consumed by the frame's FIRST backbuffer pass, which is where a
+    // pre-segment clear request logically belongs.
+    void SdlGpuGraphicsBackend::RenderToSwapchain(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
+                                                  SDL_GPUTexture* swapchainTexture,
+                                                  bool isFirstBackbuffer)
+    {
+        const bool clearColor   = segment.clearColorRequested   || (isFirstBackbuffer && clearColorPending_);
+        const bool clearDepth   = segment.clearDepthRequested   || (isFirstBackbuffer && clearDepthPending_);
+        const bool clearStencil = segment.clearStencilRequested || (isFirstBackbuffer && clearStencilPending_);
+
+        SDL_GPUColorTargetInfo colorTarget{};
+        colorTarget.texture = swapchainTexture;
+        colorTarget.clear_color = segment.clearColorRequested ? segment.clearColor : clearColor_;
+        colorTarget.load_op = clearColor ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+        colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+
+        SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
+        if (depthStencilTexture_ != nullptr)
+        {
+            depthStencilTarget.texture = depthStencilTexture_;
+            depthStencilTarget.clear_depth = segment.clearDepthRequested ? segment.clearDepth : clearDepth_;
+            depthStencilTarget.load_op = clearDepth ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            // STORE, always: a following backbuffer cycle LOADs the depth this one wrote, so a
+            // depth test issued after an intervening render-target cycle still sees it.
+            depthStencilTarget.store_op = SDL_GPU_STOREOP_STORE;
+            depthStencilTarget.clear_stencil = segment.clearStencilRequested ? segment.clearStencil : clearStencil_;
+            depthStencilTarget.stencil_load_op = clearStencil ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
+        }
+
+        const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
+            cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
+        RenderPassOwner passOwner(pass);
+        // REMED-GFX-068: the scissor (like the viewport, REMED-GFX-064) is applied PER DRAW inside
+        // RenderQueuedDraws from each queued draw's own captured state, not once per pass here -- a
+        // per-pass read of the live scissor would apply the post-unbind full-backbuffer rect (see
+        // ApplyScissorForRef / QueuedDrawRef). SDL sets a default full-target scissor at pass begin,
+        // which each draw's ApplyScissorForRef then overrides.
+        // Real chronological draw order (adversarial-review finding #4) -- see drawOrder_'s own
+        // doc comment; replaces the old fixed "all 3D families, then all sprites" sequence.
+        const DrawTarget swapchainTarget{};
+        // The swapchain surface is never MSAA in this backend -- SDL_GPU_SAMPLECOUNT_1 always.
+        RenderQueuedDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1,
+                          depthStencilTexture_ != nullptr
+                              ? depthStencilFormat_
+                              : SDL_GPU_TEXTUREFORMAT_INVALID,
+                          1, segment.id);
+        passOwner.End();
     }
 
     void SdlGpuGraphicsBackend::RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment)
@@ -1560,9 +1610,24 @@ namespace CNA::Internal::Backends::SdlGpu
         framePending_ = true;
     }
 
+    // REMED-GFX-143: a backbuffer bind cycle is a segment like any other. Selecting the backbuffer
+    // is not work, so framePending_ is deliberately NOT set here -- the first Clear() or draw issued
+    // inside the cycle sets it, exactly as it did when the backbuffer had no segment at all.
+    void SdlGpuGraphicsBackend::BeginBackbufferSegment()
+    {
+        PassSegment segment;
+        segment.id = nextSegmentId_++;
+        passSegments_.push_back(std::move(segment));
+        currentSegment_ = passSegments_.back().id;
+    }
+
+    // REMED-GFX-143: unbinding a target returns to the backbuffer, which opens a NEW backbuffer
+    // cycle rather than resuming a frame-wide "swapchain" bucket. That is what makes
+    // `draw A; bind t; draw; unbind; draw B` three ordered passes instead of one target pass
+    // followed by a trailing pass holding both A and B.
     void SdlGpuGraphicsBackend::EndRenderTargetSegment()
     {
-        currentSegment_ = kSwapchainSegment;
+        BeginBackbufferSegment();
     }
 
     void SdlGpuGraphicsBackend::ReopenSegmentForBoundTarget()
@@ -1572,6 +1637,8 @@ namespace CNA::Internal::Backends::SdlGpu
             BeginCubeFaceSegment(currentRenderTargetCube_->State(), currentActiveCubeFace_);
         else if (currentRenderTarget_ != nullptr)
             BeginRenderTargetSegment(currentRenderTarget_->State());
+        else
+            BeginBackbufferSegment();  // REMED-GFX-143: the backbuffer needs its cycle back too.
         // Re-opening must not itself make the frame look dirty -- nothing has been queued yet.
         framePending_ = false;
     }
@@ -4666,10 +4733,11 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUGraphicsPipeline* boundPipeline = nullptr;
         for (const QueuedDrawRef& ref : drawOrder_)
         {
-            // REMED-GFX-145: a render-target pass replays ONE bind cycle. Target identity alone
-            // would replay every cycle of that target -- exactly the collapsing this fixes. The
-            // swapchain's trailing pass passes kSwapchainSegment and keeps its target-only filter.
-            if (segment != kSwapchainSegment && ref.segment != segment)
+            // REMED-GFX-145: a pass replays ONE bind cycle. Target identity alone would replay
+            // every cycle of that target -- exactly the collapsing that fix removed. REMED-GFX-143:
+            // this holds for the backbuffer too, so there is no longer any "replay every swapchain
+            // draw whichever cycle issued it" escape.
+            if (ref.segment != segment)
                 continue;
             // REMED-GFX-064: apply this draw's own captured GraphicsDevice.Viewport before it is
             // issued. SDL_SetGPUViewport is pass-state that persists until changed, so setting it

@@ -293,31 +293,35 @@ class BackbufferPassOrderTest : public Game
     void skip(const std::string& label) { check(true, label); }
 
     /**
-     * @brief Gate for a check whose oracle is the backbuffer's own pixels.
+     * @brief Whether this backend's own pixels can judge a backbuffer question.
      *
      * A backend with no public backbuffer readback cannot answer any question in this file about
-     * backbuffer content. The skip names that, so the gap is visible in the output rather than
+     * backbuffer content. Every check still ISSUES its whole public command sequence there -- that
+     * is what a structural oracle (native pass order and load actions under an interposer) needs to
+     * observe, and issuing it also proves the sequence is legal and does not throw. Only the pixel
+     * judgement is skipped, and the skip names the gap so it is visible in the output rather than
      * silently counted as a pass for a reason nobody wrote down.
      */
-    bool RequireBackbuffer(const std::string& label)
+    bool CanJudgeBackbuffer(const std::string& label)
     {
         if (kContract.backbufferReadback == Support::Exact) return true;
-        skip(label + ": skipped -- this backend has no public backbuffer readback, so backbuffer "
-                     "content cannot be observed at all");
+        skip(label + ": sequence issued, judgement skipped -- this backend has no public backbuffer "
+                     "readback, so backbuffer content cannot be observed at all");
         return false;
     }
 
     /**
-     * @brief Gate for a check that can only distinguish an ordered stream from a trailing pass.
+     * @brief Whether a check that can only distinguish an ordered stream from a trailing pass counts.
      *
-     * Check A1 still runs on a backend that declares the defect and asserts the COLLAPSED shape,
-     * so the declaration turns red the day the backend is fixed.
+     * Check A1 still runs on a backend that declares the defect and asserts the COLLAPSED shape, so
+     * the declaration turns red the day the backend is fixed; every other such check reports a skip
+     * naming the reason rather than a failure that belongs to a different task.
      */
-    bool RequireOrder(const std::string& label)
+    bool CanJudgeOrder(const std::string& label)
     {
         if (kContract.orderedBackbufferSegments) return true;
-        skip(label + ": skipped -- this backend replays all backbuffer work in one trailing pass "
-                     "(declared open defect)");
+        skip(label + ": sequence issued, judgement skipped -- this backend replays all backbuffer "
+                     "work in one trailing pass (declared open defect)");
         return false;
     }
 
@@ -480,8 +484,10 @@ class BackbufferPassOrderTest : public Game
      * a reordered draw still cannot hide.
      */
     void CheckStripes(const Frame& f, const std::array<Color, kStripes>& expected,
-                      const std::string& label)
+                      const std::string& label, bool needsOrder = true)
     {
+        if (!CanJudgeBackbuffer(label)) return;
+        if (needsOrder && !CanJudgeOrder(label)) return;
         if (f.threw)
         {
             check(false, label + ": GetBackBufferData raised: " + f.what);
@@ -549,7 +555,6 @@ class BackbufferPassOrderTest : public Game
     void RunProduceConsumeProduce(GraphicsDevice& dev)
     {
         const std::string label = "A1 produce/consume/produce";
-        if (!RequireBackbuffer(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -562,12 +567,12 @@ class BackbufferPassOrderTest : public Game
         if (kContract.orderedBackbufferSegments)
             CheckStripes(f, { kRed, kRed, kGreen, kGreen },
                          label + ": each backbuffer cycle sees the target as it stood when that "
-                                 "cycle was issued");
+                                 "cycle was issued", false);
         else
             CheckStripes(f, { kGreen, kGreen, kGreen, kGreen },
                          label + ": this backend replays every backbuffer draw AFTER every target "
                                  "pass, so both consumers see the FINAL target content (declared "
-                                 "open defect)");
+                                 "open defect)", false);
     }
 
     /**
@@ -579,7 +584,6 @@ class BackbufferPassOrderTest : public Game
     void RunForwardConsume(GraphicsDevice& dev)
     {
         const std::string label = "A2 forward consume";
-        if (!RequireBackbuffer(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -589,7 +593,7 @@ class BackbufferPassOrderTest : public Game
         Frame f = ReadBackbuffer(dev);
         CheckStripes(f, { kRed, kGreen, kBlack, kBlack },
                      label + ": a backbuffer draw issued before a producer stays before it, and "
-                             "the later consumer still sees the produced content");
+                             "the later consumer still sees the produced content", false);
     }
 
     /**
@@ -598,8 +602,6 @@ class BackbufferPassOrderTest : public Game
     void RunOverlappingConsumers(GraphicsDevice& dev)
     {
         const std::string label = "A3 overlapping consumers";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -617,8 +619,6 @@ class BackbufferPassOrderTest : public Game
     void RunThreeCycles(GraphicsDevice& dev)
     {
         const std::string label = "A4 three cycles";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -643,8 +643,6 @@ class BackbufferPassOrderTest : public Game
     void RunTwoIdenticalTargets(GraphicsDevice& dev)
     {
         const std::string label = "A5 two identical targets";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto a = MakeTarget(dev, RenderTargetUsage::PreserveContents);
         auto b = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
@@ -721,8 +719,6 @@ class BackbufferPassOrderTest : public Game
     void RunClearInLaterCycle(GraphicsDevice& dev)
     {
         const std::string label = "C1 clear in later cycle";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -740,7 +736,6 @@ class BackbufferPassOrderTest : public Game
     void RunClearInFirstCycleOnly(GraphicsDevice& dev)
     {
         const std::string label = "C2 clear in first cycle only";
-        if (!RequireBackbuffer(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kRed);
@@ -750,15 +745,13 @@ class BackbufferPassOrderTest : public Game
         Frame f = ReadBackbuffer(dev);
         CheckStripes(f, { kBlue, kGreen, kRed, kRed },
                      label + ": a later backbuffer cycle LOADS what the earlier one stored instead "
-                             "of clearing again");
+                             "of clearing again", false);
     }
 
     /// C3 -- three cycles, a Clear in the middle one only.
     void RunClearInMiddleCycle(GraphicsDevice& dev)
     {
         const std::string label = "C3 clear in middle cycle";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -777,7 +770,6 @@ class BackbufferPassOrderTest : public Game
     void RunClearAfterDraw(GraphicsDevice& dev)
     {
         const std::string label = "C4 clear after draw in one cycle";
-        if (!RequireBackbuffer(label)) return;
 
         dev.Clear(kBlack);
         SpriteStripes(0, 4, kBlue);
@@ -786,25 +778,23 @@ class BackbufferPassOrderTest : public Game
         Frame f = ReadBackbuffer(dev);
         if (kContract.clearAfterDrawWinsOnBackbuffer)
             CheckStripes(f, { kGreen, kRed, kRed, kRed },
-                         label + ": a Clear issued after a draw wipes that draw");
+                         label + ": a Clear issued after a draw wipes that draw", false);
         else
             CheckStripes(f, { kGreen, kBlue, kBlue, kBlue },
                          label + ": this backend's only backbuffer clear mechanism is the pass "
                                  "load action, so a Clear cannot wipe a draw issued before it "
-                                 "inside the SAME cycle (declared, separate from segmentation)");
+                                 "inside the SAME cycle (declared, separate from segmentation)", false);
     }
 
     /// C5 -- a colour-only Clear in a later cycle must leave the depth buffer alone.
     void RunColourOnlyClearKeepsDepth(GraphicsDevice& dev)
     {
         const std::string label = "C5 colour-only clear keeps depth";
-        if (!RequireBackbuffer(label)) return;
         if (!kContract.backbufferDepth || !kContract.draws3D)
         {
             skip(label + ": skipped -- no backbuffer depth buffer or no 3D rasterization here");
             return;
         }
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
@@ -823,13 +813,11 @@ class BackbufferPassOrderTest : public Game
     void RunDepthOnlyClearInLaterCycle(GraphicsDevice& dev)
     {
         const std::string label = "C6 depth-only clear in later cycle";
-        if (!RequireBackbuffer(label)) return;
         if (!kContract.backbufferDepth || !kContract.draws3D)
         {
             skip(label + ": skipped -- no backbuffer depth buffer or no 3D rasterization here");
             return;
         }
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
@@ -859,7 +847,6 @@ class BackbufferPassOrderTest : public Game
     void RunDepthSurvivesInterveningTarget(GraphicsDevice& dev)
     {
         const std::string label = "D1 depth survives an intervening target";
-        if (!RequireBackbuffer(label)) return;
         if (!kContract.backbufferDepth || !kContract.draws3D)
         {
             skip(label + ": skipped -- no backbuffer depth buffer or no 3D rasterization here");
@@ -877,14 +864,13 @@ class BackbufferPassOrderTest : public Game
         Frame f = ReadBackbuffer(dev);
         CheckStripes(f, { kGreen, kGreen, kCyan, kBlack },
                      label + ": the depth an earlier backbuffer cycle wrote is neither discarded "
-                             "nor re-cleared by a later one, and untouched depth still accepts");
+                             "nor re-cleared by a later one, and untouched depth still accepts", false);
     }
 
     /// D2 -- the render target's own depth must not leak into the backbuffer's.
     void RunTargetDepthDoesNotLeak(GraphicsDevice& dev)
     {
         const std::string label = "D2 target depth does not leak";
-        if (!RequireBackbuffer(label)) return;
         if (!kContract.backbufferDepth || !kContract.draws3D)
         {
             skip(label + ": skipped -- no backbuffer depth buffer or no 3D rasterization here");
@@ -904,7 +890,7 @@ class BackbufferPassOrderTest : public Game
         Frame f = ReadBackbuffer(dev);
         CheckStripes(f, { kCyan, kBlack, kBlack, kBlack },
                      label + ": a depth write inside a render-target pass does not reject a later "
-                             "backbuffer draw");
+                             "backbuffer draw", false);
     }
 
     // =====================================================================
@@ -915,13 +901,11 @@ class BackbufferPassOrderTest : public Game
     void Run3DThenSpritesAcrossCycles(GraphicsDevice& dev)
     {
         const std::string label = "O1 3D then sprites across cycles";
-        if (!RequireBackbuffer(label)) return;
         if (!kContract.draws3D)
         {
             skip(label + ": skipped -- no 3D rasterization here");
             return;
         }
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -939,7 +923,6 @@ class BackbufferPassOrderTest : public Game
     void RunSpritesThen3DAcrossCycles(GraphicsDevice& dev)
     {
         const std::string label = "O2 sprites then 3D across cycles";
-        if (!RequireBackbuffer(label)) return;
         if (!kContract.draws3D)
         {
             skip(label + ": skipped -- no 3D rasterization here");
@@ -954,14 +937,13 @@ class BackbufferPassOrderTest : public Game
         Frame f = ReadBackbuffer(dev);
         CheckStripes(f, { kBlue, kGreen, kBlack, kBlack },
                      label + ": a 3D draw issued in a LATER backbuffer cycle covers a SpriteBatch "
-                             "draw issued in an earlier one");
+                             "draw issued in an earlier one", false);
     }
 
     /// O3 -- the same pair INSIDE one backbuffer cycle. Declared per backend; not this task.
     void RunMixedQueuesInOneCycle(GraphicsDevice& dev)
     {
         const std::string label = "O3 mixed queues in one cycle";
-        if (!RequireBackbuffer(label)) return;
         if (!kContract.draws3D)
         {
             skip(label + ": skipped -- no 3D rasterization here");
@@ -974,12 +956,12 @@ class BackbufferPassOrderTest : public Game
         Frame f = ReadBackbuffer(dev);
         if (kContract.mixedQueuesKeepPublicOrder)
             CheckStripes(f, { kBlue, kBlack, kBlack, kBlack },
-                         label + ": a sprite issued after a 3D draw inside ONE cycle covers it");
+                         label + ": a sprite issued after a 3D draw inside ONE cycle covers it", false);
         else
             CheckStripes(f, { kGreen, kBlack, kBlack, kBlack },
                          label + ": this backend replays all sprites then all 3D draws inside one "
                                  "cycle, so the 3D draw wins regardless of public order (declared "
-                                 "open defect with its own root cause, not segmentation)");
+                                 "open defect with its own root cause, not segmentation)", false);
     }
 
     // =====================================================================
@@ -990,8 +972,6 @@ class BackbufferPassOrderTest : public Game
     void RunViewportPerCycle(GraphicsDevice& dev)
     {
         const std::string label = "V1 viewport per cycle";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
         const int q = StripeW();
 
@@ -1013,6 +993,8 @@ class BackbufferPassOrderTest : public Game
         dev.setViewportProperty(Viewport(0, 0, bbW_, bbH_));
         Frame f = ReadBackbuffer(dev);
 
+        if (!CanJudgeBackbuffer(label)) return;
+        if (!CanJudgeOrder(label)) return;
         if (kContract.spriteViewportIsLocal)
         {
             // Stripe 0's left half is the third cycle's blue, its right half the first cycle's
@@ -1038,8 +1020,6 @@ class BackbufferPassOrderTest : public Game
     void RunScissorPerCycle(GraphicsDevice& dev)
     {
         const std::string label = "V2 scissor per cycle";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         if (!kContract.spriteScissorApplies)
         {
             skip(label + ": skipped -- this backend's SpriteBatch ignores ScissorRectangle");
@@ -1088,8 +1068,6 @@ class BackbufferPassOrderTest : public Game
     void RunUploadIsolation(GraphicsDevice& dev)
     {
         const std::string label = "U1 upload isolation";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -1110,13 +1088,11 @@ class BackbufferPassOrderTest : public Game
     void RunUploadIsolation3D(GraphicsDevice& dev)
     {
         const std::string label = "U2 upload isolation (3D)";
-        if (!RequireBackbuffer(label)) return;
         if (!kContract.draws3D)
         {
             skip(label + ": skipped -- no 3D rasterization here");
             return;
         }
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);
@@ -1139,8 +1115,6 @@ class BackbufferPassOrderTest : public Game
     void RunMrtInterleaved(GraphicsDevice& dev)
     {
         const std::string label = "M1 MRT interleaved";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto a = MakeTarget(dev, RenderTargetUsage::PreserveContents);
         auto b = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
@@ -1185,8 +1159,6 @@ class BackbufferPassOrderTest : public Game
             skip(label + ": skipped -- no RenderTargetCube on this backend");
             return;
         }
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
         auto cube = std::make_unique<RenderTargetCube>(dev, kRT, false, SurfaceFormat::Color,
                                                        DepthFormat::None, 0,
@@ -1243,8 +1215,6 @@ class BackbufferPassOrderTest : public Game
     void RunManyCycles(GraphicsDevice& dev)
     {
         const std::string label = "R1 many cycles";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
         const std::array<Color, 4> wheel = { kRed, kGreen, kBlue, kYellow };
 
@@ -1266,8 +1236,6 @@ class BackbufferPassOrderTest : public Game
     void RunSecondFrame(GraphicsDevice& dev)
     {
         const std::string label = "R2 second frame";
-        if (!RequireBackbuffer(label)) return;
-        if (!RequireOrder(label)) return;
         auto t = MakeTarget(dev, RenderTargetUsage::PreserveContents);
 
         dev.Clear(kBlack);

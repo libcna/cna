@@ -727,7 +727,13 @@ namespace CNA::Internal::Backends::SdlGpu
         struct PassSegment
         {
             std::uint64_t id = 0;
-            /// Exactly one of `rt` / `cube` is set; `cube` also carries `face`.
+            /**
+             * At most one of `rt` / `cube` is set; `cube` also carries `face`. REMED-GFX-143: with
+             * NEITHER set the segment is a BACKBUFFER bind cycle. The backbuffer used to have no
+             * segment at all -- `currentSegment_` simply held `kSwapchainSegment` while no target
+             * was bound, and `EnsureFrameRendered` recorded every backbuffer draw of the frame in
+             * one trailing swapchain pass no matter when it was issued.
+             */
             std::shared_ptr<SdlGpuRenderTarget2DState> rt;
             std::shared_ptr<SdlGpuRenderTargetCubeState> cube;
             int face = -1;
@@ -1692,14 +1698,14 @@ namespace CNA::Internal::Backends::SdlGpu
         // loops used to skip it -- only the ORDER changed, not the readiness rules. boundPipeline
         // is now tracked globally across every kind, not just within one family, so consecutive
         // same-pipeline draws of DIFFERENT kinds also skip a redundant rebind.
-        // REMED-GFX-145: @p segment restricts the replay to the ONE bind cycle this pass
-        // represents; kSwapchainSegment means "every draw whose DrawTarget is the swapchain,
-        // whichever cycle it was issued in", which is what the single trailing backbuffer pass
-        // still needs (interleaving backbuffer work BETWEEN target segments is REMED-GFX-143).
+        // REMED-GFX-145/143: @p segment restricts the replay to the ONE bind cycle this pass
+        // represents, and that now includes a backbuffer cycle. The old "replay every draw whose
+        // DrawTarget is the swapchain, whichever cycle it was issued in" escape is gone with the
+        // single trailing swapchain pass it existed for.
         void RenderQueuedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const DrawTarget& target,
                               SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                              SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount = 1,
-                              std::uint64_t segment = kSwapchainSegment);
+                              SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
+                              std::uint64_t segment);
         // Releases every transient buffer UploadSceneDrawData created, and clears all 3 queues --
         // safe to call immediately after SDL_SubmitGPUCommandBuffer (SDL_gpu defers the actual
         // free until the GPU is done, per SDL_ReleaseGPUBuffer's own documented contract).
@@ -1749,6 +1755,27 @@ namespace CNA::Internal::Backends::SdlGpu
         // that is precisely the case the old target-identity grouping could not represent.
         void BeginRenderTargetSegment(const std::shared_ptr<SdlGpuRenderTarget2DState>& rt);
         void BeginCubeFaceSegment(const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube, int face);
+        /**
+         * @brief REMED-GFX-143: opens a BACKBUFFER bind cycle.
+         *
+         * Called wherever the backbuffer becomes the active target -- at construction, on every
+         * unbind of a render target or cube face, and when a mid-frame flush rebuilds the segment
+         * list -- so leaving the backbuffer closes its cycle and returning opens a NEW one. Marking
+         * the frame pending is deliberately left to whatever is queued next: merely selecting the
+         * backbuffer is not work.
+         */
+        void BeginBackbufferSegment();
+        /**
+         * @brief Records one backbuffer bind cycle into the acquired swapchain texture.
+         *
+         * @param cmd               The frame's command buffer.
+         * @param segment           The bind cycle to replay.
+         * @param swapchainTexture  The texture acquired once for this frame.
+         * @param isFirstBackbuffer This is the frame's first backbuffer pass, so a segment with no
+         *                          Clear() of its own keeps the pre-fix load action.
+         */
+        void RenderToSwapchain(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
+                               SDL_GPUTexture* swapchainTexture, bool isFirstBackbuffer);
         /// Closes the open segment; subsequent work belongs to the swapchain until the next bind.
         void EndRenderTargetSegment();
         /// The open segment, or null when the swapchain is current.
@@ -1923,7 +1950,12 @@ namespace CNA::Internal::Backends::SdlGpu
         // SdlGpuRenderTarget2DState's own doc comment). Cleared, like every other queue, right
         // after a successful submit.
         std::vector<PassSegment> passSegments_;
-        /// The open segment's id, or kSwapchainSegment when no render target is bound.
+        /**
+         * The open segment's id. REMED-GFX-143: never `kSwapchainSegment` in ordinary operation --
+         * the backbuffer owns real segments too, so a draw issued with no render target bound
+         * carries the id of the backbuffer cycle it was issued in and is replayed in exactly that
+         * cycle's pass. The sentinel survives only as the "no segment has ever been opened" value.
+         */
         std::uint64_t currentSegment_ = kSwapchainSegment;
         /// Monotonically increasing; never reused within a frame, never a cache key.
         std::uint64_t nextSegmentId_ = 1;
