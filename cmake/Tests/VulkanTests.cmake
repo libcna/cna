@@ -1211,4 +1211,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_CubeVolume_SetDataContract COMMAND cna_test_vulkan_cube_volume_setdata_contract
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-144: the acquired swapchain image must not be written before
+        # vkAcquireNextImageKHR has handed it over. The acquire semaphore is waited at
+        # COLOR_ATTACHMENT_OUTPUT, but the swapchain render pass's automatic initialLayout
+        # transition -- a WRITE -- was ordered only by a subpass dependency whose first
+        # synchronization scope named nothing but stages EARLIER than that, so the transition could
+        # run before the semaphore signalled. This test enables Khronos synchronization validation
+        # IN PROCESS (VkValidationFeaturesEXT), proves the layer is loaded rather than assuming it,
+        # runs enough consecutive frames to wrap every frame slot and re-enter several swapchain
+        # images, includes REMED-GFX-143's backbuffer/render-target interleaving, drives a real
+        # swapchain recreation, and asserts the frame model with bounded counters as well as exact
+        # pixels -- so it cannot go green by losing its measurement.
+        cna_vulkan_test(cna_test_vulkan_swapchain_sync
+                        examples/vulkan_swapchain_sync_test.cpp)
+        cna_register_backend_test(NAME Vulkan_Swapchain_Sync COMMAND cna_test_vulkan_swapchain_sync
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()

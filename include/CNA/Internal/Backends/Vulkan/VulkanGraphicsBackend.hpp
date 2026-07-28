@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include <vulkan/vulkan.h>
 #include <algorithm>
@@ -990,6 +991,84 @@ namespace CNA::Internal::Backends::Vulkan
             return validationMessages_;
         }
 
+        /**
+         * @brief Returns the layer message-ID name for each captured validation message.
+         *
+         * Parallel to GetValidationMessagesEXT(): entry i is the pMessageIdName the layer supplied
+         * for message i, e.g. "SYNC-HAZARD-WRITE-AFTER-READ" or a VUID. Lets a regression classify
+         * by message class rather than by matching a diagnostic sentence.
+         *
+         * @return Message-ID names captured since backend construction.
+         */
+        NOXNA [[nodiscard]] const std::vector<std::string>& GetValidationMessageIdNamesEXT() const noexcept
+        {
+            return validationMessageIdNames_;
+        }
+
+        /**
+         * @brief Requests Khronos synchronization validation on the next instance created.
+         *
+         * Chains VkValidationFeaturesEXT into VkInstanceCreateInfo, so a regression can enable the
+         * synchronization checks in-process instead of depending on VK_LAYER_SETTINGS_PATH or on an
+         * environment variable a runner might drop. Must be called before the backend is
+         * constructed, and has no effect when the Khronos layer is unavailable.
+         *
+         * @param enabled True to request synchronization validation.
+         */
+        NOXNA static void SetSyncValidationEnabledEXT(bool enabled) noexcept;
+
+        /**
+         * @brief Reports whether the Khronos validation layer is actually active.
+         *
+         * False once CreateInstance() has found the layer missing, so a validation regression can
+         * fail loudly instead of reporting a meaningless zero message count.
+         *
+         * @return True when the layer was found and the debug messenger was installed.
+         */
+        NOXNA [[nodiscard]] static bool IsValidationActiveEXT() noexcept;
+
+        /** @brief Number of vkAcquireNextImageKHR calls that returned an image. */
+        NOXNA [[nodiscard]] uint64_t GetAcquireCountEXT() const noexcept { return acquireCountEXT_; }
+        /** @brief Number of per-frame vkQueueSubmit calls made by SubmitFrame. */
+        NOXNA [[nodiscard]] uint64_t GetFrameSubmitCountEXT() const noexcept { return frameSubmitCountEXT_; }
+        /** @brief Number of vkQueuePresentKHR calls, deferred presents included. */
+        NOXNA [[nodiscard]] uint64_t GetPresentCountEXT() const noexcept { return presentCountEXT_; }
+        /** @brief Number of frame-fence waits, including the deferred-readback hold. */
+        NOXNA [[nodiscard]] uint64_t GetFrameFenceWaitCountEXT() const noexcept { return frameFenceWaitCountEXT_; }
+        /** @brief Number of completed swapchain recreations. */
+        NOXNA [[nodiscard]] uint64_t GetSwapchainRecreateCountEXT() const noexcept { return swapchainRecreateCountEXT_; }
+        /** @brief Count of distinct swapchain image indices an acquire has returned. */
+        NOXNA [[nodiscard]] int GetDistinctAcquiredImageCountEXT() const noexcept;
+        /** @brief Count of distinct frame slots a submit has used. */
+        NOXNA [[nodiscard]] int GetUsedFrameSlotCountEXT() const noexcept;
+        /** @brief Number of images in the current swapchain. */
+        NOXNA [[nodiscard]] int GetSwapchainImageCountEXT() const noexcept
+        {
+            return static_cast<int>(swapchainImages_.size());
+        }
+        /** @brief Number of frame slots the backend cycles through. */
+        NOXNA [[nodiscard]] static constexpr int GetFramesInFlightEXT() noexcept { return MaxFramesInFlight; }
+        /** @brief Live image-available semaphores; must stay equal to the frame-slot count. */
+        NOXNA [[nodiscard]] int GetImageAvailableSemaphoreCountEXT() const noexcept
+        {
+            return static_cast<int>(imageAvailableSemaphores_.size());
+        }
+        /** @brief Live render-finished semaphores; must stay equal to the frame-slot count. */
+        NOXNA [[nodiscard]] int GetRenderFinishedSemaphoreCountEXT() const noexcept
+        {
+            return static_cast<int>(renderFinishedSemaphores_.size());
+        }
+        /** @brief Live frame fences; must stay equal to the frame-slot count. */
+        NOXNA [[nodiscard]] int GetFrameFenceCountEXT() const noexcept
+        {
+            return static_cast<int>(inFlightFences_.size());
+        }
+        /** @brief Live frame command buffers; must stay equal to the frame-slot count. */
+        NOXNA [[nodiscard]] int GetFrameCommandBufferCountEXT() const noexcept
+        {
+            return static_cast<int>(commandBuffers_.size());
+        }
+
         SDL_Window*  GetWindowInternal()   const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
@@ -1074,6 +1153,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkInstance       instance_       = VK_NULL_HANDLE;
         VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
         std::vector<std::string> validationMessages_;
+        /// REMED-GFX-144: pMessageIdName per entry of validationMessages_, same order and size.
+        std::vector<std::string> validationMessageIdNames_;
         VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
         VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
         VkDevice         device_         = VK_NULL_HANDLE;
@@ -1089,6 +1170,22 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VkSemaphore> imageAvailableSemaphores_;
         std::vector<VkSemaphore> renderFinishedSemaphores_;
         std::vector<VkFence>     inFlightFences_;
+
+        // REMED-GFX-144: bounded frame/swapchain instrumentation. A synchronization regression that
+        // can only read pixels proves nothing about the model that produced them, and one that can
+        // only parse a validation sentence breaks whenever the layer rewords it. These counters let
+        // a test assert the model itself: one acquire, one frame submit and one present per rendered
+        // frame; every frame slot and every swapchain image genuinely re-entered; and no per-frame
+        // growth in the objects that carry synchronization.
+        uint64_t acquireCountEXT_          = 0;
+        uint64_t frameSubmitCountEXT_      = 0;
+        uint64_t presentCountEXT_          = 0;
+        uint64_t frameFenceWaitCountEXT_   = 0;
+        uint64_t swapchainRecreateCountEXT_ = 0;
+        /// Bit i set once swapchain image index i has been returned by an acquire.
+        uint32_t acquiredImageMaskEXT_     = 0;
+        /// Bit i set once frame slot i has been used by a submit.
+        uint32_t usedFrameSlotMaskEXT_     = 0;
 
         // --- MSAA state (set at construction, fixed for backend lifetime) ---
         VkSampleCountFlagBits    sampleCount_     = VK_SAMPLE_COUNT_1_BIT;

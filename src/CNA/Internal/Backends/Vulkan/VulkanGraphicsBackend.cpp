@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+#include <bit>
 #include <algorithm>
 #include <cassert>
 #include <cstring>
@@ -32,6 +33,13 @@ namespace CNA::Internal::Backends::Vulkan
 #else
     static bool sEnableValidation = true;
 #endif
+
+    // REMED-GFX-144: opt-in synchronization validation, off unless a regression asks for it. The
+    // Khronos layer's synchronization checks are not part of the default validation set, which is
+    // why the whole class went unmeasured until REMED-GFX-140; requesting them through
+    // VkValidationFeaturesEXT keeps the regression self-contained rather than dependent on a
+    // VK_LAYER_SETTINGS_PATH file or an environment variable a test runner may not forward.
+    static bool sRequestSyncValidation = false;
 
     // =========================================================================
     // Helpers
@@ -1526,18 +1534,82 @@ namespace CNA::Internal::Backends::Vulkan
         const char* const* sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlN);
         std::vector<const char*> exts(sdlExts, sdlExts + sdlN);
         if (sEnableValidation) exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        // REMED-GFX-144: VK_EXT_validation_features is provided by the Khronos layer itself, so it
+        // is requested only when that layer is really going in.
+        const bool wantSyncValidation = sEnableValidation && sRequestSyncValidation;
+        if (wantSyncValidation) exts.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+
+        // The layer caps repeats of one message id at ten by default, which would make a reported
+        // hazard COUNT meaningless. VK_EXT_layer_settings lifts the cap in process; it is queried
+        // from the layer rather than assumed, because requesting an absent instance extension makes
+        // vkCreateInstance fail outright.
+        bool haveLayerSettings = false;
+        if (wantSyncValidation) {
+            uint32_t en = 0;
+            vkEnumerateInstanceExtensionProperties(kValidationLayers[0], &en, nullptr);
+            std::vector<VkExtensionProperties> layerExts(en);
+            vkEnumerateInstanceExtensionProperties(kValidationLayers[0], &en, layerExts.data());
+            for (const auto& e : layerExts)
+                if (std::strcmp(e.extensionName, VK_EXT_LAYER_SETTINGS_EXTENSION_NAME) == 0) {
+                    haveLayerSettings = true;
+                    break;
+                }
+            if (haveLayerSettings) exts.push_back(VK_EXT_LAYER_SETTINGS_EXTENSION_NAME);
+        }
+
+        const VkValidationFeatureEnableEXT syncFeature[] = {
+            VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT
+        };
+        VkValidationFeaturesEXT vf{};
+        vf.sType                         = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+        vf.enabledValidationFeatureCount = static_cast<uint32_t>(std::size(syncFeature));
+        vf.pEnabledValidationFeatures    = syncFeature;
+
+        const VkBool32 kFalse = VK_FALSE;
+        const VkLayerSettingEXT settings[] = {
+            { kValidationLayers[0], "enable_message_limit",
+              VK_LAYER_SETTING_TYPE_BOOL32_EXT, 1, &kFalse },
+        };
+        VkLayerSettingsCreateInfoEXT lsci{};
+        lsci.sType        = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT;
+        lsci.pNext        = &vf;
+        lsci.settingCount = static_cast<uint32_t>(std::size(settings));
+        lsci.pSettings    = settings;
 
         VkInstanceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         ci.pApplicationInfo = &app;
         ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
+        if (wantSyncValidation)
+            ci.pNext = haveLayerSettings ? static_cast<const void*>(&lsci)
+                                         : static_cast<const void*>(&vf);
         if (sEnableValidation) {
             ci.enabledLayerCount = static_cast<uint32_t>(std::size(kValidationLayers));
             ci.ppEnabledLayerNames = kValidationLayers;
         }
         if (vkCreateInstance(&ci, nullptr, &instance_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateInstance failed");
+    }
+
+    void VulkanGraphicsBackend::SetSyncValidationEnabledEXT(bool enabled) noexcept
+    {
+        sRequestSyncValidation = enabled;
+    }
+
+    bool VulkanGraphicsBackend::IsValidationActiveEXT() noexcept
+    {
+        return sEnableValidation;
+    }
+
+    int VulkanGraphicsBackend::GetDistinctAcquiredImageCountEXT() const noexcept
+    {
+        return std::popcount(acquiredImageMaskEXT_);
+    }
+
+    int VulkanGraphicsBackend::GetUsedFrameSlotCountEXT() const noexcept
+    {
+        return std::popcount(usedFrameSlotMaskEXT_);
     }
 
     void VulkanGraphicsBackend::SetupDebugMessenger()
@@ -1565,8 +1637,15 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (sev >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
             auto* backend = static_cast<VulkanGraphicsBackend*>(userData);
-            if (backend != nullptr && d != nullptr && d->pMessage != nullptr)
+            if (backend != nullptr && d != nullptr && d->pMessage != nullptr) {
                 backend->validationMessages_.emplace_back(d->pMessage);
+                // REMED-GFX-144: pMessageIdName carries the layer's stable message name
+                // ("SYNC-HAZARD-WRITE-AFTER-READ", "VUID-..."), which pMessage does not. Recording
+                // it lets a regression classify by message CLASS instead of matching a diagnostic
+                // sentence the layer is free to reword.
+                backend->validationMessageIdNames_.emplace_back(
+                    d->pMessageIdName != nullptr ? d->pMessageIdName : "");
+            }
             SDL_Log("[Vulkan Validation] %s", d->pMessage);
         }
         return VK_FALSE;
@@ -2449,6 +2528,12 @@ namespace CNA::Internal::Backends::Vulkan
         CreateDepthResources();
         if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) CreateMsaaColorResources();
         CreateFramebuffers();
+        // REMED-GFX-144: the new swapchain may hold a different number of images, and an index that
+        // was never reachable before can now be acquired, so the observed-index record starts over
+        // with it. The frame-slot sync objects are deliberately NOT recreated: they are indexed by
+        // frame slot, never by image, so their count is fixed for the backend's lifetime.
+        ++swapchainRecreateCountEXT_;
+        acquiredImageMaskEXT_ = 0;
     }
 
     // =========================================================================
@@ -7876,6 +7961,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (!initialized_) return false;
 
         vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+        ++frameFenceWaitCountEXT_;
 
         // REMED-GFX-075: the current frame slot's fence just signalled, so free any retired
         // deferred-resource handles whose consuming frame is now provably complete (see
@@ -7889,6 +7975,11 @@ namespace CNA::Internal::Backends::Vulkan
         if (result == VK_ERROR_OUT_OF_DATE_KHR) { RecreateSwapchain(); return false; }
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
             throw std::runtime_error("vkAcquireNextImageKHR failed");
+        // REMED-GFX-144: counted only on an acquire that really handed over an image. An
+        // OUT_OF_DATE acquire returns above WITHOUT resetting the fence, which is what keeps a
+        // failed acquire from leaving this slot's fence permanently unsignalled.
+        ++acquireCountEXT_;
+        if (imageIndex < 32) acquiredImageMaskEXT_ |= (1u << imageIndex);
 
         vkResetFences(device_, 1, &inFlightFences_[currentFrame_]);
         vkResetCommandBuffer(commandBuffers_[currentFrame_], 0);
@@ -7905,6 +7996,8 @@ namespace CNA::Internal::Backends::Vulkan
         si.signalSemaphoreCount = 1; si.pSignalSemaphores = signalSems;
         if (vkQueueSubmit(graphicsQueue_, 1, &si, inFlightFences_[currentFrame_]) != VK_SUCCESS)
             throw std::runtime_error("vkQueueSubmit failed");
+        ++frameSubmitCountEXT_;
+        if (currentFrame_ < 32) usedFrameSlotMaskEXT_ |= (1u << currentFrame_);
 
         // REMED-GFX-075: this Full record consumed every deferred entry; advance the retirement
         // generation clock so resources retired during this frame's build are freed only after this
@@ -7916,6 +8009,7 @@ namespace CNA::Internal::Backends::Vulkan
             // (ReadBackbuffer) reads the staging buffer before the image is presented, so
             // presentation-engine timing can never corrupt the captured pixels.
             vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+            ++frameFenceWaitCountEXT_;
             deferredPresentImageIndex_ = imageIndex;
             hasDeferredPresent_        = true;
             return true;
@@ -7928,6 +8022,7 @@ namespace CNA::Internal::Backends::Vulkan
         pi.swapchainCount     = 1; pi.pSwapchains     = sc;
         pi.pImageIndices      = &imageIndex;
         result = vkQueuePresentKHR(presentQueue_, &pi);
+        ++presentCountEXT_;
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
             RecreateSwapchain();
         else if (result != VK_SUCCESS)
@@ -7954,6 +8049,7 @@ namespace CNA::Internal::Backends::Vulkan
         pi.swapchainCount     = 1; pi.pSwapchains     = sc;
         pi.pImageIndices      = &imageIndex;
         VkResult result = vkQueuePresentKHR(presentQueue_, &pi);
+        ++presentCountEXT_;
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
             RecreateSwapchain();
         else if (result != VK_SUCCESS)
