@@ -18,9 +18,10 @@
 // (this backend has no oracle harness) -- the check is that dispatch genuinely selects a
 // different, real shader per the flag, matching the same discriminating-scene technique already
 // proven on 3 other backends, not that the numeric result matches another backend's raw value:
-// this backend's swapchain prefers an sRGB format (see webgpu_littextured3d_test.cpp's own header
-// comment), so a raw readback of a linear mid-tone fragment value comes back gamma-encoded and is
-// not directly comparable to EasyGL's/Vulkan's/Bgfx's own linear-readback numbers.
+// REMED-GFX-131 made this backend's readback directly comparable to the other three: its render
+// targets and backbuffer now use a non-sRGB format, matching SurfaceFormat::Color's plain UNORM
+// byte semantics, so the values asserted below are the SAME linear numbers EasyGL/Vulkan/Bgfx read
+// for this identical scene rather than their gamma-encoded counterparts.
 //
 // 3 checks:
 //   (a) PreferPerPixelLighting=false: vertex-lit Gouraud-averaged result.
@@ -167,22 +168,20 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        // Expected values below are gamma-encoded, NOT the raw ~127/~152 linear values EasyGL/
-        // Vulkan/Bgfx read directly for this identical scene (see this file's own header comment
-        // on this backend's sRGB swapchain preference) -- empirically measured on this backend,
-        // then confirmed to match the sRGB encode of those same linear values almost exactly
-        // (sRGB(127/255)=~187, sRGB(152/255)=~203), i.e. this is the SAME underlying shader math,
-        // just displayed through a gamma curve the other 3 backends' linear readback doesn't hit.
+        // REMED-GFX-131: the expected values are now the raw linear ~127/~152 that EasyGL, Vulkan
+        // and Bgfx read for this identical scene. They used to be 187/203 -- the sRGB encode of
+        // exactly those numbers -- because this backend rendered into an *UnormSrgb attachment.
+        // Measured post-fix as 127/152, so all four backends agree on the same shader math.
         const Color vertexLit = renderWith(dev, false);
         std::printf("[INFO] vertex-lit (PreferPerPixelLighting=false) centre = (%d,%d,%d)\n",
                     vertexLit.getRProperty(), vertexLit.getGProperty(), vertexLit.getBProperty());
-        check(matches(vertexLit, 187, 187, 187),
+        check(matches(vertexLit, 127, 127, 127),
               "(a) PreferPerPixelLighting=false renders the Gouraud-averaged vertex-lit result");
 
         const Color pixelLit = renderWith(dev, true);
         std::printf("[INFO] pixel-lit (PreferPerPixelLighting=true) centre = (%d,%d,%d)\n",
                     pixelLit.getRProperty(), pixelLit.getGProperty(), pixelLit.getBProperty());
-        check(matches(pixelLit, 203, 203, 203),
+        check(matches(pixelLit, 152, 152, 152),
               "(b) PreferPerPixelLighting=true renders the fresh per-fragment pixel-lit result");
 
         check(!matches(vertexLit, pixelLit.getRProperty(), pixelLit.getGProperty(), pixelLit.getBProperty(), 3),

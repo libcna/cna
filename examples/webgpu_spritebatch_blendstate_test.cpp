@@ -9,10 +9,11 @@
 // bit, all enabled states use one hardcoded straight-alpha equation, and blend constants are
 // frame-final rather than per batch.
 //
-// WebGPU deliberately prefers an sRGB swapchain format and its RenderTarget2D mirrors that format.
-// The shader, clear values, and native blending operate in linear space; GetData() returns the
-// encoded attachment bytes. Expected RGB values below are therefore analytically blended in
-// linear space and explicitly sRGB-encoded before comparison. Alpha is not sRGB encoded.
+// REMED-GFX-131: SurfaceFormat::Color is a plain 8-bit UNORM byte format on every backend, so the
+// shader output, the clear value, the native blend result and the byte GetData() returns are all
+// the same value. Expected RGBA values below are therefore analytically blended and converted with
+// one plain UNORM rounding, for colour and alpha alike. This file previously sRGB-encoded its RGB
+// expectations because WebGPU gave its render targets the swapchain's *UnormSrgb format.
 //
 // Permanent coverage also records cache cardinality, proves dynamic constants and object
 // identities are not keys, exercises RT -> backbuffer -> RT reuse, checks post-Begin mutation,
@@ -63,18 +64,17 @@ namespace
         return static_cast<float>(value) / 255.0f;
     }
 
-    int SrgbByte(float linear)
+    /**
+     * @brief The byte a unit colour component must be stored as.
+     *
+     * REMED-GFX-131: this used to apply a linear-to-sRGB encode, because WebGPU gave its render
+     * targets the swapchain's *UnormSrgb format. SurfaceFormat::Color is a plain 8-bit UNORM byte
+     * format, so the shader's linear output IS the stored byte and the encode was reproducing a
+     * defect in the oracle. Colour and alpha now share one conversion, as they always should have.
+     */
+    int UnormByte(float value)
     {
-        linear = std::clamp(linear, 0.0f, 1.0f);
-        const float encoded = linear <= 0.0031308f
-            ? linear * 12.92f
-            : 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
-        return static_cast<int>(std::lround(encoded * 255.0f));
-    }
-
-    int LinearAlphaByte(float alpha)
-    {
-        return static_cast<int>(std::lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f));
+        return static_cast<int>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
     }
 
     int AbsI(int value)
@@ -106,17 +106,17 @@ class WebGpuSpriteBatchBlendStateTest final : public Game
     void CheckLinear(const Color& actual, float r, float g, float b, float a,
                      const std::string& label, int tolerance = 5)
     {
-        const int er = SrgbByte(r);
-        const int eg = SrgbByte(g);
-        const int eb = SrgbByte(b);
-        const int ea = LinearAlphaByte(a);
+        const int er = UnormByte(r);
+        const int eg = UnormByte(g);
+        const int eb = UnormByte(b);
+        const int ea = UnormByte(a);
         const bool matches =
             AbsI(actual.getRProperty() - er) <= tolerance &&
             AbsI(actual.getGProperty() - eg) <= tolerance &&
             AbsI(actual.getBProperty() - eb) <= tolerance &&
             AbsI(actual.getAProperty() - ea) <= tolerance;
         Check(matches,
-              label + " expected encoded RGBA(" + std::to_string(er) + "," +
+              label + " expected stored RGBA(" + std::to_string(er) + "," +
               std::to_string(eg) + "," + std::to_string(eb) + "," +
               std::to_string(ea) + ") got (" +
               std::to_string(actual.getRProperty()) + "," +

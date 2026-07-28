@@ -1116,7 +1116,26 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUDevice device_ = nullptr;
         WGPUQueue queue_ = nullptr;
         WGPUSurfaceConfiguration surfaceConfig_{};
+        // REMED-GFX-131: two distinct formats, deliberately separated.
+        //
+        // surfaceFormat_ is CNA's SurfaceFormat::Color mapping: the format every render pipeline
+        // declares as its colour target, every RenderTarget2D/RenderTargetCube allocates, and every
+        // backbuffer view is created with. XNA's SurfaceFormat.Color is a plain 8-bit UNORM byte
+        // format -- SurfaceFormat.ColorSrgbEXT is the separate, explicitly gamma-encoded one -- so
+        // this is ALWAYS a non-sRGB format. It used to be the surface's configured format directly,
+        // which made the hardware apply a linear-to-sRGB encode on every render-pass store: a
+        // channel written as 128 read back as 188.
+        //
+        // surfaceConfiguredFormat_ is what the SURFACE itself is configured with, which the
+        // platform may only offer as an sRGB variant. When the two differ, the surface is
+        // configured with the non-sRGB counterpart listed in viewFormats and every backbuffer view
+        // is created in surfaceFormat_, so the byte semantics above hold with no extra pipeline,
+        // pass, texture or per-pixel conversion. They are equal on every adapter that offers a
+        // non-sRGB surface format at all, which is the overwhelmingly common case.
         WGPUTextureFormat surfaceFormat_ = WGPUTextureFormat_Undefined;
+        WGPUTextureFormat surfaceConfiguredFormat_ = WGPUTextureFormat_Undefined;
+        /// Backing storage for surfaceConfig_.viewFormats, which only borrows the array.
+        std::array<WGPUTextureFormat, 1> surfaceViewFormats_{WGPUTextureFormat_Undefined};
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
 

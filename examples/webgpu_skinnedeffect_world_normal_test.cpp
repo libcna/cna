@@ -36,10 +36,11 @@
 //        no-world  (Variant A)                 = norm(1,1,0)   -> N.L = 0.707 -> ~180
 //   4. World = RotationZ(90) * Scale(2,1,1): CPU-derived by the same formula.
 //
-// The N.L values above are LINEAR; this backend's swapchain is sRGB, so the readback byte is the
-// sRGB OETF of the linear N.L (e.g. correct scale N.L=0.894 reads ~243, not 228; un-worlded 0.707
-// reads ~219; raw-World 0.447 reads ~178). The three cases stay three-way distinguishable in sRGB
-// space. See LinearToSrgb() below -- the expectation is encoded the same way the pipeline writes.
+// REMED-GFX-131: the readback byte is now simply round(N.L * 255), exactly as on a backend like
+// EasyGL or Vulkan. SurfaceFormat::Color is a plain UNORM byte format, so this backend's render
+// targets and backbuffer no longer use an *UnormSrgb format that gamma-encoded every stored value
+// (correct scale N.L=0.894 read ~243 instead of 228, un-worlded 0.707 read ~219, raw-World 0.447
+// read ~178). The three cases remain three-way distinguishable.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -83,17 +84,6 @@ namespace
 {
     constexpr int   kSize = 64;
     constexpr float kQuad = 0.9f;
-
-    // WebGPU's swapchain is BGRA8UnormSrgb/RGBA8UnormSrgb (see WebGPUGraphicsBackend's
-    // preferredFormats): the shader emits a LINEAR N.L, the hardware sRGB-encodes on write, and
-    // GetBackBufferData returns the raw sRGB bytes. So the expected byte is the sRGB OETF of the
-    // analytic linear N.L -- not N.L*255 as on a linear-backbuffer backend like EasyGL/Vulkan.
-    // (Empirically confirmed: an un-worlded N.L=0.707 reads back as 219 = round(255*sRGB(0.707)).)
-    float LinearToSrgb(float c)
-    {
-        if (c <= 0.0031308f) return 12.92f * c;
-        return 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
-    }
 
     Vector3 ExpectedWorldNormal(const Matrix& world, const Vector3& n)
     {
@@ -176,8 +166,8 @@ class WebGpuSkinnedEffectWorldNormalTest : public Game
     {
         const Vector3 wn = ExpectedWorldNormal(world, n);
         const float   ndotl = wn.Y > 0.0f ? wn.Y : 0.0f;      // L = (0,1,0)
-        // sRGB-encode the linear N.L to match this backend's sRGB swapchain (see LinearToSrgb).
-        const int     want  = static_cast<int>(LinearToSrgb(ndotl) * 255.0f + 0.5f);
+        // REMED-GFX-131: the stored byte is the shader's own linear N.L, unencoded.
+        const int     want  = static_cast<int>(ndotl * 255.0f + 0.5f);
 
         const Color got = Render(dev, world, n, preferPerPixel);
         const int gotV = got.getRProperty();

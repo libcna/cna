@@ -102,23 +102,18 @@ namespace
             && std::abs(got.getAProperty() - expected.getAProperty()) <= tolerance;
     }
 
-    Color ExpectedStoredColor(const Color& linear)
+    /**
+     * @brief What a cube face must hold after a draw of @p written.
+     *
+     * REMED-GFX-131: the stored bytes ARE the written bytes, on every backend. This used to fork
+     * on a WebGPU-only CNA_GFX096_EXPECT_SRGB_ENCODED define that sRGB-encoded the expectation,
+     * because that backend gave its render targets the swapchain's *UnormSrgb format; SurfaceFormat
+     * ::Color is a plain UNORM byte format, so that fork encoded a defect into the oracle rather
+     * than a platform difference.
+     */
+    Color ExpectedStoredColor(const Color& written)
     {
-#if defined(CNA_GFX096_EXPECT_SRGB_ENCODED)
-        auto encode = [](int channel) {
-            const float value = static_cast<float>(channel) / 255.0f;
-            const float encoded = value <= 0.0031308f
-                ? 12.92f * value
-                : 1.055f * std::pow(value, 1.0f / 2.4f) - 0.055f;
-            return static_cast<int>(std::lround(encoded * 255.0f));
-        };
-        return Color(encode(linear.getRProperty()),
-                     encode(linear.getGProperty()),
-                     encode(linear.getBProperty()),
-                     static_cast<int>(linear.getAProperty()));
-#else
-        return linear;
-#endif
+        return written;
     }
 }
 

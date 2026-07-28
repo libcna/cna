@@ -150,6 +150,24 @@ namespace CNA::Internal::Backends::WebGPU
             return false;
         }
 
+        /**
+         * @brief The non-sRGB counterpart of an 8-bit colour format, or the format unchanged.
+         *
+         * REMED-GFX-131: CNA's SurfaceFormat::Color is a plain UNORM byte format, so every colour
+         * attachment this backend renders into must use the linear variant. Channel order is
+         * deliberately preserved -- only the transfer function is dropped -- so the readback
+         * swizzle that keys on BGRA-ness stays correct either way.
+         */
+        [[nodiscard]] constexpr WGPUTextureFormat NonSrgbColorFormat(WGPUTextureFormat format)
+        {
+            switch (format)
+            {
+                case WGPUTextureFormat_BGRA8UnormSrgb: return WGPUTextureFormat_BGRA8Unorm;
+                case WGPUTextureFormat_RGBA8UnormSrgb: return WGPUTextureFormat_RGBA8Unorm;
+                default:                               return format;
+            }
+        }
+
         struct AdapterRequestState
         {
             WGPUAdapter adapter = nullptr;
@@ -1122,6 +1140,9 @@ namespace CNA::Internal::Backends::WebGPU
         // (WebGPUTextureCubeBackend's own convention for a plain upload-only TextureCube) --
         // every GetOrCreatePipeline*3D() hardcodes `target.format = surfaceFormat_`, so a 3D draw
         // into a cube face must match that format to stay pipeline-compatible.
+        //
+        // REMED-GFX-131: surfaceFormat_ is guaranteed non-sRGB, so a cube face carries the same
+        // byte-exact SurfaceFormat::Color semantics as a RenderTarget2D and a plain TextureCube.
         colorFormat_ = owner_->surfaceFormat_;
         if (colorFormat_ == WGPUTextureFormat_Undefined)
             throw std::runtime_error("CNA WebGPU: cannot create a RenderTargetCube before the "
@@ -1563,7 +1584,7 @@ namespace CNA::Internal::Backends::WebGPU
         if (width_ <= 0 || height_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTarget2D dimensions must be positive");
 
-        // Always created in the swapchain's own chosen format (surfaceFormat_), NOT
+        // Always created in the backend's colour format (surfaceFormat_), NOT
         // WGPUTextureFormat_RGBA8Unorm (the format every plain WebGPUTextureBackend always uses)
         // -- this lets every existing GetOrCreatePipeline*3D() (each hardcodes
         // `target.format = surfaceFormat_` at pipeline-creation time) render into this target's
@@ -1571,6 +1592,12 @@ namespace CNA::Internal::Backends::WebGPU
         // Sampling this render target back as an ordinary texture (SpriteBatch/
         // BasicEffect.Texture) is unaffected by this choice -- WGSL texture_2d<f32> sampling does
         // not care about the exact underlying texture format.
+        //
+        // REMED-GFX-131: surfaceFormat_ is guaranteed non-sRGB (see its own declaration), so this
+        // inheritance no longer imports a hardware gamma encode into a resource whose bytes
+        // RenderTarget2D::GetData hands straight to game code. It is the same format the plain
+        // Texture2D path uses, which is what makes ordinary textures and render targets share one
+        // colour semantics.
         colorFormat_ = owner_->surfaceFormat_;
         if (colorFormat_ == WGPUTextureFormat_Undefined)
             throw std::runtime_error("CNA WebGPU: cannot create a RenderTarget2D before the "
@@ -2255,13 +2282,21 @@ namespace CNA::Internal::Backends::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to query surface capabilities");
         }
 
-        WGPUTextureFormat chosenFormat = capabilities.formats[0];
+        // REMED-GFX-131: prefer a NON-sRGB surface format, exactly as VulkanGraphicsBackend::
+        // CreateSwapchain() already does for the identical decision, and for the identical reason:
+        // XNA's SurfaceFormat.Color -- the default backbuffer format, and the only format the
+        // IGraphicsBackend render-target entry points can even express -- is a plain 8-bit UNORM
+        // byte format, while SurfaceFormat.ColorSrgbEXT is the separate gamma-encoded one. An sRGB
+        // surface format makes the hardware encode every value the render pass stores, and this
+        // backend copies the surface format into every render target and every pipeline's colour
+        // target, so that encode reached offscreen resources whose bytes a game reads back.
         constexpr WGPUTextureFormat preferredFormats[] = {
-            WGPUTextureFormat_BGRA8UnormSrgb,
-            WGPUTextureFormat_RGBA8UnormSrgb,
             WGPUTextureFormat_BGRA8Unorm,
-            WGPUTextureFormat_RGBA8Unorm
+            WGPUTextureFormat_RGBA8Unorm,
+            WGPUTextureFormat_BGRA8UnormSrgb,
+            WGPUTextureFormat_RGBA8UnormSrgb
         };
+        WGPUTextureFormat chosenFormat = capabilities.formats[0];
         for (const auto format : preferredFormats)
         {
             if (HasSurfaceFormat(capabilities, format))
@@ -2270,6 +2305,15 @@ namespace CNA::Internal::Backends::WebGPU
                 break;
             }
         }
+
+        // The colour format CNA renders in. Equal to chosenFormat whenever the surface offers a
+        // non-sRGB format at all; otherwise the sRGB format's own non-sRGB counterpart, requested
+        // below through viewFormats so every view this backend creates over a surface texture
+        // reinterprets those same bytes without a transfer function. This keeps SurfaceFormat::
+        // Color byte-exact even on a surface that can only be CONFIGURED as sRGB, and costs
+        // nothing: no extra pipeline, pass, texture, submit or per-pixel conversion.
+        const WGPUTextureFormat renderFormat = NonSrgbColorFormat(chosenFormat);
+        const bool needsViewReinterpretation = renderFormat != chosenFormat;
 
         WGPUPresentMode presentMode = WGPUPresentMode_Fifo;
         if (swapInterval_ == 0)
@@ -2288,14 +2332,21 @@ namespace CNA::Internal::Backends::WebGPU
             ? capabilities.alphaModes[0]
             : WGPUCompositeAlphaMode_Auto;
 
-        const bool formatChanged = surfaceFormat_ != chosenFormat;
-        surfaceFormat_ = chosenFormat;
+        const bool formatChanged = surfaceFormat_ != renderFormat;
+        surfaceFormat_ = renderFormat;
+        surfaceConfiguredFormat_ = chosenFormat;
         surfaceConfig_ = {};
         surfaceConfig_.device = device_;
-        surfaceConfig_.format = surfaceFormat_;
+        surfaceConfig_.format = surfaceConfiguredFormat_;
         surfaceConfig_.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc;
         surfaceConfig_.width = static_cast<std::uint32_t>(width);
         surfaceConfig_.height = static_cast<std::uint32_t>(height);
+        // Must outlive wgpuSurfaceConfigure(): WGPUSurfaceConfiguration only borrows the array.
+        // surfaceConfig_ is a member, so this pointer is deliberately kept valid for as long as
+        // the configuration it belongs to is.
+        surfaceViewFormats_[0] = surfaceFormat_;
+        surfaceConfig_.viewFormatCount = needsViewReinterpretation ? 1u : 0u;
+        surfaceConfig_.viewFormats = needsViewReinterpretation ? surfaceViewFormats_.data() : nullptr;
         surfaceConfig_.presentMode = presentMode;
         surfaceConfig_.alphaMode = alphaMode;
         wgpuSurfaceConfigure(surface_, &surfaceConfig_);
@@ -5657,7 +5708,21 @@ struct VSOut {
         // stays Store (not Discard) on the multisampled attachment so a future frame's
         // WGPULoadOp_Load (when no Clear() was queued that frame) still observes real content,
         // exactly like the pre-MSAA behaviour of Load-ing straight from the swapchain texture.
-        WGPUTextureView backBuffer = wgpuTextureCreateView(acquiredTexture_, nullptr);
+        // REMED-GFX-131: created explicitly in surfaceFormat_ (CNA's non-sRGB SurfaceFormat::Color
+        // mapping) rather than with a null descriptor, which would inherit the surface texture's
+        // own configured format. The two differ only on a surface that offers no non-sRGB format at
+        // all, where ConfigureSurface() listed this format in viewFormats precisely so this view is
+        // legal; everywhere else this is the texture's own format and the call is unchanged.
+        WGPUTextureViewDescriptor backBufferViewDescriptor{};
+        backBufferViewDescriptor.label = StringView("CNA WebGPU Backbuffer View");
+        backBufferViewDescriptor.format = surfaceFormat_;
+        backBufferViewDescriptor.dimension = WGPUTextureViewDimension_2D;
+        backBufferViewDescriptor.baseMipLevel = 0;
+        backBufferViewDescriptor.mipLevelCount = 1;
+        backBufferViewDescriptor.baseArrayLayer = 0;
+        backBufferViewDescriptor.arrayLayerCount = 1;
+        backBufferViewDescriptor.aspect = WGPUTextureAspect_All;
+        WGPUTextureView backBuffer = wgpuTextureCreateView(acquiredTexture_, &backBufferViewDescriptor);
         const bool useMsaa = sampleCount_ > 1 && msaaColorView_ != nullptr;
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU Frame Encoder");

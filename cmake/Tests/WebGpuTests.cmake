@@ -211,8 +211,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # REMED-GFX-096: backend-neutral singular/plural cube-face binding parity.
     cna_webgpu_test(cna_test_webgpu_rendertargetcube_plural_binding
                     examples/rendertargetcube_plural_binding_test.cpp)
+    # REMED-GFX-131: CNA_GFX096_EXPECT_SRGB_ENCODED is gone. It sRGB-encoded this shared fixture's
+    # expectations for WebGPU alone, because WebGPU gave its render targets the swapchain's
+    # *UnormSrgb format; SurfaceFormat::Color is a plain UNORM byte format, so the define was
+    # encoding a defect into the oracle rather than describing a platform difference.
     target_compile_definitions(cna_test_webgpu_rendertargetcube_plural_binding
-        PRIVATE CNA_GFX096_CUBE_GETDATA=1 CNA_GFX096_EXPECT_SRGB_ENCODED=1)
+        PRIVATE CNA_GFX096_CUBE_GETDATA=1)
     cna_register_backend_test(NAME WebGPU_RenderTargetCube_PluralBinding
         COMMAND cna_test_webgpu_rendertargetcube_plural_binding
         TIMEOUT 60 LABELS "WebGPU"
