@@ -319,6 +319,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_RenderTarget_PassBoundary COMMAND cna_test_sdlgpu_rendertarget_pass_boundary
         TIMEOUT 90 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
+    # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
+    # native pass in public order, but both kept the BACKBUFFER as one trailing pass, so every
+    # backbuffer draw of a frame was replayed after every target pass regardless of when it was
+    # issued. A frame that samples a target onto the backbuffer and then renders into that target
+    # again therefore saw the FINAL content. Every check queues its whole public sequence with no
+    # Present, GetData, flush or extra frame between the cycles, and only then reads once.
+    cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_pass_order
+                    examples/backbuffer_pass_order_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_Backbuffer_PassOrder COMMAND cna_test_sdlgpu_backbuffer_pass_order
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-145: the SDL_GPU-specific half of the same contract. The shared oracle above drives
     # SpriteBatch only and scopes itself to colour, so it cannot see a segment filter that works for
     # `DrawKind::Sprite` and not for the eight 3D families, a transient upload arena aliasing

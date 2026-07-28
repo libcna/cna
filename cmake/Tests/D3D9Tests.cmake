@@ -321,6 +321,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         COMMAND ${_d3d9_rendertarget_pass_boundary_cmd}
         TIMEOUT 90 LABELS "D3D9")
 
+    # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
+    # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
+    # native pass in public order, but both kept the BACKBUFFER as one trailing pass, so every
+    # backbuffer draw of a frame was replayed after every target pass regardless of when it was
+    # issued. A frame that samples a target onto the backbuffer and then renders into that target
+    # again therefore saw the FINAL content. Every check queues its whole public sequence with no
+    # Present, GetData, flush or extra frame between the cycles, and only then reads once.
+    cna_d3d9_test(cna_test_d3d9_backbuffer_pass_order
+                  examples/backbuffer_pass_order_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_backbuffer_pass_order_cmd cna_test_d3d9_backbuffer_pass_order)
+    cna_register_backend_test(NAME D3D9_Backbuffer_PassOrder
+        COMMAND ${_d3d9_backbuffer_pass_order_cmd}
+        TIMEOUT 120 LABELS "D3D9")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
