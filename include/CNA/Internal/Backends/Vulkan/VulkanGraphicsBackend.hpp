@@ -665,9 +665,11 @@ namespace CNA::Internal::Backends::Vulkan
         // UNDEFINED when false. This class previously hardcoded the discard variant with a
         // comment saying it had "no preserveContents concept", which was true only because the
         // creation call could not carry one.
-        // MSAA is a declared boundary, inherited unchanged from the 2D leg: msaaColorImage_ is
-        // ONE transient attachment shared by all six faces and GetOrCreateRTRenderPassMsaa() has
-        // no LOAD variant, so a multisampled cube face is not preserved across bind cycles.
+        // REMED-GFX-141: it now selects the MULTISAMPLED face render pass too. msaaColorImage_ is
+        // a six-layer image with one per-face view (it used to be one single-layer attachment
+        // shared by all six) and GetOrCreateRTRenderPassMsaa() has gained the LOAD variant it
+        // never had, so a multisampled cube face is preserved across bind cycles exactly like a
+        // single-sample one.
         VulkanRenderTargetCubeBackend(VulkanGraphicsBackend* owner, int size, int depthFormat,
                                        bool preserveContents = false,
                                        bool mipMap = false, int requestedMultiSampleCount = 0);
@@ -685,7 +687,15 @@ namespace CNA::Internal::Backends::Vulkan
                 ? faceViews_[static_cast<std::size_t>(face)]
                 : VK_NULL_HANDLE;
         }
-        [[nodiscard]] VkImageView GetMsaaColorViewEXT() const { return msaaColorView_; }
+        /// REMED-GFX-141: this cube's per-face multisample colour view (NOXNA -- test/diagnostics).
+        /// There are six now, one per array layer of `msaaColorImage_`, where there used to be one
+        /// shared by every face. VK_NULL_HANDLE when this target did not engage MSAA.
+        [[nodiscard]] VkImageView GetMsaaColorViewEXT(int face) const
+        {
+            return face >= 0 && face < 6
+                ? msaaColorViews_[static_cast<std::size_t>(face)]
+                : VK_NULL_HANDLE;
+        }
         [[nodiscard]] VkImageView GetDepthViewEXT() const { return depthView_; }
         [[nodiscard]] VkFormat GetDepthFormatEXT() const { return depthVkFormat_; }
         [[nodiscard]] VkSampleCountFlagBits GetColorSampleCountEXT() const
@@ -761,7 +771,14 @@ namespace CNA::Internal::Backends::Vulkan
             VkFormat GetDepthFormat()               const override { return depthFormat; }
             bool ColorLoadOpIsClearEXT()            const override
             {
-                return (msaaFramebuffer != VK_NULL_HANDLE) || !preserveContents;
+                // REMED-GFX-141: the MSAA pass no longer forces a clear. It has a real LOAD variant
+                // now (GetOrCreateRTRenderPassMsaa's `discardContents`) and this face's framebuffer
+                // was built against whichever one its usage selected, so both the MSAA and the
+                // non-MSAA leg answer the same question the same way -- which is what lets
+                // REMED-GFX-129 fold a leading Clear() into the load action on a discarding
+                // multisampled face and record it as an ordered vkCmdClearAttachments on a
+                // preserving one.
+                return !preserveContents;
             }
             void MaybeGenerateMips(VkCommandBuffer cb) override;
         };
@@ -779,13 +796,26 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory             depthMemory_ = VK_NULL_HANDLE;
         VkImageView                depthView_   = VK_NULL_HANDLE;
         std::array<VkFramebuffer, 6> framebuffers_ = {};
-        // Task 903: one shared MSAA color image, reused across all 6 faces (mirrors depthImage_'s
-        // existing shared-across-faces pattern) since only one face is ever rendered into at a
-        // time -- TRANSIENT_ATTACHMENT only, resolved into that face's own faceViews_[face]/image_
-        // layer at vkCmdEndRenderPass via rtRenderPassMsaa_'s pResolveAttachments.
+        /**
+         * REMED-GFX-141: ONE multisampled image with SIX array layers and one per-layer view per
+         * face, resolved into that face's own `faceViews_[face]`/`image_` layer at
+         * `vkCmdEndRenderPass` via the MSAA render pass's `pResolveAttachments`.
+         *
+         * Task 903 allocated a single-layer image here and pointed all six face framebuffers at it,
+         * on `depthImage_`'s "only one face is ever rendered into at a time" reasoning. That holds
+         * while a face is being PRODUCED and breaks the moment one is RELOADED: a multisample image
+         * carries no face identity, so a `PreserveContents` face rebound for a partial update read
+         * back whichever face was rendered last -- or, since `GetOrCreateRTRenderPassMsaa` had no
+         * `LOAD` variant at all, the clear colour. Six layers matches what D3D11/D3D12 have always
+         * allocated. Memory cost is `size * size * samples * 4 * 6` bytes per cube target, paid
+         * once at construction; there is no per-bind allocation and no full-face copy.
+         *
+         * `TRANSIENT_ATTACHMENT` is only requested for a DISCARDING target -- a preserving one must
+         * genuinely keep its samples between passes, which is what "transient" says it will not.
+         */
         VkImage                       msaaColorImage_  = VK_NULL_HANDLE;
         VkDeviceMemory                msaaColorMemory_ = VK_NULL_HANDLE;
-        VkImageView                   msaaColorView_   = VK_NULL_HANDLE;
+        std::array<VkImageView, 6>    msaaColorViews_  = {};
         std::array<VkFramebuffer, 6>  msaaFramebuffers_ = {};
         std::array<FaceProxy, 6>     faceProxies_;
         int                        size_      = 0;
@@ -1249,7 +1279,14 @@ namespace CNA::Internal::Backends::Vulkan
         // share one pass + one pipeline, mirroring the pre-existing single-format reuse pattern).
         std::unordered_map<VkFormat, VkRenderPass> rtRenderPassByDepthFmt_;      // LOAD_OP_CLEAR, color → SHADER_READ_ONLY_OPTIMAL
         std::unordered_map<VkFormat, VkRenderPass> rtRenderPassLoadByDepthFmt_;  // LOAD_OP_LOAD,  color → SHADER_READ_ONLY_OPTIMAL
-        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth
+        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaByDepthFmt_;  // 3-attachment MSAA color/resolve/depth, LOAD_OP_CLEAR
+        /// REMED-GFX-141: the MSAA render pass's missing LOAD variant. Its multisample colour
+        /// attachment uses LOAD_OP_LOAD + STORE_OP_STORE and stays in COLOR_ATTACHMENT_OPTIMAL
+        /// across passes, so a PreserveContents target's own multisample samples survive a bind
+        /// cycle instead of being cleared and thrown away. Same depth-format keying, same
+        /// per-format sharing, and render-pass-compatible with the clear variant (load/store ops
+        /// and layouts take no part in compatibility), so no pipeline cache key changed.
+        std::unordered_map<VkFormat, VkRenderPass> rtRenderPassMsaaLoadByDepthFmt_;
         std::vector<VkFramebuffer> swapchainFramebuffers_;
 
         /**
@@ -1945,10 +1982,12 @@ namespace CNA::Internal::Backends::Vulkan
         // too (they differ only in loadOp/initialLayout, which compatibility ignores), so callers
         // that only need a pipeline's *reference* render pass should always pass false.
         VkRenderPass GetOrCreateRTRenderPass(VkFormat depthFmt, bool discardContents);
-        // Task 911: MSAA counterpart -- DiscardContents-shaped only, mirrors the pre-existing
-        // rtRenderPassMsaa_ scope decision (PreserveContents+MSAA was never given its own
-        // LOAD_OP_LOAD variant).
-        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat depthFmt);
+        // Task 911: MSAA counterpart. REMED-GFX-141 gave it the LOAD_OP_LOAD variant it never had:
+        // `discardContents` false keeps the multisample colour attachment's own samples across
+        // passes (LOAD/STORE, COLOR_ATTACHMENT_OPTIMAL in and out) instead of clearing them and
+        // discarding them at every pass end. The two variants are render-pass-compatible, so the
+        // same pipelines serve both.
+        VkRenderPass GetOrCreateRTRenderPassMsaa(VkFormat depthFmt, bool discardContents);
         void CreateSurface();
         void PickPhysicalDevice();
         void CreateLogicalDevice();

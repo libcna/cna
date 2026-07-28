@@ -1064,8 +1064,25 @@ namespace CNA::Internal::Backends::Bgfx
         if (MapDepthFormat(depthFormat, depthBgfxFormat))
         {
             // Depth attachment must share the color attachment's sample count (Task 903).
+            //
+            // ...and, when that sample count is > 1, it must also say so. bgfx's own
+            // isFrameBufferValid() refuses a MULTISAMPLED depth attachment whose TEXTURE was not
+            // created with BGFX_TEXTURE_RT_WRITE_ONLY or BGFX_TEXTURE_MSAA_SAMPLE -- "Frame buffer
+            // depth MSAA texture cannot be resolved" -- and refuses it with a hard assert that
+            // aborts the process, not a recoverable error. Task 951 already gave the ATTACHMENT
+            // BGFX_RESOLVE_NONE below, but that check reads the texture's creation flags, not the
+            // attachment's resolve mode. So every depth-backed multisampled RenderTargetCube ever
+            // constructed on this backend aborted at the first BindAsRenderTargetFace; it went
+            // unnoticed because every existing bgfx cube MSAA check uses DepthFormat::None, and
+            // REMED-GFX-141's oracle is the first thing to combine the two.
+            //
+            // WRITE_ONLY is this texture's own truth: it is never sampled, never read back and
+            // never resolved (that is exactly what BGFX_RESOLVE_NONE declares), only depth-tested
+            // and depth-written during the face's pass.
+            const uint64_t depthFlags = appliedMsaa > 0 ? (msaaFlag | BGFX_TEXTURE_RT_WRITE_ONLY)
+                                                        : msaaFlag;
             depthTex = bgfx::createTexture2D(static_cast<uint16_t>(size), static_cast<uint16_t>(size),
-                false, 1, depthBgfxFormat, msaaFlag);
+                false, 1, depthBgfxFormat, depthFlags);
         }
         // The FBO is created per-face bind to attach the right face layer
         fbo = BGFX_INVALID_HANDLE;

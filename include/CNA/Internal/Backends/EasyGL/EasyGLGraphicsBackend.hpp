@@ -162,10 +162,22 @@ namespace CNA::Internal::Backends::EasyGL
         void CreateResources();
 
         ::easygl::Texture      cubeTex_;
-        ::easygl::Framebuffer  fbo_;         ///< Render FBO (color = cubeTex_ face, or msaaColorRbo_ when MSAA).
+        ::easygl::Framebuffer  fbo_;         ///< Render FBO (color = cubeTex_ face, or msaaColorRbos_[face] when MSAA).
         ::easygl::Framebuffer  resolveFbo_;  ///< MSAA only: blit destination, re-attached per face.
         ::easygl::Renderbuffer depthRbo_;
-        ::easygl::Renderbuffer msaaColorRbo_;
+        /**
+         * REMED-GFX-141: SIX multisample colour renderbuffers, one per cube face, not one shared
+         * by all six. A renderbuffer is face-agnostic storage, so the single one this used to
+         * allocate held whichever face was rendered last -- and a `PreserveContents` face rebound
+         * for a partial update loaded THAT instead of its own samples, while the resolved
+         * `cubeTex_` layer still held the right content (which is why a full redraw and an
+         * immediate readback both passed). `BindAsRenderTargetFace` now re-attaches this face's
+         * own renderbuffer, exactly as the non-MSAA path already re-attaches this face's own
+         * cube-texture image. Six is what D3D11/D3D12 have always allocated (a six-slice
+         * multisampled array); the cost is `size * size * samples * 4 * 6` bytes per cube target,
+         * paid once at construction -- never per bind, and with no full-face copy anywhere.
+         */
+        std::array<::easygl::Renderbuffer, 6> msaaColorRbos_;
         int  size_             = 0;
         int  depthFormat_      = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
         bool mipMap_           = false;

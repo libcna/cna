@@ -305,16 +305,35 @@ namespace CNA::Internal::Backends::SdlGpu
         int size = 0;
         bool mipMap = false;
         SDL_GPUTexture* cubeTexture = nullptr;
-        // A single-layer SDL_GPU_TEXTURETYPE_2D texture (NOT a 6-layer array) shared across
-        // whichever face is currently the active render target, same convention as depthTexture
-        // below -- SDL_gpu's own debug validation asserts "For array textures: sample_count must be
-        // SDL_GPU_SAMPLECOUNT_1", so a real 6-layer multisampled array texture is not a valid
-        // construction at all (found 2026-07-16 via SDLGPU-6's own debug_mode wiring, which
-        // surfaced this previously-silent violation as a genuine hang, not just a warning).
-        SDL_GPUTexture* msaaTexture = nullptr;
+        /**
+         * REMED-GFX-141: SIX single-layer `SDL_GPU_TEXTURETYPE_2D` multisample textures, one per
+         * cube face, where there used to be ONE shared by whichever face was currently active.
+         *
+         * They stay six separate textures rather than a six-layer array because SDL_gpu's own debug
+         * validation asserts "For array textures: sample_count must be SDL_GPU_SAMPLECOUNT_1" -- a
+         * real multisampled array texture is not a valid construction here at all (found
+         * 2026-07-16 via SDLGPU-6's debug_mode wiring, which surfaced the previously-silent
+         * violation as a genuine hang). Six independent textures give the same per-face isolation.
+         *
+         * The shared one could never be preserved: it had to be CYCLED on every pass (its previous
+         * contents belonged to another face) and cycling is illegal together with
+         * `SDL_GPU_LOADOP_LOAD`, so `RenderToTargetCubeFace` was forced to clear it every time.
+         * With one texture per face there is nothing to cycle: the pass LOADs the face's own
+         * samples and `SDL_GPU_STOREOP_RESOLVE_AND_STORE` keeps them for the next cycle.
+         *
+         * Cost is `size * size * samples * 4 * 6` bytes per cube target, allocated once at
+         * construction -- no per-bind texture creation, no per-bind copy.
+         */
+        std::array<SDL_GPUTexture*, 6> msaaTextures{};
         SDL_GPUTexture* depthTexture = nullptr;
         /// Same rationale as SdlGpuRenderTarget2DState::sampleCount.
         SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
+        /// REMED-GFX-141: this target's public RenderTargetUsage, collapsed by
+        /// `RenderTargetUsagePreservesContentsEXT()`. It decides whether a multisampled face's pass
+        /// keeps its own samples (`RESOLVE_AND_STORE`) or throws them away once resolved
+        /// (`RESOLVE`) -- the single-sample path never needed it, because SDL_gpu's LOAD op on the
+        /// cube texture itself already preserved a face by construction.
+        bool preserveContents = false;
         /// REMED-GFX-145: per-face FIRST-USE clear state only — same meaning (and same reason) as
         /// SdlGpuRenderTarget2DState's own clear fields. An explicit Clear() belongs to the bind
         /// cycle that issued it and lives on SdlGpuGraphicsBackend::PassSegment instead.
@@ -347,8 +366,13 @@ namespace CNA::Internal::Backends::SdlGpu
     class SdlGpuRenderTargetCubeBackend final : public IRenderTargetCubeBackend
     {
     public:
+        /// REMED-GFX-141: `preserveContents` is this target's public RenderTargetUsage. It reached
+        /// `SdlGpuGraphicsBackend::CreateRenderTargetCube` under REMED-GFX-136 and was deliberately
+        /// unused there, because a single-sample face was preserved by construction and a
+        /// multisampled one could not be preserved at all. Now that each face owns its own
+        /// multisample texture it selects that texture's store op.
         SdlGpuRenderTargetCubeBackend(SdlGpuGraphicsBackend& owner, int size, int depthFormat,
-                                      bool mipMap, int multiSampleCount);
+                                      bool preserveContents, bool mipMap, int multiSampleCount);
         ~SdlGpuRenderTargetCubeBackend() override;
 
         SdlGpuRenderTargetCubeBackend(const SdlGpuRenderTargetCubeBackend&) = delete;
@@ -374,8 +398,21 @@ namespace CNA::Internal::Backends::SdlGpu
 
         /** @brief Returns the single-sample, sampleable cube texture. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }
-        /** @brief Returns the multisampled 2D-array render texture, or null when not multisampled. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return state_->msaaTexture; }
+        /**
+         * @brief Returns one cube face's own multisample render texture. NOXNA.
+         *
+         * REMED-GFX-141: there are six, one per face, where this used to return the single texture
+         * every face shared.
+         *
+         * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @return That face's multisample texture, or null when this target is not multisampled or
+         *         @p face is out of range.
+         */
+        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture(int face) const
+        {
+            return face >= 0 && face < 6 ? state_->msaaTextures[static_cast<std::size_t>(face)]
+                                         : nullptr;
+        }
         /** @brief Returns the shared depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
         NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return state_->depthTexture; }
         /** @brief Whether the mip chain should be regenerated after this cube's faces render each frame. NOXNA. */

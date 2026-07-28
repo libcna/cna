@@ -1494,12 +1494,17 @@ namespace CNA::Internal::Backends::SdlGpu
         const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube = segment.cube;
         const int face = segment.face;
 
+        const std::size_t faceSlot = static_cast<std::size_t>(face);
+        SDL_GPUTexture* const faceMsaa = cube->msaaTextures[faceSlot];
+        const bool cubeMsaa = faceMsaa != nullptr;
+
         SDL_GPUColorTargetInfo colorTarget{};
-        if (cube->msaaTexture != nullptr)
+        if (cubeMsaa)
         {
-            // msaaTexture is a single-layer 2D texture shared across faces (see its own doc
-            // comment on SdlGpuRenderTargetCubeState for why) -- layer_or_depth_plane 0, not face.
-            colorTarget.texture = cube->msaaTexture;
+            // REMED-GFX-141: THIS face's own single-layer multisample texture -- there are six now,
+            // so layer_or_depth_plane is 0 on a texture that belongs to exactly one face, not 0 on
+            // one shared by all six.
+            colorTarget.texture = faceMsaa;
             colorTarget.layer_or_depth_plane = 0;
         }
         else
@@ -1509,34 +1514,37 @@ namespace CNA::Internal::Backends::SdlGpu
         }
         colorTarget.clear_color = segment.clearColorRequested ? segment.clearColor
                                                               : cube->clearColor[face];
-        // REMED-GFX-136: LOAD is what makes a single-sample cube face preserve its contents across
-        // bind cycles -- but it is ILLEGAL together with the cycle flag the multisampled path below
-        // must set, and SDL_gpu says so out loud ('Cannot cycle color target when load op is
-        // LOAD!'). That combination was reachable the moment a multisampled cube face was bound a
-        // second time without a Clear() in between, which is exactly what a PreserveContents (or
-        // PlatformContents) target does. The scratch texture's previous contents are another
-        // face's samples anyway -- see the cycle comment below -- so CLEAR is both the legal and
-        // the honest choice here, and multisampled cube targets are recorded as not preserving.
-        const bool cubeMsaa = cube->msaaTexture != nullptr;
+        // REMED-GFX-136: LOAD is what makes a cube face preserve its contents across bind cycles.
+        // REMED-GFX-141: the multisampled path can finally use it. It used to be forced to CLEAR,
+        // because the ONE shared scratch texture held another face's samples and therefore had to
+        // be cycled -- and SDL_gpu forbids cycling together with LOAD out loud ('Cannot cycle color
+        // target when load op is LOAD!'), which is exactly what a PreserveContents cube reached the
+        // second time a multisampled face was bound with no Clear() in between. With one texture
+        // per face there is nothing to cycle and nothing stale to load, so both legs now ask the
+        // same question: an explicit Clear() in this cycle wins, otherwise this face's own first-use
+        // flag, otherwise LOAD.
         colorTarget.load_op =
-            (segment.clearColorRequested || cube->clearColorPending[face] || cubeMsaa)
+            (segment.clearColorRequested || cube->clearColorPending[face])
                 ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-        // msaaTexture is reused across every face's own pass this frame (it's a disposable scratch
-        // resource, immediately resolved away each time) -- SDL_gpu's own doc comment on this cycle
-        // flag says reusing a bound resource across passes without cycling "will produce unexpected
-        // results" (this was the real cause of a genuine Vulkan validation layout-hazard error found
-        // 2026-07-16 once SDLGPU-6 turned debug_mode on for real). cubeTexture must NEVER cycle here
-        // (whether as the direct target below or as resolve_texture above) -- cycling wipes the
-        // ENTIRE persistent 6-layer resource, including every other face already written this frame.
-        colorTarget.cycle = cubeMsaa;
-        if (cube->msaaTexture != nullptr)
+        // REMED-GFX-141: never cycle. cubeTexture must NEVER cycle (whether as the direct target
+        // below or as resolve_texture) -- cycling wipes the ENTIRE persistent 6-layer resource,
+        // including every other face already written this frame -- and a per-face multisample
+        // texture must not either, since its previous contents are that same face's own samples,
+        // which is precisely what this pass may be about to load.
+        colorTarget.cycle = false;
+        if (cubeMsaa)
         {
             // Automatic render-pass-end resolve -- SDL_gpu has no multisampled cube texture type,
-            // so the (single-layer, shared) MSAA color target resolves directly into the active
-            // face of the real (single-sample, 6-layer) cube texture.
+            // so this face's MSAA color target resolves directly into that face's layer of the real
+            // (single-sample, 6-layer) cube texture.
+            // REMED-GFX-141: RESOLVE_AND_STORE on a preserving target -- plain RESOLVE explicitly
+            // leaves the multisample contents undefined, which is the store half of the same defect
+            // the shared texture was the allocation half of. A discarding target keeps plain
+            // RESOLVE: the shared layer clears it on every bind, so its samples are never loaded.
             colorTarget.resolve_texture = cube->cubeTexture;
             colorTarget.resolve_layer = static_cast<Uint32>(face);
-            colorTarget.store_op = SDL_GPU_STOREOP_RESOLVE;
+            colorTarget.store_op = cube->preserveContents ? SDL_GPU_STOREOP_RESOLVE_AND_STORE
+                                                          : SDL_GPU_STOREOP_RESOLVE;
         }
         else
         {
@@ -2205,16 +2213,16 @@ namespace CNA::Internal::Backends::SdlGpu
     std::unique_ptr<IRenderTargetCubeBackend> SdlGpuGraphicsBackend::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        // REMED-GFX-136: consumed by being deliberately unused, exactly like this backend's own
-        // CreateRenderTarget2D above. RenderToTargetCubeFace() already picks SDL_GPU_LOADOP_LOAD
-        // unless a real Clear() is pending for that face (clearColorPending[face]), and the only
-        // clear a cube target gets without the game asking is the one
-        // GraphicsDevice::SetRenderTargets issues for a DiscardContents target -- so a
-        // single-sample face is preserved by construction. Multisampled cube targets are a
-        // declared boundary: their pass renders into one shared, must-be-cycled scratch texture
-        // that is resolved away immediately, so there is nothing per-face left to load.
-        (void) preserveContents;
-        return std::make_unique<SdlGpuRenderTargetCubeBackend>(*this, size, depthFormat, mipMap, multiSampleCount);
+        // REMED-GFX-136 threaded `preserveContents` here and left it unused: RenderToTargetCubeFace()
+        // already picks SDL_GPU_LOADOP_LOAD unless a real Clear() is pending for that face
+        // (clearColorPending[face]), and the only clear a cube target gets without the game asking
+        // is the one GraphicsDevice::SetRenderTargets issues for a DiscardContents target -- so a
+        // single-sample face is preserved by construction. REMED-GFX-141 gives it a real consumer:
+        // a multisampled face now owns its own multisample texture, and this flag decides whether
+        // that texture's store op keeps the samples (RESOLVE_AND_STORE) or drops them (RESOLVE).
+        return std::make_unique<SdlGpuRenderTargetCubeBackend>(*this, size, depthFormat,
+                                                               preserveContents, mipMap,
+                                                               multiSampleCount);
     }
 
     std::unique_ptr<ITexture3DBackend> SdlGpuGraphicsBackend::CreateTexture3D(
@@ -5712,17 +5720,21 @@ namespace CNA::Internal::Backends::SdlGpu
         // comment for why (some other still-pending draw may sample cubeTexture as an
         // EnvironmentMapEffect input, independent of the pending pass segments).
         owner->QueueTextureRelease(depthTexture);
-        owner->QueueTextureRelease(msaaTexture);
+        // REMED-GFX-141: six per-face multisample textures now, released exactly once each.
+        for (SDL_GPUTexture* msaa : msaaTextures) owner->QueueTextureRelease(msaa);
         owner->QueueTextureRelease(cubeTexture);
     }
 
     SdlGpuRenderTargetCubeBackend::SdlGpuRenderTargetCubeBackend(SdlGpuGraphicsBackend& owner, int size,
-                                                                  int depthFormat, bool mipMap, int multiSampleCount)
+                                                                  int depthFormat, bool preserveContents,
+                                                                  bool mipMap, int multiSampleCount)
         : owner_(&owner), mipMap_(mipMap)
     {
         state_ = std::make_shared<SdlGpuRenderTargetCubeState>();
         state_->owner = owner_;
         state_->size = size;
+        // REMED-GFX-141: only the multisampled path consults it -- see the field's own comment.
+        state_->preserveContents = preserveContents;
 
         SDL_GPUDevice* device = owner_->Device();
         constexpr SDL_GPUTextureFormat kFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -5752,18 +5764,20 @@ namespace CNA::Internal::Backends::SdlGpu
 
         if (multiSampleCount_ > 0)
         {
-            // SDL_GPU_TEXTURETYPE_CUBE has no multisampled variant. The original design used a
-            // 6-layer 2D_ARRAY MSAA texture, one layer per face -- but SDL_gpu's own debug
+            // SDL_GPU_TEXTURETYPE_CUBE has no multisampled variant, and SDL_gpu's own debug
             // validation forbids sample_count>1 on ANY array texture ("For array textures:
-            // sample_count must be SDL_GPU_SAMPLECOUNT_1"), found 2026-07-16 once SDLGPU-6 wired
-            // debug_mode to a real CNA-side toggle for the first time (previously silently
-            // tolerated -- a genuine hang under Vulkan validation, not just a warning). Fixed to a
-            // single-layer SDL_GPU_TEXTURETYPE_2D texture instead, shared across whichever face is
-            // currently the active render target -- the exact same "one shared resource, only one
-            // face active at a time" convention depthTexture below already uses. Resolves into
-            // cubeTexture's active face via SDL_GPUColorTargetInfo.resolve_texture/resolve_layer at
-            // render-pass end (see RenderToTargetCubeFace) -- no manual ResolveSubresource-equivalent
-            // needed.
+            // sample_count must be SDL_GPU_SAMPLECOUNT_1"), so a 6-layer multisampled array is not
+            // a valid construction here either (found 2026-07-16 once SDLGPU-6 wired debug_mode to
+            // a real CNA-side toggle -- previously a silent violation, then a genuine hang).
+            //
+            // REMED-GFX-141: SIX single-layer SDL_GPU_TEXTURETYPE_2D textures, one per face, where
+            // this used to create ONE shared by whichever face was currently active. The shared one
+            // could not be preserved by construction: its previous contents belonged to another
+            // face, so it had to be cycled on every pass, and cycling is illegal together with
+            // SDL_GPU_LOADOP_LOAD -- RenderToTargetCubeFace was forced to clear it every time.
+            // Each face's texture resolves into that face's layer of cubeTexture via
+            // SDL_GPUColorTargetInfo.resolve_texture/resolve_layer at render-pass end (see
+            // RenderToTargetCubeFace) -- no manual ResolveSubresource-equivalent needed.
             SDL_GPUTextureCreateInfo msaaInfo{};
             msaaInfo.type = SDL_GPU_TEXTURETYPE_2D;
             msaaInfo.format = kFormat;
@@ -5773,11 +5787,19 @@ namespace CNA::Internal::Backends::SdlGpu
             msaaInfo.layer_count_or_depth = 1;
             msaaInfo.num_levels = 1;
             msaaInfo.sample_count = sampleCount;
-            state_->msaaTexture = SDL_CreateGPUTexture(device, &msaaInfo);
-            if (state_->msaaTexture == nullptr)
+            for (SDL_GPUTexture*& face : state_->msaaTextures)
             {
-                SDL_ReleaseGPUTexture(device, state_->cubeTexture);
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTargetCube MSAA texture: ") + SDL_GetError());
+                face = SDL_CreateGPUTexture(device, &msaaInfo);
+                if (face == nullptr)
+                {
+                    const std::string what = SDL_GetError();
+                    for (SDL_GPUTexture* made : state_->msaaTextures)
+                        if (made != nullptr) SDL_ReleaseGPUTexture(device, made);
+                    state_->msaaTextures.fill(nullptr);
+                    SDL_ReleaseGPUTexture(device, state_->cubeTexture);
+                    throw std::runtime_error(
+                        "CNA SDL_GPU: failed to create RenderTargetCube MSAA texture: " + what);
+                }
             }
         }
 
@@ -5795,9 +5817,14 @@ namespace CNA::Internal::Backends::SdlGpu
             state_->depthTexture = SDL_CreateGPUTexture(device, &depthInfo);
             if (state_->depthTexture == nullptr)
             {
-                if (state_->msaaTexture != nullptr) SDL_ReleaseGPUTexture(device, state_->msaaTexture);
+                const std::string what = SDL_GetError();
+                // REMED-GFX-141: all six, not one.
+                for (SDL_GPUTexture* msaa : state_->msaaTextures)
+                    if (msaa != nullptr) SDL_ReleaseGPUTexture(device, msaa);
+                state_->msaaTextures.fill(nullptr);
                 SDL_ReleaseGPUTexture(device, state_->cubeTexture);
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTargetCube depth texture: ") + SDL_GetError());
+                throw std::runtime_error(
+                    "CNA SDL_GPU: failed to create RenderTargetCube depth texture: " + what);
             }
         }
     }

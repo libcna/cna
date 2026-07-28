@@ -934,19 +934,27 @@ namespace CNA::Internal::Backends::EasyGL
 
         if (multiSampleCount_ > 0)
         {
-            // One shared multisample color renderbuffer, reused across all 6 faces (only one
-            // face is ever rendered into at a time) — matches FNA's RenderTargetCube.cs, which
-            // also allocates a single glColorBuffer regardless of face. resolveFbo_ is
-            // re-attached to whichever face was most recently bound (see BindAsRenderTargetFace)
-            // so UnbindAsRenderTarget's blit resolves into the correct face.
-            msaaColorRbo_.create();
-            msaaColorRbo_.bind();
-            msaaColorRbo_.set_storage_multisample(multiSampleCount_,
-                                                   ::metagl::InternalFormat::Rgba8,
-                                                   size_, size_);
+            // REMED-GFX-141: one multisample color renderbuffer PER FACE. This used to allocate a
+            // single one for the whole cube, on the reasoning that only one face is ever rendered
+            // into at a time -- true for producing a face, but it left a PreserveContents face
+            // nothing of its own to load back: a renderbuffer carries no face identity, so rebinding
+            // face A found whichever face was rendered last. Face 0 of an interleaved A -> B -> A
+            // sequence came back holding 60 of its 64 texels from face B. resolveFbo_ is still
+            // re-attached to whichever face is being unbound, so the blit resolves into the correct
+            // cube image; what changed is that the blit SOURCE is now that face's own storage.
+            for (auto& rbo : msaaColorRbos_)
+            {
+                rbo.create();
+                rbo.bind();
+                rbo.set_storage_multisample(multiSampleCount_,
+                                             ::metagl::InternalFormat::Rgba8,
+                                             size_, size_);
+            }
+            // Face 0 is attached here only so this FBO is complete the moment it exists;
+            // BindAsRenderTargetFace re-attaches the face actually being bound.
             fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                      ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
-                                     msaaColorRbo_);
+                                     msaaColorRbos_[0]);
             resolveFbo_.create();
         }
 
@@ -984,9 +992,18 @@ namespace CNA::Internal::Backends::EasyGL
                                     faceTarget,
                                     cubeTex_, 0);
         }
-        // MSAA: fbo_'s color attachment is the shared msaaColorRbo_, which is face-agnostic
-        // (a renderbuffer, not a cube texture) — nothing to re-attach on bind; the face only
-        // matters when UnbindAsRenderTarget resolves into cubeTex_'s specific face image.
+        else
+        {
+            // REMED-GFX-141: MSAA re-attaches this face's OWN multisample renderbuffer, the exact
+            // counterpart of the non-MSAA branch above. GL has no load action, so a face's samples
+            // simply survive until something draws over them -- which is all PreserveContents ever
+            // needed. A DiscardContents face is still wiped by the Clear()
+            // GraphicsDevice::SetRenderTargets issues on every bind, so nothing about discard
+            // semantics changes here.
+            fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
+                                     ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                     msaaColorRbos_[static_cast<std::size_t>(face)]);
+        }
     }
 
     void EasyGLRenderTargetCubeBackend::UnbindAsRenderTarget()
@@ -1100,7 +1117,8 @@ namespace CNA::Internal::Backends::EasyGL
         resolveFbo_.reset_handle_no_gl();
         cubeTex_.reset_handle_no_gl();
         depthRbo_.reset_handle_no_gl();
-        msaaColorRbo_.reset_handle_no_gl();
+        // REMED-GFX-141: all six per-face multisample renderbuffers, not one.
+        for (auto& rbo : msaaColorRbos_) rbo.reset_handle_no_gl();
     }
 
     void EasyGLRenderTargetCubeBackend::recreate_gl_resource()
@@ -1948,10 +1966,10 @@ void main()
         // texture and binding an FBO never touches its contents, so a single-sample face is
         // preserved by construction; the ONLY thing that clears one is an explicit glClear, which
         // is what GraphicsDevice::SetRenderTargets issues (and only issues) for a DiscardContents
-        // target. Multisampled cube targets are a declared boundary: this backend allocates one
-        // multisample colour renderbuffer shared by all six faces, so rebinding a multisampled
-        // face reloads whichever face was rendered into that renderbuffer last -- see
-        // EasyGLRenderTargetCubeBackend's own msaaColorRbo_ and REMED-GFX-136's record.
+        // target. REMED-GFX-141 makes that true of a MULTISAMPLED cube face too: each face now owns
+        // its own multisample colour renderbuffer (EasyGLRenderTargetCubeBackend::msaaColorRbos_),
+        // so binding one still touches nothing and there is still no load action to carry a usage
+        // decision.
         (void) preserveContents;
         return std::make_unique<EasyGLRenderTargetCubeBackend>(size, depthFormat, RegistryPtr(), mipMap, multiSampleCount);
     }

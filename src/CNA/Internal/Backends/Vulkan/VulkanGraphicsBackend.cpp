@@ -563,10 +563,18 @@ namespace CNA::Internal::Backends::Vulkan
         {
             // att0=MSAA color, att1=resolve (colorImage_/colorView_), att2=MSAA depth (if hasDepth)
             // -- mirrors GetOrCreateRTRenderPassMsaa()'s attachment order exactly.
+            // REMED-GFX-141 gave that call a `discardContents` parameter and a real LOAD variant.
+            // The 2D leg deliberately keeps asking for the CLEAR one: this finding's subject is the
+            // six-face aliasing a cube target suffers, and a single-surface target has no second
+            // face whose samples it could load by mistake. That a multisampled PreserveContents
+            // RenderTarget2D still discards on Vulkan is the SAME missing-load-variant half of the
+            // root cause, but it is a distinct, separately recorded claim that needs its own
+            // cross-backend oracle -- not a symmetry edit made here without one.
             VkImageView fbAtts[] = { msaaColorView_, colorView_, depthView_ };
             VkFramebufferCreateInfo fbInfo{};
             fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_);
+            fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_,
+                                                                        /*discardContents=*/true);
             fbInfo.attachmentCount = hasDepth ? 3u : 2u;
             fbInfo.pAttachments    = fbAtts;
             fbInfo.width           = uw;
@@ -698,7 +706,10 @@ namespace CNA::Internal::Backends::Vulkan
     VkRenderPass VulkanRenderTargetBackend::GetRenderPass() const
     {
         if (!owner_) return VK_NULL_HANDLE;
-        if (msaaFramebuffer_ != VK_NULL_HANDLE) return owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_);
+        // REMED-GFX-141: the CLEAR variant, matching the framebuffer this target was built with --
+        // see the constructor's own comment for why the 2D leg stays on it.
+        if (msaaFramebuffer_ != VK_NULL_HANDLE)
+            return owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_, /*discardContents=*/true);
         return owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
     }
 
@@ -1454,6 +1465,10 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& [fmt, rp] : rtRenderPassMsaaByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         rtRenderPassMsaaByDepthFmt_.clear();
+        // REMED-GFX-141: the MSAA load variant has the same lifetime as the MSAA clear variant.
+        for (auto& [fmt, rp] : rtRenderPassMsaaLoadByDepthFmt_)
+            if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
+        rtRenderPassMsaaLoadByDepthFmt_.clear();
         // REMED-GFX-143: the per-load/store swapchain variants share renderPass_'s lifetime.
         DestroySwapchainPassVariants();
         if (renderPass_       != VK_NULL_HANDLE) { vkDestroyRenderPass(device_, renderPass_,       nullptr); renderPass_       = VK_NULL_HANDLE; }
@@ -2254,10 +2269,13 @@ namespace CNA::Internal::Backends::Vulkan
         return rp;
     }
 
-    VkRenderPass VulkanGraphicsBackend::GetOrCreateRTRenderPassMsaa(VkFormat depthFmt)
+    VkRenderPass VulkanGraphicsBackend::GetOrCreateRTRenderPassMsaa(VkFormat depthFmt,
+                                                                    bool discardContents)
     {
-        auto it = rtRenderPassMsaaByDepthFmt_.find(depthFmt);
-        if (it != rtRenderPassMsaaByDepthFmt_.end()) return it->second;
+        // REMED-GFX-141: two caches, exactly like GetOrCreateRTRenderPass's own clear/load pair.
+        auto& cache = discardContents ? rtRenderPassMsaaByDepthFmt_ : rtRenderPassMsaaLoadByDepthFmt_;
+        auto it = cache.find(depthFmt);
+        if (it != cache.end()) return it->second;
 
         const bool hasDepth = (depthFmt != VK_FORMAT_UNDEFINED);
 
@@ -2269,18 +2287,33 @@ namespace CNA::Internal::Backends::Vulkan
         // here whenever depthFmt happens to equal depthFormat_ -- but with the resolve
         // attachment's finalLayout = SHADER_READ_ONLY_OPTIMAL instead of PRESENT_SRC_KHR, since
         // this resolves into an RT's sampleable colorImage_, never presented (attachment
-        // initial/final layouts don't affect pipeline compatibility). DiscardContents-shaped only
-        // (LOAD_OP_CLEAR): PreserveContents + MSAA is not given its own LOAD_OP_LOAD variant here
-        // (see VulkanRenderTargetBackend's constructor comment) -- an intentionally narrower scope
-        // than the non-MSAA discard/load split.
+        // initial/final layouts don't affect pipeline compatibility).
+        //
+        // REMED-GFX-141: this used to be DiscardContents-shaped ONLY (LOAD_OP_CLEAR + STORE_OP_
+        // DONT_CARE), so a multisampled PreserveContents target had no way to keep its own samples
+        // at all -- every bind cleared the multisample attachment and every pass end threw it away,
+        // and the face came back as the frame's clear colour. The load variant loads and stores the
+        // multisample colour attachment and leaves it in COLOR_ATTACHMENT_OPTIMAL, which is exactly
+        // the layout the previous pass's finalLayout already produced, so back-to-back cycles of one
+        // target need no extra barrier. The FIRST bind still finds undefined samples: the owning
+        // target transitions the image UNDEFINED -> COLOR_ATTACHMENT_OPTIMAL once at construction so
+        // the layout is legal, and the shared layer's discard clear (or the target's own first full
+        // draw) is what makes the CONTENT defined -- the same "a brand-new preserving target has no
+        // previous content" rule the non-MSAA load variant has always had.
+        //
+        // Depth/stencil is untouched by this: it keeps CLEAR/DONT_CARE in both variants, so
+        // REMED-GFX-142's open disagreement is neither widened nor silently resolved here.
         VkAttachmentDescription colorAtt{};
         colorAtt.format         = swapchainFormat_;
         colorAtt.samples        = sampleCount_;
-        colorAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR
+                                                  : VK_ATTACHMENT_LOAD_OP_LOAD;
+        colorAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
         colorAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAtt.initialLayout  = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED
+                                                  : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         colorAtt.finalLayout    = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkAttachmentDescription resolveAtt{};
@@ -2363,7 +2396,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkRenderPass rp = VK_NULL_HANDLE;
         if (vkCreateRenderPass(device_, &ci, nullptr, &rp) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass (RT MSAA) failed");
-        rtRenderPassMsaaByDepthFmt_[depthFmt] = rp;
+        cache[depthFmt] = rp;
         return rp;
     }
 
@@ -2498,7 +2531,11 @@ namespace CNA::Internal::Backends::Vulkan
                 targetDepthFmt);
         if (targetDepthFmt == depthFormat_)
             return (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
-        return msaa ? GetOrCreateRTRenderPassMsaa(targetDepthFmt)
+        // Pipelines only ever need a REFERENCE render pass, and REMED-GFX-141's load variant is
+        // render-pass-compatible with the clear one (they differ only in loadOp/storeOp/
+        // initialLayout, none of which participates in compatibility), so this keeps asking for the
+        // clear variant on both legs -- no pipeline cache key changed.
+        return msaa ? GetOrCreateRTRenderPassMsaa(targetDepthFmt, true)
                     : GetOrCreateRTRenderPass(targetDepthFmt, true);
     }
 
@@ -8302,6 +8339,11 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& [fmt, rp] : rtRenderPassMsaaByDepthFmt_)
             if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
         rtRenderPassMsaaByDepthFmt_.clear();
+        // REMED-GFX-141: the load variant bakes in sampleCount_ exactly as the clear variant does,
+        // so it is dropped and lazily recreated against the new configuration alongside it.
+        for (auto& [fmt, rp] : rtRenderPassMsaaLoadByDepthFmt_)
+            if (rp != VK_NULL_HANDLE) vkDestroyRenderPass(device_, rp, nullptr);
+        rtRenderPassMsaaLoadByDepthFmt_.clear();
         clearPipelineCache(pipelines3D_);
         clearPipelineCache(pipelinesAlphaTest3D_);
         clearPipelineCache(pipelinesDualTex3D_);
@@ -9732,7 +9774,11 @@ namespace CNA::Internal::Backends::Vulkan
                 result.samples = cube->GetColorSampleCountEXT();
                 result.resolveView =
                     cube->GetFaceResolveViewEXT(binding.GetCubeFace());
-                result.msaaView = cube->GetMsaaColorViewEXT();
+                // REMED-GFX-141: the bound face's OWN multisample view. This used to be one shared
+                // view per cube, so an MRT set naming two faces of the SAME cube wired both colour
+                // attachments to identical multisample storage while resolving them to different
+                // layers -- the six-face alias reaching the MRT path.
+                result.msaaView = cube->GetMsaaColorViewEXT(binding.GetCubeFace());
                 result.depthView = cube->GetDepthViewEXT();
                 result.depthFormat = cube->GetDepthFormatEXT();
             } else {
@@ -10571,12 +10617,21 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView (depth) failed");
         }
 
-        // --- Shared MSAA color image (Task 903): one 2D image reused across all 6 faces, same
-        // "shared across faces" pattern as depthImage_ above -- only one face is ever rendered
-        // into at a time. TRANSIENT_ATTACHMENT only (never sampled directly), resolved into that
-        // face's own faceViews_[face]/image_ layer via the depth-format-keyed MSAA render pass's
-        // (GetOrCreateRTRenderPassMsaa()) pResolveAttachments, mirroring
-        // VulkanRenderTargetBackend::msaaColorImage_ exactly. ---
+        // --- Per-face MSAA color image (Task 903; REMED-GFX-141): ONE multisampled 2D image with
+        // SIX array layers, and one per-layer VkImageView per face, so every face owns its own
+        // multisample colour state. Task 903 originally allocated a single-layer image shared by
+        // all six faces, on depthImage_'s "only one face is ever rendered into at a time"
+        // reasoning. That is true while PRODUCING a face and false the moment a face is RELOADED:
+        // a PreserveContents face rebound for a partial update loaded whichever face had been
+        // rendered last. Six layers is what D3D11 and D3D12 have always allocated (a six-slice
+        // multisampled array with one per-slice RTV) and it is what makes all six faces
+        // simultaneously live. No cube-compatible flag: this image is never sampled, only
+        // rendered into and resolved from, one layer at a time.
+        //
+        // TRANSIENT_ATTACHMENT is dropped for a preserving target: with REMED-GFX-141's LOAD/STORE
+        // render pass the samples must genuinely survive between passes, which is the opposite of
+        // what "transient" declares (and of what a LAZILY_ALLOCATED backing would provide on a
+        // tiler). A discarding target keeps it, and keeps every byte of Task 903's behaviour. ---
         if (wantsMsaa)
         {
             VkImageCreateInfo msaaColorInfo{};
@@ -10585,11 +10640,12 @@ namespace CNA::Internal::Backends::Vulkan
             msaaColorInfo.format        = owner_->swapchainFormat_;
             msaaColorInfo.extent        = { us, us, 1 };
             msaaColorInfo.mipLevels     = 1;
-            msaaColorInfo.arrayLayers   = 1;
+            msaaColorInfo.arrayLayers   = 6;
             msaaColorInfo.samples       = owner_->sampleCount_;
             msaaColorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-            msaaColorInfo.usage         = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            msaaColorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                          (preserveContents_ ? 0u
+                                                             : VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
             msaaColorInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
             msaaColorInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             if (vkCreateImage(dev, &msaaColorInfo, nullptr, &msaaColorImage_) != VK_SUCCESS)
@@ -10606,14 +10662,42 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("VulkanRenderTargetCubeBackend: vkAllocateMemory (MSAA color) failed");
             vkBindImageMemory(dev, msaaColorImage_, msaaColorMemory_, 0);
 
-            VkImageViewCreateInfo msaaColorView{};
-            msaaColorView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            msaaColorView.image    = msaaColorImage_;
-            msaaColorView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            msaaColorView.format   = owner_->swapchainFormat_;
-            msaaColorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-            if (vkCreateImageView(dev, &msaaColorView, nullptr, &msaaColorView_) != VK_SUCCESS)
-                throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView (MSAA color) failed");
+            for (int face = 0; face < 6; ++face)
+            {
+                VkImageViewCreateInfo msaaColorView{};
+                msaaColorView.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                msaaColorView.image    = msaaColorImage_;
+                msaaColorView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+                msaaColorView.format   = owner_->swapchainFormat_;
+                msaaColorView.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1,
+                                                   static_cast<uint32_t>(face), 1 };
+                if (vkCreateImageView(dev, &msaaColorView, nullptr, &msaaColorViews_[face]) != VK_SUCCESS)
+                    throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView (MSAA color) failed");
+            }
+
+            // REMED-GFX-141: a preserving target's MSAA render pass declares initialLayout
+            // COLOR_ATTACHMENT_OPTIMAL, which is what its own finalLayout leaves behind on every
+            // subsequent pass -- but not what a freshly created image is in. One up-front
+            // transition of all six layers, the exact counterpart of the image_ barrier above.
+            if (preserveContents_)
+            {
+                VkCommandBuffer msaaInitCb = owner_->BeginOneTimeCommands();
+                VkImageMemoryBarrier msaaBarrier{};
+                msaaBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                msaaBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+                msaaBarrier.newLayout           = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                msaaBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                msaaBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                msaaBarrier.image               = msaaColorImage_;
+                msaaBarrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6 };
+                msaaBarrier.srcAccessMask       = 0;
+                msaaBarrier.dstAccessMask       = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                                  VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+                vkCmdPipelineBarrier(msaaInitCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+                                     0, nullptr, 0, nullptr, 1, &msaaBarrier);
+                owner_->EndOneTimeCommands(msaaInitCb);
+            }
 
             appliedMultiSampleCount_ = SampleCountToInt(owner_->sampleCount_);
         }
@@ -10626,10 +10710,15 @@ namespace CNA::Internal::Backends::Vulkan
         for (int face = 0; face < 6; ++face) {
             if (wantsMsaa)
             {
-                VkImageView atts[] = { msaaColorView_, faceViews_[face], depthView_ };
+                // REMED-GFX-141: att0 is THIS face's own multisample layer view, not a single
+                // shared one, and the pass is picked by usage exactly as the non-MSAA branch below
+                // already picks its own -- so a preserving face loads its own samples and resolves
+                // them into its own faceViews_[face] layer.
+                VkImageView atts[] = { msaaColorViews_[face], faceViews_[face], depthView_ };
                 VkFramebufferCreateInfo fbInfo{};
                 fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-                fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_);
+                fbInfo.renderPass      = owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_,
+                                                                             !preserveContents_);
                 fbInfo.attachmentCount = hasDepth ? 3u : 2u;
                 fbInfo.pAttachments    = atts;
                 fbInfo.width           = us;
@@ -10639,7 +10728,8 @@ namespace CNA::Internal::Backends::Vulkan
                     throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateFramebuffer (MSAA) failed");
 
                 faceProxies_[face].msaaFramebuffer = msaaFramebuffers_[face];
-                faceProxies_[face].msaaRenderPass  = owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_);
+                faceProxies_[face].msaaRenderPass  = owner_->GetOrCreateRTRenderPassMsaa(
+                    depthVkFormat_, !preserveContents_);
             }
             else
             {
@@ -10703,12 +10793,13 @@ namespace CNA::Internal::Backends::Vulkan
             if (framebuffers_[i]     != VK_NULL_HANDLE) { r.framebuffers.push_back(framebuffers_[i]);     framebuffers_[i]     = VK_NULL_HANDLE; }
             if (msaaFramebuffers_[i] != VK_NULL_HANDLE) { r.framebuffers.push_back(msaaFramebuffers_[i]); msaaFramebuffers_[i] = VK_NULL_HANDLE; }
             if (faceViews_[i]        != VK_NULL_HANDLE) { r.imageViews.push_back(faceViews_[i]);          faceViews_[i]        = VK_NULL_HANDLE; }
+            // REMED-GFX-141: six per-face multisample views now, where there used to be one.
+            if (msaaColorViews_[i]   != VK_NULL_HANDLE) { r.imageViews.push_back(msaaColorViews_[i]);     msaaColorViews_[i]   = VK_NULL_HANDLE; }
         }
         if (cubeView_    != VK_NULL_HANDLE) { r.imageViews.push_back(cubeView_);   cubeView_    = VK_NULL_HANDLE; }
         if (depthView_   != VK_NULL_HANDLE) { r.imageViews.push_back(depthView_);  depthView_   = VK_NULL_HANDLE; }
         if (depthImage_  != VK_NULL_HANDLE) { r.images.push_back(depthImage_);     depthImage_  = VK_NULL_HANDLE; }
         if (depthMemory_ != VK_NULL_HANDLE) { r.memories.push_back(depthMemory_);  depthMemory_ = VK_NULL_HANDLE; }
-        if (msaaColorView_   != VK_NULL_HANDLE) { r.imageViews.push_back(msaaColorView_);  msaaColorView_   = VK_NULL_HANDLE; }
         if (msaaColorImage_  != VK_NULL_HANDLE) { r.images.push_back(msaaColorImage_);     msaaColorImage_  = VK_NULL_HANDLE; }
         if (msaaColorMemory_ != VK_NULL_HANDLE) { r.memories.push_back(msaaColorMemory_);  msaaColorMemory_ = VK_NULL_HANDLE; }
         if (image_       != VK_NULL_HANDLE) { r.images.push_back(image_);          image_       = VK_NULL_HANDLE; }

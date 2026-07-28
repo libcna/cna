@@ -421,7 +421,7 @@ class VulkanCubeMrtBindingTest final : public Game
             && proxy->GetFramebufferAttachmentCountEXT() == 4
             && proxy->GetResolveAttachmentCountEXT() == 2
             && proxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*cube).GetMsaaColorViewEXT()
+                == BackendOf(*cube).GetMsaaColorViewEXT(5)
             && proxy->GetColorAttachmentViewEXT(1)
                 == BackendOf(*rt).GetMsaaColorViewEXT()
             && proxy->GetResolveAttachmentViewEXT(0)
@@ -455,9 +455,9 @@ class VulkanCubeMrtBindingTest final : public Game
         proxy = Backend().GetCurrentMRTProxyEXT();
         const bool twoCubeStructure = proxy
             && proxy->GetColorAttachmentViewEXT(0)
-                == BackendOf(*cubeA).GetMsaaColorViewEXT()
+                == BackendOf(*cubeA).GetMsaaColorViewEXT(2)
             && proxy->GetColorAttachmentViewEXT(1)
-                == BackendOf(*cubeB).GetMsaaColorViewEXT()
+                == BackendOf(*cubeB).GetMsaaColorViewEXT(5)
             && proxy->GetResolveAttachmentViewEXT(0)
                 == BackendOf(*cubeA).GetFaceResolveViewEXT(2)
             && proxy->GetResolveAttachmentViewEXT(1)
@@ -471,18 +471,46 @@ class VulkanCubeMrtBindingTest final : public Game
               "two MSAA cubes use independent sources and exact +Y/-Z resolves: "
               + Describe(aPixel) + " / " + Describe(bPixel));
 
-        bool sharedSourceRejected = false;
+        // REMED-GFX-141 turned this case from rejected into correct. It used to throw "Vulkan MRT
+        // cannot bind one multisample source subresource to more than one slot (same-cube
+        // multi-face MSAA is unsupported)" -- and the guard was right, because
+        // VulkanRenderTargetCubeBackend allocated ONE multisample image for the whole cube, so both
+        // slots really did name the same storage while resolving to different layers. The cube's
+        // multisample image now has six array layers and one view per face, so two faces of one
+        // cube are two genuinely distinct sources. The guard itself is untouched and still fires
+        // for any target that really does expose one shared source; what changed is that a cube no
+        // longer does.
+        const auto sameCubeFaces = std::vector<RenderTargetBinding>{
+            CubeBinding(*cubeA, CubeMapFace::PositiveX),
+            CubeBinding(*cubeA, CubeMapFace::NegativeX),
+        };
+        bool sameCubeAccepted = false;
+        bool sameCubeStructure = false;
         try {
-            device.SetRenderTargets({
-                CubeBinding(*cubeA, CubeMapFace::PositiveX),
-                CubeBinding(*cubeA, CubeMapFace::NegativeX),
-            });
+            device.SetRenderTargets(sameCubeFaces);
+            proxy = Backend().GetCurrentMRTProxyEXT();
+            sameCubeAccepted = true;
+            sameCubeStructure = proxy
+                && proxy->GetColorAttachmentViewEXT(0)
+                    == BackendOf(*cubeA).GetMsaaColorViewEXT(0)
+                && proxy->GetColorAttachmentViewEXT(1)
+                    == BackendOf(*cubeA).GetMsaaColorViewEXT(1)
+                && proxy->GetColorAttachmentViewEXT(0) != proxy->GetColorAttachmentViewEXT(1)
+                && proxy->GetResolveAttachmentViewEXT(0)
+                    == BackendOf(*cubeA).GetFaceResolveViewEXT(0)
+                && proxy->GetResolveAttachmentViewEXT(1)
+                    == BackendOf(*cubeA).GetFaceResolveViewEXT(1);
         } catch (const std::runtime_error&) {
-            sharedSourceRejected = true;
+            sameCubeAccepted = false;
         }
         device.SetRenderTargets({});
-        Check(sharedSourceRejected,
-              "same-cube different-face MSAA is explicitly rejected (shared transient source)");
+        QueueMrtDraw(sameCubeFaces, effect, BlendState::Opaque);
+        const Color facePlusX  = SampleFace(*cubeA, CubeMapFace::PositiveX);
+        const Color faceMinusX = SampleFace(*cubeA, CubeMapFace::NegativeX);
+        Check(sameCubeAccepted && sameCubeStructure
+              && MatchesRgb(facePlusX, kSource) && MatchesRgb(faceMinusX, kOutput1),
+              "same-cube different-face MSAA uses two independent per-face sources and resolves "
+              "each to its own face: " + Describe(facePlusX) + " / " + Describe(faceMinusX));
 
         auto depthCube = MakeCube(8, DepthFormat::Depth24Stencil8);
         auto depthPeer = Make2D(8, DepthFormat::Depth24Stencil8);
