@@ -75,6 +75,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     cna_d3d12_test(cna_test_d3d12_rendertargetcube_msaa_face
                    examples/rendertargetcube_msaa_face_test.cpp)
 
+    # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
+    # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
+    # bind clears all three (Target|DepthBuffer|Stencil, MaxDepth, 0) -- so the enum governs depth and
+    # stencil, not colour alone. Renders an occluder, unbinds, rebinds WITHOUT clearing and draws behind
+    # it: three bands separate preserved depth from cleared depth, lost colour and a second pass that
+    # never drew. A parallel stencil stamp/gate sequence does the same for stencil.
+    cna_d3d12_test(cna_test_d3d12_rendertarget_depthstencil_usage
+                   examples/rendertarget_depthstencil_usage_test.cpp)
+
     # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
     # `VulkanGraphicsBackend::RecordCommandBuffer` collected ONE render pass per unique render-target
     # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
