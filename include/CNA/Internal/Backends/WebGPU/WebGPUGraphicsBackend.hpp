@@ -504,6 +504,49 @@ namespace CNA::Internal::Backends::WebGPU
         float maxDepth = 1.0f;
     };
 
+    /**
+     * @brief REMED-GFX-146: the complete scissor state captured BY VALUE at the exact public draw
+     *        call that queued a deferred command.
+     *
+     * The scissor counterpart of WebGPUViewportSnapshot, and it exists for the same reason: the
+     * native rectangle is dynamic wgpu-native render-pass state, so it may be RECORDED late, but
+     * resolving it from the backend's live `scissorEnabled_`/`scissorX_`/.../`scissorH_` members
+     * while recording hands every already-queued draw whatever rectangle happens to be current at
+     * flush time. Both halves of the decision travel together -- a snapshot that carried the
+     * rectangle but read the enable flag live would still be wrong, since `SetRenderTarget` resets
+     * `GraphicsDevice.ScissorRectangle` to the newly bound target's full size on every bind. Nothing
+     * here is a pointer to, or an index into, mutable state, and nothing here participates in any
+     * pipeline cache key: a rectangle change must never create a pipeline variant or split a pass.
+     */
+    struct WebGPUScissorSnapshot
+    {
+        /// RasterizerState.ScissorTestEnable as it stood at the public draw call.
+        bool enabled = false;
+        int x = 0;
+        int y = 0;
+        int width = 0;
+        int height = 0;
+    };
+
+    /**
+     * @brief REMED-GFX-146: one render pass's scissor bookkeeping.
+     *
+     * Holds the target extent every captured snapshot is clamped against plus the exact values last
+     * handed to wgpuRenderPassEncoderSetScissorRect, so a run of draws that share a rectangle
+     * issues one native call instead of one per draw. Correctness never depends on that skip --
+     * dropping it would only add redundant identical calls.
+     */
+    struct WebGPUPassScissorState
+    {
+        int targetWidth = 0;
+        int targetHeight = 0;
+        bool applied = false;
+        std::uint32_t x = 0;
+        std::uint32_t y = 0;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+    };
+
     class WebGPUSpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:
@@ -586,6 +629,10 @@ namespace CNA::Internal::Backends::WebGPU
             // sprite baked target-relative was still replayed under whatever viewport was live at
             // flush time -- setting a sub-Viewport after the batch, before the flush, squeezed it.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
         };
 
         struct SpritePipelineKey
@@ -667,6 +714,13 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] std::size_t GetSetViewportCallCountEXT() const noexcept
         {
             return setViewportCallCount_;
+        }
+        /// REMED-GFX-146: native wgpuRenderPassEncoderSetScissorRect calls issued since device
+        /// creation. Its permanent regression asserts the exact count for known draw sequences, so
+        /// a per-rectangle render-pass split or a per-draw redundant call cannot creep back in.
+        [[nodiscard]] std::size_t GetSetScissorCallCountEXT() const noexcept
+        {
+            return setScissorCallCount_;
         }
         /// REMED-GFX-116: render passes begun since device creation. A viewport change is dynamic
         /// pass state and must never open a new pass.
@@ -933,6 +987,41 @@ namespace CNA::Internal::Backends::WebGPU
          * @param snapshot The Viewport captured when the draw was queued.
          */
         void ApplyDrawViewport(WGPURenderPassEncoder pass, const WebGPUViewportSnapshot& snapshot);
+        /**
+         * @brief REMED-GFX-146: the complete scissor state as it stands right now.
+         *
+         * Called by every Queue*Draw()/QueueSprite() at the public draw call, so the returned value
+         * can never observe a later SetScissorRect() or ApplyRasterizerState().
+         *
+         * @return A by-value snapshot of ScissorTestEnable and all four rectangle components.
+         */
+        [[nodiscard]] WebGPUScissorSnapshot CaptureScissor() const noexcept;
+        /**
+         * @brief REMED-GFX-146: starts a render pass's scissor bookkeeping.
+         *
+         * Sets the pass scissor to the whole target -- deliberately NOT to the live backend
+         * rectangle, which is the state every deferred draw must be independent of -- and records
+         * it as the currently applied value. Every draw then applies its own captured snapshot.
+         * WebGPU has no separate "scissor test enable" toggle, so the whole attachment extent is
+         * what "disabled" means here.
+         *
+         * @param pass The render pass encoder that was just begun.
+         * @param targetWidth Width in pixels of the pass's colour target.
+         * @param targetHeight Height in pixels of the pass's colour target.
+         */
+        void BeginPassScissor(WGPURenderPassEncoder pass, int targetWidth, int targetHeight);
+        /**
+         * @brief REMED-GFX-146: makes one queued command's captured scissor state current.
+         *
+         * A disabled scissor test resolves to the whole target. An enabled one is clipped to the
+         * attachment in signed arithmetic before the unsigned native call, so a negative or
+         * oversized public rectangle can never wrap. Calls wgpuRenderPassEncoderSetScissorRect only
+         * when the resulting four values differ from what the pass already has.
+         *
+         * @param pass The render pass encoder being recorded.
+         * @param snapshot The scissor state captured when the draw was queued.
+         */
+        void ApplyDrawScissor(WGPURenderPassEncoder pass, const WebGPUScissorSnapshot& snapshot);
         void RenderColoredDraws(WGPURenderPassEncoder pass);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                        WGPUIndexFormat stripIndexFormat,
@@ -1129,7 +1218,13 @@ namespace CNA::Internal::Backends::WebGPU
         // wgpuRenderPassEncoderSetViewport -- it is NOT a source of viewport values (those come
         // only from each command's own WebGPUViewportSnapshot).
         WebGPUPassViewportState passViewport_{};
+        // REMED-GFX-146: the scissor counterpart of passViewport_, with identical lifetime and the
+        // identical rule -- it is NOT a source of rectangle values (those come only from each
+        // command's own WebGPUScissorSnapshot), only the bookkeeping that lets consecutive draws
+        // sharing a rectangle issue one native call.
+        WebGPUPassScissorState passScissor_{};
         std::size_t setViewportCallCount_ = 0;
+        std::size_t setScissorCallCount_ = 0;
         std::size_t renderPassCount_ = 0;
         std::size_t queueSubmitCount_ = 0;
         float blendFactorR_ = 1.0f;
@@ -1233,6 +1328,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
         };
         WGPUShaderModule coloredShader_ = nullptr;
         WGPUBindGroupLayout coloredBindGroupLayout_ = nullptr;
@@ -1272,6 +1371,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
             // Not shadow-copied like vertex/index data: a bound Texture2D's WebGPUTextureBackend
             // is owned by long-lived game/content state (unlike DrawUserPrimitives' transient
             // vertex buffers), so it is guaranteed to still be alive when this command actually
@@ -1361,6 +1464,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
             const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -1449,6 +1556,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
             const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -1515,6 +1626,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
             const IWebGPUSamplable* texture0 = nullptr;
             const IWebGPUSamplable* texture1 = nullptr;
             int textureFilter = 0;
@@ -1592,6 +1707,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
             /// EnvironmentMapEffect::Texture -- may legitimately be null (falls back to a 1x1
             /// white texture at render time), unlike every other stride-32+ effect family, which
             /// requires a non-null texture0 at dispatch time.
@@ -1684,6 +1803,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
         };
         void CreateInstancedResources();
         void DestroyInstancedResources();
@@ -1748,6 +1871,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
             const IWebGPUSamplable* baseColorTexture = nullptr;
             const IWebGPUSamplable* normalMap = nullptr;
             const IWebGPUSamplable* metallicRoughnessMap = nullptr;
@@ -1839,6 +1966,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
             const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -1912,6 +2043,10 @@ namespace CNA::Internal::Backends::WebGPU
             /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
             /// public call, captured by value. Never resolved from live state during replay.
             WebGPUViewportSnapshot viewport{};
+            /// REMED-GFX-146: the complete scissor state (ScissorTestEnable plus the four
+            /// rectangle components) active at this draw's own public call, captured by
+            /// value. Never resolved from live state during replay.
+            WebGPUScissorSnapshot scissor{};
             const IWebGPUSamplable* baseColorTexture = nullptr;
             const IWebGPUSamplable* normalMap = nullptr;
             const IWebGPUSamplable* metallicRoughnessMap = nullptr;

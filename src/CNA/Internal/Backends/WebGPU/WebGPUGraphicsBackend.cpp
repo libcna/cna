@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <iterator>
@@ -4395,6 +4396,11 @@ struct VertexOutput {
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         // EnvironmentMapEffect::Texture/EnvironmentMap are both genuinely optional (unlike every
         // other stride-32+ effect family's dispatch gate) -- null falls back to the 1x1 white
         // texture/cube at render time, matching VulkanGraphicsBackend's own default-white fallback.
@@ -4506,6 +4512,8 @@ struct VertexOutput {
                                                                   command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -4748,6 +4756,8 @@ struct VertexOutput {
                                                                      command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
@@ -5172,6 +5182,11 @@ struct VSOut {
         // independent: viewportCustom decides how the NDC above was baked, the snapshot decides
         // where the rasterizer puts it.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         const float rgba[4] = {
             static_cast<float>(color.getRProperty()) / 255.0f,
             static_cast<float>(color.getGProperty()) / 255.0f,
@@ -5268,6 +5283,8 @@ struct VSOut {
             // that was set after it was queued. RenderSprites runs last in the pass, but the 3D
             // families now drive the same per-draw state, so neither can disturb the other.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             std::array<WGPUBindGroupEntry, 2> entries{};
             entries[0].binding = 0;
             entries[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
@@ -5473,6 +5490,90 @@ struct VSOut {
         passViewport_.maxDepth = maxDepth;
     }
 
+    // REMED-GFX-146: these three functions are the whole scissor-capture mechanism, and they are
+    // deliberately the exact shape of REMED-GFX-116's viewport trio. SetScissorRect() and
+    // ApplyRasterizerState() store the LIVE state; CaptureScissor() copies both halves of it into a
+    // queued command at the public draw call, and ApplyDrawScissor() is the only thing that turns a
+    // captured value back into native pass state. No Render*Draws() may read scissorEnabled_ or
+    // scissorX_ and friends -- that is precisely the "resolve at flush time" defect this replaces.
+    WebGPUScissorSnapshot WebGPUGraphicsBackend::CaptureScissor() const noexcept
+    {
+        WebGPUScissorSnapshot snapshot;
+        snapshot.enabled = scissorEnabled_;
+        snapshot.x = scissorX_;
+        snapshot.y = scissorY_;
+        snapshot.width = scissorW_;
+        snapshot.height = scissorH_;
+        return snapshot;
+    }
+
+    void WebGPUGraphicsBackend::BeginPassScissor(WGPURenderPassEncoder pass, int targetWidth,
+                                                 int targetHeight)
+    {
+        passScissor_ = WebGPUPassScissorState{};
+        passScissor_.targetWidth = std::max(0, targetWidth);
+        passScissor_.targetHeight = std::max(0, targetHeight);
+        passScissor_.width = static_cast<std::uint32_t>(passScissor_.targetWidth);
+        passScissor_.height = static_cast<std::uint32_t>(passScissor_.targetHeight);
+        passScissor_.applied = true;
+        wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, passScissor_.width, passScissor_.height);
+        ++setScissorCallCount_;
+    }
+
+    void WebGPUGraphicsBackend::ApplyDrawScissor(WGPURenderPassEncoder pass,
+                                                 const WebGPUScissorSnapshot& snapshot)
+    {
+        const int fullW = passScissor_.targetWidth;
+        const int fullH = passScissor_.targetHeight;
+        // "Disabled" is the whole attachment: WebGPU has no separate scissor-test toggle the way
+        // GL and Vulkan do -- the rectangle IS the only clip -- so the full extent is the identity.
+        int sx = 0;
+        int sy = 0;
+        int sw = fullW;
+        int sh = fullH;
+        if (snapshot.enabled)
+        {
+            // Clip in SIGNED arithmetic, before anything reaches the unsigned native call: a
+            // negative public X/Y or a rectangle hanging off the target would otherwise wrap
+            // through uint32_t into an enormous rectangle. XNA/FNA clip a ScissorRectangle to the
+            // active target rather than rejecting it, which is also what this backend has always
+            // done and what Vulkan's computeScissor does; ranges are clipped, never rejected.
+            // The edge sums are formed in 64 bits: X and Width both come straight from the public
+            // Rectangle, so `x + width` can overflow a 32-bit int on absurd input, and signed
+            // overflow is undefined behaviour rather than a large number.
+            using I64 = std::int64_t;
+            const I64 x0 = std::clamp<I64>(snapshot.x, 0, fullW);
+            const I64 y0 = std::clamp<I64>(snapshot.y, 0, fullH);
+            // Width/Height are measured from the UNCLAMPED origin, so a rectangle whose left edge
+            // is off-target keeps the part of it that is on-target instead of being shifted right.
+            const I64 x1 = std::clamp<I64>(static_cast<I64>(snapshot.x) +
+                                           std::max(0, snapshot.width), 0, fullW);
+            const I64 y1 = std::clamp<I64>(static_cast<I64>(snapshot.y) +
+                                           std::max(0, snapshot.height), 0, fullH);
+            sx = static_cast<int>(x0);
+            sy = static_cast<int>(y0);
+            sw = static_cast<int>(std::max<I64>(0, x1 - x0));
+            sh = static_cast<int>(std::max<I64>(0, y1 - y0));
+        }
+        const std::uint32_t nx = static_cast<std::uint32_t>(sx);
+        const std::uint32_t ny = static_cast<std::uint32_t>(sy);
+        const std::uint32_t nw = static_cast<std::uint32_t>(sw);
+        const std::uint32_t nh = static_cast<std::uint32_t>(sh);
+
+        if (passScissor_.applied && passScissor_.x == nx && passScissor_.y == ny &&
+            passScissor_.width == nw && passScissor_.height == nh)
+        {
+            return;  // Consecutive draws sharing a rectangle need one native call, not one each.
+        }
+        wgpuRenderPassEncoderSetScissorRect(pass, nx, ny, nw, nh);
+        ++setScissorCallCount_;
+        passScissor_.applied = true;
+        passScissor_.x = nx;
+        passScissor_.y = ny;
+        passScissor_.width = nw;
+        passScissor_.height = nh;
+    }
+
     WGPUSampler WebGPUGraphicsBackend::GetOrCreateSlotSampler(int filter, int addressU, int addressV,
                                                                int maxAnisotropy)
     {
@@ -5587,33 +5688,22 @@ struct VSOut {
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
         ++renderPassCount_;
 
-        // WEBGPU-80/81/29/30: scissor rect, blend constant and reference stencil are all genuinely
-        // dynamic wgpu-native render-pass state (unlike blend/cull/wireframe/depthBias, which are
-        // baked per-pipeline above) -- applied once here from whatever is currently stored,
-        // exactly like Vulkan's own vkCmdSetScissor/BlendConstants/StencilReference calls at the
-        // top of its own single-pass-per-frame record path. A disabled scissor test still needs an
-        // explicit full-backbuffer wgpuRenderPassEncoderSetScissorRect call: WebGPU has no
-        // separate "scissor test enable" toggle the way GL/Vulkan do -- the scissor rect IS the
-        // only clip, so "disabled" means "rect == the whole target".
+        // WEBGPU-29/30: the blend constant and the reference stencil are genuinely dynamic
+        // wgpu-native render-pass state (unlike blend/cull/wireframe/depthBias, which are baked
+        // per-pipeline above) and are still applied once here from whatever is currently stored.
         // REMED-GFX-116: the VIEWPORT is no longer in that list. It used to be applied here from
         // the live viewport*_ members, which handed every already-queued draw whatever viewport
         // happened to be current at flush time; BeginPassViewport() now installs the whole target
         // and each draw applies the Viewport captured at its own public call.
-        const std::uint32_t fullW = static_cast<std::uint32_t>(std::max(0, physicalWidth_));
-        const std::uint32_t fullH = static_cast<std::uint32_t>(std::max(0, physicalHeight_));
-        if (scissorEnabled_)
-        {
-            const std::uint32_t sx = static_cast<std::uint32_t>(std::clamp(scissorX_, 0, physicalWidth_));
-            const std::uint32_t sy = static_cast<std::uint32_t>(std::clamp(scissorY_, 0, physicalHeight_));
-            const std::uint32_t sw = std::min(static_cast<std::uint32_t>(scissorW_), fullW - std::min(sx, fullW));
-            const std::uint32_t sh = std::min(static_cast<std::uint32_t>(scissorH_), fullH - std::min(sy, fullH));
-            wgpuRenderPassEncoderSetScissorRect(pass, sx, sy, sw, sh);
-        }
-        else
-        {
-            wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, fullW, fullH);
-        }
+        // REMED-GFX-146: neither is the SCISSOR, for exactly the same reason. It used to be
+        // computed here from the live scissorEnabled_/scissorX_/scissorY_/scissorW_/scissorH_
+        // members, so several rectangles in one bind cycle collapsed last-wins and the full-target
+        // rectangle SetRenderTarget installs on every bind unclipped every already-queued draw.
+        // BeginPassScissor() opens the pass at the whole target and ApplyDrawScissor() replays each
+        // command's own captured state -- including its ScissorTestEnable, since WebGPU has no
+        // separate scissor-test toggle and "disabled" therefore means "rect == the whole target".
         BeginPassViewport(pass, physicalWidth_, physicalHeight_);
+        BeginPassScissor(pass, physicalWidth_, physicalHeight_);
         const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
@@ -5719,24 +5809,11 @@ struct VSOut {
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
         ++renderPassCount_;
 
-        // Scissor/blend-constant/reference-stencil: same "whatever's currently stored" model as
+        // Blend constant and reference stencil: same "whatever's currently stored" model as
         // EnsureFrameRendered()'s identical block -- see that function's own comment. The viewport
-        // is per-draw captured state instead (REMED-GFX-116).
-        const std::uint32_t fullW = static_cast<std::uint32_t>(std::max(0, target->GetWidth()));
-        const std::uint32_t fullH = static_cast<std::uint32_t>(std::max(0, target->GetHeight()));
-        if (scissorEnabled_)
-        {
-            const std::uint32_t sx = static_cast<std::uint32_t>(std::clamp(scissorX_, 0, target->GetWidth()));
-            const std::uint32_t sy = static_cast<std::uint32_t>(std::clamp(scissorY_, 0, target->GetHeight()));
-            const std::uint32_t sw = std::min(static_cast<std::uint32_t>(scissorW_), fullW - std::min(sx, fullW));
-            const std::uint32_t sh = std::min(static_cast<std::uint32_t>(scissorH_), fullH - std::min(sy, fullH));
-            wgpuRenderPassEncoderSetScissorRect(pass, sx, sy, sw, sh);
-        }
-        else
-        {
-            wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, fullW, fullH);
-        }
+        // (REMED-GFX-116) and the scissor (REMED-GFX-146) are per-draw captured state instead.
         BeginPassViewport(pass, target->GetWidth(), target->GetHeight());
+        BeginPassScissor(pass, target->GetWidth(), target->GetHeight());
         const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
@@ -5848,23 +5925,11 @@ struct VSOut {
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
         ++renderPassCount_;
 
-        // Scissor/viewport/blend-constant/reference-stencil: same "whatever's currently stored"
-        // model as RenderPendingDrawsToRenderTarget()'s identical block.
-        const std::uint32_t fullW = static_cast<std::uint32_t>(std::max(0, target->GetSize()));
-        const std::uint32_t fullH = fullW;
-        if (scissorEnabled_)
-        {
-            const std::uint32_t sx = static_cast<std::uint32_t>(std::clamp(scissorX_, 0, target->GetSize()));
-            const std::uint32_t sy = static_cast<std::uint32_t>(std::clamp(scissorY_, 0, target->GetSize()));
-            const std::uint32_t sw = std::min(static_cast<std::uint32_t>(scissorW_), fullW - std::min(sx, fullW));
-            const std::uint32_t sh = std::min(static_cast<std::uint32_t>(scissorH_), fullH - std::min(sy, fullH));
-            wgpuRenderPassEncoderSetScissorRect(pass, sx, sy, sw, sh);
-        }
-        else
-        {
-            wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, fullW, fullH);
-        }
+        // Blend constant and reference stencil: same "whatever's currently stored" model as
+        // RenderPendingDrawsToRenderTarget()'s identical block. The viewport (REMED-GFX-116) and
+        // the scissor (REMED-GFX-146) are per-draw captured state instead.
         BeginPassViewport(pass, target->GetSize(), target->GetSize());
+        BeginPassScissor(pass, target->GetSize(), target->GetSize());
         const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
@@ -6451,6 +6516,11 @@ struct VSOut {
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         if (params != nullptr)
         {
             const Matrix wvp = world * view * projection;
@@ -6692,6 +6762,11 @@ struct VSOut {
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         command.instanceCount = static_cast<std::uint32_t>(std::max(1, instanceCount));
 
         // Copies the FULL vertex/instance buffers (matches VulkanGraphicsBackend::
@@ -6768,6 +6843,8 @@ struct VSOut {
                                                                    command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
@@ -6858,6 +6935,8 @@ struct VSOut {
                                                 command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -6960,6 +7039,8 @@ struct VSOut {
                                                     command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -7022,6 +7103,11 @@ struct VSOut {
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         command.texture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7113,6 +7199,8 @@ struct VSOut {
                                                                      command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -7177,6 +7265,11 @@ struct VSOut {
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         command.texture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7266,6 +7359,8 @@ struct VSOut {
                                                                        command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -7330,6 +7425,11 @@ struct VSOut {
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         command.texture0 = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7398,6 +7498,11 @@ struct VSOut {
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         command.texture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7808,6 +7913,11 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         command.baseColorTexture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7939,6 +8049,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
                                                                command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -8696,6 +8808,11 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         command.texture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -8807,6 +8924,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
                                                                     command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -9206,6 +9325,11 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         // REMED-GFX-116: captured here, at the public draw call, for the same reason the
         // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
         command.viewport = CaptureViewport();
+        // REMED-GFX-146: and the scissor state with it, for exactly the same reason -- a
+        // later ScissorRectangle or RasterizerState change must not reclip an already-
+        // queued draw, and SetRenderTarget resets the rectangle to the target's full size
+        // on every bind, so the live value at flush time is never this draw's.
+        command.scissor = CaptureScissor();
         command.baseColorTexture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -9348,6 +9472,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
                                                                       command.depthBias, command.slopeScaleDepthBias);
             // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
             ApplyDrawViewport(pass, command.viewport);
+            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+            ApplyDrawScissor(pass, command.scissor);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
