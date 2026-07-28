@@ -2478,7 +2478,7 @@ existing task.
 | REMED-GFX-126 | Software reports a `MultiSampleCount` it never implements: `SoftwareRenderTargetBackend::GetMultiSampleCount()` returns the requested power-of-two-rounded count although the rasterizer writes one sample per pixel and stores no per-sample data. | LOW | P3 | REMED-GFX-124 multisample boundary | **OPEN — CONTRADICTS `IRenderTargetBackend::GetMultiSampleCount`'S OWN "0 IF NOT SUPPORTED BY THIS BACKEND" CONTRACT AND FNA'S `FNA3D_GetMaxMultiSampleCount` SEMANTICS; READBACK AND SAMPLING ARE UNAFFECTED, SO THIS IS A REPORTING DEFECT. VALUE PINNED BY `Software_RenderTargetReadback` CHECK H3.** |
 | REMED-GFX-127 | `Texture2D::GetData`'s render-target fallback zero-initialized the scratch buffer it handed the backend and converted it for the caller regardless, so a backend with no readback returned a fabricated, fully written transparent-black frame. | MEDIUM | P2 | REMED-GFX-124 pre-fix measurement | **DONE 2026-07-27 — REPRODUCED ON SEVEN BACKENDS (SDL_RENDERER, BGFX, ASCII, DX3, HEADLESS, D3D9, D3D11) AT `sentinelSurvivors=0/128`, `fabricated=128`, `exact=0`, NO EXCEPTION — THE SENTINEL ORACLE PASSES ON EVERY ONE. FIXED BY MAKING `ITextureBackend::GetData` RETURN `bool` (TRUE ONLY FOR A COMPLETE REGION, `[[nodiscard]]` DEFAULT FALSE) AND CONVERTING ONLY ON TRUE, ELSE `System::NotSupportedException` WITH THE DESTINATION UNTOUCHED. REAL READBACK IMPLEMENTED ON SDL_RENDERER/ASCII, BGFX, DX3, D3D9, D3D11, D3D12 AND CANVAS USING EACH BACKEND'S OWN ESTABLISHED MECHANISM; HEADLESS REFUSES EXPLICITLY; TWO WEBGPU `memset`-TO-ZERO-AND-SUCCEED SITES CLOSED. NEW SHARED SUITE 39/39 ON ELEVEN RUNTIME BACKENDS, 34/34 HEADLESS, D3D12 VIA 5 NEW SMOKE CHECKS (247/247), CANVAS COMPILE-VERIFIED; ASAN/UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-129/130/131/132/133.** |
 | REMED-GFX-128 | `Texture2D::GetData`'s two overloads give `startIndex` opposite meanings: a SOURCE offset in `GetData(Color*, int, int)` and a DESTINATION offset in the rectangle overload. | LOW | P3 | REMED-GFX-124 destination-offset coverage | **OPEN — XNA/FNA DEFINE `startIndex` AS THE DESTINATION ARRAY OFFSET IN BOTH; FOR A RENDER TARGET THE DIVERGENCE IS MASKED BY THE WHOLE-LEVEL OVERLOAD'S `startIndex == 0` GATE, WHICH THROWS `std::runtime_error` INSTEAD OF READING. BOTH BEHAVIOURS PINNED BY CHECKS D7/D8/E10.** |
-| REMED-GFX-129 | Vulkan builds a `PreserveContents` render target's pass with `VK_ATTACHMENT_LOAD_OP_LOAD` and delivers the clear colour only through the load op, so an explicit `GraphicsDevice.Clear()` on such a target is silently dropped. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **OPEN — MEASURED: A PRESERVECONTENTS TARGET CLEARED TO `(0,255,255,128)` AND THEN PAINTED READ BACK WITH THE SPRITE BLOCKS EXACT AND ALL 64 BACKGROUND PIXELS `(0,0,0,0)`. XNA/FNA SCOPE `PreserveContents` TO SET-TIME DISCARD, NOT TO WHETHER `Clear()` WORKS. RE-MEASURED AND NARROWED UNDER REMED-GFX-140 (2026-07-28), STILL OPEN AND **NOT** A SYMPTOM OF THAT FINDING'S PASS COLLAPSING: CHECKS `X1`/`X2`/`X3` OF `examples/rendertarget_pass_boundary_test.cpp` DROP THE CLEAR IDENTICALLY WITH ONE BIND CYCLE, WITH A SECOND CYCLE THAT IS NOW GENUINELY ITS OWN NATIVE PASS, AND AFTER A DRAW INSIDE ONE CYCLE. THE WHOLE ROOT CAUSE IS THAT THE CLEAR COLOUR IS DELIVERED ONLY THROUGH THE PASS LOAD OP AND A PASS HAS EXACTLY ONE; FIXING IT NEEDS A REAL `vkCmdClearAttachments` PATH.** |
+| REMED-GFX-129 | Vulkan delivered a clear ONLY through the render-pass load action, so `Clear()` was not an ordered command at all: it was dropped on a `PreserveContents` target, it ran before a draw it was issued after, two clears in one bind cycle collapsed into one, and `ClearDepth` recorded no request whatsoever. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **DONE 2026-07-28 — REPRODUCED RED-FIRST AT 3/34 ON A NEW SHARED ORDERED-CLEAR SUITE, 124/232 ON REMED-GFX-018's CLEAROPTIONS SUITE (REGISTERED ON VULKAN FOR THE FIRST TIME) AND 41/44 ON GFX-140's X1/X2/X3, EVERY MEASUREMENT A/B AGAINST PRE-FIX PRODUCTION WITH THE FINAL TEST FILES. FIXED BY STAMPING EVERY DEFERRED ENTRY WITH ITS POSITION IN THE PUBLIC COMMAND STREAM, MAKING `PendingClear` ONE RECORD PER PUBLIC `Clear()`, AND REPLAYING EACH SEGMENT AS `draws -> vkCmdClearAttachments -> draws`. LOAD-OP FOLDING KEPT ONLY FOR A CLEAR THAT PRECEDES EVERY DRAW OF A CYCLE WHOSE PASS CLEARS ANYWAY. **34/34, 232/232, 44/44**; STANDARD AND SYNCHRONIZATION VALIDATION CLEAN WITH THE LAYER PROVED LOADED; `vkCmdClearAttachments` 0 -> 111/59/4 WITH EVERY OTHER NATIVE COUNTER UNCHANGED; ASAN/UBSAN CLEAN; 9 CROSS-BACKEND CONTROLS GREEN; ALL FOURTEEN BACKEND LIBRARIES BUILD; FOUR FALSE-POSITIVE-CAPABLE FILES STRENGTHENED.** |
 | REMED-GFX-130 | `ITextureCubeBackend::GetData`/`ITexture3DBackend::GetData` kept the no-op `void` default and the public cube/volume `GetData` converted their own zeroed scratch buffer regardless, so `TextureCube`/`Texture3D` readback fabricated the frame REMED-GFX-127 removed from `Texture2D`. | MEDIUM | P2 | REMED-GFX-127 interface survey | **DONE 2026-07-27 — REPRODUCED ON FIVE BACKENDS: HEADLESS 17/33 (`fabricated=64/64`, `sentinelSurvivors=0`, NO EXCEPTION — ITS `GetData` ACTIVELY ZERO-FILLED THE CALLER WHILE `SetData` STORED NOTHING), SOFTWARE 31/33 (CUBE MIP 1 `fabricated=16/16`), SDL_RENDERER 19/33, DX3 19/33, ASCII 32/56 (CUBE **AND** A `Texture3D` THAT CONSTRUCTED WITH NO STORAGE). FIXED BY MAKING BOTH INTERFACES RETURN `[[nodiscard]] bool` (TRUE ONLY FOR A COMPLETE REGION, DEFAULT FALSE), SIZING THE SHARED SCRATCH TO THE REQUESTED REGION RATHER THAN `elementCount`, REFUSING A NULL BACKEND, AND THROWING `ObjectDisposedException` AFTER DISPOSE. THREE WEBGPU `memset`-TO-ZERO-AND-SUCCEED SITES AND EASYGL'S PER-SLICE HALF-READ CLOSED; HEADLESS REFUSES EXPLICITLY AND ITS ZERO-FILLED CUBE/VOXEL STORAGE IS DELETED; ASCII'S FALSE `GraphicsCapability::Texture3D` CLAIM CORRECTED. NEW SHARED SUITE 56/56 ON EASYGL/VULKAN/BGFX/SDL_GPU/WEBGPU/D3D9/D3D11 AND 33/33 ON SOFTWARE/HEADLESS/SDL_RENDERER/ASCII/DX3; D3D12 VIA 4 NEW SMOKE CHECKS (251/251); CANVAS COMPILE-VERIFIED. ASAN+UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-134/135.** |
 | REMED-GFX-131 | WebGPU configures an `*UnormSrgb` surface format and creates render targets with it, so a mid-tone channel written through the render pass comes back gamma-encoded (128 -> 188) unlike XNA's non-sRGB `SurfaceFormat.Color`. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **OPEN — ALPHA AND THE 0/255 FIXED POINTS ARE UNAFFECTED, WHICH IS WHY EXISTING SATURATED-COLOUR WEBGPU RENDER-TARGET TESTS NEVER SAW IT.** |
 | REMED-GFX-132 | `cna_reference_dump` links `CNA` without the `--start-group` wrapper its own build-system comment says it needs, so it fails to link under the ASCII backend. | LOW | P3 | REMED-GFX-127 build matrix | **OPEN — `BuildAsciiFontAtlas` REFERENCES `SpriteFont::SpriteFont` FROM AN ALREADY-PASSED ARCHIVE. EVERY BACKEND LIBRARY, EVERY ASCII TEST AND `CnaTests` BUILD; ONLY THIS TOOL TARGET FAILS.** |
@@ -13873,7 +13873,7 @@ permanent allocation per pass, no per-draw render-pass creation. The one genuine
 `MaybeGenerateMips`, now run once per segment rather than once per target per flush — required, since
 each pass's result needs its own mip chain, and a no-op unless the target actually owns mips.
 
-### REMED-GFX-129 — outcome B, still OPEN with a narrower root cause
+### REMED-GFX-129 — outcome B, still OPEN with a narrower root cause (since closed 2026-07-28)
 
 Re-measured, not resolved. Checks `X1`/`X2`/`X3` reproduce it three ways:
 
@@ -13888,6 +13888,8 @@ cause is that `GetOrCreateRTRenderPass` delivers the clear colour **only** throu
 and a preserving pass uses `LOAD_OP_LOAD` — there is no `vkCmdClearAttachments` path anywhere in the
 backend — which is equally why a clear issued after a draw cannot wipe it. Fixing it needs that path;
 GFX-140 deliberately did not add one, and the index row is updated with this narrower statement.
+REMED-GFX-129 added exactly that path on 2026-07-28; this file's `X1`/`X2`/`X3` were flipped to the
+correct contract there and the whole oracle is unchanged at 44/44 across the change.
 REMED-GFX-018's `ClearOptions` semantics are untouched (`Vulkan_GraphicsDevice_ClearOptions` green).
 
 ### Viewport / scissor / MRT / cube / MSAA / layouts
@@ -14612,7 +14614,8 @@ REMED-GFX-018's `ClearOptions` semantics are preserved: `Clear(ClearOptions, …
 the same seven `GraphicsDevice` dispatch arms, and the aspect flags added to `PendingClear` are
 consumed only by the backbuffer path. A frame with one backbuffer cycle clears exactly as before.
 
-**REMED-GFX-129 was not begun and is unchanged**: its `X1`/`X2`/`X3` checks in GFX-140's oracle still
+**REMED-GFX-129 was not begun and is unchanged at the time of this task** (since closed 2026-07-28):
+its `X1`/`X2`/`X3` checks in GFX-140's oracle still
 report the same declared behaviour, and the render-target clear path was not touched.
 
 ### Viewport / scissor / state
@@ -15155,7 +15158,9 @@ synchronization claim were examined; **two were false-positive-capable and both 
 
 The single `ctest` miss is `Vulkan_DepthBias`, A/B-re-proven pre-existing: **3/4 → 3/4 with the same
 failing check** (`DepthBias=-1e6 (flat)`), pre-recorded by REMED-GFX-140 and unrelated to
-synchronization. **REMED-GFX-129 was not begun and is unchanged.**
+synchronization. **REMED-GFX-129 was not begun and is unchanged at the time of this task; since
+closed 2026-07-28**, which added three checks to this file's own fixture (25/25 -> 28/28) and left
+its acquire-hazard count at 0.
 
 ### Cross-backend controls
 
@@ -15217,3 +15222,349 @@ above two jobs and never needed to be reduced below it.
 - `docs(remediation): record GFX-144 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-129 — ordered Vulkan `Clear` commands (DONE 2026-07-28)
+
+### Classification
+
+**Real defect, MEDIUM, GRAPHICS, Vulkan backend only.** Not a symptom of pass collapsing
+(REMED-GFX-140), not a symptom of backbuffer/off-screen ordering (REMED-GFX-143), and not a
+`RenderTargetUsage` question (REMED-GFX-136). It is a missing *mechanism*: the backend had no way to
+express a clear as a command at all.
+
+`VulkanGraphicsBackend` delivered a clear **only** through the render pass load action.
+`GetOrCreateRTRenderPass(depthFormat, discardContents)` chose
+`discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD`, `PendingClear` carried
+the values, and `RecordCommandBuffer` handed them to `VkRenderPassBeginInfo::pClearValues`. There was
+no `vkCmdClearAttachments`, `vkCmdClearColorImage` or `vkCmdClearDepthStencilImage` call anywhere in
+the file — measured, 0 of each under an LD_PRELOAD counter of the real entry points.
+
+A render pass has exactly one load action per attachment, and it necessarily runs before every draw
+the pass contains. Five distinct public failures follow from that one fact:
+
+1. **A `Clear()` on a `PreserveContents` target was dropped entirely.** Its pass uses
+   `LOAD_OP_LOAD`; there is no value to hand a clear to.
+2. **A `Clear()` issued after a draw ran before it.** The load action is the start of the pass.
+3. **Two `Clear()`s in one bind cycle collapsed into one.** `NoteRenderTargetClearEXT` merged the
+   second into the first *because* a pass has one load action — the data structure encoded the
+   limitation.
+4. **`ClearDepth` recorded nothing at all.** `void ClearDepth(float depth) { clearDepth_ = depth;
+   readbackStagingValid_ = false; }` — a depth-only `Clear()` did literally nothing on Vulkan, and
+   the source said so: `/* Vulkan depth-only clear not yet implemented */`.
+5. **A depth- or stencil-only clear could not be expressed** even in principle, because taking the
+   load action means also taking the colour load action the target's usage had already chosen.
+
+`PendingClear` already carried `wantColor`/`wantDepth`/`wantStencil` (REMED-GFX-143), but only the
+BACKBUFFER path read them, and only to pick between `LOAD` and `CLEAR` — never to restrict *what* a
+clear touched.
+
+**`ClearDepth` is not a separate finding.** It is variant 4 of the same missing mechanism, on the
+same implementation path: it needed the ordered clear command and nothing else. Fixing it here was
+inseparable, and it is recorded above rather than split out.
+
+### The authoritative public contract this establishes
+
+`GraphicsDevice::Clear` is an **ordered command at its exact public call position**. It is not a hint
+for the next render-pass load action, and it is not governed by `RenderTargetUsage` — usage decides
+what happens when a target is BOUND, `Clear()` decides what happens where it is CALLED. The two
+contracts were conflated and are now separate.
+
+Established from CNA's own cross-backend behaviour, not from one backend. `clearAfterDrawWins` in
+`examples/rendertarget_pass_boundary_test.cpp` was already declared **true** on HEADLESS, SOFTWARE,
+EASYGL, BGFX, SDL_RENDERER, ASCII, CANVAS, DX3, D3D9 and D3D11 before this task, and false only on
+VULKAN, WEBGPU and SDL_GPU — the three load-op-only backends. FNA's `GraphicsDevice.Clear` forwards
+straight to `FNA3D_Clear` at the call site with no deferral of any kind.
+
+### Reproduction (red first, three independent files)
+
+New shared `examples/graphicsdevice_ordered_clear_test.cpp`. Every check queues its **whole** public
+sequence and reads **once** at the end: no `GetData`, `GetBackBufferData`, `Present`, flush, fence
+wait, sleep or extra frame sits between two commands of one sequence, so a backend cannot pass by
+being forced to settle in between. The palette is 0/255-only, an exact fixed point of sRGB encoding,
+so every colour comparison is byte-exact including on sRGB targets. Depth and stencil are never read
+back: they are proven by geometry the stored depth must reject or accept and geometry the stored
+stencil must gate. Colour work and 3D work never share one bind cycle, so the pre-existing
+sprites-then-3D replay order within a cycle is not being measured here.
+
+| check | shape | pre-fix | post-fix |
+|---|---|---|---|
+| `O1` | draw, then `Clear`, in the ONLY cycle of a `PreserveContents` target | red | green |
+| `O2` | `Clear`, then a partial draw — the clear colour survives outside it | red | green |
+| `O3` | draw, `Clear`, partial draw — the full ordered triple in one cycle | red | green |
+| `O4` | `Clear A`, draw, `Clear B` — the second happens, after the draw | red | green |
+| `O5` | `A → B → A` clear values in one cycle | red | green |
+| `O6` | `Clear` in a genuine SECOND bind segment | red | green |
+| `O7` | a cycle whose only command is a `Clear()` | red | green |
+| `U1`/`U2`/`U3` | `Discard` + `Clear`, `Platform` + `Clear`, `A → B → A` targets | red | green |
+| `B1` | backbuffer: draw, `Clear`, partial draw | red | green |
+| `K1` | `RenderTargetCube` face clear, other faces untouched | red | green |
+| `M1` | `ClearOptions::Target` reaches EVERY bound MRT colour attachment | red | green |
+| `D1` | `DepthBuffer` alone — depth reset, colour untouched | red | green |
+| `D2` | `Stencil` alone — stencil reset, colour untouched | red | green |
+| `D3`/`D4`/`D5`/`D6` | `Target\|Depth`, `Target\|Stencil`, `Depth\|Stencil`, all three | red | green |
+| `D7` | depth clear VALUE at 0.0 and 1.0 | red | green |
+| `D8` | stencil clear VALUES 0, 1, 255 and 1-gated-on-255 | red | green |
+| `V1`/`V2` | a sub-Viewport and an enabled scissor active across the `Clear` | red | green |
+| `S1` | ordered `Clear` on a genuinely multisampled target, resolved readback | red | green |
+| `R1` | 33 `Clear`s in one cycle, then 8 cycles of 4 | red | green |
+
+**VULKAN 3/34 → 34/34.** The three that passed pre-fix are controls: "clearing one face leaves every
+other face alone", "`ClearOptions::Target` reaches the other MRT attachment" (the load action already
+cleared it) and "stencil 1 gated on 255 does not pass" (a negative check).
+
+REMED-GFX-018's backend-agnostic `ClearOptions` suite was registered on Vulkan for the first time. It
+establishes distinct pre-existing colour, depth and stencil values and encodes the survivors into
+colour probes, so it can tell the three aspects apart instead of asserting one pixel: all eight
+masks, every public overload, backbuffer and `PreserveContents` targets, `Depth24Stencil8`/`Depth24`/
+depthless, repeated and interleaved clears, target isolation and `A → B → A`. **VULKAN 124/232 →
+232/232.**
+
+REMED-GFX-140's `X1`/`X2`/`X3` — the exact shapes this finding was narrowed with — had their Vulkan
+contract flipped from the declared defect to the correct behaviour: **41/44 → 44/44.**
+
+All three numbers are A/B measurements with the **final** test files against the pre-fix production
+sources, restored file by file (no `git stash`, no repository-wide checkout).
+
+### The correction
+
+**One monotonic order stamp, one record per public `Clear()`, ordered replay.**
+
+* `commandOrder_` / `NextCommandOrderEXT()` stamp every deferred entry with its position in the
+  frame's public command stream: `PendingBatch::order` at SpriteBatch `End()`, `Pending3DDraw::order`
+  in `PushPending3DDraw` (the single choke point all draw families route through), and
+  `PendingClear::order` in `NoteRenderTargetClearEXT`.
+* `NoteRenderTargetClearEXT` no longer merges. Each public `Clear()` is its own record, carrying
+  `ClearOptions` as the three `want*` flags, the colour, depth and stencil values, the target
+  segment, the target source pointer and its order — all by value.
+* `ClearDepth` records a depth-aspect request like every other entry point.
+* `PassSegment` carries the segment's ordered clear list and the position of its earliest draw.
+  `RecordCommandBuffer` walks each segment as
+  `draws(cursor, clear.order) → clear → draws(clear.order, next)`, so a clear runs after exactly the
+  draws that preceded it and before exactly the ones that followed. `drawSpritesFor`/`draw3DFor` gain
+  a half-open order range; the shared per-frame vertex/index arena cursors are untouched, and since
+  the slices are disjoint and cover the whole segment every batch is still copied once, at the same
+  offset, in the same order (REMED-GFX-140's arena fix is not weakened — its `P6`/`P7` stay green).
+* `RecordOrderedClearEXT` emits the command: one `VkClearAttachment` per bound colour attachment when
+  the request names `ClearOptions::Target`, plus one combined depth/stencil entry whose aspect mask
+  is **intersected with what the attachment format actually owns** — asking for the stencil aspect of
+  a `Depth24` target is invalid usage (`VUID-vkCmdClearAttachments-aspectMask-02502`), not a no-op.
+  A request naming nothing the attachment set owns records no command rather than an empty one.
+* `draw3DFor`'s open occlusion query is hoisted out of the lambda into the segment scope. A segment
+  holding a clear replays its draws in several slices, and a query must stay open across the clear
+  rather than being ended and re-begun on the same pool index, which is invalid usage.
+
+**`vkCmdClearColorImage` is deliberately not used.** It is a transfer-stage command that cannot be
+recorded inside a render pass, so it would mean breaking the pass in two and re-transitioning the
+image for every `Clear()` the game issues — a pass split per clear, which the task's own boundary
+forbids without technical necessity. There is none: `vkCmdClearAttachments` is exactly the in-pass
+clear Vulkan provides.
+
+### The load-op optimization boundary
+
+Folding is **kept but narrowed to what is provably identical**. A clear rides the pass load action
+only when
+
+1. it is the segment's FIRST clear, and
+2. its order precedes every draw in the segment, and
+3. the pass clears its colour attachments anyway —
+   `VulkanRTSource::ColorLoadOpIsClearEXT()`, false exactly for a non-MSAA `PreserveContents` target
+   (the MSAA and MRT passes are `DiscardContents`-shaped unconditionally, and the cube face proxy now
+   mirrors its owner's usage so it can answer for itself).
+
+Everything else is an explicit command. Pre-fix, `seg.clearColor` was set by ANY clear in the cycle,
+which is precisely how "draw, then `Clear`" ended up running the clear first; the backbuffer's
+per-aspect `SwapchainPassKey` is now derived from the folded clear instead.
+
+Folding is kept because the shared layer issues a `Clear()` on **every** `DiscardContents` bind, so
+an unfolded version would pay one redundant full-target clear per bind on the hottest path. It is
+measurable that it still works: `rendertarget_pass_boundary`, whose battery contains roughly forty
+discarding bind cycles, records exactly **4** `vkCmdClearAttachments` — its four explicit public
+`Clear()` calls, and not one of the bind clears.
+
+### Clear rectangle, viewport and scissor — a real cross-backend divergence
+
+The rect is the **whole render area**, `layerCount = 1`. A cube face has its own framebuffer over its
+own single-layer view (REMED-GFX-134), so the face is selected by the framebuffer and never by a base
+array layer here.
+
+Measured, not inferred, with the same public fixture:
+
+| backend | Viewport restricts `Clear` | Scissor restricts `Clear` |
+|---|---|---|
+| SOFTWARE, BGFX, WEBGPU, SDL_GPU, **VULKAN**, D3D11 | no | no |
+| EASYGL | no | **yes** (`glClear` is narrowed by `GL_SCISSOR_TEST`) |
+| D3D9 | **yes** | **yes** |
+
+D3D9's answer is real XNA's, since XNA ran on D3D9. REMED-GFX-018 nevertheless established the
+full-target contract for this project ("each clear is a full-target ordered operation … viewport and
+scissor do not restrict `Clear`"), six of the eight measurable backends already follow it, and it is
+byte-for-byte what the pass load action Vulkan is replacing did. Vulkan therefore takes full-target,
+and the two divergences are **declared per backend and recorded**, not standardised away under this
+finding. `V1`/`V2` assert whichever answer the backend declares, so both stay falsifiable.
+
+### Colour, depth and stencil
+
+Colour: `VkClearValue::color` takes the same normalized floats the load path used, so `Color`
+conversion, alpha, sRGB handling and the BGRA/RGBA attachment format are unchanged by construction —
+`D8`'s alpha probe and the 0/255 palette pin it. Every bound MRT colour attachment is cleared for
+`ClearOptions::Target` and no other attachment is touched (`M1` asserts a third target outside the
+bound set is untouched). MSAA clears the multisample attachment; the resolve at pass end carries it
+(`S1`, on a genuinely multisampled target — `applied=4` is asserted, not assumed).
+
+Depth and stencil are proven by rendering, never by a readback and never by absence of validation
+messages: overlapping geometry at distinct depths (`D1`, `D3`, `D5`, `D6`, `D7`) and stencil-gated
+geometry (`D2`, `D4`, `D5`, `D6`, `D8`), each in both directions — the geometry that must be accepted
+and the geometry that must be rejected. `Depth24Stencil8` and `Depth24` both covered; a stencil
+request against a depthless or stencil-less attachment drops that aspect bit rather than issuing
+invalid usage; depth values 0.0 and 1.0 and stencil values 0, 1 and 255 all covered.
+
+### Preserve / discard / platform, backbuffer, MRT, cube, MSAA
+
+`PreserveContents` still loads prior colour at bind, `DiscardContents` still gets CNA's deterministic
+opaque-black bind replacement, `PlatformContents` still preserves — REMED-GFX-136 untouched, its
+suite green. Ordered clears then modify the selected attachments afterwards (`U1`/`U2`/`U3`).
+REMED-GFX-140's segmentation and REMED-GFX-143's interleaving are untouched: `rendertarget_pass_
+boundary` 44/44 and `backbuffer_pass_order` 29/29, one acquire, one submit and one present per
+rendered frame unchanged.
+
+### Validation and synchronization
+
+**Standard Khronos validation: clean** — zero messages across the ordered-clear suite, the
+`ClearOptions` suite and the pass-boundary suite, with `VK_LOADER_DEBUG=layer` proving
+`VkLayer_khronos_validation` really loaded (11 loader mentions), so a zero is a measurement.
+
+**Synchronization validation**: `vulkan_swapchain_sync_test.cpp` gains phase `BC`, which drives every
+route that records a clear command — a preserving colour target, a clear after a draw, several clears
+in one cycle, depth-only and stencil-only clears on a real `Depth24Stencil8` attachment, an MRT set
+where one clear writes both attachments, a single-layer cube face, and a backbuffer clear issued
+after backbuffer geometry — all in one command buffer. **Zero hazards**, with the opt-in made before
+Game construction and `IsValidationActiveEXT()` asserted first. REMED-GFX-144's acquire hazard stays
+at **0**. 25/25 → **28/28**. Nothing was suppressed.
+
+### Cache and resource cardinality, performance
+
+Under an LD_PRELOAD counter of the real entry points, with **identical** test files either side:
+
+| counter | ordered-clear suite | `ClearOptions` suite | pass-boundary suite |
+|---|---|---|---|
+| `vkCmdClearAttachments` | **0 → 111** | **0 → 59** | **0 → 4** |
+| `vkCmdClearColorImage` | 0 → 0 | 0 → 0 | 0 → 0 |
+| `vkCmdClearDepthStencilImage` | 0 → 0 | 0 → 0 | 0 → 0 |
+| `vkCmdBeginRenderPass` = `vkCmdEndRenderPass` | 46 → 46 | 178 → 178 | 85 → 85 |
+| `vkCreateRenderPass` | 7 → 7 | 6 → 6 | 6 → 6 |
+| `vkCreateFramebuffer` | 54 → 54 | 17 → 17 | 71 → 71 |
+| `vkCreateImageView` | 105 → 105 | 30 → 30 | 121 → 121 |
+| `vkAllocateCommandBuffers` | 166 → 166 | 9 → 9 | 214 → 214 |
+| `vkQueueSubmit` | 168 → 168 | 132 → 132 | 218 → 218 |
+| `vkQueuePresentKHR` / `vkAcquireNextImageKHR` | 3 → 3 | 124 → 124 | 5 → 5 |
+| `vkDeviceWaitIdle` | 62 → 62 | 168 → 168 | 37 → 37 |
+| `vkQueueWaitIdle` | 165 → 165 | 8 → 8 | 213 → 213 |
+| `vkCreateGraphicsPipelines` | 8 → 8 | 12 → 12 | 4 → 4 |
+| `vkWaitForFences` | 4 → 4 | 161 → 161 | 7 → 7 |
+
+**Only the clear commands themselves changed.** No permanent object, pipeline variant, command
+buffer, render pass, submit, present, acquire, device wait, queue wait or fence wait per `Clear()`;
+no full-target copy, no extra frame, no pass split. `R1` additionally asserts behaviourally that 33
+clears in one cycle and 8 cycles of 4 still resolve exactly, so unbounded per-clear storage would
+show up as a wrong result rather than only as a memory number.
+
+### False-positive test audit
+
+Scope: the directly relevant clear tests, not a repository-wide rewrite. **Four found, four
+strengthened.**
+
+| file | finding | action |
+|---|---|---|
+| `bgfx_graphicsdevice_clearoptions_test.cpp` | `ClipDepthForFramebufferDepth` read `CNA_BGFX_RENDERER` unconditionally — a variable only the two Bgfx CTest routes ever set — so on any other backend it applied the OpenGL clip conversion regardless of that backend's real convention. On Vulkan both depth probes then landed on the same side of the cleared value (0.32 and 0.36 against a 0.67 clear) and the "upper bracket rejects" half of every depth-clearing case could never hold | **strengthened** — the convention is chosen from the compiled backend. Bgfx A/B byte-identical: OpenGL route 232/232 → 232/232, Vulkan route 217/232 → 217/232 |
+| `backbuffer_pass_order_test.cpp` | checks `C4` (clear after draw) and `C6` (depth-only clear) declared this finding's defect as Vulkan's contract | **strengthened** — both went red the moment the fix landed, which is what turned the declarations over. 27/29 → 29/29 |
+| `easygl_graphicsdevice_clear_stencil_test.cpp` | split stamp from clear+compare across frames and documented the split as unavoidable: Vulkan's clear *"always executes before ALL of that frame's draws … even with this task's fix correctly applied"* | **strengthened** — the claim is now false. New check `C` makes the same measurement inside ONE frame with nothing between the three steps. A/B-measured **2/3 pre-fix, 3/3 post-fix**; EasyGL 3/3 |
+| `graphicsdevice_clear_depth_test.cpp` | exempted `ClearOptions::DepthBuffer` ALONE for a Bgfx reason, which also meant nothing in it ever reached Vulkan's `ClearDepth` — the one entry point that recorded no clear at all — while both its checks passed because both include `Target` | **corrected** — the exemption is recorded as closed on both backends and points at the checks that now cover it |
+| `rendertarget_pass_boundary_test.cpp` `X1`/`X2`/`X3` | already this finding's declared reproduction | flipped to the correct contract, 41/44 → 44/44 |
+
+### Cross-backend controls
+
+Public fixtures only; **only Vulkan production changed.**
+
+| backend | ordered-clear suite | route |
+|---|---|---|
+| VULKAN | **34/34** | `:101`, llvmpipe (LLVM 19.1.7), validation active |
+| EASYGL | **34/34** | `:101`, OpenGL ES 3.2 Mesa 25.0.7 |
+| BGFX | **34/34** | `:101` |
+| D3D9 | **34/34** | `:99`, Wine + DXVK 2.6.0 (`run-wine-dxvk9.sh`) |
+| D3D11 | **34/34** | `:99`, Wine + DXVK (`run-wine-dxvk.sh`) |
+| SDL_GPU | **31/31** | `:101` |
+| WEBGPU | **29/29** | `:101`, wgpu-native v29.0.1.1 |
+| SOFTWARE | **28/28** | headless |
+| HEADLESS | **25/25** | headless |
+
+Counts differ because a backend that cannot read a cube face, cannot read the backbuffer, has no
+stencil oracle or applies no multisampling reports a named skip instead of a check.
+
+### Regression gates
+
+`rendertarget_pass_boundary` **44/44** (GFX-140), `backbuffer_pass_order` **29/29** (GFX-143),
+`vulkan_swapchain_sync` **28/28** (GFX-144), GFX-018 `ClearOptions` **232/232**, GFX-136 usage,
+GFX-134's cube readback, GFX-093/095/096/112 and the target sampling/disposal suites all green.
+`ctest -R '^Vulkan'` **171/172**; the single miss is `Vulkan_DepthBias`, re-measured at its recorded
+**3/4** with the same failing check (`DepthBias=-1e6 (flat)`) and unrelated to clears.
+
+### Sanitizers
+
+ASan and UBSan over all five Vulkan clear fixtures — ordered clear, `ClearOptions`, pass boundary,
+backbuffer order and swapchain sync — with `ldd` proving each runtime linked. **Clean**: no invalid
+access, stale command data, overflow, attachment-indexing error or lifetime issue, and every fixture
+reports the same counts as the ordinary build.
+
+### Independent findings, recorded and NOT fixed here
+
+- **Clear rectangle divergence.** EasyGL's `Clear` is narrowed by the scissor rectangle; D3D9's is
+  narrowed by both the viewport and the scissor. Both disagree with REMED-GFX-018's cross-backend
+  contract; D3D9's is real XNA behaviour, which makes this a contract question for the project rather
+  than a backend bug, and it is declared per backend so either resolution turns a check over.
+- **`Bgfx_GraphicsDevice_ClearOptions_Vulkan` is at 217/232**, A/B-proven unchanged by this task
+  (identical before and after the test-file correction, and the Bgfx build does not link CNA's Vulkan
+  backend at all). REMED-GFX-018 recorded 232/232 on that route, so it regressed at some point
+  between then and now — a separate finding, on bgfx's own Vulkan renderer.
+- **Sprites and 3D draws still replay in separate families within one bind cycle** on Vulkan, so a 3D
+  draw issued before a sprite still lands on top of it. Already recorded by REMED-GFX-143 as an
+  independent finding (`mixedQueuesKeepPublicOrder`); ordered clears interleave correctly with both
+  families, and this file deliberately never mixes them in one cycle.
+- **`GetOrCreateMRTRenderPass`'s dependency masks** are still not byte-identical to the other five
+  sites (REMED-GFX-144's note). Not required by this correction and not touched.
+
+### Build directories, ccache, displays and thermal
+
+Used, **all pre-existing and reused incrementally**: `cmake-build-vulkan`, `cmake-build-vulkan-asan`,
+`cmake-build-vulkan-ubsan`, `cmake-build-debug` (EasyGL), `cmake-build-software`,
+`cmake-build-headless`, `cmake-build-sdlgpu`, `cmake-build-webgpu`, `cmake-build-bgfx`,
+`cmake-build-sdlrenderer`, `cmake-build-ascii`, `cmake-build-dx3`, `cmake-build-canvas`,
+`cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`. `CNA_USE_CCACHE=ON`
+in every one.
+
+**No new build directory was created**, none was cleaned, deleted or recreated, and **no clean build
+occurred** — every configure was incremental and every build was a rebuild of changed targets only.
+No build tree was created under `/tmp`, `/var/tmp` or `/dev/shm`; the session scratchpad held only
+the LD_PRELOAD counter, small logs and the saved originals used for the A/B restores. `git stash` was
+never used and the four pre-existing user stashes are untouched; `git clean -xfd` and
+`git reset --hard` were never run. **Maximum build parallelism was `-j2` throughout**, including the
+sanitizer variants.
+
+Displays: shared Xvfb **`:101`** served every native Vulkan, EasyGL, Software, SdlGpu, WebGPU, Bgfx
+and sanitizer run; `:99` served the Wine D3D9/D3D11 runs. **No display was started and none was
+stopped.** No `:0` measurement was taken.
+
+Thermal: started at **57.4 °C**. Peak **83.4 °C** during the first fixture build, which triggered a
+two-minute cooling pause down to **54.4 °C**; every later build stayed within **58–77 °C** at `-j2`
+with no further pause needed, and no heavy matrices were run concurrently. Final **57 °C**.
+
+### Commits
+
+- `9f791921 test(Task REMED-GFX-129): reproduce ordered Vulkan Clear loss`
+- `c11f937a fix(Task REMED-GFX-129): record explicit Vulkan clear commands`
+- `71b6fdef test(Task REMED-GFX-129): cover colour depth stencil and ordering`
+- `docs(remediation): record GFX-129 completion` (this record)
+
+No shader, bytecode or other generated artifact changed. `git diff --check` is clean and `audit/` is
+untouched.
