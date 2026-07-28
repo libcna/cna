@@ -49,8 +49,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # a small partial update -- with no readback, Present or flush in between -- and reads the whole of
     # A: the resolved single-sample layer still held the correct A, which is why a full redraw and an
     # immediate read both passed before this.
-    cna_canvas_test(cna_test_canvas_rendertargetcube_msaa_face
-                    examples/rendertargetcube_msaa_face_test.cpp)
+    # Built (not ctest-registered, like every Canvas test) so this backend's own "no cube target"
+    # declaration stays compile-verified on the Emscripten toolchain.
+    add_executable(cna_test_canvas_rendertargetcube_msaa_face
+                   examples/rendertargetcube_msaa_face_test.cpp)
     target_link_libraries(cna_test_canvas_rendertargetcube_msaa_face PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 
     # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
