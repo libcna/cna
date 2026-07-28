@@ -13964,7 +13964,7 @@ Public fixtures only; **only Vulkan production changed.**
 | ASCII | **38/38** | `:101`, SDL_Renderer |
 | DX3 | **38/38** | `SDL_VIDEODRIVER=dummy`, free-direct |
 | HEADLESS | **30/30** | `SDL_VIDEODRIVER=dummy`, no rasterization |
-| SDL_GPU | **28/28** | `:101`, SDL_gpu (Vulkan driver) — declares `segmentsBindCycles = false`, REMED-GFX-145 |
+| SDL_GPU | **28/28** | `:101`, SDL_gpu (Vulkan driver) — declared `segmentsBindCycles = false` at the time; REMED-GFX-145 has since fixed it and the same file now runs **39/39** there |
 | CANVAS | compile+link | Emscripten |
 | D3D12 | compile+link | DX-100's Wine `dxgi!d3d12_swapchain_init` null dereference still blocks every windowed D3D12 test; D3D11 is the runtime D3D control |
 
@@ -14006,7 +14006,7 @@ Public fixtures only; **only Vulkan production changed.**
   resolve, readback copy and final layout onto the last backbuffer segment.
 * **REMED-GFX-144** — the two pre-existing synchronization-validation hazard classes above.
 * **REMED-GFX-145** — SdlGpu collapses bind cycles exactly as Vulkan did, 19/37 with the identical
-  signature, not fixed here (Vulkan-only scope).
+  signature, not fixed here (Vulkan-only scope). **Closed 2026-07-28**, 39/39.
 * `SupportsCapability(GraphicsCapability::MultipleRenderTargets)` has **no override on any backend**
   and `IGraphicsBackend`'s default answers `true`, so Software claims MRT support while its
   `SetRenderTargets` throws outright. The battery probes with the bind itself instead; noted here
@@ -14051,5 +14051,393 @@ untouched. Every A/B measurement restored exactly two files via
 - `d02efbc8 test(Task REMED-GFX-140): cover pass ordering and target parity`
 - `be1dae6e test(Task REMED-GFX-140): declare per-backend pass-boundary contracts`
 - `docs(remediation): record GFX-140 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-145 — deferred SDL_GPU render-pass boundaries (DONE 2026-07-28)
+
+### Classification
+
+**A real defect in `SdlGpuGraphicsBackend::EnsureFrameRendered`'s per-target grouping, plus two
+dependent defects in the same path that had to be fixed with it.** Not a test artefact, not a driver
+behaviour, and not the same second defect REMED-GFX-140 found in Vulkan — SdlGpu has no shared
+per-frame vertex arena to alias, and that was measured rather than assumed (below).
+
+### Exact lost-boundary mechanism
+
+`usedRenderTargetsThisFrame_` was the list of **unique** `SdlGpuRenderTarget2DState`s bound this
+frame (`MarkUsedThisFrame` appended only if not already present), and `EnsureFrameRendered` gave each
+entry one `SDL_BeginGPURenderPass` … `SDL_EndGPURenderPass` via `RenderToTarget`.
+`usedRenderTargetCubeFacesThisFrame_` did the same per unique `(cube, face)` pair. Inside the pass,
+`RenderQueuedDraws` walked `drawOrder_` and issued every entry whose `DrawTarget` — resource pointer
+plus cube face — matched. Target identity was the only grouping key the deferred queues carried, so
+two public bind cycles of one target were indistinguishable. The field's own doc comment said so out
+loud: *"every Clear()/draw call recorded against the same target within one frame is accumulated into
+that target's single pass, regardless of how many times SetRenderTarget2D re-selected it meanwhile."*
+
+| public sequence | pre-fix native RT passes | required |
+|---|---|---|
+| `SetRenderTarget(A); Draw; SetRenderTarget(null); SetRenderTarget(A); Draw; SetRenderTarget(null)` | **1** | 2 |
+| `A; Draw; null; B; Draw; null; A; Draw; null` | **2** | 3 |
+| `A; Draw; null;` ×3 | **1** | 3 |
+| cube face 0; face 1; face 0 | **2** | 3 |
+| `{a,b}; Draw; null; {a,c}; Draw; null` | **1**, and `b` never rendered at all | 2 |
+
+Consequences, each reproduced independently rather than assumed:
+
+| claimed consequence | verdict | evidence |
+|---|---|---|
+| the second load action never occurs | **real** | `S1` — a `DiscardContents` target's second bind returned the first cycle's whole pattern, 4/64 exact |
+| `PreserveContents` tests passing without a reload | **real** | `S2` is pixel-identical under both shapes; REMED-GFX-136's `Settle()` exists for exactly this |
+| `DiscardContents` applied at the wrong bind | **real** | `S1`, `S4`, `S8`, `S12`, `C1`, `K1`, `K2`, `M1`, `R1`, `P3` |
+| `Clear()` attached to the wrong logical pass | **real** | `S3` (9/64), `X2` (13/64), and new `C2` — see "Clear values" |
+| viewport / scissor leaking between cycles | **real** | `S10`, `S11` |
+| target A → B → A ordering lost | **real** | `S4`, `S12` |
+| cube face A → B → A merging | **real, but it is the SAME-face rebind that merges** | `C1` — each `(cube, face)` pair is its own `DrawTarget`, so face ≠ face never merged; face 0 → 1 → 0 collapsed the two face-0 cycles |
+| render-target usage captured from the last live state | **real, through the CLEAR VALUES rather than the usage** | `QueueClear` wrote `state->clearColor`, so the frame's last `Clear()` on a target supplied the colour for its one pass |
+| MRT bind cycles merging | **real, and worse than "merging"** | the attachment SET was on the primary's state, so `{a,c}` rewrote the `{a,b}` cycle's set and `b` — still flagged `isMrtSibling` and no longer in anyone's list — was skipped by the per-target loop and produced no pass at all |
+| shared transient upload storage reused across passes | **NOT real** | see "Transient upload storage" |
+
+### Two dependent defects fixed with it
+
+1. **Clear values lived on the target.** `QueueClear`/`QueueClearDepth`/`QueueClearStencil` set
+   `state->clearColor` + `clearColorPending`, and `FillColorTargetInfo` read them at pass-begin. With
+   one pass per target that made the frame's LAST `Clear()` the colour of that target's only pass and
+   dropped every earlier cycle's. Segmentation makes fixing it mandatory: two cycles are now two
+   passes, and each needs its own load action. Clear values now belong to `PassSegment`; the
+   per-resource flags keep only their other meaning — *"no pass has ever written this resource, so a
+   `LOAD` would read uninitialized memory"* — and are consumed by whichever segment actually records
+   it, which is byte-identical to the pre-fix behaviour for a single-cycle target.
+2. **The MRT attachment set lived on the primary's state** (`mrtSiblings` + `isMrtSibling`), so it
+   was per TARGET rather than per bind cycle. It is now `PassSegment::extraAttachments`;
+   `currentExtraMrtTargets_` disappears with it, because a segment's `Clear()` already covers every
+   attachment of that same cycle.
+
+### Corrected segment architecture
+
+Design **B** of the four offered — a monotonically increasing segment id captured on every bind cycle
+— with one SdlGpu-specific difference from REMED-GFX-140: SDL_gpu decides a pass's whole
+configuration at `SDL_BeginGPURenderPass`, so the segment has to be a first-class ordered record
+rather than something rebuilt from the id at record time.
+
+* `PassSegment { id, rt | (cube, face), extraAttachments, clear{Color,Depth,Stencil}Requested + values }`,
+  appended to `passSegments_` in the exact order the cycles were opened — replay is public order by
+  construction, with no sort.
+* `BeginRenderTargetSegment` / `BeginCubeFaceSegment` replace the bind bookkeeping at **every** bind
+  site (`BindAsRenderTarget`, `BindAsRenderTargetFace`), and advance unconditionally — including a
+  rebind of the resource, face or MRT set already current, which is the whole point.
+  `EndRenderTargetSegment` runs on both `UnbindAsRenderTarget`s and on both wrappers' destructors.
+* `QueuedDrawRef::segment`, tagged in `PushDrawOrder` — the single choke point all nine draw families
+  and `QueueSprite` already route through, so no call site can forget it. `RenderQueuedDraws` takes a
+  segment filter; `kSwapchainSegment` (0) means "no filter", which is what the single trailing
+  backbuffer pass still asks for.
+* `Clear`/`ClearDepth`/`ClearStencil` write to the open segment, or to the frame-global swapchain
+  clear state when none is open.
+* `EnsureFrameRendered` walks `passSegments_` in order. A segment with no draws, no `Clear()` and no
+  resource still owing its first-use initialization issues **no native pass**.
+* A mid-frame flush that leaves a target still bound re-opens a segment for it
+  (`ReopenSegmentForBoundTarget`). Pre-fix, `usedRenderTargetsThisFrame_.clear()` in the same place
+  left a still-bound target un-registered, so draws issued after that flush would never have been
+  recorded — a latent hole the segment model would have inherited; closed here.
+
+Requirements checked against the design: every bind cycle is a distinct segment ✓; object identity
+alone never merges segments ✓; face, mip/layer, usage, load/store action and attachment set all ride
+on the segment or on the resource it names ✓; unbind closes the segment ✓; rebind opens a new one ✓;
+entry order preserved ✓; caches stay compatibility-keyed and no cache key contains a segment id ✓; no
+renderer submit, fence wait or `Present` between segments ✓; one allocation per logical pass, none
+per draw ✓.
+
+### Native pass counts and object cardinality
+
+Same binary set, same final test files, `LD_PRELOAD` interposer on the real SDL_gpu entry points (no
+production instrumentation):
+
+| counter | `rendertarget_pass_boundary` pre → post | `pass_boundary_upload` pre → post | `sdlgpu_mrt` pre → post |
+|---|---|---|---|
+| checks | **19/37 → 39/39** | **11/17 → 17/17** | **44/45 → 45/45** |
+| `SDL_BeginGPURenderPass` | 64 → **102** | 31 → **78** | 112 → **113** |
+| `SDL_EndGPURenderPass` | 64 → **102** | 31 → **78** | 112 → **113** |
+| `SDL_BeginGPUCopyPass` / `End` | 68 → 68 | 39 → 39 | 134 → 134 |
+| `SDL_AcquireGPUCommandBuffer` | 68 → 68 | 38 → 38 | 104 → 104 |
+| `SDL_SubmitGPUCommandBuffer` | 32 → 32 | 21 → 21 | 58 → 58 |
+| `SDL_SubmitGPUCommandBufferAndAcquireFence` | 36 → 36 | 17 → 17 | 46 → 46 |
+| `SDL_WaitForGPUFences` | 36 → 36 | 17 → 17 | 46 → 46 |
+| `SDL_CreateGPUGraphicsPipeline` | 4 → 4 | 3 → 3 | 17 → 17 |
+| `SDL_CreateGPUTexture` | 46 → 46 | 19 → 19 | 19 → 19 |
+| `SDL_CreateGPUBuffer` | 5 → 5 | 99 → 99 | 34 → 34 |
+| `SDL_CreateGPUTransferBuffer` | 68 → 68 | 119 → 119 | 134 → 134 |
+| `SDL_CreateGPUSampler` | 1 → 1 | 1 → 1 | 1 → 1 |
+| `SDL_GenerateMipmapsForGPUTexture` | 0 → 0 | 0 → 0 | 0 → 0 |
+
+Begins equal ends in every run — no unmatched or overlapping pass — and every `Create*` count equals
+its matching `Release*` count in every run, so resources return to baseline after disposal. **Not one
+pipeline, texture, buffer, transfer buffer, sampler, command buffer, submit or fence wait was added:
+segment ids are a grouping key, never a cache key.** `sdlgpu_mrt_test.cpp`'s explicit sprite-pipeline
+cardinality ladder (1 → 2 → 3 → 4, reuse, +depth = 5, +MSAA = 6, +write masks = 7) still holds
+exactly, which is the direct statement that pipelines remain compatibility-keyed.
+
+Per check, the boundary is exact. Native `SDL_BeginGPURenderPass` deltas, each check's total
+including the one swapchain pass its readback flush also records:
+
+| check | shape | pre → post |
+|---|---|---|
+| `S1` | one target, two `DiscardContents` cycles | 3 → **4** (1 → 2 RT passes) |
+| `S5` | two independent targets, one cycle each | 3 → **3** (unchanged — no new boundary is required) |
+| `S8` | one target, three cycles | 2 → **4** (1 → 3) |
+| `S12` | A → B → A → B | 3 → **5** (2 → 4) |
+| `C1` | cube face 0 → 1 → 0 | 3 → **4** (2 → 3) |
+| `M2` | `{a,b}` then `{a,c}` | 2 → **3** (1 → 2, and `b` now renders) |
+| `X1` | a single bind cycle | 2 → **2** (unchanged) |
+| `R1` | seventeen segments | 3 → **18** (2 → 17) |
+
+### Preserve / Discard / Platform
+
+Every segment gets its own load and store actions, chosen from the segment first and the resource's
+first-use flag second — never from the last live target. Within one command submission:
+Preserve → Preserve (`S2`, `U2`), Preserve → Discard (`S7`), Discard → Preserve (`S7`),
+Preserve A → Discard B → Preserve A (`S7`), and Discard ×3 (`S8`). REMED-GFX-136's usage suite is
+**30/30** unchanged, and its `PlatformContents` mapping to preservation is untouched.
+
+### Clear ordering
+
+A `Clear()` belongs to the exact segment the public call occurred in. Covered: clear in the first
+segment (`C2`, `D1`), clear in the second segment (`S3`, `X2`, `C2`), several clears in one segment
+(`C1` — last wins), clear followed by draw (`S3`), draw followed by clear (`X3`), colour-only (`S3`),
+depth-only (`D1`), and a clear-only cycle whose result the next cycle loads (`C3`). Depth-only is the
+decisive one: `D1` shows a farther quad rejected by the previous cycle's stored depth and then
+accepted after a depth-ONLY `Clear()` that leaves the colour attachment loading.
+
+Within one segment the last `Clear()` still wins and a `Clear()` issued after a draw cannot wipe it,
+because SDL_gpu delivers the colour only through `SDL_GPUColorTargetInfo.load_op` and a pass has
+exactly one. That is the same boundary REMED-GFX-129 records for Vulkan; the file declares it as
+`clearAfterDrawWins = false` and `X3` asserts it. **No independent SdlGpu clear defect remained after
+segmentation:** unlike Vulkan, `clearOnPreserveTarget` is true here and `X1`/`X2` both pass, `X2`
+because the second cycle is now genuinely its own pass with its own load op.
+
+### Viewport / scissor / draw state
+
+Per-draw capture (REMED-GFX-064 viewport + `MinDepth`/`MaxDepth`, REMED-GFX-068 scissor +
+`ScissorTestEnable`, REMED-GFX-069 `BlendFactor`, REMED-GFX-051 `DepthBias`/`SlopeScaleDepthBias`,
+and `RenderStateSnapshot`'s blend/cull/fill/stencil) is untouched — segmentation neither introduced
+nor hid a live-state capture defect. What changed is that those per-draw values are now replayed
+inside the pass their own cycle opened: `S10` (a sub-viewport set in the second cycle) and `S11` (a
+scissor set in the second cycle) apply to that cycle only. Render-target dimensions come from the
+segment's own resource. `SdlGpu_DepthBias` and `SdlGpu_RenderTargetViewport`/`Scissor`/`BlendFactor`
+are green.
+
+### Transient upload storage
+
+REMED-GFX-140 found Vulkan restarting a shared per-frame arena cursor at 0 for every pass. **SdlGpu
+has no such hazard, and this is a measurement, not an inspection-only claim.** Where the data lives:
+
+* 3D families — `UploadSceneDrawData` gives every queued command its **own**
+  `uploadedVertexBuffer`/`uploadedIndexBuffer` (`SDL_CreateGPUBuffer` per command; the 99 and 34
+  buffer creations in the table above are exactly those), released together after submit. Nothing is
+  shared, so nothing can be overwritten.
+* Sprites — one `spriteVertexBuffer_`, but each sprite's vertices are written at
+  `index * 6 * sizeof(SpriteVertex)` where `index` is its own position in `spriteCommands_`, and
+  `IssueSpriteDraw` binds at the same offset. The cursor is the command's own index; it is
+  monotonically increasing over the frame and never reset per pass.
+
+New checks `U5` and `U6` ask the question behaviourally with geometry that differs left from right —
+not merely in colour — over A → B → A, across indexed, non-indexed and sprite paths, and with all
+three targets recorded into one command buffer. `U5`'s **second** assertion (target B keeps its own
+geometry) passed pre-fix as well as post-fix: the aliasing does not exist. Its first assertion was
+red purely for the segmentation. `P7` adds the same measurement to the shared oracle through the
+ordinary Present path, so backends that cannot read their backbuffer — SdlGpu among them, which is
+why `P6` had always skipped here — get it too.
+
+### RenderTarget2D / cube / MRT / MSAA / backbuffer
+
+* **RenderTarget2D** — `S1`–`S12`, `U1`–`U6`, `D1`, `C1`–`C3`, `R1`, `P1`–`P3`, `P7`.
+* **Cube** — `C1`/`C2`: face 0 → 1 → 0 under both usages. REMED-GFX-134's cube readback is **55/55**
+  and REMED-GFX-136's usage suite **30/30**.
+* **MRT** — `M1`/`M2` in the oracle plus the new three-assertion check in `sdlgpu_mrt_test.cpp`.
+  Changing only the second attachment starts a new logical pass for the first, and the attachment
+  dropped from the set keeps its OWN cycle's output instead of vanishing. `SdlGpu_Mrt` **45/45**
+  (was 42 checks; +3).
+* **MSAA** — `K1`/`K2` on a genuinely multisampled `RenderTarget2D` (`applied=4`), so each segment's
+  `SDL_GPU_STOREOP_RESOLVE` completes before the next segment of the same resource loads, and the
+  readback after all queued segments is exact. `SdlGpu_RenderTarget2DMsaa` green. **REMED-GFX-141**
+  (one multisample scratch texture shared by six cube faces) is untouched — the canonical MSAA case
+  here is non-cube for exactly that reason, and `rendertargetcube_usage_test.cpp`'s `M3` still
+  records the cube boundary as declared.
+* **Targets with and without depth** — `MakeTarget(..., DepthFormat::None)` throughout the oracle,
+  `Depth24Stencil8` in `D1` and in the MRT test's depth-backed set.
+* **Backbuffer** — `S6` (target → backbuffer → target) passes: the target's two cycles no longer
+  merge. Backbuffer commands do **not** participate in the ordered segment stream; the swapchain
+  keeps one trailing pass whose load action, `clearColorPending_` state and presentation belong to
+  the acquired swapchain texture. Recorded separately, not fixed here — see "Independent findings".
+
+### Validation
+
+**Standard Khronos validation: clean.** SDL_gpu requests `debug_mode` in this build (the log line
+`[SDL_GPU] Backend initialised (800x480), debug mode enabled`), and `VK_LOADER_DEBUG=layer` confirms
+the layer really loads — `Loading layer library libVkLayer_khronos_validation.so` and
+`Insert instance layer "VK_LAYER_KHRONOS_validation"`. Zero `Validation Error`, zero `Validation
+Warning` and zero VUIDs across the whole 39-check battery and the new 17-check test. No SDL_GPU
+error, no invalid pass nesting, no invalid load/store or resolve use, no device loss.
+
+**Synchronization validation** (`khronos_validation.validate_sync`): **zero** hazards on SdlGpu for
+both files. The mechanism was proved live rather than assumed — the same settings file run against
+the Vulkan backend reports exactly REMED-GFX-144's recorded **15** hazards, so a zero here is a real
+zero and not an inactive feature.
+
+One pre-existing message is **not** attributed to this task: `cna_test_sdlgpu_rendertargetcube_usage`
+emits one `VUID-vkCmdDraw-None-09600` (a cube layer expected in `COLOR_ATTACHMENT_OPTIMAL` found in
+`SHADER_READ_ONLY_OPTIMAL`), inside SDL's own Vulkan renderer. A/B-measured with the identical test
+binary: **1 before, 1 after, byte-identical text.** Recorded as an independent finding below.
+
+### False-positive test audit
+
+Scope: the directly relevant SdlGpu render-target tests, not a repository-wide rewrite. Eleven files
+were read in full and classified against one question — *would a backend that collapses several bind
+cycles into one native pass still pass this test?*
+
+| file | finding | action |
+|---|---|---|
+| `sdlgpu_mrt_test.cpp` | **the worst offender, and the one that looks strongest**: eleven repeated bind cycles over the same target set, but a `GetData` ends every single one, so each was its own flush window; plus a `Clear()` after every bind and byte-identical sprite geometry in every pass | **strengthened** — a new check queues `{A,B}` then `{A,C}` with nothing between them and asserts all three targets byte-exact. **44/45 pre-fix**: `B` was never rendered. Attachment 0 passed pre-fix by coincidence — with Opaque blend the merged pass's last draw wins |
+| `rendertarget_pass_boundary_test.cpp` | its arena check `P6` is reached only through `GetBackBufferData`, which SdlGpu cannot do, so it had always skipped here | **strengthened** — new `P7` makes the same geometry-distinct measurement through the ordinary Present path, on every backend with readback. 37/37 → 39/39 |
+| `rendertargetcube_usage_test.cpp` | `Settle()`'s and `Q1`'s docs named this collapsing as a Vulkan-only defect fixed by REMED-GFX-140 | **corrected** — both now record SdlGpu's own route and its fix. The barrier stays; it is what makes preservation observable, not a workaround |
+| `sdlgpu_rendertarget2d_test.cpp`, `..._msaa_test.cpp`, `..._lifetime_test.cpp`, `..._viewport_test.cpp`, `..._scissor_test.cpp`, `..._blendfactor_test.cpp` | blind rather than wrong: none rebinds a target inside one flush window (the viewport/scissor/blend-factor "multi-state" cruxes are several draws INSIDE one cycle, which segmentation cannot and must not split), and each clears immediately after every bind | **left alone** — none asserts anything that only holds under collapsing, so none is at risk from the fix, and the new dedicated file covers what they cannot |
+| `rendertargetcube_plural_binding_test.cpp` | genuinely not false-positive-capable: rebinds the same `+X` face three times with no barrier and never clears in `DrawFace` | verified green |
+| `sdlgpu_rendertargetcube_test.cpp`, `sdlgpu_depthless_cube_spritebatch_compatibility_test.cpp` | partial — catch collapse across faces of one cube, not repeated cycles on one face | verified green |
+
+Found: **8 false-positive-capable files**. Strengthened: **3** (two by new assertions, one by
+corrected documentation). One new dedicated file added, `examples/sdlgpu_pass_boundary_upload_test.cpp`
+(17 checks, **11/17** pre-fix), because three questions were unaskable in the shared oracle at all:
+the eight 3D draw families (a different queue, `Issue*Draw` and pipeline cache from sprites, plus
+REMED-GFX-117's `ResolveIndexedRange`), upload isolation with geometry that actually differs, and
+depth/stencil load actions. Findings whose previous evidence depended on the false positives:
+REMED-GFX-136's SdlGpu preservation claim, which its own barrier already protected, and
+REMED-GFX-140's SdlGpu control run, which reported 28/28 only because the contract declared the
+defect.
+
+### Cross-backend controls
+
+Public fixtures only, with the strengthened shared oracle; **only SdlGpu production changed.**
+
+| backend | result | display / route |
+|---|---|---|
+| SDL_GPU | **19/37 → 39/39** | `:101`, SDL_gpu (Vulkan driver, llvmpipe), Khronos validation active |
+| VULKAN | **44/44** | `:101`, Vulkan (llvmpipe), validation layer active |
+| D3D9 | **43/43** | `:99`, Wine + DXVK 2.6.0 (`run-wine-dxvk9.sh`) |
+| D3D11 | **43/43** | `:99`, Wine + DXVK 2.6.0 (`run-wine-dxvk.sh`) |
+| EASYGL | **43/43** | `:101`, OpenGL ES / Mesa |
+| WEBGPU | **42/42** | `:101`, wgpu-native v29.0.1.1 |
+| BGFX | **41/41** | `:101`, OpenGL |
+| SOFTWARE | **40/40** | `SDL_VIDEODRIVER=dummy`, CPU |
+| SDL_RENDERER | **40/40** | `:101`, SDL_Renderer |
+| ASCII | **40/40** | `:101`, SDL_Renderer |
+| DX3 | **40/40** | `SDL_VIDEODRIVER=dummy`, free-direct |
+| HEADLESS | **30/30** | `SDL_VIDEODRIVER=dummy`, no rasterization (`P7` skips with the rest of the readback checks) |
+| CANVAS | compile + link | Emscripten |
+| D3D12 | compile + link | DX-100's Wine `dxgi!d3d12_swapchain_init` null dereference still blocks every windowed D3D12 test, re-observed here; D3D11 is the runtime D3D control |
+
+Each backend's count rose by exactly the +2 `P7` adds where readback exists. `:0` was not used for
+any measurement. No display was started and none was stopped.
+
+### Performance
+
+Added: **+38, +47 and +1 native begin/end pairs** in the three measured files — i.e. exactly the
+boundaries the public contract requires, and nothing else. Not added: no queue submit per target
+switch (32/21/58 → unchanged), no fence wait per segment (36/17/46 → unchanged), no `Present` per
+segment, no extra rendered frame, no full-target copy to establish a boundary, no permanent
+allocation per segment, no pipeline keyed by segment identity. One heap allocation per logical pass
+(the `PassSegment`), none per draw. `SDL_GenerateMipmapsForGPUTexture` for a mipped
+`RenderTarget2D` now runs once per segment rather than once per target per frame — required, since
+each pass's result is what a later segment or the swapchain pass may sample — and cube mip
+regeneration stays once per cube per frame.
+
+### Regression gates
+
+| gate | result |
+|---|---|
+| REMED-GFX-018 `ClearOptions` | green |
+| REMED-GFX-039 active-target validation | green |
+| REMED-GFX-051 SdlGpu `DepthBias` | green (`SdlGpu_DepthBias`) |
+| REMED-GFX-096 plural target / cube binding | green (`SdlGpu_RenderTargetCube_PluralBinding`) |
+| REMED-GFX-097 / 098 SdlGpu pipeline compatibility | green (incl. the MRT cache ladder, unchanged 1→7) |
+| REMED-GFX-117 SdlGpu indexed offsets | green (`SdlGpuIndexedDrawRangeTest` ×9), plus new `U3`/`U4` issuing them inside a SECOND pass |
+| REMED-GFX-124 / 127 / 130 honest readback | green |
+| REMED-GFX-134 cube readback | **55/55** |
+| REMED-GFX-136 usage semantics | **30/30** |
+| REMED-GFX-140 Vulkan segmentation oracle | **44/44**, and its 15 synchronization hazards unchanged |
+| target sampling / target disposal / lifetime | green (`SdlGpu_RenderTargetLifetime`, create == release in every counter) |
+| `ctest -R '^SdlGpu'` | **71/72** — only `SdlGpu_RenderState`, A/B-re-proven pre-existing here ("Cannot present while render targets are bound", identical against the pre-fix backend) |
+| `ctest` (full, SdlGpu tree) | **5775 registered, 5 failed, 6 skipped** — `XnbContainerFuzzTest`, `CnjEffectTest`, `CnjStockEffectTest`, `DoesNotSupportWireFrame` and `SdlGpu_RenderState`, all pre-recorded |
+| `ctest -R PassBoundary` in every registered dir | green in Vulkan, EasyGL, Bgfx, WebGPU, SDL_Renderer, ASCII, Software, Headless, DX3, D3D9, D3D11, SdlGpu |
+
+### Sanitizers
+
+| build | tests | result |
+|---|---|---|
+| `cmake-build-sdlgpu-asan` | pass-boundary, upload/3D, MRT, cube usage | 39/39, 17/17, 45/45, 30/30 — **0** ASan reports |
+| `cmake-build-sdlgpu-ubsan` | same four | 39/39, 17/17, 45/45, 30/30 — **0** runtime errors |
+
+Coverage across those four: repeated same-target segments, A → B → A, cube faces, MRT with a
+changing attachment set, MSAA, colour/depth/stencil clears, per-cycle viewport and scissor,
+distinctive geometry upload, target disposal, and repeated frames. No invalid access,
+use-after-free, integer overflow, stale command reference, arena overwrite, invalid pass nesting or
+invalid native state.
+
+### Independent findings recorded
+
+* **SdlGpu cannot interleave backbuffer work between render-target segments** — the counterpart of
+  REMED-GFX-143 for this backend. `EnsureFrameRendered` records every render-target segment first and
+  then ONE swapchain pass, which is passed `kSwapchainSegment` and so replays every backbuffer draw
+  of the frame regardless of when it was issued. Nothing observable in a render target changes (`S6`
+  covers exactly that sequence and passes); what breaks is a game that samples a target onto the
+  backbuffer and then renders into that target again. Fixing it needs the swapchain pass to become
+  segment-aware with a `SDL_GPU_LOADOP_LOAD` variant, and the presentation, depth-clear state and
+  cube mip regeneration threaded onto the last backbuffer segment only. Deliberately out of scope:
+  REMED-GFX-143 is the open task for this class and this note extends it to SdlGpu.
+* **One `VUID-vkCmdDraw-None-09600` inside SDL's own Vulkan renderer**, in
+  `cna_test_sdlgpu_rendertargetcube_usage`: a cube array layer the command buffer expects in
+  `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` is found in `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`
+  at `vkQueueSubmit`. A/B-measured identical before and after this fix (1 → 1, same text, same
+  layer), so it is pre-existing and belongs to SDL_gpu's own layout tracking for a cube face that is
+  both rendered and sampled in one frame — not to CNA's pass boundaries.
+* **A latent hole closed in passing**: pre-fix, a flush that happened while a render target was still
+  bound cleared `usedRenderTargetsThisFrame_` without re-registering it, so any draw issued
+  afterwards into that still-bound target would never have been recorded.
+  `ReopenSegmentForBoundTarget` closes it; no existing test reached the shape.
+
+### Source, shader and generated-artifact changes
+
+Two production files: `include/CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp` and
+`src/CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.cpp`. No public API changed. **No shader,
+bytecode or other generated artifact changed.**
+
+### Build directories, ccache and displays
+
+Used, all in-repository and **all pre-existing and reused** — no directory was created:
+`cmake-build-sdlgpu`, `cmake-build-sdlgpu-asan`, `cmake-build-sdlgpu-ubsan`, `cmake-build-vulkan`,
+`cmake-build-debug` (EasyGL), `cmake-build-bgfx`, `cmake-build-webgpu`, `cmake-build-software`,
+`cmake-build-sdlrenderer`, `cmake-build-ascii`, `cmake-build-headless`, `cmake-build-dx3`,
+`cmake-build-canvas`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`.
+`CNA_USE_CCACHE=ON` was verified in every `CMakeCache.txt` before the first build.
+
+No build directory was cleaned, deleted or recreated; **no clean build was required.** The three
+SdlGpu trees were reconfigured incrementally (`cmake -S . -B <dir>`) once each, only to refresh the
+`CONFIGURE_DEPENDS` glob so the new test source produced a target. Builds used `-j4`, dropping to
+`-j2` for the sanitizer and cross-compiled variants; the package stayed at 68 °C. **No build tree was
+created under `/tmp`, `/var/tmp` or `/dev/shm`** — the session scratchpad held only logs and the
+~18 KB `LD_PRELOAD` counting shim used for the native-pass measurements.
+
+`git clean -xfd` was never run, `git stash` was never used, and the four pre-existing user stashes are
+untouched. Every A/B measurement restored exactly two files via `git show <commit>:<path> > <path>`
+and put the working copies back with `git checkout --` afterwards.
+
+Displays: `:101` for every native Linux run (SdlGpu, Vulkan, EasyGL, Bgfx, WebGPU, SDL_Renderer,
+ASCII), `SDL_VIDEODRIVER=dummy` for Software/Headless/DX3, and `:99` only for the Wine + DXVK D3D9,
+D3D11 and D3D12 controls. `:0` was not used for any measurement; no display was started or stopped.
+
+### Commits
+
+- `e57a8f76 test(Task REMED-GFX-145): reproduce SDL GPU render-pass collapsing`
+- `70f40127 fix(Task REMED-GFX-145): preserve deferred SDL GPU pass boundaries`
+- `a50e65b6 test(Task REMED-GFX-145): cover pass ordering and upload isolation`
+- `docs(remediation): record GFX-145 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
