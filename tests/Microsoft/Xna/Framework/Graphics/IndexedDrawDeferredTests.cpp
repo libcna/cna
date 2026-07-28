@@ -435,6 +435,20 @@ namespace
         const CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend& backend,
         std::size_t firstMessage)
     {
+        // REMED-GFX-144: an empty message list means "no validation problem" ONLY if the layer is
+        // really there. When VK_LAYER_KHRONOS_validation is missing, CreateInstance() clears
+        // sEnableValidation, no debug messenger is installed and this vector stays empty forever --
+        // so every assertion below would pass vacuously. Fail loudly on that instead.
+        //
+        // This helper deliberately keeps STANDARD validation only. The Khronos synchronization
+        // checks are a separate opt-in (VulkanGraphicsBackend::SetSyncValidationEnabledEXT) whose
+        // hazards belong to whichever pass records them; REMED-GFX-144's acquire hazard was
+        // invisible here for exactly that reason, and examples/vulkan_swapchain_sync_test.cpp is
+        // the file that enforces it.
+        ASSERT_TRUE(CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend::IsValidationActiveEXT())
+            << "Vulkan validation layer is not active, so a zero message count proves nothing "
+               "(REMED-GFX-112 made these messages fatal; REMED-GFX-144 made their absence "
+               "meaningful)";
         const auto& messages = backend.GetValidationMessagesEXT();
         std::string completeMessages;
         for (std::size_t i = firstMessage; i < messages.size(); ++i)

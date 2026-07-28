@@ -100,11 +100,22 @@ protected:
         Color centPx(0, 0, 0, 0);
         device.GetBackBufferData(&centReg, &centPx, 0, 1);
 
-        // Phase 2 backbuffer must be blue — proves the 6 cube-face passes in Phase 1
-        // completed cleanly and did not corrupt the backbuffer colour.
-        const bool pass = (centPx.getRProperty() <= 50  &&
-                           centPx.getGProperty() <= 50  &&
-                           centPx.getBProperty() >= 200);
+        // Phase 2's backbuffer must be exactly the requested blue, so the six cube-face passes
+        // recorded before it neither wrote into the swapchain image nor left their clear colour
+        // behind.
+        //
+        // REMED-GFX-144 corrected the claim this check used to make. Absence of visible corruption
+        // is NOT evidence of correct synchronization: this file runs standard validation only, one
+        // frame, one readback, one pixel, and would have reported a clean pass throughout the whole
+        // life of the acquire WRITE_AFTER_READ hazard -- as it did. What it really measures is
+        // attachment routing, and that is worth measuring BYTE-EXACTLY rather than through a
+        // tolerance band: (0,0,255) is an exact fixed point of sRGB encoding, so a ±50 window only
+        // ever hid a real difference. Synchronization is enforced by
+        // examples/vulkan_swapchain_sync_test.cpp, which enables the synchronization checks,
+        // proves the layer is loaded and wraps the frame ring.
+        const bool pass = (centPx.getRProperty() == 0   &&
+                           centPx.getGProperty() == 0   &&
+                           centPx.getBProperty() == 255);
 
         if (pass) {
             std::printf("[PASS] VulkanRTCube: backbuffer_centre=(%d,%d,%d) — "
@@ -113,7 +124,7 @@ protected:
             result_ = 0;
         } else {
             std::printf("[FAIL] VulkanRTCube: backbuffer_centre=(%d,%d,%d), "
-                        "expected blue (R<=50, G<=50, B>=200)\n",
+                        "expected exactly (0,0,255)\n",
                         centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty());
         }
         Exit();
