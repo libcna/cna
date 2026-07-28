@@ -251,6 +251,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_GraphicsDevice_ClearDepth COMMAND cna_test_vulkan_graphicsdevice_clear_depth
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-129: the full public GraphicsDevice.Clear/ClearOptions contract, reusing
+        # REMED-GFX-018's backend-agnostic source verbatim. Vulkan delivered a clear ONLY through
+        # the render pass load op, so every one of the eight masks collapsed to "whatever the pass
+        # load action happens to be" -- a depth-only or stencil-only clear did nothing at all, a
+        # clear on a PreserveContents target was dropped entirely, and a clear issued after a draw
+        # ran before it. This suite establishes distinct pre-existing colour/depth/stencil values
+        # first and encodes the survivors into colour probes, so it can tell the three aspects
+        # apart instead of asserting one pixel.
+        cna_vulkan_test(cna_test_vulkan_graphicsdevice_clearoptions
+                        examples/bgfx_graphicsdevice_clearoptions_test.cpp)
+        cna_register_backend_test(NAME Vulkan_GraphicsDevice_ClearOptions COMMAND cna_test_vulkan_graphicsdevice_clearoptions
+            TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-129: Clear() is an ORDERED command at its exact public call position, not a
+        # hint for the next render-pass load action. Every check queues its whole public sequence
+        # and reads once at the end, with no GetData, Present, flush or extra frame in between, so
+        # a backend cannot pass by being forced to settle between two commands.
+        cna_vulkan_test(cna_test_vulkan_ordered_clear
+                        examples/graphicsdevice_ordered_clear_test.cpp)
+        cna_register_backend_test(NAME Vulkan_GraphicsDevice_OrderedClear COMMAND cna_test_vulkan_ordered_clear
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-089: backend-neutral public GraphicsDevice/DepthStencilState
         # A(Default)->B(DepthRead)->C(None)->A near/far contract, shared with D3D9/D3D11/Software.
         cna_vulkan_test(cna_test_vulkan_depth_contract

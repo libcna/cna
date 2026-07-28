@@ -187,6 +187,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_rendertarget_pass_boundary
         TIMEOUT 60 LABELS "Software")
 
+    # REMED-GFX-129: cross-backend control for Vulkan's ordered-Clear correction.
+    cna_software_test(cna_test_software_ordered_clear
+                      examples/graphicsdevice_ordered_clear_test.cpp)
+    cna_register_backend_test(NAME Software_GraphicsDevice_OrderedClear
+        COMMAND cna_test_software_ordered_clear
+        TIMEOUT 120 LABELS "Software")
+
     # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
     # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
     # native pass in public order, but both kept the BACKBUFFER as one trailing pass, so every

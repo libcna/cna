@@ -188,13 +188,14 @@ namespace
     constexpr Contract kContract{"BGFX", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, false, true, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
-    // `clearOnPreserveTarget` / `clearAfterDrawWins` false: REMED-GFX-129, still open. Both follow
-    // from the same narrow mechanism -- GetOrCreateRTRenderPass delivers the clear colour through
-    // VK_ATTACHMENT_LOAD_OP_CLEAR only, and a PreserveContents target's pass uses LOAD_OP_LOAD.
-    // Checks X1/X2/X3 pin that behaviour so GFX-140's segmentation fix is measured against it
-    // instead of being credited with it.
+    // `clearOnPreserveTarget` / `clearAfterDrawWins` were BOTH false here while REMED-GFX-129 was
+    // open: `GetOrCreateRTRenderPass` delivered the clear colour through VK_ATTACHMENT_LOAD_OP_CLEAR
+    // only, and a PreserveContents target's pass uses LOAD_OP_LOAD. REMED-GFX-129 replaced that with
+    // real ordered `vkCmdClearAttachments` commands, so both are true and checks X1/X2/X3 now assert
+    // the correct behaviour. They are kept here, unchanged in shape, because they are the exact
+    // reproduction the finding was narrowed with.
     constexpr Contract kContract{"VULKAN", true, Support::Exact, true, Support::Exact,
-                                 false, false, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, Support::Exact,
                                  true, false, false, true, true, true, true, false};

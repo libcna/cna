@@ -327,6 +327,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_RenderTarget_PassBoundary COMMAND cna_test_webgpu_rendertarget_pass_boundary
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-129: cross-backend control for Vulkan's ordered-Clear correction.
+    cna_webgpu_test(cna_test_webgpu_ordered_clear
+                    examples/graphicsdevice_ordered_clear_test.cpp)
+    cna_register_backend_test(NAME WebGPU_GraphicsDevice_OrderedClear COMMAND cna_test_webgpu_ordered_clear
+        TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
     # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
     # native pass in public order, but both kept the BACKBUFFER as one trailing pass, so every

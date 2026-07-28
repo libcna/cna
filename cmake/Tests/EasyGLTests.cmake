@@ -1661,6 +1661,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_RenderTarget_PassBoundary COMMAND cna_test_easygl_rendertarget_pass_boundary
             TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-129: cross-backend control for Vulkan's ordered-Clear correction. Clear() is an
+        # ordered command at its exact public call position, not a hint for the next render-pass
+        # load action; every check queues its whole public sequence and reads once at the end.
+        cna_easygl_test(cna_test_easygl_ordered_clear
+                        examples/graphicsdevice_ordered_clear_test.cpp)
+        cna_register_backend_test(NAME EasyGL_GraphicsDevice_OrderedClear COMMAND cna_test_easygl_ordered_clear
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-143: backbuffer work and render-target work must replay in ONE ordered stream.
         # REMED-GFX-140 (Vulkan) and REMED-GFX-145 (SdlGpu) gave every render-target bind cycle its own
         # native pass in public order, but both kept the BACKBUFFER as one trailing pass, so every
