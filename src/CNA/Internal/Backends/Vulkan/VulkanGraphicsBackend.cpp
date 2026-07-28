@@ -955,8 +955,12 @@ namespace CNA::Internal::Backends::Vulkan
             // this backend's Begin(), so backend_->blendEnabled_/blendParams_ are this batch's.
             snapshot->blendEnabled = backend_->blendEnabled_;
             snapshot->blendParams  = backend_->blendParams_;
+            // REMED-GFX-129: `order` is taken HERE, at End(), which is where the batch enters the
+            // frame's command stream -- an ordered Clear() issued between Begin() and End() would
+            // belong before it, and SpriteBatch has no way to interleave with one anyway.
             backend_->activeBatches_.push_back(
-                { std::move(snapshot), activeRT_, activeSegment_ });
+                { std::move(snapshot), activeRT_, activeSegment_,
+                  backend_->NextCommandOrderEXT() });
         }
     }
 
@@ -7041,8 +7045,15 @@ namespace CNA::Internal::Backends::Vulkan
         // one target's two bind cycles are now two passes over the same arena.
         VkDeviceSize spriteVbCursor = 0;
         VkDeviceSize spriteIbCursor = 0;
+        // REMED-GFX-129: `afterOrder`/`beforeOrder` bound this call to the half-open slice of the
+        // segment's batches that lies between two ordered Clear() commands. A segment with no clear
+        // is replayed in one call with the full (0, UINT64_MAX) range, which selects exactly what
+        // the unbounded version selected. The arena cursors are NOT reset per call (see above), and
+        // the slices are disjoint and cover the whole segment, so every batch is still copied once,
+        // at the same offset, in the same order.
         auto drawSpritesFor = [&](VulkanRTSource* targetRT, uint64_t segment,
-                                  float vpW, float vpH)
+                                  float vpW, float vpH,
+                                  uint64_t afterOrder, uint64_t beforeOrder)
         {
             static constexpr VkDeviceSize kSpriteVBSize = MaxSpriteVertices * sizeof(Sprite2DVertex);
             static constexpr VkDeviceSize kSpriteIBSize = MaxSpriteIndices  * sizeof(uint16_t);
@@ -7057,6 +7068,7 @@ namespace CNA::Internal::Backends::Vulkan
                 // batch belongs to exactly the segment it was issued in. There is no longer any
                 // "replay everything for this target" mode.
                 if (entry.segment != segment) continue;
+                if (entry.order <= afterOrder || entry.order >= beforeOrder) continue;
                 const auto& verts = snapshot->vertices;
                 const auto& inds  = snapshot->indices;
                 const auto& draws = snapshot->draws;
@@ -7221,7 +7233,24 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceSize frame3DVbCursor     = 0;
         VkDeviceSize frame3DIbCursor     = 0;
         VkDeviceSize frame3DInstVbCursor = 0;
-        auto draw3DFor = [&](VulkanRTSource* targetRT, uint64_t segment)
+        // Task 447/854: the OcclusionQuery currently wrapped in a real vkCmdBeginQuery for the
+        // render pass being recorded, if any -- tracks contiguous runs of draws sharing the same
+        // occlusionQuery tag so they land in one vkCmdBeginQuery/vkCmdEndQuery pair.
+        // REMED-GFX-129 hoisted it out of draw3DFor: a segment holding an ordered Clear() replays
+        // its draws in several calls, and a query left open by one slice must stay open across the
+        // clear rather than being ended and re-begun on the same pool index, which is invalid usage.
+        VulkanOcclusionQueryBackend* openQuery3D = nullptr;
+        auto closeOpenQuery3D = [&]()
+        {
+            if (openQuery3D && openQuery3D->pool_ != VK_NULL_HANDLE) {
+                vkCmdEndQuery(cb, openQuery3D->pool_, 0);
+                openQuery3D->recordedThisFrame_ = true;
+            }
+            openQuery3D = nullptr;
+        };
+        // REMED-GFX-129: see drawSpritesFor for what afterOrder/beforeOrder mean.
+        auto draw3DFor = [&](VulkanRTSource* targetRT, uint64_t segment,
+                             uint64_t afterOrder, uint64_t beforeOrder)
         {
             if (pending3D_.empty()) return;
             EnsureFrame3DBuffers();
@@ -7230,13 +7259,11 @@ namespace CNA::Internal::Backends::Vulkan
             VkDeviceSize& vbOff     = frame3DVbCursor;
             VkDeviceSize& ibOff     = frame3DIbCursor;
             VkDeviceSize& instVbOff = frame3DInstVbCursor;
-            // Task 447/854: the OcclusionQuery currently wrapped in a real vkCmdBeginQuery for
-            // this render pass, if any -- tracks contiguous runs of draws sharing the same
-            // occlusionQuery tag so they land in one vkCmdBeginQuery/vkCmdEndQuery pair.
-            VulkanOcclusionQueryBackend* openQuery = nullptr;
+            VulkanOcclusionQueryBackend*& openQuery = openQuery3D;
             for (const auto& draw : pending3D_) {
                 if (draw.rt != targetRT) continue;
                 if (draw.segment != segment) continue;
+                if (draw.order <= afterOrder || draw.order >= beforeOrder) continue;
                 if (draw.isMarker) {
                     if (pfnCmdInsertDebugLabel_) {
                         VkDebugUtilsLabelEXT lbl{};
@@ -7613,12 +7640,8 @@ namespace CNA::Internal::Backends::Vulkan
                     instVbOff += static_cast<VkDeviceSize>(draw.instVbData.size());
                 vbOff += static_cast<VkDeviceSize>(draw.vbData.size());
             }
-            // Task 447/854: close a query left open at the end of this render pass's own draw
-            // list (its span ran through the last tagged draw with no following untagged one).
-            if (openQuery && openQuery->pool_ != VK_NULL_HANDLE) {
-                vkCmdEndQuery(cb, openQuery->pool_, 0);
-                openQuery->recordedThisFrame_ = true;
-            }
+            // Task 447/854's close of a query left open at the end of a render pass's own draw
+            // list now happens once per SEGMENT, in closeOpenQuery3D, not once per slice.
         };
 
         // ---- One ordered stream of passes: every bind cycle, off-screen AND backbuffer ----
@@ -7640,17 +7663,18 @@ namespace CNA::Internal::Backends::Vulkan
         // same ascending-id order as the rest; the swapchain image is acquired once and entered once
         // per cycle (GetOrCreateSwapchainRenderPass supplies the LOAD variant), and presentation
         // stays once per frame.
+        //
+        // REMED-GFX-129: a segment no longer carries ONE set of clear values. It carries the ordered
+        // list of the Clear() calls made inside its bind cycle, plus the position of its earliest
+        // draw, which is all the load-op folding decision needs.
         struct PassSegment {
             uint64_t        id        = 0;
             VulkanRTSource* rt        = nullptr;   ///< nullptr = the backbuffer.
-            bool            hasClear  = false;
-            float           r = 0.f, g = 0.f, b = 0.f, a = 1.f;
-            float           depth     = 1.0f;
-            int             stencil   = 0;
-            bool            clearColor   = false;  ///< REMED-GFX-143: per-aspect, backbuffer only.
-            bool            clearDepth   = false;
-            bool            clearStencil = false;
             bool            isBackbuffer = false;  ///< Distinguishes "the backbuffer" from "unset".
+            /// This bind cycle's Clear() calls, in public call order.
+            std::vector<const PendingClear*> clears;
+            /// Public-stream position of this segment's earliest draw; none = no draw at all.
+            uint64_t        firstDrawOrder = std::numeric_limits<uint64_t>::max();
         };
         std::vector<PassSegment> segments;
         auto segmentFor = [&segments](uint64_t id, VulkanRTSource* rt) -> PassSegment& {
@@ -7668,19 +7692,17 @@ namespace CNA::Internal::Backends::Vulkan
         // otherwise the target's colour image never leaves VK_IMAGE_LAYOUT_UNDEFINED. REMED-GFX-143:
         // a backbuffer Clear() opens a segment for the same reason -- a frame whose only backbuffer
         // command in a cycle is a Clear() must still get that cycle's own load action.
-        for (const auto& c : pendingClears_) {
-            PassSegment& seg = segmentFor(c.segment, c.rt);
-            seg.hasClear = true;
-            seg.r = c.r; seg.g = c.g; seg.b = c.b; seg.a = c.a;
-            seg.depth = c.depth; seg.stencil = c.stencil;
-            seg.clearColor   = seg.clearColor   || c.wantColor;
-            seg.clearDepth   = seg.clearDepth   || c.wantDepth;
-            seg.clearStencil = seg.clearStencil || c.wantStencil;
+        // pendingClears_ is already in public call order, so each segment's list comes out ordered.
+        for (const auto& c : pendingClears_)
+            segmentFor(c.segment, c.rt).clears.push_back(&c);
+        for (const auto& entry : activeBatches_) {
+            PassSegment& seg = segmentFor(entry.segment, entry.rt);
+            seg.firstDrawOrder = std::min(seg.firstDrawOrder, entry.order);
         }
-        for (const auto& entry : activeBatches_)
-            (void) segmentFor(entry.segment, entry.rt);
-        for (const auto& draw : pending3D_)
-            (void) segmentFor(draw.segment, draw.rt);
+        for (const auto& draw : pending3D_) {
+            PassSegment& seg = segmentFor(draw.segment, draw.rt);
+            seg.firstDrawOrder = std::min(seg.firstDrawOrder, draw.order);
+        }
         std::sort(segments.begin(), segments.end(),
                   [](const PassSegment& l, const PassSegment& r) { return l.id < r.id; });
 
@@ -7726,11 +7748,21 @@ namespace CNA::Internal::Backends::Vulkan
                 // game that never calls Clear() must still get clearR_. Later cycles LOAD what the
                 // earlier one stored unless they issued their own Clear(), per aspect: a colour-only
                 // Clear() in a later cycle must not throw away the depth an earlier cycle wrote.
+                // REMED-GFX-129: only a clear that PRECEDES every draw of this cycle may become
+                // the pass load action -- one issued after a draw has to run after that draw and is
+                // recorded as a vkCmdClearAttachments command below. Pre-fix `seg.clearColor` was
+                // set by ANY clear in the cycle, which is precisely how "draw, then Clear" ended up
+                // running the clear first.
+                const PendingClear* folded =
+                    (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder)
+                        ? seg.clears.front()
+                        : nullptr;
+
                 SwapchainPassKey key;
                 key.msaa         = hasMsaa;
-                key.loadColor    = !isFirstBackbuffer && !seg.clearColor;
-                key.loadDepth    = !isFirstBackbuffer && !seg.clearDepth;
-                key.loadStencil  = !isFirstBackbuffer && !seg.clearStencil;
+                key.loadColor    = !isFirstBackbuffer && !(folded && folded->wantColor);
+                key.loadDepth    = !isFirstBackbuffer && !(folded && folded->wantDepth);
+                key.loadStencil  = !isFirstBackbuffer && !(folded && folded->wantStencil);
                 key.storeForNext = !isLastBackbuffer;
 
                 // A second entry into the same image needs its LOAD (and its initialLayout
@@ -7765,14 +7797,16 @@ namespace CNA::Internal::Backends::Vulkan
                         0, 1, &mb, 0, nullptr, 0, nullptr);
                 }
 
-                // This cycle's own clear values; an aspect it did not clear falls back to the
+                // The FOLDED clear's values; an aspect it did not name falls back to the
                 // frame-global value, which is byte-for-byte what the old single pass used.
-                const float segR = seg.clearColor ? seg.r : clearR_;
-                const float segG = seg.clearColor ? seg.g : clearG_;
-                const float segB = seg.clearColor ? seg.b : clearB_;
-                const float segA = seg.clearColor ? seg.a : clearA_;
-                const float segDepth   = (seg.clearDepth   || seg.clearStencil) ? seg.depth   : clearDepth_;
-                const int   segStencil = (seg.clearDepth   || seg.clearStencil) ? seg.stencil : clearStencil_;
+                const bool foldColor = folded && folded->wantColor;
+                const bool foldDS    = folded && (folded->wantDepth || folded->wantStencil);
+                const float segR = foldColor ? folded->r : clearR_;
+                const float segG = foldColor ? folded->g : clearG_;
+                const float segB = foldColor ? folded->b : clearB_;
+                const float segA = foldColor ? folded->a : clearA_;
+                const float segDepth   = foldDS ? folded->depth   : clearDepth_;
+                const int   segStencil = foldDS ? folded->stencil : clearStencil_;
                 // MSAA render pass: att0=MSAA color, att1=resolve(swapchain), att2=depth — 3 clear
                 // values. Non-MSAA render pass: att0=swapchain color, att1=depth — 2 clear values.
                 VkClearValue cv[3]{};
@@ -7820,8 +7854,24 @@ namespace CNA::Internal::Backends::Vulkan
                                                           : static_cast<float>(swapchainExtent_.width);
                 const float vpH2D = (virtualHeight_ > 0) ? static_cast<float>(virtualHeight_)
                                                           : static_cast<float>(swapchainExtent_.height);
-                drawSpritesFor(nullptr, seg.id, vpW2D, vpH2D);
-                draw3DFor(nullptr, seg.id);
+                // REMED-GFX-129: replay this cycle's batches, 3D draws and Clear() commands in the
+                // exact public order they were issued in. The folded clear (if any) has already
+                // happened, as this pass's load action.
+                {
+                    uint64_t cursor = 0;
+                    for (const PendingClear* c : seg.clears) {
+                        if (c == folded) { cursor = c->order; continue; }
+                        drawSpritesFor(nullptr, seg.id, vpW2D, vpH2D, cursor, c->order);
+                        draw3DFor(nullptr, seg.id, cursor, c->order);
+                        RecordOrderedClearEXT(cb, *c, 1u, depthFormat_,
+                                              swapchainExtent_.width, swapchainExtent_.height);
+                        cursor = c->order;
+                    }
+                    const uint64_t kEnd = std::numeric_limits<uint64_t>::max();
+                    drawSpritesFor(nullptr, seg.id, vpW2D, vpH2D, cursor, kEnd);
+                    draw3DFor(nullptr, seg.id, cursor, kEnd);
+                    closeOpenQuery3D();
+                }
 
                 vkCmdEndRenderPass(cb);
                 continue;
@@ -7834,16 +7884,28 @@ namespace CNA::Internal::Backends::Vulkan
             // REMED-GFX-095: attachment order mirrors the render pass exactly:
             // [N color sources, optional N resolves, optional depth].
             const uint32_t depthIndex = rtMsaa ? nColor * 2 : nColor;
-            // REMED-GFX-140: this segment's own clear values. A segment that issued no Clear()
-            // keeps the pre-fix behaviour and falls back to the frame-global values -- the shared
-            // layer clears a DiscardContents target on every bind, so a discarding cycle always has
-            // its own; a preserving cycle's pass uses LOAD_OP_LOAD and never reads these at all.
-            const float segR = seg.hasClear ? seg.r : clearR_;
-            const float segG = seg.hasClear ? seg.g : clearG_;
-            const float segB = seg.hasClear ? seg.b : clearB_;
-            const float segA = seg.hasClear ? seg.a : clearA_;
-            const float segDepth   = seg.hasClear ? seg.depth   : clearDepth_;
-            const int   segStencil = seg.hasClear ? seg.stencil : clearStencil_;
+            // REMED-GFX-129: a LEADING Clear() may ride this pass's load action, but only when the
+            // pass actually clears its colour attachment -- a PreserveContents target's pass uses
+            // VK_ATTACHMENT_LOAD_OP_LOAD, and there is no per-aspect load value to hand a clear to
+            // there. Every other Clear() of the cycle, and every Clear() at all on a preserving
+            // target, is recorded as an ordered vkCmdClearAttachments command below. Folding is kept
+            // for the discarding case because the shared layer issues a Clear() on EVERY
+            // DiscardContents bind, so an unfolded version would pay one extra full-target clear per
+            // bind for a result the load action already produces.
+            const PendingClear* folded =
+                (!seg.clears.empty() && seg.clears.front()->order < seg.firstDrawOrder &&
+                 rt->ColorLoadOpIsClearEXT())
+                    ? seg.clears.front()
+                    : nullptr;
+            // A segment with no folded clear keeps the pre-fix fallback to the frame-global values.
+            const bool foldColor = folded && folded->wantColor;
+            const bool foldDS    = folded && (folded->wantDepth || folded->wantStencil);
+            const float segR = foldColor ? folded->r : clearR_;
+            const float segG = foldColor ? folded->g : clearG_;
+            const float segB = foldColor ? folded->b : clearB_;
+            const float segA = foldColor ? folded->a : clearA_;
+            const float segDepth   = foldDS ? folded->depth   : clearDepth_;
+            const int   segStencil = foldDS ? folded->stencil : clearStencil_;
             std::vector<VkClearValue> rtCv(depthIndex + (hasDepth ? 1u : 0u));
             for (uint32_t ci = 0; ci < nColor; ++ci)
                 rtCv[ci].color = { { segR, segG, segB, segA } };
@@ -7874,8 +7936,23 @@ namespace CNA::Internal::Backends::Vulkan
             VkRect2D rtSc{ {0, 0}, { rtW, rtH } };
             vkCmdSetScissor(cb, 0, 1, &rtSc);
 
-            drawSpritesFor(rt, seg.id, static_cast<float>(rtW), static_cast<float>(rtH));
-            draw3DFor(rt, seg.id);
+            // REMED-GFX-129: exact public order, clears included. See the backbuffer branch.
+            {
+                uint64_t cursor = 0;
+                for (const PendingClear* c : seg.clears) {
+                    if (c == folded) { cursor = c->order; continue; }
+                    drawSpritesFor(rt, seg.id, static_cast<float>(rtW), static_cast<float>(rtH),
+                                   cursor, c->order);
+                    draw3DFor(rt, seg.id, cursor, c->order);
+                    RecordOrderedClearEXT(cb, *c, nColor, rt->GetDepthFormat(), rtW, rtH);
+                    cursor = c->order;
+                }
+                const uint64_t kEnd = std::numeric_limits<uint64_t>::max();
+                drawSpritesFor(rt, seg.id, static_cast<float>(rtW), static_cast<float>(rtH),
+                               cursor, kEnd);
+                draw3DFor(rt, seg.id, cursor, kEnd);
+                closeOpenQuery3D();
+            }
 
             vkCmdEndRenderPass(cb);
 
@@ -8303,24 +8380,93 @@ namespace CNA::Internal::Backends::Vulkan
     // cycle can clear one and LOAD the others.
     void VulkanGraphicsBackend::NoteRenderTargetClearEXT(bool color, bool depth, bool stencil)
     {
-        for (auto& c : pendingClears_) {
-            if (c.segment == currentSegment_) {
-                // A second Clear() inside one bind cycle: Vulkan delivers the values through the
-                // pass load op and a pass has exactly one, so the last one wins per aspect.
-                // REMED-GFX-129 owns that limitation; it is deliberately not widened here.
-                c.rt = currentRT_;
-                c.r = clearR_; c.g = clearG_; c.b = clearB_; c.a = clearA_;
-                c.depth = clearDepth_; c.stencil = clearStencil_;
-                c.wantColor   = c.wantColor   || color;
-                c.wantDepth   = c.wantDepth   || depth;
-                c.wantStencil = c.wantStencil || stencil;
-                return;
-            }
-        }
+        // REMED-GFX-129: one record per public Clear(), never merged. The previous code folded a
+        // second Clear() of the same bind cycle into the first, because the only delivery mechanism
+        // was the pass load op and a pass has exactly one -- which is exactly why "Clear A; draw;
+        // Clear B" could not be expressed. RecordCommandBuffer replays these in `order` between the
+        // draws they were issued between, and may fold only a LEADING one into the load action.
         pendingClears_.push_back({ currentSegment_, currentRT_,
                                    clearR_, clearG_, clearB_, clearA_,
                                    clearDepth_, clearStencil_,
-                                   color, depth, stencil });
+                                   color, depth, stencil,
+                                   NextCommandOrderEXT() });
+    }
+
+    namespace
+    {
+        /// REMED-GFX-129: does this depth attachment format own a depth aspect at all?
+        bool VkDepthFormatHasDepth(VkFormat f)
+        {
+            return f != VK_FORMAT_UNDEFINED && f != VK_FORMAT_S8_UINT;
+        }
+        /// REMED-GFX-129: ... and a stencil aspect? Clearing the stencil aspect of a depth-only
+        /// attachment is invalid usage (VUID-vkCmdClearAttachments-aspectMask-02502), so a public
+        /// ClearOptions::Stencil on a Depth24/Depth16 target must drop that bit, not pass it on.
+        bool VkDepthFormatHasStencil(VkFormat f)
+        {
+            return f == VK_FORMAT_S8_UINT || f == VK_FORMAT_D16_UNORM_S8_UINT ||
+                   f == VK_FORMAT_D24_UNORM_S8_UINT || f == VK_FORMAT_D32_SFLOAT_S8_UINT;
+        }
+    }
+
+    // REMED-GFX-129: the ordered clear command itself.
+    //
+    // vkCmdClearAttachments is the only clear Vulkan offers INSIDE a render pass, and it is exactly
+    // what XNA's contract needs: it happens where it is recorded, relative to the draws around it.
+    // vkCmdClearColorImage is deliberately not used -- it is a transfer-stage command that cannot be
+    // recorded inside a render pass, so reaching for it would mean breaking the pass in two and
+    // re-transitioning the image for every Clear() the game issues.
+    //
+    // The clear RECTANGLE is the whole render area, never the Viewport or the ScissorRectangle:
+    // REMED-GFX-018 established that contract for this project on Bgfx ("each clear is a full-target
+    // ordered operation ... viewport and scissor do not restrict Clear"), it matches what the pass
+    // load action this replaces already did, and checks V1/V2 of
+    // examples/graphicsdevice_ordered_clear_test.cpp assert it on every backend that runs them.
+    // layerCount is 1 because every framebuffer this backend builds is single-layer -- a cube face
+    // has its own framebuffer over its own single-layer view (REMED-GFX-134), so the face is already
+    // selected by the framebuffer and never by a base array layer here.
+    void VulkanGraphicsBackend::RecordOrderedClearEXT(VkCommandBuffer cb, const PendingClear& clear,
+                                                     uint32_t colorAttachmentCount,
+                                                     VkFormat depthFmt,
+                                                     uint32_t width, uint32_t height) const
+    {
+        if (cb == VK_NULL_HANDLE || width == 0 || height == 0) return;
+
+        // MAX_RENDERTARGET_BINDINGS is 4, so 4 colour entries plus one combined depth/stencil is
+        // the ceiling; the guard keeps this correct if that limit is ever raised.
+        std::array<VkClearAttachment, 5> atts{};
+        uint32_t n = 0;
+        if (clear.wantColor) {
+            // Every bound colour attachment, not just attachment 0: XNA's ClearOptions::Target
+            // names the render target, and an MRT set is one render target with several
+            // attachments. The 2D and 3D pipelines write attachment 0 only, so this is the single
+            // place where the other attachments of an MRT set are ever written.
+            for (uint32_t i = 0; i < colorAttachmentCount && n < atts.size(); ++i) {
+                atts[n].aspectMask       = VK_IMAGE_ASPECT_COLOR_BIT;
+                atts[n].colorAttachment  = i;
+                atts[n].clearValue.color = { { clear.r, clear.g, clear.b, clear.a } };
+                ++n;
+            }
+        }
+        VkImageAspectFlags dsAspect = 0;
+        if (clear.wantDepth   && VkDepthFormatHasDepth(depthFmt))   dsAspect |= VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (clear.wantStencil && VkDepthFormatHasStencil(depthFmt)) dsAspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        if (dsAspect != 0 && n < atts.size()) {
+            atts[n].aspectMask = dsAspect;
+            atts[n].clearValue.depthStencil = {
+                clear.depth, static_cast<uint32_t>(clear.stencil)
+            };
+            ++n;
+        }
+        // A request that names nothing this attachment set owns (a stencil clear on a depthless
+        // target, say) records no command at all rather than an empty one.
+        if (n == 0) return;
+
+        VkClearRect rect{};
+        rect.rect           = { {0, 0}, { width, height } };
+        rect.baseArrayLayer = 0;
+        rect.layerCount     = 1;
+        vkCmdClearAttachments(cb, n, atts.data(), 1, &rect);
     }
 
     void VulkanGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -8367,14 +8513,23 @@ namespace CNA::Internal::Backends::Vulkan
         NoteRenderTargetClearEXT(true, true, false);
     }
 
-    void VulkanGraphicsBackend::ClearDepth(float depth) { clearDepth_ = depth; readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
+    // REMED-GFX-129: this used to update clearDepth_ and stop. With the clear value delivered only
+    // through the pass load op there was nothing else it COULD do -- a depth-only clear cannot be
+    // expressed as a load action without also taking the colour one the target's usage had chosen --
+    // so `Clear(ClearOptions::DepthBuffer, ...)` did nothing at all on Vulkan. It now records an
+    // ordered clear request naming the depth aspect only, exactly like every other Clear* entry
+    // point here.
+    void VulkanGraphicsBackend::ClearDepth(float depth)
+    {
+        clearDepth_ = depth;
+        readbackStagingValid_ = false;
+        NoteRenderTargetClearEXT(false, true, false);
+    }
 
-    // Task 871: every render pass this backend records already unconditionally clears the
-    // color/depth attachments every frame (see RecordCommandBuffer()'s hardcoded loadOp=CLEAR),
-    // so -- mirroring that existing (if imperfect) design rather than introducing new
-    // per-request selectivity -- these new stencil-aware entry points just update clearStencil_
-    // (read by RecordCommandBuffer()'s VkClearValue construction) and mark the currently-bound RT
-    // dirty exactly like Clear()/ClearColorAndDepth() already do (Task 875).
+    // Task 871 introduced these stencil-aware entry points as value-only updates, because every
+    // render pass cleared its colour/depth attachments unconditionally and there was no
+    // per-request selectivity to hook into. REMED-GFX-129 replaced that with a real ordered clear
+    // command, so each one now records exactly the aspects its ClearOptions mask named.
     void VulkanGraphicsBackend::ClearStencil(int stencil)
     {
         clearStencil_ = stencil;
@@ -8439,6 +8594,9 @@ namespace CNA::Internal::Backends::Vulkan
         // so RecordCommandBuffer replays it inside that cycle's own pass and no other. Every
         // DrawXPrimitives() call site routes through here, so no site can forget it.
         d.segment = currentSegment_;
+        // REMED-GFX-129: position in the frame's public command stream, so an ordered Clear() can
+        // be replayed between exactly the draws it was issued between.
+        d.order = NextCommandOrderEXT();
         pending3D_.push_back(std::move(d));
     }
 
@@ -10514,6 +10672,9 @@ namespace CNA::Internal::Backends::Vulkan
             faceProxies_[face].levelCount  = levelCount_;
             faceProxies_[face].faceIndex   = face;
             faceProxies_[face].depthFormat = depthVkFormat_;
+            // REMED-GFX-129: the face needs the same usage the render pass above was picked with,
+            // so it can report whether its colour attachment is cleared or loaded on entry.
+            faceProxies_[face].preserveContents = preserveContents_;
         }
     }
 

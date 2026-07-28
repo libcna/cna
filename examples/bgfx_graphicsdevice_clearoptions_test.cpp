@@ -200,12 +200,25 @@ namespace
 
     float ClipDepthForFramebufferDepth(float depth)
     {
-        // These are the two explicit CTest routes for this Bgfx-only regression. Vulkan's
-        // homogeneous clip-depth range is [0,1]; OpenGL 2.1 maps clip [-1,1] to framebuffer
-        // [0,1]. Converting the probe positions lets the public depth test bracket the requested
-        // clear value to +/-0.01 instead of merely distinguishing it from a hardcoded 1.0.
+        // A homogeneous clip-depth range is [0,1]; OpenGL maps clip [-1,1] to framebuffer [0,1].
+        // Converting the probe positions lets the public depth test bracket the requested clear
+        // value to +/-0.01 instead of merely distinguishing it from a hardcoded 1.0.
+        //
+        // REMED-GFX-129 false positive: this used to read `CNA_BGFX_RENDERER` unconditionally, a
+        // variable only the two Bgfx CTest routes ever set. On any OTHER backend it was absent, so
+        // the OpenGL conversion was applied regardless of that backend's real convention -- and on
+        // Vulkan, whose range IS [0,1], both probes then landed on the same side of the cleared
+        // value (0.32 and 0.36 against a 0.67 clear), so the "upper bracket rejects" half of every
+        // depth-clearing case could never hold. Measured, not assumed: with the correct convention
+        // the same probes bracket the value, and with the wrong one they do not.
+#if defined(CNA_BACKEND_BGFX)
         const char* route = std::getenv("CNA_BGFX_RENDERER");
         const bool homogeneousDepth = route != nullptr && std::string(route) == "VULKAN";
+#elif defined(CNA_BACKEND_VULKAN)
+        const bool homogeneousDepth = true;
+#else
+        const bool homogeneousDepth = false;
+#endif
         return homogeneousDepth ? depth : depth * 2.0f - 1.0f;
     }
 }

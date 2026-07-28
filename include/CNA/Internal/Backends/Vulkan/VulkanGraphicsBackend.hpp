@@ -47,6 +47,12 @@ namespace CNA::Internal::Backends::Vulkan
         /// mip levels beyond 0). Called by RecordCommandBuffer right after this RT's render pass
         /// ends, once per frame it was actually rendered into.
         virtual void          MaybeGenerateMips(VkCommandBuffer /*cb*/) {}
+        /// REMED-GFX-129: true when this source's render pass begins its colour attachments with
+        /// VK_ATTACHMENT_LOAD_OP_CLEAR, which is the only condition under which a LEADING Clear()
+        /// may be folded into the load action instead of being recorded as an ordered
+        /// vkCmdClearAttachments. Default true: the MSAA and MRT render passes are
+        /// DiscardContents-shaped unconditionally. Overridden where RenderTargetUsage decides.
+        virtual bool          ColorLoadOpIsClearEXT()      const { return true; }
         virtual ~VulkanRTSource() = default;
     };
 
@@ -155,6 +161,13 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 911: this instance's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
         // attachment, DepthFormat::None).
         VkFormat        GetDepthFormat()            const override { return depthVkFormat_; }
+        // REMED-GFX-129: a PreserveContents target's non-MSAA pass loads its colour, so a leading
+        // Clear() cannot ride the load action there and is recorded as an ordered command instead.
+        // The MSAA variant is DiscardContents-shaped for every usage (see its own comment).
+        bool            ColorLoadOpIsClearEXT()     const override
+        {
+            return WantsMsaa() || !preserveContents_;
+        }
         // Real, backend-clamped applied MultiSampleCount (0 if MSAA wasn't engaged — see the
         // "piggyback on the backend's own sampleCount_" scope decision in plan_graphics.md).
         int             GetMultiSampleCount()      const override { return appliedMultiSampleCount_; }
@@ -736,6 +749,9 @@ namespace CNA::Internal::Backends::Vulkan
             /// attachment, DepthFormat::None), mirrored from the owning
             /// VulkanRenderTargetCubeBackend's depthVkFormat_.
             VkFormat      depthFormat  = VK_FORMAT_UNDEFINED;
+            /// REMED-GFX-129: mirrored from the owning cube's preserveContents_, so this face can
+            /// answer whether its own render pass clears or loads its colour attachment.
+            bool          preserveContents = false;
             VkFramebuffer GetFramebuffer()          const override { return (msaaFramebuffer != VK_NULL_HANDLE) ? msaaFramebuffer : framebuffer; }
             VkRenderPass  GetRenderPass()            const override { return (msaaFramebuffer != VK_NULL_HANDLE) ? msaaRenderPass : renderPass; }
             int GetWidth()                          const override { return size; }
@@ -743,6 +759,10 @@ namespace CNA::Internal::Backends::Vulkan
             uint32_t GetColorAttachmentCount()      const override { return 1; }
             bool WantsMsaa()                        const override { return msaaFramebuffer != VK_NULL_HANDLE; }
             VkFormat GetDepthFormat()               const override { return depthFormat; }
+            bool ColorLoadOpIsClearEXT()            const override
+            {
+                return (msaaFramebuffer != VK_NULL_HANDLE) || !preserveContents;
+            }
             void MaybeGenerateMips(VkCommandBuffer cb) override;
         };
 
@@ -1643,6 +1663,9 @@ namespace CNA::Internal::Backends::Vulkan
             // captured by PushPending3DDraw from currentSegment_. Two draws with the same `rt` but
             // different `segment` belong to two different native render passes.
             uint64_t                segment = 0;
+            // REMED-GFX-129: this draw's position in the whole frame's public command stream (see
+            // PendingBatch::order). Stamped by PushPending3DDraw, the single choke point.
+            uint64_t                order   = 0;
         };
         std::vector<Pending3DDraw>  pending3D_;
         // Task 447/854: pushes d onto pending3D_ after tagging it with the currently-active
@@ -1667,6 +1690,9 @@ namespace CNA::Internal::Backends::Vulkan
             std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot> snapshot;
             VulkanRTSource* rt      = nullptr;
             uint64_t        segment = 0;
+            // REMED-GFX-129: this batch's position in the whole frame's public command stream, so
+            // RecordCommandBuffer can place an ordered Clear() exactly where the game issued it.
+            uint64_t        order   = 0;
         };
         std::vector<PendingBatch> activeBatches_;
 
@@ -1681,35 +1707,60 @@ namespace CNA::Internal::Backends::Vulkan
         // the clear values. Before, every pass in a flush began with the frame-global clearR_/
         // clearDepth_/clearStencil_ as they stood at record time, so the last Clear() of the frame
         // supplied the colour for every earlier pass too. A clear now belongs to the bind cycle
-        // that issued it; the last Clear() within one cycle still wins, because Vulkan delivers the
-        // colour through the pass load op and a pass has exactly one (REMED-GFX-129 owns that
-        // narrower limitation). A segment with no explicit Clear() keeps the previous behaviour and
-        // falls back to the frame-global values.
+        // that issued it.
+        //
+        // REMED-GFX-129 made it ONE RECORD PER PUBLIC Clear() CALL rather than one per bind cycle.
+        // The previous shape merged every Clear() of a cycle into a single record because the only
+        // way a clear could reach the GPU was the pass load op, and a pass has exactly one -- which
+        // is precisely the defect: the merged record could not express "draw, then clear", could
+        // not express two different clears, and on a PreserveContents target (LOAD_OP_LOAD) could
+        // not be delivered at all. Each record now also carries `order`, its position in the whole
+        // frame's public command stream, so RecordCommandBuffer can replay it between exactly the
+        // draws it belongs between.
         struct PendingClear {
             uint64_t        segment = 0;
             VulkanRTSource* rt      = nullptr;
             float           r = 0.f, g = 0.f, b = 0.f, a = 1.f;
             float           depth   = 1.0f;
             int             stencil = 0;
-            // REMED-GFX-143: which aspects the Clear() actually asked for. A render-target pass
-            // takes its load action from the target's usage and needs only the values, so this is
-            // read by the BACKBUFFER path, where one segment may clear colour while loading the
-            // depth an earlier segment wrote (and the other way round). An aspect that was not
-            // requested falls back to the frame-global clearR_/clearDepth_/clearStencil_, which is
-            // byte-for-byte what a single trailing pass used to do for every aspect.
+            // Which aspects this Clear() actually asked for. REMED-GFX-143 introduced them for the
+            // BACKBUFFER, where one segment may clear colour while loading the depth an earlier
+            // segment wrote; REMED-GFX-129 made them decide the vkCmdClearAttachments aspect mask
+            // and the colour-attachment list for EVERY target, so a depth-only Clear() no longer
+            // takes the colour load action the target's usage had already chosen.
             bool            wantColor   = false;
             bool            wantDepth   = false;
             bool            wantStencil = false;
+            // REMED-GFX-129: position in the frame's public command stream (see PendingBatch).
+            uint64_t        order   = 0;
         };
         std::vector<PendingClear> pendingClears_;
         /**
-         * @brief Records (or updates) this bind cycle's clear values. REMED-GFX-140/143, Task 875.
+         * @brief Records one public Clear() call. REMED-GFX-129/140/143, Task 875.
          *
          * @param color   The caller cleared the colour target.
          * @param depth   The caller cleared the depth buffer.
          * @param stencil The caller cleared the stencil buffer.
          */
         void NoteRenderTargetClearEXT(bool color, bool depth, bool stencil);
+        /**
+         * @brief REMED-GFX-129: records one ordered clear as a real vkCmdClearAttachments command.
+         *
+         * Must be called inside an active render pass. Emits one VkClearAttachment per bound colour
+         * attachment when the request names ClearOptions::Target, plus one combined depth/stencil
+         * entry whose aspect mask is intersected with what @p depthFmt actually owns -- asking for
+         * the stencil aspect of a depth-only format is invalid usage, not a no-op.
+         *
+         * @param cb                   The command buffer currently recording the render pass.
+         * @param clear                The public Clear() call being replayed.
+         * @param colorAttachmentCount Colour attachments in the active subpass.
+         * @param depthFmt             The depth attachment's format, VK_FORMAT_UNDEFINED if none.
+         * @param width                Render-area width in texels.
+         * @param height               Render-area height in texels.
+         */
+        void RecordOrderedClearEXT(VkCommandBuffer cb, const PendingClear& clear,
+                                   uint32_t colorAttachmentCount, VkFormat depthFmt,
+                                   uint32_t width, uint32_t height) const;
 
         // REMED-GFX-075: deferred-resource retirement queue -- the generic ownership mechanism that
         // makes the whole-frame deferred renderer memory-safe against a SOURCE resource
@@ -1800,6 +1851,14 @@ namespace CNA::Internal::Backends::Vulkan
         float    clearDepth_ = 1.0f;
         bool     initialized_       = false;
         VulkanRTSource*            currentRT_ = nullptr;
+        // REMED-GFX-129: monotonic position in the frame's public command stream. Every deferred
+        // entry -- sprite batch, 3D draw and Clear() -- is stamped with the next value, so a
+        // segment's contents can be replayed in exactly the order the game issued them instead of
+        // "every clear, then every draw". Never reset within a record; it only has to be
+        // MONOTONIC, and pendingClears_/activeBatches_/pending3D_ are all cleared together.
+        uint64_t                   commandOrder_ = 0;
+        /// REMED-GFX-129: allocates the next public-command-stream position.
+        uint64_t NextCommandOrderEXT() { return ++commandOrder_; }
         // REMED-GFX-140: identifies the logical render pass every deferred entry belongs to. One
         // public bind/unbind cycle == one segment: the counter advances on EVERY assignment of
         // currentRT_ (see BeginRenderPassSegmentEXT), so binding the SAME target again after an
