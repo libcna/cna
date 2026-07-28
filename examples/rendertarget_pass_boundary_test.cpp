@@ -199,8 +199,16 @@ namespace
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, Support::Exact,
                                  true, false, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
+    // `segmentsBindCycles` true since REMED-GFX-145. SdlGpu collapsed bind cycles exactly as Vulkan
+    // did and for the same reason -- `EnsureFrameRendered` gave each DISTINCT `DrawTarget` one
+    // `SDL_BeginGPURenderPass` holding every draw ever queued against it that frame -- and declared
+    // false here until it was fixed. `clearAfterDrawWins` stays false: SDL_gpu delivers a clear
+    // colour only through `SDL_GPUColorTargetInfo.load_op`, so a `Clear()` issued after a draw
+    // inside ONE cycle cannot wipe that draw (X3). `clearOnPreserveTarget` is true, and X2 now
+    // proves it holds in a SECOND cycle too, because that cycle is a real second pass with its own
+    // load op.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, Support::Exact,
-                                 true, false, false, false, true, true, true, false};
+                                 true, false, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, false, true, true, false};
