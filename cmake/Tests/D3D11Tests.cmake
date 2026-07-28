@@ -202,6 +202,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${_d3d11_rendertargetcube_usage_cmd}
         TIMEOUT 60 LABELS "D3D11")
 
+    # REMED-GFX-141: a MULTISAMPLED RenderTargetCube shared ONE multisample colour attachment
+    # across all six faces on EasyGL, Vulkan and SdlGpu, so a PreserveContents face reloaded whichever
+    # face was rendered last instead of its own samples. Renders face A, then face B, then rebinds A for
+    # a small partial update -- with no readback, Present or flush in between -- and reads the whole of
+    # A: the resolved single-sample layer still held the correct A, which is why a full redraw and an
+    # immediate read both passed before this.
+    cna_d3d11_test(cna_test_d3d11_rendertargetcube_msaa_face
+                   examples/rendertargetcube_msaa_face_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_rendertargetcube_msaa_face_cmd cna_test_d3d11_rendertargetcube_msaa_face)
+    cna_register_backend_test(NAME D3D11_RenderTargetCube_MsaaFace
+        COMMAND ${_d3d11_rendertargetcube_msaa_face_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
     # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
     # `VulkanGraphicsBackend::RecordCommandBuffer` collected ONE render pass per unique render-target
     # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
