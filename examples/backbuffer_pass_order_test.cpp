@@ -202,11 +202,17 @@ namespace
     // `clearAfterDrawWinsOnBackbuffer` false: WebGPU delivers a backbuffer clear colour only
     // through the render-pass load op, the same mechanism REMED-GFX-140 records for its render
     // targets, so a Clear() after a draw inside ONE cycle cannot wipe that draw.
-    // `backbufferSpriteScissorApplies` false: a measured, pre-existing WebGPU gap recorded as an
-    // independent finding by REMED-GFX-143 -- its RENDER-TARGET scissor works (GFX-140's S11
-    // passes), but a backbuffer SpriteBatch fill is not clipped by ScissorRectangle at all.
+    // `backbufferSpriteScissorApplies` was false while REMED-GFX-146 was open, recorded by
+    // REMED-GFX-143 as "a backbuffer SpriteBatch fill is not clipped by ScissorRectangle at all".
+    // That description was the SYMPTOM, not the cause: the backbuffer pass was never missing its
+    // scissor call, it resolved the rectangle from live state when it recorded the pass, and check
+    // V2 below restores the full rectangle before its single read -- so every already-queued batch
+    // was replayed unclipped. Its RENDER-TARGET scissor looked correct for the same reason in
+    // reverse (a target switch IS the flush on this backend, so live state still matched).
+    // REMED-GFX-146 captures the whole scissor state per draw and this declaration turned over;
+    // it was measured red the moment the fix landed.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
-                                 true, true, true, false, true, true, true, false, true, false};
+                                 true, true, true, false, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override, so `GetBackBufferData` raises and this file's
     // backbuffer oracle cannot run here at all. REMED-GFX-143's SdlGpu half is measured

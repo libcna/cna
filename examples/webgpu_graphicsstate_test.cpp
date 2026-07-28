@@ -110,7 +110,7 @@ class WebGpuGraphicsStateTest : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     bool done_ = false;
     int passCount_ = 0;
-    static constexpr int kTotalChecks = 7;
+    static constexpr int kTotalChecks = 8;
     int result_ = 1;
 
     void check(bool ok, const char* label)
@@ -209,6 +209,35 @@ protected:
                   "Viewport confines the full-clip-space quad to its own sub-rectangle "
                   "(inside=quad colour, outside=untouched clear colour)");
             dev.setViewportProperty(Viewport(0, 0, kSize, kSize));
+        }
+
+        // ---- Check H: TWO ScissorRectangles in one bind cycle, read once at the end. ----
+        // REMED-GFX-146 false-positive audit. Check E above uses exactly ONE rectangle and reads
+        // it back BEFORE restoring, so the live rectangle at flush time is still the one the draw
+        // was issued under -- it passes whether the backend captures the rectangle per draw or
+        // resolves it when it records the pass, and it therefore could not see this backend's
+        // deferred-scissor defect at all. This check issues both draws and only then reads, with
+        // the rectangle restored to the whole backbuffer first, so "resolve at flush time"
+        // predicts white everywhere and "capture at queue time" predicts two disjoint bands.
+        {
+            RasterizerState rs;
+            rs.setScissorTestEnableProperty(true);
+            dev.setRasterizerStateProperty(rs);
+            dev.Clear(Color::Black);
+            dev.setScissorRectangleProperty(Rectangle(0, 0, kSize / 4, kSize));
+            DrawWindingQuad(dev, Color::White);
+            dev.setScissorRectangleProperty(Rectangle(kSize / 2, 0, kSize / 4, kSize));
+            DrawWindingQuad(dev, Color::Red);
+            dev.setScissorRectangleProperty(Rectangle(0, 0, kSize, kSize));
+            const Color first  = readPixel(dev, kSize / 8, kSize / 2);          // inside rect A
+            const Color gap    = readPixel(dev, (3 * kSize) / 8, kSize / 2);    // between A and B
+            const Color second = readPixel(dev, (5 * kSize) / 8, kSize / 2);    // inside rect B
+            const Color tail   = readPixel(dev, (7 * kSize) / 8, kSize / 2);    // past B
+            check(colorNear(first, Color::White) && colorNear(gap, Color::Black) &&
+                  colorNear(second, Color::Red) && colorNear(tail, Color::Black),
+                  "two ScissorRectangles in one bind cycle each clip their own draw "
+                  "(restored to the whole target before the single read)");
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
         }
 
         // ---- Check G: FillMode.WireFrame does not crash (WEBGPU-115 documented deviation). ----

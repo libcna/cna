@@ -416,4 +416,25 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/deferred_scissor_capture_test.cpp)
     cna_register_backend_test(NAME WebGPU_Deferred_Scissor COMMAND cna_test_webgpu_deferred_scissor
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-146's structural half: the captured scissor state must be dynamic pass state. It may
+    # not create a pipeline variant (for the rectangle OR for ScissorTestEnable), split a render
+    # pass, add a submit, or issue one native setScissorRect per draw when consecutive draws share a
+    # rectangle. It also re-reads the setViewport counter, so REMED-GFX-116 stays measurably intact.
+    cna_webgpu_test(cna_test_webgpu_scissor_cardinality
+                    examples/webgpu_scissor_cardinality_test.cpp)
+    target_link_libraries(cna_test_webgpu_scissor_cardinality PRIVATE WebGPU::WebGPU)
+    cna_register_backend_test(NAME WebGPU_Scissor_Cardinality COMMAND cna_test_webgpu_scissor_cardinality
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-146 false-positive audit: REMED-GFX-081's shared SpriteBatch.Begin(rasterizerState)
+    # fixture was registered for SdlGpu and Vulkan but never for WebGPU, on no recorded grounds, so
+    # the one backend whose scissor state was resolved late was the one backend this never ran on.
+    # Registered here; it renders into a RenderTarget2D, which on this backend is its own flush, so
+    # it complements rather than duplicates the deferral fixture above.
+    cna_webgpu_test(cna_test_webgpu_spritebatch_begin_rasterizerstate_scissor
+                    examples/spritebatch_begin_rasterizerstate_scissor_test.cpp)
+    cna_register_backend_test(NAME WebGPU_SpriteBatch_Begin_RasterizerState_Scissor
+        COMMAND cna_test_webgpu_spritebatch_begin_rasterizerstate_scissor
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

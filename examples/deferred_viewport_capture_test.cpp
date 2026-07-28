@@ -42,7 +42,9 @@
 // Sections: A A->B->A on a render target; B Y orientation; C viewport components one at a time;
 // D odd target dimensions; E MinDepth/MaxDepth; F target/backbuffer transitions; G buffer kinds
 // (static/dynamic, indexed/non-indexed, 16-/32-bit, DrawUser); H stock effect families;
-// I SpriteBatch interleaved with 3D; J scissor is unaffected; K repeated frames.
+// I SpriteBatch interleaved with 3D; J scissor is unaffected (see
+// examples/deferred_scissor_capture_test.cpp for the scissor's own deferral fixture,
+// REMED-GFX-146); K repeated frames.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL.
 
@@ -1478,9 +1480,14 @@ class DeferredViewportCaptureTest : public Game
             dev.SetVertexBuffer(nullptr);
         }
         SetViewport(dev, 0, 0, kRTW, kRTH);
-        // The scissor state is reset only AFTER the unbind: this backend still resolves the
-        // SCISSOR rectangle from live state when it records the pass (a separately recorded,
-        // deliberately untouched finding), so resetting before the flush would erase the control.
+        // The scissor state is reset only AFTER the unbind. That was originally REQUIRED, because
+        // WebGPU still resolved the SCISSOR rectangle from live state when it recorded the pass
+        // (recorded here as a separate finding and left untouched by REMED-GFX-116), so resetting
+        // before the flush would have erased the control. REMED-GFX-146 has since captured the
+        // whole scissor state per draw, and the deliberately deferral-sensitive form of this
+        // question now lives in examples/deferred_scissor_capture_test.cpp; the order is kept here
+        // so this check keeps measuring what it always measured -- that per-draw VIEWPORT capture
+        // does not disturb whatever the backend does with ScissorRectangle.
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
         dev.setScissorRectangleProperty(Rectangle(0, 0, kRTW, kRTH));

@@ -143,40 +143,61 @@ namespace
         bool spriteScissorApplies;
         /// A degenerate (zero-width or zero-height) rectangle rasterizes nothing.
         bool emptyScissorDrawsNothing;
+        /**
+         * A ScissorRectangle reaching past the bound target is REJECTED with a diagnostic instead
+         * of being clipped to the target. True only where the backend's declared job is to validate
+         * (Headless, HEADLESS-23); every rendering backend clips, which is the CNA/FNA contract.
+         */
+        bool outOfBoundsScissorRejected;
         bool wantHiDefProfile;
     };
 
 #if defined(CNA_BACKEND_WEBGPU)
     constexpr Contract kContract{"WEBGPU", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false};
+                                 true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
+    // `emptyScissorDrawsNothing` false: measured here. `VulkanGraphicsBackend`'s `computeScissor`
+    // returns the WHOLE framebuffer for `sw == 0 || sh == 0`, so a degenerate rectangle does not
+    // clip the draw away. Every other check in this file passes on Vulkan, which isolates this to
+    // the degenerate case; it is recorded as its own finding rather than fixed here, and check E1
+    // asserts the IGNORED outcome exactly so the declaration is falsifiable in both directions.
     constexpr Contract kContract{"VULKAN", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false};
+                                 true, true, true, false, false, false};
 #elif defined(CNA_BACKEND_EASYGL)
+    // `emptyScissorDrawsNothing` false: measured here, by a DIFFERENT mechanism from Vulkan's.
+    // `EasyGLGraphicsBackend::SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the
+    // previously installed rectangle in place, so a degenerate rectangle is not merely unclipping,
+    // it never reaches the backend at all. Same observable, recorded as its own finding.
     constexpr Contract kContract{"EASYGL", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false};
+                                 true, true, true, false, false, false};
 #elif defined(CNA_BACKEND_BGFX)
+    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
     constexpr Contract kContract{"BGFX", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false};
+                                 true, true, true, false, false, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override at all, so `GetBackBufferData` raises; its
     // render-target oracle still answers every render-target question in this file.
+    // `emptyScissorDrawsNothing` false: measured here, the same observable as Vulkan and EasyGL.
     constexpr Contract kContract{"SDL_GPU", Support::Unsupported, Support::Exact, true,
-                                 true, true, true, true, false};
+                                 true, true, true, false, false, false};
 #elif defined(CNA_BACKEND_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false};
+                                 true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_HEADLESS)
     // Headless rasterizes nothing and its readback is REMED-GFX-127/130's deterministic refusal.
-    // Every sequence must still be legal and must not throw.
+    // Every sequence must still be legal. `outOfBoundsScissorRejected` true: this is the backend
+    // whose declared job is to validate, and HEADLESS-23 makes `SetScissorRect` cross-reference the
+    // bound target's real size and raise `HeadlessValidationException` for a rectangle that leaves
+    // it, instead of clipping. Checks E2/E3 assert the REJECTION there, so the declaration is
+    // falsifiable in both directions rather than being an untested exemption.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, Support::Unsupported, true,
-                                 true, true, true, true, false};
+                                 true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_D3D11)
     constexpr Contract kContract{"D3D11", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, false};
+                                 true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, Support::Exact, true,
-                                 true, true, true, true, true};
+                                 true, true, true, true, false, true};
 #else
 #error "REMED-GFX-146: this backend has no declared deferred-scissor contract."
 #endif
@@ -715,15 +736,28 @@ class DeferredScissorCaptureTest : public Game
     // E -- empty and out-of-bounds rectangles
     // =====================================================================
 
-    /// E1 -- a zero-width and a zero-height rectangle each rasterize nothing.
+    /**
+     * @brief E1 -- what a degenerate (zero-width or zero-height) rectangle does.
+     *
+     * A measured cross-backend divergence, declared per backend rather than standardised away.
+     * WebGPU takes the natural hardware semantics -- a zero-extent scissor rejects every fragment.
+     * Vulkan's `computeScissor` returns the WHOLE framebuffer for `sw == 0 || sh == 0`, and
+     * EasyGL's `SetScissorRect` returns early on `w <= 0 || h <= 0` and leaves the previous
+     * rectangle installed; two different mechanisms, one shared observable -- the draw is not
+     * clipped away. Both outcomes are asserted EXACTLY here, so either declaration turns red the
+     * day its backend changes.
+     *
+     * The final real rectangle is a control on every backend: whatever the degenerate ones do,
+     * a genuine rectangle after them must still clip exactly, which rules out "the rectangle
+     * stopped working at all".
+     */
     void RunEmptyRectangles(GraphicsDevice& dev)
     {
-        const std::string label = "E1 degenerate rectangles rasterize nothing";
+        const std::string label = "E1 degenerate rectangles";
         keepAlive_.clear();
-        if (!kContract.draws3D || !kContract.targetScissorApplies ||
-            !kContract.emptyScissorDrawsNothing)
+        if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
-            skip(label + ": skipped -- not a declared behaviour on this backend");
+            skip(label + ": skipped -- no 3D render-target scissor on this backend");
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
@@ -743,18 +777,44 @@ class DeferredScissorCaptureTest : public Game
 
         if (!CanJudgeTarget(label)) return;
         const Image image = ReadTarget(*rt, kRTW, kRTH);
-        CheckProbes(image, {
-            { 16, 12, kBlack }, { 20, 20, kBlack }, { 30, 12, kBlack },
-            {  0,  0, kBlack }, { 63, 47, kBlack },
-            { 40, 30, kGreen }, { 47, 35, kGreen },   // the control still landed
-            { 39, 30, kBlack }, { 48, 35, kBlack },
-        }, label);
+        // The control is asserted identically either way.
+        std::vector<Probe> probes{
+            { 40, 30, kGreen }, { 47, 35, kGreen },
+            { 39, 30, kContract.emptyScissorDrawsNothing ? kBlack : kYellow },
+            { 48, 35, kContract.emptyScissorDrawsNothing ? kBlack : kYellow },
+        };
+        if (kContract.emptyScissorDrawsNothing)
+        {
+            probes.push_back({ 16, 12, kBlack });
+            probes.push_back({ 20, 20, kBlack });
+            probes.push_back({ 30, 12, kBlack });
+            probes.push_back({  0,  0, kBlack });
+            probes.push_back({ 63, 47, kBlack });
+        }
+        else
+        {
+            // Unclipped: the LAST degenerate draw covers everything the control did not.
+            probes.push_back({ 16, 12, kYellow });
+            probes.push_back({ 20, 20, kYellow });
+            probes.push_back({ 30, 12, kYellow });
+            probes.push_back({  0,  0, kYellow });
+            probes.push_back({ 63, 47, kYellow });
+        }
+        CheckProbes(image, probes,
+                    label + (kContract.emptyScissorDrawsNothing ? " rasterize nothing"
+                                                                : " are ignored (declared)"));
     }
 
-    /// E2 -- a rectangle that hangs off the target is clipped at the boundary, not wrapped.
+    /**
+     * @brief E2 -- a rectangle that hangs off the target is clipped at the boundary, not wrapped.
+     *
+     * On a backend that declares `outOfBoundsScissorRejected` the same rectangle must instead
+     * raise, and the target must be left as it was: both outcomes are asserted, so neither
+     * declaration is an untested exemption.
+     */
     void RunOutOfBoundsRectangle(GraphicsDevice& dev)
     {
-        const std::string label = "E2 rectangle partially outside the target clips at the edge";
+        const std::string label = "E2 rectangle partially outside the target";
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
@@ -762,14 +822,36 @@ class DeferredScissorCaptureTest : public Game
             return;
         }
         auto rt = MakeTarget(dev, kRTW, kRTH);
+        bool threw = false;
+        std::string why;
 
         dev.SetRenderTarget(rt.get());
         dev.Clear(kBlack);
-        SetScissor(dev, 48, 36, 32, 32);     // extends 16 past the right and 20 past the bottom
-        Draw3D(dev, FullQuad(kRed));
+        try
+        {
+            SetScissor(dev, 48, 36, 32, 32);   // 16 past the right edge, 20 past the bottom
+            Draw3D(dev, FullQuad(kRed));
+        }
+        catch (const std::exception& e)
+        {
+            threw = true;
+            why = e.what();
+        }
         SetScissor(dev, 0, 0, kRTW, kRTH);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
+        if (kContract.outOfBoundsScissorRejected)
+        {
+            check(threw, threw ? label + ": rejected with a diagnostic (declared): " + why
+                               : label + ": accepted an out-of-bounds rectangle although this "
+                                         "backend declares it a validation error");
+            return;
+        }
+        if (threw)
+        {
+            check(false, label + ": raised instead of clipping: " + why);
+            return;
+        }
         if (!CanJudgeTarget(label)) return;
         const Image image = ReadTarget(*rt, kRTW, kRTH);
         // A rectangle wrapped through an unsigned conversion, or one whose overhang shifted its
@@ -779,13 +861,13 @@ class DeferredScissorCaptureTest : public Game
             { 48, 47, kRed   }, { 63, 47, kRed   },
             { 47, 36, kBlack }, { 48, 35, kBlack },
             {  0,  0, kBlack }, { 32, 24, kBlack },
-        }, label);
+        }, label + " clips at the edge");
     }
 
-    /// E3 -- a rectangle entirely outside the target rasterizes nothing and raises nothing.
+    /// E3 -- a rectangle entirely outside the target draws nothing (or is rejected, as declared).
     void RunFullyOutsideRectangle(GraphicsDevice& dev)
     {
-        const std::string label = "E3 rectangle entirely outside the target draws nothing";
+        const std::string label = "E3 rectangle entirely outside the target";
         keepAlive_.clear();
         if (!kContract.draws3D || !kContract.targetScissorApplies)
         {
@@ -811,6 +893,13 @@ class DeferredScissorCaptureTest : public Game
         SetScissor(dev, 0, 0, kRTW, kRTH);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
+        if (kContract.outOfBoundsScissorRejected)
+        {
+            check(threw, threw ? label + ": rejected with a diagnostic (declared): " + why
+                               : label + ": accepted a wholly out-of-bounds rectangle although "
+                                         "this backend declares it a validation error");
+            return;
+        }
         if (threw)
         {
             check(false, label + ": raised instead of clipping: " + why);
@@ -820,7 +909,7 @@ class DeferredScissorCaptureTest : public Game
         const Image image = ReadTarget(*rt, kRTW, kRTH);
         CheckProbes(image, {
             {  0,  0, kBlack }, { 63, 47, kBlack }, { 32, 24, kBlack }, { 63, 0, kBlack },
-        }, label);
+        }, label + " draws nothing");
     }
 
     // =====================================================================

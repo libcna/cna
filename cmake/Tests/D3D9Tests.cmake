@@ -380,6 +380,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         COMMAND ${_d3d9_deferred_viewport_cmd}
         TIMEOUT 120 LABELS "D3D9")
 
+    # REMED-GFX-146 cross-backend control: every deferred draw must execute under the
+    # GraphicsDevice.ScissorRectangle and RasterizerState.ScissorTestEnable active at its own
+    # public call. WebGPU resolved both live when it recorded the pass; this file is the same
+    # public fixture, so a backend that regresses the contract is caught here rather than
+    # assumed correct.
+    cna_d3d9_test(cna_test_d3d9_deferred_scissor
+                   examples/deferred_scissor_capture_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_deferred_scissor_cmd cna_test_d3d9_deferred_scissor)
+    cna_register_backend_test(NAME D3D9_Deferred_Scissor
+        COMMAND ${_d3d9_deferred_scissor_cmd}
+        TIMEOUT 120 LABELS "D3D9")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
