@@ -30,6 +30,10 @@
 // Only the binary/full-intensity color Red is used for spatial assertions, so a possible sRGB
 // encoding cannot masquerade as a coordinate error (0/255 channel values are gamma-invariant).
 //
+// REMED-GFX-116 added Check D: the converse of Check A. A FULL-TARGET batch followed by a
+// sub-Viewport must stay full-target. Capturing the viewport only for a sub-region batch passes
+// A/B/C and still fails D, which is exactly what WebGPU did between REMED-GFX-072 and this task.
+//
 // Scene: backbuffer 96x72, custom Viewport V=(19,11,41,29), sprite VIEWPORT-LOCAL Rectangle(5,4,17,11).
 // Correct (viewport-relative) absolute footprint: x in [24,41), y in [15,26) -- width 17, height 11.
 //
@@ -254,6 +258,35 @@ protected:
             check(CloseTo(b.minX, kVpX + 8, 1) && CloseTo(b.minY, kVpY + 6, 1),
                   "Check C2: transform+custom-viewport footprint at (" + std::to_string(kVpX + 8)
                   + "," + std::to_string(kVpY + 6) + "): " + b.str());
+        }
+
+        // -------------------------------------------------------------------------------------
+        // Check D (REMED-GFX-116) -- the mirror image of Check A: a FULL-TARGET sprite followed by
+        // a sub-Viewport that no draw ever uses. Check A only proves a SUB-REGION batch is not
+        // promoted to the whole target; nothing here proved the converse, and a backend that
+        // captures the viewport only for the sub-region case (WebGPU after REMED-GFX-072) then
+        // resolved the full-target batch against whatever was live when it recorded the pass --
+        // squeezing this sprite into the trailing sub-Viewport. The viewport is deliberately NOT
+        // restored before the read: that restore is what would hide the defect.
+        // Sprite Rectangle(0,0,kBBW,kBBH) => the whole backbuffer must be red.
+        // -------------------------------------------------------------------------------------
+        {
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            SetViewport(dev, 0, 0, kBBW, kBBH);
+            dev.Clear(Color::Black);
+            DrawSprite(dev, Rectangle(0, 0, kBBW, kBBH), Color::Red);
+            SetViewport(dev, kVpX, kVpY, kVpW, kVpH);   // used by nothing; must change nothing
+            const std::vector<Color> pix = ReadBackbuffer(dev);
+            SetViewport(dev, 0, 0, kBBW, kBBH);
+            const BBox b = RedBox(pix);
+            check(CloseTo(b.width(), kBBW, 1) && CloseTo(b.height(), kBBH, 1),
+                  "Check D1: a full-target batch stays full-target when a sub-Viewport is set "
+                  "afterwards: " + b.str());
+            check(b.minX == 0 && b.minY == 0,
+                  "Check D2: the full-target batch still starts at (0,0): " + b.str());
+            check(Redish(At(pix, kBBW - 1, kBBH - 1)) && Redish(At(pix, 0, kBBH - 1)) &&
+                  Redish(At(pix, kBBW - 1, 0)),
+                  "Check D3: all four corners of the full-target batch are covered");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);

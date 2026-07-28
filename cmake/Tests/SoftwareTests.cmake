@@ -231,6 +231,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_backbuffer_pass_order
         TIMEOUT 90 LABELS "Software")
 
+    # REMED-GFX-116 cross-backend control: every deferred draw must execute under the
+    # GraphicsDevice.Viewport active at its own public call. WebGPU resolved it live when it
+    # recorded the pass; this file is the same public fixture, so a backend that regresses the
+    # contract is caught here rather than assumed correct.
+    cna_software_test(cna_test_software_deferred_viewport
+                    examples/deferred_viewport_capture_test.cpp)
+    cna_register_backend_test(NAME Software_Deferred_Viewport COMMAND cna_test_software_deferred_viewport
+        TIMEOUT 90 LABELS "Software")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.

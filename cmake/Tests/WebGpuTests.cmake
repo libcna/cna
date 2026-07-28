@@ -241,12 +241,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # (Viewport.Width/Height), not the full target. GFX-019 fixed the RT-size selection but the
     # QueueSprite NDC divide still used the full target dims, while the render pass applied the
     # custom Viewport as the rasterizer viewport -- squishing the sprite. QueueSprite must bake
-    # viewport-relative NDC for a custom sub-Viewport. (Two different viewports in one backbuffer
-    # frame remain a per-pass last-wins limitation -- a WebGPU analog of REMED-GFX-065 -- so only
-    # the single-custom-viewport case is asserted.)
+    # viewport-relative NDC for a custom sub-Viewport. Check D is REMED-GFX-116's addition: the
+    # converse case, a full-target batch followed by a sub-Viewport, which GFX-072's capture-only-
+    # if-custom rule got wrong. The former "two viewports in one backbuffer frame are per-pass
+    # last-wins" note is gone: REMED-GFX-116 made the viewport per-draw state on this backend, so
+    # examples/spritebatch_viewport_switch_test.cpp is registered here too (below).
     cna_webgpu_test(cna_test_webgpu_spritebatch_custom_viewport
                     examples/spritebatch_custom_viewport_test.cpp)
     cna_register_backend_test(NAME WebGPU_SpriteBatch_CustomViewport COMMAND cna_test_webgpu_spritebatch_custom_viewport
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-116: two SpriteBatch cycles under two different Viewports inside ONE frame. This
+    # file was deliberately NOT registered here while WebGPU applied one viewport per render pass.
+    # The viewport is per-draw state now, so the per-batch requirement is a real gate on this
+    # backend too.
+    cna_webgpu_test(cna_test_webgpu_spritebatch_viewport_switch
+                    examples/spritebatch_viewport_switch_test.cpp)
+    cna_register_backend_test(NAME WebGPU_SpriteBatch_ViewportSwitch COMMAND cna_test_webgpu_spritebatch_viewport_switch
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-102: every SpriteBatch.Begin() BlendState must be captured by value and select a
@@ -385,4 +396,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/deferred_viewport_capture_test.cpp)
     cna_register_backend_test(NAME WebGPU_Deferred_Viewport COMMAND cna_test_webgpu_deferred_viewport
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-116's structural half: the captured viewport must be dynamic pass state. It may not
+    # create a pipeline variant, split a render pass, add a submit, or issue one native
+    # setViewport per draw when consecutive draws share a viewport.
+    cna_webgpu_test(cna_test_webgpu_viewport_cardinality
+                    examples/webgpu_viewport_cardinality_test.cpp)
+    target_link_libraries(cna_test_webgpu_viewport_cardinality PRIVATE WebGPU::WebGPU)
+    cna_register_backend_test(NAME WebGPU_Viewport_Cardinality COMMAND cna_test_webgpu_viewport_cardinality
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

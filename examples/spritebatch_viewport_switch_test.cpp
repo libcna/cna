@@ -7,9 +7,11 @@
 // flushes per End() and reads the live viewport). A fix that threads only the final viewport into
 // the sprite clip-space bake would place the first batch wrong.
 //
-// (WebGPU accumulates all backbuffer sprites into one render pass and Bgfx accumulates into one
-// view, so two different viewports in one frame there is a separate per-pass/per-view last-wins
-// limitation -- a WebGPU analog of REMED-GFX-065 -- and this test is NOT registered for them.)
+// (Bgfx accumulates into one view, so two different viewports in one frame there is a separate
+// per-view last-wins limitation and this test is not registered for it. WebGPU used to be in the
+// same sentence: it accumulated all backbuffer sprites into one render pass whose viewport was
+// resolved live at flush time. REMED-GFX-116 made the viewport per-draw state on that backend, so
+// this file IS registered for WebGPU now.)
 //
 // Scene: backbuffer 96x72, Clear Black, two independent Begin/Draw/End cycles, read once via
 // GetBackBufferData (top-left consistent):

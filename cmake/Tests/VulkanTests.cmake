@@ -1247,6 +1247,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_Backbuffer_PassOrder COMMAND cna_test_vulkan_backbuffer_pass_order
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-116 cross-backend control: every deferred draw must execute under the
+        # GraphicsDevice.Viewport active at its own public call. WebGPU resolved it live when it
+        # recorded the pass; this file is the same public fixture, so a backend that regresses the
+        # contract is caught here rather than assumed correct.
+        cna_vulkan_test(cna_test_vulkan_deferred_viewport
+                        examples/deferred_viewport_capture_test.cpp)
+        cna_register_backend_test(NAME Vulkan_Deferred_Viewport COMMAND cna_test_vulkan_deferred_viewport
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
         # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
         # upload that stored nothing, or only part of the requested region, still returned normally.

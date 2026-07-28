@@ -359,6 +359,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_Backbuffer_PassOrder COMMAND cna_test_sdlgpu_backbuffer_pass_order
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-116 cross-backend control: every deferred draw must execute under the
+    # GraphicsDevice.Viewport active at its own public call. WebGPU resolved it live when it
+    # recorded the pass; this file is the same public fixture, so a backend that regresses the
+    # contract is caught here rather than assumed correct.
+    cna_sdlgpu_test(cna_test_sdlgpu_deferred_viewport
+                    examples/deferred_viewport_capture_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_Deferred_Viewport COMMAND cna_test_sdlgpu_deferred_viewport
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-145: the SDL_GPU-specific half of the same contract. The shared oracle above drives
     # SpriteBatch only and scopes itself to colour, so it cannot see a segment filter that works for
     # `DrawKind::Sprite` and not for the eight 3D families, a transient upload arena aliasing
