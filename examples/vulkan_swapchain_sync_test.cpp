@@ -61,6 +61,9 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -90,12 +93,15 @@ namespace
     constexpr int kInterleavedFrames = 6;
     /// Frames rendered after the resize.
     constexpr int kPostResizeFrames = 6;
+    /// REMED-GFX-129: frames spent driving ordered vkCmdClearAttachments commands.
+    constexpr int kClearFrames = 6;
 
     const Color kRed(255, 0, 0, 255);
     const Color kGreen(0, 255, 0, 255);
     const Color kBlue(0, 0, 255, 255);
     const Color kYellow(255, 255, 0, 255);
     const Color kBlack(0, 0, 0, 255);
+    const Color kWhite(255, 255, 255, 255);
 
     bool Same(const Color& a, const Color& b)
     {
@@ -153,6 +159,15 @@ class VulkanSwapchainSyncTest : public Game
     std::unique_ptr<SpriteBatch> sb_;
     std::unique_ptr<Texture2D> white_;
     std::unique_ptr<RenderTarget2D> rt_;
+    // REMED-GFX-129: the surfaces the ordered-clear phase drives. `preserve_` is the shape whose
+    // pass loads its colour, so EVERY Clear() into it must be an explicit command; `depth_` owns a
+    // real depth+stencil aspect pair; `mrtA_`/`mrtB_` make a clear write more than one attachment;
+    // `cube_` makes it write a single-layer face framebuffer.
+    std::unique_ptr<RenderTarget2D>   preserve_;
+    std::unique_ptr<RenderTarget2D>   depth_;
+    std::unique_ptr<RenderTarget2D>   mrtA_;
+    std::unique_ptr<RenderTarget2D>   mrtB_;
+    std::unique_ptr<RenderTargetCube> cube_;
 
     int bbW_ = kBBW;
     int bbH_ = kBBH;
@@ -370,6 +385,59 @@ class VulkanSwapchainSyncTest : public Game
         SpriteTargetStripes(*rt_, 2, kStripes);
     }
 
+    /**
+     * @brief REMED-GFX-129's shape: every route that records a vkCmdClearAttachments command.
+     *
+     * A clear is now a real command inside an active render pass rather than a load action, which
+     * is a new WRITE to a colour or depth/stencil attachment at a point the pass's own external
+     * subpass dependencies were never written for. This frame drives all of it in one command
+     * buffer: a preserving colour target (LOAD_OP_LOAD, so the clear must be explicit), a clear
+     * after a draw, several clears in one cycle, depth-only and stencil-only clears against a real
+     * Depth24Stencil8 attachment, an MRT set where one clear writes both attachments, a cube face
+     * whose framebuffer is single-layer, and a backbuffer clear issued after backbuffer geometry.
+     */
+    void OrderedClearFrame(GraphicsDevice& dev)
+    {
+        dev.Clear(kBlack);
+
+        // Preserving colour target: draw, then clear, then draw again.
+        dev.SetRenderTarget(preserve_.get());
+        FillTarget(kRed);
+        dev.Clear(ClearOptions::Target, kGreen, 1.0f, 0);
+        FillTarget(kBlue);
+        dev.Clear(ClearOptions::Target, kYellow, 1.0f, 0);
+        dev.SetRenderTarget(nullptr);
+
+        // Real depth+stencil aspects, each cleared on its own and then together.
+        dev.SetRenderTarget(depth_.get());
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                  kRed, 1.0f, 0);
+        FillTarget(kGreen);
+        dev.Clear(ClearOptions::DepthBuffer, kWhite, 0.5f, 0);
+        dev.Clear(ClearOptions::Stencil, kWhite, 1.0f, 7);
+        dev.Clear(ClearOptions::DepthBuffer | ClearOptions::Stencil, kWhite, 1.0f, 0);
+        dev.SetRenderTarget(nullptr);
+
+        // One clear across two colour attachments.
+        dev.SetRenderTargets({RenderTargetBinding(static_cast<Texture*>(mrtA_.get())),
+                              RenderTargetBinding(static_cast<Texture*>(mrtB_.get()))});
+        FillTarget(kRed);
+        dev.Clear(ClearOptions::Target, kBlue, 1.0f, 0);
+        dev.SetRenderTargets({});
+
+        // A single-layer cube-face framebuffer.
+        dev.SetRenderTarget(cube_.get(), CubeMapFace::NegativeZ);
+        FillTarget(kRed);
+        dev.Clear(ClearOptions::Target, kGreen, 1.0f, 0);
+        dev.SetRenderTargets({});
+
+        // Backbuffer: geometry first, then the clear, then geometry again -- the shape that used to
+        // run the clear before both draws.
+        SpriteStripes(0, kStripes, kBlue);
+        dev.Clear(ClearOptions::Target, kRed, 1.0f, 0);
+        SpriteStripes(0, 2, kGreen);
+    }
+
 protected:
     void Initialize() override
     {
@@ -386,6 +454,21 @@ protected:
         rt_ = std::make_unique<RenderTarget2D>(dev, kRT, kRT, false, SurfaceFormat::Color,
                                                DepthFormat::None, 0,
                                                RenderTargetUsage::DiscardContents);
+        preserve_ = std::make_unique<RenderTarget2D>(dev, kRT, kRT, false, SurfaceFormat::Color,
+                                                     DepthFormat::None, 0,
+                                                     RenderTargetUsage::PreserveContents);
+        depth_ = std::make_unique<RenderTarget2D>(dev, kRT, kRT, false, SurfaceFormat::Color,
+                                                  DepthFormat::Depth24Stencil8, 0,
+                                                  RenderTargetUsage::PreserveContents);
+        mrtA_ = std::make_unique<RenderTarget2D>(dev, kRT, kRT, false, SurfaceFormat::Color,
+                                                 DepthFormat::None, 0,
+                                                 RenderTargetUsage::PreserveContents);
+        mrtB_ = std::make_unique<RenderTarget2D>(dev, kRT, kRT, false, SurfaceFormat::Color,
+                                                 DepthFormat::None, 0,
+                                                 RenderTargetUsage::PreserveContents);
+        cube_ = std::make_unique<RenderTargetCube>(dev, kRT, false, SurfaceFormat::Color,
+                                                   DepthFormat::None, 0,
+                                                   RenderTargetUsage::PreserveContents);
     }
 
     void Draw(const GameTime&) override
@@ -489,8 +572,25 @@ protected:
             return;
         }
 
+        // ---- phase BC: REMED-GFX-129 ordered clears -------------------------
+        if (frame_ <= kPlainFrames + 1 + kInterleavedFrames + kClearFrames)
+        {
+            SyncViewport(dev);
+            OrderedClearFrame(dev);
+            if (frame_ == kPlainFrames + 1 + kInterleavedFrames + kClearFrames)
+            {
+                const Frame f = ReadBackbuffer(dev);
+                CheckStripes(f, { kGreen, kGreen, kRed, kRed },
+                             "BC1 an ordered backbuffer Clear() issued after geometry runs after "
+                             "that geometry and before the geometry that follows it");
+                JudgeNewValidation("BC2 ordered vkCmdClearAttachments frames");
+            }
+            ++frame_;
+            return;
+        }
+
         // ---- phase C: swapchain recreation ---------------------------------
-        if (frame_ == kPlainFrames + 2 + kInterleavedFrames)
+        if (frame_ == kPlainFrames + 2 + kInterleavedFrames + kClearFrames)
         {
             recreatesBeforeResize_ = backend.GetSwapchainRecreateCountEXT();
             gdm_->setPreferredBackBufferWidthProperty(kBBW * 2);
@@ -502,7 +602,7 @@ protected:
             return;
         }
 
-        if (frame_ <= kPlainFrames + 2 + kInterleavedFrames + kPostResizeFrames)
+        if (frame_ <= kPlainFrames + 2 + kInterleavedFrames + kClearFrames + kPostResizeFrames)
         {
             SyncViewport(dev);
             InterleavedFrame(dev);

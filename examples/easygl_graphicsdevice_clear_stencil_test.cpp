@@ -7,17 +7,17 @@
 // checked `hasClearFlag(options, ClearOptions::Stencil)` -- no code path cleared the stencil
 // buffer to any value, requested or not, on any backend.
 //
-// IMPORTANT: spread across separate frames, one step per Draw() call -- NOT a single frame with
-// interleaved stamp/Clear()/compare draws. Vulkan's backend defers every frame's draws into one
-// command buffer, replayed as a single render pass whose clear (loadOp=CLEAR, using whatever
-// clear value was MOST RECENTLY set) always executes before ALL of that frame's draws,
-// regardless of the order Clear()/DrawXxx() were actually called in game code within that same
-// frame. A same-frame "stamp, then Clear(), then compare" sequence would therefore always see the
-// stamp win on Vulkan (the implicit start-of-pass clear happens before every draw, not at the
-// point Clear() was called), even with this task's fix correctly applied -- an artifact of this
-// project's per-frame-batched Vulkan architecture, not something this test should be fooled by.
-// Splitting stamp/clear+compare into separate frames (so the stamp's frame fully completes and
-// presents before the clear+compare frame begins) sidesteps this and is valid on every backend.
+// Checks A and B are spread across separate frames, one step per Draw() call. That was originally
+// described as unavoidable: Vulkan's backend deferred every frame's draws into one render pass
+// whose clear ran before ALL of them regardless of where Clear() sat in the public call order, so a
+// same-frame "stamp, then Clear(), then compare" would always have seen the stamp win.
+//
+// REMED-GFX-129 CORRECTED THAT CLAIM rather than working around it: a Clear() is now an ordered
+// command at its exact public call position on Vulkan too. The frame split is kept for A and B --
+// it is valid everywhere and they are Task 871's original regression -- and check C below makes the
+// same measurement WITHIN ONE FRAME, which is the shape the old note asserted could never work.
+// Without C, this file could not tell a correctly ordered stencil clear from one that silently
+// happens at the start of the pass.
 //
 // Per check: stamp the whole screen to stencil=0x07 in frame N via a real draw
 // (StencilFunction::Always, StencilPass::Replace, ReferenceStencil=0x07); in frame N+1, issue the
@@ -34,8 +34,14 @@
 //   overload, which always implies stencil=0) so a broken dispatch that leaves the stencil clear
 //   value at its uninitialized/leftover-default 0 cannot coincidentally still match the expected
 //   value and mask the bug.
+// Check C -- REMED-GFX-129: the whole stamp / ClearOptions::Stencil / compare sequence inside ONE
+//   frame, with nothing between the three steps. A backend that delivers a stencil clear only
+//   through the render-pass load action runs it before the stamp, so the buffer still holds the
+//   stamped 0x05 and the Equal-0x0c test draw finds nothing -- BACKGROUND. Measured red on Vulkan
+//   before REMED-GFX-129 and green after; values distinct from A and B so a leftover clear value
+//   from an earlier frame cannot make it pass.
 //
-// Exit code 0 = both checks PASS, 1 = either FAILs.
+// Exit code 0 = all three checks PASS, 1 = any FAILs.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -176,9 +182,20 @@ protected:
             std::printf("[%s] Target|DepthBuffer|Stencil together (clear to 0x09 over a 0x07 stamp)\n",
                         okB ? "PASS" : "FAIL");
             if (okB) ++passCount_;
+            break;
+        }
+        case 4:
+        {
+            // Frame 5: Check C -- REMED-GFX-129. Stamp, clear and compare with NOTHING between
+            // them, so a clear that is really the pass load action cannot pass by running first.
+            StampStencil(dev, 0x05);
+            const bool okC = ClearThenTestStencilEquals(dev, ClearOptions::Stencil, 0x0c, 0x0c);
+            std::printf("[%s] ORDERED: stamp 0x05, ClearOptions::Stencil to 0x0c and compare, all "
+                        "in ONE frame\n", okC ? "PASS" : "FAIL");
+            if (okC) ++passCount_;
 
-            std::printf("=== %d/2 PASS ===\n", passCount_);
-            result_ = (passCount_ == 2) ? 0 : 1;
+            std::printf("=== %d/3 PASS ===\n", passCount_);
+            result_ = (passCount_ == 3) ? 0 : 1;
             done_ = true;
             Exit();
             break;

@@ -145,8 +145,14 @@ namespace
          * leading clear, but still cannot deliver one after a draw.
          */
         bool clearOnPreserveTarget;
-        /// Clear covers the whole target regardless of Viewport and ScissorRectangle (GFX-018).
-        bool fullTargetClear;
+        /**
+         * Clear covers the whole target regardless of the current Viewport (REMED-GFX-018's
+         * cross-backend contract: "each clear is a full-target ordered operation ... viewport and
+         * scissor do not restrict Clear"). False records a backend that scopes it to the viewport.
+         */
+        bool clearIgnoresViewport;
+        /// The same question for ScissorRectangle, declared separately because they can differ.
+        bool clearIgnoresScissor;
         bool preferMultiSampling;  ///< A target only multisamples if the backbuffer does.
         bool msaaTargetReadback;   ///< A multisampled RenderTarget2D reads back its RESOLVED content.
         bool wantHiDefProfile;
@@ -159,44 +165,52 @@ namespace
     // with it.
     constexpr Contract kContract{"VULKAN", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, true, true, false};
+                                 true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_EASYGL)
+    // `clearIgnoresScissor` false is an INDEPENDENT, separately recorded divergence, not this
+    // finding: EasyGL clears with glClear, which GL_SCISSOR_TEST narrows. Its Clear IS
+    // viewport-independent, which is why the two questions are declared separately.
     constexpr Contract kContract{"EASYGL", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, false, true, false};
+                                 true, true, true, false, false, true, false};
 #elif defined(CNA_BACKEND_SOFTWARE)
     constexpr Contract kContract{"SOFTWARE", true, true, true, false, false,
                                  true, true, false,
-                                 true, true, true, false, true, false};
+                                 true, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // SDL_gpu delivers a clear colour only through SDL_GPUColorTargetInfo.load_op, so a Clear()
     // after a draw cannot wipe that draw; a LEADING clear works because every bind cycle is its own
     // pass with its own load op (REMED-GFX-145).
     constexpr Contract kContract{"SDL_GPU", true, true, false, true, true,
                                  true, true, false,
-                                 false, true, true, false, true, false};
+                                 false, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_BGFX)
     constexpr Contract kContract{"BGFX", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, false, false, false};
+                                 true, true, true, true, false, false, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     // wgpu delivers a clear only through the pass load op, exactly as SDL_gpu does.
     constexpr Contract kContract{"WEBGPU", true, true, true, true, true,
                                  true, true, false,
-                                 false, true, true, false, true, false};
+                                 false, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_HEADLESS)
     // Rasterizes nothing and owns no readable colour: every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, false, false, true, false,
                                  true, false, false,
-                                 true, true, true, false, false, false};
+                                 true, true, true, true, false, false, false};
 #elif defined(CNA_BACKEND_D3D9)
+    // `clearIgnoresViewport` / `clearIgnoresScissor` BOTH false, and both measured: D3D9's
+    // IDirect3DDevice9::Clear is bounded by the current viewport and, with scissor testing enabled,
+    // by the scissor rectangle -- which is real XNA's own behaviour, since XNA ran on D3D9. It
+    // disagrees with REMED-GFX-018's cross-backend contract and with the five other measurable
+    // backends; recorded as an independent finding rather than standardised away here.
     constexpr Contract kContract{"D3D9", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, false, true, true};
+                                 true, true, false, false, false, true, true};
 #elif defined(CNA_BACKEND_D3D11)
     constexpr Contract kContract{"D3D11", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, false, true, false};
+                                 true, true, true, true, false, true, false};
 #else
 #error "REMED-GFX-129: this backend has no declared ordered-Clear contract."
 #endif
@@ -1136,7 +1150,7 @@ class OrderedClearTest : public Game
                           "(declared defect)");
             return;
         }
-        if (kContract.fullTargetClear)
+        if (kContract.clearIgnoresViewport)
             ExpectUniform(p, kRT, kRT, kGreen,
                           "V1 Clear under a sub-viewport: Clear covers the whole target, "
                           "unrestricted by Viewport (REMED-GFX-018 contract)");
@@ -1172,7 +1186,7 @@ class OrderedClearTest : public Game
                           "(declared defect)");
             return;
         }
-        if (kContract.fullTargetClear)
+        if (kContract.clearIgnoresScissor)
             ExpectUniform(p, kRT, kRT, kGreen,
                           "V2 Clear under a scissor: Clear covers the whole target, unrestricted "
                           "by ScissorRectangle (REMED-GFX-018 contract)");

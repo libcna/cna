@@ -190,11 +190,14 @@ namespace
     // `mixedQueuesKeepPublicOrder` false: `activeBatches_` and `pending3D_` are two queues and
     // every pass replays all sprites then all 3D draws, so within ONE segment a 3D draw issued
     // before a sprite still lands on top of it (recorded as an independent finding, not fixed
-    // here). `clearAfterDrawWinsOnBackbuffer` / `backbufferDepthOnlyClear` false: the clear colour
-    // reaches the swapchain only through the render-pass load op, and `ClearDepth` is the one
-    // clear entry point that records no clear request at all.
+    // here). `clearAfterDrawWinsOnBackbuffer` / `backbufferDepthOnlyClear` were BOTH false while
+    // REMED-GFX-129 was open -- the clear colour reached the swapchain only through the render-pass
+    // load op, and `ClearDepth` was the one clear entry point that recorded no clear request at
+    // all. REMED-GFX-129 made Clear an ordered vkCmdClearAttachments command, so checks C4 and C6
+    // now assert the correct behaviour on this backend; both were measured red the moment the fix
+    // landed, which is what turned these two declarations over.
     constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
-                                 true, true, false, false, false, true, true, true, true, false};
+                                 true, true, false, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     // `clearAfterDrawWinsOnBackbuffer` false: WebGPU delivers a backbuffer clear colour only
     // through the render-pass load op, the same mechanism REMED-GFX-140 records for its render

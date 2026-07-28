@@ -21,11 +21,17 @@
 //   coincidentally still pass both checks), draw at z=0.9 (still less than the buggy hardcoded 1.0,
 //   still NOT less than the correctly-cleared 0.7).
 //
-// ClearOptions::DepthBuffer alone (IGraphicsBackend::ClearDepth) is deliberately NOT exercised
-// here: Task 871 already established (and this task's fix preserves) that Bgfx's ClearDepth() only
-// stores the new clear value without an immediate EnsureViewState()/touch() — a pre-existing
-// "doesn't visibly apply until the next real clear" shape, unrelated to this task's depth-*value*
-// fix and out of scope to change.
+// ClearOptions::DepthBuffer alone (IGraphicsBackend::ClearDepth) was deliberately NOT exercised
+// here, because Bgfx's ClearDepth() then only stored the new clear value without an immediate
+// EnsureViewState()/touch().
+//
+// REMED-GFX-129 false-positive note: that exemption also meant nothing in this file ever reached
+// Vulkan's ClearDepth, which recorded no clear request at all -- so a depth-ONLY Clear() did
+// literally nothing there and both checks below still passed, since both include
+// ClearOptions::Target. Bgfx's own gap was closed by REMED-GFX-018 and Vulkan's by REMED-GFX-129;
+// `examples/graphicsdevice_ordered_clear_test.cpp` (checks D1, D5, D6 and D7) now covers a
+// depth-only clear, its value at both ends of the legal range, and its ordering against draws, on
+// every backend that has a depth oracle.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 
