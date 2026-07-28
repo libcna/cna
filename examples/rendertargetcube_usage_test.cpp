@@ -392,13 +392,21 @@ class RenderTargetCubeUsageTest : public Game
      *        one, and returns nothing.
      *
      * This exists because a preservation check that skips it is false-positive-capable on a
-     * deferred backend. Vulkan records exactly ONE render pass per unique render-target source per
-     * flush (RecordCommandBuffer's Phase 1 collects `usedRTs` and replays every queued batch for
-     * each), so a producer pass and a later partial pass issued into the same flush window collapse
-     * into a single pass whose one load action runs before BOTH -- and the producer's content
-     * survives even on a backend that discards on every bind. Reading the face forces
-     * `FlushDeferredRenderTarget`, closing that pass, so the marker pass below really does begin a
-     * new one. The returned value is deliberately unused: this is a barrier, not an assertion.
+     * deferred backend. Vulkan used to record exactly ONE render pass per unique render-target
+     * source per flush -- `RecordCommandBuffer`'s Phase 1 collected `usedRTs` and replayed every
+     * queued batch for each -- so a producer pass and a later partial pass issued into the same
+     * flush window collapsed into a single pass whose one load action ran before BOTH, and the
+     * producer's content survived even on a backend that discards on every bind. **REMED-GFX-140
+     * fixed that**: Phase 1 is now keyed on the bind cycle, so a rebind is a separate native pass
+     * with its own load action.
+     *
+     * The barrier stays, and is still required, because it is what makes this file's subject
+     * observable at all rather than a workaround for the collapsing: a preservation check has to
+     * prove that content written by an EARLIER pass is reloaded by a LATER one, and only a real
+     * flush boundary guarantees the producer has been submitted before the partial pass is
+     * recorded. `examples/rendertarget_pass_boundary_test.cpp` is the file that asserts the
+     * boundary itself, with no barrier anywhere. The returned value is deliberately unused: this is
+     * a barrier, not an assertion.
      */
     static void Settle(const TextureCube& cube, int face)
     {
@@ -825,11 +833,15 @@ class RenderTargetCubeUsageTest : public Game
      * @brief Q1 -- the SAME-flush-window shape, which every other preservation check deliberately
      *        avoids.
      *
-     * Producer and partial pass are issued back to back with nothing between them, so a deferred
-     * backend may legitimately collapse them into one GPU pass. Whatever it does, the result must
-     * still be the producer's pattern with the marker over it: collapsing must not lose the
-     * producer, and not collapsing must not lose it either. This check passes on a discarding
-     * backend, which is exactly why it is not the oracle for P3.
+     * Producer and partial pass are issued back to back with nothing between them. On a
+     * PreserveContents target the two possible shapes are indistinguishable -- one LOAD pass
+     * holding both cycles' draws produces exactly the pixels two LOAD passes would -- so what this
+     * asserts is only that the composition is right either way: the producer's pattern with the
+     * marker over it. It passes on a discarding backend too, which is exactly why it is not the
+     * oracle for P3, and it is NOT a licence to collapse: REMED-GFX-140 established that every
+     * bind cycle is its own logical pass and
+     * `examples/rendertarget_pass_boundary_test.cpp` enforces that on a DiscardContents target,
+     * where the two shapes differ.
      */
     void RunSameWindow(GraphicsDevice& dev)
     {

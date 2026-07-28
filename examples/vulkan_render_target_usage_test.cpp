@@ -8,12 +8,25 @@
 //
 // Test structure (2 Draw() frames):
 //
-//   Frame 0 — fill both RTs:
-//     rt_discard  → full-screen RED   quad
-//     rt_preserve → full-screen GREEN quad
+//   Frame 0 — fill all three RTs:
+//     rt_preserve2 → full-screen BLUE quad, then a LEFT-HALF WHITE quad   (recorded FIRST)
+//     rt_discard   → full-screen RED   quad
+//     rt_preserve  → full-screen GREEN quad
 //     (EndDraw calls Present() automatically)
+//     rt_preserve2 goes first deliberately: a per-frame vertex arena whose cursor restarts at 0
+//     for every pass is only detectable on a pass that is NOT the last writer.
 //
 //   Frame 1 — verify behaviour:
+//     REMED-GFX-140 strengthening: rt_preserve2 is checked FIRST, before anything is rebound.
+//     Frame 0 records three targets' passes into ONE command buffer, and this file never looked
+//     at what those passes actually produced -- it only ever looked at rt_discard AFTER a discard
+//     had wiped it, and at rt_preserve's uniform fill, which is indistinguishable from any other
+//     target's uniform fill. Both of the defects REMED-GFX-140 fixed were therefore invisible
+//     here: passes sharing one per-frame vertex arena whose cursor restarted at 0 (so an earlier
+//     pass drew a later pass's geometry), and bind cycles of one target collapsing into one pass.
+//     rt_preserve2 differs from the other two in COLOUR and, between its own two draws, in
+//     GEOMETRY, and both halves are asserted byte-exact (BLUE and WHITE are 0/255-only, so no
+//     sRGB tolerance is needed, unlike Color::Green's 128).
 //     DiscardContents: re-bind rt_discard, draw left-half BLUE quad to force
 //       an RT render pass.  LOAD_OP_CLEAR clears the right half to black (not red).
 //       Blit to BB → GetBackBufferData at right half → expect black (not red).
@@ -83,6 +96,7 @@ class VulkanRTUsageTest : public Game
     std::unique_ptr<SpriteBatch>           sb_;
     std::unique_ptr<RenderTarget2D>        rt_discard_;
     std::unique_ptr<RenderTarget2D>        rt_preserve_;
+    std::unique_ptr<RenderTarget2D>        rt_preserve2_;
     int  frame_  = 0;
     int  pass_   = 0;
     int  fail_   = 0;
@@ -123,6 +137,9 @@ protected:
         rt_preserve_ = std::make_unique<RenderTarget2D>(dev, kSize, kSize, false,
                         SurfaceFormat::Color, DepthFormat::None, 0,
                         RenderTargetUsage::PreserveContents);
+        rt_preserve2_ = std::make_unique<RenderTarget2D>(dev, kSize, kSize, false,
+                        SurfaceFormat::Color, DepthFormat::None, 0,
+                        RenderTargetUsage::PreserveContents);
     }
 
     void Draw(const GameTime&) override
@@ -148,6 +165,15 @@ protected:
 
         if (frame_ == 0)
         {
+            // REMED-GFX-140: a target whose content differs from both others in colour AND whose
+            // own two draws differ in geometry, recorded FIRST so that a shared arena cursor
+            // restarting per pass would overwrite its vertices before the queue is submitted. All
+            // three targets' passes are recorded into one command buffer by the Present below.
+            dev.SetRenderTarget(rt_preserve2_.get());
+            drawFullScreen(dev, Color::Blue);
+            drawLeftHalf(dev, Color::White);
+            dev.SetRenderTarget(nullptr);
+
             // Fill rt_discard with red.
             dev.SetRenderTarget(rt_discard_.get());
             drawFullScreen(dev, Color::Red);
@@ -166,6 +192,29 @@ protected:
 
         if (frame_ == 1)
         {
+            const int rxEarly = kSize * 3 / 4;
+            const int ryEarly = kSize / 2;
+            const int lxEarly = kSize / 4;
+
+            // ── REMED-GFX-140: what frame 0's shared record actually produced ──
+            // Nothing is rebound before this, so the only thing being read is the result of three
+            // render-target passes recorded side by side into one command buffer.
+            sb_->Begin();
+            sb_->Draw(*rt_preserve2_,
+                      Rectangle(0, 0, kSize, kSize),
+                      Rectangle(0, 0, kSize, kSize),
+                      Color::White);
+            sb_->End();
+            Color px2Right = readBB(dev, rxEarly, ryEarly);
+            Color px2Left  = readBB(dev, lxEarly, ryEarly);
+            std::printf("shared record right-half: R=%d G=%d B=%d, left-half: R=%d G=%d B=%d\n",
+                        px2Right.getRProperty(), px2Right.getGProperty(), px2Right.getBProperty(),
+                        px2Left.getRProperty(), px2Left.getGProperty(), px2Left.getBProperty());
+            check(colourMatch(px2Right, Color::Blue),
+                  "shared record: the third target kept its OWN colour, not another target's");
+            check(colourMatch(px2Left, Color::White),
+                  "shared record: the third target's second draw kept its OWN geometry");
+
             // ── DiscardContents ──────────────────────────────────────────────
             // Re-bind rt_discard: SetRenderTarget calls Clear(0,0,0,255) via XNA
             // layer which sets the Vulkan clear colour to black.
