@@ -680,11 +680,13 @@ namespace CNA::Internal::Backends::SdlGpu
         };
 
         /**
-         * @brief REMED-GFX-145: the segment id reserved for the swapchain.
+         * @brief The "no segment has ever been opened" id. REMED-GFX-145/143.
          *
-         * Real segment ids start at 1, so a draw issued with no render target bound never matches
-         * any render-target segment's replay filter, and the swapchain's own trailing pass asks
-         * for this value to mean "no segment filter at all".
+         * Real segment ids start at 1. This used to be the id every draw issued with no render
+         * target bound carried, because the swapchain had no bind cycles of its own and its single
+         * trailing pass asked for this value to mean "no segment filter at all". REMED-GFX-143
+         * gave the backbuffer real segments, so a backbuffer draw now carries the id of the cycle
+         * it was issued in and this value survives only as the pre-first-cycle sentinel.
          */
         static constexpr std::uint64_t kSwapchainSegment = 0;
 

@@ -18,10 +18,10 @@
 // ports from, easygl_rt_roundtrip_test.cpp, does exactly that) -- confirmed via investigation
 // that GetBackBufferData/ReadBackbuffer on Vulkan always reads the swapchain image, never
 // whatever render target happens to be currently bound (unlike EasyGL, which tracks
-// currentRtHeight_ and redirects). Reading "while bound" on Vulkan would only coincidentally
-// appear to work because the swapchain's own backbuffer pass shares the same global clear-colour
-// scalar as whichever RT was most recently Clear()-ed in the same recorded frame -- not because
-// it actually read the RT's own image. Sampling via SpriteBatch after unbinding is the only
+// currentRtHeight_ and redirects). Reading "while bound" on Vulkan would not read the RT's own
+// image at all. (Before REMED-GFX-140/143 it could also appear to work coincidentally, because the
+// swapchain pass and every RT pass shared ONE frame-global clear-colour scalar; clear values now
+// belong to the bind cycle that issued them, on the backbuffer as well as on a target.) Sampling via SpriteBatch after unbinding is the only
 // methodology that genuinely exercises "does this RT's colour image contain what Clear() wrote,
 // and is it in a layout a later draw can actually sample".
 //
@@ -90,16 +90,14 @@ class VulkanRtRoundtripTest : public Game
         dev.Clear(fillColor);   // the exact bug scenario: no draw call follows
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        // Force a frame boundary now, while Clear()'s shared global clear-colour scalar still
-        // holds fillColor -- Vulkan has no per-RT remembered clear value, so this RT's own
-        // render pass (recorded below, before anything else changes that shared scalar) must
-        // run with the right colour before the backbuffer's own Clear() call further down
-        // overwrites it with something else.
-        {
-            Color dummy(0, 0, 0, 0);
-            const Rectangle dummyReg(0, 0, 1, 1);
-            dev.GetBackBufferData(&dummyReg, &dummy, 0, 1);
-        }
+        // REMED-GFX-143 false-positive audit: an artificial GetBackBufferData used to sit here,
+        // forcing a frame boundary between the producer and the consumer because Vulkan had ONE
+        // frame-global clear-colour scalar and the backbuffer's own Clear() further down would
+        // overwrite fillColor before this target's pass was recorded. REMED-GFX-140 gave every
+        // render-target bind cycle its own clear values, which made the barrier unnecessary --
+        // A/B-measured: the barrier-free form already passes with GFX-140 alone. It is removed
+        // here so producer and consumer sit in ONE frame with nothing between them, which is what
+        // the test claimed to measure all along.
 
         const auto& vp = dev.getViewportProperty();
         const int W = vp.getWidthProperty();

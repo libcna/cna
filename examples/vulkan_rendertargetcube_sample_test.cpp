@@ -7,12 +7,14 @@
 // covered: actually sampling the RenderTargetCube's rendered content back out as a TextureCube.
 //
 // Sequence:
-//   Phase 1 (RT passes): SpriteBatch-draw a solid-blue 1x1 texture into each of the 6
+//   Step 1 (cube-face bind cycles): SpriteBatch-draw a solid-blue 1x1 texture into each of the 6
 //     RenderTargetCube faces.
-//   Phase 2 (backbuffer pass): draw a full-screen NDC quad with EnvironmentMapEffect,
+//   Step 2 (a backbuffer bind cycle): draw a full-screen NDC quad with EnvironmentMapEffect,
 //     EnvironmentMapAmount=1, EmissiveColor=0, EnvironmentMapSpecular=0 (isolates the env-map
 //     term), sampling the now-unbound RenderTargetCube via setEnvironmentMapProperty.
-//   GetBackBufferData triggers Present() -> RecordCommandBuffer executes both phases; centre
+//   GetBackBufferData triggers Present() -> RecordCommandBuffer records both cycles in public
+//   order (REMED-GFX-140/143 replaced its old two-phase "every target pass, then one trailing
+//   swapchain pass" shape with one ordered stream of bind cycles); centre
 //   pixel must be blue if VulkanRenderTargetCubeBackend's actual rendered cubeView_ (not stale
 //   or garbage data) was sampled — confirmed via VulkanRenderTargetCubeBackend's
 //   IVulkanCubeSamplable::GetVkCubeImageView() override, reached through a safe dynamic_cast in
@@ -116,7 +118,7 @@ protected:
         }
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        // --- Phase 2: sample the unbound RenderTargetCube via EnvironmentMapEffect ---
+        // --- Step 2: sample the unbound RenderTargetCube via EnvironmentMapEffect ---
         device.Clear(Color(0, 0, 0, 255));
 
         EnvironmentMapEffect fx(device);
@@ -145,7 +147,8 @@ protected:
         device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
 
-        // GetBackBufferData triggers Present() -> RecordCommandBuffer executes both phases.
+        // GetBackBufferData triggers Present() -> RecordCommandBuffer records both bind cycles,
+        // the cube faces' and this backbuffer one, in that public order.
         const Rectangle centReg(W / 2, H / 2, 1, 1);
         Color centPx(0, 0, 0, 0);
         device.GetBackBufferData(&centReg, &centPx, 0, 1);

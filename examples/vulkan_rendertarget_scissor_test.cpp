@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-013: Vulkan ScissorRectangle must clip draws issued while a RenderTarget2D is bound.
 //
-// Before the fix, VulkanGraphicsBackend::RecordCommandBuffer()'s render-target pass (Phase 1)
-// hardcoded a full-target scissor (VkRect2D{{0,0},{rtW,rtH}}) and never read the captured
+// Before the fix, VulkanGraphicsBackend::RecordCommandBuffer()'s render-target passes hardcoded a
+// full-target scissor (VkRect2D{{0,0},{rtW,rtH}}) and never read the captured
 // scissorEnabled_/scissorX_/Y_/W_/H_ state, so ScissorRectangle was a silent no-op whenever a
-// render target was bound — even though the backbuffer pass (Phase 2) honored it correctly.
+// render target was bound — even though the backbuffer honored it correctly. (RecordCommandBuffer
+// no longer has the two phases those names referred to: REMED-GFX-140/143 replaced them with one
+// ordered stream of bind cycles, backbuffer cycles included.)
 //
 // Because the Vulkan backend defers every draw to a single Present()-time record, and because
 // Task 338 (FNA parity) resets ScissorRectangle when a render target is unbound, honoring only the
@@ -129,7 +131,7 @@ class VulkanRenderTargetScissorTest : public Game
 
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr)); // Task 338 resets scissor
 
-        // --- Phase 2: blit the rendered RT onto the backbuffer, unclipped, 1:1 at origin ---
+        // --- Step 2: blit the rendered RT onto the backbuffer, unclipped, 1:1 at origin ---
         dev.Clear(Color(0, 0, 0, 255));
         dev.setRasterizerStateProperty(RasterizerState()); // scissor disabled for the blit
         dev.setBlendStateProperty(BlendState::Opaque);
