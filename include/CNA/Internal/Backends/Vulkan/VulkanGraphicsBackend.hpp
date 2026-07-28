@@ -451,6 +451,10 @@ namespace CNA::Internal::Backends::Vulkan
         const IVulkanSamplable*          currentTexture_      = nullptr;
         uint32_t                         batchFirstIndex_     = 0;
         VulkanRTSource*                  activeRT_            = nullptr;
+        // REMED-GFX-140: the logical render-pass segment active at Begin(), captured with
+        // activeRT_ and for the same reason -- the batch belongs to the bind cycle that opened
+        // it, even if End() happens after the target was unbound.
+        uint64_t                         activeSegment_       = 0;
 
         // Task 665 fix: pending SamplerState, applied at flush time (mirrors EasyGL's exact
         // field names/defaults — SamplerState.LinearClamp is SpriteBatch's own real default).
@@ -1494,6 +1498,10 @@ namespace CNA::Internal::Backends::Vulkan
             // BlendFactor/InverseBlendFactor (VK_DYNAMIC_STATE_BLEND_CONSTANTS, REMED-GFX-091).
             float                   blendFactorR = 1.0f, blendFactorG = 1.0f,
                                     blendFactorB = 1.0f, blendFactorA = 1.0f;
+            // REMED-GFX-140: the logical render-pass segment (bind cycle) this draw was issued in,
+            // captured by PushPending3DDraw from currentSegment_. Two draws with the same `rt` but
+            // different `segment` belong to two different native render passes.
+            uint64_t                segment = 0;
         };
         std::vector<Pending3DDraw>  pending3D_;
         // Task 447/854: pushes d onto pending3D_ after tagging it with the currently-active
@@ -1507,22 +1515,45 @@ namespace CNA::Internal::Backends::Vulkan
         // at a time is the real, documented XNA usage pattern), so a single raw pointer (not a
         // stack) is sufficient.
         VulkanOcclusionQueryBackend* activeOcclusionQuery_ = nullptr;
-        // pair: (an independent per-Begin/End-cycle snapshot, target RT) where RT=nullptr means
-        // backbuffer. Owns each snapshot outright (Task 664 fix) so that a 2nd Begin()/End() on
-        // the same SpriteBatch object within one frame cannot clobber the 1st cycle's data —
-        // each snapshot is pushed at End(), independent heap storage, harvested (and destroyed
-        // via activeBatches_.clear()) once per frame in RecordCommandBuffer().
-        std::vector<std::pair<std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot>, VulkanRTSource*>> activeBatches_;
+        // One independent per-Begin/End-cycle snapshot, its target RT (nullptr = backbuffer) and
+        // the logical render-pass segment it was issued in. Owns each snapshot outright (Task 664
+        // fix) so that a 2nd Begin()/End() on the same SpriteBatch object within one frame cannot
+        // clobber the 1st cycle's data — each snapshot is pushed at End(), independent heap
+        // storage, harvested (and destroyed via activeBatches_.clear()) once per frame in
+        // RecordCommandBuffer(). REMED-GFX-140 added `segment`: without it two batches with the
+        // same `rt` were indistinguishable, which is exactly what let two bind cycles merge.
+        struct PendingBatch {
+            std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot> snapshot;
+            VulkanRTSource* rt      = nullptr;
+            uint64_t        segment = 0;
+        };
+        std::vector<PendingBatch> activeBatches_;
 
-        // Task 875: render targets explicitly `Clear()`-ed this frame with no accompanying draw
-        // call. `RecordCommandBuffer`'s `usedRTs` list was previously built purely from
-        // `activeBatches_`/`pending3D_` (both draw-call-populated), so a real, XNA-legal
+        // Task 875: a render target explicitly `Clear()`-ed with no accompanying draw call still
+        // needs its render pass recorded. `RecordCommandBuffer`'s segment list was previously built
+        // purely from `activeBatches_`/`pending3D_` (both draw-call-populated), so a real, XNA-legal
         // "SetRenderTarget(rt); Clear(color); SetRenderTarget(nullptr);" pattern with no draw in
         // between never got its render pass recorded at all — the target's colour image stayed
-        // at VK_IMAGE_LAYOUT_UNDEFINED forever. `Clear()`/`ClearColorAndDepth()` push `currentRT_`
-        // here (when a render target is bound) so `usedRTs` picks it up even with zero draws;
-        // cleared alongside `activeBatches_`/`pending3D_` once per frame in `RecordCommandBuffer()`.
-        std::vector<VulkanRTSource*> clearedRTs_;
+        // at VK_IMAGE_LAYOUT_UNDEFINED forever.
+        //
+        // REMED-GFX-140 turned the bare pointer list into a per-segment record that also CARRIES
+        // the clear values. Before, every pass in a flush began with the frame-global clearR_/
+        // clearDepth_/clearStencil_ as they stood at record time, so the last Clear() of the frame
+        // supplied the colour for every earlier pass too. A clear now belongs to the bind cycle
+        // that issued it; the last Clear() within one cycle still wins, because Vulkan delivers the
+        // colour through the pass load op and a pass has exactly one (REMED-GFX-129 owns that
+        // narrower limitation). A segment with no explicit Clear() keeps the previous behaviour and
+        // falls back to the frame-global values.
+        struct PendingClear {
+            uint64_t        segment = 0;
+            VulkanRTSource* rt      = nullptr;
+            float           r = 0.f, g = 0.f, b = 0.f, a = 1.f;
+            float           depth   = 1.0f;
+            int             stencil = 0;
+        };
+        std::vector<PendingClear> pendingClears_;
+        /// Records (or updates) this bind cycle's clear values. REMED-GFX-140 / Task 875.
+        void NoteRenderTargetClearEXT();
 
         // REMED-GFX-075: deferred-resource retirement queue -- the generic ownership mechanism that
         // makes the whole-frame deferred renderer memory-safe against a SOURCE resource
@@ -1613,6 +1644,19 @@ namespace CNA::Internal::Backends::Vulkan
         float    clearDepth_ = 1.0f;
         bool     initialized_       = false;
         VulkanRTSource*            currentRT_ = nullptr;
+        // REMED-GFX-140: identifies the logical render pass every deferred entry belongs to. One
+        // public bind/unbind cycle == one segment: the counter advances on EVERY assignment of
+        // currentRT_ (see BeginRenderPassSegmentEXT), so binding the SAME target again after an
+        // unbind starts a new segment rather than joining the previous one. RecordCommandBuffer
+        // replays segments in ascending id order, each in its own
+        // vkCmdBeginRenderPass/vkCmdEndRenderPass, which is what makes the second cycle's load
+        // action, clear values, viewport and scissor apply to the second cycle only. It is a
+        // grouping key, never a cache key -- render passes and framebuffers stay keyed on
+        // compatibility (depth format, attachment identity), so many segments share one
+        // VkRenderPass and one VkFramebuffer.
+        uint64_t                   currentSegment_ = 0;
+        /// Advances the segment counter and binds @p rt (nullptr = backbuffer). REMED-GFX-140.
+        void BeginRenderPassSegmentEXT(VulkanRTSource* rt);
         bool     depthTestEnabled_  = true;
         bool     depthWriteEnabled_ = true;
         bool     blendEnabled_      = false;

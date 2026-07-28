@@ -673,11 +673,11 @@ namespace CNA::Internal::Backends::Vulkan
         if (owner_) {
             // REMED-GFX-074: drop any deferred work still queued into this target BEFORE its GPU
             // resources are freed, otherwise the raw VulkanRTSource* left in activeBatches_/
-            // pending3D_/clearedRTs_ dangles and the next Present dereferences freed memory.
+            // pending3D_/pendingClears_ dangles and the next Present dereferences freed memory.
             owner_->PurgeDeferredWorkForTarget(this);
             auto& list = owner_->liveRenderTargets_;
             list.erase(std::remove(list.begin(), list.end(), this), list.end());
-            if (owner_->currentRT_ == this) owner_->currentRT_ = nullptr;
+            if (owner_->currentRT_ == this) owner_->BeginRenderPassSegmentEXT(nullptr);
         }
         ReleaseVulkanResources();
     }
@@ -696,12 +696,12 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanRenderTargetBackend::BindAsRenderTarget()
     {
-        if (owner_) owner_->currentRT_ = this;
+        if (owner_) owner_->BeginRenderPassSegmentEXT(this);
     }
 
     void VulkanRenderTargetBackend::UnbindAsRenderTarget()
     {
-        if (owner_ && owner_->currentRT_ == this) owner_->currentRT_ = nullptr;
+        if (owner_ && owner_->currentRT_ == this) owner_->BeginRenderPassSegmentEXT(nullptr);
     }
 
     // Task 878: regenerate the mip chain from level 0's just-rendered (and, if this RT engaged
@@ -852,6 +852,7 @@ namespace CNA::Internal::Backends::Vulkan
         currentTexture_  = nullptr;
         batchFirstIndex_ = 0;
         activeRT_        = backend_->currentRT_;
+        activeSegment_   = backend_->currentSegment_;
         active_ = true;
     }
 
@@ -946,7 +947,8 @@ namespace CNA::Internal::Backends::Vulkan
             // this backend's Begin(), so backend_->blendEnabled_/blendParams_ are this batch's.
             snapshot->blendEnabled = backend_->blendEnabled_;
             snapshot->blendParams  = backend_->blendParams_;
-            backend_->activeBatches_.push_back({ std::move(snapshot), activeRT_ });
+            backend_->activeBatches_.push_back(
+                { std::move(snapshot), activeRT_, activeSegment_ });
         }
     }
 
@@ -6622,9 +6624,12 @@ namespace CNA::Internal::Backends::Vulkan
         readbackStagingValid_ = false;  // new frame content invalidates the readback cache
         // Task 875: mark the currently-bound RT as needing its render pass recorded this frame,
         // even if no draw call follows.
-        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
-            clearedRTs_.push_back(currentRT_);
+        NoteRenderTargetClearEXT();
     }
+
+    // REMED-GFX-140: passed as the segment filter by the backbuffer pass, which is not
+    // segmented (see Phase 2's own comment) and replays every entry queued against the backbuffer.
+    static constexpr uint64_t kAllSegments = ~static_cast<uint64_t>(0);
 
     void VulkanGraphicsBackend::RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex,
                                                     RecordMode mode, VulkanRTSource* onlyRT)
@@ -6724,16 +6729,33 @@ namespace CNA::Internal::Backends::Vulkan
         // already-correct accumulating-cursor pattern, so multiple Begin()/End() cycles (or
         // multiple SpriteBatch instances) targeting the same RT in one frame compose additively
         // instead of overwriting each other at a hardcoded offset 0 (Task 664 fix).
-        auto drawSpritesFor = [&](VulkanRTSource* targetRT,
+        // REMED-GFX-140: the sprite and 3D arenas are ONE host-visible allocation per frame in
+        // flight, shared by every pass this command buffer records, and every memcpy into them
+        // happens while recording -- long before the queue submit that makes the GPU read them. A
+        // cursor that restarted at 0 for each pass therefore let a later pass overwrite the exact
+        // bytes an earlier pass had already bound, so the earlier pass drew the later pass's
+        // geometry (test P6). It was invisible before this task because the only multi-pass
+        // fixtures drew identical rectangles and varied the source texture, which lives in the
+        // per-draw descriptor set rather than in the arena. Hoisting the cursors to the whole
+        // record makes every pass own a disjoint range; segmentation makes that mandatory, since
+        // one target's two bind cycles are now two passes over the same arena.
+        VkDeviceSize spriteVbCursor = 0;
+        VkDeviceSize spriteIbCursor = 0;
+        auto drawSpritesFor = [&](VulkanRTSource* targetRT, uint64_t segment,
                                   float vpW, float vpH)
         {
             static constexpr VkDeviceSize kSpriteVBSize = MaxSpriteVertices * sizeof(Sprite2DVertex);
             static constexpr VkDeviceSize kSpriteIBSize = MaxSpriteIndices  * sizeof(uint16_t);
             VkPipeline   lastBoundPipeline = VK_NULL_HANDLE;
-            VkDeviceSize vbOff = 0;
-            VkDeviceSize ibOff = 0;
-            for (auto& [snapshot, batchRT] : activeBatches_) {
+            VkDeviceSize& vbOff = spriteVbCursor;
+            VkDeviceSize& ibOff = spriteIbCursor;
+            for (auto& entry : activeBatches_) {
+                const auto& snapshot = entry.snapshot;
+                VulkanRTSource* batchRT = entry.rt;
                 if (batchRT != targetRT) continue;
+                // kAllSegments replays every batch for this target in one pass -- the backbuffer
+                // pass's own long-standing behaviour, deliberately unchanged (see Phase 2).
+                if (segment != kAllSegments && entry.segment != segment) continue;
                 const auto& verts = snapshot->vertices;
                 const auto& inds  = snapshot->indices;
                 const auto& draws = snapshot->draws;
@@ -6895,20 +6917,25 @@ namespace CNA::Internal::Backends::Vulkan
         uint32_t pbrSkinnedUBOSlot  = 0; // SkinnedPbrEffect PbrParams
 
         // Helper: draw all pending 3D draws for a specific RT into the current render pass.
-        auto draw3DFor = [&](VulkanRTSource* targetRT)
+        VkDeviceSize frame3DVbCursor     = 0;
+        VkDeviceSize frame3DIbCursor     = 0;
+        VkDeviceSize frame3DInstVbCursor = 0;
+        auto draw3DFor = [&](VulkanRTSource* targetRT, uint64_t segment)
         {
             if (pending3D_.empty()) return;
             EnsureFrame3DBuffers();
             VkPipeline lastPipe   = VK_NULL_HANDLE;
-            VkDeviceSize vbOff    = 0;
-            VkDeviceSize ibOff    = 0;
-            VkDeviceSize instVbOff = 0;
+            // See drawSpritesFor's cursor comment: one arena, many passes, one record.
+            VkDeviceSize& vbOff     = frame3DVbCursor;
+            VkDeviceSize& ibOff     = frame3DIbCursor;
+            VkDeviceSize& instVbOff = frame3DInstVbCursor;
             // Task 447/854: the OcclusionQuery currently wrapped in a real vkCmdBeginQuery for
             // this render pass, if any -- tracks contiguous runs of draws sharing the same
             // occlusionQuery tag so they land in one vkCmdBeginQuery/vkCmdEndQuery pair.
             VulkanOcclusionQueryBackend* openQuery = nullptr;
             for (const auto& draw : pending3D_) {
                 if (draw.rt != targetRT) continue;
+                if (segment != kAllSegments && draw.segment != segment) continue;
                 if (draw.isMarker) {
                     if (pfnCmdInsertDebugLabel_) {
                         VkDebugUtilsLabelEXT lbl{};
@@ -7293,44 +7320,85 @@ namespace CNA::Internal::Backends::Vulkan
             }
         };
 
-        // ---- Phase 1: off-screen RT passes ----
-        // Collect unique render targets referenced this frame.
-        std::vector<VulkanRTSource*> usedRTs;
-        // Task 875: an RT explicitly Clear()-ed with no draw call still needs its render pass
-        // recorded (matches FNA/XNA, where Clear() takes effect regardless of what's drawn
-        // afterward) — otherwise its colour image never leaves VK_IMAGE_LAYOUT_UNDEFINED.
-        for (auto* rt : clearedRTs_)
-            if (rt && std::find(usedRTs.begin(), usedRTs.end(), rt) == usedRTs.end())
-                usedRTs.push_back(rt);
-        for (auto& [batch, rt] : activeBatches_)
-            if (rt && std::find(usedRTs.begin(), usedRTs.end(), rt) == usedRTs.end())
-                usedRTs.push_back(rt);
-        for (auto& draw : pending3D_)
-            if (draw.rt && std::find(usedRTs.begin(), usedRTs.end(), draw.rt) == usedRTs.end())
-                usedRTs.push_back(draw.rt);
+        // ---- Phase 1: off-screen RT passes, ONE per logical bind cycle ----
+        // REMED-GFX-140: this used to collect the UNIQUE render-target sources referenced this
+        // frame and give each of them a single pass holding every batch and draw queued against it.
+        // That threw away the boundary between two public bind cycles of the same target: they
+        // shared one load action, so the second cycle's DiscardContents clear (and any explicit
+        // Clear()) simply did not happen. The list is now keyed on the SEGMENT -- the bind cycle --
+        // and every entry carries the segment it was issued in, so rebinding the same target
+        // creates a genuinely new pass. Ordering is by segment id, i.e. exactly the public order in
+        // which the cycles were opened; A -> B -> A therefore records three passes, not two.
+        struct PassSegment {
+            uint64_t        id        = 0;
+            VulkanRTSource* rt        = nullptr;
+            bool            hasClear  = false;
+            float           r = 0.f, g = 0.f, b = 0.f, a = 1.f;
+            float           depth     = 1.0f;
+            int             stencil   = 0;
+        };
+        std::vector<PassSegment> segments;
+        auto segmentFor = [&segments](uint64_t id, VulkanRTSource* rt) -> PassSegment& {
+            for (auto& seg : segments)
+                if (seg.id == id) return seg;
+            segments.push_back(PassSegment{ id, rt, false, 0.f, 0.f, 0.f, 1.f, 1.0f, 0 });
+            return segments.back();
+        };
+        // Task 875: a segment whose only content is a Clear() still needs its render pass recorded
+        // (matches FNA/XNA, where Clear() takes effect regardless of what is drawn afterward) —
+        // otherwise the target's colour image never leaves VK_IMAGE_LAYOUT_UNDEFINED.
+        for (const auto& c : pendingClears_) {
+            if (!c.rt) continue;
+            PassSegment& seg = segmentFor(c.segment, c.rt);
+            seg.hasClear = true;
+            seg.r = c.r; seg.g = c.g; seg.b = c.b; seg.a = c.a;
+            seg.depth = c.depth; seg.stencil = c.stencil;
+        }
+        for (const auto& entry : activeBatches_)
+            if (entry.rt) (void) segmentFor(entry.segment, entry.rt);
+        for (const auto& draw : pending3D_)
+            if (draw.rt) (void) segmentFor(draw.segment, draw.rt);
+        std::sort(segments.begin(), segments.end(),
+                  [](const PassSegment& l, const PassSegment& r) { return l.id < r.id; });
 
-        // REMED-GFX-074: a readback flush records exactly one target's pass. FlushDeferredRenderTarget
-        // only invokes this mode when `onlyRT` genuinely has pending work, so forcing it into usedRTs
-        // (even if the only queued entry was a bare Clear()) is always correct and never over-clears
-        // an untouched target.
-        if (rtOnly) { usedRTs.clear(); if (onlyRT) usedRTs.push_back(onlyRT); }
+        // REMED-GFX-074: a readback flush records exactly one target's passes and nothing else.
+        // FlushDeferredRenderTarget only invokes this mode when `onlyRT` genuinely has pending
+        // work, so keeping every segment that names it (even one whose only entry was a bare
+        // Clear()) is always correct and never touches an untouched target. REMED-GFX-140: it is
+        // "segments", plural — a target bound twice before its first readback owes two passes here
+        // just as it does at Present.
+        if (rtOnly)
+            segments.erase(std::remove_if(segments.begin(), segments.end(),
+                               [onlyRT](const PassSegment& seg) { return seg.rt != onlyRT; }),
+                           segments.end());
 
-        for (auto* rt : usedRTs) {
+        for (const auto& seg : segments) {
+            VulkanRTSource* rt = seg.rt;
             const uint32_t nColor = rt->GetColorAttachmentCount();
             const bool rtMsaa = rt->WantsMsaa();
             const bool hasDepth = rt->GetDepthFormat() != VK_FORMAT_UNDEFINED;
             // REMED-GFX-095: attachment order mirrors the render pass exactly:
             // [N color sources, optional N resolves, optional depth].
             const uint32_t depthIndex = rtMsaa ? nColor * 2 : nColor;
+            // REMED-GFX-140: this segment's own clear values. A segment that issued no Clear()
+            // keeps the pre-fix behaviour and falls back to the frame-global values -- the shared
+            // layer clears a DiscardContents target on every bind, so a discarding cycle always has
+            // its own; a preserving cycle's pass uses LOAD_OP_LOAD and never reads these at all.
+            const float segR = seg.hasClear ? seg.r : clearR_;
+            const float segG = seg.hasClear ? seg.g : clearG_;
+            const float segB = seg.hasClear ? seg.b : clearB_;
+            const float segA = seg.hasClear ? seg.a : clearA_;
+            const float segDepth   = seg.hasClear ? seg.depth   : clearDepth_;
+            const int   segStencil = seg.hasClear ? seg.stencil : clearStencil_;
             std::vector<VkClearValue> rtCv(depthIndex + (hasDepth ? 1u : 0u));
             for (uint32_t ci = 0; ci < nColor; ++ci)
-                rtCv[ci].color = { { clearR_, clearG_, clearB_, clearA_ } };
+                rtCv[ci].color = { { segR, segG, segB, segA } };
             if (rtMsaa)
                 for (uint32_t ri = nColor; ri < nColor * 2; ++ri)
                     rtCv[ri].color = {};
             if (hasDepth)
                 rtCv[depthIndex].depthStencil = {
-                    clearDepth_, static_cast<uint32_t>(clearStencil_)
+                    segDepth, static_cast<uint32_t>(segStencil)
                 };
             VkRenderPassBeginInfo rtRp{};
             rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -7352,8 +7420,8 @@ namespace CNA::Internal::Backends::Vulkan
             VkRect2D rtSc{ {0, 0}, { rtW, rtH } };
             vkCmdSetScissor(cb, 0, 1, &rtSc);
 
-            drawSpritesFor(rt, static_cast<float>(rtW), static_cast<float>(rtH));
-            draw3DFor(rt);
+            drawSpritesFor(rt, seg.id, static_cast<float>(rtW), static_cast<float>(rtH));
+            draw3DFor(rt, seg.id);
 
             vkCmdEndRenderPass(cb);
 
@@ -7367,13 +7435,13 @@ namespace CNA::Internal::Backends::Vulkan
         // backbuffer's pending work untouched, then close the command buffer.
         if (rtOnly) {
             activeBatches_.erase(std::remove_if(activeBatches_.begin(), activeBatches_.end(),
-                [onlyRT](const std::pair<std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot>,
-                                         VulkanRTSource*>& p) { return p.second == onlyRT; }),
+                [onlyRT](const PendingBatch& p) { return p.rt == onlyRT; }),
                 activeBatches_.end());
             pending3D_.erase(std::remove_if(pending3D_.begin(), pending3D_.end(),
                 [onlyRT](const Pending3DDraw& d) { return d.rt == onlyRT; }), pending3D_.end());
-            clearedRTs_.erase(std::remove(clearedRTs_.begin(), clearedRTs_.end(), onlyRT),
-                              clearedRTs_.end());
+            pendingClears_.erase(std::remove_if(pendingClears_.begin(), pendingClears_.end(),
+                [onlyRT](const PendingClear& c) { return c.rt == onlyRT; }),
+                pendingClears_.end());
             if (vkEndCommandBuffer(cb) != VK_SUCCESS)
                 throw std::runtime_error("vkEndCommandBuffer failed");
             return;
@@ -7426,12 +7494,18 @@ namespace CNA::Internal::Backends::Vulkan
                                                   : static_cast<float>(swapchainExtent_.width);
         const float vpH2D = (virtualHeight_ > 0) ? static_cast<float>(virtualHeight_)
                                                   : static_cast<float>(swapchainExtent_.height);
-        drawSpritesFor(nullptr, vpW2D, vpH2D);
-        draw3DFor(nullptr);
+        // The backbuffer keeps ONE pass per frame: its load action, MSAA resolve, deferred
+        // readback copy and PRESENT_SRC_KHR final layout all belong to the swapchain image this
+        // frame acquired, so every backbuffer bind cycle of the frame is replayed here in public
+        // order inside it (kAllSegments). Render targets are what REMED-GFX-140 segments; the
+        // interleaving of backbuffer work BETWEEN two render-target segments is recorded separately
+        // as REMED-GFX-143 rather than being changed under this task.
+        drawSpritesFor(nullptr, kAllSegments, vpW2D, vpH2D);
+        draw3DFor(nullptr, kAllSegments);
 
         activeBatches_.clear();
         pending3D_.clear();
-        clearedRTs_.clear();
+        pendingClears_.clear();
 
         vkCmdEndRenderPass(cb);
 
@@ -7791,13 +7865,48 @@ namespace CNA::Internal::Backends::Vulkan
                                                             multiSampleCount, mipMap);
     }
 
+    // REMED-GFX-140: open a new logical render pass. The counter advances on EVERY call, even
+    // when `rt` equals the currently bound target, because "bind A, draw, unbind, bind A again" is
+    // two logical passes with two independent load actions -- merging them is the defect this
+    // fixes. An advance that ends up with no queued entry costs nothing: RecordCommandBuffer builds
+    // its segment list from the entries themselves, so an empty segment produces no native pass.
+    void VulkanGraphicsBackend::BeginRenderPassSegmentEXT(VulkanRTSource* rt)
+    {
+        currentRT_ = rt;
+        ++currentSegment_;
+    }
+
+    // REMED-GFX-140 / Task 875: record this bind cycle's clear values, and mark the cycle as
+    // needing its render pass recorded even with no draw call (matching FNA/XNA, where Clear()
+    // takes effect regardless of what is drawn afterwards). Nothing is recorded while the
+    // backbuffer is bound: Phase 2 keeps reading the frame-global clear values it always has.
+    void VulkanGraphicsBackend::NoteRenderTargetClearEXT()
+    {
+        if (!currentRT_) return;
+        for (auto& c : pendingClears_) {
+            if (c.segment == currentSegment_) {
+                // A second Clear() inside one bind cycle: Vulkan delivers the colour through the
+                // pass load op and a pass has exactly one, so the last one wins. REMED-GFX-129 owns
+                // that limitation; it is deliberately not widened here.
+                c.rt = currentRT_;
+                c.r = clearR_; c.g = clearG_; c.b = clearB_; c.a = clearA_;
+                c.depth = clearDepth_; c.stencil = clearStencil_;
+                return;
+            }
+        }
+        pendingClears_.push_back({ currentSegment_, currentRT_,
+                                   clearR_, clearG_, clearB_, clearA_,
+                                   clearDepth_, clearStencil_ });
+    }
+
     void VulkanGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         if (rt == nullptr) {
-            currentRT_ = nullptr;
+            BeginRenderPassSegmentEXT(nullptr);
         } else {
             auto* vrt = static_cast<VulkanRenderTargetBackend*>(rt);
-            currentRT_ = vrt;
+            // BindAsRenderTarget() opens the segment; assigning currentRT_ here as well would only
+            // burn an id on an empty segment (harmless, but pointlessly noisy in the queues).
             vrt->BindAsRenderTarget();
         }
     }
@@ -7831,8 +7940,7 @@ namespace CNA::Internal::Backends::Vulkan
         clearDepth_ = depth;
         readbackStagingValid_ = false;  // new frame content invalidates the readback cache
         // Task 875: see Clear()'s identical fix.
-        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
-            clearedRTs_.push_back(currentRT_);
+        NoteRenderTargetClearEXT();
     }
 
     void VulkanGraphicsBackend::ClearDepth(float depth) { clearDepth_ = depth; readbackStagingValid_ = false; /* Vulkan depth-only clear not yet implemented */ }
@@ -7847,8 +7955,7 @@ namespace CNA::Internal::Backends::Vulkan
     {
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
-        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
-            clearedRTs_.push_back(currentRT_);
+        NoteRenderTargetClearEXT();
     }
 
     void VulkanGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
@@ -7856,8 +7963,7 @@ namespace CNA::Internal::Backends::Vulkan
         clearDepth_ = depth;
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
-        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
-            clearedRTs_.push_back(currentRT_);
+        NoteRenderTargetClearEXT();
     }
 
     void VulkanGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
@@ -7865,8 +7971,7 @@ namespace CNA::Internal::Backends::Vulkan
         clearR_ = r; clearG_ = g; clearB_ = b; clearA_ = a;
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
-        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
-            clearedRTs_.push_back(currentRT_);
+        NoteRenderTargetClearEXT();
     }
 
     void VulkanGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
@@ -7875,8 +7980,7 @@ namespace CNA::Internal::Backends::Vulkan
         clearDepth_ = depth;
         clearStencil_ = stencil;
         readbackStagingValid_ = false;
-        if (currentRT_ && std::find(clearedRTs_.begin(), clearedRTs_.end(), currentRT_) == clearedRTs_.end())
-            clearedRTs_.push_back(currentRT_);
+        NoteRenderTargetClearEXT();
     }
 
     void VulkanGraphicsBackend::SetDepthTestEnabled(bool v)  { depthTestEnabled_  = v; }
@@ -7907,6 +8011,10 @@ namespace CNA::Internal::Backends::Vulkan
         // values in one frame otherwise collapse to the single record-time read).
         d.blendFactorR = blendFactorR_; d.blendFactorG = blendFactorG_;
         d.blendFactorB = blendFactorB_; d.blendFactorA = blendFactorA_;
+        // REMED-GFX-140: tag the draw with the logical render pass (bind cycle) it was issued in,
+        // so RecordCommandBuffer replays it inside that cycle's own pass and no other. Every
+        // DrawXPrimitives() call site routes through here, so no site can forget it.
+        d.segment = currentSegment_;
         pending3D_.push_back(std::move(d));
     }
 
@@ -8069,13 +8177,13 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (!rt) return;
         activeBatches_.erase(std::remove_if(activeBatches_.begin(), activeBatches_.end(),
-            [rt](const std::pair<std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot>,
-                                 VulkanRTSource*>& p) { return p.second == rt; }),
+            [rt](const PendingBatch& p) { return p.rt == rt; }),
             activeBatches_.end());
         pending3D_.erase(std::remove_if(pending3D_.begin(), pending3D_.end(),
             [rt](const Pending3DDraw& d) { return d.rt == rt; }), pending3D_.end());
-        clearedRTs_.erase(std::remove(clearedRTs_.begin(), clearedRTs_.end(), rt),
-                          clearedRTs_.end());
+        pendingClears_.erase(std::remove_if(pendingClears_.begin(), pendingClears_.end(),
+            [rt](const PendingClear& c) { return c.rt == rt; }),
+            pendingClears_.end());
     }
 
     // REMED-GFX-074: record + submit ONLY `rt`'s off-screen pass now (no present) so its colour
@@ -8088,9 +8196,9 @@ namespace CNA::Internal::Backends::Vulkan
         if (!initialized_ || !rt || device_ == VK_NULL_HANDLE) return;
 
         auto hasPending = [this](VulkanRTSource* source) {
-            for (const auto& p : activeBatches_) if (p.second == source) return true;
-            for (const auto& d : pending3D_)     if (d.rt == source) return true;
-            for (auto* cleared : clearedRTs_)    if (cleared == source) return true;
+            for (const auto& p : activeBatches_)  if (p.rt == source) return true;
+            for (const auto& d : pending3D_)      if (d.rt == source) return true;
+            for (const auto& c : pendingClears_)  if (c.rt == source) return true;
             return false;
         };
 
@@ -8971,7 +9079,7 @@ namespace CNA::Internal::Backends::Vulkan
                 retiredMrtProxies_.emplace_back(frameGeneration_, std::move(mrtProxy_));
         };
         if (!renderTargets || count <= 0) {
-            currentRT_ = nullptr;
+            BeginRenderPassSegmentEXT(nullptr);
             retireMrtProxy();
             return;
         }
@@ -8990,7 +9098,6 @@ namespace CNA::Internal::Backends::Vulkan
                 if (!vrt)
                     throw std::runtime_error(
                         "Vulkan SetRenderTargets: 2D target is not a Vulkan render target");
-                currentRT_ = vrt;
                 vrt->BindAsRenderTarget();
             }
             return;
@@ -8999,7 +9106,7 @@ namespace CNA::Internal::Backends::Vulkan
         retireMrtProxy();
         mrtProxy_ = std::make_unique<VulkanMRTProxy>(
             this, renderTargets, static_cast<uint32_t>(count));
-        currentRT_ = mrtProxy_.get();
+        BeginRenderPassSegmentEXT(mrtProxy_.get());
     }
 
     // --- VulkanMRTProxy ---
@@ -9994,7 +10101,7 @@ namespace CNA::Internal::Backends::Vulkan
             // dangling-VulkanRTSource* hazard as the 2D render target destructor.
             for (auto& fp : faceProxies_) {
                 owner_->PurgeDeferredWorkForTarget(&fp);
-                if (owner_->currentRT_ == &fp) owner_->currentRT_ = nullptr;
+                if (owner_->currentRT_ == &fp) owner_->BeginRenderPassSegmentEXT(nullptr);
             }
         }
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
@@ -10027,14 +10134,17 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
     {
         if (owner_ && face >= 0 && face < 6)
-            owner_->currentRT_ = &faceProxies_[face];
+            owner_->BeginRenderPassSegmentEXT(&faceProxies_[face]);
     }
 
     void VulkanRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
         if (owner_) {
             for (auto& fp : faceProxies_)
-                if (owner_->currentRT_ == &fp) { owner_->currentRT_ = nullptr; return; }
+                if (owner_->currentRT_ == &fp) {
+                    owner_->BeginRenderPassSegmentEXT(nullptr);
+                    return;
+                }
         }
     }
 
