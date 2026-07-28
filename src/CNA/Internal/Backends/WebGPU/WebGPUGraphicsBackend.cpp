@@ -5782,19 +5782,24 @@ struct VSOut {
         colorAttachment.storeOp = WGPUStoreOp_Store;
         colorAttachment.clearValue = clearColor_;
 
-        // Depth/stencil deliberately keeps clearing on a PRESERVING target too, unlike the 2D
-        // sibling above. RenderTargetUsage is a colour contract in this project (Vulkan's own
-        // PreserveContents render pass has always used LOAD_OP_DONT_CARE for depth), and this
-        // cube's depth+stencil texture is ONE attachment shared by all six faces -- "preserving"
-        // it would hand face A whatever depth face B last wrote, which is worse than a defined
-        // clear, not better.
+        // REMED-GFX-142: depth/stencil now follows the same rule as the 2D sibling above, which is
+        // also FNA3D's own (its SDL_GPU driver loads both aspects unless a clear is pending, and
+        // its GL and D3D11 drivers preserve them because an FBO attachment and a DSV simply
+        // persist). This used to clear unconditionally on the reasoning that RenderTargetUsage is
+        // a colour contract and that one depth texture shared by six faces would "hand face A
+        // whatever depth face B last wrote" -- but FNA3D documents `preserveTargetContents` as
+        // storing the "color/depth/stencil" contents, and FNA's RenderTargetCube allocates exactly
+        // ONE glDepthStencilBuffer for the whole cube, so face A seeing face B's depth IS the
+        // reference behaviour rather than a hazard to design around.
+        const bool doClearDepthCube = clearDepthPending_ || discard;
+        const bool doClearStencilCube = clearStencilPending_ || discard;
         WGPURenderPassDepthStencilAttachment depthAttachment{};
         depthAttachment.view = target->DepthView();
-        depthAttachment.depthLoadOp = WGPULoadOp_Clear;
+        depthAttachment.depthLoadOp = doClearDepthCube ? WGPULoadOp_Clear : WGPULoadOp_Load;
         depthAttachment.depthStoreOp = WGPUStoreOp_Store;
         depthAttachment.depthClearValue = clearDepth_;
         depthAttachment.depthReadOnly = false;
-        depthAttachment.stencilLoadOp = WGPULoadOp_Clear;
+        depthAttachment.stencilLoadOp = doClearStencilCube ? WGPULoadOp_Clear : WGPULoadOp_Load;
         depthAttachment.stencilStoreOp = WGPUStoreOp_Store;
         depthAttachment.stencilClearValue = clearStencil_;
         depthAttachment.stencilReadOnly = false;

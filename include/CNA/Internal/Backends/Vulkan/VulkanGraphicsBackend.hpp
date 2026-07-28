@@ -53,6 +53,21 @@ namespace CNA::Internal::Backends::Vulkan
         /// vkCmdClearAttachments. Default true: the MSAA and MRT render passes are
         /// DiscardContents-shaped unconditionally. Overridden where RenderTargetUsage decides.
         virtual bool          ColorLoadOpIsClearEXT()      const { return true; }
+        /**
+         * REMED-GFX-142: which depth/stencil storage this source renders into, as an identity.
+         *
+         * Colour is per-source -- a RenderTarget2D owns its image, a cube face owns its layer --
+         * but depth/stencil is per TARGET: FNA's RenderTargetCube allocates exactly one
+         * glDepthStencilBuffer for the whole cube and CNA mirrors that, so all six FaceProxies
+         * share one depth image. REMED-GFX-074's single-target readback flush filters recorded
+         * segments by `seg.rt == onlyRT`, which is right for colour and wrong for that shared
+         * depth: reading face B replayed only face B's bind cycles, so face A's depth writes were
+         * still pending and face B's own earlier depth clear was recorded AFTER them. The filter
+         * asks this instead, so every face of one cube flushes together and the shared buffer sees
+         * the public command order. Default `this` -- a source with no shared depth is its own
+         * group, and the filter degenerates to the pointer comparison it always was.
+         */
+        virtual const void*   DepthStencilOwnerEXT()      const { return this; }
         virtual ~VulkanRTSource() = default;
     };
 
@@ -779,6 +794,13 @@ namespace CNA::Internal::Backends::Vulkan
                 // multisampled face and record it as an ordered vkCmdClearAttachments on a
                 // preserving one.
                 return !preserveContents;
+            }
+            /// REMED-GFX-142: all six faces of one cube share `depthImage_`, so they are one
+            /// depth/stencil group. `image` is the cube's own colour image handle, identical for
+            /// all six proxies of this cube and distinct from every other target's.
+            const void* DepthStencilOwnerEXT() const override
+            {
+                return static_cast<const void*>(image);
             }
             void MaybeGenerateMips(VkCommandBuffer cb) override;
         };

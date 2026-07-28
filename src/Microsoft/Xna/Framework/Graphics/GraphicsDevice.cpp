@@ -319,10 +319,30 @@ namespace Microsoft::Xna::Framework::Graphics
         bool hasRealDepthBuffer;
         if (!currentRenderTargets_.empty())
         {
-            const auto* rt = dynamic_cast<RenderTarget2D*>(currentRenderTargets_[0].getRenderTargetProperty());
-            const bool depthFormatRequested = rt && rt->getDepthStencilFormatProperty() != DepthFormat::None;
-            const auto* rtBackend = rt ? rt->GetRenderTargetBackend() : nullptr;
-            hasRealDepthBuffer = rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+            // REMED-GFX-142: a bound RenderTargetCube has to be asked too. This branch only ever
+            // recognized RenderTarget2D, so a cube binding fell through to `rt == nullptr` ->
+            // `hasRealDepthBuffer == false` -> `options &= ClearOptions::Target` -- every
+            // ClearOptions::DepthBuffer and ClearOptions::Stencil issued while a cube face was
+            // bound was silently dropped, on every backend, whatever depth format the cube
+            // actually had. SetRenderTargets already asks both target kinds (see its own
+            // `IsRenderTarget2D()` branch); this is the same question at the other call site.
+            Texture* bound = currentRenderTargets_[0].getRenderTargetProperty();
+            const auto* rt = dynamic_cast<RenderTarget2D*>(bound);
+            const auto* cube = (rt == nullptr) ? dynamic_cast<RenderTargetCube*>(bound) : nullptr;
+            if (cube != nullptr)
+            {
+                const bool depthFormatRequested =
+                    cube->getDepthStencilFormatProperty() != DepthFormat::None;
+                const auto* cubeBackend = cube->GetRenderTargetCubeBackend();
+                hasRealDepthBuffer =
+                    cubeBackend && cubeBackend->HasRealDepthBuffer(depthFormatRequested);
+            }
+            else
+            {
+                const bool depthFormatRequested = rt && rt->getDepthStencilFormatProperty() != DepthFormat::None;
+                const auto* rtBackend = rt ? rt->GetRenderTargetBackend() : nullptr;
+                hasRealDepthBuffer = rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+            }
         }
         else
         {
@@ -2264,7 +2284,15 @@ namespace Microsoft::Xna::Framework::Graphics
             const auto* rtBackend = renderTarget->GetRenderTargetBackend();
             const bool hasDepthBuffer =
                 rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
-            Clear(hasDepthBuffer ? (ClearOptions::Target | ClearOptions::DepthBuffer) : ClearOptions::Target,
+            // REMED-GFX-142: ClearOptions::Stencil belongs here. FNA's own SetRenderTargets ends
+            // with Clear(Target | DepthBuffer | Stencil, DiscardColor, Viewport.MaxDepth, 0), and
+            // FNA3D documents `preserveTargetContents` as storing the "color/depth/stencil"
+            // contents -- so DiscardContents has a DETERMINISTIC replacement for all three
+            // aspects, not two. Without the flag a DiscardContents target kept its previous
+            // stencil for ever, which is neither preservation nor discard.
+            Clear(hasDepthBuffer
+                      ? (ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil)
+                      : ClearOptions::Target,
                   Color(0, 0, 0, 255), 1.0f, 0);
         }
     }
@@ -2418,7 +2446,10 @@ namespace Microsoft::Xna::Framework::Graphics
                 ? firstDescriptor.GetRenderTarget2D()->HasRealDepthBuffer(depthFormatRequested)
                 : firstDescriptor.GetRenderTargetCube()->HasRealDepthBuffer(
                     depthFormatRequested);
-            Clear(hasDepthBuffer ? (ClearOptions::Target | ClearOptions::DepthBuffer) : ClearOptions::Target,
+            // REMED-GFX-142: see the singular overload's identical Stencil rationale.
+            Clear(hasDepthBuffer
+                      ? (ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil)
+                      : ClearOptions::Target,
                   Color(0, 0, 0, 255), 1.0f, 0);
         }
     }

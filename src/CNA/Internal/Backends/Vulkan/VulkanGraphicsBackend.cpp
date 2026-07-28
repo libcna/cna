@@ -100,6 +100,14 @@ namespace CNA::Internal::Backends::Vulkan
         throw std::runtime_error("Vulkan: no suitable depth format for requested DepthFormat");
     }
 
+    namespace
+    {
+        /// REMED-GFX-142: declared here, defined next to its REMED-GFX-129 sibling further down --
+        /// the render-target constructors need it for their up-front depth layout transition, which
+        /// must cover the stencil aspect too when the picked format actually has one.
+        bool VkDepthFormatHasStencil(VkFormat f);
+    }
+
     static int VertexCountForPrimitives(PrimitiveType pt, int n)
     {
         switch (pt) {
@@ -626,6 +634,36 @@ namespace CNA::Internal::Backends::Vulkan
             vkCmdPipelineBarrier(initCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
                                  0, nullptr, 0, nullptr, 1, &initBarrier);
+            // REMED-GFX-142: a PRESERVING target's RT render pass loads depth and stencil, and
+            // VK_ATTACHMENT_LOAD_OP_LOAD declares initialLayout = DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+            // -- which the depth image is not in until something puts it there. One transition
+            // here, on the command buffer the colour image is already using, makes the FIRST bind
+            // legal; every later one finds the layout the pass's own finalLayout left. A
+            // discarding target keeps LOAD_OP_CLEAR with initialLayout UNDEFINED and needs none of
+            // this, so nothing is submitted for it. Contents stay undefined either way until the
+            // target is first drawn into or cleared -- the same "a brand-new preserving target has
+            // no previous content" rule REMED-GFX-136 established for colour.
+            if (depthImage_ != VK_NULL_HANDLE && preserveContents_)
+            {
+                VkImageMemoryBarrier depthBarrier{};
+                depthBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                depthBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+                depthBarrier.newLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                depthBarrier.image               = depthImage_;
+                depthBarrier.subresourceRange    = {
+                    static_cast<VkImageAspectFlags>(
+                        VK_IMAGE_ASPECT_DEPTH_BIT |
+                        (VkDepthFormatHasStencil(depthVkFormat_) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0u)),
+                    0, 1, 0, 1 };
+                depthBarrier.srcAccessMask       = 0;
+                depthBarrier.dstAccessMask       = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                vkCmdPipelineBarrier(initCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                     VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
+                                     0, nullptr, 0, nullptr, 1, &depthBarrier);
+            }
             owner_->EndOneTimeCommands(initCb);
         }
 
@@ -2192,16 +2230,31 @@ namespace CNA::Internal::Backends::Vulkan
         colorAtt.initialLayout  = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         colorAtt.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+        // REMED-GFX-142: depth and stencil follow the colour attachment's rule instead of being
+        // thrown away. This used to be DONT_CARE/DONT_CARE in the PRESERVING variant on the
+        // reasoning that "its previous content is never needed across RT passes" -- but FNA3D
+        // documents `preserveTargetContents` as storing the "color/depth/stencil" contents, and
+        // FNA's own GL and D3D11 drivers preserve all three because an FBO attachment and a DSV
+        // simply persist. DONT_CARE makes the contents UNDEFINED, so a depth-tested draw into a
+        // rebound PreserveContents target read whatever the driver happened to leave; llvmpipe
+        // retains it, which is why this looked correct here and would not on a tiler.
+        // STORE is what makes the next cycle's LOAD meaningful. The discarding variant keeps
+        // CLEAR/DONT_CARE exactly as before -- it is cleared again on every bind anyway.
         VkAttachmentDescription depthAtt{};
         depthAtt.format         = depthFmt;
         depthAtt.samples        = VK_SAMPLE_COUNT_1_BIT;
-        // Depth uses DONT_CARE/UNDEFINED even in the PreserveContents variant: the depth image
-        // starts in UNDEFINED and its previous content is never needed across RT passes.
-        depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        depthAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        depthAtt.stencilStoreOp = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        // LOAD_OP_LOAD needs a defined layout, which UNDEFINED is not: the owning target
+        // transitions its depth image once at construction (see VulkanRenderTargetBackend's and
+        // VulkanRenderTargetCubeBackend's init barrier) so the FIRST preserving bind is legal, and
+        // every later one finds the finalLayout this pass itself leaves behind.
+        depthAtt.initialLayout  = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED
+                                                  : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference colorRef{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
@@ -2301,8 +2354,12 @@ namespace CNA::Internal::Backends::Vulkan
         // draw) is what makes the CONTENT defined -- the same "a brand-new preserving target has no
         // previous content" rule the non-MSAA load variant has always had.
         //
-        // Depth/stencil is untouched by this: it keeps CLEAR/DONT_CARE in both variants, so
-        // REMED-GFX-142's open disagreement is neither widened nor silently resolved here.
+        // REMED-GFX-142 closed that: depth/stencil now follows the same discardContents rule the
+        // colour attachment does, on this multisampled leg too. Multisampled depth is never
+        // resolved -- FNA allocates one multisampled depth renderbuffer and nothing reads it back
+        // -- so preserving it means the MULTISAMPLE depth attachment itself has to survive the
+        // bind cycle, which is exactly what LOAD/STORE buys and what CLEAR/DONT_CARE made
+        // impossible. No depth resolve was added to fake it.
         VkAttachmentDescription colorAtt{};
         colorAtt.format         = swapchainFormat_;
         colorAtt.samples        = sampleCount_;
@@ -2326,14 +2383,18 @@ namespace CNA::Internal::Backends::Vulkan
         resolveAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
         resolveAtt.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+        // REMED-GFX-142: identical rule to the single-sample variant's depth attachment.
         VkAttachmentDescription depthAtt{};
         depthAtt.format         = depthFmt;
         depthAtt.samples        = sampleCount_;
-        depthAtt.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAtt.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAtt.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAtt.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAtt.loadOp         = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        depthAtt.storeOp        = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.stencilLoadOp  = discardContents ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        depthAtt.stencilStoreOp = discardContents ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                  : VK_ATTACHMENT_STORE_OP_STORE;
+        depthAtt.initialLayout  = discardContents ? VK_IMAGE_LAYOUT_UNDEFINED
+                                                  : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         depthAtt.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference colorRef   { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
@@ -6979,6 +7040,15 @@ namespace CNA::Internal::Backends::Vulkan
         // readback flush -- Phase 2 (backbuffer) and the backbuffer readback are skipped, and only
         // this target's deferred entries are consumed at the end (see the cleanup below).
         const bool rtOnly = (mode == RecordMode::RenderTargetsOnly);
+        // REMED-GFX-142: what a RenderTargetsOnly flush counts as "this target". Every site that
+        // decides what to record, what to reset and what to consume must use the SAME predicate,
+        // or a cube face recorded here would be replayed again at Present. See
+        // VulkanRTSource::DepthStencilOwnerEXT for why a cube's six faces are one group.
+        const void* onlyGroup = (rtOnly && onlyRT != nullptr) ? onlyRT->DepthStencilOwnerEXT()
+                                                              : nullptr;
+        auto inFlushGroup = [onlyGroup](const VulkanRTSource* rt) {
+            return rt != nullptr && rt->DepthStencilOwnerEXT() == onlyGroup;
+        };
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         if (vkBeginCommandBuffer(cb, &bi) != VK_SUCCESS)
@@ -6994,10 +7064,11 @@ namespace CNA::Internal::Backends::Vulkan
         {
             std::vector<VulkanOcclusionQueryBackend*> queriesThisFrame;
             for (const auto& draw : pending3D_) {
-                // REMED-GFX-074: in a RenderTargetsOnly readback flush only `onlyRT`'s draws are
-                // recorded, so only their queries are reset/recorded here; every other query is
-                // left untouched for the real Present().
-                if (rtOnly && draw.rt != onlyRT) continue;
+                // REMED-GFX-074: in a RenderTargetsOnly readback flush only this target's draws
+                // are recorded, so only their queries are reset/recorded here; every other query is
+                // left untouched for the real Present(). REMED-GFX-142: "this target" is the
+                // depth/stencil group, so a cube's six faces count as one.
+                if (rtOnly && !inFlushGroup(draw.rt)) continue;
                 if (draw.occlusionQuery &&
                     std::find(queriesThisFrame.begin(), queriesThisFrame.end(), draw.occlusionQuery)
                         == queriesThisFrame.end())
@@ -7750,9 +7821,18 @@ namespace CNA::Internal::Backends::Vulkan
         // "segments", plural — a target bound twice before its first readback owes two passes here
         // just as it does at Present. `onlyRT` is never null, so this also drops every backbuffer
         // segment, leaving the backbuffer's pending work for the real Present exactly as before.
+        // REMED-GFX-142: the filter is by depth/stencil GROUP, not by source. All six faces of a
+        // RenderTargetCube render into one shared depth image (see VulkanRTSource::
+        // DepthStencilOwnerEXT), so keeping only the face being read replayed that face's own
+        // earlier depth clear AFTER another face's still-pending depth writes -- the shared buffer
+        // saw an order the public API never expressed. Grouping by owner keeps this "exactly one
+        // TARGET's passes and nothing else": a RenderTargetCube is one target, and for every other
+        // source the default `this` makes it the identical pointer comparison it always was.
         if (rtOnly)
             segments.erase(std::remove_if(segments.begin(), segments.end(),
-                               [onlyRT](const PassSegment& seg) { return seg.rt != onlyRT; }),
+                               [&inFlushGroup](const PassSegment& seg) {
+                                   return !inFlushGroup(seg.rt);
+                               }),
                            segments.end());
 
         // REMED-GFX-143: the swapchain image must be cleared/stored and left in PRESENT_SRC_KHR
@@ -8002,13 +8082,17 @@ namespace CNA::Internal::Backends::Vulkan
         // does not replay them (no double-render), leaving every other target's and the
         // backbuffer's pending work untouched, then close the command buffer.
         if (rtOnly) {
+            // REMED-GFX-142: consume exactly what was recorded above -- the whole depth/stencil
+            // group, not just `onlyRT` -- so Present() never replays a cube face this flush
+            // already emitted.
             activeBatches_.erase(std::remove_if(activeBatches_.begin(), activeBatches_.end(),
-                [onlyRT](const PendingBatch& p) { return p.rt == onlyRT; }),
+                [&inFlushGroup](const PendingBatch& p) { return inFlushGroup(p.rt); }),
                 activeBatches_.end());
             pending3D_.erase(std::remove_if(pending3D_.begin(), pending3D_.end(),
-                [onlyRT](const Pending3DDraw& d) { return d.rt == onlyRT; }), pending3D_.end());
+                [&inFlushGroup](const Pending3DDraw& d) { return inFlushGroup(d.rt); }),
+                pending3D_.end());
             pendingClears_.erase(std::remove_if(pendingClears_.begin(), pendingClears_.end(),
-                [onlyRT](const PendingClear& c) { return c.rt == onlyRT; }),
+                [&inFlushGroup](const PendingClear& c) { return inFlushGroup(c.rt); }),
                 pendingClears_.end());
             if (vkEndCommandBuffer(cb) != VK_SUCCESS)
                 throw std::runtime_error("vkEndCommandBuffer failed");
@@ -10615,6 +10699,37 @@ namespace CNA::Internal::Backends::Vulkan
             dv.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
             if (vkCreateImageView(dev, &dv, nullptr, &depthView_) != VK_SUCCESS)
                 throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateImageView (depth) failed");
+
+            // REMED-GFX-142: exact counterpart of VulkanRenderTargetBackend's own depth barrier.
+            // A preserving cube's RT render pass now loads depth/stencil, and LOAD_OP_LOAD
+            // declares initialLayout = DEPTH_STENCIL_ATTACHMENT_OPTIMAL, so the shared depth image
+            // has to be in that layout before the first face is ever bound. ONE image for all six
+            // faces is deliberate and stays: FNA's RenderTargetCube allocates exactly one
+            // glDepthStencilBuffer per cube, so depth is a per-TARGET resource that every face
+            // shares -- unlike REMED-GFX-141's per-face multisample COLOUR storage.
+            if (preserveContents_)
+            {
+                VkCommandBuffer depthCb = owner_->BeginOneTimeCommands();
+                VkImageMemoryBarrier depthBarrier{};
+                depthBarrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                depthBarrier.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+                depthBarrier.newLayout           = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                depthBarrier.image               = depthImage_;
+                depthBarrier.subresourceRange    = {
+                    static_cast<VkImageAspectFlags>(
+                        VK_IMAGE_ASPECT_DEPTH_BIT |
+                        (VkDepthFormatHasStencil(depthVkFormat_) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0u)),
+                    0, 1, 0, 1 };
+                depthBarrier.srcAccessMask       = 0;
+                depthBarrier.dstAccessMask       = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                vkCmdPipelineBarrier(depthCb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                     VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
+                                     0, nullptr, 0, nullptr, 1, &depthBarrier);
+                owner_->EndOneTimeCommands(depthCb);
+            }
         }
 
         // --- Per-face MSAA color image (Task 903; REMED-GFX-141): ONE multisampled 2D image with

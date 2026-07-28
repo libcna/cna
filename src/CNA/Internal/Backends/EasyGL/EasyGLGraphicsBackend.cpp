@@ -1839,7 +1839,14 @@ void main()
         // restore it. No-op fast path when the mask is the default All.
         const bool maskActive = HasRestrictedActiveColorWriteMask();
         if (maskActive) ForceAllColorWriteMasks();
-        device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
+        // REMED-GFX-142: COLOUR ONLY. This is the backend entry point GraphicsDevice::Clear routes
+        // a bare ClearOptions::Target to, and it used to add ClearFlags::Depth -- so asking XNA to
+        // clear only the colour target silently wiped the depth buffer with it, on the one backend
+        // that did this. Every clear that is meant to include depth has its own entry point
+        // (ClearColorAndDepth, ClearColorDepthAndStencil, ...), including the single-argument
+        // public overload, which GraphicsDevice::Clear(const Color&) expands to
+        // Target | DepthBuffer | Stencil precisely so this one does not have to guess.
+        device.clear(::easygl::ClearFlags::Color);
         if (maskActive) ApplyCurrentColorWriteMasks();
     }
 
