@@ -458,6 +458,52 @@ namespace CNA::Internal::Backends::WebGPU
         std::uint32_t sampleCount = 1;
     };
 
+    /**
+     * @brief REMED-GFX-116: the complete GraphicsDevice.Viewport captured BY VALUE at the exact
+     *        public draw call that queued a deferred command.
+     *
+     * This backend defers every draw of a bind cycle into one render pass that is recorded later.
+     * The viewport is genuinely dynamic wgpu-native pass state, so it may be recorded late -- but
+     * it must not be RESOLVED late: reading the backend's live viewportX_/.../viewportMaxDepth_
+     * members while recording gives every already-queued draw whatever viewport happens to be
+     * current at flush time, which is exactly the defect this type removes. All six XNA Viewport
+     * fields travel with the command; nothing here is a pointer to, or an index into, mutable
+     * state, and nothing here participates in any pipeline cache key (a viewport change must never
+     * create a pipeline variant or split a render pass).
+     */
+    struct WebGPUViewportSnapshot
+    {
+        /// False when no GraphicsDevice.Viewport was ever set; replay then uses the whole target.
+        bool set = false;
+        int x = 0;
+        int y = 0;
+        int width = 0;
+        int height = 0;
+        float minDepth = 0.0f;
+        float maxDepth = 1.0f;
+    };
+
+    /**
+     * @brief REMED-GFX-116: one render pass's viewport bookkeeping.
+     *
+     * Holds the target extent every captured snapshot is clamped against plus the exact values
+     * last handed to wgpuRenderPassEncoderSetViewport, so a run of draws that share a viewport
+     * issues one native call instead of one per draw. Correctness never depends on that skip --
+     * dropping it would only add redundant identical calls.
+     */
+    struct WebGPUPassViewportState
+    {
+        int targetWidth = 0;
+        int targetHeight = 0;
+        bool applied = false;
+        float x = 0.0f;
+        float y = 0.0f;
+        float width = 0.0f;
+        float height = 0.0f;
+        float minDepth = 0.0f;
+        float maxDepth = 1.0f;
+    };
+
     class WebGPUSpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:
@@ -530,14 +576,16 @@ namespace CNA::Internal::Backends::WebGPU
             // BlendState pointer, live backend state, texture identity, sprite identity, or target
             // object identity participates in replay or pipeline selection.
             WebGPUSpriteBlendSnapshot blend{};
-            // REMED-GFX-072: the GraphicsDevice.Viewport that was active when this sprite was
-            // enqueued. The vertices above are baked VIEWPORT-LOCAL (normalized by Viewport.W/H)
-            // when viewportCustom is true; RenderSprites() then sets the rasterizer viewport to this
-            // captured sub-region per draw, so a viewport restore before Present cannot mis-place it
-            // (WebGPU records the pass viewport live at flush time, unlike Vulkan/SdlGpu snapshots).
+            // REMED-GFX-072: true when the Viewport active at enqueue time was a genuine
+            // sub-region of the target, in which case the vertices above are baked VIEWPORT-LOCAL
+            // (normalized by Viewport.Width/Height) instead of target-relative. This is purely the
+            // NDC-baking decision; where the sprite LANDS is driven by the snapshot below.
             bool viewportCustom = false;
-            int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
-            float viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
+            // REMED-GFX-116: the complete Viewport active at this sprite's own public Draw call,
+            // captured unconditionally. GFX-072 captured it only for a genuine sub-region, so a
+            // sprite baked target-relative was still replayed under whatever viewport was live at
+            // flush time -- setting a sub-Viewport after the batch, before the flush, squeezed it.
+            WebGPUViewportSnapshot viewport{};
         };
 
         struct SpritePipelineKey
@@ -612,6 +660,24 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] std::size_t GetUncapturedErrorCountEXT() const noexcept
         {
             return uncapturedErrorCount_.load();
+        }
+        /// REMED-GFX-116: native wgpuRenderPassEncoderSetViewport calls issued since device
+        /// creation. Its permanent regression asserts the exact count for known draw sequences,
+        /// so a per-viewport render-pass split or a per-draw redundant call cannot creep back in.
+        [[nodiscard]] std::size_t GetSetViewportCallCountEXT() const noexcept
+        {
+            return setViewportCallCount_;
+        }
+        /// REMED-GFX-116: render passes begun since device creation. A viewport change is dynamic
+        /// pass state and must never open a new pass.
+        [[nodiscard]] std::size_t GetRenderPassCountEXT() const noexcept
+        {
+            return renderPassCount_;
+        }
+        /// REMED-GFX-116: wgpuQueueSubmit calls since device creation, for the same reason.
+        [[nodiscard]] std::size_t GetQueueSubmitCountEXT() const noexcept
+        {
+            return queueSubmitCount_;
         }
 
         void Clear(float r, float g, float b, float a) override;
@@ -830,9 +896,43 @@ namespace CNA::Internal::Backends::WebGPU
         // requested count in [2,4] rounds down to 1 unless 4x is supported (in which case it
         // rounds UP to 4, since 4 is the only value above 1), and anything >= 4 clamps down to 4.
         [[nodiscard]] int PickSampleCount(int requestedMultiSampleCount);
-        void RenderSprites(WGPURenderPassEncoder pass, std::uint32_t targetWidth,
-                           std::uint32_t targetHeight, WGPUTextureFormat targetFormat,
+        // REMED-GFX-116: the target extent used to be passed in only to clamp the per-sprite
+        // viewport; that clamp now lives in ApplyDrawViewport(), against the pass state
+        // BeginPassViewport() recorded, so every family clamps identically.
+        void RenderSprites(WGPURenderPassEncoder pass, WGPUTextureFormat targetFormat,
                            std::uint32_t targetSampleCount);
+        /**
+         * @brief REMED-GFX-116: the complete GraphicsDevice.Viewport as it stands right now.
+         *
+         * Called by every Queue*Draw()/QueueSprite() at the public draw call, so the returned
+         * value can never observe a later SetViewport().
+         *
+         * @return A by-value snapshot of all six XNA Viewport fields.
+         */
+        [[nodiscard]] WebGPUViewportSnapshot CaptureViewport() const noexcept;
+        /**
+         * @brief REMED-GFX-116: starts a render pass's viewport bookkeeping.
+         *
+         * Sets the pass viewport to the whole target -- deliberately NOT to the live backend
+         * viewport, which is the state every deferred draw must be independent of -- and records
+         * it as the currently applied value. Every draw then applies its own captured snapshot.
+         *
+         * @param pass The render pass encoder that was just begun.
+         * @param targetWidth Width in pixels of the pass's colour target.
+         * @param targetHeight Height in pixels of the pass's colour target.
+         */
+        void BeginPassViewport(WGPURenderPassEncoder pass, int targetWidth, int targetHeight);
+        /**
+         * @brief REMED-GFX-116: makes one queued command's captured Viewport current.
+         *
+         * Clamps the snapshot to the pass target exactly as the pass-level code always did, then
+         * calls wgpuRenderPassEncoderSetViewport only when the resulting six values differ from
+         * what the pass already has.
+         *
+         * @param pass The render pass encoder being recorded.
+         * @param snapshot The Viewport captured when the draw was queued.
+         */
+        void ApplyDrawViewport(WGPURenderPassEncoder pass, const WebGPUViewportSnapshot& snapshot);
         void RenderColoredDraws(WGPURenderPassEncoder pass);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                        WGPUIndexFormat stripIndexFormat,
@@ -1023,6 +1123,15 @@ namespace CNA::Internal::Backends::WebGPU
         int viewportH_ = 0;
         float viewportMinDepth_ = 0.0f;
         float viewportMaxDepth_ = 1.0f;
+        // REMED-GFX-116: pass-local viewport bookkeeping, rebuilt at the top of every render pass
+        // and consumed only while that pass is being recorded. It holds the target extent the
+        // captured snapshots are clamped against and the last values actually handed to
+        // wgpuRenderPassEncoderSetViewport -- it is NOT a source of viewport values (those come
+        // only from each command's own WebGPUViewportSnapshot).
+        WebGPUPassViewportState passViewport_{};
+        std::size_t setViewportCallCount_ = 0;
+        std::size_t renderPassCount_ = 0;
+        std::size_t queueSubmitCount_ = 0;
         float blendFactorR_ = 1.0f;
         float blendFactorG_ = 1.0f;
         float blendFactorB_ = 1.0f;
@@ -1121,6 +1230,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
         };
         WGPUShaderModule coloredShader_ = nullptr;
         WGPUBindGroupLayout coloredBindGroupLayout_ = nullptr;
@@ -1157,6 +1269,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
             // Not shadow-copied like vertex/index data: a bound Texture2D's WebGPUTextureBackend
             // is owned by long-lived game/content state (unlike DrawUserPrimitives' transient
             // vertex buffers), so it is guaranteed to still be alive when this command actually
@@ -1243,6 +1358,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
             const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -1328,6 +1446,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
             const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -1391,6 +1512,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
             const IWebGPUSamplable* texture0 = nullptr;
             const IWebGPUSamplable* texture1 = nullptr;
             int textureFilter = 0;
@@ -1465,6 +1589,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
             /// EnvironmentMapEffect::Texture -- may legitimately be null (falls back to a 1x1
             /// white texture at render time), unlike every other stride-32+ effect family, which
             /// requires a non-null texture0 at dispatch time.
@@ -1554,6 +1681,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
         };
         void CreateInstancedResources();
         void DestroyInstancedResources();
@@ -1615,6 +1745,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
             const IWebGPUSamplable* baseColorTexture = nullptr;
             const IWebGPUSamplable* normalMap = nullptr;
             const IWebGPUSamplable* metallicRoughnessMap = nullptr;
@@ -1703,6 +1836,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
             const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -1773,6 +1909,9 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
+            /// REMED-GFX-116: the complete GraphicsDevice.Viewport active at this draw's own
+            /// public call, captured by value. Never resolved from live state during replay.
+            WebGPUViewportSnapshot viewport{};
             const IWebGPUSamplable* baseColorTexture = nullptr;
             const IWebGPUSamplable* normalMap = nullptr;
             const IWebGPUSamplable* metallicRoughnessMap = nullptr;

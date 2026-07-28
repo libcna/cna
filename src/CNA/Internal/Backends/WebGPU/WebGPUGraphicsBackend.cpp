@@ -4392,6 +4392,9 @@ struct VertexOutput {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         // EnvironmentMapEffect::Texture/EnvironmentMap are both genuinely optional (unlike every
         // other stride-32+ effect family's dispatch gate) -- null falls back to the 1x1 white
         // texture/cube at render time, matching VulkanGraphicsBackend's own default-white fallback.
@@ -4501,6 +4504,8 @@ struct VertexOutput {
                                                                   command.blend, command.blendParams,
                                                                   command.cullMode, command.wireframe,
                                                                   command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -4741,6 +4746,8 @@ struct VertexOutput {
                                                                      command.blend, command.blendParams,
                                                                      command.cullMode, command.wireframe,
                                                                      command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
@@ -4986,7 +4993,12 @@ struct VSOut {
             passDescriptor.colorAttachmentCount = 1;
             passDescriptor.colorAttachments = &colorAttachment;
             WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+            ++renderPassCount_;
+            // Internal mip-blit pass: nothing public is queued into it, so it neither reads nor
+            // needs a captured Viewport. It is still counted (REMED-GFX-116's diagnostics measure
+            // every native pass/setViewport this backend issues, not a filtered subset).
             wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(dstW), static_cast<float>(dstH), 0.0f, 1.0f);
+            ++setViewportCallCount_;
             wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, static_cast<std::uint32_t>(dstW), static_cast<std::uint32_t>(dstH));
             wgpuRenderPassEncoderSetPipeline(pass, mipBlitPipeline_);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
@@ -5003,6 +5015,7 @@ struct VSOut {
         WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
         wgpuCommandEncoderRelease(encoder);
         wgpuQueueSubmit(queue_, 1, &commandBuffer);
+        ++queueSubmitCount_;
         wgpuCommandBufferRelease(commandBuffer);
 
         for (WGPUBindGroup bg : pendingGroups) wgpuBindGroupRelease(bg);
@@ -5152,15 +5165,13 @@ struct VSOut {
         command.addressV = addressV;
         command.blend = blendSnapshot;
         command.viewportCustom = customViewport;
-        if (customViewport)
-        {
-            command.viewportX = viewportX_;
-            command.viewportY = viewportY_;
-            command.viewportW = viewportW_;
-            command.viewportH = viewportH_;
-            command.viewportMinDepth = viewportMinDepth_;
-            command.viewportMaxDepth = viewportMaxDepth_;
-        }
+        // REMED-GFX-116: capture the Viewport for EVERY sprite, not only a sub-region one.
+        // GFX-072 captured only the custom case, so a target-relative sprite still inherited
+        // whatever viewport the pass resolved live at flush time -- setting a sub-Viewport after
+        // the batch but before the flush squeezed it into that sub-region. The two fields are
+        // independent: viewportCustom decides how the NDC above was baked, the snapshot decides
+        // where the rasterizer puts it.
+        command.viewport = CaptureViewport();
         const float rgba[4] = {
             static_cast<float>(color.getRProperty()) / 255.0f,
             static_cast<float>(color.getGProperty()) / 255.0f,
@@ -5197,8 +5208,7 @@ struct VSOut {
         framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::RenderSprites(WGPURenderPassEncoder pass, std::uint32_t targetWidth,
-                                              std::uint32_t targetHeight,
+    void WebGPUGraphicsBackend::RenderSprites(WGPURenderPassEncoder pass,
                                               WGPUTextureFormat targetFormat,
                                               std::uint32_t targetSampleCount)
     {
@@ -5223,16 +5233,6 @@ struct VSOut {
             vertices.insert(vertices.end(), command.vertices.begin(), command.vertices.end());
         wgpuQueueWriteBuffer(queue_, spriteVertexBuffer_, 0, vertices.data(), vertices.size() * sizeof(SpriteVertex));
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, spriteVertexBuffer_, 0, vertices.size() * sizeof(SpriteVertex));
-
-        // REMED-GFX-072: does any sprite carry a custom Viewport? If so, drive the rasterizer
-        // viewport per draw (the vertices are baked viewport-local for those). WebGPU records the
-        // pass viewport live at flush time (this method runs after any viewport restore), so a
-        // per-draw viewport here -- not the pass-level one -- is what keeps a custom-Viewport sprite
-        // placed at Viewport.X/Y. RenderSprites runs last in the pass, so overriding the viewport
-        // cannot disturb the already-recorded 3D draws.
-        bool anyCustomViewport = false;
-        for (const SpriteCommand& c : spriteCommands_)
-            if (c.viewportCustom) { anyCustomViewport = true; break; }
 
         WGPURenderPipeline boundPipeline = nullptr;
         for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
@@ -5261,31 +5261,13 @@ struct VSOut {
             };
             wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
 
-            if (anyCustomViewport)
-            {
-                if (command.viewportCustom)
-                {
-                    const float vx = static_cast<float>(std::clamp(command.viewportX, 0,
-                                                        static_cast<int>(targetWidth)));
-                    const float vy = static_cast<float>(std::clamp(command.viewportY, 0,
-                                                        static_cast<int>(targetHeight)));
-                    const float vw = static_cast<float>(std::min(
-                        static_cast<std::uint32_t>(std::max(0, command.viewportW)),
-                        targetWidth - std::min(static_cast<std::uint32_t>(vx), targetWidth)));
-                    const float vh = static_cast<float>(std::min(
-                        static_cast<std::uint32_t>(std::max(0, command.viewportH)),
-                        targetHeight - std::min(static_cast<std::uint32_t>(vy), targetHeight)));
-                    wgpuRenderPassEncoderSetViewport(pass, vx, vy, std::max(vw, 1.0f), std::max(vh, 1.0f),
-                                                     command.viewportMinDepth, command.viewportMaxDepth);
-                }
-                else
-                {
-                    // A full-target sprite baked full-target-relative: reset to the whole target so a
-                    // preceding custom-viewport draw does not mis-place it.
-                    wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(targetWidth),
-                                                     static_cast<float>(targetHeight), 0.0f, 1.0f);
-                }
-            }
+            // REMED-GFX-072/116: this sprite's OWN captured Viewport. A sub-region sprite was
+            // baked viewport-local at enqueue and lands at Viewport.X/Y from here; a target-
+            // relative sprite's snapshot IS the whole target by construction, so it resets the
+            // rasterizer after a preceding sub-region draw and can no longer inherit a viewport
+            // that was set after it was queued. RenderSprites runs last in the pass, but the 3D
+            // families now drive the same per-draw state, so neither can disturb the other.
+            ApplyDrawViewport(pass, command.viewport);
             std::array<WGPUBindGroupEntry, 2> entries{};
             entries[0].binding = 0;
             entries[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
@@ -5408,6 +5390,89 @@ struct VSOut {
         viewportSet_ = true;
     }
 
+    // REMED-GFX-116: these three functions are the whole viewport-capture mechanism. Everything
+    // above stores the LIVE GraphicsDevice.Viewport; CaptureViewport() copies it into a queued
+    // command at the public draw call, and ApplyDrawViewport() is the only thing that turns a
+    // captured value back into native pass state. No Render*Draws() may read viewportX_ and
+    // friends -- that is precisely the "resolve at flush time" defect this replaces.
+    WebGPUViewportSnapshot WebGPUGraphicsBackend::CaptureViewport() const noexcept
+    {
+        WebGPUViewportSnapshot snapshot;
+        snapshot.set = viewportSet_;
+        snapshot.x = viewportX_;
+        snapshot.y = viewportY_;
+        snapshot.width = viewportW_;
+        snapshot.height = viewportH_;
+        snapshot.minDepth = viewportMinDepth_;
+        snapshot.maxDepth = viewportMaxDepth_;
+        return snapshot;
+    }
+
+    void WebGPUGraphicsBackend::BeginPassViewport(WGPURenderPassEncoder pass, int targetWidth, int targetHeight)
+    {
+        passViewport_ = WebGPUPassViewportState{};
+        passViewport_.targetWidth = std::max(0, targetWidth);
+        passViewport_.targetHeight = std::max(0, targetHeight);
+        passViewport_.width = std::max(static_cast<float>(passViewport_.targetWidth), 1.0f);
+        passViewport_.height = std::max(static_cast<float>(passViewport_.targetHeight), 1.0f);
+        passViewport_.maxDepth = 1.0f;
+        passViewport_.applied = true;
+        wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, passViewport_.width, passViewport_.height,
+                                         0.0f, 1.0f);
+        ++setViewportCallCount_;
+    }
+
+    void WebGPUGraphicsBackend::ApplyDrawViewport(WGPURenderPassEncoder pass,
+                                                  const WebGPUViewportSnapshot& snapshot)
+    {
+        const std::uint32_t fullW = static_cast<std::uint32_t>(passViewport_.targetWidth);
+        const std::uint32_t fullH = static_cast<std::uint32_t>(passViewport_.targetHeight);
+        float vx = 0.0f;
+        float vy = 0.0f;
+        float vw = static_cast<float>(fullW);
+        float vh = static_cast<float>(fullH);
+        float minDepth = 0.0f;
+        float maxDepth = 1.0f;
+        if (snapshot.set)
+        {
+            // wgpu-native requires x+width <= target width and y+height <= target height (a hard
+            // validation rule -- unlike scissor, which wgpu-native happens to accept out of bounds
+            // without complaint, an oversized viewport silently distorts geometry instead of being
+            // rejected or clipped). GraphicsDevice.Viewport can legitimately be stale relative to
+            // the CURRENT physical surface across a live window resize (its default value is only
+            // refreshed by GraphicsDevice.UpdateViewportFromWindow(), not on every frame) -- clamp
+            // defensively so a stale/oversized Viewport degrades to "as much of it as actually
+            // fits" instead of stretching the draw. Same arithmetic the pass-level block used
+            // before this became per-draw state.
+            vx = static_cast<float>(std::clamp(snapshot.x, 0, passViewport_.targetWidth));
+            vy = static_cast<float>(std::clamp(snapshot.y, 0, passViewport_.targetHeight));
+            vw = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, snapshot.width)),
+                                             fullW - std::min(static_cast<std::uint32_t>(vx), fullW)));
+            vh = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, snapshot.height)),
+                                             fullH - std::min(static_cast<std::uint32_t>(vy), fullH)));
+            minDepth = snapshot.minDepth;
+            maxDepth = snapshot.maxDepth;
+        }
+        vw = std::max(vw, 1.0f);
+        vh = std::max(vh, 1.0f);
+
+        if (passViewport_.applied && passViewport_.x == vx && passViewport_.y == vy &&
+            passViewport_.width == vw && passViewport_.height == vh &&
+            passViewport_.minDepth == minDepth && passViewport_.maxDepth == maxDepth)
+        {
+            return;  // Consecutive draws sharing a viewport need one native call, not one each.
+        }
+        wgpuRenderPassEncoderSetViewport(pass, vx, vy, vw, vh, minDepth, maxDepth);
+        ++setViewportCallCount_;
+        passViewport_.applied = true;
+        passViewport_.x = vx;
+        passViewport_.y = vy;
+        passViewport_.width = vw;
+        passViewport_.height = vh;
+        passViewport_.minDepth = minDepth;
+        passViewport_.maxDepth = maxDepth;
+    }
+
     WGPUSampler WebGPUGraphicsBackend::GetOrCreateSlotSampler(int filter, int addressU, int addressV,
                                                                int maxAnisotropy)
     {
@@ -5520,15 +5585,20 @@ struct VSOut {
         passDescriptor.colorAttachments = &colorAttachment;
         passDescriptor.depthStencilAttachment = depthView_ != nullptr ? &depthAttachment : nullptr;
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+        ++renderPassCount_;
 
-        // WEBGPU-80/81/29/30: scissor rect, viewport, blend constant and reference stencil are all
-        // genuinely dynamic wgpu-native render-pass state (unlike blend/cull/wireframe/depthBias,
-        // which are baked per-pipeline above) -- applied once here from whatever is currently
-        // stored, exactly like Vulkan's own vkCmdSetScissor/Viewport/BlendConstants/
-        // StencilReference calls at the top of its own single-pass-per-frame record path. A
-        // disabled scissor test still needs an explicit full-backbuffer wgpuRenderPassEncoderSetScissorRect
-        // call: WebGPU has no separate "scissor test enable" toggle the way GL/Vulkan do -- the
-        // scissor rect IS the only clip, so "disabled" means "rect == the whole target".
+        // WEBGPU-80/81/29/30: scissor rect, blend constant and reference stencil are all genuinely
+        // dynamic wgpu-native render-pass state (unlike blend/cull/wireframe/depthBias, which are
+        // baked per-pipeline above) -- applied once here from whatever is currently stored,
+        // exactly like Vulkan's own vkCmdSetScissor/BlendConstants/StencilReference calls at the
+        // top of its own single-pass-per-frame record path. A disabled scissor test still needs an
+        // explicit full-backbuffer wgpuRenderPassEncoderSetScissorRect call: WebGPU has no
+        // separate "scissor test enable" toggle the way GL/Vulkan do -- the scissor rect IS the
+        // only clip, so "disabled" means "rect == the whole target".
+        // REMED-GFX-116: the VIEWPORT is no longer in that list. It used to be applied here from
+        // the live viewport*_ members, which handed every already-queued draw whatever viewport
+        // happened to be current at flush time; BeginPassViewport() now installs the whole target
+        // and each draw applies the Viewport captured at its own public call.
         const std::uint32_t fullW = static_cast<std::uint32_t>(std::max(0, physicalWidth_));
         const std::uint32_t fullH = static_cast<std::uint32_t>(std::max(0, physicalHeight_));
         if (scissorEnabled_)
@@ -5543,30 +5613,7 @@ struct VSOut {
         {
             wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, fullW, fullH);
         }
-        if (viewportSet_)
-        {
-            // wgpu-native requires x+width <= target width and y+height <= target height (a
-            // hard validation rule -- unlike scissor, which wgpu-native happens to accept
-            // out-of-bounds without complaint, an oversized viewport silently distorts geometry
-            // instead of being rejected or clipped). GraphicsDevice.Viewport can legitimately be
-            // stale relative to the CURRENT physical surface across a live window resize (its
-            // default value is only refreshed by GraphicsDevice.UpdateViewportFromWindow(), not
-            // on every frame) -- clamp defensively here so a stale/oversized Viewport degrades to
-            // "as much of it as actually fits" instead of stretching every draw in the pass.
-            const float vx = static_cast<float>(std::clamp(viewportX_, 0, physicalWidth_));
-            const float vy = static_cast<float>(std::clamp(viewportY_, 0, physicalHeight_));
-            const float vw = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportW_)),
-                                                          fullW - std::min(static_cast<std::uint32_t>(vx), fullW)));
-            const float vh = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportH_)),
-                                                          fullH - std::min(static_cast<std::uint32_t>(vy), fullH)));
-            wgpuRenderPassEncoderSetViewport(pass, vx, vy, std::max(vw, 1.0f), std::max(vh, 1.0f),
-                                             viewportMinDepth_, viewportMaxDepth_);
-        }
-        else
-        {
-            wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(fullW), static_cast<float>(fullH),
-                                             0.0f, 1.0f);
-        }
+        BeginPassViewport(pass, physicalWidth_, physicalHeight_);
         const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
@@ -5583,7 +5630,7 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, fullW, fullH, surfaceFormat_,
+        RenderSprites(pass, surfaceFormat_,
                       static_cast<std::uint32_t>(std::max(1, sampleCount_)));
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -5595,6 +5642,7 @@ struct VSOut {
         WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
         wgpuCommandEncoderRelease(encoder);
         wgpuQueueSubmit(queue_, 1, &commandBuffer);
+        ++queueSubmitCount_;
         wgpuCommandBufferRelease(commandBuffer);
         wgpuTextureViewRelease(backBuffer);
 
@@ -5669,9 +5717,11 @@ struct VSOut {
         passDescriptor.colorAttachments = &colorAttachment;
         passDescriptor.depthStencilAttachment = &depthAttachment;
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+        ++renderPassCount_;
 
-        // Scissor/viewport/blend-constant/reference-stencil: same "whatever's currently stored"
-        // model as EnsureFrameRendered()'s identical block -- see that function's own comment.
+        // Scissor/blend-constant/reference-stencil: same "whatever's currently stored" model as
+        // EnsureFrameRendered()'s identical block -- see that function's own comment. The viewport
+        // is per-draw captured state instead (REMED-GFX-116).
         const std::uint32_t fullW = static_cast<std::uint32_t>(std::max(0, target->GetWidth()));
         const std::uint32_t fullH = static_cast<std::uint32_t>(std::max(0, target->GetHeight()));
         if (scissorEnabled_)
@@ -5686,22 +5736,7 @@ struct VSOut {
         {
             wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, fullW, fullH);
         }
-        if (viewportSet_)
-        {
-            const float vx = static_cast<float>(std::clamp(viewportX_, 0, target->GetWidth()));
-            const float vy = static_cast<float>(std::clamp(viewportY_, 0, target->GetHeight()));
-            const float vw = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportW_)),
-                                                          fullW - std::min(static_cast<std::uint32_t>(vx), fullW)));
-            const float vh = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportH_)),
-                                                          fullH - std::min(static_cast<std::uint32_t>(vy), fullH)));
-            wgpuRenderPassEncoderSetViewport(pass, vx, vy, std::max(vw, 1.0f), std::max(vh, 1.0f),
-                                             viewportMinDepth_, viewportMaxDepth_);
-        }
-        else
-        {
-            wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(fullW), static_cast<float>(fullH),
-                                             0.0f, 1.0f);
-        }
+        BeginPassViewport(pass, target->GetWidth(), target->GetHeight());
         const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
@@ -5716,7 +5751,7 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, fullW, fullH, target->ColorFormat(),
+        RenderSprites(pass, target->ColorFormat(),
                       static_cast<std::uint32_t>(std::max(1, target->GetMultiSampleCount())));
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -5726,6 +5761,7 @@ struct VSOut {
         WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
         wgpuCommandEncoderRelease(encoder);
         wgpuQueueSubmit(queue_, 1, &commandBuffer);
+        ++queueSubmitCount_;
         wgpuCommandBufferRelease(commandBuffer);
 
         // Same "only release after the referencing command buffer is submitted" rule as
@@ -5810,6 +5846,7 @@ struct VSOut {
         passDescriptor.colorAttachments = &colorAttachment;
         passDescriptor.depthStencilAttachment = &depthAttachment;
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+        ++renderPassCount_;
 
         // Scissor/viewport/blend-constant/reference-stencil: same "whatever's currently stored"
         // model as RenderPendingDrawsToRenderTarget()'s identical block.
@@ -5827,22 +5864,7 @@ struct VSOut {
         {
             wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, fullW, fullH);
         }
-        if (viewportSet_)
-        {
-            const float vx = static_cast<float>(std::clamp(viewportX_, 0, target->GetSize()));
-            const float vy = static_cast<float>(std::clamp(viewportY_, 0, target->GetSize()));
-            const float vw = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportW_)),
-                                                          fullW - std::min(static_cast<std::uint32_t>(vx), fullW)));
-            const float vh = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportH_)),
-                                                          fullH - std::min(static_cast<std::uint32_t>(vy), fullH)));
-            wgpuRenderPassEncoderSetViewport(pass, vx, vy, std::max(vw, 1.0f), std::max(vh, 1.0f),
-                                             viewportMinDepth_, viewportMaxDepth_);
-        }
-        else
-        {
-            wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(fullW), static_cast<float>(fullH),
-                                             0.0f, 1.0f);
-        }
+        BeginPassViewport(pass, target->GetSize(), target->GetSize());
         const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
@@ -5857,7 +5879,7 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, fullW, fullH, target->ColorFormat(), 1);
+        RenderSprites(pass, target->ColorFormat(), 1);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
@@ -5866,6 +5888,7 @@ struct VSOut {
         WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
         wgpuCommandEncoderRelease(encoder);
         wgpuQueueSubmit(queue_, 1, &commandBuffer);
+        ++queueSubmitCount_;
         wgpuCommandBufferRelease(commandBuffer);
 
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
@@ -6425,6 +6448,9 @@ struct VSOut {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         if (params != nullptr)
         {
             const Matrix wvp = world * view * projection;
@@ -6663,6 +6689,9 @@ struct VSOut {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         command.instanceCount = static_cast<std::uint32_t>(std::max(1, instanceCount));
 
         // Copies the FULL vertex/instance buffers (matches VulkanGraphicsBackend::
@@ -6737,6 +6766,8 @@ struct VSOut {
                                                                    command.blend, command.blendParams,
                                                                    command.cullMode, command.wireframe,
                                                                    command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
@@ -6825,6 +6856,8 @@ struct VSOut {
                                                 command.blend, command.blendParams,
                                                 command.cullMode, command.wireframe,
                                                 command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -6925,6 +6958,8 @@ struct VSOut {
                                                     command.blend, command.blendParams,
                                                     command.cullMode, command.wireframe,
                                                     command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -6984,6 +7019,9 @@ struct VSOut {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         command.texture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7073,6 +7111,8 @@ struct VSOut {
                                                                      command.blend, command.blendParams,
                                                                      command.cullMode, command.wireframe,
                                                                      command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -7134,6 +7174,9 @@ struct VSOut {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         command.texture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7221,6 +7264,8 @@ struct VSOut {
                                                                        command.blend, command.blendParams,
                                                                        command.cullMode, command.wireframe,
                                                                        command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -7282,6 +7327,9 @@ struct VSOut {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         command.texture0 = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7347,6 +7395,9 @@ struct VSOut {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         command.texture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7754,6 +7805,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         command.baseColorTexture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -7883,6 +7937,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
                                                                command.blend, command.blendParams,
                                                                command.cullMode, command.wireframe,
                                                                command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -8637,6 +8693,9 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         command.texture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -8746,6 +8805,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
                                                                     command.blend, command.blendParams,
                                                                     command.cullMode, command.wireframe,
                                                                     command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -9142,6 +9203,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         command.wireframe = fillModeWireframe_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        // REMED-GFX-116: captured here, at the public draw call, for the same reason the
+        // pipeline state above is -- a later SetViewport() must not move an already-queued draw.
+        command.viewport = CaptureViewport();
         command.baseColorTexture = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -9282,6 +9346,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
                                                                       command.blend, command.blendParams,
                                                                       command.cullMode, command.wireframe,
                                                                       command.depthBias, command.slopeScaleDepthBias);
+            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+            ApplyDrawViewport(pass, command.viewport);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
