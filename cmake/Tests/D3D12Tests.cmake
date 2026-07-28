@@ -66,6 +66,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     cna_d3d12_test(cna_test_d3d12_rendertargetcube_usage
                    examples/rendertargetcube_usage_test.cpp)
 
+    # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
+    # `VulkanGraphicsBackend::RecordCommandBuffer` collected ONE render pass per unique render-target
+    # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
+    # one target within a single flush window shared one load action. The decisive checks all use
+    # DiscardContents -- collapsing is invisible on a preserving target, which is why REMED-GFX-136
+    # needed an artificial readback barrier to see it -- and nothing between two cycles ever forces a
+    # flush.
+    cna_d3d12_test(cna_test_d3d12_rendertarget_pass_boundary
+                   examples/rendertarget_pass_boundary_test.cpp)
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.

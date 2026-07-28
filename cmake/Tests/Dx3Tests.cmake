@@ -113,6 +113,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Dx3_RenderTargetCube_Usage COMMAND cna_test_dx3_rendertargetcube_usage
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
+    # REMED-GFX-140: every public render-target bind/unbind cycle must be its own logical pass.
+    # `VulkanGraphicsBackend::RecordCommandBuffer` collected ONE render pass per unique render-target
+    # source per flush and replayed every queued batch for it inside that pass, so two bind cycles of
+    # one target within a single flush window shared one load action. The decisive checks all use
+    # DiscardContents -- collapsing is invisible on a preserving target, which is why REMED-GFX-136
+    # needed an artificial readback barrier to see it -- and nothing between two cycles ever forces a
+    # flush.
+    cna_dx3_test(cna_test_dx3_rendertarget_pass_boundary
+                 examples/rendertarget_pass_boundary_test.cpp)
+    cna_register_backend_test(NAME Dx3_RenderTarget_PassBoundary COMMAND cna_test_dx3_rendertarget_pass_boundary
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
     # REMED-GFX-135: the WRITE half of the same finding. `TextureCube::SetData`/`Texture3D::SetData`
     # kept the pre-REMED-GFX-127 shape -- a `void` backend method behind `if (backend_)` -- so an
     # upload that stored nothing, or only part of the requested region, still returned normally.
