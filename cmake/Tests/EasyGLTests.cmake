@@ -1623,6 +1623,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_ColorSpace_MidTone COMMAND cna_test_easygl_colorspace_midtone
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical
+        # orientation as an ordinary Texture2D holding identical bytes. An OpenGL framebuffer's
+        # origin is bottom-left, so a target's colour texture stores the image bottom-up; GetData
+        # already compensated (which is why public readback was always right) but sampling did not,
+        # so a rendered texture arrived upside down while an uploaded one did not. This is the
+        # EasyGL counterpart of REMED-GFX-067's bgfx finding.
+        cna_easygl_test(cna_test_easygl_rt_sampling_orientation
+            examples/rendertarget_sampling_orientation_test.cpp)
+        cna_register_backend_test(NAME EasyGL_RenderTarget_SamplingOrientation
+            COMMAND cna_test_easygl_rt_sampling_orientation
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_texture2d_getdata_contract
                         examples/texture2d_getdata_contract_test.cpp)
         cna_register_backend_test(NAME EasyGL_Texture2D_GetDataContract COMMAND cna_test_easygl_texture2d_getdata_contract
