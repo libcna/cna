@@ -177,6 +177,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_RenderTarget_BackbufferConsumer COMMAND cna_test_software_rt_backbuffer_consumer
         TIMEOUT 180 LABELS "Software")
 
+    # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
+    # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
+    # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
+    # WEBGPU clean, using ordinary Texture2D sources on both destinations. The oracle is a staircase
+    # -- step i covers stripes [0, N-i), so one readback proves every draw happened AND that they
+    # happened in the issued order.
+    cna_software_test(cna_test_software_spritebatch_3d_order
+        examples/spritebatch_3d_order_test.cpp)
+    cna_register_backend_test(NAME Software_SpriteBatch3DOrder
+        COMMAND cna_test_software_spritebatch_3d_order
+        TIMEOUT 300 LABELS "Software")
+
     cna_software_test(cna_test_software_texture2d_getdata_contract
                       examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Software_Texture2D_GetDataContract

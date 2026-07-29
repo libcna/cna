@@ -1208,6 +1208,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             examples/rendertarget_backbuffer_consumer_test.cpp)
         cna_register_backend_test(NAME Vulkan_RenderTarget_BackbufferConsumer COMMAND cna_test_vulkan_rt_backbuffer_consumer
             TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
+        # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
+        # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
+        # WEBGPU clean, using ordinary Texture2D sources on both destinations. The oracle is a staircase
+        # -- step i covers stripes [0, N-i), so one readback proves every draw happened AND that they
+        # happened in the issued order.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_3d_order
+            examples/spritebatch_3d_order_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SpriteBatch3DOrder COMMAND cna_test_vulkan_spritebatch_3d_order
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # The same fixture on a multisampled device. A Vulkan render target derives its sample count
         # from the device's own, so only this run makes leg E a genuinely multisampled producer --
         # its resolve has to complete before the consumer samples it, with no readback to trigger it.
