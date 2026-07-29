@@ -201,21 +201,19 @@ namespace
     /**
      * @brief Whether a BACKBUFFER draw can sample a render target that was never read back.
      *
-     * REMED-GFX-155 (measured here, owned by neither this task nor bgfx): on bgfx a render target
-     * produced and unbound in this frame samples as entirely empty when the consumer draws to the
-     * BACKBUFFER (0/32, all 32 texels (0,0,0,0)), while the identical source sampled into another
-     * RENDER TARGET is byte-exact (legs D1-D5) and an ordinary Texture2D drawn in the same
-     * backbuffer batch is byte-exact too. So it is neither "the target is empty" nor "the
-     * backbuffer draw is broken" -- it is specifically a never-read target reaching a backbuffer
-     * consumer. Every prior bgfx fixture read its source at some point, which is how it stayed
-     * hidden. Cannot be caused by REMED-GFX-151, whose fix touches Vulkan files only.
+     * REMED-GFX-155, measured here and FIXED (2026-07-29), so this is now true everywhere. On bgfx
+     * a render target produced and unbound in this frame sampled as entirely empty when the
+     * consumer drew to the BACKBUFFER (0/32, all 32 texels (0,0,0,0)), while the identical source
+     * sampled into another RENDER TARGET was byte-exact (legs D1-D5) and an ordinary Texture2D
+     * drawn in the same backbuffer batch was byte-exact too. The cause was neither an empty target
+     * nor a broken backbuffer draw: bgfx radix-sorts a frame's draws by their view's sort position,
+     * which defaults to the numeric view id, and that backend's id partition puts the backbuffer at
+     * 0 below every render target -- so the consumer executed BEFORE its producer. The backend now
+     * records the frame's views in public first-use order and programs it through
+     * bgfx::setViewOrder. `rendertarget_backbuffer_consumer_test.cpp` is that contract's own
+     * fixture; this declaration is what pins it from here.
      */
-    constexpr bool kBackbufferConsumerSeesNeverReadTarget =
-#if defined(CNA_BACKEND_BGFX)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kBackbufferConsumerSeesNeverReadTarget = true;
 
     /**
      * @brief Whether a `Clear()` issued AFTER a draw, in the same bind cycle, wins.

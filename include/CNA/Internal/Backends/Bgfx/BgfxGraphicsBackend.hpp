@@ -48,6 +48,17 @@ namespace CNA::Internal::Backends::Bgfx
         // its later segments (higher ids, monotonic in submission order) always execute in draw order.
         inline constexpr bgfx::ViewId kFirstSegmentViewId = 192;
 
+        // REMED-GFX-155: bgfx's compile-time view-id count (BGFX_CONFIG_MAX_VIEWS). Every id in
+        // [0, kMaxViews) is a legal view, and bgfx::setViewOrder() only produces a well-defined
+        // execution order when it is handed a full PERMUTATION of that range -- bgfx inverts the
+        // table it was given (`viewRemap[m_viewRemap[ii]] = ii` in Frame::sort), so a partial list
+        // is silently clobbered by the identity entries that follow it. Kept as a named constant
+        // rather than a literal so the permutation and the range it must cover cannot drift apart.
+        inline constexpr int kMaxViews = 256;
+        static_assert(kBackbufferFlushViewId == kMaxViews - 1,
+                      "the reserved backbuffer-flush view must be the HIGHEST view id, so that the "
+                      "ordered permutation's ascending tail leaves it last (Task 951)");
+
         // Task 910: each concurrently-live render target (2D or cube) needs its own bgfx view id
         // -- bgfx::setViewFrameBuffer(viewId, fbo) is a per-view-per-*frame* setting, resolved
         // once at bgfx::frame(), not per bgfx::submit() call. Every render target previously
@@ -616,6 +627,21 @@ namespace CNA::Internal::Backends::Bgfx
         // base ids were consumed and force a fresh ordered segment on a same-frame rebind.
         std::array<bool, Detail::kFirstSegmentViewId> segmentBaseUsed_ = {};
         bool segmentNeedsFreshView_ = false;
+        // REMED-GFX-155: the view ids this frame's public commands used, in the order they were
+        // first used. bgfx does NOT execute views in submission order -- it radix-sorts every draw
+        // by its view's SORT POSITION, which defaults to the numeric view id. Because the backbuffer
+        // owns the lowest id (0) while every render target owns a higher one, a backbuffer draw that
+        // samples a render target produced earlier in the same frame executed BEFORE its producer.
+        // This list is what ApplyFrameViewOrder() hands to bgfx::setViewOrder() before every
+        // bgfx::frame(), making native execution order equal public submission order. Recycled by
+        // EndFrameSegments(); membership is O(1) through frameViewOrdered_.
+        std::vector<bgfx::ViewId> frameViewOrder_;
+        std::array<bool, Detail::kMaxViews> frameViewOrdered_ = {};
+        // REMED-GFX-155: set from CNA_BGFX_TRACE_VIEW_ORDER=1. bgfx's execution order is not
+        // observable from the public API, so the ordering this backend programs is written to stderr
+        // on demand -- that trace is the structural evidence behind this task's ordering claims and
+        // is how a future ordering regression is diagnosed without re-deriving the id partition.
+        bool traceViewOrder_ = false;
         // The active view's viewport identity. The FIRST viewport on a target uses its BASE view (view 0 /
         // RT id) exactly as before this task -- a custom viewport still shrinks that base view's rect
         // (REMED-GFX-063), so a single-viewport frame is byte-identical to pre-GFX-065. A draw whose
@@ -989,6 +1015,14 @@ namespace CNA::Internal::Backends::Bgfx
         void ResetSegmentTarget(bgfx::ViewId baseId, bgfx::FrameBufferHandle fbo);
         // Recycle the per-frame segment id pool at a frame boundary (after bgfx::frame()).
         void EndFrameSegments();
+        // REMED-GFX-155: record that a public command has just committed to @p id, so the frame's
+        // view execution order can be programmed from PUBLIC submission order instead of being left
+        // to bgfx's numeric-view-id default. Idempotent: a view already in this frame's order keeps
+        // its original position, which is what makes a run of consecutive draws on one view cheap.
+        void NoteViewUsedEXT(bgfx::ViewId id);
+        // REMED-GFX-155: program the frame's view execution order through bgfx::setViewOrder().
+        // Must be called immediately before every bgfx::frame() in this backend.
+        void ApplyFrameViewOrder();
 
         // Task 880: overrides the current 3D view's rect with a custom Viewport, if one was set
         // via SetViewport(). Since REMED-GFX-063 this applies to render-target views too, and since
