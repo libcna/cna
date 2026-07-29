@@ -310,8 +310,13 @@ class BgfxRasterizerStateCullModeTest final : public Game
         DrawCanonicalPair(device);
 
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-        // Bgfx orders views by id; flush the off-screen view before the backbuffer samples it.
-        device.Present();
+        // REMED-GFX-155: this used to be followed by `device.Present();`, commented "Bgfx orders
+        // views by id; flush the off-screen view before the backbuffer samples it." That was a
+        // correct diagnosis of a real defect and an accidental workaround for it -- bgfx sorted a
+        // frame's draws by numeric view id, and the backbuffer owns the lowest one, so the consumer
+        // ran before its producer unless a frame boundary separated them. The backend now orders
+        // views by public submission order, so the extra frame is gone and this fixture measures
+        // culling in the ordinary same-frame sequence a game would write.
         BlitRenderTargetToBackbuffer(device);
         return ReadBackbuffer(device);
     }
@@ -359,7 +364,8 @@ class BgfxRasterizerStateCullModeTest final : public Game
         if (renderTarget)
         {
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            device.Present();
+            // REMED-GFX-155: the `device.Present();` that used to sit here is gone for the same
+            // reason as in RenderPairIntoTarget above.
             BlitRenderTargetToBackbuffer(device);
         }
         return ReadBackbuffer(device);

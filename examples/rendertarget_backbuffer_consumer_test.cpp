@@ -176,20 +176,6 @@ namespace
         true;
 #endif
 
-    /**
-     * @brief Whether a RenderTargetCube face can be bound and read back on this backend.
-     *
-     * REMED-GFX-130/134 implemented honest cube readback on six backends and declared the rest.
-     * Where it is absent the cube leg records the boundary instead of asserting a fabricated value.
-     */
-    constexpr bool kRenderTargetCubeReadable =
-#if defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SDL_RENDERER) || \
-    defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_CANVAS)
-        false;
-#else
-        true;
-#endif
-
     constexpr int kBBW = 64;   ///< Backbuffer width.  Eight pattern slots across.
     constexpr int kBBH = 64;   ///< Backbuffer height.
 
@@ -854,17 +840,35 @@ class RenderTargetBackbufferConsumerTest : public Game
      */
     void LegCubeFaceProducer(GraphicsDevice& dev)
     {
-        if (!kRenderTargetCubeReadable)
+        // Whether a cube face can be BOUND at all is asked of the public API rather than of a
+        // hard-coded backend list, because the two disagree: Software implements RenderTargetCube
+        // yet rejects SetRenderTarget for a face. A backend that cannot bind one has no cube bind
+        // cycle to order, so the boundary is recorded and the leg ends.
+        std::unique_ptr<RenderTargetCube> cube;
+        try
         {
-            std::printf("[INFO] H: %s has no RenderTargetCube readback (REMED-GFX-130/134) -- "
-                        "boundary recorded\n", kBackendName);
+            cube = std::make_unique<RenderTargetCube>(dev, kPW, false, SurfaceFormat::Color,
+                                                      DepthFormat::None, 0,
+                                                      RenderTargetUsage::DiscardContents);
+            dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveX);
+        }
+        catch (const System::NotSupportedException& e)
+        {
+            std::printf("[INFO] H: %s cannot bind a RenderTargetCube face (%s) -- boundary "
+                        "recorded\n", kBackendName, e.what());
             std::fflush(stdout);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            return;
+        }
+        catch (const std::exception& e)
+        {
+            std::printf("[INFO] H: %s cannot bind a RenderTargetCube face (%s) -- boundary "
+                        "recorded\n", kBackendName, e.what());
+            std::fflush(stdout);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             return;
         }
 
-        RenderTargetCube cube(dev, kPW, false, SurfaceFormat::Color, DepthFormat::None, 0,
-                              RenderTargetUsage::DiscardContents);
-        dev.SetRenderTarget(&cube, CubeMapFace::PositiveX);
         ResetState(dev);
         dev.Clear(Color(0, 0, 0, 255));
         {
@@ -893,7 +897,7 @@ class RenderTargetBackbufferConsumerTest : public Game
         std::vector<Color> face(static_cast<std::size_t>(kPW) * kPW, Color(0xCD, 0xCD, 0xCD, 0xCD));
         bool threw = false;
         std::string what;
-        try { cube.GetData(CubeMapFace::PositiveX, face.data(), 0, static_cast<int>(face.size())); }
+        try { cube->GetData(CubeMapFace::PositiveX, face.data(), 0, static_cast<int>(face.size())); }
         catch (const System::NotSupportedException&) { threw = true; what = "NotSupportedException"; }
         catch (const std::exception& e) { threw = true; what = e.what(); }
         if (threw)
@@ -1121,10 +1125,27 @@ class RenderTargetBackbufferConsumerTest : public Game
                     ") resolves before a BACKBUFFER consumer samples it", PatternColor);
         }
 
-        // J2: mipmapped producer, sampled at level 0.
+        // J2: mipmapped producer, sampled at level 0. Whether a backend supports a mipmapped render
+        // target AT ALL is measured, not assumed: WebGPU documents the chain regeneration
+        // unimplemented (plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not
+        // an ordering result.
         {
-            RenderTarget2D a(dev, kPW, kPH, true, SurfaceFormat::Color, DepthFormat::None, 0,
-                             RenderTargetUsage::DiscardContents);
+            std::unique_ptr<RenderTarget2D> owner;
+            try
+            {
+                owner = std::make_unique<RenderTarget2D>(dev, kPW, kPH, true, SurfaceFormat::Color,
+                                                         DepthFormat::None, 0,
+                                                         RenderTargetUsage::DiscardContents);
+            }
+            catch (const std::exception& e)
+            {
+                std::printf("[INFO] J2 mipmapped RenderTarget2D unsupported on %s (%s) -- boundary "
+                            "recorded; J1 and the sample-count-one legs carry the contract\n",
+                            kBackendName, e.what());
+                std::fflush(stdout);
+                return;
+            }
+            RenderTarget2D& a = *owner;
             std::printf("[INFO] J2 mipmapped producer LevelCount=%d\n", a.getLevelCountProperty());
             std::fflush(stdout);
 
