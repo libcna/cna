@@ -119,6 +119,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -249,18 +250,14 @@ namespace
      * the day the backend is corrected, these checks fail and this constant has to be turned over
      * deliberately rather than silently.
      *
-     * WEBGPU replays all of a cycle's 3D draws and then all of its sprites, so `SpriteBatch -> 3D`
-     * comes out inverted while `3D -> SpriteBatch` looks correct. That is the same root cause
-     * REMED-GFX-157 corrects on Vulkan and bgfx (which grouped the other way round), measured here
-     * rather than assumed; it is recorded as its own finding because this task was scoped not to
-     * change WebGPU production.
+     * WEBGPU replayed all of a cycle's 3D draws and then all of its sprites, so `SpriteBatch -> 3D`
+     * came out inverted while `3D -> SpriteBatch` looked correct. That was the same root cause
+     * REMED-GFX-157 corrected on Vulkan and bgfx (which grouped the other way round), and
+     * REMED-GFX-159 has now corrected it here: every backend owes public order, so this constant is
+     * `PublicOrder` everywhere and the enum is kept only so a regression names the shape it
+     * regressed to instead of merely reporting permuted stripes.
      */
-    constexpr Replay kReplay =
-#if defined(CNA_BACKEND_WEBGPU)
-        Replay::All3DThenAllSprites;
-#else
-        Replay::PublicOrder;
-#endif
+    constexpr Replay kReplay = Replay::PublicOrder;
 
     /** @brief True when this backend honours public order between the two families. */
     constexpr bool kPublicFamilyOrder = (kReplay == Replay::PublicOrder);
@@ -290,9 +287,18 @@ namespace
      * property per backend under the name `clearAfterDrawWinsOnBackbuffer`; leg J measures it on a
      * PreserveContents render target and is not this task's subject either way -- it is declared so
      * that a clear-ordering regression cannot hide inside a family-ordering fixture.
+     *
+     * WEBGPU joined SDL_GPU here when REMED-GFX-159 landed, and the two facts are independent: leg
+     * J had been skipping behind the family-order gate above, so turning that gate over is what
+     * first RAN it. Measured then: a `Clear()` between the two families leaves the earlier sprite
+     * standing and a `Clear()` after both leaves both standing, because `clearColorPending_` only
+     * ever selects `WGPULoadOp_Clear` for the whole pass. `backbuffer_pass_order_test.cpp` already
+     * declares exactly this for WEBGPU under its own name, citing REMED-GFX-140. Ordered mid-cycle
+     * `Clear` on WebGPU is the counterpart of REMED-GFX-129's Vulkan work and is its own finding,
+     * deliberately not started here.
      */
     constexpr bool kClearAfterDrawWins =
-#if defined(CNA_BACKEND_SDL_GPU)
+#if defined(CNA_BACKEND_SDL_GPU) || defined(CNA_BACKEND_WEBGPU)
         false;
 #else
         true;
@@ -358,13 +364,6 @@ namespace
         Three     ///< A stock effect Apply followed by a GraphicsDevice draw call.
     };
 
-    /** @brief One step of a public sequence: a family and the colour it must leave behind. */
-    struct Step
-    {
-        Fam   fam;
-        Color colour;
-    };
-
     /** @brief Which GraphicsDevice entry point a 3D step uses. */
     enum class Draw3D
     {
@@ -387,6 +386,23 @@ namespace
         DualTexture,      ///< DualTextureEffect, second texture white so the modulate is a no-op.
         EnvironmentMap,   ///< EnvironmentMapEffect over VertexPositionNormalTexture.
         Skinned           ///< SkinnedEffect with identity bones.
+    };
+
+    /** @brief One step of a public sequence: a family and the colour it must leave behind. */
+    struct Step
+    {
+        Fam   fam;
+        Color colour;
+        /**
+         * @brief A `Fam::Three` step's own stock effect, when it must differ from its neighbours'.
+         *
+         * Empty -- the shape every leg before N uses -- means "whatever effect the staircase itself
+         * was given", so one sequence stays inside one 3D command family. Leg N sets it per step
+         * precisely so a sequence spans SEVERAL of them: a deferred backend that keeps one queue
+         * per stock effect can invert two 3D draws exactly as it can invert a 3D draw against a
+         * sprite, and only a sequence whose steps land in different queues can see it.
+         */
+        std::optional<Fx> fx{};
     };
 }
 
@@ -836,7 +852,7 @@ class SpriteBatch3DOrderTest : public Game
                  Draw3D mode, Fx fx)
     {
         if (s.fam == Fam::Sprite) SpriteStripes(dest, from, to, s.colour);
-        else                      Draw3DStripes(dev, from, to, s.colour, mode, fx);
+        else                      Draw3DStripes(dev, from, to, s.colour, mode, s.fx.value_or(fx));
     }
 
     // ------------------------------------------------------------------ the staircase oracle
@@ -1761,6 +1777,75 @@ class SpriteBatch3DOrderTest : public Game
         ResetState(dev);
     }
 
+    /**
+     * @brief N -- public order between 3D draws that use DIFFERENT stock effects.
+     *
+     * Every leg above puts one sequence's 3D steps through one stock effect, so a backend keeping
+     * one deferred queue per effect can replay those steps in issue order and still be reordering
+     * everything else. REMED-GFX-159's ticket names only the SpriteBatch-against-3D direction, but
+     * on a backend whose replay is a fixed list of per-family loops the ten 3D families are ordered
+     * against each other by exactly the same mechanism, and a game mixing a textured BasicEffect
+     * with a vertex-colour one inside a cycle sees it without a SpriteBatch anywhere.
+     *
+     * The staircase oracle is unchanged; only the effect varies per step. Each pair is run in BOTH
+     * directions, because a fixed replay list renders one of the two correctly by accident and a
+     * one-directional check would report that as "ordered".
+     */
+    void LegCrossEffectOrder(GraphicsDevice& dev)
+    {
+        if (!kDraws3D) { skip("N: skipped -- no stock 3D rasterization here"); return; }
+        if (!RequirePublicFamilyOrder("N")) return;
+        RenderTarget2D rt(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::DiscardContents);
+        Dest d{ &rt, kRTW, kRTH, "render target" };
+
+        /// A `Fam::Three` step pinned to one stock effect.
+        auto three = [](Fx fx, const Color& c) { return Step{ Fam::Three, c, fx }; };
+
+        struct Pair { Fx a; Fx b; const char* an; const char* bn; };
+        const Pair pairs[] = {
+            { Fx::Basic,       Fx::BasicVertexColor, "textured BasicEffect", "vertex-colour BasicEffect" },
+            { Fx::AlphaTest,   Fx::BasicVertexColor, "AlphaTestEffect",      "vertex-colour BasicEffect" },
+            { Fx::DualTexture, Fx::Basic,            "DualTextureEffect",    "textured BasicEffect" },
+            { Fx::AlphaTest,   Fx::DualTexture,      "AlphaTestEffect",      "DualTextureEffect" },
+        };
+        int n = 0;
+        for (const Pair& p : pairs)
+        {
+            const std::string tag = "N" + std::to_string(++n);
+            try
+            {
+                Staircase(dev, d, { three(p.a, kRed), three(p.b, kBlue) },
+                          tag + "a " + p.an + " -> " + p.bn + " in public order");
+                Staircase(dev, d, { three(p.b, kRed), three(p.a, kBlue) },
+                          tag + "b " + p.bn + " -> " + p.an + " in public order");
+            }
+            catch (const std::exception& e)
+            {
+                skip(tag + ": skipped -- threw on " + kBackendName + " (" + e.what() + ")");
+            }
+        }
+
+        // Three distinct 3D families plus sprites alternating in ONE cycle: the shape a fixed
+        // per-family replay list permutes hardest, and the one that fails if any single family is
+        // hoisted out of order rather than only the sprite/3D split.
+        try
+        {
+            Staircase(dev, d,
+                      { three(Fx::Basic, kRed), { Fam::Sprite, kGreen },
+                        three(Fx::BasicVertexColor, kBlue), { Fam::Sprite, kYellow },
+                        three(Fx::AlphaTest, kMagenta) },
+                      "N5 three stock effects and two sprite batches alternating in one cycle");
+        }
+        catch (const std::exception& e)
+        {
+            skip(std::string("N5: skipped -- threw on ") + kBackendName + " (" + e.what() + ")");
+        }
+
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        ResetState(dev);
+    }
+
 protected:
     void Initialize() override
     {
@@ -1864,6 +1949,7 @@ protected:
         LegCardinality(dev);
         LegLocalLifetime(dev);
         LegLegI0Shape(dev);
+        LegCrossEffectOrder(dev);
 
         std::printf("[INFO] %s: %d/%d checks passed (%d skipped)\n",
                     kBackendName, passCount_, totalCount_, skipCount_);
