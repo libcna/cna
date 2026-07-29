@@ -325,6 +325,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_RenderTarget_FirstUse COMMAND cna_test_sdlgpu_rt_first_use
         TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-152: a RenderTarget2D handed to a stock or custom 3D effect as its Texture must be
+    # sampled, not reinterpreted. The defect was SDL_GPU-local and fatal -- thirteen sites
+    # static_cast an ITextureBackend* to the unrelated sibling SdlGpuTextureBackend, fabricating an
+    # SDL_GPUTexture* out of a render target's mipMap_/padding/multiSampleCount_ bytes -- so this
+    # fixture supervises each leg in its own process and reports a SIGSEGV as an attributable
+    # result instead of losing the shard.
+    cna_sdlgpu_test(cna_test_sdlgpu_rt_effect_source
+        examples/rendertarget_effect_source_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_RenderTarget_EffectSource COMMAND cna_test_sdlgpu_rt_effect_source
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
