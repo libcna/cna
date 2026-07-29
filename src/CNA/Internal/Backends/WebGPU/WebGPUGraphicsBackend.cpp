@@ -266,18 +266,24 @@ namespace CNA::Internal::Backends::WebGPU
         // "unbound" by every Render*Draws() call site's existing null check) for a null input or
         // a texture from an incompatible concrete type, instead of the unchecked static_cast this
         // replaces everywhere.
-        [[nodiscard]] const IWebGPUSamplable* ResolveSamplable(const ITextureBackend* tex)
+        // REMED-GFX-167: resolves to a VALUE, not a pointer, and does it here at the public draw
+        // call while the resource is unambiguously alive. A queued command therefore never
+        // dereferences a wrapper at replay time, and carries the native reference that keeps its
+        // view valid even when that wrapper is gone by then.
+        [[nodiscard]] WebGPUSampledTextureEXT ResolveSamplable(const ITextureBackend* tex)
         {
-            return tex != nullptr ? dynamic_cast<const IWebGPUSamplable*>(tex) : nullptr;
+            const auto* samplable = tex != nullptr ? dynamic_cast<const IWebGPUSamplable*>(tex) : nullptr;
+            return samplable != nullptr ? samplable->Sampled() : WebGPUSampledTextureEXT{};
         }
 
         // WEBGPU-114: the IWebGPUCubeSamplable sibling of ResolveSamplable() above -- resolves any
         // ITextureCubeBackend* (WebGPUTextureCubeBackend OR WebGPURenderTargetCubeBackend) to its
         // whole-cube sampling view, safely degrading to nullptr for a null input or an incompatible
         // concrete type.
-        [[nodiscard]] const IWebGPUCubeSamplable* ResolveCubeSamplable(const ITextureCubeBackend* tex)
+        [[nodiscard]] WebGPUSampledTextureEXT ResolveCubeSamplable(const ITextureCubeBackend* tex)
         {
-            return tex != nullptr ? dynamic_cast<const IWebGPUCubeSamplable*>(tex) : nullptr;
+            const auto* samplable = tex != nullptr ? dynamic_cast<const IWebGPUCubeSamplable*>(tex) : nullptr;
+            return samplable != nullptr ? samplable->SampledCube() : WebGPUSampledTextureEXT{};
         }
 
         [[nodiscard]] std::uint32_t AlignBytesPerRow(std::uint32_t bytesPerRow)
@@ -700,6 +706,22 @@ namespace CNA::Internal::Backends::WebGPU
         }
     }
 
+    // REMED-GFX-167: see WebGPUSampledResourceEXT's own doc comment (the header). Both handles are
+    // referenced here and released exactly once, when the last queued command carrying this object
+    // is gone -- so a resource sampled by a still-queued draw stays valid without the wrapper.
+    WebGPUSampledResourceEXT::WebGPUSampledResourceEXT(WGPUTexture texture, WGPUTextureView view)
+        : texture_(texture), view_(view)
+    {
+        if (texture_ != nullptr) wgpuTextureAddRef(texture_);
+        if (view_ != nullptr) wgpuTextureViewAddRef(view_);
+    }
+
+    WebGPUSampledResourceEXT::~WebGPUSampledResourceEXT()
+    {
+        if (view_ != nullptr) wgpuTextureViewRelease(view_);
+        if (texture_ != nullptr) wgpuTextureRelease(texture_);
+    }
+
     WebGPUTextureBackend::WebGPUTextureBackend(WebGPUGraphicsBackend& owner, const ImageData& data)
         : owner_(&owner), width_(data.width), height_(data.height), mipLevels_(std::max(1, data.mipLevels))
     {
@@ -739,6 +761,7 @@ namespace CNA::Internal::Backends::WebGPU
             texture_ = nullptr;
             throw std::runtime_error("CNA WebGPU: failed to create Texture2D view");
         }
+        sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, view_);
 
         if (!data.pixels.empty())
             UpdatePixels(data.pixels.data(), width_ * 4);
@@ -963,6 +986,7 @@ namespace CNA::Internal::Backends::WebGPU
             texture_ = nullptr;
             throw std::runtime_error("CNA WebGPU: failed to create TextureCube view");
         }
+        sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, cubeView_);
     }
 
     WebGPUTextureCubeBackend::~WebGPUTextureCubeBackend()
@@ -1245,6 +1269,7 @@ namespace CNA::Internal::Backends::WebGPU
             texture_ = nullptr;
             throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube depth-stencil view");
         }
+        sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, cubeView_);
     }
 
     WebGPURenderTargetCubeBackend::~WebGPURenderTargetCubeBackend()
@@ -1727,6 +1752,7 @@ namespace CNA::Internal::Backends::WebGPU
             }
             appliedMultiSampleCount_ = owner_->sampleCount_;
         }
+        sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(colorTexture_, colorView_);
     }
 
     WebGPURenderTargetBackend::~WebGPURenderTargetBackend()
@@ -4546,11 +4572,11 @@ struct VertexOutput {
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.maxAnisotropy);
-        WGPUTextureView texView = command.texture != nullptr
-            ? command.texture->View()
+        WGPUTextureView texView = command.texture
+            ? command.texture.View()
             : envMapDefaultWhiteTexture_->View();
-        WGPUTextureView cubeView = command.envMap != nullptr
-            ? command.envMap->CubeView()
+        WGPUTextureView cubeView = command.envMap
+            ? command.envMap.View()
             : envMapDefaultWhiteCube_->CubeView();
         std::array<WGPUBindGroupEntry, 3> texEntries{};
         texEntries[0].binding = 0;
@@ -5230,7 +5256,9 @@ struct VSOut {
         constexpr int indices[6] = {0, 1, 2, 2, 1, 3};
 
         SpriteCommand command{};
-        command.texture = &samplable;
+        // REMED-GFX-167: the resolved view plus its keep-alive, never `&samplable` -- a SpriteBatch
+        // draw is replayed at Present too, by which time a short-lived Texture2D may be gone.
+        command.texture = samplable.Sampled();
         command.textureFilter = textureFilter;
         command.addressU = addressU;
         command.addressV = addressV;
@@ -5372,7 +5400,7 @@ struct VSOut {
         entries[0].binding = 0;
         entries[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
         entries[1].binding = 1;
-        entries[1].textureView = command.texture->View();
+        entries[1].textureView = command.texture.View();
         WGPUBindGroupDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU SpriteBatch BindGroup");
         descriptor.layout = spriteBindGroupLayout_;
@@ -7192,7 +7220,7 @@ struct VSOut {
                                                   ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+        if (command.vertexCount == 0 || command.vertexData.empty() || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -7225,7 +7253,7 @@ struct VSOut {
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
-        texEntries[1].textureView = command.texture->View();
+        texEntries[1].textureView = command.texture.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU Textured3D Texture BindGroup");
         texBindDescriptor.layout = texturedBindGroupLayout_;
@@ -7285,7 +7313,7 @@ struct VSOut {
                                                      ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+        if (command.vertexCount == 0 || command.vertexData.empty() || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -7328,7 +7356,7 @@ struct VSOut {
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
-        texEntries[1].textureView = command.texture->View();
+        texEntries[1].textureView = command.texture.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU LitTextured3D Texture BindGroup");
         texBindDescriptor.layout = texturedBindGroupLayout_;
@@ -7464,7 +7492,7 @@ struct VSOut {
                                                    ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+        if (command.vertexCount == 0 || command.vertexData.empty() || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -7497,7 +7525,7 @@ struct VSOut {
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
-        texEntries[1].textureView = command.texture->View();
+        texEntries[1].textureView = command.texture.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU AlphaTest3D Texture BindGroup");
         texBindDescriptor.layout = texturedBindGroupLayout_;
@@ -7624,7 +7652,7 @@ struct VSOut {
     {
         Begin3DDrawState(pass, state);
         if (command.vertexCount == 0 || command.vertexData.empty() ||
-            command.texture0 == nullptr || command.texture1 == nullptr)
+            !command.texture0 || !command.texture1)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -7657,9 +7685,9 @@ struct VSOut {
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
-        texEntries[1].textureView = command.texture0->View();
+        texEntries[1].textureView = command.texture0.View();
         texEntries[2].binding = 2;
-        texEntries[2].textureView = command.texture1->View();
+        texEntries[2].textureView = command.texture1.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU DualTexture3D Texture BindGroup");
         texBindDescriptor.layout = dualTextureBindGroupLayout_;
@@ -8247,16 +8275,16 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.normalMap = params.pbrNormalMap != nullptr
             ? ResolveSamplable(params.pbrNormalMap)
-            : pbrDefaultFlatNormalTexture_.get();
+            : pbrDefaultFlatNormalTexture_->Sampled();
         command.metallicRoughnessMap = params.pbrMetallicRoughnessMap != nullptr
             ? ResolveSamplable(params.pbrMetallicRoughnessMap)
-            : pbrDefaultWhiteTexture_.get();
+            : pbrDefaultWhiteTexture_->Sampled();
         command.emissiveMap = params.pbrEmissiveMap != nullptr
             ? ResolveSamplable(params.pbrEmissiveMap)
-            : pbrDefaultWhiteTexture_.get();
+            : pbrDefaultWhiteTexture_->Sampled();
         command.occlusionMap = params.pbrOcclusionMap != nullptr
             ? ResolveSamplable(params.pbrOcclusionMap)
-            : pbrDefaultWhiteTexture_.get();
+            : pbrDefaultWhiteTexture_->Sampled();
 
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
@@ -8291,9 +8319,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
                                              ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || command.baseColorTexture == nullptr ||
-            command.normalMap == nullptr || command.metallicRoughnessMap == nullptr ||
-            command.emissiveMap == nullptr || command.occlusionMap == nullptr)
+        if (command.vertexCount == 0 || command.vertexData.empty() || !command.baseColorTexture ||
+            !command.normalMap || !command.metallicRoughnessMap ||
+            !command.emissiveMap || !command.occlusionMap)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -8346,15 +8374,15 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
-        texEntries[1].textureView = command.baseColorTexture->View();
+        texEntries[1].textureView = command.baseColorTexture.View();
         texEntries[2].binding = 2;
-        texEntries[2].textureView = command.normalMap->View();
+        texEntries[2].textureView = command.normalMap.View();
         texEntries[3].binding = 3;
-        texEntries[3].textureView = command.metallicRoughnessMap->View();
+        texEntries[3].textureView = command.metallicRoughnessMap.View();
         texEntries[4].binding = 4;
-        texEntries[4].textureView = command.emissiveMap->View();
+        texEntries[4].textureView = command.emissiveMap.View();
         texEntries[5].binding = 5;
-        texEntries[5].textureView = command.occlusionMap->View();
+        texEntries[5].textureView = command.occlusionMap.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU Pbr3D Texture BindGroup");
         texBindDescriptor.layout = pbrBindGroupLayout1_;
@@ -9177,7 +9205,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
                                                  ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+        if (command.vertexCount == 0 || command.vertexData.empty() || !command.texture)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -9230,7 +9258,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
-        texEntries[1].textureView = command.texture->View();
+        texEntries[1].textureView = command.texture.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU Skinned3D Texture BindGroup");
         texBindDescriptor.layout = texturedBindGroupLayout_;
@@ -9661,16 +9689,16 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.normalMap = params.pbrNormalMap != nullptr
             ? ResolveSamplable(params.pbrNormalMap)
-            : pbrDefaultFlatNormalTexture_.get();
+            : pbrDefaultFlatNormalTexture_->Sampled();
         command.metallicRoughnessMap = params.pbrMetallicRoughnessMap != nullptr
             ? ResolveSamplable(params.pbrMetallicRoughnessMap)
-            : pbrDefaultWhiteTexture_.get();
+            : pbrDefaultWhiteTexture_->Sampled();
         command.emissiveMap = params.pbrEmissiveMap != nullptr
             ? ResolveSamplable(params.pbrEmissiveMap)
-            : pbrDefaultWhiteTexture_.get();
+            : pbrDefaultWhiteTexture_->Sampled();
         command.occlusionMap = params.pbrOcclusionMap != nullptr
             ? ResolveSamplable(params.pbrOcclusionMap)
-            : pbrDefaultWhiteTexture_.get();
+            : pbrDefaultWhiteTexture_->Sampled();
 
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
@@ -9706,9 +9734,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
                                                     ReplayState& state)
     {
         Begin3DDrawState(pass, state);
-        if (command.vertexCount == 0 || command.vertexData.empty() || command.baseColorTexture == nullptr ||
-            command.normalMap == nullptr || command.metallicRoughnessMap == nullptr ||
-            command.emissiveMap == nullptr || command.occlusionMap == nullptr)
+        if (command.vertexCount == 0 || command.vertexData.empty() || !command.baseColorTexture ||
+            !command.normalMap || !command.metallicRoughnessMap ||
+            !command.emissiveMap || !command.occlusionMap)
             return;
 
         WGPUBufferDescriptor vbDescriptor{};
@@ -9771,15 +9799,15 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
-        texEntries[1].textureView = command.baseColorTexture->View();
+        texEntries[1].textureView = command.baseColorTexture.View();
         texEntries[2].binding = 2;
-        texEntries[2].textureView = command.normalMap->View();
+        texEntries[2].textureView = command.normalMap.View();
         texEntries[3].binding = 3;
-        texEntries[3].textureView = command.metallicRoughnessMap->View();
+        texEntries[3].textureView = command.metallicRoughnessMap.View();
         texEntries[4].binding = 4;
-        texEntries[4].textureView = command.emissiveMap->View();
+        texEntries[4].textureView = command.emissiveMap.View();
         texEntries[5].binding = 5;
-        texEntries[5].textureView = command.occlusionMap->View();
+        texEntries[5].textureView = command.occlusionMap.View();
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D Texture BindGroup");
         texBindDescriptor.layout = pbrBindGroupLayout1_;

@@ -39,11 +39,74 @@ namespace CNA::Internal::Backends::WebGPU
     /// makes that cast a real hazard: this interface plus ResolveSamplable() (see the .cpp) turns
     /// it into a safe dynamic_cast that degrades to "treat as unbound" for any incompatible type,
     /// which is never worse than before and is now also correct for a RenderTarget2D.
+    /**
+     * @brief One native reference on a sampleable texture and its view (REMED-GFX-167). NOXNA.
+     *
+     * This backend records a whole frame and replays it later — a draw queued now is issued at
+     * `SetRenderTarget()`'s flush or, for a backbuffer destination, not until `Present()`. The
+     * public `Texture2D`/`RenderTarget2D` it sampled may be a short-lived local that is already
+     * destroyed by then, and its backend releases its `WGPUTexture`/`WGPUTextureView` in its own
+     * destructor. Holding this object keeps both native handles valid for exactly as long as some
+     * queued command can still bind them.
+     *
+     * `wgpuTextureRelease`/`wgpuTextureViewRelease` are refcount decrements, not the destructive
+     * `wgpuTextureDestroy`, so an extra reference genuinely keeps the resource usable rather than
+     * merely keeping a freed handle addressable. Both handles are referenced: a view alone would
+     * rely on wgpu-native's internal parent reference, which this backend does not need to assume.
+     */
+    class WebGPUSampledResourceEXT
+    {
+    public:
+        /** @brief Takes one native reference on each of @p texture and @p view. */
+        WebGPUSampledResourceEXT(WGPUTexture texture, WGPUTextureView view);
+        /** @brief Releases the reference taken on each handle by the constructor. */
+        ~WebGPUSampledResourceEXT();
+
+        WebGPUSampledResourceEXT(const WebGPUSampledResourceEXT&) = delete;
+        WebGPUSampledResourceEXT& operator=(const WebGPUSampledResourceEXT&) = delete;
+
+        /** @brief The sampleable view this object keeps alive. */
+        [[nodiscard]] WGPUTextureView View() const noexcept { return view_; }
+
+    private:
+        WGPUTexture texture_ = nullptr;
+        WGPUTextureView view_ = nullptr;
+    };
+
+    /**
+     * @brief The one bindable form of a sampled texture in this backend (REMED-GFX-167). NOXNA.
+     *
+     * Every deferred command stores this by value instead of a pointer to the resource's backend
+     * object. That closes both halves of the same defect at once: the view is resolved once, at
+     * the public draw call, so replay never dereferences a wrapper that may since have been
+     * destroyed; and @ref keepAlive holds the native handles open until the last command carrying
+     * it is gone.
+     *
+     * Copying one costs a refcount increment; it allocates nothing (each samplable backend builds
+     * its @ref keepAlive once, at construction).
+     */
+    struct WebGPUSampledTextureEXT
+    {
+        /** @brief The already-resolved sampleable view, or null for an unbound slot. */
+        WGPUTextureView view = nullptr;
+        /** @brief Keeps @ref view valid while a queued command can still bind it. */
+        std::shared_ptr<const WebGPUSampledResourceEXT> keepAlive;
+
+        /** @brief Whether a texture was actually resolved (an absent optional slot yields false). */
+        [[nodiscard]] explicit operator bool() const noexcept { return view != nullptr; }
+        /** @brief The resolved view, for the bind-group entry that samples it. */
+        [[nodiscard]] WGPUTextureView View() const noexcept { return view; }
+    };
+
     class IWebGPUSamplable
     {
     public:
         virtual ~IWebGPUSamplable() = default;
         [[nodiscard]] virtual WGPUTextureView View() const = 0;
+        /// REMED-GFX-167: the same view plus the reference that keeps it alive past this object's
+        /// own destruction. Every deferred draw stores THIS, never `this` — see
+        /// WebGPUSampledTextureEXT's own doc comment.
+        [[nodiscard]] virtual WebGPUSampledTextureEXT Sampled() const = 0;
     };
 
     /// WEBGPU-114: the cube-map sibling of IWebGPUSamplable -- lets both WebGPUTextureCubeBackend
@@ -60,6 +123,9 @@ namespace CNA::Internal::Backends::WebGPU
     public:
         virtual ~IWebGPUCubeSamplable() = default;
         [[nodiscard]] virtual WGPUTextureView CubeView() const = 0;
+        /// REMED-GFX-167: the cube counterpart of IWebGPUSamplable::Sampled() — the whole-cube view
+        /// plus the reference that keeps it alive past this object's own destruction.
+        [[nodiscard]] virtual WebGPUSampledTextureEXT SampledCube() const = 0;
     };
 
     class WebGPUTextureBackend final : public ITextureBackend, public IWebGPUSamplable
@@ -93,11 +159,15 @@ namespace CNA::Internal::Backends::WebGPU
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         [[nodiscard]] WGPUTextureView View() const override { return view_; }
+        [[nodiscard]] WebGPUSampledTextureEXT Sampled() const override { return {view_, sampled_}; }
 
     private:
         WebGPUGraphicsBackend* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView view_ = nullptr;
+        /// REMED-GFX-167: built once, at construction; handed to every deferred command that
+        /// samples this texture so the native handles outlive this object when one does.
+        std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
@@ -160,6 +230,7 @@ namespace CNA::Internal::Backends::WebGPU
         /// currently multisampled (WEBGPU-58) -- unaffected by MSAA, matching this member's
         /// pre-existing role exactly.
         [[nodiscard]] WGPUTextureView View() const override { return colorView_; }
+        [[nodiscard]] WebGPUSampledTextureEXT Sampled() const override { return {colorView_, sampled_}; }
         [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
         [[nodiscard]] bool PreserveContents() const { return preserveContents_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
@@ -183,6 +254,12 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
         WGPUTexture colorTexture_ = nullptr;
         WGPUTextureView colorView_ = nullptr;
+        /// REMED-GFX-167: keeps colorTexture_/colorView_ — the pair a consumer draw SAMPLES —
+        /// alive for any queued command still carrying it. The depth and multisample attachments
+        /// below are deliberately not in it: they are only ever a render pass's own attachments,
+        /// and this backend builds and consumes a pass destination synchronously, while the
+        /// target is still bound.
+        std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
         /// WEBGPU-58: only non-null when this instance mirrors the owner's sampleCount_ > 1 at
@@ -237,11 +314,14 @@ namespace CNA::Internal::Backends::WebGPU
         /// The single `WGPUTextureViewDimension_Cube` view sampled by `texture_cube<f32>` in
         /// env_map3d.wgsl's fragment shader.
         [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
+        [[nodiscard]] WebGPUSampledTextureEXT SampledCube() const override { return {cubeView_, sampled_}; }
 
     private:
         WebGPUGraphicsBackend* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView cubeView_ = nullptr;
+        /// REMED-GFX-167: see WebGPUTextureBackend::sampled_.
+        std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         int size_ = 0;
         int mipLevels_ = 1;
     };
@@ -300,6 +380,7 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         /// The whole-cube sampling view (all 6 layers) -- IWebGPUCubeSamplable's contract.
         [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
+        [[nodiscard]] WebGPUSampledTextureEXT SampledCube() const override { return {cubeView_, sampled_}; }
         /// This face's own single-layer 2D view, used as a render-pass colour attachment.
         [[nodiscard]] WGPUTextureView ColorAttachmentView(int face) const { return faceViews_[static_cast<std::size_t>(face)]; }
         /// The one depth+stencil view shared by all 6 faces (only one is ever bound at once).
@@ -323,6 +404,10 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView cubeView_ = nullptr;
+        /// REMED-GFX-167: keeps texture_/cubeView_ — the pair EnvironmentMapEffect samples — alive
+        /// for any queued command still carrying it. The per-face and depth views are attachments
+        /// only, consumed synchronously while this target is bound (see the RenderTarget2D twin).
+        std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         std::array<WGPUTextureView, 6> faceViews_{};
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
@@ -610,7 +695,7 @@ namespace CNA::Internal::Backends::WebGPU
 
         struct SpriteCommand
         {
-            const IWebGPUSamplable* texture = nullptr;
+            WebGPUSampledTextureEXT texture;
             std::array<SpriteVertex, 6> vertices{};
             int textureFilter = 0;
             int addressU = 1;
@@ -1652,11 +1737,15 @@ namespace CNA::Internal::Backends::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
-            // Not shadow-copied like vertex/index data: a bound Texture2D's WebGPUTextureBackend
-            // is owned by long-lived game/content state (unlike DrawUserPrimitives' transient
-            // vertex buffers), so it is guaranteed to still be alive when this command actually
-            // renders later in the same frame.
-            const IWebGPUSamplable* texture = nullptr;
+            // REMED-GFX-167: resolved ONCE, here at the public draw call. This used to be a raw
+            // `const IWebGPUSamplable*` justified by "a bound Texture2D's backend is owned by
+            // long-lived game/content state, so it is guaranteed to still be alive when this
+            // command actually renders later in the same frame". Nothing guarantees that: a
+            // RenderTarget2D produced, sampled and dropped inside one Draw() is destroyed while
+            // this command is still only queued, and replay then made a VIRTUAL call on freed
+            // memory. Storing the resolved view plus its keep-alive removes the dereference and
+            // the dangling handle together.
+            WebGPUSampledTextureEXT texture;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -1746,7 +1835,7 @@ namespace CNA::Internal::Backends::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
-            const IWebGPUSamplable* texture = nullptr;
+            WebGPUSampledTextureEXT texture;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -1839,7 +1928,7 @@ namespace CNA::Internal::Backends::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
-            const IWebGPUSamplable* texture = nullptr;
+            WebGPUSampledTextureEXT texture;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -1910,8 +1999,8 @@ namespace CNA::Internal::Backends::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
-            const IWebGPUSamplable* texture0 = nullptr;
-            const IWebGPUSamplable* texture1 = nullptr;
+            WebGPUSampledTextureEXT texture0;
+            WebGPUSampledTextureEXT texture1;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -1995,14 +2084,14 @@ namespace CNA::Internal::Backends::WebGPU
             /// EnvironmentMapEffect::Texture -- may legitimately be null (falls back to a 1x1
             /// white texture at render time), unlike every other stride-32+ effect family, which
             /// requires a non-null texture0 at dispatch time.
-            const IWebGPUSamplable* texture = nullptr;
+            WebGPUSampledTextureEXT texture;
             /// EnvironmentMapEffect::EnvironmentMap -- may legitimately be null (falls back to a
             /// 1x1 white cube map at render time, matching VulkanGraphicsBackend's own
             /// defaultWhiteCubeView_ fallback). WEBGPU-114: IWebGPUCubeSamplable rather than the
             /// concrete WebGPUTextureCubeBackend, so a WebGPURenderTargetCubeBackend (a distinct
             /// concrete class) bound as EnvironmentMapEffect.EnvironmentMap resolves correctly too
             /// -- see IWebGPUCubeSamplable's own doc comment.
-            const IWebGPUCubeSamplable* envMap = nullptr;
+            WebGPUSampledTextureEXT envMap;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -2158,11 +2247,11 @@ namespace CNA::Internal::Backends::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
-            const IWebGPUSamplable* baseColorTexture = nullptr;
-            const IWebGPUSamplable* normalMap = nullptr;
-            const IWebGPUSamplable* metallicRoughnessMap = nullptr;
-            const IWebGPUSamplable* emissiveMap = nullptr;
-            const IWebGPUSamplable* occlusionMap = nullptr;
+            WebGPUSampledTextureEXT baseColorTexture;
+            WebGPUSampledTextureEXT normalMap;
+            WebGPUSampledTextureEXT metallicRoughnessMap;
+            WebGPUSampledTextureEXT emissiveMap;
+            WebGPUSampledTextureEXT occlusionMap;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -2254,7 +2343,7 @@ namespace CNA::Internal::Backends::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
-            const IWebGPUSamplable* texture = nullptr;
+            WebGPUSampledTextureEXT texture;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -2332,11 +2421,11 @@ namespace CNA::Internal::Backends::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
-            const IWebGPUSamplable* baseColorTexture = nullptr;
-            const IWebGPUSamplable* normalMap = nullptr;
-            const IWebGPUSamplable* metallicRoughnessMap = nullptr;
-            const IWebGPUSamplable* emissiveMap = nullptr;
-            const IWebGPUSamplable* occlusionMap = nullptr;
+            WebGPUSampledTextureEXT baseColorTexture;
+            WebGPUSampledTextureEXT normalMap;
+            WebGPUSampledTextureEXT metallicRoughnessMap;
+            WebGPUSampledTextureEXT emissiveMap;
+            WebGPUSampledTextureEXT occlusionMap;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
