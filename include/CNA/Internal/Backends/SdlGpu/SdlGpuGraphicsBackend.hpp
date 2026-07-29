@@ -100,6 +100,53 @@ namespace CNA::Internal::Backends::SdlGpu
                               SdlGpuResourceEventEXT event) noexcept = nullptr;
     };
 
+    /**
+     * @brief The one bindable form of a sampled texture in this backend (REMED-GFX-152). NOXNA.
+     *
+     * A public `Texture2D` and a public `RenderTarget2D` arrive at every draw as the SAME static
+     * type, `const ITextureBackend*`, but their concrete backends — `SdlGpuTextureBackend` and
+     * `SdlGpuRenderTargetBackend` — are unrelated SIBLINGS, both merely deriving from
+     * `ITextureBackend` (and the former is `final`, so a render target can never be one). Every
+     * binding route therefore has to ANSWER a question, not assume an answer, and this value object
+     * is that answer: the native, sampleable, already-resolved handle, plus a reference that keeps
+     * whatever owns it alive for exactly as long as the command holding it can still be replayed.
+     *
+     * `keepAlive` matters because this backend is a whole-frame-deferred recorder: a draw queued now
+     * is issued at `EnsureFrameRendered()`, and the public `Texture2D`/`RenderTarget2D` it sampled
+     * may be a short-lived local that has already been destroyed by then. Holding the owner's shared
+     * GPU state (never the wrapper object, which is not shared) means the native handle stays valid
+     * and its release stays deferred past the submit that consumes it — the same contract
+     * `SdlGpuRenderTarget2DState` already gave render targets, now extended to ordinary textures so
+     * a command can never outlive the resource it binds.
+     *
+     * Copying one costs a refcount increment; it allocates nothing.
+     */
+    struct SdlGpuSampledTextureEXT
+    {
+        /** @brief The sampleable native texture — for MSAA render targets, the RESOLVED one. */
+        SDL_GPUTexture* texture = nullptr;
+        /** @brief Keeps the resource owning @ref texture alive while a queued command can bind it. */
+        std::shared_ptr<const void> keepAlive;
+
+        /** @brief Whether a texture was actually resolved (an absent optional slot yields false). */
+        [[nodiscard]] explicit operator bool() const noexcept { return texture != nullptr; }
+    };
+
+    // The GPU handle of an ordinary uploaded texture (Texture2D, TextureCube) lives in this
+    // separately-owned struct rather than on the wrapper, for the same reason
+    // SdlGpuRenderTarget2DState exists (see its own doc comment): draws are replayed at Present,
+    // long after a short-lived public texture may have been destroyed, so the native handle has to
+    // outlive the wrapper and its release has to be deferred until the command buffer that samples
+    // it has been submitted (REMED-GFX-152). Render targets keep their own richer state struct;
+    // this is the minimal one for resources that are nothing but a sampleable texture.
+    struct SdlGpuSampledTextureState
+    {
+        SdlGpuGraphicsBackend* owner = nullptr;
+        SDL_GPUTexture* texture = nullptr;
+
+        ~SdlGpuSampledTextureState();
+    };
+
     /** @brief `SDL_gpu`-backed `Texture2D`. Plain 2D, `SAMPLER` usage only (no mip chain yet). */
     class SdlGpuTextureBackend final : public ITextureBackend
     {
@@ -116,11 +163,19 @@ namespace CNA::Internal::Backends::SdlGpu
         void UpdatePixels(const uint8_t* rgba, int stride) override;
 
         /** @brief Returns the underlying `SDL_GPUTexture`. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return texture_; }
+        NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
+        /**
+         * @brief Returns this texture as a bindable, lifetime-safe sampled resource. NOXNA.
+         *
+         * @return The native handle paired with the shared state that keeps it alive.
+         */
+        NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
-        SDL_GPUTexture* texture_ = nullptr;
+        // The actual GPU handle lives in this shared_ptr-owned struct, NOT directly here -- see
+        // SdlGpuSampledTextureState's own doc comment for why.
+        std::shared_ptr<SdlGpuSampledTextureState> state_;
         int width_ = 0;
         int height_ = 0;
     };
@@ -251,6 +306,16 @@ namespace CNA::Internal::Backends::SdlGpu
 
         /** @brief Returns the sampleable (single-sample, resolved-into-if-MSAA) color texture. NOXNA. */
         NOXNA [[nodiscard]] SDL_GPUTexture* ColorTexture() const { return state_->colorTexture; }
+        /**
+         * @brief Returns this target as a bindable, lifetime-safe sampled resource. NOXNA.
+         *
+         * Always the single-sample colour texture, never `MsaaTexture()`: the multisample
+         * attachment is created `COLOR_TARGET`-only and resolves INTO the colour texture at
+         * render-pass end, so it is not a legal sampler binding at all (REMED-GFX-152).
+         *
+         * @return The resolved native handle paired with the shared state that keeps it alive.
+         */
+        NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->colorTexture, state_}; }
         /** @brief Returns the multisampled render texture, or null when not multisampled. NOXNA. */
         NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return state_->msaaTexture; }
         /** @brief Returns the depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
@@ -399,6 +464,17 @@ namespace CNA::Internal::Backends::SdlGpu
         /** @brief Returns the single-sample, sampleable cube texture. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }
         /**
+         * @brief Returns this cube target as a bindable, lifetime-safe sampled resource. NOXNA.
+         *
+         * Always the single-sample cube texture that the per-face multisample attachments resolve
+         * INTO, never one of those attachments — they are `COLOR_TARGET`-only and are not legal
+         * sampler bindings, and a cube sampler needs the cube-typed resource in any case
+         * (REMED-GFX-152).
+         *
+         * @return The resolved native handle paired with the shared state that keeps it alive.
+         */
+        NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->cubeTexture, state_}; }
+        /**
          * @brief Returns one cube face's own multisample render texture. NOXNA.
          *
          * REMED-GFX-141: there are six, one per face, where this used to return the single texture
@@ -462,16 +538,58 @@ namespace CNA::Internal::Backends::SdlGpu
                                    void* data, int dataLength) const override;
 
         /** @brief Returns the underlying `SDL_GPUTexture`. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return texture_; }
+        NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
+        /**
+         * @brief Returns this cube texture as a bindable, lifetime-safe sampled resource. NOXNA.
+         *
+         * @return The native handle paired with the shared state that keeps it alive.
+         */
+        NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
-        SDL_GPUTexture* texture_ = nullptr;
+        // Same rationale as SdlGpuTextureBackend's own state_ -- see SdlGpuSampledTextureState.
+        std::shared_ptr<SdlGpuSampledTextureState> state_;
         int size_ = 0;
         bool mipMap_ = false;
         /// Mip levels SDL really allocated for this cube (REMED-GFX-135).
         int levelCount_ = 1;
     };
+
+    /**
+     * @brief Resolves any public 2D texture resource to its bindable native form. NOXNA.
+     *
+     * REMED-GFX-152: the ONE place this backend is allowed to decide what a `const ITextureBackend*`
+     * really is. Every SpriteBatch and stock/custom 3D binding route goes through here, so a
+     * `RenderTarget2D` can never again reach a route that assumed `SdlGpuTextureBackend`. The
+     * decision is made by `dynamic_cast` — enforced by the object itself — not by a static
+     * assumption, and an unrecognised backend throws deterministically instead of being
+     * reinterpreted.
+     *
+     * @param texture Backend texture to resolve; null yields an empty (falsy) result, which is how
+     *                an optional slot such as a PBR normal map says "not supplied".
+     * @param usage   Public API name used in the exception text, e.g. `"BasicEffect.Texture"`.
+     * @return The sampleable native handle plus a reference keeping its owner alive.
+     * @throws std::invalid_argument If @p texture belongs to a different graphics backend, or to a
+     *         resource this backend cannot expose as a sampleable 2D texture.
+     */
+    NOXNA [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledTextureEXT(const ITextureBackend* texture,
+                                                                         const char* usage);
+
+    /**
+     * @brief Resolves any public cube texture resource to its bindable native form. NOXNA.
+     *
+     * The `ITextureCubeBackend` counterpart of @ref ResolveSampledTextureEXT, covering both an
+     * uploaded `TextureCube` and a rendered-into `RenderTargetCube`.
+     *
+     * @param texture Backend cube texture to resolve; null yields an empty (falsy) result.
+     * @param usage   Public API name used in the exception text, e.g. `"EnvironmentMapEffect.EnvironmentMap"`.
+     * @return The sampleable native cube handle plus a reference keeping its owner alive.
+     * @throws std::invalid_argument If @p texture belongs to a different graphics backend, or to a
+     *         resource this backend cannot expose as a sampleable cube texture.
+     */
+    NOXNA [[nodiscard]] SdlGpuSampledTextureEXT ResolveSampledCubeEXT(const ITextureCubeBackend* texture,
+                                                                      const char* usage);
 
     /** @brief `SDL_gpu`-backed vertex buffer. */
     class SdlGpuVertexBufferBackend final : public IVertexBufferBackend
@@ -706,6 +824,9 @@ namespace CNA::Internal::Backends::SdlGpu
         friend class SdlGpuRenderTargetCubeBackend;
         friend struct SdlGpuRenderTarget2DState;
         friend struct SdlGpuRenderTargetCubeState;
+        // REMED-GFX-152: ordinary uploaded textures defer their native release through the same
+        // QueueTextureRelease path render targets already used.
+        friend struct SdlGpuSampledTextureState;
         friend class SdlGpuEffectBackend;
     public:
         /** @brief Vertex layout for the `sprite2d` pipeline: position, UV, RGBA color (32 bytes). */
@@ -927,11 +1048,13 @@ namespace CNA::Internal::Backends::SdlGpu
 
         struct SpriteCommand
         {
-            // Raw native handle rather than a concrete backend pointer -- SpriteBatch can draw
-            // either a plain Texture2D (SdlGpuTextureBackend) or a RenderTarget2D/RenderTargetCube
-            // (SdlGpuRenderTargetBackend/SdlGpuRenderTargetCubeBackend); all expose an
-            // SDL_GPUTexture* but are unrelated classes (see QueueSprite/SdlGpuSpriteBatchBackend::Draw).
-            SDL_GPUTexture* texture = nullptr;
+            // REMED-GFX-152: the same resolved, lifetime-owning value every 3D binding route now
+            // carries, so SpriteBatch and the effects share one texture-resolution contract. It
+            // replaces a bare SDL_GPUTexture*, which was correct about the TYPE question (a sprite
+            // source may be a plain Texture2D or a rendered-into target, unrelated classes both) but
+            // silent about the LIFETIME one -- this command is replayed at Present, by when a
+            // short-lived public texture may already have released that handle.
+            SdlGpuSampledTextureEXT texture;
             std::array<SpriteVertex, 6> vertices{};
             int textureFilter = 0;
             int addressU = 1;
@@ -1019,7 +1142,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            const SdlGpuTextureBackend* texture = nullptr;
+            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
@@ -1048,7 +1171,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            const SdlGpuTextureBackend* texture = nullptr;
+            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
@@ -1078,7 +1201,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            const SdlGpuTextureBackend* texture = nullptr;
+            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
@@ -1110,8 +1233,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            const SdlGpuTextureBackend* texture0 = nullptr;
-            const SdlGpuTextureBackend* texture1 = nullptr;
+            SdlGpuSampledTextureEXT texture0;  ///< REMED-GFX-152: resolved once, at queue time
+            SdlGpuSampledTextureEXT texture1;  ///< REMED-GFX-152: resolved once, at queue time
             ///@{ SDLGPU-21: independent per-slot sampler state (GraphicsDevice.SamplerStates[0]/[1]).
             int texture0Filter = 0;
             int texture0AddressU = 0;
@@ -1149,8 +1272,8 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            const SdlGpuTextureBackend* texture = nullptr;
-            SDL_GPUTexture* envMapTexture = nullptr;
+            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
+            SdlGpuSampledTextureEXT envMapTexture;  ///< REMED-GFX-152: resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
@@ -1190,7 +1313,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            const SdlGpuTextureBackend* texture = nullptr;
+            SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
@@ -1230,11 +1353,11 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthWrite = false;
             int depthFunc = 3;
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
-            const SdlGpuTextureBackend* texture = nullptr;                  ///< base color, required
-            const SdlGpuTextureBackend* normalMap = nullptr;                ///< optional, default flat normal
-            const SdlGpuTextureBackend* metallicRoughnessMap = nullptr;     ///< optional, default white
-            const SdlGpuTextureBackend* emissiveMap = nullptr;              ///< optional, default white
-            const SdlGpuTextureBackend* occlusionMap = nullptr;             ///< optional, default white
+            SdlGpuSampledTextureEXT texture;                  ///< base color, required
+            SdlGpuSampledTextureEXT normalMap;                ///< optional, default flat normal
+            SdlGpuSampledTextureEXT metallicRoughnessMap;     ///< optional, default white
+            SdlGpuSampledTextureEXT emissiveMap;              ///< optional, default white
+            SdlGpuSampledTextureEXT occlusionMap;             ///< optional, default white
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
@@ -1485,7 +1608,7 @@ namespace CNA::Internal::Backends::SdlGpu
          * time (Texture2D and RenderTarget2D are unrelated concrete backend classes, so
          * SdlGpuSpriteBatchBackend::Draw resolves this once at call time).
          */
-        NOXNA void QueueSprite(const ITextureBackend& texture, SDL_GPUTexture* nativeTexture,
+        NOXNA void QueueSprite(const ITextureBackend& texture, const SdlGpuSampledTextureEXT& nativeTexture,
                                 const Rectangle& destinationRectangle,
                                 const Rectangle& sourceRectangle,
                                 const Color& color,

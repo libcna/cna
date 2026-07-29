@@ -1046,7 +1046,16 @@ namespace CNA::Internal::Backends::SdlGpu
             IGraphicsBackend::UnregisterForWindow(window_);
             registeredForWindow_ = false;
         }
+        // Drops every queued command, and with it every SdlGpuSampledTextureEXT::keepAlive a
+        // command still holds (REMED-GFX-152). This must happen HERE, while the backend and its
+        // device are both fully alive: a resource whose last reference was one of those commands
+        // releases through QueueTextureRelease, and the drain of pendingTextureReleases_ a few
+        // lines below is what actually frees it. ReleaseSceneDrawBuffers() clears the 3D command
+        // vectors; sprites and pending segments hold references of their own.
         ReleaseSceneDrawBuffers();
+        spriteCommands_.clear();
+        passSegments_.clear();
+        drawOrder_.clear();
         DestroyPbrResources();
         DestroySkinnedResources();
         DestroyEnvMapResources();
@@ -2685,14 +2694,14 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture;
+        samplerBinding.texture = command.texture.texture;
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
     }
 
-    void SdlGpuGraphicsBackend::QueueSprite(const ITextureBackend& texture, SDL_GPUTexture* nativeTexture,
+    void SdlGpuGraphicsBackend::QueueSprite(const ITextureBackend& texture, const SdlGpuSampledTextureEXT& nativeTexture,
                                              const Rectangle& destination,
                                              const Rectangle& source,
                                              const Color& color,
@@ -3364,7 +3373,7 @@ namespace CNA::Internal::Backends::SdlGpu
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
-        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.texture = ResolveSampledTextureEXT(params.texture0, "BasicEffect.Texture");
         // SDLGPU-21: real per-slot dynamic sampler state (GraphicsDevice.SamplerStates[0]).
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
@@ -3415,7 +3424,7 @@ namespace CNA::Internal::Backends::SdlGpu
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillLitLightUniforms(command.lightUniforms, params);
-        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.texture = ResolveSampledTextureEXT(params.texture0, "BasicEffect.Texture (lit)");
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
@@ -4115,7 +4124,7 @@ namespace CNA::Internal::Backends::SdlGpu
         const Matrix wvp = world * view * projection;
         FillAlphaTestUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
-        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.texture = ResolveSampledTextureEXT(params.texture0, "AlphaTestEffect.Texture");
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
@@ -4163,8 +4172,8 @@ namespace CNA::Internal::Backends::SdlGpu
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
-        command.texture0 = static_cast<const SdlGpuTextureBackend*>(params.texture0);
-        command.texture1 = static_cast<const SdlGpuTextureBackend*>(params.texture1);
+        command.texture0 = ResolveSampledTextureEXT(params.texture0, "DualTextureEffect.Texture");
+        command.texture1 = ResolveSampledTextureEXT(params.texture1, "DualTextureEffect.Texture2");
         // SDLGPU-21: texture0/texture1 are independent slots (GraphicsDevice.SamplerStates[0]/[1]
         // -- real XNA lets DualTextureEffect's two textures sample differently).
         command.texture0Filter = samplerSlots_[0].filter;
@@ -4206,17 +4215,10 @@ namespace CNA::Internal::Backends::SdlGpu
 
         // params.envMap (ITextureCubeBackend*) may be either a plain, uploaded TextureCube
         // (SdlGpuTextureCubeBackend, SDLGPU-51) or a RenderTargetCube sampled after being rendered
-        // into (SdlGpuRenderTargetCubeBackend, SDLGPU-36) -- both implement ITextureCubeBackend but
-        // are unrelated concrete classes, so resolve whichever one this actually is to get the raw
-        // SDL_GPUTexture* to bind (mirrors SpriteBatch::Draw's own dual-backend resolve for
-        // ITextureBackend/SdlGpuTextureBackend vs SdlGpuRenderTargetBackend).
-        SDL_GPUTexture* envMapTexture = nullptr;
-        if (const auto* plainCube = dynamic_cast<const SdlGpuTextureCubeBackend*>(params.envMap))
-            envMapTexture = plainCube->Texture();
-        else if (const auto* rtCube = dynamic_cast<const SdlGpuRenderTargetCubeBackend*>(params.envMap))
-            envMapTexture = rtCube->CubeTexture();
-        else
-            throw std::invalid_argument("CNA SDL_GPU: EnvironmentMapEffect received a cube texture from another graphics backend");
+        // into (SdlGpuRenderTargetCubeBackend, SDLGPU-36) -- unrelated concrete classes, resolved
+        // through the one shared resolver every binding route uses (REMED-GFX-152).
+        const SdlGpuSampledTextureEXT envMapTexture =
+            ResolveSampledCubeEXT(params.envMap, "EnvironmentMapEffect.EnvironmentMap");
 
         EnvMapDrawCommand command;
         const int vertexStart = params.vertexStart;
@@ -4233,7 +4235,7 @@ namespace CNA::Internal::Backends::SdlGpu
         FillEnvMapUniforms(command.uniforms, wvp, params);
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillEnvMapParams(command.envMapUniforms, params);
-        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.texture = ResolveSampledTextureEXT(params.texture0, "EnvironmentMapEffect.Texture");
         command.envMapTexture = envMapTexture;
         // SDLGPU-21: diffuse texture0 gets real per-slot dynamic sampler state; the env map
         // itself stays fixed Linear+Clamp regardless (see RenderEnvMapDraws' own comment).
@@ -4290,7 +4292,7 @@ namespace CNA::Internal::Backends::SdlGpu
         FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillSkinnedBoneUniforms(command.boneUniforms, params);
         FillSkinnedLightUniforms(command.lightUniforms, params);
-        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.texture = ResolveSampledTextureEXT(params.texture0, "SkinnedEffect.Texture");
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
@@ -4358,11 +4360,11 @@ namespace CNA::Internal::Backends::SdlGpu
             FillSkinnedBoneUniforms(command.boneUniforms, params);
         }
         FillPbrParams(command.pbrParams, params);
-        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
-        command.normalMap = static_cast<const SdlGpuTextureBackend*>(params.pbrNormalMap);
-        command.metallicRoughnessMap = static_cast<const SdlGpuTextureBackend*>(params.pbrMetallicRoughnessMap);
-        command.emissiveMap = static_cast<const SdlGpuTextureBackend*>(params.pbrEmissiveMap);
-        command.occlusionMap = static_cast<const SdlGpuTextureBackend*>(params.pbrOcclusionMap);
+        command.texture = ResolveSampledTextureEXT(params.texture0, "PbrEffect.Texture");
+        command.normalMap = ResolveSampledTextureEXT(params.pbrNormalMap, "PbrEffect.NormalMap");
+        command.metallicRoughnessMap = ResolveSampledTextureEXT(params.pbrMetallicRoughnessMap, "PbrEffect.MetallicRoughnessMap");
+        command.emissiveMap = ResolveSampledTextureEXT(params.pbrEmissiveMap, "PbrEffect.EmissiveMap");
+        command.occlusionMap = ResolveSampledTextureEXT(params.pbrOcclusionMap, "PbrEffect.OcclusionMap");
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
@@ -4408,7 +4410,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture->Texture();
+        samplerBinding.texture = command.texture.texture;
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
@@ -4449,9 +4451,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // SDLGPU-21: texture0/texture1 are independent GraphicsDevice.SamplerStates[0]/[1]
         // slots in real XNA -- each gets its own sampler object, not a shared one.
         SDL_GPUTextureSamplerBinding samplerBindings[2]{};
-        samplerBindings[0].texture = command.texture0->Texture();
+        samplerBindings[0].texture = command.texture0.texture;
         samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU, command.texture0AddressV);
-        samplerBindings[1].texture = command.texture1->Texture();
+        samplerBindings[1].texture = command.texture1.texture;
         samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU, command.texture1AddressV);
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
 
@@ -4495,9 +4497,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // address settings -- matches this project's other backends' fixed reflection-map
         // sampling convention (address mode is largely moot for a direction-addressed cube map).
         SDL_GPUTextureSamplerBinding samplerBindings[2]{};
-        samplerBindings[0].texture = command.texture->Texture();
+        samplerBindings[0].texture = command.texture.texture;
         samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-        samplerBindings[1].texture = command.envMapTexture;
+        samplerBindings[1].texture = command.envMapTexture.texture;
         samplerBindings[1].sampler = GetOrCreateSampler(0, 1, 1);
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
 
@@ -4544,7 +4546,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture->Texture();
+        samplerBinding.texture = command.texture.texture;
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
@@ -4599,15 +4601,15 @@ namespace CNA::Internal::Backends::SdlGpu
         // no independent per-PBR-map sampler state to select from.
         SDL_GPUTextureSamplerBinding samplerBindings[5]{};
         SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-        samplerBindings[0].texture = command.texture->Texture();
+        samplerBindings[0].texture = command.texture.texture;
         samplerBindings[0].sampler = sampler;
-        samplerBindings[1].texture = command.normalMap != nullptr ? command.normalMap->Texture() : defaultFlatNormalTexture_->Texture();
+        samplerBindings[1].texture = command.normalMap ? command.normalMap.texture : defaultFlatNormalTexture_->Texture();
         samplerBindings[1].sampler = sampler;
-        samplerBindings[2].texture = command.metallicRoughnessMap != nullptr ? command.metallicRoughnessMap->Texture() : defaultWhiteTexture_->Texture();
+        samplerBindings[2].texture = command.metallicRoughnessMap ? command.metallicRoughnessMap.texture : defaultWhiteTexture_->Texture();
         samplerBindings[2].sampler = sampler;
-        samplerBindings[3].texture = command.emissiveMap != nullptr ? command.emissiveMap->Texture() : defaultWhiteTexture_->Texture();
+        samplerBindings[3].texture = command.emissiveMap ? command.emissiveMap.texture : defaultWhiteTexture_->Texture();
         samplerBindings[3].sampler = sampler;
-        samplerBindings[4].texture = command.occlusionMap != nullptr ? command.occlusionMap->Texture() : defaultWhiteTexture_->Texture();
+        samplerBindings[4].texture = command.occlusionMap ? command.occlusionMap.texture : defaultWhiteTexture_->Texture();
         samplerBindings[4].sampler = sampler;
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 5);
 
@@ -4814,7 +4816,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture->Texture();
+        samplerBinding.texture = command.texture.texture;
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
@@ -4855,7 +4857,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        samplerBinding.texture = command.texture->Texture();
+        samplerBinding.texture = command.texture.texture;
         samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
@@ -4934,7 +4936,7 @@ namespace CNA::Internal::Backends::SdlGpu
                 case DrawKind::Textured:
                 {
                     const TexturedDrawCommand& c = texturedDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.texture && c.target == target)
                         IssueTexturedDraw(pass, cmd, c, colorFormat, sampleCount,
                                           depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -4942,7 +4944,7 @@ namespace CNA::Internal::Backends::SdlGpu
                 case DrawKind::LitTextured:
                 {
                     const LitTexturedDrawCommand& c = litTexturedDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.texture && c.target == target)
                         IssueLitTexturedDraw(pass, cmd, c, colorFormat, sampleCount,
                                              depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -4950,7 +4952,7 @@ namespace CNA::Internal::Backends::SdlGpu
                 case DrawKind::AlphaTest:
                 {
                     const AlphaTestDrawCommand& c = alphaTestDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.texture && c.target == target)
                         IssueAlphaTestDraw(pass, cmd, c, colorFormat, sampleCount,
                                            depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -4958,7 +4960,7 @@ namespace CNA::Internal::Backends::SdlGpu
                 case DrawKind::DualTexture:
                 {
                     const DualTextureDrawCommand& c = dualTextureDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture0 != nullptr && c.texture1 != nullptr && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.texture0 && c.texture1 && c.target == target)
                         IssueDualTextureDraw(pass, cmd, c, colorFormat, sampleCount,
                                              depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -4966,7 +4968,7 @@ namespace CNA::Internal::Backends::SdlGpu
                 case DrawKind::EnvMap:
                 {
                     const EnvMapDrawCommand& c = envMapDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr && c.envMapTexture != nullptr && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.texture && c.envMapTexture && c.target == target)
                         IssueEnvMapDraw(pass, cmd, c, colorFormat, sampleCount,
                                         depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -4974,7 +4976,7 @@ namespace CNA::Internal::Backends::SdlGpu
                 case DrawKind::Skinned:
                 {
                     const SkinnedDrawCommand& c = skinnedDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.uploadedBoneBuffer != nullptr && c.texture != nullptr && c.target == target)
+                    if (c.uploadedVertexBuffer != nullptr && c.uploadedBoneBuffer != nullptr && c.texture && c.target == target)
                         IssueSkinnedDraw(pass, cmd, c, colorFormat, sampleCount,
                                          depthStencilFormat, colorTargetCount, boundPipeline);
                     break;
@@ -4982,7 +4984,7 @@ namespace CNA::Internal::Backends::SdlGpu
                 case DrawKind::Pbr:
                 {
                     const PbrDrawCommand& c = pbrDrawCommands_[ref.index];
-                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr
+                    if (c.uploadedVertexBuffer != nullptr && c.texture
                         && (!c.skinned || c.uploadedBoneBuffer != nullptr) && c.target == target)
                         IssuePbrDraw(pass, cmd, c, colorFormat, sampleCount,
                                      depthStencilFormat, colorTargetCount, boundPipeline);
@@ -5213,11 +5215,65 @@ namespace CNA::Internal::Backends::SdlGpu
         DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
     }
 
+    // ---- SdlGpuSampledTextureState / texture resolution (REMED-GFX-152) ----
+
+    SdlGpuSampledTextureState::~SdlGpuSampledTextureState()
+    {
+        // Deferred, not immediate -- a draw queued this frame is only issued at
+        // EnsureFrameRendered(), so a public Texture2D/TextureCube destroyed in between must leave
+        // its native handle valid until that command buffer has been submitted. Same contract (and
+        // same drain point) as SdlGpuRenderTarget2DState; see QueueTextureRelease's own doc comment.
+        //
+        // Honest scope: an immediate SDL_ReleaseGPUTexture here was A/B-measured and produced
+        // neither a wrong pixel nor an ASan report, because SDL_gpu defers the real destruction
+        // internally. This is therefore hardening, not a defect that was observed failing -- but
+        // the commands now store a raw native handle, and relying on another library's internal
+        // deferral to keep it valid is exactly the kind of unstated assumption REMED-GFX-152
+        // exists to remove. Ordinary textures and render targets follow ONE lifetime rule.
+        if (owner != nullptr)
+            owner->QueueTextureRelease(texture);
+    }
+
+    SdlGpuSampledTextureEXT ResolveSampledTextureEXT(const ITextureBackend* texture, const char* usage)
+    {
+        if (texture == nullptr)
+            return {};
+        // dynamic_cast, never static_cast: a public Texture2D and a public RenderTarget2D arrive
+        // here as the same static type but are unrelated sibling classes, so the object -- not the
+        // call site -- has to answer which one this is (REMED-GFX-152).
+        if (const auto* plain = dynamic_cast<const SdlGpuTextureBackend*>(texture))
+            return plain->Sampled();
+        if (const auto* target = dynamic_cast<const SdlGpuRenderTargetBackend*>(texture))
+            return target->Sampled();
+        throw std::invalid_argument(
+            std::string("CNA SDL_GPU: ") + usage +
+            " received a texture this backend cannot sample -- it is neither an SDL_GPU Texture2D "
+            "nor an SDL_GPU RenderTarget2D (a resource from another graphics backend?)");
+    }
+
+    SdlGpuSampledTextureEXT ResolveSampledCubeEXT(const ITextureCubeBackend* texture, const char* usage)
+    {
+        if (texture == nullptr)
+            return {};
+        if (const auto* plain = dynamic_cast<const SdlGpuTextureCubeBackend*>(texture))
+            return plain->Sampled();
+        if (const auto* target = dynamic_cast<const SdlGpuRenderTargetCubeBackend*>(texture))
+            return target->Sampled();
+        throw std::invalid_argument(
+            std::string("CNA SDL_GPU: ") + usage +
+            " received a cube texture this backend cannot sample -- it is neither an SDL_GPU "
+            "TextureCube nor an SDL_GPU RenderTargetCube (a resource from another graphics backend?)");
+    }
+
     // ---- SdlGpuTextureBackend ----
 
     SdlGpuTextureBackend::SdlGpuTextureBackend(SdlGpuGraphicsBackend& owner, const ImageData& data)
-        : owner_(&owner), width_(data.width), height_(data.height)
+        : owner_(&owner),
+          state_(std::make_shared<SdlGpuSampledTextureState>()),
+          width_(data.width), height_(data.height)
     {
+        state_->owner = &owner;
+
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_2D;
         createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -5228,29 +5284,17 @@ namespace CNA::Internal::Backends::SdlGpu
         createInfo.num_levels = 1;
         createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
-        texture_ = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
-        if (texture_ == nullptr)
+        state_->texture = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
+        if (state_->texture == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create Texture2D: ") + SDL_GetError());
 
-        try
-        {
-            UpdatePixels(data.pixels.data(), width_ * 4);
-        }
-        catch (...)
-        {
-            // A throwing constructor never runs ~SdlGpuTextureBackend(). Release the native
-            // texture here while preserving the upload exception and its SDL diagnostic.
-            SDL_ReleaseGPUTexture(owner_->Device(), texture_);
-            texture_ = nullptr;
-            throw;
-        }
+        UpdatePixels(data.pixels.data(), width_ * 4);
+        // A throwing UpdatePixels no longer needs its own cleanup: state_ is already constructed,
+        // so unwinding destroys it and its destructor releases the texture through the same
+        // deferred path every other exit uses.
     }
 
-    SdlGpuTextureBackend::~SdlGpuTextureBackend()
-    {
-        if (texture_ != nullptr)
-            SDL_ReleaseGPUTexture(owner_->Device(), texture_);
-    }
+    SdlGpuTextureBackend::~SdlGpuTextureBackend() = default;
 
     void SdlGpuTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
     {
@@ -5296,7 +5340,7 @@ namespace CNA::Internal::Backends::SdlGpu
         source.pixels_per_row = static_cast<Uint32>(width_);
         source.rows_per_layer = static_cast<Uint32>(height_);
         SDL_GPUTextureRegion destination{};
-        destination.texture = texture_;
+        destination.texture = state_->texture;
         destination.w = static_cast<Uint32>(width_);
         destination.h = static_cast<Uint32>(height_);
         destination.d = 1;
@@ -5483,9 +5527,13 @@ namespace CNA::Internal::Backends::SdlGpu
     // ---- SdlGpuTextureCubeBackend (Phase SDLGPU-9, SDLGPU-51) ----
 
     SdlGpuTextureCubeBackend::SdlGpuTextureCubeBackend(SdlGpuGraphicsBackend& owner, int size, bool mipMap)
-        : owner_(&owner), size_(size), mipMap_(mipMap)
+        : owner_(&owner)
+        , state_(std::make_shared<SdlGpuSampledTextureState>())
+        , size_(size), mipMap_(mipMap)
         , levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
     {
+        state_->owner = &owner;
+
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_CUBE;
         createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -5502,16 +5550,12 @@ namespace CNA::Internal::Backends::SdlGpu
         createInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(size, size)) : 1;
         createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
-        texture_ = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
-        if (texture_ == nullptr)
+        state_->texture = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
+        if (state_->texture == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create TextureCube: ") + SDL_GetError());
     }
 
-    SdlGpuTextureCubeBackend::~SdlGpuTextureCubeBackend()
-    {
-        if (texture_ != nullptr)
-            SDL_ReleaseGPUTexture(owner_->Device(), texture_);
-    }
+    SdlGpuTextureCubeBackend::~SdlGpuTextureCubeBackend() = default;
 
     bool SdlGpuTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
                                            const void* data, int dataLength)
@@ -5554,7 +5598,7 @@ namespace CNA::Internal::Backends::SdlGpu
         source.pixels_per_row = static_cast<Uint32>(w);
         source.rows_per_layer = static_cast<Uint32>(h);
         SDL_GPUTextureRegion destination{};
-        destination.texture = texture_;
+        destination.texture = state_->texture;
         destination.mip_level = static_cast<Uint32>(level);
         destination.layer = static_cast<Uint32>(face);
         destination.x = static_cast<Uint32>(x);
@@ -5575,7 +5619,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // outside any pass, per SDL_gpu.h.
         const bool isFullLevel0Upload = level == 0 && x == 0 && y == 0 && w == size_ && h == size_;
         if (mipMap_ && isFullLevel0Upload)
-            SDL_GenerateMipmapsForGPUTexture(cmd, texture_);
+            SDL_GenerateMipmapsForGPUTexture(cmd, state_->texture);
 
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
@@ -5621,7 +5665,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
         SDL_GPUTextureRegion region{};
-        region.texture = texture_;
+        region.texture = state_->texture;
         region.mip_level = static_cast<Uint32>(level);
         region.layer = static_cast<Uint32>(face);
         region.x = static_cast<Uint32>(x);
@@ -6552,16 +6596,11 @@ namespace CNA::Internal::Backends::SdlGpu
         if (!begun_)
             throw std::logic_error("CNA SDL_GPU SpriteBatch.Draw called outside Begin/End");
         // A drawn texture is either a plain Texture2D (SdlGpuTextureBackend) or a RenderTarget2D
-        // sampled after being rendered into (SdlGpuRenderTargetBackend, Phase SDLGPU-8) -- both
-        // implement ITextureBackend but are unrelated concrete classes, so resolve whichever one
-        // this actually is to get the raw SDL_GPUTexture* to bind.
-        SDL_GPUTexture* nativeTexture = nullptr;
-        if (const auto* plainTexture = dynamic_cast<const SdlGpuTextureBackend*>(&texture))
-            nativeTexture = plainTexture->Texture();
-        else if (const auto* renderTarget = dynamic_cast<const SdlGpuRenderTargetBackend*>(&texture))
-            nativeTexture = renderTarget->ColorTexture();
-        else
-            throw std::invalid_argument("CNA SDL_GPU: SpriteBatch received a texture from another graphics backend");
+        // sampled after being rendered into (SdlGpuRenderTargetBackend, Phase SDLGPU-8) -- unrelated
+        // concrete classes, resolved through the one shared resolver the 3D effect paths also use,
+        // so sprites and effects cannot drift apart on either type or lifetime (REMED-GFX-152).
+        const SdlGpuSampledTextureEXT nativeTexture =
+            ResolveSampledTextureEXT(&texture, "SpriteBatch.Draw");
         // SDLGPU-42/43: resolve the custom effect NOW (Draw()-call time), not once per Begin/End --
         // a game may reasonably change uniforms between individual Draw() calls within one
         // Begin/End cycle using the same custom effect object (see SpriteCommand's own doc comment).
