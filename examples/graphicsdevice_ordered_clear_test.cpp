@@ -178,21 +178,27 @@ namespace
                                  true, true, false,
                                  true, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
-    // SDL_gpu delivers a clear colour only through SDL_GPUColorTargetInfo.load_op, so a Clear()
-    // after a draw cannot wipe that draw; a LEADING clear works because every bind cycle is its own
-    // pass with its own load op (REMED-GFX-145).
+    // SDL_gpu delivers a clear colour only through SDL_GPUColorTargetInfo.load_op, and a render pass
+    // has exactly one. REMED-GFX-156 made the LOGICAL SEGMENT the unit that owns a load action
+    // instead of the bind cycle: an observable Clear() closes the open segment and opens another one
+    // over the same destination, so the clear is the new pass's load action and everything issued
+    // after it joins that pass. `orderedClear` is therefore true and the whole declaration is
+    // measured, not assumed.
     constexpr Contract kContract{"SDL_GPU", true, true, false, true, true,
                                  true, true, false,
-                                 false, true, true, true, false, true, false};
+                                 true, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_BGFX)
     constexpr Contract kContract{"BGFX", true, true, true, true, true,
                                  true, true, true,
                                  true, true, true, true, false, false, false};
 #elif defined(CNA_BACKEND_WEBGPU)
-    // wgpu delivers a clear only through the pass load op, exactly as SDL_gpu does.
+    // wgpu delivers a clear only through the pass load op, exactly as SDL_gpu does, and a
+    // WGPURenderPassDescriptor has exactly one set of them. REMED-GFX-156 put Clear() into the same
+    // ordered stream REMED-GFX-159 built for the eleven draw families and cuts that stream into one
+    // native pass per observable Clear, so `orderedClear` is true here too.
     constexpr Contract kContract{"WEBGPU", true, true, true, true, true,
                                  true, true, false,
-                                 false, true, true, true, false, true, false};
+                                 true, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_HEADLESS)
     // Rasterizes nothing and owns no readable colour: every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", true, false, false, true, false,
@@ -1242,6 +1248,330 @@ class OrderedClearTest : public Game
     // R -- resource cardinality: many Clears must not build anything up
     // =====================================================================
 
+    // =====================================================================
+    // P -- REMED-GFX-156: pass state must survive an ordered Clear boundary
+    // =====================================================================
+
+    /**
+     * @brief The parity oracle every P check uses.
+     *
+     * A backend that delivers an ordered mid-cycle Clear by ending its native render pass and
+     * beginning another one has to reinstate, for the second pass, every piece of pass state the
+     * first pass's end discarded. A pixel oracle that only asks "did the clear happen" is blind to
+     * all of it, so each check runs the SAME state-sensitive draw twice: once at the head of a bind
+     * cycle (control, one native pass) and once after a full-target draw that an ordered Clear
+     * erases (subject, two native passes). The two readbacks must be byte-identical.
+     *
+     * @param dev The device.
+     * @param label What the check is called.
+     * @param draw Issues the state-sensitive draw. Called once per leg, in both arrangements.
+     */
+    template <typename Fn>
+    void ExpectClearBoundaryParity(GraphicsDevice& dev, const std::string& label, Fn draw)
+    {
+        if (!NeedRtReadback(label)) return;
+        auto control = MakeTarget(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
+        dev.SetRenderTarget(control.get());
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                  kBlack, 1.0f, 0);
+        draw(dev);
+        dev.SetRenderTarget(nullptr);
+        Probe ctrl = ReadTarget(*control);
+        if (ctrl.threw) { check(false, label + " [control readback threw: " + ctrl.what + "]"); return; }
+
+        auto subject = MakeTarget(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
+        dev.SetRenderTarget(subject.get());
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                  kBlack, 1.0f, 0);
+        FillTarget(kMagenta);                      // everything the ordered Clear must erase
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
+                  kBlack, 1.0f, 0);
+        draw(dev);
+        dev.SetRenderTarget(nullptr);
+        Probe subj = ReadTarget(*subject);
+        if (subj.threw) { check(false, label + " [subject readback threw: " + subj.what + "]"); return; }
+
+        Expect(subj, kRT, kRT,
+               [&](int x, int y) { return ctrl.dest[static_cast<std::size_t>(y) * kRT + x]; },
+               label);
+    }
+
+    /// P1 -- the Viewport a draw was queued under still applies in the pass the Clear opened.
+    void RunViewportAcrossClearBoundary(GraphicsDevice& dev)
+    {
+        ExpectClearBoundaryParity(
+            dev, "P1 Viewport survives a Clear boundary",
+            [this](GraphicsDevice& d)
+            {
+                const Viewport saved = d.getViewportProperty();
+                d.setViewportProperty(Viewport(0, 0, kHalf, kHalf));
+                Fill(kGreen, 0, 0, kRT, kRT);
+                d.setViewportProperty(saved);
+            });
+    }
+
+    /// P2 -- the ScissorRectangle a draw was queued under still applies after the boundary.
+    void RunScissorAcrossClearBoundary(GraphicsDevice& dev)
+    {
+        ExpectClearBoundaryParity(
+            dev, "P2 ScissorRectangle survives a Clear boundary",
+            [this](GraphicsDevice& d)
+            {
+                RasterizerState scissored = RasterizerState::CullNone;
+                scissored.setScissorTestEnableProperty(true);
+                const Rectangle saved = d.getScissorRectangleProperty();
+                d.setScissorRectangleProperty(Rectangle(0, 0, kHalf, kRT));
+                SamplerState point = SamplerState::PointClamp;
+                DepthStencilState noDepth = DepthStencilState::None;
+                sb_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth,
+                           &scissored);
+                sb_->Draw(*white_, Rectangle(0, 0, kRT, kRT), Rectangle(0, 0, 1, 1), kGreen);
+                sb_->End();
+                d.setScissorRectangleProperty(saved);
+                d.setRasterizerStateProperty(RasterizerState::CullNone);
+            });
+    }
+
+    /// P3 -- the blend constant (GraphicsDevice.BlendFactor) still reaches the reopened pass.
+    void RunBlendFactorAcrossClearBoundary(GraphicsDevice& dev)
+    {
+        ExpectClearBoundaryParity(
+            dev, "P3 BlendFactor survives a Clear boundary",
+            [this](GraphicsDevice& d)
+            {
+                // Opaque white under SourceBlend=BlendFactor resolves to the blend constant itself,
+                // so the drawn colour IS the piece of pass state under test.
+                BlendState factored;
+                factored.setColorSourceBlendProperty(Blend::BlendFactor);
+                factored.setColorDestinationBlendProperty(Blend::Zero);
+                factored.setAlphaSourceBlendProperty(Blend::One);
+                factored.setAlphaDestinationBlendProperty(Blend::Zero);
+                const Color savedFactor = d.getBlendFactorProperty();
+                d.setBlendFactorProperty(kCyan);
+                SamplerState point = SamplerState::PointClamp;
+                DepthStencilState noDepth = DepthStencilState::None;
+                RasterizerState noCull = RasterizerState::CullNone;
+                sb_->Begin(SpriteSortMode::Deferred, factored, &point, &noDepth, &noCull);
+                sb_->Draw(*white_, Rectangle(0, 0, kHalf, kRT), Rectangle(0, 0, 1, 1), kWhite);
+                sb_->End();
+                d.setBlendFactorProperty(savedFactor);
+            });
+    }
+
+    /// P4 -- the depth buffer and depth state still gate the draw after the boundary.
+    void RunDepthStateAcrossClearBoundary(GraphicsDevice& dev)
+    {
+        if (!kContract.primitives3D || !kContract.depthBuffer3D)
+        {
+            skip("P4 depth state survives a Clear boundary: skipped -- no depth oracle here");
+            return;
+        }
+        ExpectClearBoundaryParity(
+            dev, "P4 depth state survives a Clear boundary",
+            [this](GraphicsDevice& d)
+            {
+                Draw3D(d, DepthState(), -1.0f, 1.0f, 0.3f, kBlue);   // near, writes depth
+                Draw3D(d, DepthState(), -1.0f, 0.0f, 0.7f, kRed);    // farther, must be rejected
+            });
+    }
+
+    /// P5 -- the stencil reference and stencil buffer still gate the draw after the boundary.
+    void RunStencilAcrossClearBoundary(GraphicsDevice& dev)
+    {
+        if (!kContract.primitives3D || !kContract.stencilBuffer3D)
+        {
+            skip("P5 stencil state survives a Clear boundary: skipped -- stencil testing does not "
+                 "gate fragments here");
+            return;
+        }
+        ExpectClearBoundaryParity(
+            dev, "P5 stencil state survives a Clear boundary",
+            [this](GraphicsDevice& d)
+            {
+                Draw3D(d, StencilWriteState(7), -1.0f, 0.0f, 0.5f, kBlue);  // left half writes 7
+                Draw3D(d, StencilTestState(7), -1.0f, 1.0f, 0.5f, kGreen);  // only where 7
+            });
+    }
+
+    // =====================================================================
+    // T -- REMED-GFX-156: destination transitions around ordered Clears
+    // =====================================================================
+
+    /// T1 -- backbuffer -> target -> backbuffer, each cycle drawing then clearing.
+    void RunBackbufferTargetBackbuffer(GraphicsDevice& dev)
+    {
+        if (!NeedRtReadback("T1 backbuffer -> target -> backbuffer")) return;
+        auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents);
+
+        FillBackbuffer(kRed);
+        dev.Clear(ClearOptions::Target, kBlue, 1.0f, 0);
+
+        dev.SetRenderTarget(rt.get());
+        FillTarget(kMagenta);
+        dev.Clear(ClearOptions::Target, kGreen, 1.0f, 0);
+        FillLeftHalf(kYellow);
+        dev.SetRenderTarget(nullptr);
+
+        FillBackbufferLeft(kCyan);
+
+        Probe pt = ReadTarget(*rt);
+        ExpectHalves(pt, kRT, kRT, kYellow, kGreen,
+                     "T1 backbuffer -> target -> backbuffer: the target cycle's own ordered Clear "
+                     "wipes only its own earlier draw");
+        if (!kContract.backbufferReadback)
+        {
+            skip("T1 backbuffer -> target -> backbuffer: backbuffer half skipped -- no readback");
+            return;
+        }
+        Probe pb = ReadBackbuffer(dev);
+        ExpectHalves(pb, kBBW, kBBH, kCyan, kBlue,
+                     "T1 backbuffer -> target -> backbuffer: the backbuffer's ordered Clear wiped "
+                     "its first draw, and the draw issued after the target cycle lands on top");
+    }
+
+    /// T2 -- two equal-sized targets, each with its own draw-then-Clear, interleaved.
+    void RunTwoEqualTargets(GraphicsDevice& dev)
+    {
+        if (!NeedRtReadback("T2 two equal-sized targets")) return;
+        auto a = MakeTarget(dev, RenderTargetUsage::PreserveContents);
+        auto b = MakeTarget(dev, RenderTargetUsage::PreserveContents);
+
+        dev.SetRenderTarget(a.get());
+        FillTarget(kRed);
+        dev.Clear(ClearOptions::Target, kGreen, 1.0f, 0);
+        dev.SetRenderTarget(nullptr);
+
+        dev.SetRenderTarget(b.get());
+        FillTarget(kBlue);
+        dev.Clear(ClearOptions::Target, kYellow, 1.0f, 0);
+        FillLeftHalf(kMagenta);
+        dev.SetRenderTarget(nullptr);
+
+        dev.SetRenderTarget(a.get());
+        FillLeftHalf(kCyan);
+        dev.SetRenderTarget(nullptr);
+
+        ExpectHalves(ReadTarget(*a), kRT, kRT, kCyan, kGreen,
+                     "T2 two equal-sized targets: A keeps its own ordered Clear and the later "
+                     "cycle's draw composes with it");
+        ExpectHalves(ReadTarget(*b), kRT, kRT, kMagenta, kYellow,
+                     "T2 two equal-sized targets: B keeps its own ordered Clear, not A's");
+    }
+
+    /// T3 -- two DIFFERENTLY sized targets: a boundary must not carry the other's extent.
+    void RunTwoDifferentlySizedTargets(GraphicsDevice& dev)
+    {
+        if (!NeedRtReadback("T3 two differently sized targets")) return;
+        auto small = MakeTarget(dev, RenderTargetUsage::PreserveContents);
+        RenderTarget2D big(dev, kRT * 2, kRT * 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                           RenderTargetUsage::PreserveContents);
+
+        dev.SetRenderTarget(&big);
+        Fill(kRed, 0, 0, kRT * 2, kRT * 2);
+        dev.Clear(ClearOptions::Target, kGreen, 1.0f, 0);
+        Fill(kBlue, 0, 0, kRT, kRT * 2);
+        dev.SetRenderTarget(nullptr);
+
+        dev.SetRenderTarget(small.get());
+        FillTarget(kMagenta);
+        dev.Clear(ClearOptions::Target, kYellow, 1.0f, 0);
+        dev.SetRenderTarget(nullptr);
+
+        std::vector<Color> bigPixels(static_cast<std::size_t>(kRT * 2) * (kRT * 2), Sentinel());
+        bool threw = false;
+        std::string what;
+        try { big.GetData(0, nullptr, bigPixels.data(), 0, static_cast<int>(bigPixels.size())); }
+        catch (const std::exception& e) { threw = true; what = e.what(); }
+        if (threw)
+        {
+            check(false, "T3 two differently sized targets [readback threw: " + what + "]");
+        }
+        else
+        {
+            std::size_t bad = 0;
+            for (int y = 0; y < kRT * 2; ++y)
+                for (int x = 0; x < kRT * 2; ++x)
+                {
+                    const Color want = x < kRT ? kBlue : kGreen;
+                    if (!Same(bigPixels[static_cast<std::size_t>(y) * (kRT * 2) + x], want)) ++bad;
+                }
+            check(bad == 0, "T3 two differently sized targets: the larger target's ordered Clear "
+                            "covers ITS whole extent, not the smaller one's [mismatched=" +
+                                std::to_string(bad) + "/" +
+                                std::to_string(static_cast<std::size_t>(kRT * 2) * (kRT * 2)) + "]");
+        }
+        ExpectUniform(ReadTarget(*small), kRT, kRT, kYellow,
+                      "T3 two differently sized targets: the smaller target's own ordered Clear "
+                      "wipes its own draw");
+    }
+
+    /// T4 -- an ordered Clear on a SECOND cube face leaves the first face's clear standing.
+    void RunSecondCubeFaceClear(GraphicsDevice& dev)
+    {
+        if (!kContract.cubeTargets || !kContract.cubeReadback)
+        {
+            skip("T4 second cube face Clear: skipped -- no exact RenderTargetCube readback here");
+            return;
+        }
+        auto cube = std::make_unique<RenderTargetCube>(dev, kRT, false, SurfaceFormat::Color,
+                                                       DepthFormat::None, 0,
+                                                       RenderTargetUsage::PreserveContents);
+        dev.SetRenderTarget(cube.get(), CubeMapFace::NegativeX);
+        FillTarget(kRed);
+        dev.Clear(ClearOptions::Target, kGreen, 1.0f, 0);
+        dev.SetRenderTargets({});
+
+        dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveZ);
+        FillTarget(kBlue);
+        dev.Clear(ClearOptions::Target, kYellow, 1.0f, 0);
+        FillLeftHalf(kMagenta);
+        dev.SetRenderTargets({});
+
+        ExpectUniform(ReadFace(*cube, static_cast<int>(CubeMapFace::NegativeX)), kRT, kRT, kGreen,
+                      "T4 second cube face Clear: the first face keeps its own ordered Clear");
+        ExpectHalves(ReadFace(*cube, static_cast<int>(CubeMapFace::PositiveZ)), kRT, kRT,
+                     kMagenta, kYellow,
+                     "T4 second cube face Clear: the second face's ordered Clear wipes only that "
+                     "face's earlier draw");
+        // A face neither cycle ever bound has never been rendered into, so what it holds is this
+        // backend's own uninitialized surface -- not something to predict. What IS asserted is the
+        // claim: neither ordered Clear reached it. K1 already asserts the positive form for a face
+        // that WAS painted.
+        Probe untouched = ReadFace(*cube, static_cast<int>(CubeMapFace::PositiveY));
+        bool leaked = untouched.threw;
+        for (const Color& c : untouched.dest)
+            if (Same(c, kGreen) || Same(c, kYellow) || Same(c, kMagenta)) { leaked = true; break; }
+        check(!leaked, "T4 second cube face Clear: a face neither cycle bound is reached by "
+                       "neither ordered Clear (got " + ColorText(untouched.dest[0]) + ")");
+    }
+
+    /// A1 -- consecutive Clears naming DIFFERENT aspects must compose, not replace each other.
+    void RunAspectCoalescing(GraphicsDevice& dev)
+    {
+        if (!kContract.primitives3D || !kContract.depthBuffer3D)
+        {
+            skip("A1 aspect coalescing: skipped -- no depth oracle here");
+            return;
+        }
+        if (!NeedRtReadback("A1 aspect coalescing")) return;
+        auto rt = MakeTarget(dev, RenderTargetUsage::PreserveContents, DepthFormat::Depth24Stencil8);
+        dev.SetRenderTarget(rt.get());
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, kBlack, 1.0f, 0);
+        Draw3D(dev, DepthState(), -1.0f, 1.0f, 0.3f, kBlue);   // near, writes depth
+        // Two ordered Clears, no draw between them: colour red, then depth back to far. Both must
+        // reach the SAME reopened pass -- a backend that let the second replace the first would
+        // leave either the colour uncleared or the depth uncleared.
+        dev.Clear(ClearOptions::Target, kRed, 1.0f, 0);
+        dev.Clear(ClearOptions::DepthBuffer, kWhite, 1.0f, 0);
+        Draw3D(dev, DepthState(), -1.0f, 0.0f, 0.7f, kGreen);  // farther, now accepted
+        dev.SetRenderTarget(nullptr);
+
+        ExpectHalves(ReadTarget(*rt), kRT, kRT, kGreen, kRed,
+                     "A1 aspect coalescing: Clear(Target) then Clear(DepthBuffer) with no draw "
+                     "between them delivers BOTH -- the colour is the requested red and the "
+                     "farther quad is accepted by the reset depth");
+    }
+
     /// R1 -- 32 Clear()s in ONE bind cycle, then 8 cycles of 4 Clear()s each.
     void RunManyClears(GraphicsDevice& dev)
     {
@@ -1343,6 +1673,18 @@ protected:
         RunClearUnderViewport(dev);
         RunClearUnderScissor(dev);
         RunMsaaOrderedClear(dev);
+        // REMED-GFX-156: pass state across the boundary an ordered Clear creates, and the
+        // destination arrangements that boundary has to stay correct in.
+        RunViewportAcrossClearBoundary(dev);
+        RunScissorAcrossClearBoundary(dev);
+        RunBlendFactorAcrossClearBoundary(dev);
+        RunDepthStateAcrossClearBoundary(dev);
+        RunStencilAcrossClearBoundary(dev);
+        RunBackbufferTargetBackbuffer(dev);
+        RunTwoEqualTargets(dev);
+        RunTwoDifferentlySizedTargets(dev);
+        RunSecondCubeFaceClear(dev);
+        RunAspectCoalescing(dev);
         RunManyClears(dev);
         // Last, because it is the only check that leaves content on the backbuffer.
         RunBackbufferOrderedClear(dev);

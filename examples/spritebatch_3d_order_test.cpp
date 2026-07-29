@@ -64,7 +64,13 @@
 //   H  repeated and interleaved Apply            the same effect applied twice, two different
 //                                                effect objects, Apply after SpriteBatch.End
 //   I  state does not leak between families      depth, blend, rasterizer, cull, scissor, viewport
-//   J  clears between families                   before, between and after the two families
+//   J  clears between families                   before, between and after the two families, both
+//                                                orders, alternating Clear/draw runs, and two
+//                                                consecutive Clears (REMED-GFX-156)
+//   P  every family ACROSS a Clear boundary      REMED-GFX-156: a backend that splits its bind
+//                                                cycle into two native passes at the Clear must
+//                                                rebuild all pass state for the second one; parity
+//                                                against the same draw at the head of a fresh pass
 //   K  cardinality and repetition                many alternations per cycle, many cycles, many
 //                                                frames -- no growth, no extra frame needed
 //   L  lifetime control                          scope-local effect and buffers, as leg I0 wrote it
@@ -290,19 +296,15 @@ namespace
      *
      * WEBGPU joined SDL_GPU here when REMED-GFX-159 landed, and the two facts are independent: leg
      * J had been skipping behind the family-order gate above, so turning that gate over is what
-     * first RAN it. Measured then: a `Clear()` between the two families leaves the earlier sprite
-     * standing and a `Clear()` after both leaves both standing, because `clearColorPending_` only
-     * ever selects `WGPULoadOp_Clear` for the whole pass. `backbuffer_pass_order_test.cpp` already
-     * declares exactly this for WEBGPU under its own name, citing REMED-GFX-140. Ordered mid-cycle
-     * `Clear` on WebGPU is the counterpart of REMED-GFX-129's Vulkan work and is its own finding,
-     * deliberately not started here.
+     * first RAN it. Measured then: a `Clear()` between the two families left the earlier sprite
+     * standing and a `Clear()` after both left both standing, because `clearColorPending_` only
+     * ever selected `WGPULoadOp_Clear` for the whole pass.
+     *
+     * REMED-GFX-156 fixed both: each cuts its bind cycle into one native render pass per observable
+     * Clear, so the declaration is unconditional and leg J -- which was SKIPPED, not failing, on
+     * exactly those two backends, and is this file's only Clear coverage -- now runs everywhere.
      */
-    constexpr bool kClearAfterDrawWins =
-#if defined(CNA_BACKEND_SDL_GPU) || defined(CNA_BACKEND_WEBGPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kClearAfterDrawWins = true;
 
     /**
      * @brief Whether `GetBackBufferData` rejects on a backend that rasterizes nothing.
@@ -1432,14 +1434,11 @@ class SpriteBatch3DOrderTest : public Game
     {
         if (!kDraws3D) { skip("J: skipped -- no stock 3D rasterization here"); return; }
         if (!RequirePublicFamilyOrder("J")) return;
-        if (!kClearAfterDrawWins)
-        {
-            skip("J: skipped -- on " + std::string(kBackendName) + " a pass's only clear mechanism "
-                 "is its load action, so a Clear() issued after a draw in the same bind cycle "
-                 "cannot wipe it (declared, and REMED-GFX-143's own fixture declares the same "
-                 "property); this is not a family-ordering question");
-            return;
-        }
+        static_assert(kClearAfterDrawWins,
+                      "REMED-GFX-156: leg J used to be SKIPPED behind this gate on SDL_GPU and "
+                      "WebGPU, which is how a whole file's worth of Clear coverage measured "
+                      "nothing on the two backends that needed it. A backend that regresses must "
+                      "restore the declaration rather than re-introduce the skip.");
         RenderTarget2D rt(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::PreserveContents);
         Dest d{ &rt, kRTW, kRTH, "render target" };
@@ -1469,6 +1468,169 @@ class SpriteBatch3DOrderTest : public Game
                 check(Same(StripeColor(r, 0), kClear) && Same(StripeColor(r, 1), kClear),
                       "J2 a Clear after both families wipes both (stripe0 " +
                       ColorText(StripeColor(r, 0)) + ")");
+        }
+
+        // J3 the reverse pair: a Clear between 3D and SpriteBatch.
+        {
+            Begin(dev, d);
+            Draw3DStripes(dev, 0, 4, kBlue);
+            dev.Clear(kClear);
+            SpriteStripes(d, 0, 1, kRed);
+            Readback r = Read(dev, d);
+            if (Readable(r, d, "J3"))
+                check(Same(StripeColor(r, 0), kRed) && Same(StripeColor(r, 1), kClear),
+                      "J3 a Clear between a 3D draw and a later SpriteBatch wipes the 3D draw "
+                      "(stripe0 " + ColorText(StripeColor(r, 0)) + ", stripe1 " +
+                      ColorText(StripeColor(r, 1)) + ")");
+        }
+
+        // J4 REMED-GFX-156's shape F: Clear, draw, Clear, draw, Clear -- alternating families, and
+        // the trailing Clear must win over everything before it.
+        {
+            Begin(dev, d);
+            SpriteStripes(d, 0, 4, kRed);
+            dev.Clear(kBlue);
+            Draw3DStripes(dev, 0, 3, kGreen);
+            dev.Clear(kYellow);
+            SpriteStripes(d, 0, 2, kMagenta);
+            dev.Clear(kClear);
+            Readback r = Read(dev, d);
+            if (Readable(r, d, "J4"))
+            {
+                bool all = true;
+                for (int s = 0; s < kStripes; ++s) if (!Same(StripeColor(r, s), kClear)) all = false;
+                check(all, "J4 Clear, draw, Clear, draw, Clear across both families -- the last "
+                           "Clear wins everywhere (stripe0 " + ColorText(StripeColor(r, 0)) +
+                           ", stripe3 " + ColorText(StripeColor(r, 3)) + ")");
+            }
+        }
+
+        // J5 REMED-GFX-156's shape D: two ordered Clears with one family between each pair, so the
+        // surviving image spells the sequence rather than any one command.
+        {
+            Begin(dev, d);
+            dev.Clear(kRed);
+            SpriteStripes(d, 0, 4, kBlue);
+            dev.Clear(kGreen);
+            Draw3DStripes(dev, 0, 1, kMagenta);
+            Readback r = Read(dev, d);
+            if (Readable(r, d, "J5"))
+                check(Same(StripeColor(r, 0), kMagenta) && Same(StripeColor(r, 1), kGreen) &&
+                          Same(StripeColor(r, 3), kGreen),
+                      "J5 Clear, SpriteBatch, Clear, 3D -- the second Clear erases the SpriteBatch "
+                      "and the 3D draw lands on the cleared surface (stripe0 " +
+                      ColorText(StripeColor(r, 0)) + ", stripe1 " + ColorText(StripeColor(r, 1)) +
+                      ")");
+        }
+
+        // J6 two consecutive Clears with nothing between them: the LAST one wins, and it costs no
+        // more than the one pass a single leading Clear costs (asserted structurally by the
+        // per-backend native traces, not here).
+        {
+            Begin(dev, d);
+            SpriteStripes(d, 0, 4, kRed);
+            dev.Clear(kBlue);
+            dev.Clear(kGreen);
+            Readback r = Read(dev, d);
+            if (Readable(r, d, "J6"))
+                check(Same(StripeColor(r, 0), kGreen),
+                      "J6 two consecutive Clears after a draw -- the last one wins (stripe0 " +
+                      ColorText(StripeColor(r, 0)) + ")");
+        }
+
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        ResetState(dev);
+    }
+
+    /**
+     * @brief REMED-GFX-156: every draw entry point and every stock effect ACROSS a Clear boundary.
+     *
+     * A backend that delivers an ordered mid-cycle Clear by cutting its bind cycle into two native
+     * render passes has to rebuild, in the second pass, everything the first pass's end discarded:
+     * the pipeline, the vertex and index buffers, the vertex declaration, the topology, the texture
+     * and sampler bindings, the bind/resource groups, the blend, depth/stencil and rasterizer state,
+     * the blend constant, the stencil reference, the viewport, the scissor and the effect uniforms.
+     * A pixel oracle that only asks "did the clear happen" cannot see any of that.
+     *
+     * The oracle here is PARITY, and it sees all of it at once: the identical draw is issued once as
+     * the FIRST thing in a bind cycle (control, one native pass) and once after a full-target draw
+     * that an ordered Clear then wipes (subject, two native passes). The two readbacks must be
+     * byte-identical over the WHOLE image -- so the clear must have erased the earlier draw exactly,
+     * and the family draw must shade identically after a pass restart. No effect's shading maths has
+     * to be predicted for this to be exact.
+     */
+    void LegClearBoundaryFamilies(GraphicsDevice& dev)
+    {
+        if (!kDraws3D) { skip("P: skipped -- no stock 3D rasterization here"); return; }
+        if (!RequirePublicFamilyOrder("P")) return;
+        RenderTarget2D rt(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                          RenderTargetUsage::PreserveContents);
+        Dest d{ &rt, kRTW, kRTH, "render target" };
+
+        struct Case { Draw3D mode; Fx fx; const char* name; };
+        const Case cases[] = {
+            { Draw3D::UserPrimitives,        Fx::Basic,            "P1 DrawUserPrimitives" },
+            { Draw3D::UserIndexed16,         Fx::Basic,            "P2 DrawUserIndexedPrimitives, 16-bit" },
+            { Draw3D::UserIndexed32,         Fx::Basic,            "P3 DrawUserIndexedPrimitives, 32-bit" },
+            { Draw3D::UserVertexColor,       Fx::BasicVertexColor, "P4 DrawUserPrimitives, vertex colour" },
+            { Draw3D::BufferPrimitives,      Fx::Basic,            "P5 SetVertexBuffer + DrawPrimitives" },
+            { Draw3D::BufferIndexed,         Fx::Basic,            "P6 DrawIndexedPrimitives" },
+            { Draw3D::BufferPrimitivesRange, Fx::Basic,            "P7 DrawPrimitives, nonzero vertexStart" },
+            { Draw3D::BufferIndexedRange,    Fx::Basic,            "P8 DrawIndexedPrimitives, nonzero range" },
+            { Draw3D::UserPrimitives,        Fx::AlphaTest,        "P9 AlphaTestEffect" },
+            { Draw3D::UserPrimitives,        Fx::DualTexture,      "P10 DualTextureEffect" },
+            { Draw3D::UserPrimitives,        Fx::EnvironmentMap,   "P11 EnvironmentMapEffect" },
+            { Draw3D::UserPrimitives,        Fx::Skinned,          "P12 SkinnedEffect" },
+        };
+        for (const Case& c : cases)
+        {
+            const std::string label =
+                std::string(c.name) + " renders identically across an ordered Clear boundary";
+            try
+            {
+                Begin(dev, d);
+                Draw3DStripes(dev, 0, 2, kBlue, c.mode, c.fx);
+                Readback ctrl = Read(dev, d);
+                if (!Readable(ctrl, d, label)) continue;
+                if (Same(StripeColor(ctrl, 0), kClear))
+                {
+                    skip(label + ": skipped -- this entry point / effect renders nothing on " +
+                         kBackendName + " even as the FIRST draw of a cycle");
+                    continue;
+                }
+
+                Begin(dev, d);
+                SpriteStripes(d, 0, kStripes, kRed);   // whole target red...
+                dev.Clear(kClear);                     // ...which the ordered Clear must erase
+                Draw3DStripes(dev, 0, 2, kBlue, c.mode, c.fx);
+                Readback subj = Read(dev, d);
+                if (!Readable(subj, d, label)) continue;
+
+                std::size_t bad = 0;
+                std::string first;
+                for (int y = 0; y < d.h; ++y)
+                    for (int x = 0; x < d.w; ++x)
+                        if (!Same(subj.at(x, y), ctrl.at(x, y)))
+                        {
+                            ++bad;
+                            if (first.empty())
+                                first = " first@(" + std::to_string(x) + "," + std::to_string(y) +
+                                        ") got " + ColorText(subj.at(x, y)) + " want " +
+                                        ColorText(ctrl.at(x, y));
+                        }
+                check(bad == 0, label + " [mismatched=" + std::to_string(bad) + "/" +
+                                    std::to_string(static_cast<std::size_t>(d.w) * d.h) + first +
+                                    "]");
+            }
+            catch (const System::NotSupportedException& e)
+            {
+                skip(label + ": skipped -- NotSupportedException on " + kBackendName + " (" +
+                     e.what() + ")");
+            }
+            catch (const std::exception& e)
+            {
+                skip(label + ": skipped -- threw on " + kBackendName + " (" + e.what() + ")");
+            }
         }
 
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -1946,6 +2108,7 @@ protected:
         LegEffectApplication(dev);
         LegStateTransitions(dev);
         LegClears(dev);
+        LegClearBoundaryFamilies(dev);
         LegCardinality(dev);
         LegLocalLifetime(dev);
         LegLegI0Shape(dev);

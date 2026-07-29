@@ -218,20 +218,16 @@ namespace
     /**
      * @brief Whether a `Clear()` issued AFTER a draw, in the same bind cycle, wins.
      *
-     * REMED-GFX-156 (measured here): on SDL_GPU **and WebGPU** a producer built as `Clear(A); draw
-     * pattern; Clear(B)` is sampled by its consumer as the PATTERN, not as B -- the trailing clear
-     * is lost, so `Clear()` is not an ordered command there. Both report the identical value
-     * (20,25,40,255), i.e. the pattern's own texel (0,0), on all three RenderTargetUsage values.
-     * This is the SDL_GPU/WebGPU counterpart of REMED-GFX-129, which fixed exactly this on Vulkan
-     * and was scoped to Vulkan. Independent of REMED-GFX-151: it reproduces identically whether or
-     * not a producer is sampled, and this fix touches Vulkan files only.
+     * REMED-GFX-156 measured this here first: on SDL_GPU **and WebGPU** a producer built as
+     * `Clear(A); draw pattern; Clear(B)` used to be sampled by its consumer as the PATTERN, not as
+     * B -- the trailing clear was lost, so `Clear()` was not an ordered command there. Both
+     * reported the identical value (20,25,40,255), i.e. the pattern's own texel (0,0), on all three
+     * RenderTargetUsage values, which is the SDL_GPU/WebGPU counterpart of REMED-GFX-129 (fixed on
+     * Vulkan and scoped to Vulkan). Both backends now cut their bind cycle into one native render
+     * pass per observable Clear, so the ordered contract holds everywhere and this declaration is
+     * unconditional -- the producer/consumer path being the second, independent witness of it.
      */
-    constexpr bool kOrderedClearAfterDrawWins =
-#if defined(CNA_BACKEND_SDL_GPU) || defined(CNA_BACKEND_WEBGPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kOrderedClearAfterDrawWins = true;
 
     /**
      * @brief Whether `DualTextureEffect` accepts this fixture's `VertexPositionTexture` geometry.
@@ -1107,28 +1103,13 @@ class RenderTargetProducerConsumerTest : public Game
                 {
                     bool all = true;
                     for (const Color& c : r.pixels) if (!Same(c, clearB)) { all = false; break; }
-                    if (kOrderedClearAfterDrawWins)
-                    {
-                        check(all, std::string("G3 ") + u.name +
-                              ": geometry then Clear() -- the consumer sees the LAST command (want " +
-                              ColorText(clearB) + ", got " + ColorText(r.at(0, 0)) + ")");
-                    }
-                    else
-                    {
-                        // Asserted as "the trailing clear is LOST", which is the claim, so fixing
-                        // REMED-GFX-156 fails this fixture and forces the declaration to be updated.
-                        int pattern = 0;
-                        for (int y = 0; y < kPH; ++y)
-                            for (int x = 0; x < kPW; ++x)
-                                if (Same(r.at(x, y), PatternColor(x, y))) ++pattern;
-                        check(!all && pattern == kPW * kPH,
-                              std::string("G3 ") + u.name +
-                              ": REMED-GFX-156 pinned -- a Clear() issued AFTER a draw is LOST on " +
-                              kBackendName + ", so the consumer sees the geometry (" +
-                              std::to_string(pattern) + "/" + std::to_string(kPW * kPH) +
-                              " pattern texels, got " + ColorText(r.at(0, 0)) + " want " +
-                              ColorText(clearB) + "). Fixing it must flip this declaration.");
-                    }
+                    static_assert(kOrderedClearAfterDrawWins,
+                                  "REMED-GFX-156: every backend this fixture runs on delivers an "
+                                  "ordered Clear now; a backend that regresses must re-introduce "
+                                  "the declaration rather than weaken this leg.");
+                    check(all, std::string("G3 ") + u.name +
+                          ": geometry then Clear() -- the consumer sees the LAST command (want " +
+                          ColorText(clearB) + ", got " + ColorText(r.at(0, 0)) + ")");
                 }
             }
         }

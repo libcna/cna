@@ -284,17 +284,20 @@ namespace
     // state and deliberately never bakes it into any pipeline's `WGPUStencilFaceState` (WEBGPU-83),
     // so every fragment passes the stencil test -- check C2 measures exactly that and is the
     // reason no stencil-preservation result is claimed here.
-    // `orderedClearInCycle` false: a mid-cycle Clear is still delivered through the pass load
-    // action, so it cannot wipe a draw recorded before it (check K7).
+    // `orderedClearInCycle` was false while REMED-GFX-156 was open: a mid-cycle Clear was still
+    // delivered through the pass load action, so it could not wipe a draw recorded before it
+    // (check K7). It cuts the bind cycle into one native pass per observable Clear now, so K7
+    // asserts the ordered result here; it was measured red the moment the fix landed.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
-                                 true, false, true, false, false,
+                                 true, false, true, false, true,
                                  true, true, false, true, true, false, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // Already FNA3D-shaped: every depth/stencil target info uses `clearX ? CLEAR : LOAD` with an
     // unconditional STORE, which is what FNA3D's own SDL_GPU driver does.
-    // `orderedClearInCycle` false: same boundary as WebGPU (check K7).
+    // `orderedClearInCycle` was false while REMED-GFX-156 was open, the same boundary as WebGPU
+    // (check K7); both now segment the bind cycle at every observable Clear.
     constexpr Contract kContract{"SDL_GPU", Support::Exact, true, Support::Exact,
-                                 true, true, true, true, false,
+                                 true, true, true, true, true,
                                  true, true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, false, Support::Unsupported,

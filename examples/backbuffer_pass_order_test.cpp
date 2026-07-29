@@ -201,9 +201,13 @@ namespace
     constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
-    // `clearAfterDrawWinsOnBackbuffer` false: WebGPU delivers a backbuffer clear colour only
-    // through the render-pass load op, the same mechanism REMED-GFX-140 records for its render
-    // targets, so a Clear() after a draw inside ONE cycle cannot wipe that draw.
+    // `clearAfterDrawWinsOnBackbuffer` was false while REMED-GFX-156 was open: WebGPU delivered a
+    // backbuffer clear colour only through the render-pass load op, the same mechanism
+    // REMED-GFX-140 records for its render targets, so a Clear() after a draw inside ONE cycle
+    // could not wipe that draw. REMED-GFX-156 put Clear into the ordered stream REMED-GFX-159 built
+    // and cuts the cycle into one native pass per observable Clear, so check C4 now asserts the
+    // correct behaviour here; it was measured red the moment the fix landed, which is what turned
+    // this declaration over.
     // `backbufferSpriteScissorApplies` was false while REMED-GFX-146 was open, recorded by
     // REMED-GFX-143 as "a backbuffer SpriteBatch fill is not clipped by ScissorRectangle at all".
     // That description was the SYMPTOM, not the cause: the backbuffer pass was never missing its
@@ -221,7 +225,7 @@ namespace
     // per-family replay loops with one ordered reference stream, and this declaration turned over;
     // both checks were measured red the moment the fix landed.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
-                                 true, true, true, false, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override, so `GetBackBufferData` raises and this file's
     // backbuffer oracle cannot run here at all. REMED-GFX-143's SdlGpu half is measured

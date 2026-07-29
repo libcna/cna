@@ -198,19 +198,26 @@ namespace
     constexpr Contract kContract{"VULKAN", true, Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
+    // `clearAfterDrawWins` was false while REMED-GFX-156 was open: wgpu delivers a clear colour
+    // only through the render-pass load op, so a Clear() issued after a draw inside ONE cycle could
+    // not wipe that draw (X3). REMED-GFX-156 put Clear into the ordered stream REMED-GFX-159 built
+    // and cuts the cycle into one native pass per observable Clear; X3 was measured red the moment
+    // the fix landed, which is what turned this declaration over.
     constexpr Contract kContract{"WEBGPU", true, Support::Exact, true, Support::Exact,
-                                 true, false, false, true, true, true, true, false};
+                                 true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // `segmentsBindCycles` true since REMED-GFX-145. SdlGpu collapsed bind cycles exactly as Vulkan
     // did and for the same reason -- `EnsureFrameRendered` gave each DISTINCT `DrawTarget` one
     // `SDL_BeginGPURenderPass` holding every draw ever queued against it that frame -- and declared
-    // false here until it was fixed. `clearAfterDrawWins` stays false: SDL_gpu delivers a clear
-    // colour only through `SDL_GPUColorTargetInfo.load_op`, so a `Clear()` issued after a draw
-    // inside ONE cycle cannot wipe that draw (X3). `clearOnPreserveTarget` is true, and X2 now
-    // proves it holds in a SECOND cycle too, because that cycle is a real second pass with its own
-    // load op.
+    // false here until it was fixed. `clearAfterDrawWins` was false while REMED-GFX-156 was open:
+    // SDL_gpu delivers a clear colour only through `SDL_GPUColorTargetInfo.load_op`, so a `Clear()`
+    // issued after a draw inside ONE cycle could not wipe that draw (X3). REMED-GFX-156 made the
+    // logical SEGMENT rather than the bind cycle own a load action, so an observable Clear opens
+    // another segment over the same destination and X3 asserts the ordered result; it was measured
+    // red the moment the fix landed. `clearOnPreserveTarget` is true, and X2 proves it holds in a
+    // SECOND cycle too, because that cycle is a real second pass with its own load op.
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, true, Support::Exact,
-                                 true, false, false, true, true, true, true, false};
+                                 true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", true, Support::Exact, false, Support::Unsupported,
                                  true, true, false, true, false, true, true, false};
