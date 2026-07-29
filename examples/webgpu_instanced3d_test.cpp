@@ -81,7 +81,13 @@ namespace
         { 0.1f,  0.1f, 0.0f},
         {-0.1f,  0.1f, 0.0f},
     };
-    const std::uint16_t kSmallQuadIdx[6] = {0, 1, 2, 0, 2, 3};
+    // REMED-GFX-160: wound CLOCKWISE as displayed, i.e. an ordinary XNA FRONT face, so this test
+    // survives the device's own default RasterizerState.CullCounterClockwise -- which it never
+    // sets, and therefore relies on. Over the vertices above, {0,1,2}/{0,2,3} is the
+    // counter-clockwise (BACK-facing) order; it used to be that, and passed only because this
+    // backend's cull mapping was inverted to match. This test's subject is instancing, not
+    // culling, so it draws front-facing geometry like a real game would.
+    const std::uint16_t kSmallQuadIdx[6] = {0, 2, 1, 0, 3, 2};
 
     // Per-instance world matrix: 4 column-major float4 "columns" (64 bytes), matching
     // instancedAttrs' Float32x4 layout in GetOrCreatePipelineInstanced3D(). A pure translation

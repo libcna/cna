@@ -213,28 +213,25 @@ namespace
 #endif
 
     /**
-     * @brief Whether an explicit CullCounterClockwise removes a quad wound like a SpriteBatch quad.
+     * @brief The quads this file's 3D family draws are XNA BACK faces, on every backend.
      *
-     * FNA's SpriteBatch emits `j, j+1, j+2, j+3, j+2, j+1` over the corners TL, BL, TR, BR, so its
-     * first triangle is TL -> BL -> TR. The quads this file's 3D family draws are TL -> BL -> BR:
-     * the SAME winding. XNA renders SpriteBatch correctly under the default
-     * RasterizerState.CullCounterClockwise, so a quad of that winding is a FRONT face and
-     * CullCounterClockwise must NOT remove it -- which makes `false` the XNA-correct answer.
+     * This constant used to be `kCcwCullsSpriteWoundQuad`, a per-backend declaration built on a
+     * premise that was wrong at the source. It claimed FNA's SpriteBatch emits its corners as
+     * "TL, BL, TR, BR, so its first triangle is TL -> BL -> TR", and that the quads drawn here
+     * (TL -> BL -> BR) were "the SAME winding" and therefore front faces that
+     * RasterizerState.CullCounterClockwise must keep.
      *
-     * Measured (leg M5), four backends answer `true`: they treat that winding as a BACK face and
-     * cull it under the XNA default. That is an inverted front-face convention in the stock 3D
-     * path, it is a DIFFERENT defect from anything about draw ORDER, and it is what made
-     * REMED-GFX-155's leg I0 report a lost draw -- that leg let SpriteBatch.Begin default the
-     * rasterizer state to CullCounterClockwise and then drew exactly such a quad. It is declared
-     * here rather than absorbed, so the day a backend's convention is corrected this constant fails
-     * and has to be turned over deliberately.
+     * FNA SpriteBatch.cs actually declares CornerOffsetX = { 0, 1, 0, 1 } and
+     * CornerOffsetY = { 0, 0, 1, 1 } -- TL, TR, BL, BR -- so with its j, j+1, j+2 / j+3, j+2, j+1
+     * indices the two sprite triangles are TL -> TR -> BL and BR -> BL -> TR, both CLOCKWISE as
+     * displayed. The quads here are TL -> BL -> BR, the OPPOSITE winding, i.e. counter-clockwise
+     * as displayed and therefore XNA BACK faces. So CullCounterClockwise must REMOVE them
+     * everywhere, and the four backends that did so were correct all along; WEBGPU, which kept
+     * them, was the one inverted backend (REMED-GFX-160, fixed).
+     *
+     * The contract itself is now measured directly, on both windings and every cull mode, by
+     * examples/frontface_winding_test.cpp. Leg M5 below asserts it unconditionally.
      */
-    constexpr bool kCcwCullsSpriteWoundQuad =
-#if defined(CNA_BACKEND_WEBGPU)
-        false;   // XNA-correct
-#else
-        true;    // declared open defect
-#endif
 
     /** @brief How a backend replays a bind cycle's two draw families relative to each other. */
     enum class Replay
@@ -1668,12 +1665,12 @@ class SpriteBatch3DOrderTest : public Game
         check(underCcw != underCw,
               "M5 exactly one of the two culling modes removes the quad, so this backend honours "
               "RasterizerState.CullMode and has a definite front-face convention for this winding");
-        check(underCcw == !kCcwCullsSpriteWoundQuad,
-              std::string("M5 this backend's front-face convention for a SpriteBatch-wound quad is "
-                          "the declared one (CullCounterClockwise ") +
-              (underCcw ? "keeps" : "removes") + " it; XNA requires that it KEEPS it, because "
-              "SpriteBatch emits this very winding and renders correctly under the default "
-              "CullCounterClockwise)");
+        check(!underCcw && underCw,
+              std::string("M5 this quad (TL -> BL -> BR, counter-clockwise as displayed) is an XNA "
+                          "BACK face, so CullCounterClockwise removes it and CullClockwise keeps "
+                          "it -- measured: CullCounterClockwise ") +
+              (underCcw ? "keeps" : "removes") + ", CullClockwise " +
+              (underCw ? "keeps" : "removes"));
 
         // M1 -- REMED-GFX-155 leg I0's exact sequence.
         Begin(dev, bb);

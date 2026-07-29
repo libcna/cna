@@ -5,10 +5,13 @@
 // falling back to IGraphicsBackend's no-op defaults -- confirmed by grepping this backend's own
 // .cpp before this task).
 //
-// Check A -- CullMode.CullClockwiseFace culls a known-winding quad: it must NOT render.
-// Check B -- CullMode.CullCounterClockwiseFace does NOT cull the SAME quad: it must render.
-//   (A+B together prove real, direction-correct cull-mode wiring -- not just "a pipeline was
-//   created". The quad's own winding is derived by hand in the comment above DrawWindingQuad().)
+// Check A1/A2 -- CullMode.CullClockwiseFace removes the CLOCKWISE-as-displayed quad and KEEPS the
+//   counter-clockwise one.
+// Check B1/B2 -- CullMode.CullCounterClockwiseFace is the exact complement of that.
+//   (REMED-GFX-160: these four together prove real, direction-correct cull-mode wiring. They used
+//   to be two checks over ONE quad whose winding was labelled by a hand derivation that came out
+//   backwards, which is how this backend's cull mapping ended up inverted -- see the comment above
+//   DrawWindingQuad(). Both windings are now drawn so no single label can invert it again.)
 // Check C -- BlendState.NonPremultiplied genuinely blends a 50%-alpha red quad over a black
 //   background: the result must land strictly between black and pure red, not either extreme.
 // Check D -- BlendState.Opaque with the SAME 50%-alpha draw produces the PURE quad colour
@@ -81,27 +84,52 @@ namespace
     }
 
     // A full-screen quad (clip-space -1..1), built from 2 triangles that share the SAME winding
-    // (both share the top-left/bottom-right diagonal). Hand-derived winding for triangle 1
-    // (A=(-1,1), B=(-1,-1), C=(1,-1)): the NDC (Y-up, math-convention) signed area is
-    //   cross((B-A),(C-B)) = cross((0,-2)),(2,0)) = 0*0 - (-2)*2 = +4  =>  CCW in NDC.
-    // WGPU/D3D determine front/back winding in RASTER space (Y-down, row 0 = top), which mirrors
-    // NDC across the X axis -- a single-axis mirror reverses chirality, so this triangle is
-    // CLOCKWISE in raster space. XNA's own default RasterizerState (CullCounterClockwiseFace)
-    // culls counter-clockwise (raster-space) faces and keeps clockwise ones as "front" -- so this
-    // quad is a real, ordinary XNA front-facing quad, exactly like every other 3D test in this
-    // suite already draws, not a specially-reversed one.
-    void DrawWindingQuad(GraphicsDevice& dev, const Color& color)
+    // (both share the top-left/bottom-right diagonal).
+    //
+    // REMED-GFX-160 -- THE WINDING OF THIS QUAD, AND THE DERIVATION THAT USED TO BE HERE.
+    // The vertex order below is TL -> BL -> BR, whose NDC (Y-up) signed area is +4, i.e. CCW in
+    // NDC. The old comment then argued that raster space mirrors NDC across the X axis, so the
+    // triangle is "CLOCKWISE in raster space", and concluded it was "a real, ordinary XNA
+    // front-facing quad". The first half is arithmetic and correct; the conclusion is not, and it
+    // is what inverted this backend's cull mapping for real games.
+    //
+    // Flipping to Y-down raster coordinates does flip the SIGN of the computed area -- but the name
+    // a GPU API attaches to that sign is defined IN that Y-down space, so "clockwise in raster
+    // space" means COUNTER-CLOCKWISE AS DISPLAYED. XNA's enums are named for the DISPLAYED
+    // orientation instead: FNA's SpriteBatch emits TL -> TR -> BL and BR -> BL -> TR, both
+    // clockwise as displayed, and they survive the RasterizerState.CullCounterClockwise that
+    // SpriteBatch.Begin itself defaults to. So clockwise-as-displayed is XNA's FRONT face, and
+    // TL -> BL -> BR is a BACK face -- the exact opposite of what checks A and B used to assert.
+    //
+    // Rather than just flip the two expectations, both windings are now drawn and each cull mode
+    // is asserted to be their exact complement, so no future reading of one quad's hand-derived
+    // label can invert this backend again. The FNA-derived contract itself is measured across every
+    // backend by examples/frontface_winding_test.cpp.
+    //
+    // The DEFAULT is the FRONT-facing (clockwise-as-displayed) quad, deliberately. Checks E and H
+    // below construct a fresh `RasterizerState` to turn scissor testing on, and a default-
+    // constructed RasterizerState carries XNA's default CullCounterClockwiseFace -- so with a
+    // back-facing default quad those checks would silently depend on a BACK face staying visible
+    // under the default cull mode, which is the same false premise that inverted this backend.
+    // They passed only because the mapping was inverted too, and both broke the moment it was
+    // corrected. Ordinary front-facing geometry is what a real game draws and what they mean.
+    //
+    // @param backFacing  true selects TL -> BL -> BR / TL -> BR -> TR, which is COUNTER-clockwise
+    //                    as displayed and therefore XNA's BACK face.
+    void DrawWindingQuad(GraphicsDevice& dev, const Color& color, bool backFacing = false)
     {
-        const VertexPositionColor verts[6] = {
-            { Vector3(-1.0f,  1.0f, 0.5f), color },
-            { Vector3(-1.0f, -1.0f, 0.5f), color },
-            { Vector3( 1.0f, -1.0f, 0.5f), color },
-            { Vector3(-1.0f,  1.0f, 0.5f), color },
-            { Vector3( 1.0f, -1.0f, 0.5f), color },
-            { Vector3( 1.0f,  1.0f, 0.5f), color },
+        const Vector3 tl(-1.0f,  1.0f, 0.5f), tr( 1.0f,  1.0f, 0.5f);
+        const Vector3 bl(-1.0f, -1.0f, 0.5f), br( 1.0f, -1.0f, 0.5f);
+        const VertexPositionColor back[6] = {   // counter-clockwise as displayed: a BACK face
+            { tl, color }, { bl, color }, { br, color },
+            { tl, color }, { br, color }, { tr, color },
+        };
+        const VertexPositionColor front[6] = {  // clockwise as displayed: FNA's sprite winding
+            { tl, color }, { tr, color }, { bl, color },
+            { br, color }, { bl, color }, { tr, color },
         };
         ApplyBasicEffect(dev);
-        dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+        dev.DrawUserPrimitives(PrimitiveType::TriangleList, backFacing ? back : front, 0, 2);
     }
 }
 
@@ -110,7 +138,7 @@ class WebGpuGraphicsStateTest : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     bool done_ = false;
     int passCount_ = 0;
-    static constexpr int kTotalChecks = 8;
+    static constexpr int kTotalChecks = 10;
     int result_ = 1;
 
     void check(bool ok, const char* label)
@@ -129,7 +157,8 @@ protected:
         dev.setDepthStencilStateProperty(DepthStencilState::None);
         dev.setBlendStateProperty(BlendState::Opaque);
 
-        // ---- Check A: CullClockwiseFace culls this (raster-space-clockwise) quad. ----
+        // ---- Checks A1/A2: CullClockwiseFace removes the CLOCKWISE-as-displayed quad and keeps
+        //      the counter-clockwise one. REMED-GFX-160: each enum names the face it CULLS. ----
         {
             RasterizerState rs;
             rs.setCullModeProperty(CullMode::CullClockwiseFace);
@@ -137,10 +166,16 @@ protected:
             dev.Clear(Color::Black);
             DrawWindingQuad(dev, Color::White);
             check(colorNear(readPixel(dev, kSize / 2, kSize / 2), Color::Black),
-                  "CullClockwiseFace culls the (raster-space-clockwise) quad -- background stays");
+                  "CullClockwiseFace culls the clockwise-as-displayed quad (FNA's own sprite "
+                  "winding, XNA's front face) -- background stays");
+
+            dev.Clear(Color::Black);
+            DrawWindingQuad(dev, Color::White, /*backFacing=*/true);
+            check(colorNear(readPixel(dev, kSize / 2, kSize / 2), Color::White),
+                  "CullClockwiseFace KEEPS the counter-clockwise-as-displayed quad");
         }
 
-        // ---- Check B: CullCounterClockwiseFace does NOT cull the SAME quad. ----
+        // ---- Checks B1/B2: CullCounterClockwiseFace is the exact complement of that. ----
         {
             RasterizerState rs;
             rs.setCullModeProperty(CullMode::CullCounterClockwiseFace);
@@ -148,7 +183,13 @@ protected:
             dev.Clear(Color::Black);
             DrawWindingQuad(dev, Color::White);
             check(colorNear(readPixel(dev, kSize / 2, kSize / 2), Color::White),
-                  "CullCounterClockwiseFace keeps the quad visible (does not cull it)");
+                  "CullCounterClockwiseFace KEEPS the clockwise-as-displayed quad -- FNA's sprite "
+                  "winding must survive XNA's default cull mode");
+
+            dev.Clear(Color::Black);
+            DrawWindingQuad(dev, Color::White, /*backFacing=*/true);
+            check(colorNear(readPixel(dev, kSize / 2, kSize / 2), Color::Black),
+                  "CullCounterClockwiseFace culls the counter-clockwise-as-displayed quad");
         }
 
         // Reset to a neutral (no culling) rasterizer state for the remaining checks -- they are
