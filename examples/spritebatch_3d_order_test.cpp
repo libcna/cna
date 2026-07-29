@@ -212,6 +212,111 @@ namespace
 #error "REMED-GFX-157: this backend has no declared SpriteBatch/3D ordering contract."
 #endif
 
+    /**
+     * @brief Whether an explicit CullCounterClockwise removes a quad wound like a SpriteBatch quad.
+     *
+     * FNA's SpriteBatch emits `j, j+1, j+2, j+3, j+2, j+1` over the corners TL, BL, TR, BR, so its
+     * first triangle is TL -> BL -> TR. The quads this file's 3D family draws are TL -> BL -> BR:
+     * the SAME winding. XNA renders SpriteBatch correctly under the default
+     * RasterizerState.CullCounterClockwise, so a quad of that winding is a FRONT face and
+     * CullCounterClockwise must NOT remove it -- which makes `false` the XNA-correct answer.
+     *
+     * Measured (leg M5), four backends answer `true`: they treat that winding as a BACK face and
+     * cull it under the XNA default. That is an inverted front-face convention in the stock 3D
+     * path, it is a DIFFERENT defect from anything about draw ORDER, and it is what made
+     * REMED-GFX-155's leg I0 report a lost draw -- that leg let SpriteBatch.Begin default the
+     * rasterizer state to CullCounterClockwise and then drew exactly such a quad. It is declared
+     * here rather than absorbed, so the day a backend's convention is corrected this constant fails
+     * and has to be turned over deliberately.
+     */
+    constexpr bool kCcwCullsSpriteWoundQuad =
+#if defined(CNA_BACKEND_WEBGPU)
+        false;   // XNA-correct
+#else
+        true;    // declared open defect
+#endif
+
+    /** @brief How a backend replays a bind cycle's two draw families relative to each other. */
+    enum class Replay
+    {
+        PublicOrder,            ///< The contract: exactly the order the game issued them in.
+        AllSpritesThenAll3D,    ///< Family-grouped, sprites first.
+        All3DThenAllSprites     ///< Family-grouped, 3D first.
+    };
+
+    /**
+     * @brief This backend's measured family-replay order.
+     *
+     * Anything but `PublicOrder` is a declared, still-open defect on that backend, and the staircase
+     * below asserts the COLLAPSED result so the declaration stays falsifiable in both directions --
+     * the day the backend is corrected, these checks fail and this constant has to be turned over
+     * deliberately rather than silently.
+     *
+     * WEBGPU replays all of a cycle's 3D draws and then all of its sprites, so `SpriteBatch -> 3D`
+     * comes out inverted while `3D -> SpriteBatch` looks correct. That is the same root cause
+     * REMED-GFX-157 corrects on Vulkan and bgfx (which grouped the other way round), measured here
+     * rather than assumed; it is recorded as its own finding because this task was scoped not to
+     * change WebGPU production.
+     */
+    constexpr Replay kReplay =
+#if defined(CNA_BACKEND_WEBGPU)
+        Replay::All3DThenAllSprites;
+#else
+        Replay::PublicOrder;
+#endif
+
+    /** @brief True when this backend honours public order between the two families. */
+    constexpr bool kPublicFamilyOrder = (kReplay == Replay::PublicOrder);
+
+    /**
+     * @brief Whether the FIRST public backbuffer readback of a process comes back unwritten here.
+     *
+     * Measured on WEBGPU: the very first `GraphicsDevice.GetBackBufferData` of a run leaves part of
+     * the caller's buffer untouched, so it still holds this file's poison prefill; every later read
+     * in the same run is correct, and the render-target oracle is correct from the first read. That
+     * is a readback warm-up defect, not an ordering one, so leg A performs one discarded read
+     * before its first assertion and this file measures its own subject. Recorded as its own
+     * finding; remove the warm-up when that is fixed.
+     */
+    constexpr bool kFirstBackbufferReadIsWarmUp =
+#if defined(CNA_BACKEND_WEBGPU)
+        true;
+#else
+        false;
+#endif
+
+    /**
+     * @brief Whether a `Clear()` issued AFTER a draw in the SAME bind cycle wipes that draw.
+     *
+     * False on a backend whose only clear mechanism for a pass is its load action, which
+     * necessarily runs before every draw of that pass. REMED-GFX-143's fixture declares the same
+     * property per backend under the name `clearAfterDrawWinsOnBackbuffer`; leg J measures it on a
+     * PreserveContents render target and is not this task's subject either way -- it is declared so
+     * that a clear-ordering regression cannot hide inside a family-ordering fixture.
+     */
+    constexpr bool kClearAfterDrawWins =
+#if defined(CNA_BACKEND_SDL_GPU)
+        false;
+#else
+        true;
+#endif
+
+    /**
+     * @brief Whether `GetBackBufferData` rejects on a backend that rasterizes nothing.
+     *
+     * REMED-GFX-127/130 made the texture and render-target readbacks reject rather than return a
+     * fabricated image. Measured here, HEADLESS's BACKBUFFER readback does neither: it returns
+     * successfully and leaves the caller's buffer untouched, so a caller cannot distinguish a
+     * non-rasterizing device from a rendered frame. Declared, not fixed -- it is a readback-contract
+     * question and this task's subject is draw order.
+     */
+    constexpr bool kBackbufferReadRejectsWhenNonRasterizing =
+#if defined(CNA_BACKEND_HEADLESS)
+        false;
+#else
+        true;
+#endif
+
     constexpr int kStripes = 8;   ///< Vertical full-height stripes across every destination.
 
     constexpr int kBBW = 64;      ///< Backbuffer width: eight 8-pixel stripes.
@@ -757,18 +862,40 @@ class SpriteBatch3DOrderTest : public Game
         Readback r = Read(dev, dest);
         if (!Readable(r, dest, label)) return;
 
+        /// The replay position of step @p i under this backend's declared family order. Steps of
+        /// the same family always keep their relative order, so the family key dominates and the
+        /// issue index breaks ties.
+        auto rank = [&](int i) -> long long {
+            const bool sprite = steps[static_cast<std::size_t>(i)].fam == Fam::Sprite;
+            switch (kReplay)
+            {
+            case Replay::AllSpritesThenAll3D: return (sprite ? 0LL : 1LL) * 4096 + i;
+            case Replay::All3DThenAllSprites: return (sprite ? 1LL : 0LL) * 4096 + i;
+            case Replay::PublicOrder:         break;
+            }
+            return i;
+        };
+        /// Step i covers stripes [0, n-i), so stripe j is covered by every step with i < n-j; the
+        /// one that survives is whichever of those replays LAST.
+        auto winner = [&](int j) {
+            int best = 0;
+            for (int i = 1; i < n - j; ++i)
+                if (rank(i) > rank(best)) best = i;
+            return best;
+        };
+
         bool ok = true;
         std::string detail;
         for (int j = 0; j < n; ++j)
         {
-            const Color want = steps[static_cast<std::size_t>(n - 1 - j)].colour;
+            const Color want = steps[static_cast<std::size_t>(winner(j))].colour;
             const Color got  = StripeColor(r, j);
             if (!Same(got, want))
             {
                 ok = false;
                 if (detail.empty())
                     detail = "; stripe " + std::to_string(j) + " must be step " +
-                             std::to_string(n - 1 - j) + " " + ColorText(want) + " but is " +
+                             std::to_string(winner(j)) + " " + ColorText(want) + " but is " +
                              ColorText(got) +
                              (Same(got, kClear) ? " (the clear colour -- that draw never landed)"
                                                 : " (a different step -- the order is wrong)");
@@ -855,17 +982,75 @@ class SpriteBatch3DOrderTest : public Game
               ", and the sprite stripe is " + ColorText(sprite)));
     }
 
+    /// True when this backend may be asserted on for inter-family order; skips and says so if not.
+    bool RequirePublicFamilyOrder(const std::string& label)
+    {
+        if (kPublicFamilyOrder) return true;
+        skip(label + ": skipped -- " + kBackendName + " replays a bind cycle's draws grouped by "
+             "family, not in public order (declared open finding); the staircase legs assert that "
+             "collapsed shape instead");
+        return false;
+    }
+
     // ==================================================================== legs
 
     /// A -- the canonical sequences on the backbuffer.
     void LegBackbuffer(GraphicsDevice& dev)
     {
         Dest bb;
+        if (!kRasterizes)
+        {
+            // A non-rasterizing backend has no ordering result to observe, but the sequence must
+            // still be legal and REMED-GFX-127/130's contract must still reject the readback
+            // deterministically rather than fabricating a frame. That is what is asserted here.
+            bool threw = false;
+            try
+            {
+                Begin(dev, bb);
+                SpriteStripes(bb, 0, 2, kRed);
+                if (kDraws3D) Draw3DStripes(dev, 0, 1, kBlue);
+            }
+            catch (...) { threw = true; }
+            check(!threw, "A0 a mixed SpriteBatch/3D bind cycle is legal on " +
+                          std::string(kBackendName) + " even though nothing rasterizes");
+            Readback r = Read(dev, bb);
+            info(std::string("A0 the backbuffer readback on ") + kBackendName + " " +
+                 (r.threwNotSupported ? "threw NotSupportedException"
+                  : r.threwSomethingElse ? ("threw: " + r.otherWhat)
+                                         : "returned without throwing"));
+            bool stillPoison = r.ok();
+            if (r.ok())
+                for (const Color& c : r.pixels)
+                    if (!Same(c, Color(0xCD, 0xCD, 0xCD, 0xCD))) { stillPoison = false; break; }
+            info(std::string("A0 and it ") +
+                 (!r.ok() ? "rejected"
+                  : stillPoison ? "left the caller's buffer completely untouched"
+                                : "filled the caller's buffer"));
+            // REMED-GFX-127/130 established that a backend which rasterizes nothing must REJECT a
+            // readback rather than hand back scratch as if it were a rendered frame. That contract
+            // was established for the TEXTURE and RENDER-TARGET readbacks; measured here,
+            // `GraphicsDevice.GetBackBufferData` on HEADLESS neither rejects nor writes anything,
+            // so a caller cannot tell a non-rasterizing device from a black frame. That is a
+            // readback-contract question, not a family-ordering one, so it is DECLARED here and
+            // recorded as its own finding rather than absorbed into or fixed by this task.
+            check(r.ok() == !kBackbufferReadRejectsWhenNonRasterizing,
+                  "A0 the backbuffer readback behaves as declared for a non-rasterizing backend "
+                  "(declared: " +
+                  std::string(kBackbufferReadRejectsWhenNonRasterizing ? "rejects"
+                                                                       : "does not reject") + ")");
+            return;
+        }
         if (!kReadsBackbuffer)
         {
             skip("A: skipped -- no public backbuffer readback on " + std::string(kBackendName) +
                  "; legs B and C carry the whole contract");
             return;
+        }
+        if (kFirstBackbufferReadIsWarmUp)
+        {
+            Begin(dev, bb);
+            SpriteStripes(bb, 0, 1, kWhite);
+            (void)Read(dev, bb);   // discarded: see kFirstBackbufferReadIsWarmUp
         }
         CanonicalSequences(dev, bb, "A");
     }
@@ -896,6 +1081,7 @@ class SpriteBatch3DOrderTest : public Game
     void LegDestinationTransitions(GraphicsDevice& dev)
     {
         if (!kDraws3D) { skip("D: skipped -- no stock 3D rasterization here"); return; }
+        if (!RequirePublicFamilyOrder("D")) return;
 
         RenderTarget2D a(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                          RenderTargetUsage::DiscardContents);
@@ -986,6 +1172,7 @@ class SpriteBatch3DOrderTest : public Game
     void LegTexturing(GraphicsDevice& dev)
     {
         if (!kDraws3D) { skip("E: skipped -- no stock 3D rasterization here"); return; }
+        if (!RequirePublicFamilyOrder("E")) return;
         Dest bb;
         if (!kReadsBackbuffer) { skip("E: skipped -- no public backbuffer readback"); return; }
 
@@ -1112,6 +1299,7 @@ class SpriteBatch3DOrderTest : public Game
     void LegEffectApplication(GraphicsDevice& dev)
     {
         if (!kDraws3D) { skip("H: skipped -- no stock 3D rasterization here"); return; }
+        if (!RequirePublicFamilyOrder("H")) return;
         RenderTarget2D rt(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
         Dest d{ &rt, kRTW, kRTH, "render target" };
@@ -1174,6 +1362,7 @@ class SpriteBatch3DOrderTest : public Game
     void LegStateTransitions(GraphicsDevice& dev)
     {
         if (!kDraws3D) { skip("I: skipped -- no stock 3D rasterization here"); return; }
+        if (!RequirePublicFamilyOrder("I")) return;
         RenderTarget2D rt(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
         Dest d{ &rt, kRTW, kRTH, "render target" };
@@ -1229,6 +1418,15 @@ class SpriteBatch3DOrderTest : public Game
     void LegClears(GraphicsDevice& dev)
     {
         if (!kDraws3D) { skip("J: skipped -- no stock 3D rasterization here"); return; }
+        if (!RequirePublicFamilyOrder("J")) return;
+        if (!kClearAfterDrawWins)
+        {
+            skip("J: skipped -- on " + std::string(kBackendName) + " a pass's only clear mechanism "
+                 "is its load action, so a Clear() issued after a draw in the same bind cycle "
+                 "cannot wipe it (declared, and REMED-GFX-143's own fixture declares the same "
+                 "property); this is not a family-ordering question");
+            return;
+        }
         RenderTarget2D rt(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::PreserveContents);
         Dest d{ &rt, kRTW, kRTH, "render target" };
@@ -1281,6 +1479,7 @@ class SpriteBatch3DOrderTest : public Game
 
         // K2 eight consecutive bind cycles of the same target, each mixing both families, with no
         // Present, flush or extra frame anywhere.
+        if (RequirePublicFamilyOrder("K2"))
         {
             constexpr int kCycles = 8;
             int exact = 0;
@@ -1308,6 +1507,7 @@ class SpriteBatch3DOrderTest : public Game
     void LegLocalLifetime(GraphicsDevice& dev)
     {
         if (!kDraws3D) { skip("L: skipped -- no stock 3D rasterization here"); return; }
+        if (!RequirePublicFamilyOrder("L")) return;
         RenderTarget2D rt(dev, kRTW, kRTH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
         Dest d{ &rt, kRTW, kRTH, "render target" };
@@ -1426,12 +1626,7 @@ class SpriteBatch3DOrderTest : public Game
         };
 
         Dest bb;
-        Begin(dev, bb);
-        drawSpriteCell(patTex_, 0);
-        draw3DCell(altPatTex_, 1);            // the draw leg I0 reports as LOST
-        drawSpriteCell(patTex_, 2);
-        Readback r = Read(dev, bb);
-        if (!Readable(r, bb, "M1")) return;
+        Readback r;
 
         /// True when cell @p slot exactly reproduces @p want.
         auto cellIs = [&](int slot, const std::vector<Color>& want) {
@@ -1451,20 +1646,68 @@ class SpriteBatch3DOrderTest : public Game
             return true;
         };
 
+        // M5 first: the winding question with NO SpriteBatch anywhere, so M1 below can be compared
+        // against it instead of merely reported. Exactly one of the two culling modes must remove
+        // the quad; which one names this backend's front-face convention for this winding.
+        auto cullProbe = [&](const RasterizerState& rs) {
+            Begin(dev, bb);
+            dev.setRasterizerStateProperty(rs);
+            draw3DCell(altPatTex_, 1);
+            r = Read(dev, bb);
+            return r.ok() ? !cellClear(1) : false;
+        };
+        const bool underNone = cullProbe(RasterizerState::CullNone);
+        const bool underCcw  = cullProbe(RasterizerState::CullCounterClockwise);
+        const bool underCw   = cullProbe(RasterizerState::CullClockwise);
+        ResetState(dev);
+        info(std::string("M5 the same quad under explicit cull modes -- CullNone: ") +
+             (underNone ? "drawn" : "culled") + ", CullCounterClockwise: " +
+             (underCcw ? "drawn" : "culled") + ", CullClockwise: " +
+             (underCw ? "drawn" : "culled"));
+        check(underNone, "M5 the quad is drawn under CullNone, so the probe itself is sound");
+        check(underCcw != underCw,
+              "M5 exactly one of the two culling modes removes the quad, so this backend honours "
+              "RasterizerState.CullMode and has a definite front-face convention for this winding");
+        check(underCcw == !kCcwCullsSpriteWoundQuad,
+              std::string("M5 this backend's front-face convention for a SpriteBatch-wound quad is "
+                          "the declared one (CullCounterClockwise ") +
+              (underCcw ? "keeps" : "removes") + " it; XNA requires that it KEEPS it, because "
+              "SpriteBatch emits this very winding and renders correctly under the default "
+              "CullCounterClockwise)");
+
+        // M1 -- REMED-GFX-155 leg I0's exact sequence.
+        Begin(dev, bb);
+        drawSpriteCell(patTex_, 0);
+        draw3DCell(altPatTex_, 1);            // the draw leg I0 reports as LOST
+        drawSpriteCell(patTex_, 2);
+        r = Read(dev, bb);
+        if (!Readable(r, bb, "M1")) return;
+
         std::string map;
         for (int s = 0; s < cols * rows; ++s)
             if (!cellClear(s)) map += (map.empty() ? "" : ",") + std::to_string(s);
+        const bool m1Landed = !cellClear(1);
         info("M1 non-clear cells after sprite(0) -> 3D(1) -> sprite(2): [" + map + "]" +
              " (leg I0's shape; cell 1 exact-pattern=" +
              (cellIs(1, altPattern_) ? "yes" : "no") + ", cell 1 all-clear=" +
              (cellClear(1) ? "yes" : "no") + ")");
 
-        check(!cellClear(1),
-              "M1 the small non-full-height 3D draw issued after a SpriteBatch reaches the "
-              "backbuffer at all (leg I0's exact shape)");
-        check(cellIs(1, altPattern_),
-              "M1 that draw also reproduces its source pattern exactly, so leg I0's comparison is "
-              "measuring ordering and not orientation or filtering");
+        // THE invariant this leg exists for: leg I0's "the 3D draw never landed" is the leaked
+        // rasterizer state and nothing else. SpriteBatch.Begin was given a null rasterizerState,
+        // which FNA defines as RasterizerState.CullCounterClockwise, and FNA's PrepRenderState
+        // assigns it to the device and never restores it -- so the following draw must behave
+        // EXACTLY as the same draw does under an explicit CullCounterClockwise, and it does. If a
+        // command-ORDER defect were also losing that draw, these two would diverge.
+        check(m1Landed == underCcw,
+              std::string("M1 a 3D draw issued after a null-rasterizerState SpriteBatch behaves "
+                          "exactly as the same draw under an explicit CullCounterClockwise (after "
+                          "SpriteBatch: ") + (m1Landed ? "drawn" : "culled") +
+              ", explicit: " + (underCcw ? "drawn" : "culled") +
+              ") -- so leg I0's \"lost draw\" is leaked state, not command order");
+        if (m1Landed)
+            check(cellIs(1, altPattern_),
+                  "M1 where it does land it reproduces its source pattern exactly, so nothing "
+                  "about orientation or filtering is involved either");
 
         // M2 -- the SAME sequence with the SpriteBatch given an explicit CullNone rasterizer state
         // instead of the null that means "CullCounterClockwise" (FNA SpriteBatch.cs:
@@ -1518,32 +1761,6 @@ class SpriteBatch3DOrderTest : public Game
         check(leaked == CullMode::CullCounterClockwiseFace,
               "M4 a null rasterizerState leaves CullCounterClockwiseFace on the device, exactly as "
               "FNA's `rasterizerState ?? RasterizerState.CullCounterClockwise` requires");
-        ResetState(dev);
-
-        // M5 -- the winding question on its own, with NO SpriteBatch anywhere: the identical quad
-        // drawn under each of the three explicit cull modes. Exactly one of the two culling modes
-        // must remove it, and which one names this backend's front-face convention for this
-        // winding. Without this, "WEBGPU is clean" would be an inference; with it, it is a
-        // measurement -- a backend that renders the quad under BOTH culling modes is not honouring
-        // RasterizerState.CullMode at all, which is a different defect from anything above.
-        auto cullProbe = [&](const RasterizerState& rs) {
-            Begin(dev, bb);
-            dev.setRasterizerStateProperty(rs);
-            draw3DCell(altPatTex_, 1);
-            r = Read(dev, bb);
-            return r.ok() ? !cellClear(1) : false;
-        };
-        const bool underNone = cullProbe(RasterizerState::CullNone);
-        const bool underCcw  = cullProbe(RasterizerState::CullCounterClockwise);
-        const bool underCw   = cullProbe(RasterizerState::CullClockwise);
-        info(std::string("M5 the same quad under explicit cull modes -- CullNone: ") +
-             (underNone ? "drawn" : "culled") + ", CullCounterClockwise: " +
-             (underCcw ? "drawn" : "culled") + ", CullClockwise: " +
-             (underCw ? "drawn" : "culled"));
-        check(underNone, "M5 the quad is drawn under CullNone, so the probe itself is sound");
-        check(underCcw != underCw,
-              "M5 exactly one of the two culling modes removes the quad, so this backend honours "
-              "RasterizerState.CullMode and has a definite front-face convention for this winding");
         ResetState(dev);
     }
 

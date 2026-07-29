@@ -7772,6 +7772,58 @@ namespace CNA::Internal::Backends::Vulkan
             // list now happens once per SEGMENT, in closeOpenQuery3D, not once per slice.
         };
 
+        // REMED-GFX-157: replay ONE order slice of a segment with both draw families interleaved in
+        // public order, instead of all of its sprites and then all of its 3D draws.
+        //
+        // The two families live in separate queues (`activeBatches_`, `pending3D_`) and used to be
+        // replayed by two back-to-back calls, so within a single bind cycle a 3D draw always landed
+        // on top of a sprite issued after it -- the sequence `3D draw; SpriteBatch.Draw` came out
+        // inverted. REMED-GFX-143's check O3 declared that as an open defect on this backend.
+        //
+        // Nothing about either family's replay changes. Both lambdas already accept the half-open
+        // order range REMED-GFX-129 gave them for ordered Clear() slicing, and `commandOrder_` is a
+        // single monotonic counter shared by batches, 3D draws and clears alike -- so the whole
+        // correction is to split the requested range at every point where the family changes and
+        // call the existing lambdas once per same-family RUN, in order. Orders are unique, so a run
+        // [first, last] is selected exactly by the range (first - 1, last + 1).
+        //
+        // This adds no pass, no submit, no barrier and no allocation per draw: one small vector of
+        // (order, family) pairs per slice, and one extra pipeline bind per family switch, which is
+        // the irreducible cost of actually interleaving. A segment that uses only one family still
+        // makes exactly one call, exactly as before.
+        auto drawFamiliesInOrder = [&](VulkanRTSource* targetRT, uint64_t segment,
+                                       float vpW, float vpH,
+                                       uint64_t afterOrder, uint64_t beforeOrder)
+        {
+            struct Item { uint64_t order; bool sprite; };
+            std::vector<Item> items;
+            items.reserve(activeBatches_.size() + pending3D_.size());
+            for (const auto& e : activeBatches_) {
+                if (e.rt != targetRT || e.segment != segment) continue;
+                if (e.order <= afterOrder || e.order >= beforeOrder) continue;
+                items.push_back({ e.order, true });
+            }
+            for (const auto& d : pending3D_) {
+                if (d.rt != targetRT || d.segment != segment) continue;
+                if (d.order <= afterOrder || d.order >= beforeOrder) continue;
+                items.push_back({ d.order, false });
+            }
+            if (items.empty()) return;
+            std::sort(items.begin(), items.end(),
+                      [](const Item& a, const Item& b) { return a.order < b.order; });
+
+            std::size_t i = 0;
+            while (i < items.size()) {
+                std::size_t j = i;
+                while (j + 1 < items.size() && items[j + 1].sprite == items[i].sprite) ++j;
+                const uint64_t lo = items[i].order - 1;
+                const uint64_t hi = items[j].order + 1;
+                if (items[i].sprite) drawSpritesFor(targetRT, segment, vpW, vpH, lo, hi);
+                else                 draw3DFor(targetRT, segment, lo, hi);
+                i = j + 1;
+            }
+        };
+
         // ---- One ordered stream of passes: every bind cycle, off-screen AND backbuffer ----
         // REMED-GFX-140: this used to collect the UNIQUE render-target sources referenced this
         // frame and give each of them a single pass holding every batch and draw queued against it.
@@ -7993,15 +8045,13 @@ namespace CNA::Internal::Backends::Vulkan
                     uint64_t cursor = 0;
                     for (const PendingClear* c : seg.clears) {
                         if (c == folded) { cursor = c->order; continue; }
-                        drawSpritesFor(nullptr, seg.id, vpW2D, vpH2D, cursor, c->order);
-                        draw3DFor(nullptr, seg.id, cursor, c->order);
+                        drawFamiliesInOrder(nullptr, seg.id, vpW2D, vpH2D, cursor, c->order);
                         RecordOrderedClearEXT(cb, *c, 1u, depthFormat_,
                                               swapchainExtent_.width, swapchainExtent_.height);
                         cursor = c->order;
                     }
                     const uint64_t kEnd = std::numeric_limits<uint64_t>::max();
-                    drawSpritesFor(nullptr, seg.id, vpW2D, vpH2D, cursor, kEnd);
-                    draw3DFor(nullptr, seg.id, cursor, kEnd);
+                    drawFamiliesInOrder(nullptr, seg.id, vpW2D, vpH2D, cursor, kEnd);
                     closeOpenQuery3D();
                 }
 
@@ -8073,16 +8123,14 @@ namespace CNA::Internal::Backends::Vulkan
                 uint64_t cursor = 0;
                 for (const PendingClear* c : seg.clears) {
                     if (c == folded) { cursor = c->order; continue; }
-                    drawSpritesFor(rt, seg.id, static_cast<float>(rtW), static_cast<float>(rtH),
-                                   cursor, c->order);
-                    draw3DFor(rt, seg.id, cursor, c->order);
+                    drawFamiliesInOrder(rt, seg.id, static_cast<float>(rtW),
+                                        static_cast<float>(rtH), cursor, c->order);
                     RecordOrderedClearEXT(cb, *c, nColor, rt->GetDepthFormat(), rtW, rtH);
                     cursor = c->order;
                 }
                 const uint64_t kEnd = std::numeric_limits<uint64_t>::max();
-                drawSpritesFor(rt, seg.id, static_cast<float>(rtW), static_cast<float>(rtH),
-                               cursor, kEnd);
-                draw3DFor(rt, seg.id, cursor, kEnd);
+                drawFamiliesInOrder(rt, seg.id, static_cast<float>(rtW),
+                                    static_cast<float>(rtH), cursor, kEnd);
                 closeOpenQuery3D();
             }
 

@@ -1401,6 +1401,24 @@ namespace CNA::Internal::Backends::Bgfx
         }
         initialized = true;
 
+        // REMED-GFX-157: make every view submit its draws in the order they were submitted.
+        //
+        // REMED-GFX-155 made the VIEWS execute in public order; this is the other half, the order
+        // WITHIN a view. bgfx's default view mode sorts a view's draws by their sort key to
+        // minimise state changes, so a SpriteBatch draw and a stock 3D draw issued into the same
+        // bind cycle came out grouped by program rather than in the order the game issued them: the
+        // sequence `3D draw; SpriteBatch.Draw` was inverted, and the sprite ended up underneath.
+        // REMED-GFX-143's check O3 declared exactly that as an open defect on this backend.
+        //
+        // ViewMode::Sequential is bgfx's own mechanism for "submission order is the contract", which
+        // is what the XNA public API promises. It is set once here for every view id rather than in
+        // the draw paths: view mode is persistent view state, this backend never calls
+        // bgfx::resetView, and doing it once costs nothing per frame and cannot be missed by a new
+        // view id later. The trade is bgfx's state-change sorting, which is a throughput
+        // optimisation that is not allowed to reorder observable output.
+        for (int v = 0; v < Detail::kMaxViews; ++v)
+            bgfx::setViewMode(static_cast<bgfx::ViewId>(v), bgfx::ViewMode::Sequential);
+
         // REMED-GFX-155: bgfx's view execution order is not observable through the public API, so it
         // is written to stderr on demand. Read once, here, so no draw path pays for the lookup.
         {
