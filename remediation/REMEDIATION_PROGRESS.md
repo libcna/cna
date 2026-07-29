@@ -2494,7 +2494,7 @@ existing task.
 | REMED-GFX-156 | SDL_GPU and WebGPU: a `Clear()` issued AFTER a draw in the same bind cycle is lost — the consumer sees the geometry, on all three `RenderTargetUsage` values, both backends reporting the identical `(20,25,40,255)`. The SDL_GPU/WebGPU counterpart of REMED-GFX-129. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-151 leg G3) |
 | REMED-GFX-157 | A bind cycle's SpriteBatch draws and its stock 3D draws were replayed GROUPED BY FAMILY instead of in the order the game issued them, so within ONE cycle `3D draw; SpriteBatch.Draw` came out inverted. The ticket's original statement ("a 3D draw after a SpriteBatch never reaches the target on BGFX/VULKAN/SOFTWARE/EASYGL, WEBGPU clean") was wrong in every particular: that draw was CULLED by state SpriteBatch legitimately leaves behind, not lost. | HIGH | P1 | — | **DONE 2026-07-29 — RECLASSIFIED, THEN FIXED. THE REPORTED SYMPTOM WAS A FIXTURE DEFECT: REMED-GFX-155'S LEG I0 PASSED A NULL rasterizerState TO SpriteBatch.Begin, WHICH FNA DEFINES AS RasterizerState.CullCounterClockwise AND ASSIGNS TO THE DEVICE WITHOUT EVER RESTORING IT, AND THEN DREW A QUAD OF EXACTLY THE WINDING FOUR BACKENDS CULL UNDER IT. PROVEN THREE WAYS (EXPLICIT CullNone; RESTORING ONLY RasterizerState; AND THE DRAW'S FATE AFTER A SpriteBatch BEING BYTE-IDENTICAL TO ITS FATE UNDER AN EXPLICIT CullCounterClockwise). WEBGPU LOOKED CLEAN ONLY BECAUSE ITS FRONT-FACE WINDING IS INVERTED (GFX-160). THE REAL DEFECT IS THE OPPOSITE DIRECTION AND A DIFFERENT BACKEND SET: VULKAN AND BGFX REPLAY ALL SPRITES THEN ALL 3D DRAWS; SOFTWARE AND EASYGL WERE ALWAYS CORRECT; WEBGPU GROUPS THE OTHER WAY ROUND (GFX-159, NOT CHANGED — SCOPED OUT). FIXED ON VULKAN BY SPLITTING EACH PASS'S ORDER RANGE AT EVERY FAMILY CHANGE AND REPLAYING THE RUNS THROUGH THE EXISTING LAMBDAS, AND ON BGFX BY SETTING EVERY VIEW TO ViewMode::Sequential AT INIT. NO PASS, SUBMIT, BARRIER, PRESENT, FLUSH, WAIT OR EXTRA FRAME ADDED. NEW DEDICATED FIXTURE WITH A STAIRCASE ORACLE: VULKAN 42/60 -> 60/60, BGFX 41/60 -> 60/60, SOFTWARE 61/61, EASYGL 60/60, WEBGPU 39/39, SDL_GPU 40/40, HEADLESS 2/2. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED (LEG I0: SOFTWARE 77->86, VULKAN/EASYGL/BGFX 81->90, WEBGPU 84->87; CHECK O3 GAINED CHECK O4 FOR THE UNTESTED DIRECTION). ctest ^Vulkan 182/183 AND ^Bgfx 143/148, EVERY FAILURE A/B-PROVEN PRE-EXISTING. ASAN/UBSAN CLEAN; VULKAN VALIDATION 1.4.309 LIVE AND SILENT; ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-159/160/161/162.** |
 | REMED-GFX-158 | Bgfx: a `RenderTarget2D` CREATED and rendered into in the same bgfx frame loses that frame's content when its view is the first one bgfx executes that frame. Measured: creating a target and advancing one frame WITHOUT ever rendering into it is enough to make the next one correct, so it is the creation frame that matters, not the drawing. Invisible until REMED-GFX-155 stopped the backbuffer view (id 0) from always executing first, which had acted as an accidental warm-up. A game that allocates a render target and renders into it on its first frame, before any backbuffer work, loses that frame. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-155; `bgfx_rendertarget2d_mip_test.cpp` carries a documented warm-up so it measures its own subject) |
-| REMED-GFX-159 | WebGPU replays a bind cycle's draws grouped by family — all 3D draws, then all sprites — so a SpriteBatch followed by an OVERLAPPING stock 3D draw comes out with the sprite on top. The same root cause REMED-GFX-157 corrected on Vulkan and bgfx, which grouped the other way round. `3D; sprite` looks correct here, which is why REMED-GFX-143's check O3 passed and this went unmeasured. | HIGH | P1 | — | OPEN (measured 2026-07-29 by REMED-GFX-157; declared in three fixtures so it is falsifiable in both directions; not fixed because that task was scoped not to change WebGPU production) |
+| REMED-GFX-159 | A bind cycle's draws were replayed grouped by family on all three WebGPU pass recorders — all 3D draws, then all sprites — so a SpriteBatch followed by an OVERLAPPING stock 3D draw came out with the sprite on top. The ticket is correct but incomplete: the ten 3D families were ordered against each other by the same mechanism. | HIGH | P1 | — | **DONE 2026-07-29 — ROOT CAUSE: ALL THREE PASS RECORDERS REPLAYED A CYCLE AS A FIXED LIST OF ELEVEN PER-FAMILY LOOPS, JUSTIFIED IN A COMMENT AS "3D DRAWS FIRST, 2D SPRITEBATCH/UI ON TOP — MATCHES TYPICAL XNA GAME DRAW ORDER". A TYPICAL ORDER IS NOT A CONTRACT, AND THERE WAS NO ORDER COUNTER ANYWHERE IN THE BACKEND, SO THE SOURCE ORDER OF THOSE ELEVEN CALLS DECIDED EXECUTION ORDER. WHAT THE TICKET MISSES, MEASURED NOT ASSUMED: `textured BasicEffect; vertex-colour BasicEffect` INVERTED WITH NO SPRITEBATCH ANYWHERE, ON FOUR EFFECT PAIRS IN BOTH DIRECTIONS, EACH REVERSE ORDERING RENDERING CORRECTLY BY ACCIDENT. FIXED BY ADDING ONE ORDERED REFERENCE STREAM OF (FAMILY, SLOT, PUBLIC ORDER) APPENDED AT THE PUBLIC CALL, WALKED ONCE AT REPLAY; EVERY COMMAND STRUCT, CAPTURE AND Queue*Draw() IS UNCHANGED AND THE TEN FORMER LOOPS BECAME PER-COMMAND Issue*Draw FUNCTIONS. REFERENCES ARE INDICES, NOT POINTERS — THE FAMILY VECTORS GROW WHILE A CYCLE RECORDS. THREE PIECES OF PASS STATE EACH FAMILY COULD PREVIOUSLY ASSUME UNTOUCHED ARE HANDLED AT A BOUNDARY: THE SPRITE PATH'S REDUNDANT-PIPELINE-BIND SKIP IS NOW TRACKED ACROSS ALL FAMILIES, THE SHARED SPRITE VERTEX BUFFER IS REBOUND ONCE PER SPRITE RUN, AND THE PASS-LEVEL BLEND CONSTANT IS RESTORED BEFORE A 3D DRAW SO A 3D DRAW SEES BYTE-IDENTICALLY WHAT IT SAW BEFORE. NO PASS, SUBMIT, WAIT, BARRIER, FLUSH, PRESENT, TARGET SWITCH OR EXTRA FRAME ADDED; NO PIPELINE VARIANT KEYED ON ORDER; NO PER-VERTEX OR PER-SPRITE ALLOCATION; NO SORT. ORDERING WAS MEASURED NATIVELY VIA A NEW ENV-GATED TRACE (CNA_WEBGPU_TRACE_DRAW_ORDER): PRE-FIX THE FIVE-ALTERNATION SEQUENCE ENQUEUED 0,1,2,3,4 AND ISSUED 1,3,0,2,4; POST-FIX ALL 191 DRAWS ACROSS 101 PASSES ISSUE AT EXACTLY THEIR PUBLIC POSITION, AND THE 191/101 TOTALS ARE IDENTICAL BEFORE AND AFTER. WEBGPU 27/69 -> 67/67. NEW webgpu_draw_order_cardinality_test.cpp 21/21 PROVES 8 AND 16 ALTERNATING DRAWS EACH COST EXACTLY 1 RENDER PASS, 1 SUBMIT, 0 NEW PIPELINES, 1 setViewport AND 1 setScissorRect ON BACKBUFFER, TARGET AND CUBE FACE, WITH ITS LEG D7 COVERING THE CUBE-FACE RECORDER BY PIXELS IN BOTH DIRECTIONS (A/B-PROVEN: D7a FAILS PRE-FIX, D7b PASSES PRE-FIX). TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED: backbuffer_pass_order_test.cpp 29/30 -> 30/30 AND rendertarget_backbuffer_consumer_test.cpp LEG I0 86/87 -> 87/87. ctest -R '^WebGPU' 54/55, THE ONE FAILURE A/B-PROVEN PRE-EXISTING WITH BYTE-IDENTICAL FAILURES. ASAN+UBSAN CLEAN WITH RUNTIMES PROVED LINKED BY SYMBOL; THE EXIT LEAK IS 63 ALLOCATIONS BOTH PRE- AND POST-FIX. WEBGPU VALIDATION SILENT. CROSS-BACKEND CONTROLS UNCHANGED (SOFTWARE 70/70, EASYGL 69/69, VULKAN 69/69, BGFX 69/69, SDL_GPU 49/49, HEADLESS 2/2) AND REAL-D3D RUNTIME CONTROLS GREEN ON :101 UNDER WINE (D3D9 30/30, D3D11 30/30). ALL FOURTEEN BACKEND LIBRARIES BUILD. ONE INDEPENDENT FINDING RECORDED, NOT FIXED: WEBGPU'S MID-CYCLE Clear IS LOAD-OP-ONLY, THE COUNTERPART OF REMED-GFX-129'S VULKAN WORK.** |
 | REMED-GFX-160 | The stock 3D front-face winding convention was reported inverted on SOFTWARE, EASYGL, VULKAN and BGFX relative to XNA/FNA, with WEBGPU "the XNA-correct one". Measured against an explicit oracle it is exactly the other way round: WEBGPU was the only inverted backend. | HIGH | P1 | — | **DONE 2026-07-29 — RECLASSIFIED, THEN FIXED. THE TICKET WAS BACKWARDS AND ITS PREMISE WAS WRONG AT THE SOURCE. IT CLAIMED FNA'S SpriteBatch LAYS ITS CORNERS OUT TL, BL, TR, BR SO ITS FIRST TRIANGLE IS TL->BL->TR, AND THAT THE ACCUSING FIXTURE'S TL->BL->BR QUAD WAS 'THE SAME WINDING'. FNA SpriteBatch.cs ACTUALLY DECLARES CornerOffsetX = { 0, 1, 0, 1 } AND CornerOffsetY = { 0, 0, 1, 1 } -- TL, TR, BL, BR -- AND GenerateVertexInfo() BUILDS Position0..3 FROM EXACTLY THAT PROGRESSION, SO WITH GenerateIndexArray()'S j,j+1,j+2 / j+3,j+2,j+1 THE SPRITE TRIANGLES ARE TL->TR->BL AND BR->BL->TR, BOTH CLOCKWISE AS DISPLAYED. SINCE SpriteBatch.Begin DEFAULTS ITS RASTERIZER STATE TO RasterizerState.CullCounterClockwise AND SPRITES ARE VISIBLE, CLOCKWISE-AS-DISPLAYED IS XNA'S FRONT FACE AND EACH ENUM NAMES THE FACE IT CULLS. THE FIXTURE'S TL->BL->BR QUAD IS THE OPPOSITE WINDING -- AN XNA BACK FACE -- SO THE FOUR ACCUSED BACKENDS WERE CORRECT ALL ALONG. TWO INDEPENDENT FNA3D DRIVERS AGREE BY DIFFERENT ROUTES (OpenGL's XNAToGL_FrontFace = { -, GL_CW, GL_CCW } WITH glCullFace(GL_BACK), SINCE GL WINDOW SPACE IS Y-UP SO GL'S 'CCW' IS DISPLAYED-CW; AND D3D11's FrontCounterClockwise = 1 WITH A SWAPPED CULL ENUM, A DOUBLE INVERSION NETTING TO THE SAME CONTRACT), AS DO CNA'S OWN PUBLIC DOCS IN RasterizerState.hpp AND CullMode.hpp. ROOT CAUSE ON WEBGPU: EVERY 3D PIPELINE SETS frontFace = WGPUFrontFace_CCW AND WEBGPU DECIDES FACING FROM THE SIGNED AREA IN FRAMEBUFFER SPACE (Y DOWN), SO ITS FRONT FACE IS THE DISPLAYED-CCW ONE, YET ToWGPUCullMode MAPPED CullClockwiseFace->Front AND CullCounterClockwiseFace->Back -- BOTH BACKWARDS. THE FIX IS SWAPPING THOSE TWO ARMS AND NOTHING ELSE: frontFace UNTOUCHED, NO GEOMETRY REWRITTEN, NO INDEX BUFFER REVERSED, NO PIPELINE VARIANT ADDED OR REMOVED, NO PASS/SUBMIT/DRAW/ALLOCATION ADDED, IDENTICAL COST. IT ESCAPED NOTICE BECAUSE THE SPRITEBATCH PIPELINE HARDCODES WGPUCullMode_None, SO ONLY THE STOCK 3D PATH COULD SHOW IT. NEW DEDICATED frontface_winding_test.cpp: TWO TRIANGLES IN DISJOINT QUADRANTS WOUND OPPOSITE WAYS SO ONE READBACK CLASSIFIES BOTH; REVERSING THE THREE INDICES KEEPS COVERAGE IDENTICAL SO 'CULLED' IS NEVER CONFOUNDED WITH 'MOVED'; THE TWO NEVER-COVERED QUADRANTS ARE ASSERTED CLEAR IN EVERY LEG (MIRROR DETECTOR); CullNone ASSERTED FIRST (DEAD-PROBE DETECTOR); COMPLEMENTARITY ASSERTED AS ITS OWN CHECK (CULL-ALL/CULL-NOTHING DETECTOR). COVERS BACKBUFFER, RENDERTARGET2D, MSAA, DESTINATION TRANSITIONS, SEVEN DRAW ENTRY POINTS INCLUDING NONZERO vertexStart/startIndex/baseVertex AND TriangleStrip, FOUR STOCK EFFECTS, A->B->A STATE TRANSITIONS, A DISTINCT-BUT-EQUAL RasterizerState, DEPTH/BLEND INDEPENDENCE, AND A SPRITEBATCH REFERENCE LEG; THE TRANSFORM LEG COMPARES THE WORLD MATRIX'S DETERMINANT SIGN AGAINST THE OBSERVED FACING AND PROBES THE TRANSFORMED CENTROID, SO AN INTENTIONAL MIRROR IS NEVER COMPENSATED TWICE. WEBGPU 52/119 -> 119/119. UNCHANGED AND ALREADY CORRECT: SOFTWARE 119/119, EASYGL 119/119, VULKAN 127/127, BGFX 119/119, SDL_GPU 17/17, HEADLESS 3/3. REAL-D3D RUNTIME CONTROLS RUN AND GREEN ON DISPLAY=:101 UNDER WINE/DXVK: THE PROJECT'S OWN PRE-EXISTING cna_test_d3d9_rasterizerstate_cullmode AND cna_test_d3d11_rasterizerstate_cullmode EACH 6/6 PASS, AND BOTH ALREADY MEASURE EXACTLY THIS CONTRACT OVER BOTH WINDINGS AND ALL THREE MODES (CullCounterClockwiseFace KEEPS CW AND CULLS CCW; CullClockwiseFace DOES THE REVERSE). THOSE TWO TESTS PRE-DATE THIS TICKET AND WERE PASSING THROUGHOUT -- INDEPENDENT RUNTIME PROOF ON XNA'S OWN NATIVE API. D3D9/D3D11/D3D12 SOURCE AGREES. THREE FALSE POSITIVES A/B-PROVEN AND STRENGTHENED, ALL ONE CLASS: webgpu_graphicsstate_test.cpp CHECKS A/B (THE ORIGIN OF THE PRODUCTION DEFECT) NOW FOUR CHECKS OVER BOTH WINDINGS 8->10; THE SAME FILE'S SCISSOR CHECKS E/H, WHICH BUILT A FRESH RasterizerState DEFAULTING TO CullCounterClockwiseFace AND SO REQUIRED A BACK FACE TO STAY VISIBLE; AND webgpu_instanced3d_test.cpp WHOSE kSmallQuadIdx WAS THE BACK-FACING ORDER WHILE THE TEST NEVER SETS A RasterizerState AT ALL. REMED-GFX-157'S LEG M5 CONSTANT kCcwCullsSpriteWoundQuad, WHICH DECLARED FOUR BACKENDS DEFECTIVE, IS DELETED AND M5 NOW ASSERTS THE CONTRACT UNCONDITIONALLY (SOFTWARE 61/61, EASYGL 60/60, VULKAN 60/60, BGFX 60/60, SDL_GPU 40/40, HEADLESS 2/2, WEBGPU 38/38). ASAN+UBSAN CLEAN WITH RUNTIMES PROVED LINKED BY SYMBOL: SOFTWARE 119/119 EXIT 0 WITH ZERO REPORTS ON BOTH; THE WEBGPU ASAN TOTAL IS A WGPU-NATIVE-INTERNAL PROCESS-EXIT LEAK MEASURED BYTE-IDENTICAL (1257822 B / 729 ALLOCS) WITH THE SWAP APPLIED AND REVERTED. ctest -R '^WebGPU' 53/54, THE ONE FAILURE A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND LIBRARIES BUILD INCREMENTALLY. INDEPENDENT FINDINGS RECORDED: BGFX ASSERTS ON AN MSAA RENDER TARGET THAT ALSO CARRIES A DEPTH FORMAT; WEBGPU AND SDL_GPU REJECT A CORRECTLY SIZED GetBackBufferData FOR A 64x64 BACKBUFFER; EASYGL AND BGFX MSAA RENDER TARGETS READ BACK ALL-ZERO RATHER THAN THE CLEAR COLOUR.** |
 | REMED-GFX-161 | WebGPU: the FIRST GetBackBufferData of a process returns successfully while leaving part of the caller's buffer unwritten; every later read in the same run is correct and the render-target oracle is correct from its first read. A caller cannot distinguish it from a rendered frame. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-157; `spritebatch_3d_order_test.cpp` carries one documented discarded read so it measures its own subject) |
 | REMED-GFX-162 | Headless: GetBackBufferData neither rejects nor writes. REMED-GFX-127/130 brought the texture and render-target readbacks under a reject-rather-than-fabricate contract; the backbuffer readback was never brought under it, so a caller cannot tell a non-rasterizing device from a black frame. | LOW | P3 | — | OPEN (measured 2026-07-29 by REMED-GFX-157) |
@@ -17648,7 +17648,9 @@ build, layer present, no "not available" message) and **silent** — zero VUIDs.
 **REMED-GFX-159** — WebGPU groups a cycle's draws by family the other way round (all 3D, then all
 sprites). Same root cause, declared in three fixtures so it stays falsifiable; not fixed because
 this task was explicitly scoped not to change WebGPU production. **This is a live HIGH-severity
-ordering defect and needs its own task.**
+ordering defect and needs its own task.** *(Fixed 2026-07-29 — and it was broader than recorded
+here: the ten 3D families were ordered against each other by the same mechanism, so two stock
+effects inverted with no SpriteBatch anywhere. See REMED-GFX-159's own record below.)*
 
 **REMED-GFX-160** — the stock 3D front-face winding is inverted on Software, EasyGL, Vulkan and
 bgfx relative to XNA/FNA, and WebGPU is the correct side. A game porting XNA geometry gets silently
@@ -18055,5 +18057,256 @@ when a second instance of it is live, and passes standalone in **224 ms**; the r
 - `64409791 fix(Task REMED-GFX-155): order views by id instead of remapping them`
 - `c562521c fix(Task REMED-GFX-155): rebalance the bgfx view-id partition`
 - `docs(remediation): record GFX-155 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-159 — WebGPU SpriteBatch/3D public draw order in one bind cycle (DONE 2026-07-29)
+
+### Classification
+
+**The ticket is correct, and incomplete.** It states that WebGPU replays a bind cycle's draws
+grouped by family — all 3D draws, then all sprites — the same root cause REMED-GFX-157 corrected on
+Vulkan and bgfx, which grouped the other way round. That is true. It is not the whole defect: **the
+ten 3D families were ordered against each other by exactly the same mechanism**, so two 3D draws
+using different stock effects inverted with no SpriteBatch anywhere.
+
+Of the classification options the task listed, the measured answers are:
+
+| candidate | answer |
+|---|---|
+| stores sprites and 3D in separate vectors | **yes** — eleven of them |
+| calls the 3D replay loop before the SpriteBatch replay loop | **yes** |
+| has no shared monotonic order counter | **yes — there was no order counter anywhere in the backend** |
+| assigns independent family order numbers | no — no family had one either |
+| groups by target and then by family | yes, target segmentation was already correct |
+| captures a public order but ignores it during replay | no — it was never captured |
+| uses separate render passes for the two families | **no** — one pass, which is why nothing else broke |
+| resets state or command indices between families | no |
+| sorts by pipeline/effect rather than public order | **effectively yes**, but statically: the order was the SOURCE order of eleven calls, not a sort |
+| drops one family after pass creation | no |
+| treats backbuffer differently from targets | **no** — all three recorders were identical, and all three were wrong |
+
+### Root cause
+
+`EnsureFrameRendered`, `RenderPendingDrawsToRenderTarget` and
+`RenderPendingDrawsToRenderTargetCubeFace` each ended with the same eleven calls:
+
+```cpp
+RenderColoredDraws(pass); RenderTexturedDraws(pass); RenderLitTexturedDraws(pass);
+RenderAlphaTestDraws(pass); RenderDualTextureDraws(pass); RenderEnvMapDraws(pass);
+RenderInstancedDraws(pass); RenderPbrDraws(pass); RenderSkinnedDraws(pass);
+RenderSkinnedPbrDraws(pass); RenderSprites(pass, ...);
+```
+
+carrying the comment *"3D draws first, 2D SpriteBatch/UI on top — matches typical XNA game draw
+order (World.Draw() then a HUD SpriteBatch pass)"*. A typical order is not a contract: a game that
+draws its HUD before its world got the two swapped, silently.
+
+### Pre-fix order, measured natively
+
+Ordering was **not** inferred from pixels. A family-grouped replay and a correct one produce the
+same image for one of the two directions — which is exactly how this survived REMED-GFX-143's check
+O3 — so a new env-gated trace (`CNA_WEBGPU_TRACE_DRAW_ORDER`, one cached `getenv`, off otherwise)
+records public enqueue number, family, slot, destination and native issue position. The entry stores
+its public position **separately** from its position in the stream, so a replay that reorders
+reports the two columns differing instead of relabelling itself.
+
+The canonical five-alternation sequence, backbuffer:
+
+| | public enqueue | native issue (pre-fix) | native issue (post-fix) |
+|---|---|---|---|
+| sprite | 0 | **2** | 0 |
+| 3D | 1 | **0** | 1 |
+| sprite | 2 | **3** | 2 |
+| 3D | 3 | **1** | 3 |
+| sprite | 4 | 4 | 4 |
+
+Across the whole fixture: **191 draws over 101 passes**, and post-fix **every one of the 191 issues
+at exactly its public position**. Four passes in the pre-fix trace contain two 3D draws and no
+sprite at all, issued in reverse public order — the 3D-against-3D half the ticket does not name.
+
+### Affected family inventory
+
+All eleven deferred families, each with one enqueue site and one replay loop, 1:1:
+
+| family | vector | pre-fix rank | now |
+|---|---|---|---|
+| colored3d | `coloredDrawCommands_` | 0 | public order |
+| textured3d | `texturedDrawCommands_` | 1 | public order |
+| litTextured3d | `litTexturedDrawCommands_` | 2 | public order |
+| alphaTest3d | `alphaTestDrawCommands_` | 3 | public order |
+| dualTexture3d | `dualTextureDrawCommands_` | 4 | public order |
+| envMap3d | `envMapDrawCommands_` | 5 | public order |
+| instanced3d | `instancedDrawCommands_` | 6 | public order |
+| pbr3d | `pbrDrawCommands_` | 7 | public order |
+| skinned3d | `skinnedDrawCommands_` | 8 | public order |
+| skinnedPbr3d | `skinnedPbrDrawCommands_` | 9 | public order |
+| sprite | `spriteCommands_` | 10 | public order |
+
+Rank was literally the call's position in the source list. Indexed/non-indexed, `DrawUser*` and the
+instanced structural route are variants **within** these families, not families of their own, so
+they inherit the correction; the fixture exercises all eight public draw entry points.
+
+### The fix
+
+One ordered reference stream, appended at the public call and walked once at replay. Every command
+struct, every capture (REMED-GFX-116's viewport, REMED-GFX-146's scissor, REMED-GFX-102's blend
+state) and every `Queue*Draw()` is unchanged; the ten former replay loops became per-command
+`Issue*Draw` functions with their bodies untouched.
+
+References are **indices, never pointers** — the family vectors grow while a bind cycle is being
+recorded and a pointer into one would dangle the moment it reallocated.
+
+Three pieces of pass state each family could previously assume untouched, because each owned the
+encoder from its first draw to its last, are now handled at a family boundary:
+
+* the sprite path's redundant-pipeline-bind skip is tracked across **all** families, so it cannot
+  skip a rebind after a 3D draw bound its own;
+* the shared sprite vertex buffer is rebound once per sprite **run**, because every 3D draw binds
+  its own into slot 0 — not once per sprite;
+* the pass-level blend constant is **restored** before a 3D draw. Sprites set their own per draw;
+  before interleaving, a 3D draw was guaranteed the pass-level value because sprites could only run
+  after it. What a 3D draw sees is therefore byte-identical to before this change.
+
+**Nothing was added:** no render pass, submit, wait, barrier, flush, Present, target switch or extra
+frame; no pipeline variant keyed on a draw's position; no per-vertex or per-sprite allocation; and
+no sort — the stream is built in order. Sprite vertices are still staged into one buffer in one
+queue write, and a sprite's vertices still live at offset `i*6`.
+
+### Cardinality and performance
+
+`webgpu_draw_order_cardinality_test.cpp`, **21/21**, measuring the backend's own native counters
+**inside** a bind cycle so that binding a target — itself a flush here — is never counted:
+
+| sequence | passes | submits | new pipelines | setViewport | setScissorRect |
+|---|---|---|---|---|---|
+| 8 alternating, render target | 1 | 1 | 0 | 1 | 1 |
+| 8 grouped, render target | 1 | 1 | 0 | — | — |
+| 16 alternating, render target | 1 | 1 | 0 | — | — |
+| 8 alternating, backbuffer | 1 | 1 | 0 | — | — |
+| 2 alternating, cube face | 1 | 1 | — | — | — |
+
+Leg D3 runs the **same eight draws twice**, grouped and alternating, and requires identical passes,
+submits and pipelines — the check the pixel oracle structurally cannot make, since ordering
+correctly by splitting the pass, submitting per transition, or keying a pipeline on the ordinal all
+render the *correct* picture. Whole-fixture totals are identical pre- and post-fix: 191 draws, 101
+passes. The only new cost is one pipeline bind per family switch, the irreducible price of actually
+interleaving, plus one `DrawOrderEntry` (two bytes and two 32-bit fields) per queued draw, released
+with the command vectors at the end of the pass.
+
+### Destination coverage
+
+Backbuffer with exact `GetBackBufferData`; RenderTarget2D at equal and at deliberately different
+dimensions; target → backbuffer, backbuffer → target, target A → B → A; and the RenderTargetCube
+face recorder, covered **by pixels in both directions** by leg D7 rather than left as "the same code
+path, presumed covered". The core reproducer never samples a render target as a texture.
+
+### Tests
+
+| fixture | before | after |
+|---|---|---|
+| `spritebatch_3d_order_test.cpp` (WEBGPU) | **27/69** | **67/67** (2 skipped, both declared boundaries) |
+| `webgpu_draw_order_cardinality_test.cpp` (new) | — | **21/21** |
+| `backbuffer_pass_order_test.cpp` (WEBGPU) | 29/30 | **30/30** |
+| `rendertarget_backbuffer_consumer_test.cpp` (WEBGPU) | 86/87 | **87/87** |
+
+New **leg N** covers a direction the ticket does not name: four stock-effect pairs run in **both**
+directions plus a five-step sequence spanning three effects and two sprite batches. `Step` gained an
+optional per-step `Fx` so one sequence can span several command families. Pre-fix, `textured →
+vertex-colour`, `AlphaTest → vertex-colour`, `DualTexture → textured` and `DualTexture → AlphaTest`
+all inverted while each reverse ordering rendered correctly by accident — running both directions is
+what distinguishes the two.
+
+### False positives found and strengthened
+
+| fixture | what it hid | after |
+|---|---|---|
+| `backbuffer_pass_order_test.cpp` | Carried this defect as WEBGPU's `mixedQueuesKeepPublicOrder = false`, so checks O3 and O4 *predicted* the grouped result and passed while it was live. Turned over. It was the last backend declaring anything but public order, so `kMixedGroupingReplays3DFirst` no longer feeds any prediction; kept rather than deleted, because a backend regressing to a grouped replay needs somewhere to say WHICH grouping. | 29/30 → **30/30** |
+| `rendertarget_backbuffer_consumer_test.cpp` leg I0 | Same shape under `kFamiliesReplayInPublicOrder`. It is the only overlapping probe in that file — every other leg draws its two families into disjoint slots, which any grouping renders correctly. Now unconditional. | 86/87 → **87/87** |
+| `spritebatch_3d_order_test.cpp` | Eight legs were **skipping** behind `kReplay`, and the staircase legs asserted the COLLAPSED family-grouped shape. Turning the constant over is what ran them. | 27/69 → **67/67** |
+
+Every one A/B-proven by rebuilding it against the pre-fix backend restored from `e822b15a`, not
+assumed from the declaration having existed.
+
+### Validation and sanitizers
+
+WebGPU validation live throughout and **silent** — `GetUncapturedErrorCountEXT()` is 0 after every
+family transition, asserted as leg D6. ASan+UBSan in the retained `cmake-build-webgpu-asan-ubsan`
+tree, both runtimes proved linked by symbol (**39** `__asan_*`, **15** `__ubsan_*`): the ordering
+fixture is 67/67 with **0 UBSan runtime errors**, and the process-exit leak is **63 allocations both
+pre- and post-fix** (10014 B → 9758 B), so the ordered stream leaks nothing. The cardinality fixture
+— which stresses the interleaved path hardest — reports the untouched control's exact **368 B in 4
+allocations**.
+
+### Regression gates and cross-backend controls
+
+`ctest -R '^WebGPU'` **54/55**. The one failure, `WebGPU_Clear_Readback`, is A/B-proven pre-existing:
+against the pre-fix backend it fails with the same three byte-identical checks (a 50%-alpha sprite
+blend and two `AddressMode` checks), none of them ordering-related. REMED-GFX-039/043/065/084/090/
+100/102/104/105/116/131/146/157/160 all remain green inside that run.
+
+Cross-backend controls on the same public fixture, none of which changed: Software **70/70**, EasyGL
+**69/69**, Vulkan **69/69**, Bgfx **69/69**, SdlGpu **49/49**, Headless **2/2** — all including the
+new leg N, so those backends were already correct on 3D-against-3D ordering too. The strengthened
+fixtures also ran on SdlGpu, Headless, ASCII, DX3 and SDL_Renderer, and **real-D3D runtime controls
+ran green on the allowed virtual display `:101` under Wine: D3D9 30/30 and D3D11 30/30**. Canvas is
+a WebAssembly target with no native runtime here and is compile-verified only.
+
+All **fourteen** backend libraries build incrementally: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12,
+DX3, EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan and WebGPU.
+
+### Independent finding recorded, not fixed
+
+**WebGPU's mid-cycle `Clear` is load-op-only.** `clearColorPending_` only ever selects
+`WGPULoadOp_Clear` for the whole pass, which necessarily runs before every draw of that pass, so a
+`Clear()` issued between the two families leaves the earlier sprite standing and one issued after
+both leaves both standing. This became visible only because leg J had been skipping behind the
+family-order gate, so turning that gate over is what first ran it; `backbuffer_pass_order_test.cpp`
+already declares exactly this for WEBGPU under its own name, citing REMED-GFX-140. It is declared
+here as `kClearAfterDrawWins = false`, alongside SDL_GPU. Ordered mid-cycle `Clear` on WebGPU is the
+counterpart of REMED-GFX-129's Vulkan work and is its own finding, deliberately not started.
+
+### Source and generated-artifact changes
+
+Two production files: `WebGPUGraphicsBackend.cpp` and `WebGPUGraphicsBackend.hpp`. **No shader
+changed and no generated artifact or offline-compiled bytecode was regenerated** — the correction is
+the order draws replay in, not what they draw. **No public API changed.** Winding, culling,
+colour-space semantics, viewport and scissor were not touched. Four fixtures: the new cardinality
+one, the extended ordering one and the two strengthened false positives, plus one
+`cmake/Tests/WebGpuTests.cmake` registration.
+
+### Build directories, ccache and displays
+
+| directory | role | ccache | status |
+|---|---|---|---|
+| `cmake-build-webgpu` | the fixed backend | yes | reused |
+| `cmake-build-webgpu-asan-ubsan` | ASan+UBSan | yes | reused |
+| `cmake-build-software` · `cmake-build-debug` (EasyGL) · `cmake-build-vulkan` · `cmake-build-bgfx` · `cmake-build-sdlgpu` · `cmake-build-headless` | cross-backend matrix | yes | reused |
+| `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-sdlrenderer` · `cmake-build-dx3` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the remaining backend libraries and the D3D runtime controls | yes | reused |
+
+**No build directory was created, cleaned, deleted or recreated**; the only configure steps were two
+incremental re-runs of `cmake -S . -B <dir>` to pick up the new fixture's target, and **no clean
+build occurred**. **No build tree was created under `/tmp`, `/var/tmp` or `/dev/shm`** — the
+scratchpad held only logs and two saved copies of the production files used for the A/B runs.
+`CNA_USE_CCACHE=ON` verified in every cache used. The existing wgpu-native extraction was reused;
+nothing was downloaded or re-cloned.
+
+Virtual display **`:101`** for every measurement, including the Wine/DXVK D3D controls — pre-existing
+and shared, neither created nor stopped. **`:0` was not used at all**, and no `pkill`, `killall`,
+kill-by-name or any other global process-termination command was ever issued; no external process
+was signalled.
+
+Thermals: no unrelated heavy compilation was running at session start and the package was at
+**43.4 °C**. Maximum parallelism **`-j1` throughout**. Peak **78.4 °C**, immediately after the full
+WebGPU tree build; test, sanitizer and A/B runs sat at 50–76 °C. No pause was needed and 85 °C was
+never approached. Final **69.8 °C**.
+
+### Commits
+
+- `e822b15a test(Task REMED-GFX-159): reproduce WebGPU family-grouped replay`
+- `2910cacd fix(Task REMED-GFX-159): replay WebGPU's draw families in public order`
+- `fae3ccfa test(Task REMED-GFX-159): strengthen the fixtures that declared this open`
+- `a1c8353f test(Task REMED-GFX-159): cover the cube-face pass recorder by pixels`
+- `docs(remediation): record GFX-159 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
