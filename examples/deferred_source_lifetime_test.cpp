@@ -178,23 +178,6 @@ namespace
 #endif
 
     /**
-     * @brief Whether a source destroyed while its consumer draw is still queued is still sampled.
-     *
-     * REMED-GFX-166 (found by REMED-GFX-152, owned by neither): VULKAN is a whole-frame-deferred
-     * recorder, and a `RenderTarget2D` destroyed while its consumer draw is only queued reads back
-     * as (0,0,0,0) — the queued work is LOST rather than replayed. That is a Vulkan-side defect
-     * with its own root cause and its own ticket; it is declared here rather than silently folded
-     * into this file's WebGPU subject, so the two stay independently attributable. Every leg that
-     * needs a live source still runs on Vulkan.
-     */
-    constexpr bool kDeadSourceStillSampleable =
-#if defined(CNA_BACKEND_VULKAN)
-        false;
-#else
-        true;
-#endif
-
-    /**
      * @brief Whether a `RenderTargetCube` can be rendered into and then sampled as an env map.
      *
      * SDL_RENDERER has no 3D pipeline at all, and HEADLESS does not rasterize. Both are declared
@@ -509,12 +492,6 @@ class DeferredSourceLifetimeTest : public Game
     /** @brief Leg A2 -- an ordinary Texture2D destroyed while its backbuffer draw is only queued. */
     void LegA2(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("A2 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         BeginBackbuffer(dev);
         {
             std::vector<std::uint8_t> px(static_cast<std::size_t>(kPW) * kPH * 4);
@@ -544,12 +521,6 @@ class DeferredSourceLifetimeTest : public Game
      */
     void LegA3(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("A3 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         BeginBackbuffer(dev);
         {
             RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -573,13 +544,6 @@ class DeferredSourceLifetimeTest : public Game
      */
     void LegB1(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("B1 ") + kBackendName + " defers the WHOLE frame, so even this "
-                     "ordering destroys the source before the draw renders, and it loses that draw "
-                     "(REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         RenderTarget2D dst(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                            RenderTargetUsage::DiscardContents);
         {
@@ -608,12 +572,6 @@ class DeferredSourceLifetimeTest : public Game
      */
     void LegB2(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("B2 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         RenderTarget2D dst(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                            RenderTargetUsage::DiscardContents);
         {
@@ -673,13 +631,6 @@ class DeferredSourceLifetimeTest : public Game
             }
             // Same reasoning as leg B1: on a whole-frame-deferred recorder this destructor also
             // runs before the draw renders, so the pixel half is declared there rather than here.
-            if (!kDeadSourceStillSampleable)
-            {
-                boundary(std::string("C1 ") + kBackendName + " defers the WHOLE frame, so this "
-                         "ordering is a dead-source case too and it loses the draw "
-                         "(REMED-GFX-166) -- the pixel check is declared, not measured");
-                return;
-            }
             Readback r = ReadWholeTarget(dst, kPW, kPH);
             if (Readable(r, "C1"))
                 CheckExact(r, "C1 source destroyed before its destination leaves the destination "
@@ -690,12 +641,6 @@ class DeferredSourceLifetimeTest : public Game
     /** @brief Leg D1 -- the SpriteBatch route's own deferred command, with a dead source. */
     void LegD1(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("D1 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         BeginBackbuffer(dev);
         {
             RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -784,12 +729,6 @@ class DeferredSourceLifetimeTest : public Game
      */
     void LegF1(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("F1 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         for (int round = 0; round < 4; ++round)
         {
             PatternFn want = (round % 2 == 0) ? &PatternColor : &AltPatternColor;
@@ -811,12 +750,6 @@ class DeferredSourceLifetimeTest : public Game
     /** @brief Leg G1 -- two independent pairs, one destroyed early and one kept alive. */
     void LegG1(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("G1 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         RenderTarget2D survivor(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                 RenderTargetUsage::DiscardContents);
         ProduceInto(dev, survivor, altPatternTex_);
@@ -883,12 +816,6 @@ class DeferredSourceLifetimeTest : public Game
                      std::to_string(applied) + " for a requested 4 -- no MSAA resolve to measure");
             return;
         }
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("J1 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         BeginBackbuffer(dev);
         {
             RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 4,
@@ -919,12 +846,6 @@ class DeferredSourceLifetimeTest : public Game
      */
     void LegK1(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-        {
-            boundary(std::string("K1 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
-            return;
-        }
         BeginBackbuffer(dev);
         {
             RenderTarget2D src(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -946,15 +867,12 @@ protected:
         // own Present. Frames 1 and 2 queue-and-destroy; the check runs in frame 3.
         if (wants("I1") && frame_ <= 2)
         {
-            if (kDeadSourceStillSampleable)
-            {
-                BeginBackbuffer(dev);
-                RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
-                                 RenderTargetUsage::DiscardContents);
-                ProduceInto(dev, a, patternTex_);
-                BeginBackbuffer(dev);
-                Consume3D(dev, &a);
-            }
+            BeginBackbuffer(dev);
+            RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                             RenderTargetUsage::DiscardContents);
+            ProduceInto(dev, a, patternTex_);
+            BeginBackbuffer(dev);
+            Consume3D(dev, &a);
             return;   // <-- `a` dies here, and this frame's Present replays its draw
         }
 
@@ -995,27 +913,18 @@ protected:
 
         if (wants("I1"))
         {
-            if (!kDeadSourceStillSampleable)
+            BeginBackbuffer(dev);
             {
-                boundary(std::string("I1 ") + kBackendName + " loses a queued draw whose source was "
-                         "destroyed before the frame rendered (REMED-GFX-166) -- declared, not "
-                         "measured");
-            }
-            else
-            {
+                RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                                 RenderTargetUsage::DiscardContents);
+                ProduceInto(dev, a, patternTex_);
                 BeginBackbuffer(dev);
-                {
-                    RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
-                                     RenderTargetUsage::DiscardContents);
-                    ProduceInto(dev, a, patternTex_);
-                    BeginBackbuffer(dev);
-                    Consume3D(dev, &a);
-                }
-                Readback r = ReadBackbuffer(dev);
-                if (Readable(r, "I1"))
-                    CheckExact(r, "I1 the third consecutive frame to destroy its own source is "
-                                  "still correct", PatternColor);
+                Consume3D(dev, &a);
             }
+            Readback r = ReadBackbuffer(dev);
+            if (Readable(r, "I1"))
+                CheckExact(r, "I1 the third consecutive frame to destroy its own source is "
+                              "still correct", PatternColor);
         }
 
         std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
