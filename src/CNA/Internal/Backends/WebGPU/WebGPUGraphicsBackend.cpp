@@ -386,21 +386,29 @@ namespace CNA::Internal::Backends::WebGPU
         }
 
         // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2. Every 3D pipeline
-        // sets pipeline.primitive.frontFace = WGPUFrontFace_CCW. Empirically verified (not derived
-        // by pure reasoning about NDC/raster-space winding, which turned out backwards on a first
-        // pass) via WebGPU_GraphicsState's differential cull-mode checks: a hand-derived-winding
-        // quad renders under CullCounterClockwiseFace (XNA's own default -- an ordinary
-        // front-facing quad must stay visible) and is culled under CullClockwiseFace. This is the
-        // OPPOSITE pairing of what a naive NDC-vs-raster-space mirroring argument predicts,
-        // confirming this project's established "empirically verify, don't just derive" rule for
-        // this exact class of winding/orientation subtlety (see VulkanGraphicsBackend::
-        // FillDepthStencilState()'s own front/back-swap comment for the analogous precedent there).
+        // sets pipeline.primitive.frontFace = WGPUFrontFace_CCW, and WebGPU determines facing from
+        // the signed area in FRAMEBUFFER space, whose Y points down -- so this backend's front face
+        // is the counter-clockwise-AS-DISPLAYED one and its back face the clockwise one.
+        //
+        // REMED-GFX-160: each XNA enum names the face it CULLS, and clockwise-as-displayed is XNA's
+        // FRONT face (FNA's SpriteBatch emits TL->TR->BL and BR->BL->TR, both clockwise as
+        // displayed, and they must survive the RasterizerState.CullCounterClockwise that
+        // SpriteBatch.Begin itself defaults to). So CullClockwiseFace has to remove the clockwise
+        // face, which here is WGPUCullMode_Back, and CullCounterClockwiseFace has to remove the
+        // counter-clockwise one, which here is WGPUCullMode_Front.
+        //
+        // This pairing was previously the other way round. The "empirical verification" behind it
+        // used a probe quad whose own winding was mis-derived, so it demanded that a BACK face stay
+        // visible under XNA's default cull mode and the mapping was inverted to satisfy it -- which
+        // is why the defect only ever showed in the stock 3D path (the SpriteBatch pipeline below
+        // hardcodes WGPUCullMode_None and so was immune). Now measured against the FNA-derived
+        // contract by examples/frontface_winding_test.cpp on eight backends.
         [[nodiscard]] WGPUCullMode ToWGPUCullMode(int xnaCullMode)
         {
             switch (xnaCullMode)
             {
-                case 1: return WGPUCullMode_Front;  // CullClockwiseFace
-                case 2: return WGPUCullMode_Back;   // CullCounterClockwiseFace
+                case 1: return WGPUCullMode_Back;   // CullClockwiseFace
+                case 2: return WGPUCullMode_Front;  // CullCounterClockwiseFace
                 default: return WGPUCullMode_None;
             }
         }
