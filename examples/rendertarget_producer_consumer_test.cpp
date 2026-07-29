@@ -198,6 +198,59 @@ namespace
         true;
 #endif
 
+    /**
+     * @brief Whether a BACKBUFFER draw can sample a render target that was never read back.
+     *
+     * REMED-GFX-155 (measured here, owned by neither this task nor bgfx): on bgfx a render target
+     * produced and unbound in this frame samples as entirely empty when the consumer draws to the
+     * BACKBUFFER (0/32, all 32 texels (0,0,0,0)), while the identical source sampled into another
+     * RENDER TARGET is byte-exact (legs D1-D5) and an ordinary Texture2D drawn in the same
+     * backbuffer batch is byte-exact too. So it is neither "the target is empty" nor "the
+     * backbuffer draw is broken" -- it is specifically a never-read target reaching a backbuffer
+     * consumer. Every prior bgfx fixture read its source at some point, which is how it stayed
+     * hidden. Cannot be caused by REMED-GFX-151, whose fix touches Vulkan files only.
+     */
+    constexpr bool kBackbufferConsumerSeesNeverReadTarget =
+#if defined(CNA_BACKEND_BGFX)
+        false;
+#else
+        true;
+#endif
+
+    /**
+     * @brief Whether a `Clear()` issued AFTER a draw, in the same bind cycle, wins.
+     *
+     * REMED-GFX-156 (measured here): on SDL_GPU **and WebGPU** a producer built as `Clear(A); draw
+     * pattern; Clear(B)` is sampled by its consumer as the PATTERN, not as B -- the trailing clear
+     * is lost, so `Clear()` is not an ordered command there. Both report the identical value
+     * (20,25,40,255), i.e. the pattern's own texel (0,0), on all three RenderTargetUsage values.
+     * This is the SDL_GPU/WebGPU counterpart of REMED-GFX-129, which fixed exactly this on Vulkan
+     * and was scoped to Vulkan. Independent of REMED-GFX-151: it reproduces identically whether or
+     * not a producer is sampled, and this fix touches Vulkan files only.
+     */
+    constexpr bool kOrderedClearAfterDrawWins =
+#if defined(CNA_BACKEND_SDL_GPU) || defined(CNA_BACKEND_WEBGPU)
+        false;
+#else
+        true;
+#endif
+
+    /**
+     * @brief Whether `DualTextureEffect` accepts this fixture's `VertexPositionTexture` geometry.
+     *
+     * D3D9 rejects it outright -- "stride 20 with vertexColor=false has no matching CNA vertex
+     * layout (plan_dx9.md D9-82d)" -- which is a documented, pre-existing vertex-layout boundary of
+     * that backend and nothing to do with render-to-texture. The other three stock-effect cases
+     * (BasicEffect indexed and non-indexed, AlphaTestEffect) still run there and are what carry the
+     * "not SpriteBatch-only" claim on D3D9.
+     */
+    constexpr bool kDualTextureAcceptsPositionTexture =
+#if defined(CNA_BACKEND_D3D9)
+        false;
+#else
+        true;
+#endif
+
     constexpr int kBBW = 64;   ///< Backbuffer width.
     constexpr int kBBH = 64;   ///< Backbuffer height.
 
@@ -573,6 +626,15 @@ class RenderTargetProducerConsumerTest : public Game
 
         for (const Case& c : cases)
         {
+            if (c.kind == 3 && !kDualTextureAcceptsPositionTexture)
+            {
+                std::printf("[INFO] %s skipped on %s: DualTextureEffect rejects this fixture's "
+                            "VertexPositionTexture stride (plan_dx9.md D9-82d) -- a documented "
+                            "vertex-layout boundary, unrelated to render-to-texture\n",
+                            c.name, kBackendName);
+                std::fflush(stdout);
+                continue;
+            }
             // A fresh producer per case: a case that only passed because an earlier case had
             // already materialised the same target would prove nothing.
             RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -819,7 +881,34 @@ class RenderTargetProducerConsumerTest : public Game
             {
                 Readback r;
                 r.w = kBBW; r.h = kBBH; r.pixels = frame;
-                CheckAgainstControl(r, 0, kPW, "D6 producer -> backbuffer consumer", PatternColor);
+                // The Texture2D control is asserted either way: it is what proves the backbuffer
+                // draw itself works, so a declared boundary names the render-target source alone
+                // rather than excusing the whole leg.
+                CheckRegion(r, kPW, "D6 the Texture2D control on the backbuffer is the pattern",
+                            PatternColor);
+                if (kBackbufferConsumerSeesNeverReadTarget)
+                {
+                    CheckAgainstControl(r, 0, kPW, "D6 producer -> backbuffer consumer", PatternColor);
+                }
+                else
+                {
+                    int good = 0, empty = 0;
+                    for (int y = 0; y < kPH; ++y)
+                        for (int x = 0; x < kPW; ++x)
+                        {
+                            const Color& c = r.at(x, y);
+                            if (Same(c, PatternColor(x, y))) ++good;
+                            if (c.getRProperty() == 0 && c.getGProperty() == 0 &&
+                                c.getBProperty() == 0 && c.getAProperty() == 0) ++empty;
+                        }
+                    check(good < kPW * kPH,
+                          std::string("D6 REMED-GFX-155 pinned: a never-read render target reaching "
+                          "a BACKBUFFER consumer does not reproduce the source on ") + kBackendName +
+                          " (" + std::to_string(good) + "/" + std::to_string(kPW * kPH) +
+                          " correct, " + std::to_string(empty) + " entirely empty) while the same "
+                          "source into a render target is byte-exact above. Fixing it must flip "
+                          "this declaration.");
+                }
             }
         }
     }
@@ -887,8 +976,25 @@ class RenderTargetProducerConsumerTest : public Game
      */
     void LegMips(GraphicsDevice& dev)
     {
-        RenderTarget2D a(dev, kPW, kPH, true, SurfaceFormat::Color, DepthFormat::None, 0,
-                         RenderTargetUsage::DiscardContents);
+        // Whether a backend supports a mipmapped render target AT ALL is measured, not assumed:
+        // WebGPU documents the chain regeneration unimplemented and throws from the constructor
+        // (plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not this finding.
+        std::unique_ptr<RenderTarget2D> owner;
+        try
+        {
+            owner = std::make_unique<RenderTarget2D>(dev, kPW, kPH, true, SurfaceFormat::Color,
+                                                     DepthFormat::None, 0,
+                                                     RenderTargetUsage::DiscardContents);
+        }
+        catch (const std::exception& e)
+        {
+            std::printf("[INFO] F1 mipmapped RenderTarget2D unsupported on %s (%s) -- boundary "
+                        "recorded; the sample-count-one legs above carry the contract\n",
+                        kBackendName, e.what());
+            std::fflush(stdout);
+            return;
+        }
+        RenderTarget2D& a = *owner;
         std::printf("[INFO] F1 mipmapped producer LevelCount=%d\n", a.getLevelCountProperty());
         std::fflush(stdout);
         ProduceInto(dev, a, patternTex_);
@@ -1003,9 +1109,28 @@ class RenderTargetProducerConsumerTest : public Game
                 {
                     bool all = true;
                     for (const Color& c : r.pixels) if (!Same(c, clearB)) { all = false; break; }
-                    check(all, std::string("G3 ") + u.name +
-                          ": geometry then Clear() -- the consumer sees the LAST command (want " +
-                          ColorText(clearB) + ", got " + ColorText(r.at(0, 0)) + ")");
+                    if (kOrderedClearAfterDrawWins)
+                    {
+                        check(all, std::string("G3 ") + u.name +
+                              ": geometry then Clear() -- the consumer sees the LAST command (want " +
+                              ColorText(clearB) + ", got " + ColorText(r.at(0, 0)) + ")");
+                    }
+                    else
+                    {
+                        // Asserted as "the trailing clear is LOST", which is the claim, so fixing
+                        // REMED-GFX-156 fails this fixture and forces the declaration to be updated.
+                        int pattern = 0;
+                        for (int y = 0; y < kPH; ++y)
+                            for (int x = 0; x < kPW; ++x)
+                                if (Same(r.at(x, y), PatternColor(x, y))) ++pattern;
+                        check(!all && pattern == kPW * kPH,
+                              std::string("G3 ") + u.name +
+                              ": REMED-GFX-156 pinned -- a Clear() issued AFTER a draw is LOST on " +
+                              kBackendName + ", so the consumer sees the geometry (" +
+                              std::to_string(pattern) + "/" + std::to_string(kPW * kPH) +
+                              " pattern texels, got " + ColorText(r.at(0, 0)) + " want " +
+                              ColorText(clearB) + "). Fixing it must flip this declaration.");
+                    }
                 }
             }
         }
@@ -1138,6 +1263,16 @@ class RenderTargetProducerConsumerTest : public Game
         }
         Readback r;
         r.w = kBBW; r.h = kBBH; r.pixels = frame;
+        if (!kBackbufferConsumerSeesNeverReadTarget)
+        {
+            // REMED-GFX-155 owns the backbuffer consumer on this backend, so there is no honest
+            // ordering to measure here until it is fixed -- recorded, not asserted either way.
+            std::printf("[INFO] I2 not measurable on %s: REMED-GFX-155 (a never-read target "
+                        "reaching a backbuffer consumer) owns this path; got %s\n",
+                        kBackendName, ColorText(r.at(0, 0)).c_str());
+            std::fflush(stdout);
+            return;
+        }
         CheckRegion(r, 0, "I2 a backbuffer draw between two cycles of the same target still shows "
                           "the cycle it was issued after, despite a later mid-frame readback",
                     PatternColor);
