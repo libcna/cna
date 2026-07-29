@@ -2137,6 +2137,11 @@ namespace CNA::Internal::Backends::WebGPU
     WebGPUGraphicsBackend::~WebGPUGraphicsBackend()
     {
         IGraphicsBackend::UnregisterForWindow(window_);
+        // REMED-GFX-167: FIRST, before any native handle below is released. A queued command holds
+        // a reference to the texture it samples, and these vectors are members -- destroyed after
+        // this body, i.e. after device_/adapter_/instance_ are gone. A frame abandoned rather than
+        // presented (surface acquisition failure) is the path that can still hold commands here.
+        DiscardQueuedCommands();
         DestroySpriteResources();
         DestroyColoredResources();
         DestroyTexturedResources();
@@ -5660,6 +5665,18 @@ struct VSOut {
             wgpuRenderPassEncoderRelease(pass);
         }
 
+        DiscardQueuedCommands();
+    }
+
+    // REMED-GFX-159 keeps the ordered stream and all eleven family vectors alive for the whole
+    // walk, so they are dropped together, here, and never part-way through it.
+    // REMED-GFX-167: this is also what the destructor calls before releasing the device. A command
+    // now carries a native reference to the texture it samples, so a vector left populated would
+    // release those handles when it is destroyed as a MEMBER -- which happens after the destructor
+    // BODY has already released the queue, device, adapter and instance. Draining the queue first
+    // keeps native release strictly inside the device's lifetime.
+    void WebGPUGraphicsBackend::DiscardQueuedCommands()
+    {
         drawOrder_.clear();
         clearCommands_.clear();
         spriteCommands_.clear();

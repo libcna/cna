@@ -76,6 +76,8 @@
 //   H1 unwinding               a throwing consumer, then a clean frame that must still render
 //   I1 multi-frame             several frames, each destroying its own source before Present
 //   J1 MSAA                    an applied multisample producer, destroyed while its draw is queued
+//   K1 exit after a dead frame  the process exits immediately behind a replay that bound a
+//                              resource whose public wrapper was already destroyed
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL or CRASH.
 
@@ -901,6 +903,39 @@ class DeferredSourceLifetimeTest : public Game
                           "texture", PatternColor);
     }
 
+    /**
+     * @brief Leg K1 -- the process exits straight after a frame that sampled an already-dead source.
+     *
+     * Every other backbuffer leg forces the replay itself, by reading the destination back. This
+     * one deliberately does NOT: the consumer draw is left for the frame's own Present, and the leg
+     * returns, so device teardown follows immediately behind a replay that bound a resource whose
+     * public wrapper is already gone. The subject is the process outcome, which the supervisor
+     * judges — the pixel oracle lives in the legs that can still read their destination.
+     *
+     * Deliberately NOT written as "leave a render target bound and let it be destroyed": that
+     * conflates this subject with a separate defect (destroying a RenderTarget2D while it is still
+     * the bound target faults inside the next SetRenderTarget on EASYGL — recorded independently,
+     * not this task's).
+     */
+    void LegK1(GraphicsDevice& dev)
+    {
+        if (!kDeadSourceStillSampleable)
+        {
+            boundary(std::string("K1 ") + kBackendName + " loses a queued draw whose source was "
+                     "destroyed before the frame rendered (REMED-GFX-166) -- declared, not measured");
+            return;
+        }
+        BeginBackbuffer(dev);
+        {
+            RenderTarget2D src(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                               RenderTargetUsage::DiscardContents);
+            ProduceInto(dev, src, patternTex_);
+            BeginBackbuffer(dev);
+            Consume3D(dev, &src);
+        }   // <-- source gone; nothing here forces the replay, so Present does it on the way out
+        check(true, "K1 exiting straight after a frame that sampled a dead source completes");
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -956,6 +991,7 @@ protected:
         runLeg("G1", &DeferredSourceLifetimeTest::LegG1);
         runLeg("H1", &DeferredSourceLifetimeTest::LegH1);
         runLeg("J1", &DeferredSourceLifetimeTest::LegJ1);
+        runLeg("K1", &DeferredSourceLifetimeTest::LegK1);
 
         if (wants("I1"))
         {
@@ -1026,7 +1062,7 @@ namespace
 {
     /** @brief Every leg id this fixture knows, in the order the supervisor runs them. */
     const char* const kLegIds[] = {
-        "A1", "A2", "A3", "B1", "B2", "C1", "D1", "E1", "F1", "G1", "H1", "I1", "J1",
+        "A1", "A2", "A3", "B1", "B2", "C1", "D1", "E1", "F1", "G1", "H1", "I1", "J1", "K1",
     };
 
 #if CNA_GFX167_CAN_FORK

@@ -1245,6 +1245,11 @@ namespace CNA::Internal::Backends::WebGPU
          * @param destination Attachments, extents and usage policy of the bound destination.
          */
         void ReplayOrderedSegments(WGPUCommandEncoder encoder, const PassDestination& destination);
+        /// REMED-GFX-167: drops the ordered stream and every family vector together, releasing the
+        /// native references their commands hold. Called at the tail of a replay and, crucially,
+        /// FIRST in the destructor -- these vectors are members, so left populated they would
+        /// release textures after the destructor body has already released the device.
+        void DiscardQueuedCommands();
 
         /**
          * @brief REMED-GFX-156: appends one public Clear() to the ordered stream.
