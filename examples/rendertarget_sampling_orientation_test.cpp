@@ -182,19 +182,17 @@ namespace
     /**
      * @brief Whether a RenderTarget2D may be handed to a stock 3D effect as its texture.
      *
-     * REMED-GFX-152 (recorded here, not owned by this task): SDL_GPU's stock-effect draw paths do
-     * `static_cast<const SdlGpuTextureBackend*>(params.textureN)`, but a RenderTarget2D's backend
-     * is SdlGpuRenderTargetBackend -- an unrelated sibling, both merely deriving from
-     * ITextureBackend -- so the cast is undefined behaviour and the process dies. Its SpriteBatch
-     * path uses dynamic_cast and is fine, which is why only the 3D legs are affected. This is the
-     * SDL_GPU counterpart of REMED-GFX-078's bgfx finding.
+     * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
+     *
+     * It used to read false on SDL_GPU: thirteen stock-effect sites there did
+     * `static_cast<const SdlGpuTextureBackend*>(params.textureN)` while a RenderTarget2D's backend
+     * is the unrelated sibling SdlGpuRenderTargetBackend, so the cast was undefined behaviour and
+     * the process died -- the SDL_GPU counterpart of REMED-GFX-078's bgfx finding. All thirteen now
+     * go through one shared `ResolveSampledTextureEXT`, and this file's CD legs were A/B-proven
+     * against the pre-fix backend: SIGSEGV before, exact pixels after. The constant is kept rather
+     * than deleted so a future backend can declare the boundary again if it genuinely has one.
      */
-    constexpr bool kStockEffectRtSourceSupported =
-#if defined(CNA_BACKEND_SDL_GPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kStockEffectRtSourceSupported = true;
 
     /**
      * @brief Whether SpriteBatch's sourceRectangle is honoured for a render-target source.

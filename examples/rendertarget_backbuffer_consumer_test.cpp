@@ -163,18 +163,14 @@ namespace
     /**
      * @brief Whether a RenderTarget2D may be handed to a stock 3D effect as its texture.
      *
-     * REMED-GFX-152 (owned by neither this task nor the one that found it): SDL_GPU's stock-effect
-     * draw paths `static_cast<const SdlGpuTextureBackend*>(params.textureN)`, but a RenderTarget2D's
-     * backend is the unrelated sibling SdlGpuRenderTargetBackend, so the cast is undefined behaviour
-     * and the process dies. The 3D consumer cases are skipped there rather than crashing the run;
-     * the SpriteBatch cases still carry the ordering contract on that backend.
+     * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
+     *
+     * It used to read false on SDL_GPU, whose stock-effect paths
+     * `static_cast<const SdlGpuTextureBackend*>(params.textureN)` onto the unrelated sibling
+     * SdlGpuRenderTargetBackend and died, so the 3D consumer cases were skipped there. They now run
+     * and were A/B-proven against the pre-fix backend.
      */
-    constexpr bool kStockEffectRtSourceSupported =
-#if defined(CNA_BACKEND_SDL_GPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kStockEffectRtSourceSupported = true;
 
     /**
      * @brief Whether a bind cycle's SpriteBatch and stock 3D draws replay in public order.

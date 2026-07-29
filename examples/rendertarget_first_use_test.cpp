@@ -177,17 +177,22 @@ namespace
     /**
      * @brief Whether a RenderTarget2D may be handed to a stock 3D effect as its texture.
      *
-     * REMED-GFX-152 (owned by neither this task nor the one that found it): SDL_GPU's stock-effect
-     * draw paths cast a RenderTarget2D's backend to the unrelated `SdlGpuTextureBackend` sibling,
-     * which is undefined behaviour and kills the process. Legs that hand a target to BasicEffect
-     * are skipped there; the SpriteBatch legs still carry the first-use contract on that backend.
+     * REMED-GFX-152 CLOSED this (2026-07-29), and the declaration is now unconditionally true.
+     *
+     * It used to read false on SDL_GPU, whose stock-effect paths cast a RenderTarget2D's backend to
+     * the unrelated `SdlGpuTextureBackend` sibling and died.
+     *
+     * Recorded accurately rather than claimed as a crash proof: in THIS file the flag was
+     * OVER-APPLIED. Legs J and K carry `needsStockEffectRtSource = true`, but neither hands a
+     * render target to an effect -- both bind an ordinary `Texture2D` (`patternTex_`,
+     * `altPatternTex_`) and merely RENDER INTO a target, which was never the defect. So the skip
+     * cost SDL_GPU three checks of genuine first-use coverage while hiding nothing: both legs were
+     * measured against the pre-fix backend and PASS there (J 1/1, K 2/2). SDL_GPU 17/17 -> 20/20,
+     * the three newly-enabled checks green on both builds. The legs that really do sample a target
+     * through a stock effect live in rendertarget_effect_source_test.cpp, and those are the ones
+     * that SIGSEGV pre-fix.
      */
-    constexpr bool kStockEffectRtSourceSupported =
-#if defined(CNA_BACKEND_SDL_GPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kStockEffectRtSourceSupported = true;
 
     /**
      * @brief Whether a mipMap=true RenderTarget2D is implemented at all.
