@@ -302,23 +302,6 @@ namespace
 #endif
 
     /**
-     * @brief Whether a texture destroyed BEFORE the frame renders is still sampled correctly.
-     *
-     * REMED-GFX-166 (found by REMED-GFX-152, owned by neither): VULKAN is a whole-frame-deferred
-     * recorder like SDL_GPU, but a RenderTarget2D destroyed while its consumer draw is still only
-     * queued reads back as (0,0,0,0) -- the queued work is lost rather than replayed. Measured
-     * 2026-07-29 on llvmpipe: leg M1's two DEAD-source checks report 0/32 while every live-source
-     * check in the same run is exact, so it is the disposal, not the deferral. Declared here rather
-     * than fixed, because it is a Vulkan-side lifetime defect with its own root cause.
-     */
-    constexpr bool kDeadSourceStillSampleable =
-#if defined(CNA_BACKEND_VULKAN)
-        false;
-#else
-        true;
-#endif
-
-    /**
      * @brief The producer pattern texel at (@p x, @p y), (0, 0) being the TOP-LEFT corner.
      *
      * R is a function of x alone and G of y alone, so (R, G) is unique across all 32 texels and
@@ -934,6 +917,88 @@ class RenderTargetEffectSourceTest : public Game
               std::to_string(total - mismatched) + "/" + std::to_string(total) + ")" + first);
     }
 
+    /**
+     * @brief CheckConsumer, with the render-target source DESTROYED before the frame renders.
+     *
+     * REMED-GFX-166. Identical to CheckConsumer except for one thing: side 0's source render target
+     * is destroyed while the destination is STILL BOUND, so no flush can have consumed the queued
+     * work yet on any backend. Side 1 keeps its ordinary Texture2D alive, exactly as before, so the
+     * comparison isolates the disposal and nothing else -- whatever a family's shading does to the
+     * sampled value, it does to both sides.
+     *
+     * The control side must also carry real content (a quarter of its pixels differing from the
+     * opaque-black clear), or the leg FAILS rather than passing on two equally empty images: a
+     * dropped producer makes side 0 empty, and "both empty" must never read as "identical".
+     *
+     * @param dev     The device.
+     * @param label   Check label prefix.
+     * @param family  Consumer effect family.
+     * @param mode    How the consumer geometry reaches the device.
+     * @param control The ordinary Texture2D the live side samples.
+     * @return True when the comparison actually ran; false when the live control rendered nothing,
+     *         which is a capability observation about the family and NOT a lifetime result -- the
+     *         caller must then declare a boundary, never count a pass.
+     */
+    bool CheckDeadSourceConsumer(GraphicsDevice& dev, const std::string& label, Family family,
+                                 DrawMode mode, const Texture2D& control)
+    {
+        Readback reads[2];
+        for (int side = 0; side < 2; ++side)
+        {
+            RenderTarget2D dst(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                               RenderTargetUsage::DiscardContents);
+            {
+                RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                                 RenderTargetUsage::DiscardContents);
+                ProduceInto(dev, a, control);
+                Texture2D* src = (side == 0) ? static_cast<Texture2D*>(&a)
+                                             : const_cast<Texture2D*>(&control);
+                dev.SetRenderTarget(&dst);
+                ResetState(dev);
+                dev.Clear(Color(0, 0, 0, 255));
+                ConsumeDraw(dev, src, family, mode);
+            }   // <-- `a` dies here, with dst still bound: nothing can have flushed
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetState(dev);
+            reads[side] = ReadWhole(dst, kPW, kPH);
+        }
+
+        if (!RequireReadable(reads[0], label + " destroyed render-target source")) return true;
+        if (!RequireReadable(reads[1], label + " live Texture2D control"))         return true;
+
+        int lively = 0;
+        for (int y = 0; y < kPH; ++y)
+            for (int x = 0; x < kPW; ++x)
+                if (!Same(reads[1].at(x, y), Color(0, 0, 0, 255))) ++lively;
+        if (lively < kPW * kPH / 4)
+        {
+            boundary(label + ": the LIVE control rendered nothing (" + std::to_string(lively) + "/" +
+                     std::to_string(kPW * kPH) + " non-black) on " + kBackendName +
+                     ", so the destroyed-source comparison would measure nothing here -- recorded, "
+                     "not counted");
+            return false;
+        }
+
+        int mismatched = 0;
+        std::string first;
+        for (int y = 0; y < kPH; ++y)
+            for (int x = 0; x < kPW; ++x)
+                if (!Same(reads[0].at(x, y), reads[1].at(x, y)))
+                {
+                    ++mismatched;
+                    if (first.empty())
+                        first = " first at (" + std::to_string(x) + "," + std::to_string(y) +
+                                ") deadRt=" + ColorText(reads[0].at(x, y)) +
+                                " liveTex=" + ColorText(reads[1].at(x, y));
+                }
+        const int total = kPW * kPH;
+        check(mismatched == 0,
+              label + ": a render target DESTROYED before the frame renders samples identically to "
+              "a live control (" + std::to_string(total - mismatched) + "/" +
+              std::to_string(total) + ")" + first);
+        return true;
+    }
+
     /// Asserts a destination reproduces @p want exactly over its whole extent.
     void CheckExact(const Readback& r, const std::string& label, Color (*want)(int, int),
                     int w = kPW, int h = kPH)
@@ -1202,6 +1267,102 @@ class RenderTargetEffectSourceTest : public Game
               std::string("C1 the custom shader is genuinely bound (uniform 0.5 darkens the "
                           "render-target sample: got ") + ColorText(*rtHalf) + " vs unit-uniform " +
               ColorText(full) + ")");
+    }
+
+    /**
+     * @brief Leg M2 -- REMED-GFX-166 across every stock-effect family with a 2D texture slot.
+     *
+     * Leg M1 proves the destroyed-source contract on one family and one draw mode. The Vulkan defect
+     * it exposed lived in the DESTINATION ownership, which is family-independent -- but "should be
+     * family-independent" is a prediction, and the whole point of this fixture is that the previous
+     * ticket's ten-versus-thirteen site count was also a prediction. So each family is measured.
+     */
+    void LegM2(GraphicsDevice& dev)
+    {
+        int measured = 0;
+        const Family families[] = {
+            Family::Basic, Family::BasicVertexColor, Family::AlphaTest,
+            Family::DualSlot0, Family::DualSlot1, Family::EnvMapDiffuse,
+            Family::Skinned, Family::Pbr, Family::SkinnedPbr,
+        };
+        for (Family f : families)
+        {
+            if ((f == Family::DualSlot0 || f == Family::DualSlot1) &&
+                !kDualTextureAcceptsPositionTexture)
+            {
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                         ": DualTextureEffect rejects this fixture's stride-20 stream "
+                         "(plan_dx9.md D9-82d)");
+                continue;
+            }
+            if (f == Family::BasicVertexColor && !kBasicEffectAcceptsVertexColorWithoutColorStream)
+            {
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                         ": no vertex layout for a textured, vertex-coloured, unlit stride-20 stream "
+                         "(plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
+                         "texture is resolved");
+                continue;
+            }
+            if (f == Family::EnvMapDiffuse && !kEnvMapAcceptsPositionTexture)
+            {
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                         ": EnvironmentMapEffect requires a normal-bearing stream here "
+                         "(plan_dx9.md D9-82e)");
+                continue;
+            }
+            if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
+                !kSkinnedFamiliesAcceptPositionTexture)
+            {
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                         ": it rejects this fixture's VertexPositionTexture stride (a vertex-layout "
+                         "boundary, unrelated to how a texture is resolved)");
+                continue;
+            }
+            if (f == Family::EnvMapDiffuse && envCube_ == nullptr)
+            {
+                // The subject here is the effect's ordinary DIFFUSE slot, but the effect still
+                // requires a cube in its cube slot, and this backend could not create one.
+                boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kBackendName +
+                         ": no TextureCube could be created for its cube slot, which the effect "
+                         "requires even when only its diffuse slot is under test");
+                continue;
+            }
+            if (CheckDeadSourceConsumer(dev, std::string("M2 ") + FamilyName(f), f,
+                                        DrawMode::UserPrimitives, patternTex_))
+                ++measured;
+        }
+        // A run in which NOTHING measured is a failure, however many boundaries it declared: the
+        // point of this leg is coverage across families, and "every family was unmeasurable" would
+        // otherwise pass silently on the strength of the declarations alone.
+        check(measured > 0, "M2 at least one stock-effect family was actually measurable on " +
+                            std::string(kBackendName) + " (" + std::to_string(measured) + "/" +
+                            std::to_string(static_cast<int>(std::size(families))) + ")");
+    }
+
+    /**
+     * @brief Leg M3 -- REMED-GFX-166 across every way the consumer geometry reaches the device.
+     *
+     * The destination is captured at the same enqueue choke point for all of them, so a mode that
+     * pushed its command anywhere else would show up here and nowhere else.
+     */
+    void LegM3(GraphicsDevice& dev)
+    {
+        const DrawMode modes[] = {
+            DrawMode::UserPrimitives, DrawMode::UserIndexedPrimitives,
+            DrawMode::VertexBuffer, DrawMode::IndexedVertexBuffer, DrawMode::Instanced,
+        };
+        for (DrawMode m : modes)
+        {
+            if (m == DrawMode::Instanced && !SupportsInstancing(dev))
+            {
+                boundary(std::string("M3 ") + kBackendName + " does not implement "
+                         "DrawInstancedPrimitives at all -- the same pre-existing capability "
+                         "boundary leg D1 declares");
+                continue;
+            }
+            (void)CheckDeadSourceConsumer(dev, std::string("M3 ") + DrawModeName(m), Family::Basic,
+                                          m, patternTex_);
+        }
     }
 
     /** @brief Leg D1 -- every way the consumer geometry can reach the device. */
@@ -1699,16 +1860,9 @@ class RenderTargetEffectSourceTest : public Game
     /** @brief Leg M1 -- disposal, handle reuse and interleaved lifetimes. */
     void LegM(GraphicsDevice& dev)
     {
-        if (!kDeadSourceStillSampleable)
-            boundary(std::string("M1 ") + kBackendName + " loses a queued draw whose source was "
-                     "destroyed before the frame rendered (REMED-GFX-166) -- the dead-source checks "
-                     "are recorded as a boundary there; the create/use/dispose and live-source "
-                     "checks below still run");
-
         // The source render target is destroyed BEFORE the frame renders. This backend replays
         // draws at Present, so the queued consumer must still bind a live native handle -- the
         // keepAlive contract, judged by a real sampled result rather than by "did not crash".
-        if (kDeadSourceStillSampleable)
         {
             RenderTarget2D dst(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                RenderTargetUsage::DiscardContents);
@@ -1731,7 +1885,6 @@ class RenderTargetEffectSourceTest : public Game
 
         // The same for an ordinary Texture2D, which pre-fix released its native handle IMMEDIATELY
         // in its destructor while its consumer draw was still queued.
-        if (kDeadSourceStillSampleable)
         {
             RenderTarget2D dst(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                RenderTargetUsage::DiscardContents);
@@ -1812,7 +1965,7 @@ class RenderTargetEffectSourceTest : public Game
 
             Readback r1 = ReadWhole(dst, kPW, kPH);
             Readback r2 = ReadWhole(dst2, kPW, kPH);
-            if (kDeadSourceStillSampleable && RequireReadable(r1, "M1 interleaved, dead source"))
+            if (RequireReadable(r1, "M1 interleaved, dead source"))
                 CheckExact(r1, "M1 interleaved lifetimes: the destroyed source's draw is correct",
                            PatternColor);
             if (RequireReadable(r2, "M1 interleaved, live source"))
@@ -2045,6 +2198,8 @@ protected:
         runLeg("K1", &RenderTargetEffectSourceTest::LegK);
         runLeg("L1", &RenderTargetEffectSourceTest::LegL);
         runLeg("M1", &RenderTargetEffectSourceTest::LegM);
+        runLeg("M2", &RenderTargetEffectSourceTest::LegM2);
+        runLeg("M3", &RenderTargetEffectSourceTest::LegM3);
         runLeg("N1", &RenderTargetEffectSourceTest::LegN);
         runLeg("O1", &RenderTargetEffectSourceTest::LegO);
         runLeg("P1", &RenderTargetEffectSourceTest::LegP);
@@ -2072,7 +2227,7 @@ namespace
     /** @brief Every leg id this fixture knows, in the order the supervisor runs them. */
     const char* const kLegIds[] = {
         "A1", "A2", "A3", "B1", "C1", "D1", "E1", "F1",
-        "G1", "H1", "I1", "J1", "K1", "L1", "M1", "N1", "O1", "P1",
+        "G1", "H1", "I1", "J1", "K1", "L1", "M1", "M2", "M3", "N1", "O1", "P1",
     };
 
 #if CNA_GFX152_CAN_FORK

@@ -267,6 +267,25 @@ protected:
             check(true, "S6 destroy-before-Present did not crash (no dangling target pointer)");
         }
 
+        // --- Scene 6b: the frame AFTER Scene 6 must still render exactly (REMED-GFX-166). -------
+        // Scene 6 asserts only "did not crash", which is all it CAN assert about a target nobody
+        // reads -- and REMED-GFX-166 is precisely a silent, non-crashing wrong result, so that shape
+        // of check could never have caught it. The observable version of Scene 6 (a destroyed target
+        // that another queued draw SAMPLES) lives in examples/deferred_source_lifetime_test.cpp.
+        // What is added here is the part this fixture owns: Scene 6 changed how a dying target
+        // interacts with the pending queues, so the very next target must still be correct -- which
+        // catches a lifetime fix that leaks a stale entry, reorders the queue or drops the wrong one.
+        {
+            auto rt = makeRt();
+            dev.SetRenderTarget(rt.get());
+            dev.Clear(Color::Black);
+            drawSprite(Rectangle(0, 0, kW, kH), Color::Red);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const std::vector<Color> pix = readRt(*rt);
+            check(countIf(pix, IsRed) >= kW * kH / 2 && countIf(pix, IsFabricated) == 0,
+                  "S6b the render target created right after a destroy-before-Present is exact");
+        }
+
         std::printf("=== %d/%d PASS ===\n", pass_, total_);
         result_ = (pass_ == total_) ? 0 : 1;
         Exit();

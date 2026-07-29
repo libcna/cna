@@ -257,6 +257,8 @@ class DeferredSourceLifetimeTest : public Game
 
     Texture2D patternTex_;      ///< kPW x kPH, PatternColor -- what a producer must contain.
     Texture2D altPatternTex_;   ///< kPW x kPH, AltPatternColor.
+    /// Leg L1's source, held across a frame boundary so its release lands AFTER a submit.
+    std::unique_ptr<RenderTarget2D> inFlight_;
 
     void check(bool ok, const std::string& label)
     {
@@ -393,6 +395,50 @@ class DeferredSourceLifetimeTest : public Game
                              (good == total ? "" : shape + firstMismatch));
     }
 
+    /**
+     * @brief Requires two readbacks of the same sequence to be byte-identical, and NON-TRIVIAL.
+     *
+     * The oracle for a consumer whose exact output colour this fixture cannot predict -- the
+     * env-map families combine the sampled value with lighting and Fresnel terms. Running the
+     * identical sequence twice, differing ONLY in when the source is destroyed, turns "is the
+     * colour right" into "does the disposal change anything", which is the actual subject and needs
+     * no shading model at all.
+     *
+     * @p live must also carry real content: at least a quarter of its probed pixels differing from
+     * the opaque-black clear, so that a backend which renders nothing in BOTH runs -- the exact
+     * failure this is watching for -- cannot pass by being equally empty twice.
+     */
+    void CheckSameAndLively(const Readback& live, const Readback& dead, const std::string& label)
+    {
+        int differing = 0, nonBlack = 0;
+        std::string firstDiff;
+        for (int y = 0; y < kPH; ++y)
+            for (int x = 0; x < kPW; ++x)
+            {
+                const int px = (x * live.w) / kPW + (live.w / kPW) / 2;
+                const int py = (y * live.h) / kPH + (live.h / kPH) / 2;
+                const Color& l = live.at(px, py);
+                const Color& d = dead.at(px, py);
+                if (!Same(l, Color(0, 0, 0, 255))) ++nonBlack;
+                if (Same(l, d)) continue;
+                ++differing;
+                if (firstDiff.empty())
+                    firstDiff = " first (" + std::to_string(x) + "," + std::to_string(y) +
+                                ") live " + ColorText(l) + " dead " + ColorText(d);
+            }
+        const int total = kPW * kPH;
+        if (nonBlack < total / 4)
+        {
+            check(false, label + ": the LIVE control rendered nothing to compare against (" +
+                         std::to_string(nonBlack) + "/" + std::to_string(total) +
+                         " non-black) -- this leg would measure nothing");
+            return;
+        }
+        check(differing == 0, label + " (" + std::to_string(total - differing) + "/" +
+                              std::to_string(total) + " identical to the live control)" +
+                              (differing == 0 ? "" : firstDiff));
+    }
+
     // ---------------------------------------------------------------- producers
 
     static void FillQuad(VertexPositionTexture* q)
@@ -457,6 +503,26 @@ class DeferredSourceLifetimeTest : public Game
         VertexPositionTexture q[6];
         FillQuad(q);
         BasicEffect fx(dev);
+        fx.setWorldProperty(Matrix::getIdentityProperty());
+        fx.setViewProperty(Matrix::getIdentityProperty());
+        fx.setProjectionProperty(Matrix::getIdentityProperty());
+        fx.setTextureEnabledProperty(true);
+        fx.setTextureProperty(src);
+        fx.VertexColorEnabled = false;
+        fx.Apply();
+        dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+    }
+
+    /**
+     * @brief Consume3D, but through a caller-owned effect, so destruction ORDER can be chosen.
+     *
+     * Consume3D destroys its BasicEffect at the end of its own scope, i.e. always BEFORE the source.
+     * Leg N1 needs the other order too.
+     */
+    static void Consume3DWith(GraphicsDevice& dev, BasicEffect& fx, Texture2D* src)
+    {
+        VertexPositionTexture q[6];
+        FillQuad(q);
         fx.setWorldProperty(Matrix::getIdentityProperty());
         fx.setViewProperty(Matrix::getIdentityProperty());
         fx.setProjectionProperty(Matrix::getIdentityProperty());
@@ -857,6 +923,168 @@ class DeferredSourceLifetimeTest : public Game
         check(true, "K1 exiting straight after a frame that sampled a dead source completes");
     }
 
+    /**
+     * @brief Leg E2 -- the cube slot with a PIXEL oracle, not just "replays safely".
+     *
+     * E1 only asserts that the sequence completes, because this fixture cannot predict
+     * EnvironmentMapEffect's combined output colour. E2 does not need to: it runs the identical
+     * sequence twice, differing ONLY in whether the cube survives to the frame, and requires the two
+     * destinations to be byte-identical AND the live one to be non-trivial. A dropped cube-face
+     * producer changes the sampled environment, so it cannot pass unnoticed.
+     *
+     * EnvironmentMapAmount is 1, not E1's 0: with 0 the cube contributes nothing and the comparison
+     * would be vacuous whatever the lifetime did.
+     */
+    void LegE2(GraphicsDevice& dev)
+    {
+        if (!kRenderTargetCubeSupported)
+        {
+            boundary(std::string("E2 ") + kBackendName + " has no render-into-a-cube path -- "
+                     "declared, not measured");
+            return;
+        }
+        Readback reads[2];
+        for (int side = 0; side < 2; ++side)   // side 0 = cube destroyed early, 1 = cube alive
+        {
+            std::unique_ptr<RenderTargetCube> cube;
+            try
+            {
+                BeginBackbuffer(dev);
+                cube = std::make_unique<RenderTargetCube>(dev, 4, false, SurfaceFormat::Color,
+                                                          DepthFormat::None);
+                for (int face = 0; face < 6; ++face)
+                {
+                    dev.SetRenderTarget(cube.get(), static_cast<CubeMapFace>(face));
+                    ResetState(dev);
+                    dev.Clear(Color(static_cast<bytecs>(30 + face * 30), bytecs(90), bytecs(220),
+                                    bytecs(255)));
+                }
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                ResetState(dev);
+                BeginBackbuffer(dev);
+
+                VertexPositionNormalTexture q[6];
+                FillQuadWithNormals(q);
+                EnvironmentMapEffect fx(dev);
+                fx.setWorldProperty(Matrix::getIdentityProperty());
+                fx.setViewProperty(Matrix::getIdentityProperty());
+                fx.setProjectionProperty(Matrix::getIdentityProperty());
+                fx.setTextureProperty(&patternTex_);
+                fx.setEnvironmentMapProperty(cube.get());
+                fx.setEnvironmentMapAmountProperty(1.0f);
+                fx.setFresnelFactorProperty(0.0f);
+                fx.setEnvironmentMapSpecularProperty(Vector3(0.f, 0.f, 0.f));
+                fx.Apply();
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+            }
+            catch (const System::NotSupportedException& e)
+            {
+                boundary(std::string("E2 ") + kBackendName + " has no RenderTargetCube path (" +
+                         e.what() + ") -- declared, not measured");
+                return;
+            }
+            if (side == 0) cube.reset();   // <-- destroyed with its consumer draw still QUEUED
+            reads[side] = ReadBackbuffer(dev);
+            if (!Readable(reads[side], "E2")) return;
+        }
+        CheckSameAndLively(reads[1], reads[0],
+                           "E2 a RenderTargetCube destroyed before Present is sampled identically "
+                           "to a live one");
+    }
+
+    /**
+     * @brief Leg L1 -- the source is destroyed AFTER its frame was submitted, in the NEXT frame.
+     *
+     * Every other leg's disposal happens before the record. This one happens after it: frame 1
+     * queues producer and consumer and ends, so Present submits them; frame 2 then destroys the
+     * render target while that submission may still be executing (Vulkan keeps several frames in
+     * flight), and renders a fresh pair whose result must be exact. The subject is the GPU half of
+     * the ownership rule -- native storage must outlive submitted work, not merely the CPU record.
+     */
+    void LegL1(GraphicsDevice& dev, int frame)
+    {
+        if (frame == 1)
+        {
+            BeginBackbuffer(dev);
+            inFlight_ = std::make_unique<RenderTarget2D>(dev, kPW, kPH, false, SurfaceFormat::Color,
+                                                         DepthFormat::None, 0,
+                                                         RenderTargetUsage::DiscardContents);
+            ProduceInto(dev, *inFlight_, patternTex_);
+            BeginBackbuffer(dev);
+            Consume3D(dev, inFlight_.get());
+            return;   // <-- Present submits this frame with inFlight_ still alive
+        }
+        if (frame == 2)
+        {
+            // Submitted, quite possibly still executing, and now released by the game.
+            inFlight_.reset();
+            BeginBackbuffer(dev);
+            RenderTarget2D b(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                             RenderTargetUsage::DiscardContents);
+            ProduceInto(dev, b, altPatternTex_);
+            BeginBackbuffer(dev);
+            Consume3D(dev, &b);
+            Readback r = ReadBackbuffer(dev);
+            if (Readable(r, "L1"))
+                CheckExact(r, "L1 the frame after a submitted frame's source was released is exact",
+                           AltPatternColor);
+            return;
+        }
+        BeginBackbuffer(dev);
+        RenderTarget2D c(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                         RenderTargetUsage::DiscardContents);
+        ProduceInto(dev, c, patternTex_);
+        BeginBackbuffer(dev);
+        Consume3D(dev, &c);
+        Readback r = ReadBackbuffer(dev);
+        if (Readable(r, "L1"))
+            CheckExact(r, "L1 a third frame after an in-flight release is still exact", PatternColor);
+    }
+
+    /**
+     * @brief Leg N1 -- both destruction orders of the consumer's EFFECT and its source.
+     *
+     * Every other leg destroys the effect first, because Consume3D owns it in its own scope. A
+     * lifetime fix that made a queued command depend on its effect object outliving its source (or
+     * the reverse) would only show up here.
+     */
+    void LegN1(GraphicsDevice& dev)
+    {
+        // (a) EFFECT destroyed first, source second.
+        BeginBackbuffer(dev);
+        {
+            RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                             RenderTargetUsage::DiscardContents);
+            ProduceInto(dev, a, patternTex_);
+            BeginBackbuffer(dev);
+            {
+                BasicEffect fx(dev);
+                Consume3DWith(dev, fx, &a);
+            }   // effect gone
+        }       // source gone
+        Readback ra = ReadBackbuffer(dev);
+        if (Readable(ra, "N1"))
+            CheckExact(ra, "N1 effect destroyed before its source leaves the queued draw correct",
+                       PatternColor);
+
+        // (b) SOURCE destroyed first, effect second.
+        BeginBackbuffer(dev);
+        {
+            BasicEffect fx(dev);
+            {
+                RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                                 RenderTargetUsage::DiscardContents);
+                ProduceInto(dev, a, altPatternTex_);
+                BeginBackbuffer(dev);
+                Consume3DWith(dev, fx, &a);
+            }   // source gone first
+        }       // effect gone second
+        Readback rb = ReadBackbuffer(dev);
+        if (Readable(rb, "N1"))
+            CheckExact(rb, "N1 source destroyed before its effect leaves the queued draw correct",
+                       AltPatternColor);
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -865,6 +1093,19 @@ protected:
 
         // Leg I1's subject is that SEVERAL public frames each destroy their own source before their
         // own Present. Frames 1 and 2 queue-and-destroy; the check runs in frame 3.
+        // Leg L1's subject spans frames: frame 1 queues and is submitted, frame 2 releases the
+        // source while that submission may still be executing, frame 3 confirms recovery.
+        if (wants("L1"))
+        {
+            LegL1(dev, frame_);
+            if (frame_ < 3) return;
+            std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
+            std::fflush(stdout);
+            result_ = (passCount_ == totalCount_ && (totalCount_ > 0 || boundaryDeclared_)) ? 0 : 1;
+            Exit();
+            return;
+        }
+
         if (wants("I1") && frame_ <= 2)
         {
             BeginBackbuffer(dev);
@@ -905,11 +1146,13 @@ protected:
         runLeg("C1", &DeferredSourceLifetimeTest::LegC1);
         runLeg("D1", &DeferredSourceLifetimeTest::LegD1);
         runLeg("E1", &DeferredSourceLifetimeTest::LegE1);
+        runLeg("E2", &DeferredSourceLifetimeTest::LegE2);
         runLeg("F1", &DeferredSourceLifetimeTest::LegF1);
         runLeg("G1", &DeferredSourceLifetimeTest::LegG1);
         runLeg("H1", &DeferredSourceLifetimeTest::LegH1);
         runLeg("J1", &DeferredSourceLifetimeTest::LegJ1);
         runLeg("K1", &DeferredSourceLifetimeTest::LegK1);
+        runLeg("N1", &DeferredSourceLifetimeTest::LegN1);
 
         if (wants("I1"))
         {
@@ -961,6 +1204,12 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
+        // Leg J1's subject is a MULTISAMPLED source, and on backends that tie render-target MSAA to
+        // the device's own sample count (Vulkan does) a render target can only engage it when the
+        // backbuffer itself was created multisampled. Requested ONLY in J1's own child process --
+        // the supervisor runs one leg per child -- so no other leg's measurement moves, and the
+        // in-process fallback keeps J1's honest "nothing to measure" declaration.
+        if (onlyLeg_ == "J1") gdm_->setPreferMultiSamplingProperty(true);
     }
 
     /** @brief 0 when every check passed, 1 otherwise. */
@@ -971,7 +1220,8 @@ namespace
 {
     /** @brief Every leg id this fixture knows, in the order the supervisor runs them. */
     const char* const kLegIds[] = {
-        "A1", "A2", "A3", "B1", "B2", "C1", "D1", "E1", "F1", "G1", "H1", "I1", "J1", "K1",
+        "A1", "A2", "A3", "B1", "B2", "C1", "D1", "E1", "E2", "F1", "G1", "H1", "I1", "J1",
+        "K1", "L1", "N1",
     };
 
 #if CNA_GFX167_CAN_FORK

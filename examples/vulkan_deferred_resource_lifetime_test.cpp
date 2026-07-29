@@ -340,6 +340,51 @@ protected:
                   "S3 RenderTarget2D-as-sampler destroyed before flush: rtDst sampled BLUE");
         }
 
+        // --- S3b: S3 WITHOUT the intermediate readback of the source (REMED-GFX-166). -----------
+        // S3 above contains `(void)readRt(*rtSrc)`, commented "force rtSrc content into its image".
+        // That call is a FLUSH, and it is why S3 could not see REMED-GFX-166: it consumed rtSrc's
+        // own producer work while rtSrc was still alive, so the destination-keyed purge in
+        // ~VulkanRenderTargetBackend had nothing left to drop. Its comment asserted the right thing
+        // about the CONSUMER draw ("rtSrc is its SOURCE, not its destination") and missed that the
+        // purge was removing rtSrc's PRODUCER instead -- after which the consumer sampled an image
+        // nothing had written.
+        //
+        // This scene is S3 with that one line deleted, which is the ordinary way a game writes it:
+        // nothing reads the intermediate target, so the producer is still queued when it dies.
+        {
+            auto rtSrc = makeRt();
+            auto rtDst = makeRt();
+            dev.SetRenderTarget(rtSrc.get());
+            dev.Clear(Color::Black);
+            // A tint no other scene in this file uses, checked EXACTLY. Measured, not assumed: with
+            // the loose IsBlue predicate and Color::Blue this scene PASSED against the unfixed
+            // backend, because a purged producer leaves the target's image UNDEFINED and the
+            // recycled device memory happened to satisfy "blue enough". An exact, unique colour
+            // cannot be produced by accident.
+            const Color kS3bTint(bytecs(205), bytecs(145), bytecs(65), bytecs(255));
+            drawSpriteTex(whiteTex_, Rectangle(0, 0, kW, kH), kS3bTint);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            // <-- deliberately NO readRt(*rtSrc): the producer stays queued
+
+            dev.SetRenderTarget(rtDst.get());
+            dev.Clear(Color::Black);
+            drawSpriteTex(*rtSrc, Rectangle(0, 0, kW, kH), Color::White);  // rtSrc AS a texture
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            rtSrc.reset();                                  // producer STILL QUEUED as it dies
+            const std::vector<Color> pix = readRt(*rtDst);
+            const int exact = countIf(pix, [&kS3bTint](const Color& c) {
+                return c.getRProperty() == kS3bTint.getRProperty() &&
+                       c.getGProperty() == kS3bTint.getGProperty() &&
+                       c.getBProperty() == kS3bTint.getBProperty() &&
+                       c.getAProperty() == kS3bTint.getAProperty();
+            });
+            check(exact >= kW * kH / 2,
+                  "S3b unflushed RenderTarget2D source destroyed before the consumer record: "
+                  "rtDst sampled the producer's EXACT colour (" + std::to_string(exact) + "/" +
+                  std::to_string(kW * kH) + ")");
+        }
+
         // --- S4: custom Effect DESTROYED before the backbuffer flush (Phase 7). ----------------
         // The sprite batch snapshots the effect's pipeline/layout/push-constants at End(); the
         // effect's VkPipeline must stay alive until the record. Read via GetBackBufferData (its own
