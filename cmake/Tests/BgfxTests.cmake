@@ -1068,6 +1068,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTarget_ProducerConsumer COMMAND cna_test_bgfx_rt_producer_consumer
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-155, the home backend of the finding: the same contract for the one destination the
+    # fixture above could only pin -- the BACKBUFFER. bgfx radix-sorts a frame's draws by their
+    # view's sort position, which defaults to the numeric view id, and this backend's partition puts
+    # the backbuffer at id 0 below every render target -- so a backbuffer consumer executed BEFORE
+    # its same-frame producer and sampled an empty image (0/32, all texels (0,0,0,0)). Fixed by
+    # recording the frame's views in public first-use order and programming that through
+    # bgfx::setViewOrder. The MSAA run is separate because a target's applied sample count follows
+    # the device's own here.
+    cna_bgfx_test(cna_test_bgfx_rt_backbuffer_consumer
+        examples/rendertarget_backbuffer_consumer_test.cpp)
+    cna_register_backend_test(NAME Bgfx_RenderTarget_BackbufferConsumer COMMAND cna_test_bgfx_rt_backbuffer_consumer
+        TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTarget_BackbufferConsumer_Msaa
+        COMMAND cna_test_bgfx_rt_backbuffer_consumer --msaa
+        TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_bgfx_test(cna_test_bgfx_texture2d_getdata_contract
                   examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Bgfx_Texture2D_GetDataContract COMMAND cna_test_bgfx_texture2d_getdata_contract

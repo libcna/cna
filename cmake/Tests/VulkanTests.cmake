@@ -1197,6 +1197,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             examples/rendertarget_producer_consumer_test.cpp)
         cna_register_backend_test(NAME Vulkan_RenderTarget_ProducerConsumer COMMAND cna_test_vulkan_rt_producer_consumer
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
+        # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
+        # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
+        # defaults to the numeric view id, and its backbuffer owns the lowest id -- so a backbuffer
+        # consumer executed before its own producer); these runs are what establish that every other
+        # backend already honoured the contract rather than being made to.
+        cna_vulkan_test(cna_test_vulkan_rt_backbuffer_consumer
+            examples/rendertarget_backbuffer_consumer_test.cpp)
+        cna_register_backend_test(NAME Vulkan_RenderTarget_BackbufferConsumer COMMAND cna_test_vulkan_rt_backbuffer_consumer
+            TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # The same fixture on a multisampled device. A Vulkan render target derives its sample count
         # from the device's own, so only this run makes leg E a genuinely multisampled producer --
         # its resolve has to complete before the consumer samples it, with no readback to trigger it.

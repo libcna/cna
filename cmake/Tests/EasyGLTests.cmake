@@ -1647,6 +1647,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_rt_producer_consumer
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
+        # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
+        # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
+        # defaults to the numeric view id, and its backbuffer owns the lowest id -- so a backbuffer
+        # consumer executed before its own producer); these runs are what establish that every other
+        # backend already honoured the contract rather than being made to.
+        cna_easygl_test(cna_test_easygl_rt_backbuffer_consumer
+            examples/rendertarget_backbuffer_consumer_test.cpp)
+        cna_register_backend_test(NAME EasyGL_RenderTarget_BackbufferConsumer
+            COMMAND cna_test_easygl_rt_backbuffer_consumer
+            TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_texture2d_getdata_contract
                         examples/texture2d_getdata_contract_test.cpp)
         cna_register_backend_test(NAME EasyGL_Texture2D_GetDataContract COMMAND cna_test_easygl_texture2d_getdata_contract

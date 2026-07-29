@@ -166,6 +166,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_RenderTarget_ProducerConsumer COMMAND cna_test_software_rt_producer_consumer
         TIMEOUT 120 LABELS "Software")
 
+    # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
+    # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
+    # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
+    # defaults to the numeric view id, and its backbuffer owns the lowest id -- so a backbuffer
+    # consumer executed before its own producer); these runs are what establish that every other
+    # backend already honoured the contract rather than being made to.
+    cna_software_test(cna_test_software_rt_backbuffer_consumer
+        examples/rendertarget_backbuffer_consumer_test.cpp)
+    cna_register_backend_test(NAME Software_RenderTarget_BackbufferConsumer COMMAND cna_test_software_rt_backbuffer_consumer
+        TIMEOUT 180 LABELS "Software")
+
     cna_software_test(cna_test_software_texture2d_getdata_contract
                       examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Software_Texture2D_GetDataContract
