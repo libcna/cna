@@ -453,4 +453,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_link_libraries(cna_test_webgpu_colorspace_midtone PRIVATE WebGPU::WebGPU)
     cna_register_backend_test(NAME WebGPU_ColorSpace_MidTone COMMAND cna_test_webgpu_colorspace_midtone
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
+    # as an ordinary Texture2D holding identical bytes. Registered here as a cross-backend control:
+    # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's
+    # colour texture stores the image bottom-up and sampling did not compensate even though GetData
+    # already did), and these runs are what establish that render-target and ordinary-texture
+    # sampling already agree everywhere else rather than being made to agree by the fix.
+    cna_webgpu_test(cna_test_webgpu_rt_sampling_orientation
+                    examples/rendertarget_sampling_orientation_test.cpp)
+    cna_register_backend_test(NAME WebGPU_RenderTarget_SamplingOrientation COMMAND cna_test_webgpu_rt_sampling_orientation
+        TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

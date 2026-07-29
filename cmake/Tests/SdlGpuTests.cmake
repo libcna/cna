@@ -281,6 +281,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_ColorSpace_MidTone COMMAND cna_test_sdlgpu_colorspace_midtone
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
+    # as an ordinary Texture2D holding identical bytes. Registered here as a cross-backend control:
+    # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's
+    # colour texture stores the image bottom-up and sampling did not compensate even though GetData
+    # already did), and these runs are what establish that render-target and ordinary-texture
+    # sampling already agree everywhere else rather than being made to agree by the fix.
+    cna_sdlgpu_test(cna_test_sdlgpu_rt_sampling_orientation
+        examples/rendertarget_sampling_orientation_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_RenderTarget_SamplingOrientation COMMAND cna_test_sdlgpu_rt_sampling_orientation
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_sdlgpu_test(cna_test_sdlgpu_texture2d_getdata_contract
                     examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME SdlGpu_Texture2D_GetDataContract COMMAND cna_test_sdlgpu_texture2d_getdata_contract
