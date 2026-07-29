@@ -12,6 +12,24 @@ namespace CNA::Internal::Backends::EasyGL
 {
     class EasyGLGraphicsBackend;
 
+    /**
+     * @brief REMED-GFX-147: whether sampling @p texture needs a vertical coordinate correction.
+     *
+     * This is the single source of truth for the question "did this texture's content arrive by
+     * being RENDERED rather than uploaded?", and every EasyGL sampling path -- SpriteBatch's
+     * CPU-generated sprite UVs, the stock 3D effects' mesh UVs, and a custom ShaderEffect that
+     * opts in -- asks it here so they cannot diverge.
+     *
+     * An OpenGL framebuffer's origin is bottom-left, so a render target's colour texture stores the
+     * logical image bottom-up: texel row v=0 is the LAST logical row. Ordinary textures are
+     * uploaded top-down and are unaffected, which is why this asks about the resource's nature and
+     * not about the sampler, the target currently bound, or anything per-draw.
+     *
+     * @param texture Sampled source, or nullptr.
+     * @return True when @p texture is a render target's colour attachment.
+     */
+    [[nodiscard]] bool SampledRowOrderIsBottomUp(const ITextureBackend* texture);
+
     class EasyGLTextureBackend : public ITextureBackend, public ::easygl::RecoverableResource
     {
     public:
@@ -284,6 +302,10 @@ namespace CNA::Internal::Backends::EasyGL
     private:
         ::easygl::Program program_;
         std::string compileError_;
+        /// REMED-GFX-147: per-texture-unit "the bound source is a render target" flags, mirrored
+        /// into this effect's own `uRtFlipV` when its GLSL opts in by declaring that uniform.
+        float rtFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        bool  rtFlipVUploaded_ = false;
     };
 
     class EasyGLOcclusionQueryBackend : public IOcclusionQueryBackend, public ::easygl::RecoverableResource
@@ -325,6 +347,10 @@ namespace CNA::Internal::Backends::EasyGL
         std::vector<Vertex>   pending_vertices_;
         std::vector<uint16_t> pending_indices_;
         const ITextureBackend* current_texture_ = nullptr;
+        /// REMED-GFX-147: cached SampledRowOrderIsBottomUp(current_texture_). A batch is one
+        /// texture by construction, so the answer is resolved when the source is bound, not once
+        /// per sprite. Meaningless while current_texture_ is null.
+        bool current_texture_bottom_up_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
 
@@ -537,6 +563,8 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_pbr_occlusionmap = -1; ///< sampler2D occlusion map (PbrEffect only, R channel)
             int loc_pbr_metallic    = -1;  ///< float metallic factor (PbrEffect only)
             int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
+            int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
+            int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: vec4 whose x is texture unit 4's flag (PbrEffect only)
             void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
         };
 
@@ -609,6 +637,8 @@ namespace CNA::Internal::Backends::EasyGL
         Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
         void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                             const Matrix& projection, const GpuDrawParams& params);
+        /// REMED-GFX-147: resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.
+        static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
 
     public:
         explicit EasyGLGraphicsBackend(SDL_Window* window,

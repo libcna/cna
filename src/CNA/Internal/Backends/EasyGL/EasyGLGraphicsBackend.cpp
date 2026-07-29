@@ -61,11 +61,40 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 });
 #endif
 
+// REMED-GFX-147: the one GLSL declaration every fragment shader that samples a sampler2D shares.
+//
+// An OpenGL framebuffer's origin is bottom-left, so a render target's colour texture stores the
+// logical image BOTTOM-UP: its texel row v=0 is the LAST logical row. Readback already compensates
+// (EasyGLRenderTargetBackend::GetData reads with glReadPixels' bottom-left origin and then reverses
+// the rows), which is why the public GetData contract has always been top-down. Sampling did not,
+// so a rendered texture arrived vertically mirrored while an uploaded one did not.
+//
+// uRtFlipV.x/.y/.z/.w carry texture units 0-3 and uRtFlipVHi.x carries unit 4: 1 when the source
+// bound there is a render-target colour attachment, 0 for an ordinary texture (and 0 always on a
+// renderer whose framebuffer origin is top-left). Exactly one correction is applied, at sample
+// time, per bound source -- nothing is copied, read back or re-uploaded, and no shader variant is
+// created, because the flag is a uniform rather than a compile-time switch. Kept as one macro so
+// the eleven shaders cannot drift apart; the same per-slot shape bgfx uses for u_rtFlipV
+// (REMED-GFX-067/078).
+#define CNA_GL_RT_SAMPLE_UV_DECL \
+"uniform vec4 uRtFlipV;\n" \
+"vec2 cnaSampleUV(vec2 uv,float flip){return vec2(uv.x,mix(uv.y,1.0-uv.y,flip));}\n"
+
+/// REMED-GFX-147: unit 4's flag, declared only by the shaders that reach that far (PbrEffect).
+#define CNA_GL_RT_SAMPLE_UV_HI_DECL \
+"uniform vec4 uRtFlipVHi;\n"
+
 namespace CNA::Internal::Backends::EasyGL
 {
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Backends;
+
+    // REMED-GFX-147. See the declaration in EasyGLGraphicsBackend.hpp.
+    bool SampledRowOrderIsBottomUp(const ITextureBackend* texture)
+    {
+        return dynamic_cast<const IRenderTargetBackend*>(texture) != nullptr;
+    }
 
     // --- EasyGLTexture3DBackend ---
 
@@ -410,6 +439,27 @@ namespace CNA::Internal::Backends::EasyGL
         ::metagl::glActiveTexture(textureUnit);
         texture->BindGL();
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+
+        // REMED-GFX-147: a custom ShaderEffect's GLSL belongs to the game, so this backend cannot
+        // rewrite its sampling for it -- but it can tell it what it is sampling. A user shader that
+        // declares `uniform vec4 uRtFlipV;` and maps its V through 1-v where the flag is 1 gets the
+        // same render-target correction the stock effects get; one that does not declare it pays
+        // nothing (uniform_location returns -1). Sprite draws need no opt-in at all: SpriteBatch
+        // corrects its own CPU-side quad UVs, which a custom sprite effect reads unchanged.
+        if (unit >= 0 && unit < 4)
+        {
+            const float flip = SampledRowOrderIsBottomUp(texture) ? 1.0f : 0.0f;
+            if (rtFlipV_[unit] != flip || !rtFlipVUploaded_)
+            {
+                rtFlipV_[unit] = flip;
+                const int loc = program_.uniform_location("uRtFlipV");
+                if (loc >= 0)
+                {
+                    program_.set_uniform(loc, rtFlipV_[0], rtFlipV_[1], rtFlipV_[2], rtFlipV_[3]);
+                    rtFlipVUploaded_ = true;
+                }
+            }
+        }
     }
 
     // Task 1081: same shape as BindTexture(), but for a samplerCube -- ITextureCubeBackend is
@@ -1448,9 +1498,14 @@ void main()
         if (!begun) throw std::runtime_error("Draw called before Begin()");
 
         // Flush pending batch if texture changes
-        if (current_texture_ != nullptr && current_texture_ != &texture)
-            FlushBatch();
-        current_texture_ = &texture;
+        if (current_texture_ != &texture)
+        {
+            if (current_texture_ != nullptr) FlushBatch();
+            current_texture_ = &texture;
+            // REMED-GFX-147: resolved once per bound source rather than once per sprite -- a
+            // batch is by construction one texture, so this is a binding-time decision.
+            current_texture_bottom_up_ = SampledRowOrderIsBottomUp(&texture);
+        }
 
         const float texW = static_cast<float>(texture.GetWidth());
         const float texH = static_cast<float>(texture.GetHeight());
@@ -1467,6 +1522,23 @@ void main()
 
         if ((int)effects & (int)SpriteEffects::FlipHorizontally) std::swap(u1, u2);
         if ((int)effects & (int)SpriteEffects::FlipVertically) std::swap(v1, v2);
+
+        // REMED-GFX-147: a render target's GL texel memory is bottom-up (see
+        // SampledRowOrderIsBottomUp), so map each V to its mirror. Applied to the sprite's own
+        // CPU-generated quad rather than in the sprite shader, because SpriteBatch::Begin may
+        // substitute an arbitrary user ShaderEffect whose GLSL this backend does not own -- the
+        // vertex data is the only place both the built-in and the custom program read from.
+        //
+        // This composes with SpriteEffects rather than cancelling it: the mapping is per-component,
+        // so it commutes with FlipVertically's swap and the two remain separate transforms. It also
+        // survives a sourceRectangle that runs past the texture (FNA deliberately leaves those UVs
+        // unclamped for Wrap/Mirror tiling), because 1-v is the correct inverse in the periodic
+        // domain too.
+        if (current_texture_bottom_up_)
+        {
+            v1 = 1.0f - v1;
+            v2 = 1.0f - v2;
+        }
 
         float r = (float)color.getRProperty() / 255.0f;
         float g = (float)color.getGProperty() / 255.0f;
@@ -3101,6 +3173,7 @@ void main()
 "}\n";
 
         CompileAndLink(prog_colored_.prog, vsrc, fsrc, "colored");
+        ResolveRenderTargetOrientationUniforms(prog_colored_);
         prog_colored_.loc_wvp         = prog_colored_.prog.uniform_location("uWVP");
         prog_colored_.loc_diffuse     = prog_colored_.prog.uniform_location("uDiffuseColor");
         prog_colored_.loc_alphatest   = prog_colored_.prog.uniform_location("uAlphaTest");
@@ -3145,14 +3218,16 @@ void main()
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    FragColor=texture(uTexture,vUV)*uDiffuseColor;\n"
+"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_textured_.prog, vsrc, fsrc, "textured");
+        ResolveRenderTargetOrientationUniforms(prog_textured_);
         prog_textured_.loc_wvp         = prog_textured_.prog.uniform_location("uWVP");
         prog_textured_.loc_diffuse     = prog_textured_.prog.uniform_location("uDiffuseColor");
         prog_textured_.loc_texture     = prog_textured_.prog.uniform_location("uTexture");
@@ -3202,15 +3277,17 @@ void main()
 "uniform vec3 uFogColor;\n"
 "uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
-"    FragColor=texture(uTexture,vUV)*vc*uDiffuseColor;\n"
+"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vc*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_col_textured_.prog, vsrc, fsrc, "col+textured");
+        ResolveRenderTargetOrientationUniforms(prog_col_textured_);
         prog_col_textured_.loc_wvp         = prog_col_textured_.prog.uniform_location("uWVP");
         prog_col_textured_.loc_texture     = prog_col_textured_.prog.uniform_location("uTexture");
         prog_col_textured_.loc_diffuse     = prog_col_textured_.prog.uniform_location("uDiffuseColor");
@@ -3279,6 +3356,7 @@ void main()
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 E=normalize(uEyePosition-vWorldPos);\n"
@@ -3291,7 +3369,7 @@ void main()
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
 "    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
-"    FragColor=texture(uTexture,vUV)*vec4(litRGB,uDiffuseColor.a);\n"
+"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -3299,6 +3377,7 @@ void main()
 "}\n";
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
+        ResolveRenderTargetOrientationUniforms(prog_lit_textured_);
         prog_lit_textured_.loc_wvp         = prog_lit_textured_.prog.uniform_location("uWVP");
         prog_lit_textured_.loc_world       = prog_lit_textured_.prog.uniform_location("uWorld");
         prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
@@ -3414,8 +3493,9 @@ void main()
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    FragColor=texture(uTexture,vUV)*vec4(vLitRGB,uDiffuseColor.a);\n"
+"    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(vLitRGB,uDiffuseColor.a);\n"
 "    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -3423,6 +3503,7 @@ void main()
 "}\n";
 
         CompileAndLink(prog_lit_textured_vertexlit_.prog, vsrc, fsrc, "lit+textured (vertex-lit)");
+        ResolveRenderTargetOrientationUniforms(prog_lit_textured_vertexlit_);
         prog_lit_textured_vertexlit_.loc_wvp         = prog_lit_textured_vertexlit_.prog.uniform_location("uWVP");
         prog_lit_textured_vertexlit_.loc_world       = prog_lit_textured_vertexlit_.prog.uniform_location("uWorld");
         prog_lit_textured_vertexlit_.loc_normalmat   = prog_lit_textured_vertexlit_.prog.uniform_location("uNormalMatrix");
@@ -3484,16 +3565,18 @@ void main()
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec4 base=texture(uTexture,vUV);\n"
+"    vec4 base=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    base.rgb*=2.0;\n"
-"    FragColor=base*texture(uTexture2,vUV)*uDiffuseColor;\n"
+"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV,uRtFlipV.y))*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_dual_textured_.prog, vsrc, fsrc, "dual+textured");
+        ResolveRenderTargetOrientationUniforms(prog_dual_textured_);
         prog_dual_textured_.loc_wvp         = prog_dual_textured_.prog.uniform_location("uWVP");
         prog_dual_textured_.loc_texture     = prog_dual_textured_.prog.uniform_location("uTexture");
         prog_dual_textured_.loc_texture2    = prog_dual_textured_.prog.uniform_location("uTexture2");
@@ -3548,17 +3631,19 @@ void main()
 "uniform vec3 uFogColor;\n"
 "uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
-"    vec4 base=texture(uTexture,vUV);\n"
+"    vec4 base=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    base.rgb*=2.0;\n"
-"    FragColor=base*texture(uTexture2,vUV)*vc*uDiffuseColor;\n"
+"    FragColor=base*texture(uTexture2,cnaSampleUV(vUV,uRtFlipV.y))*vc*uDiffuseColor;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
 "}\n";
 
         CompileAndLink(prog_dual_textured_colored_.prog, vsrc, fsrc, "dual+textured+colored");
+        ResolveRenderTargetOrientationUniforms(prog_dual_textured_colored_);
         prog_dual_textured_colored_.loc_wvp         = prog_dual_textured_colored_.prog.uniform_location("uWVP");
         prog_dual_textured_colored_.loc_texture     = prog_dual_textured_colored_.prog.uniform_location("uTexture");
         prog_dual_textured_colored_.loc_texture2    = prog_dual_textured_colored_.prog.uniform_location("uTexture2");
@@ -3640,6 +3725,7 @@ void main()
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec3 N=normalize(vWorldNormal);\n"
 "    vec3 E=normalize(vEyeDir);\n"
@@ -3651,7 +3737,7 @@ void main()
 // lighting through the identical Lighting.fxh ComputeLights() in FNA, so it composes emissive
 // exactly the same way (added after the diffuse multiply, not multiplied by it).
 "    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
-"    vec4 texColor=texture(uTexture,vUV);\n"
+"    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec3 reflDir=reflect(-E,N);\n"
 "    vec4 envSample=texture(uEnvMap,reflDir);\n"
 "    vec3 baseColor=litRGB*texColor.rgb;\n"
@@ -3665,6 +3751,7 @@ void main()
 "}\n";
 
         CompileAndLink(prog_env_mapped_.prog, vsrc, fsrc, "env+mapped");
+        ResolveRenderTargetOrientationUniforms(prog_env_mapped_);
         auto& p = prog_env_mapped_;
         p.loc_wvp           = p.prog.uniform_location("uWVP");
         p.loc_normalmat     = p.prog.uniform_location("uNormalMatrix");
@@ -3784,6 +3871,7 @@ void main()
 "uniform vec3 uFogColor;\n"
 "uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 E=normalize(uEyePosition-vWorldPos);\n"
@@ -3808,7 +3896,7 @@ void main()
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
 "    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
-"    vec4 texColor=texture(uTexture,vUV);\n"
+"    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
 "    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
@@ -3822,6 +3910,7 @@ void main()
 "}\n";
 
         CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
+        ResolveRenderTargetOrientationUniforms(prog_skinned_);
         auto& p = prog_skinned_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -3965,8 +4054,9 @@ void main()
 "uniform vec3 uFogColor;\n"
 "uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec4 texColor=texture(uTexture,vUV);\n"
+"    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
 "    FragColor=vec4(vLitRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
 "    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
@@ -3979,6 +4069,7 @@ void main()
 "}\n";
 
         CompileAndLink(prog_skinned_vertexlit_.prog, vsrc, fsrc, "skinned (vertex-lit)");
+        ResolveRenderTargetOrientationUniforms(prog_skinned_vertexlit_);
         auto& p = prog_skinned_vertexlit_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -4103,17 +4194,19 @@ void main()
 "    vec3 kd=vec3(1.0)-F;\n"
 "    return (kd*diffuseColor/3.14159265+specular)*lightColor*NdotL;\n"
 "}\n"
+CNA_GL_RT_SAMPLE_UV_HI_DECL
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,vUV);\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,vUV).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,vUV);\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
@@ -4122,9 +4215,9 @@ void main()
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,vUV).r;\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,vUV).rgb;\n"
+"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -4132,6 +4225,7 @@ void main()
 "}\n";
 
         CompileAndLink(prog_pbr_.prog, vsrc, fsrc, "pbr");
+        ResolveRenderTargetOrientationUniforms(prog_pbr_);
         auto& p = prog_pbr_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -4255,17 +4349,19 @@ void main()
 "    vec3 kd=vec3(1.0)-F;\n"
 "    return (kd*diffuseColor/3.14159265+specular)*lightColor*NdotL;\n"
 "}\n"
+CNA_GL_RT_SAMPLE_UV_HI_DECL
+CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,vUV);\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
 "    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,vUV).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,vUV);\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
@@ -4274,9 +4370,9 @@ void main()
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,vUV).r;\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,vUV).rgb;\n"
+"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -4284,6 +4380,7 @@ void main()
 "}\n";
 
         CompileAndLink(prog_pbr_skinned_.prog, vsrc, fsrc, "pbr_skinned");
+        ResolveRenderTargetOrientationUniforms(prog_pbr_skinned_);
         auto& p = prog_pbr_skinned_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -4405,9 +4502,26 @@ void main()
         }
     }
 
+    // REMED-GFX-147: resolved for every stock 3D program from one place, right after it links, so
+    // a program whose fragment shader samples a texture cannot silently miss the correction.
+    // Programs that declare neither uniform (the untextured colour-only one) simply keep -1 and
+    // BindDrawParams skips them, exactly like every other optional location in Prog3D.
+    void EasyGLGraphicsBackend::ResolveRenderTargetOrientationUniforms(Prog3D& p)
+    {
+        p.loc_rt_flip_v    = p.prog.uniform_location("uRtFlipV");
+        p.loc_rt_flip_v_hi = p.prog.uniform_location("uRtFlipVHi");
+    }
+
     void EasyGLGraphicsBackend::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                                                const Matrix& projection, const GpuDrawParams& params)
     {
+        // REMED-GFX-147: one flag per texture unit, filled in beside each unit's own bind below so
+        // the flag and the resource it describes can never disagree, and uploaded once at the end.
+        // A render target's GL texel memory is bottom-up; an uploaded texture's is not. Cube maps
+        // are deliberately absent -- REMED-GFX-137 owns rendered cube faces, and uEnvMap is sampled
+        // with a direction vector, not a UV.
+        float rtFlipV[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+
         // WVP
         const Matrix wvp = world * view * projection;
         float wvp_col[16];
@@ -4594,6 +4708,7 @@ void main()
         {
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_texture2, 1);
+            rtFlipV[1] = SampledRowOrderIsBottomUp(params.texture1) ? 1.0f : 0.0f;
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
             if (params.texture1)
                 params.texture1->BindGL();
@@ -4610,6 +4725,7 @@ void main()
         {
             EnsureDefaultFlatNormalTexture();
             p.prog.set_uniform(p.loc_pbr_normalmap, 1);
+            rtFlipV[1] = SampledRowOrderIsBottomUp(params.pbrNormalMap) ? 1.0f : 0.0f;
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
             if (params.pbrNormalMap)
                 params.pbrNormalMap->BindGL();
@@ -4621,6 +4737,7 @@ void main()
         {
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_mr, 2);
+            rtFlipV[2] = SampledRowOrderIsBottomUp(params.pbrMetallicRoughnessMap) ? 1.0f : 0.0f;
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture2);
             if (params.pbrMetallicRoughnessMap)
                 params.pbrMetallicRoughnessMap->BindGL();
@@ -4632,6 +4749,7 @@ void main()
         {
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_emissivemap, 3);
+            rtFlipV[3] = SampledRowOrderIsBottomUp(params.pbrEmissiveMap) ? 1.0f : 0.0f;
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture3);
             if (params.pbrEmissiveMap)
                 params.pbrEmissiveMap->BindGL();
@@ -4643,6 +4761,7 @@ void main()
         {
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_occlusionmap, 4);
+            rtFlipV[4] = SampledRowOrderIsBottomUp(params.pbrOcclusionMap) ? 1.0f : 0.0f;
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture4);
             if (params.pbrOcclusionMap)
                 params.pbrOcclusionMap->BindGL();
@@ -4660,6 +4779,7 @@ void main()
         {
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_texture, 0);
+            rtFlipV[0] = SampledRowOrderIsBottomUp(params.texture0) ? 1.0f : 0.0f;
             if (params.texture0)
                 params.texture0->BindGL();
             else
@@ -4682,6 +4802,15 @@ void main()
         if (p.loc_fog_color >= 0)
             p.prog.set_uniform(p.loc_fog_color,
                 params.fogColor[0], params.fogColor[1], params.fogColor[2]);
+
+        // REMED-GFX-147: two uniform writes per draw at most, and only for programs that declare
+        // them. Uploaded unconditionally rather than only when a flag is set, because these are
+        // program state that outlives the draw -- leaving a previous draw's render-target flag
+        // behind would mirror the next ordinary texture.
+        if (p.loc_rt_flip_v >= 0)
+            p.prog.set_uniform(p.loc_rt_flip_v, rtFlipV[0], rtFlipV[1], rtFlipV[2], rtFlipV[3]);
+        if (p.loc_rt_flip_v_hi >= 0)
+            p.prog.set_uniform(p.loc_rt_flip_v_hi, rtFlipV[4], 0.0f, 0.0f, 0.0f);
     }
 
     void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
