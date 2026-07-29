@@ -702,6 +702,14 @@ namespace CNA::Internal::Backends::Vulkan
                 ? faceViews_[static_cast<std::size_t>(face)]
                 : VK_NULL_HANDLE;
         }
+        /// REMED-GFX-151: the key identifying this cube as ONE render target in the readback
+        /// flush's dependency graph. Deliberately the same value all six `FaceProxy`s answer from
+        /// `DepthStencilOwnerEXT()` (REMED-GFX-142), so a draw sampling the cube and the six cycles
+        /// that fill its faces resolve to the same group.
+        [[nodiscard]] const void* RenderTargetGroupEXT() const
+        {
+            return static_cast<const void*>(image_);
+        }
         /// REMED-GFX-141: this cube's per-face multisample colour view (NOXNA -- test/diagnostics).
         /// There are six now, one per array layer of `msaaColorImage_`, where there used to be one
         /// shared by every face. VK_NULL_HANDLE when this target did not engage MSAA.
@@ -2216,15 +2224,54 @@ namespace CNA::Internal::Backends::Vulkan
 
         // ---- Frame recording ----
         // REMED-GFX-074: Full records the whole deferred frame (all render-target passes + the
-        // backbuffer pass) and clears every pending queue, as before. RenderTargetsOnly records
-        // ONLY `onlyRT`'s off-screen pass into a transient command buffer for a mid-frame GetData
-        // readback flush -- it skips the backbuffer pass entirely (no swapchain image needed, so
-        // `imageIndex` is unused) and consumes only that target's deferred entries, leaving every
-        // other target's and the backbuffer's pending work intact for the eventual real Present().
+        // backbuffer pass) and clears every pending queue, as before. RenderTargetsOnly records the
+        // off-screen passes needed by a mid-frame GetData readback flush into a transient command
+        // buffer -- it skips the backbuffer pass entirely (no swapchain image needed, so
+        // `imageIndex` is unused), leaving the backbuffer's pending work intact for the eventual
+        // real Present().
+        //
+        // REMED-GFX-151: "needed by" used to mean `onlyRT`'s own segments and nothing else, which
+        // silently assumed a target's content depends only on draws issued INTO it. It also depends
+        // on every render target it SAMPLES: the canonical XNA render-to-texture sequence renders
+        // into A, unbinds it and draws with A into B, and the game then reads B. Filtering the
+        // segment list down to B dropped A's producer pass, so B's consumer pass sampled an image
+        // that had never been rendered into, and A's pass was recorded later, at Present -- after
+        // the read that was supposed to observe it. Only an intervening `A.GetData()` repaired it,
+        // by running this same flush for A first; GetData was an accidental execution barrier.
+        //
+        // `flushSegments` is the exact set of bind cycles this record must replay, computed by
+        // FlushDeferredRenderTarget as the transitive closure of "the target being read, plus every
+        // render target its cycles sample, plus theirs". Replay is in ascending segment id, i.e.
+        // exactly the public order Present would have used. Nothing is over-synchronized: no wait,
+        // no submit per target switch, no readback and no extra barrier are introduced, because each
+        // render target's render pass already ends in SHADER_READ_ONLY_OPTIMAL with a
+        // COLOR_ATTACHMENT_OUTPUT/COLOR_ATTACHMENT_WRITE -> FRAGMENT_SHADER|TRANSFER /
+        // SHADER_READ|TRANSFER_READ exit dependency. Consumption uses the identical predicate, so
+        // Present replays nothing this record already emitted and drops nothing it did not.
+        // Ignored when mode is Full.
         enum class RecordMode { Full, RenderTargetsOnly };
         void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex,
                                  RecordMode mode = RecordMode::Full,
-                                 VulkanRTSource* onlyRT = nullptr);
+                                 VulkanRTSource* onlyRT = nullptr,
+                                 const std::vector<uint64_t>* flushSegments = nullptr);
+
+        // REMED-GFX-151: the render-to-texture dependency graph for the frame being accumulated --
+        // (bind cycle, group of a render target that cycle SAMPLES). Populated at enqueue time,
+        // where the source is known and provably alive, and consumed/cleared with the bind cycles
+        // themselves, so it never outlives the pending queues it describes. `group` is always a
+        // `VulkanRTSource::DepthStencilOwnerEXT()` value, the same key the flush and the recorder
+        // use for "one target", so a dependency and the work satisfying it cannot drift apart.
+        std::vector<std::pair<uint64_t, const void*>> segmentSampledGroups_;
+        /** @brief The render-target group a sampled texture belongs to, or nullptr if ordinary. */
+        static const void* SampledRenderTargetGroupEXT(const ITextureBackend* tex);
+        /** @brief Cube overload of SampledRenderTargetGroupEXT. */
+        static const void* SampledRenderTargetGroupEXT(const ITextureCubeBackend* cube);
+        /** @brief Records that bind cycle @p segment samples render-target group @p group. */
+        void NoteSampledRenderTargetGroupEXT(uint64_t segment, const void* group);
+        /** @brief SpriteBatch entry point: notes @p tex if it is a render target. */
+        void NoteSampledRenderTargetEXT(uint64_t segment, const IVulkanSamplable* tex);
+        /** @brief Notes every render target a 3D draw samples, across all GpuDrawParams slots. */
+        void NoteSampledSourcesEXT(const GpuDrawParams& params);
 
         // REMED-GFX-074: drop every deferred sprite-batch / 3D-draw / clear entry whose target is
         // `rt` from the pending queues, so a render target destroyed before Present() cannot leave
