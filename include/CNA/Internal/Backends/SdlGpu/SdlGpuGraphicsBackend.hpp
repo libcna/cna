@@ -780,13 +780,33 @@ namespace CNA::Internal::Backends::SdlGpu
             std::vector<std::shared_ptr<SdlGpuRenderTarget2DState>> extraAttachments;
             /// An explicit GraphicsDevice.Clear() issued while this cycle was bound. Within one
             /// segment the last Clear() still wins, because SDL_gpu delivers the colour through the
-            /// pass load op and a pass has exactly one (the boundary REMED-GFX-129 records).
+            /// pass load op and a pass has exactly one. REMED-GFX-156: which is why a Clear() that
+            /// FOLLOWS a draw of this segment no longer lands here at all -- it opens a new segment
+            /// (see SegmentForOrderedClear), so several Clear()s of one bind cycle only ever share
+            /// a segment while nothing observable separates them.
             bool clearColorRequested = false;
             bool clearDepthRequested = false;
             bool clearStencilRequested = false;
             SDL_FColor clearColor{0.0f, 0.0f, 0.0f, 1.0f};
             float clearDepth = 1.0f;
             Uint8 clearStencil = 0;
+            /**
+             * @brief REMED-GFX-156: has any draw been queued into this segment yet?
+             *
+             * Set by PushDrawOrder, the one choke point every queued draw and sprite routes
+             * through, and read only by SegmentForOrderedClear to decide whether the next Clear()
+             * is observable (a draw precedes it, so it needs its own pass) or merely another
+             * leading clear (it can fold into this segment's load action).
+             */
+            bool hasDraws = false;
+            /**
+             * @brief REMED-GFX-156: this segment was opened by an ordered Clear(), not by a bind.
+             *
+             * Purely descriptive -- it exists so the native order trace can distinguish a public
+             * bind cycle from the pass segments one cycle was split into, and so the pass-count
+             * assertions in the tests can state which passes the split is responsible for.
+             */
+            bool openedByClear = false;
         };
 
         // Adversarial-review finding #4: which per-family queue a QueuedDrawRef points into.
@@ -1784,10 +1804,14 @@ namespace CNA::Internal::Backends::SdlGpu
         // sprites queued inside that one bind cycle, across every shader family) and regenerates
         // its mip chain afterward if requested. REMED-GFX-145: called once per SEGMENT, not once
         // per distinct target -- all before the swapchain pass itself.
-        void RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment);
+        // REMED-GFX-156: @p colorLoadedLater says a later segment of this frame loads this
+        // resource's colour again, which upgrades a multisampled RESOLVE to RESOLVE_AND_STORE.
+        void RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
+                            bool colorLoadedLater);
         // Phase SDLGPU-8 (SDLGPU-36): renders ONE RenderTargetCube-face segment's own pass.
         // REMED-GFX-145: once per bind cycle of that face, not once per distinct (cube, face).
-        void RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const PassSegment& segment);
+        void RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
+                                    bool colorLoadedLater);
         // REMED-GFX-145: opens a new logical render-pass segment for whatever was just bound, and
         // makes it the segment every subsequent Queue*Draw()/QueueSprite()/Clear() belongs to.
         // Called from EVERY bind site, including a rebind of the target that is already current --
@@ -1819,6 +1843,63 @@ namespace CNA::Internal::Backends::SdlGpu
         void EndRenderTargetSegment();
         /// The open segment, or null when the swapchain is current.
         [[nodiscard]] PassSegment* CurrentSegment();
+        /**
+         * @brief REMED-GFX-156: the segment one public Clear() must be recorded into.
+         *
+         * SDL_gpu delivers a clear only through SDL_GPUColorTargetInfo.load_op / the depth-stencil
+         * target's load ops, and a render pass has exactly one set of those, so a Clear() recorded
+         * into a segment that has already drawn would run BEFORE that draw. When the open segment
+         * has drawn, this closes it and opens another one over the SAME destination -- same render
+         * target, same cube face, same MRT attachment set -- so the clear becomes that new pass's
+         * load action and every later draw of the bind cycle joins it. With nothing drawn since the
+         * segment opened there is nothing to separate, so the request folds into the open segment
+         * and no extra pass is created: a leading Clear(), and any run of Clear()s not interrupted
+         * by a draw, still costs exactly one pass.
+         *
+         * @return The segment to record the request into, or null while no segment is open at all.
+         */
+        [[nodiscard]] PassSegment* SegmentForOrderedClear();
+        /**
+         * @brief REMED-GFX-156: does a LATER segment of this frame render into @p segment's colour
+         *        resource again?
+         *
+         * Only interesting while that resource is multisampled: SDL_GPU_STOREOP_RESOLVE explicitly
+         * leaves the multisample contents undefined, so a following segment that LOADs them (a
+         * depth-only or stencil-only ordered Clear, which must preserve colour) would read garbage.
+         * The answer selects SDL_GPU_STOREOP_RESOLVE_AND_STORE for exactly those segments, which is
+         * the same correction REMED-GFX-141 already applied to preserving cube faces.
+         *
+         * @param index Position of the segment in @ref passSegments_.
+         * @return True when some later segment names the same 2D target or the same cube face.
+         */
+        [[nodiscard]] bool SegmentColorLoadedLater(std::size_t index) const;
+        /**
+         * @brief REMED-GFX-156: names @p segment's destination for the native order trace.
+         *
+         * @param segment The segment to name.
+         * @return "backbuffer", "rendertarget2d" or "rendertargetcube-faceN", owned by the backend.
+         */
+        [[nodiscard]] static const char* SegmentDestinationName(const PassSegment& segment);
+        /**
+         * @brief REMED-GFX-156: writes one native order-trace line for a recorded pass.
+         *
+         * The trace exists because a final image cannot tell an ordered clear apart from a load-op
+         * clear that happened to land on the same pixels: it reports the public command stream, the
+         * logical segment each command belongs to, the native pass each segment became, and the
+         * load/store action every attachment of that pass was given.
+         *
+         * @param passIndex   Native pass number within this frame, in recording order.
+         * @param segment     The segment being recorded.
+         * @param colorLoad   Colour load action name.
+         * @param colorStore  Colour store action name.
+         * @param depthLoad   Depth load action name, or "none" without a depth attachment.
+         * @param stencilLoad Stencil load action name, or "none" without a depth attachment.
+         * @param draws       Number of queued draws this pass will issue.
+         */
+        void TracePassSegment(std::size_t passIndex, const PassSegment& segment,
+                              const char* colorLoad, const char* colorStore,
+                              const char* depthLoad, const char* stencilLoad,
+                              std::size_t draws) const;
         /// Re-opens a segment for whatever is still bound after a mid-frame flush cleared the
         /// segment list, so draws issued after that flush are not silently dropped.
         void ReopenSegmentForBoundTarget();
@@ -1998,6 +2079,14 @@ namespace CNA::Internal::Backends::SdlGpu
         std::uint64_t currentSegment_ = kSwapchainSegment;
         /// Monotonically increasing; never reused within a frame, never a cache key.
         std::uint64_t nextSegmentId_ = 1;
+        /**
+         * @brief REMED-GFX-156: native render passes recorded so far in the frame being flushed.
+         *
+         * Reset at the start of each flush and incremented by every SDL_BeginGPURenderPass this
+         * backend issues, so the order trace can state which native pass a logical segment became
+         * and the pass-cardinality claims can be read off the trace rather than assumed.
+         */
+        std::size_t nativePassIndex_ = 0;
 
         int physicalWidth_ = 0;
         int physicalHeight_ = 0;

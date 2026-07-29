@@ -1219,6 +1219,7 @@ namespace CNA::Internal::Backends::SdlGpu
             // trailing pass gave for free. The LAST backbuffer segment always gets its pass, so a
             // frame with no backbuffer work records exactly the one pass it always did; empty
             // EARLIER backbuffer segments issue none.
+            nativePassIndex_ = 0;   // REMED-GFX-156: numbering for the native order trace.
             std::size_t lastBackbuffer = passSegments_.size();
             for (std::size_t i = 0; i < passSegments_.size(); ++i)
                 if (passSegments_[i].rt == nullptr && passSegments_[i].cube == nullptr)
@@ -1243,10 +1244,13 @@ namespace CNA::Internal::Backends::SdlGpu
                 }
                 if (!draws && !clears && !SegmentOwesFirstUseClear(segment))
                     continue;
+                // REMED-GFX-156: a segment whose colour resource a later segment loads again must
+                // STORE its multisample contents, not merely resolve them.
+                const bool colorLoadedLater = SegmentColorLoadedLater(i);
                 if (segment.rt != nullptr)
-                    RenderToTarget(cmd, segment);
+                    RenderToTarget(cmd, segment, colorLoadedLater);
                 else
-                    RenderToTargetCubeFace(cmd, segment);
+                    RenderToTargetCubeFace(cmd, segment, colorLoadedLater);
             }
         }
 
@@ -1323,7 +1327,8 @@ namespace CNA::Internal::Backends::SdlGpu
         // whether this is the pass that must initialize it; otherwise LOAD, which is what makes a
         // second cycle genuinely reload what the first cycle stored.
         void FillColorTargetInfo(SDL_GPUColorTargetInfo& out, const SdlGpuRenderTarget2DState& state,
-                                 bool segmentClearsColor, SDL_FColor segmentClearColor)
+                                 bool segmentClearsColor, SDL_FColor segmentClearColor,
+                                 bool colorLoadedLater)
         {
             out.texture = state.msaaTexture != nullptr ? state.msaaTexture : state.colorTexture;
             out.clear_color = segmentClearsColor ? segmentClearColor : state.clearColor;
@@ -1332,7 +1337,13 @@ namespace CNA::Internal::Backends::SdlGpu
             if (state.msaaTexture != nullptr)
             {
                 out.resolve_texture = state.colorTexture;
-                out.store_op = SDL_GPU_STOREOP_RESOLVE;
+                // REMED-GFX-156: plain RESOLVE explicitly leaves the multisample contents
+                // undefined. That is fine for the LAST pass to touch this resource this frame, and
+                // wrong for any earlier one, because a following pass -- which is exactly what an
+                // ordered Clear() that does not name the colour attachment creates -- LOADs those
+                // samples. Same correction REMED-GFX-141 made for preserving cube faces.
+                out.store_op = colorLoadedLater ? SDL_GPU_STOREOP_RESOLVE_AND_STORE
+                                                : SDL_GPU_STOREOP_RESOLVE;
             }
             else
             {
@@ -1403,6 +1414,12 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
             cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
         RenderPassOwner passOwner(pass);
+        TracePassSegment(nativePassIndex_++, segment,
+                         clearColor ? "clear" : "load", "store",
+                         depthStencilTexture_ == nullptr ? "none" : (clearDepth ? "clear" : "load"),
+                         depthStencilTexture_ == nullptr ? "none" : (clearStencil ? "clear" : "load"),
+                         std::count_if(drawOrder_.begin(), drawOrder_.end(),
+                                       [&](const QueuedDrawRef& r) { return r.segment == segment.id; }));
         // REMED-GFX-068: the scissor (like the viewport, REMED-GFX-064) is applied PER DRAW inside
         // RenderQueuedDraws from each queued draw's own captured state, not once per pass here -- a
         // per-pass read of the live scissor would apply the post-unbind full-backbuffer rect (see
@@ -1420,7 +1437,8 @@ namespace CNA::Internal::Backends::SdlGpu
         passOwner.End();
     }
 
-    void SdlGpuGraphicsBackend::RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment)
+    void SdlGpuGraphicsBackend::RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
+                                               bool colorLoadedLater)
     {
         constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
         const std::shared_ptr<SdlGpuRenderTarget2DState>& target = segment.rt;
@@ -1431,10 +1449,11 @@ namespace CNA::Internal::Backends::SdlGpu
         // primary's shared state, so a later {a,c} bind cannot retroactively drop b out of the
         // earlier {a,b} pass.
         std::vector<SDL_GPUColorTargetInfo> colorTargets(1 + segment.extraAttachments.size());
-        FillColorTargetInfo(colorTargets[0], *target, segment.clearColorRequested, segment.clearColor);
+        FillColorTargetInfo(colorTargets[0], *target, segment.clearColorRequested, segment.clearColor,
+                            colorLoadedLater);
         for (std::size_t i = 0; i < segment.extraAttachments.size(); ++i)
             FillColorTargetInfo(colorTargets[i + 1], *segment.extraAttachments[i],
-                                segment.clearColorRequested, segment.clearColor);
+                                segment.clearColorRequested, segment.clearColor, colorLoadedLater);
         const int colorTargetCount = static_cast<int>(colorTargets.size());
 
         SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
@@ -1458,6 +1477,18 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, colorTargets.data(), static_cast<Uint32>(colorTargetCount),
                                                          hasDepth ? &depthStencilTarget : nullptr);
         RenderPassOwner passOwner(pass);
+        TracePassSegment(nativePassIndex_++, segment,
+                         colorTargets[0].load_op == SDL_GPU_LOADOP_CLEAR ? "clear" : "load",
+                         colorTargets[0].store_op == SDL_GPU_STOREOP_RESOLVE ? "resolve"
+                             : colorTargets[0].store_op == SDL_GPU_STOREOP_RESOLVE_AND_STORE
+                                 ? "resolve+store" : "store",
+                         !hasDepth ? "none"
+                             : (depthStencilTarget.load_op == SDL_GPU_LOADOP_CLEAR ? "clear" : "load"),
+                         !hasDepth ? "none"
+                             : (depthStencilTarget.stencil_load_op == SDL_GPU_LOADOP_CLEAR ? "clear"
+                                                                                           : "load"),
+                         std::count_if(drawOrder_.begin(), drawOrder_.end(),
+                                       [&](const QueuedDrawRef& r) { return r.segment == segment.id; }));
         // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{target.get(), nullptr, -1};
         RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount,
@@ -1488,7 +1519,9 @@ namespace CNA::Internal::Backends::SdlGpu
                 SDL_GenerateMipmapsForGPUTexture(cmd, extra->colorTexture);
     }
 
-    void SdlGpuGraphicsBackend::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const PassSegment& segment)
+    void SdlGpuGraphicsBackend::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd,
+                                                       const PassSegment& segment,
+                                                       bool colorLoadedLater)
     {
         constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
         const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube = segment.cube;
@@ -1543,8 +1576,13 @@ namespace CNA::Internal::Backends::SdlGpu
             // RESOLVE: the shared layer clears it on every bind, so its samples are never loaded.
             colorTarget.resolve_texture = cube->cubeTexture;
             colorTarget.resolve_layer = static_cast<Uint32>(face);
-            colorTarget.store_op = cube->preserveContents ? SDL_GPU_STOREOP_RESOLVE_AND_STORE
-                                                          : SDL_GPU_STOREOP_RESOLVE;
+            // REMED-GFX-156: `colorLoadedLater` extends the same rule to a DISCARDING cube whose
+            // face this frame splits into several passes -- the later pass loads these samples, so
+            // leaving them undefined would be the same defect on a target that merely happens not
+            // to preserve across bind cycles.
+            colorTarget.store_op = (cube->preserveContents || colorLoadedLater)
+                                       ? SDL_GPU_STOREOP_RESOLVE_AND_STORE
+                                       : SDL_GPU_STOREOP_RESOLVE;
         }
         else
         {
@@ -1572,6 +1610,18 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
         RenderPassOwner passOwner(pass);
+        TracePassSegment(nativePassIndex_++, segment,
+                         colorTarget.load_op == SDL_GPU_LOADOP_CLEAR ? "clear" : "load",
+                         colorTarget.store_op == SDL_GPU_STOREOP_RESOLVE ? "resolve"
+                             : colorTarget.store_op == SDL_GPU_STOREOP_RESOLVE_AND_STORE
+                                 ? "resolve+store" : "store",
+                         !hasDepth ? "none"
+                             : (depthStencilTarget.load_op == SDL_GPU_LOADOP_CLEAR ? "clear" : "load"),
+                         !hasDepth ? "none"
+                             : (depthStencilTarget.stencil_load_op == SDL_GPU_LOADOP_CLEAR ? "clear"
+                                                                                           : "load"),
+                         std::count_if(drawOrder_.begin(), drawOrder_.end(),
+                                       [&](const QueuedDrawRef& r) { return r.segment == segment.id; }));
         // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{nullptr, cube.get(), face};
         RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount,
@@ -1638,6 +1688,95 @@ namespace CNA::Internal::Backends::SdlGpu
         BeginBackbufferSegment();
     }
 
+    /**
+     * @brief REMED-GFX-156: whether the native clear-order trace is switched on for this process.
+     *
+     * Off unless `CNA_SDLGPU_TRACE_CLEAR_ORDER` is set in the environment, read exactly once.
+     */
+    static bool TraceClearOrder() noexcept
+    {
+        static const bool enabled = std::getenv("CNA_SDLGPU_TRACE_CLEAR_ORDER") != nullptr;
+        return enabled;
+    }
+
+    const char* SdlGpuGraphicsBackend::SegmentDestinationName(const PassSegment& segment)
+    {
+        if (segment.cube != nullptr)
+        {
+            static const char* const kFaceNames[6] = {
+                "rendertargetcube-face0", "rendertargetcube-face1", "rendertargetcube-face2",
+                "rendertargetcube-face3", "rendertargetcube-face4", "rendertargetcube-face5"};
+            if (segment.face >= 0 && segment.face < 6) return kFaceNames[segment.face];
+            return "rendertargetcube-face?";
+        }
+        return segment.rt != nullptr ? "rendertarget2d" : "backbuffer";
+    }
+
+    void SdlGpuGraphicsBackend::TracePassSegment(std::size_t passIndex, const PassSegment& segment,
+                                                 const char* colorLoad, const char* colorStore,
+                                                 const char* depthLoad, const char* stencilLoad,
+                                                 std::size_t draws) const
+    {
+        if (!TraceClearOrder()) return;
+        std::fprintf(stderr,
+                     "[sdlgpu-order] pass #%zu segment=%llu opened-by=%s destination=%s "
+                     "clear=%s%s%s colorLoad=%s colorStore=%s depthLoad=%s stencilLoad=%s draws=%zu\n",
+                     passIndex, static_cast<unsigned long long>(segment.id),
+                     segment.openedByClear ? "clear" : "bind", SegmentDestinationName(segment),
+                     segment.clearColorRequested ? "target" : "",
+                     segment.clearDepthRequested ? "|depth" : "",
+                     segment.clearStencilRequested ? "|stencil" : "",
+                     colorLoad, colorStore, depthLoad, stencilLoad, draws);
+    }
+
+    SdlGpuGraphicsBackend::PassSegment* SdlGpuGraphicsBackend::SegmentForOrderedClear()
+    {
+        PassSegment* open = CurrentSegment();
+        if (open == nullptr) return nullptr;
+        // Nothing observable has happened since this segment opened, so the request folds into its
+        // load action -- a leading Clear(), or a run of Clear()s, costs no extra pass. Coalescing is
+        // safe precisely BECAUSE nothing separates them: the caller overwrites whichever aspects it
+        // names and leaves the others as the earlier request left them, which is what "Clear(Target)
+        // then Clear(Depth)" must mean.
+        if (!open->hasDraws) return open;
+
+        // A draw of this cycle precedes the Clear, so the clear is observable and needs a load
+        // action of its own: close the segment and open another over the SAME destination.
+        PassSegment split;
+        split.id = nextSegmentId_++;
+        split.rt = open->rt;
+        split.cube = open->cube;
+        split.face = open->face;
+        split.extraAttachments = open->extraAttachments;
+        split.openedByClear = true;
+        passSegments_.push_back(std::move(split));
+        currentSegment_ = passSegments_.back().id;
+        framePending_ = true;
+        if (TraceClearOrder())
+        {
+            std::fprintf(stderr,
+                         "[sdlgpu-order] clear splits segment %llu -> %llu destination=%s\n",
+                         static_cast<unsigned long long>(open->id),
+                         static_cast<unsigned long long>(passSegments_.back().id),
+                         SegmentDestinationName(passSegments_.back()));
+        }
+        return &passSegments_.back();
+    }
+
+    bool SdlGpuGraphicsBackend::SegmentColorLoadedLater(std::size_t index) const
+    {
+        if (index >= passSegments_.size()) return false;
+        const PassSegment& segment = passSegments_[index];
+        for (std::size_t i = index + 1; i < passSegments_.size(); ++i)
+        {
+            const PassSegment& later = passSegments_[i];
+            if (segment.rt != nullptr && later.rt == segment.rt) return true;
+            if (segment.cube != nullptr && later.cube == segment.cube && later.face == segment.face)
+                return true;
+        }
+        return false;
+    }
+
     void SdlGpuGraphicsBackend::ReopenSegmentForBoundTarget()
     {
         currentSegment_ = kSwapchainSegment;
@@ -1658,7 +1797,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // the load-op colour of that target's single merged pass and every earlier cycle's clear
         // was lost. The segment also covers every MRT attachment of that same cycle, which is what
         // the old currentExtraMrtTargets_ propagation did by hand.
-        if (PassSegment* segment = CurrentSegment())
+        // REMED-GFX-156: and to the ordered POSITION inside that cycle, which is what
+        // SegmentForOrderedClear resolves -- a Clear() after a draw opens its own segment.
+        if (PassSegment* segment = SegmentForOrderedClear())
         {
             segment->clearColorRequested = true;
             segment->clearColor = SDL_FColor{r, g, b, a};
@@ -1679,8 +1820,11 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::ClearDepth(float depth)
     {
-        // REMED-GFX-145: per bind cycle, exactly like Clear() above.
-        if (PassSegment* segment = CurrentSegment())
+        // REMED-GFX-145 / REMED-GFX-156: per bind cycle and per ordered position, exactly like
+        // Clear() above. A multi-aspect public Clear() reaches here through ClearColorAndDepth and
+        // friends, whose first call already opened the segment this one folds into -- so one public
+        // Clear() is one pass boundary however many aspects it names.
+        if (PassSegment* segment = SegmentForOrderedClear())
         {
             segment->clearDepthRequested = true;
             segment->clearDepth = depth;
@@ -1695,8 +1839,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::ClearStencil(int stencil)
     {
-        // REMED-GFX-145: per bind cycle, exactly like Clear() above.
-        if (PassSegment* segment = CurrentSegment())
+        // REMED-GFX-145 / REMED-GFX-156: per bind cycle and per ordered position, exactly like
+        // Clear() above.
+        if (PassSegment* segment = SegmentForOrderedClear())
         {
             segment->clearStencilRequested = true;
             segment->clearStencil = static_cast<Uint8>(stencil);
@@ -2125,6 +2270,16 @@ namespace CNA::Internal::Backends::SdlGpu
         ref.blendFactorB = blendFactorB_;
         ref.blendFactorA = blendFactorA_;
         drawOrder_.push_back(ref);
+        // REMED-GFX-156: this segment now holds something observable, so the NEXT Clear() issued
+        // inside it is an ordered command that needs its own pass rather than a load action here.
+        if (PassSegment* segment = CurrentSegment())
+            segment->hasDraws = true;
+        if (TraceClearOrder())
+        {
+            std::fprintf(stderr, "[sdlgpu-order] enqueue #%zu draw kind=%d segment=%llu\n",
+                         drawOrder_.size() - 1, static_cast<int>(kind),
+                         static_cast<unsigned long long>(currentSegment_));
+        }
     }
 
     void SdlGpuGraphicsBackend::ApplyViewportForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
