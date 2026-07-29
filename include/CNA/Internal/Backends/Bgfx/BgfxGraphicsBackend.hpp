@@ -49,15 +49,15 @@ namespace CNA::Internal::Backends::Bgfx
         inline constexpr bgfx::ViewId kFirstSegmentViewId = 192;
 
         // REMED-GFX-155: bgfx's compile-time view-id count (BGFX_CONFIG_MAX_VIEWS). Every id in
-        // [0, kMaxViews) is a legal view, and bgfx::setViewOrder() only produces a well-defined
-        // execution order when it is handed a full PERMUTATION of that range -- bgfx inverts the
-        // table it was given (`viewRemap[m_viewRemap[ii]] = ii` in Frame::sort), so a partial list
-        // is silently clobbered by the identity entries that follow it. Kept as a named constant
-        // rather than a literal so the permutation and the range it must cover cannot drift apart.
+        // [0, kMaxViews) is a legal view. Named rather than a literal so the per-frame bookkeeping
+        // and the id space it covers cannot drift apart.
         inline constexpr int kMaxViews = 256;
         static_assert(kBackbufferFlushViewId == kMaxViews - 1,
-                      "the reserved backbuffer-flush view must be the HIGHEST view id, so that the "
-                      "ordered permutation's ascending tail leaves it last (Task 951)");
+                      "the reserved backbuffer-flush view must be the HIGHEST view id, so bgfx's "
+                      "ascending-id execution always leaves it last (Task 951)");
+        static_assert(kFirstSegmentViewId < kBackbufferFlushViewId,
+                      "REMED-GFX-155 relies on every ordered segment id sitting ABOVE every render "
+                      "target base id and BELOW the reserved flush view");
 
         // Task 910: each concurrently-live render target (2D or cube) needs its own bgfx view id
         // -- bgfx::setViewFrameBuffer(viewId, fbo) is a per-view-per-*frame* setting, resolved
@@ -632,11 +632,20 @@ namespace CNA::Internal::Backends::Bgfx
         // by its view's SORT POSITION, which defaults to the numeric view id. Because the backbuffer
         // owns the lowest id (0) while every render target owns a higher one, a backbuffer draw that
         // samples a render target produced earlier in the same frame executed BEFORE its producer.
-        // This list is what ApplyFrameViewOrder() hands to bgfx::setViewOrder() before every
-        // bgfx::frame(), making native execution order equal public submission order. Recycled by
+        // The correction keeps bgfx's default ordering and makes the IDS ascend with public order
+        // instead (see highestViewUsedThisFrame_), so this list is now a record of what was done
+        // rather than an instruction to bgfx -- it is what CNA_BGFX_TRACE_VIEW_ORDER prints, and
+        // asserting it is monotonically increasing is exactly asserting the contract. Recycled by
         // EndFrameSegments(); membership is O(1) through frameViewOrdered_.
         std::vector<bgfx::ViewId> frameViewOrder_;
         std::array<bool, Detail::kMaxViews> frameViewOrdered_ = {};
+        // REMED-GFX-155: the highest view id any public command has used this frame, or -1 before
+        // the first one. A bind cycle may keep its target's BASE view only when that base is above
+        // everything already used; otherwise bgfx's ascending-id execution would run it before work
+        // that was submitted earlier, and it takes the next ordered segment id instead. This is the
+        // whole fix: REMED-GFX-018/065 already guarantee segment ids are allocated monotonically and
+        // sit above every base id, so honouring it makes ascending-id order == public order.
+        int highestViewUsedThisFrame_ = -1;
         // REMED-GFX-155: set from CNA_BGFX_TRACE_VIEW_ORDER=1. bgfx's execution order is not
         // observable from the public API, so the ordering this backend programs is written to stderr
         // on demand -- that trace is the structural evidence behind this task's ordering claims and
@@ -1015,14 +1024,16 @@ namespace CNA::Internal::Backends::Bgfx
         void ResetSegmentTarget(bgfx::ViewId baseId, bgfx::FrameBufferHandle fbo);
         // Recycle the per-frame segment id pool at a frame boundary (after bgfx::frame()).
         void EndFrameSegments();
-        // REMED-GFX-155: record that a public command has just committed to @p id, so the frame's
-        // view execution order can be programmed from PUBLIC submission order instead of being left
-        // to bgfx's numeric-view-id default. Idempotent: a view already in this frame's order keeps
-        // its original position, which is what makes a run of consecutive draws on one view cheap.
+        // REMED-GFX-155: record that a public command has just committed to @p id. Idempotent: a
+        // view already used this frame keeps its original position, which is what makes a run of
+        // consecutive draws on one view cheap.
         void NoteViewUsedEXT(bgfx::ViewId id);
-        // REMED-GFX-155: program the frame's view execution order through bgfx::setViewOrder().
-        // Must be called immediately before every bgfx::frame() in this backend.
-        void ApplyFrameViewOrder();
+        // REMED-GFX-155: may a bind cycle whose target's base view is @p baseId start on that base
+        // view, or would doing so execute it before work already submitted this frame?
+        [[nodiscard]] bool BaseViewPreservesOrderEXT(bgfx::ViewId baseId) const
+        {
+            return static_cast<int>(baseId) > highestViewUsedThisFrame_;
+        }
 
         // Task 880: overrides the current 3D view's rect with a custom Viewport, if one was set
         // via SetViewport(). Since REMED-GFX-063 this applies to render-target views too, and since

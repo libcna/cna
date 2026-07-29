@@ -133,6 +133,24 @@ protected:
         done = true;
 
         auto& device = getGraphicsDeviceProperty();
+
+        // REMED-GFX-158: this backend loses a render target's content when the target is CREATED
+        // and rendered into in the same bgfx frame AND its view is the first one bgfx executes that
+        // frame. Measured: creating a target and advancing one frame WITHOUT ever rendering into it
+        // is enough to make the next one work, so it is the creation frame that matters, not the
+        // drawing. It became observable only when REMED-GFX-155 stopped forcing the backbuffer view
+        // to execute first in every frame -- before that, the backbuffer always ran ahead of any
+        // render target and hid it. This warm-up is here so the file measures the MIP CHAIN, which
+        // is its subject, rather than that separate defect; remove it when GFX-158 is fixed.
+        {
+            RenderTarget2D warmUp(device, kRTSize, kRTSize, /*mipMap=*/true,
+                                  SurfaceFormat::Color, DepthFormat::None);
+            device.Clear(Color(0, 0, 0, 255));
+            Color discard(0, 0, 0, 0);
+            const Rectangle onePixel(0, 0, 1, 1);
+            device.GetBackBufferData(&onePixel, &discard, 0, 1);
+        }
+
         device.setBlendStateProperty(BlendState::Opaque);
         SamplerState point = SamplerState::PointClamp;
         SamplerState linear = SamplerState::LinearClamp;

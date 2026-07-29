@@ -1780,7 +1780,8 @@ namespace CNA::Internal::Backends::Bgfx
         // A clear is a full-target ordered operation. The first operation on a target may use its
         // base view; every later clear needs a fresh monotonically-increasing segment so bgfx
         // cannot move it before earlier draws or collapse two clear masks/values last-wins.
-        const bool useBaseView = !segmentActive_ && !segmentNeedsFreshView_;
+        const bool useBaseView = !segmentActive_ && !segmentNeedsFreshView_ &&
+                                 BaseViewPreservesOrderEXT(segmentTargetBaseId_);
         if (useBaseView)
         {
             currentViewId_ = spriteViewId = segmentTargetBaseId_;
@@ -2394,7 +2395,7 @@ namespace CNA::Internal::Backends::Bgfx
         }
         frameViewOrder_.clear();
         frameViewOrdered_.fill(false);
-        ApplyFrameViewOrder();
+        highestViewUsedThisFrame_ = -1;
     }
 
     // REMED-GFX-155: append @p id to this frame's public submission order the first time a command
@@ -2408,42 +2409,14 @@ namespace CNA::Internal::Backends::Bgfx
     // expected branch.
     void BgfxGraphicsBackend::NoteViewUsedEXT(bgfx::ViewId id)
     {
-        if (id >= Detail::kMaxViews || frameViewOrdered_[id])
+        if (id >= Detail::kMaxViews)
+            return;
+        if (static_cast<int>(id) > highestViewUsedThisFrame_)
+            highestViewUsedThisFrame_ = static_cast<int>(id);
+        if (frameViewOrdered_[id])
             return;
         frameViewOrdered_[id] = true;
         frameViewOrder_.push_back(id);
-        ApplyFrameViewOrder();
-    }
-
-    // REMED-GFX-155: make bgfx execute this frame's views in PUBLIC submission order.
-    //
-    // bgfx never executes views in the order they were submitted to. Every draw carries a sort key
-    // whose high bits are its view's SORT POSITION, the whole frame is radix-sorted by that key, and
-    // the position defaults to the numeric view id. This backend's id partition (backbuffer = 0, RT
-    // base ids in [1, 192), per-frame segments in [192, 255)) therefore encoded a fixed execution
-    // order in which the backbuffer always ran FIRST and render targets ran in id-allocation order --
-    // neither of which is public order. A backbuffer draw sampling a render target produced earlier
-    // in the same frame ran before its producer and sampled an empty image.
-    //
-    // bgfx::setViewOrder(0, n, order) means "order[position] = view id": bgfx stores the table, then
-    // Frame::sort() inverts it (`viewRemap[m_viewRemap[ii]] = ii`) to get each view's position. That
-    // inversion is only well defined for a full permutation -- with a partial list the identity
-    // entries that follow overwrite the mapped ones -- so the whole [0, kMaxViews) range is written
-    // every frame: the views this frame actually used, in first-use order, then every remaining id
-    // ascending. Unused views carry no draws, so their tail positions are inert; the ascending tail
-    // also keeps kBackbufferFlushViewId (the highest id) last, which is what Task 951's readback and
-    // ReadTextureRegionEXT's blit require. Costs one 256-byte upload per frame and no GPU work.
-    void BgfxGraphicsBackend::ApplyFrameViewOrder()
-    {
-        std::array<bgfx::ViewId, Detail::kMaxViews> order{};
-        std::size_t next = 0;
-        for (const bgfx::ViewId id : frameViewOrder_)
-            order[next++] = id;
-        for (int id = 0; id < Detail::kMaxViews; ++id)
-            if (!frameViewOrdered_[static_cast<std::size_t>(id)])
-                order[next++] = static_cast<bgfx::ViewId>(id);
-
-        bgfx::setViewOrder(0, static_cast<uint16_t>(Detail::kMaxViews), order.data());
     }
 
     // REMED-GFX-065: resolve whether the active GraphicsDevice.Viewport is a genuine CUSTOM sub-region
@@ -2497,7 +2470,7 @@ namespace CNA::Internal::Backends::Bgfx
             // First draw/batch on this binding normally uses the base view. On a same-frame target
             // rebind, however, that base has already recorded an earlier operation and must not be
             // reconfigured last-wins; continue on a fresh ordered segment instead (GFX-018).
-            if (segmentNeedsFreshView_)
+            if (segmentNeedsFreshView_ || !BaseViewPreservesOrderEXT(segmentTargetBaseId_))
             {
                 const bgfx::ViewId segmentId = AllocateSegmentViewId();
                 bgfx::setViewFrameBuffer(segmentId, segmentTargetFbo_);
