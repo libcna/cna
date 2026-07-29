@@ -950,11 +950,131 @@ namespace CNA::Internal::Backends::WebGPU
         // requested count in [2,4] rounds down to 1 unless 4x is supported (in which case it
         // rounds UP to 4, since 4 is the only value above 1), and anything >= 4 clamps down to 4.
         [[nodiscard]] int PickSampleCount(int requestedMultiSampleCount);
+        // ------------------------------------------------------------------------------------
+        // REMED-GFX-159: one ordered reference stream across every deferred draw family.
+        //
+        // This backend keeps one command vector per family (eleven of them, below) and used to
+        // replay them as a FIXED LIST of per-family loops -- colored, textured, litTextured,
+        // alphaTest, dualTexture, envMap, instanced, pbr, skinned, skinnedPbr, then sprites -- in
+        // all three of its pass recorders. That list, not the game's call order, decided what
+        // executed first, so `SpriteBatch.Draw(); effect.Apply(); DrawPrimitives()` came out with
+        // the sprite ON TOP, and (measured, not assumed) two 3D draws using different stock
+        // effects inverted against each other for the same reason, with no SpriteBatch involved.
+        //
+        // The correction keeps the per-family storage exactly as it is -- every command struct,
+        // every capture, every Queue*Draw() is unchanged -- and adds ONE stream of (family, index)
+        // references pushed in public call order. Replay walks that stream. There is no sort, no
+        // per-family pass, no submit or wait at a family change, and no order value in any
+        // pipeline or cache key: an entry is two bytes plus an index, appended once per queued
+        // draw and released with the command vectors at the end of the pass.
+        // ------------------------------------------------------------------------------------
+
+        /** @brief Which deferred command vector a queued draw lives in. */
+        enum class DrawFamily : std::uint8_t
+        {
+            Sprite,       ///< spriteCommands_
+            Colored,      ///< coloredDrawCommands_
+            Textured,     ///< texturedDrawCommands_
+            LitTextured,  ///< litTexturedDrawCommands_
+            AlphaTest,    ///< alphaTestDrawCommands_
+            DualTexture,  ///< dualTextureDrawCommands_
+            EnvMap,       ///< envMapDrawCommands_
+            Instanced,    ///< instancedDrawCommands_
+            Pbr,          ///< pbrDrawCommands_
+            Skinned,      ///< skinnedDrawCommands_
+            SkinnedPbr    ///< skinnedPbrDrawCommands_
+        };
+
+        /**
+         * @brief One queued draw's position in public call order.
+         *
+         * An INDEX, never a pointer: the family vectors grow while a bind cycle is being recorded,
+         * and a pointer into one of them would dangle the moment it reallocated.
+         */
+        struct DrawOrderEntry
+        {
+            DrawFamily    family;  ///< Which vector @ref index addresses.
+            std::uint32_t index;   ///< Position inside that family's own command vector.
+            /**
+             * @brief This draw's public call number within the bind cycle.
+             *
+             * Redundant with the entry's own position while the stream is in public order, which
+             * is exactly why it is stored: it is what lets the draw-order trace state the public
+             * position and the issue position as two independently sourced numbers, so a replay
+             * that reordered the stream reports them differing instead of relabelling itself.
+             */
+            std::uint32_t order;
+        };
+
+        /**
+         * @brief Cross-family state tracking for one ordered replay.
+         *
+         * Every family used to own the whole pass from its first draw to its last, so each could
+         * assume nothing else had touched the encoder since. Interleaving removes that, and this
+         * carries exactly the three pieces of pass state a neighbouring family can now disturb.
+         */
+        struct ReplayState
+        {
+            /// The pipeline currently bound by ANY family, so the sprite path's redundant-bind
+            /// skip can never skip across a 3D draw that bound its own.
+            WGPURenderPipeline boundPipeline = nullptr;
+            /// Whether vertex slot 0 still holds the shared sprite vertex buffer. Every 3D draw
+            /// binds its own vertex buffer into the same slot.
+            bool spriteVerticesBound = false;
+            /// Whether the blend constant is still the pass-level value. Sprites set their own per
+            /// draw (REMED-GFX-102); 3D draws read the pass-level one, which before this change
+            /// they were guaranteed because they always ran first.
+            bool blendConstantIsPassDefault = true;
+        };
+
+        /**
+         * @brief Name of a deferred draw family, for the draw-order trace.
+         *
+         * A family is exactly one shader/pipeline family here, so this doubles as the program
+         * identity the trace reports.
+         *
+         * @param family The family to name.
+         * @return A stable lower-camel identifier owned by the backend.
+         */
+        [[nodiscard]] static const char* DrawFamilyName(DrawFamily family) noexcept;
+
+        /** @brief Appends @p index of @p family to the ordered stream at its public call. */
+        void RecordDrawOrder(DrawFamily family, std::size_t index);
+
+        /**
+         * @brief Replays every queued draw of this bind cycle into @p pass in public call order.
+         *
+         * Walks the ordered stream once, dispatching each entry to its family's own single-command
+         * issue function, then clears every command vector and the stream itself.
+         *
+         * @param pass The open render pass encoder for this bind cycle's destination.
+         * @param targetFormat The colour format sprite pipelines must have been built against.
+         * @param targetSampleCount The sample count sprite pipelines must have been built against.
+         * @param destination Which of the three pass recorders is replaying, for the order trace.
+         */
+        void ReplayDrawsInOrder(WGPURenderPassEncoder pass, WGPUTextureFormat targetFormat,
+                                std::uint32_t targetSampleCount, const char* destination);
+
+        /** @brief Drops queued sprites, and their ordered-stream entries, without replaying them. */
+        void DiscardQueuedSprites();
+
+        /** @brief Uploads every queued sprite's vertices into the shared sprite vertex buffer. */
+        void UploadSpriteVertices();
+
+        /**
+         * @brief Restores the pass state a preceding sprite may have changed, before a 3D draw.
+         *
+         * @param pass The open render pass encoder.
+         * @param state The running cross-family state for this replay.
+         */
+        void Begin3DDrawState(WGPURenderPassEncoder pass, ReplayState& state);
+
         // REMED-GFX-116: the target extent used to be passed in only to clamp the per-sprite
         // viewport; that clamp now lives in ApplyDrawViewport(), against the pass state
         // BeginPassViewport() recorded, so every family clamps identically.
-        void RenderSprites(WGPURenderPassEncoder pass, WGPUTextureFormat targetFormat,
-                           std::uint32_t targetSampleCount);
+        void IssueSprite(WGPURenderPassEncoder pass, const SpriteCommand& command,
+                         std::uint32_t spriteIndex, WGPUTextureFormat targetFormat,
+                         std::uint32_t targetSampleCount, ReplayState& state);
         /**
          * @brief REMED-GFX-116: the complete GraphicsDevice.Viewport as it stands right now.
          *
@@ -1022,7 +1142,6 @@ namespace CNA::Internal::Backends::WebGPU
          * @param snapshot The scissor state captured when the draw was queued.
          */
         void ApplyDrawScissor(WGPURenderPassEncoder pass, const WebGPUScissorSnapshot& snapshot);
-        void RenderColoredDraws(WGPURenderPassEncoder pass);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                        WGPUIndexFormat stripIndexFormat,
                                                                        bool depthTest, bool depthWrite,
@@ -1165,6 +1284,11 @@ namespace CNA::Internal::Backends::WebGPU
             spritePipelines_;
         WGPUBuffer spriteVertexBuffer_ = nullptr;
         std::uint64_t spriteVertexCapacityBytes_ = 0;
+        /// REMED-GFX-159: bytes UploadSpriteVertices() wrote for the cycle being replayed. The
+        /// sprite vertex buffer used to be bound once for the whole sprite run; interleaved 3D
+        /// draws bind their own into the same slot, so it is rebound per sprite run and the bind
+        /// needs the size separately from the capacity.
+        std::uint64_t spriteVertexBytes_ = 0;
         std::array<WGPUSampler, 18> samplerCache_{};
 
         // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment. Created
@@ -1179,6 +1303,14 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUSampler mipBlitSampler_ = nullptr;
 
         std::vector<SpriteCommand> spriteCommands_;
+        /**
+         * @brief REMED-GFX-159: this bind cycle's queued draws in exact public call order.
+         *
+         * One entry per queued draw, appended by the Queue*Draw()/QueueSprite() that produced it
+         * and consumed once by ReplayDrawsInOrder(). This is the ONLY thing that decides execution
+         * order; the eleven family vectors decide only where a command's payload lives.
+         */
+        std::vector<DrawOrderEntry> drawOrder_;
         std::atomic<std::size_t> uncapturedErrorCount_{0};
         int physicalWidth_ = 0;
         int physicalHeight_ = 0;
@@ -1357,6 +1489,8 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUPipelineLayout coloredPipelineLayout_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> coloredPipelines_;  ///< keyed by Make3DPipelineKey() (WEBGPU-30)
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
+        void IssueColoredDraw(WGPURenderPassEncoder pass, const ColoredDrawCommand& command,
+                              ReplayState& state);
 
         // WEBGPU-20/33: textured3d (stride 20, VertexPositionTexture). Shares the same UBO layout/
         // bind group (group 0, coloredBindGroupLayout_) as colored3d; adds a second bind group
@@ -1429,7 +1563,8 @@ namespace CNA::Internal::Backends::WebGPU
         void QueueTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderTexturedDraws(WGPURenderPassEncoder pass);
+        void IssueTexturedDraw(WGPURenderPassEncoder pass, const TexturedDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule texturedShader_ = nullptr;
         WGPUShaderModule coloredTexturedShader_ = nullptr;
@@ -1524,7 +1659,8 @@ namespace CNA::Internal::Backends::WebGPU
         void QueueLitTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderLitTexturedDraws(WGPURenderPassEncoder pass);
+        void IssueLitTexturedDraw(WGPURenderPassEncoder pass, const LitTexturedDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule litTexturedShader_ = nullptr;
         WGPUBindGroupLayout litBindGroupLayout_ = nullptr;   ///< group 0: primary UBO (binding 0) + LitLightParams UBO (binding 1)
@@ -1600,7 +1736,8 @@ namespace CNA::Internal::Backends::WebGPU
         void QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderAlphaTestDraws(WGPURenderPassEncoder pass);
+        void IssueAlphaTestDraw(WGPURenderPassEncoder pass, const AlphaTestDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule alphaTestShader_ = nullptr;          ///< strides 20/32 (no vertex colour)
         WGPUShaderModule alphaTestColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
@@ -1670,7 +1807,8 @@ namespace CNA::Internal::Backends::WebGPU
         void QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderDualTextureDraws(WGPURenderPassEncoder pass);
+        void IssueDualTextureDraw(WGPURenderPassEncoder pass, const DualTextureDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule dualTextureShader_ = nullptr;          ///< stride 20 (no vertex colour)
         WGPUShaderModule dualTextureColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
@@ -1764,7 +1902,8 @@ namespace CNA::Internal::Backends::WebGPU
         void QueueEnvMapDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderEnvMapDraws(WGPURenderPassEncoder pass);
+        void IssueEnvMapDraw(WGPURenderPassEncoder pass, const EnvMapDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule envMapShader_ = nullptr;
         WGPUBindGroupLayout envMapBindGroupLayout_ = nullptr;         ///< group 0: Transform UBO (binding 0) + EnvMapParams UBO (binding 1)
@@ -1836,7 +1975,8 @@ namespace CNA::Internal::Backends::WebGPU
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias);
-        void RenderInstancedDraws(WGPURenderPassEncoder pass);
+        void IssueInstancedDraw(WGPURenderPassEncoder pass, const InstancedDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule instancedShader_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> instancedPipelines_;
@@ -1920,7 +2060,8 @@ namespace CNA::Internal::Backends::WebGPU
         void QueuePbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                           const Matrix& world, const Matrix& view, const Matrix& projection,
                           PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderPbrDraws(WGPURenderPassEncoder pass);
+        void IssuePbrDraw(WGPURenderPassEncoder pass, const PbrDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule pbrShader_ = nullptr;
         WGPUBindGroupLayout pbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors UBOs
@@ -2010,7 +2151,8 @@ namespace CNA::Internal::Backends::WebGPU
         void QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderSkinnedDraws(WGPURenderPassEncoder pass);
+        void IssueSkinnedDraw(WGPURenderPassEncoder pass, const SkinnedDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule skinnedShader_ = nullptr;               ///< stride 52, per-pixel-lit
         WGPUShaderModule skinnedColorShader_ = nullptr;          ///< stride 56, per-pixel-lit
@@ -2088,7 +2230,8 @@ namespace CNA::Internal::Backends::WebGPU
         void QueueSkinnedPbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderSkinnedPbrDraws(WGPURenderPassEncoder pass);
+        void IssueSkinnedPbrDraw(WGPURenderPassEncoder pass, const SkinnedPbrDrawCommand& command,
+                              ReplayState& state);
 
         WGPUShaderModule skinnedPbrShader_ = nullptr;
         WGPUBindGroupLayout skinnedPbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors + SkinningParams UBOs

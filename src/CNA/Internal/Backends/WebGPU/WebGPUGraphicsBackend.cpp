@@ -19,6 +19,8 @@
 #include <cstddef>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <iterator>
@@ -4493,113 +4495,114 @@ struct VertexOutput {
         }
 
         envMapDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::EnvMap, envMapDrawCommands_.size() - 1);
     }
 
-    void WebGPUGraphicsBackend::RenderEnvMapDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssueEnvMapDraw(WGPURenderPassEncoder pass,
+                                                const EnvMapDrawCommand& command,
+                                                ReplayState& state)
     {
-        for (const EnvMapDrawCommand& command : envMapDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty())
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU EnvMap3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor transformDescriptor{};
+        transformDescriptor.label = StringView("CNA WebGPU EnvMap3D Transform UBO");
+        transformDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        transformDescriptor.size = sizeof(command.transformUniforms);
+        WGPUBuffer transformBuffer = wgpuDeviceCreateBuffer(device_, &transformDescriptor);
+        wgpuQueueWriteBuffer(queue_, transformBuffer, 0, command.transformUniforms.data(),
+                            sizeof(command.transformUniforms));
+
+        WGPUBufferDescriptor paramsDescriptor{};
+        paramsDescriptor.label = StringView("CNA WebGPU EnvMap3D Params UBO");
+        paramsDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        paramsDescriptor.size = sizeof(command.envMapUniforms);
+        WGPUBuffer paramsBuffer = wgpuDeviceCreateBuffer(device_, &paramsDescriptor);
+        wgpuQueueWriteBuffer(queue_, paramsBuffer, 0, command.envMapUniforms.data(),
+                            sizeof(command.envMapUniforms));
+
+        std::array<WGPUBindGroupEntry, 2> uboEntries{};
+        uboEntries[0].binding = 0;
+        uboEntries[0].buffer = transformBuffer;
+        uboEntries[0].size = sizeof(command.transformUniforms);
+        uboEntries[1].binding = 1;
+        uboEntries[1].buffer = paramsBuffer;
+        uboEntries[1].size = sizeof(command.envMapUniforms);
+        WGPUBindGroupDescriptor uboBindDescriptor{};
+        uboBindDescriptor.label = StringView("CNA WebGPU EnvMap3D UBO BindGroup");
+        uboBindDescriptor.layout = envMapBindGroupLayout_;
+        uboBindDescriptor.entryCount = uboEntries.size();
+        uboBindDescriptor.entries = uboEntries.data();
+        WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                     command.addressV, command.maxAnisotropy);
+        WGPUTextureView texView = command.texture != nullptr
+            ? command.texture->View()
+            : envMapDefaultWhiteTexture_->View();
+        WGPUTextureView cubeView = command.envMap != nullptr
+            ? command.envMap->CubeView()
+            : envMapDefaultWhiteCube_->CubeView();
+        std::array<WGPUBindGroupEntry, 3> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].sampler = sampler;
+        texEntries[1].binding = 1;
+        texEntries[1].textureView = texView;
+        texEntries[2].binding = 2;
+        texEntries[2].textureView = cubeView;
+        WGPUBindGroupDescriptor texBindDescriptor{};
+        texBindDescriptor.label = StringView("CNA WebGPU EnvMap3D Texture BindGroup");
+        texBindDescriptor.layout = envMapTextureBindGroupLayout_;
+        texBindDescriptor.entryCount = texEntries.size();
+        texBindDescriptor.entries = texEntries.data();
+        WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        WGPURenderPipeline pipe = GetOrCreatePipelineEnvMap3D(
+                                                              command.topology,
+                                                              RequiredStripIndexFormat(command),
+                                                              command.depthTest,
+                                                              command.depthWrite, command.depthFunc,
+                                                              command.blend, command.blendParams,
+                                                              command.cullMode, command.wireframe,
+                                                              command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU EnvMap3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor transformDescriptor{};
-            transformDescriptor.label = StringView("CNA WebGPU EnvMap3D Transform UBO");
-            transformDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            transformDescriptor.size = sizeof(command.transformUniforms);
-            WGPUBuffer transformBuffer = wgpuDeviceCreateBuffer(device_, &transformDescriptor);
-            wgpuQueueWriteBuffer(queue_, transformBuffer, 0, command.transformUniforms.data(),
-                                sizeof(command.transformUniforms));
-
-            WGPUBufferDescriptor paramsDescriptor{};
-            paramsDescriptor.label = StringView("CNA WebGPU EnvMap3D Params UBO");
-            paramsDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            paramsDescriptor.size = sizeof(command.envMapUniforms);
-            WGPUBuffer paramsBuffer = wgpuDeviceCreateBuffer(device_, &paramsDescriptor);
-            wgpuQueueWriteBuffer(queue_, paramsBuffer, 0, command.envMapUniforms.data(),
-                                sizeof(command.envMapUniforms));
-
-            std::array<WGPUBindGroupEntry, 2> uboEntries{};
-            uboEntries[0].binding = 0;
-            uboEntries[0].buffer = transformBuffer;
-            uboEntries[0].size = sizeof(command.transformUniforms);
-            uboEntries[1].binding = 1;
-            uboEntries[1].buffer = paramsBuffer;
-            uboEntries[1].size = sizeof(command.envMapUniforms);
-            WGPUBindGroupDescriptor uboBindDescriptor{};
-            uboBindDescriptor.label = StringView("CNA WebGPU EnvMap3D UBO BindGroup");
-            uboBindDescriptor.layout = envMapBindGroupLayout_;
-            uboBindDescriptor.entryCount = uboEntries.size();
-            uboBindDescriptor.entries = uboEntries.data();
-            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
-
-            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                         command.addressV, command.maxAnisotropy);
-            WGPUTextureView texView = command.texture != nullptr
-                ? command.texture->View()
-                : envMapDefaultWhiteTexture_->View();
-            WGPUTextureView cubeView = command.envMap != nullptr
-                ? command.envMap->CubeView()
-                : envMapDefaultWhiteCube_->CubeView();
-            std::array<WGPUBindGroupEntry, 3> texEntries{};
-            texEntries[0].binding = 0;
-            texEntries[0].sampler = sampler;
-            texEntries[1].binding = 1;
-            texEntries[1].textureView = texView;
-            texEntries[2].binding = 2;
-            texEntries[2].textureView = cubeView;
-            WGPUBindGroupDescriptor texBindDescriptor{};
-            texBindDescriptor.label = StringView("CNA WebGPU EnvMap3D Texture BindGroup");
-            texBindDescriptor.layout = envMapTextureBindGroupLayout_;
-            texBindDescriptor.entryCount = texEntries.size();
-            texBindDescriptor.entries = texEntries.data();
-            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
-
-            WGPURenderPipeline pipe = GetOrCreatePipelineEnvMap3D(
-                                                                  command.topology,
-                                                                  RequiredStripIndexFormat(command),
-                                                                  command.depthTest,
-                                                                  command.depthWrite, command.depthFunc,
-                                                                  command.blend, command.blendParams,
-                                                                  command.cullMode, command.wireframe,
-                                                                  command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU EnvMap3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(uboBindGroup);
-            pendingBindGroupReleases_.push_back(texBindGroup);
-            pendingBufferReleases_.push_back(transformBuffer);
-            pendingBufferReleases_.push_back(paramsBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU EnvMap3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        envMapDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(uboBindGroup);
+        pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBufferReleases_.push_back(transformBuffer);
+        pendingBufferReleases_.push_back(paramsBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 
     void WebGPUGraphicsBackend::DestroyInstancedResources()
@@ -4765,84 +4768,83 @@ struct VertexOutput {
         return created;
     }
 
-    void WebGPUGraphicsBackend::RenderInstancedDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssueInstancedDraw(WGPURenderPassEncoder pass,
+                                                   const InstancedDrawCommand& command,
+                                                   ReplayState& state)
     {
-        for (const InstancedDrawCommand& command : instancedDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty() ||
+            command.instanceCount == 0 || command.instVbData.empty())
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU Instanced3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor instVbDescriptor{};
+        instVbDescriptor.label = StringView("CNA WebGPU Instanced3D InstanceBuffer");
+        instVbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        instVbDescriptor.size = Align4(command.instVbData.size());
+        WGPUBuffer instVertexBuffer = wgpuDeviceCreateBuffer(device_, &instVbDescriptor);
+        wgpuQueueWriteBuffer(queue_, instVertexBuffer, 0, command.instVbData.data(), command.instVbData.size());
+
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU Instanced3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        WGPUBindGroupEntry bindEntry{};
+        bindEntry.binding = 0;
+        bindEntry.buffer = uniformBuffer;
+        bindEntry.size = sizeof(command.uniforms);
+        WGPUBindGroupDescriptor bindDescriptor{};
+        bindDescriptor.label = StringView("CNA WebGPU Instanced3D BindGroup");
+        bindDescriptor.layout = coloredBindGroupLayout_;
+        bindDescriptor.entryCount = 1;
+        bindDescriptor.entries = &bindEntry;
+        WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
+
+        WGPURenderPipeline pipe = GetOrCreatePipelineInstanced3D(command.pvStride, command.instVbStride,
+                                                                 command.topology,
+                                                                 RequiredStripIndexFormat(command),
+                                                                 command.depthTest,
+                                                                 command.depthWrite, command.depthFunc,
+                                                                 command.blend, command.blendParams,
+                                                                 command.cullMode, command.wireframe,
+                                                                 command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 1, instVertexBuffer, 0, command.instVbData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty() ||
-                command.instanceCount == 0 || command.instVbData.empty())
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU Instanced3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor instVbDescriptor{};
-            instVbDescriptor.label = StringView("CNA WebGPU Instanced3D InstanceBuffer");
-            instVbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            instVbDescriptor.size = Align4(command.instVbData.size());
-            WGPUBuffer instVertexBuffer = wgpuDeviceCreateBuffer(device_, &instVbDescriptor);
-            wgpuQueueWriteBuffer(queue_, instVertexBuffer, 0, command.instVbData.data(), command.instVbData.size());
-
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU Instanced3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            WGPUBindGroupEntry bindEntry{};
-            bindEntry.binding = 0;
-            bindEntry.buffer = uniformBuffer;
-            bindEntry.size = sizeof(command.uniforms);
-            WGPUBindGroupDescriptor bindDescriptor{};
-            bindDescriptor.label = StringView("CNA WebGPU Instanced3D BindGroup");
-            bindDescriptor.layout = coloredBindGroupLayout_;
-            bindDescriptor.entryCount = 1;
-            bindDescriptor.entries = &bindEntry;
-            WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
-
-            WGPURenderPipeline pipe = GetOrCreatePipelineInstanced3D(command.pvStride, command.instVbStride,
-                                                                     command.topology,
-                                                                     RequiredStripIndexFormat(command),
-                                                                     command.depthTest,
-                                                                     command.depthWrite, command.depthFunc,
-                                                                     command.blend, command.blendParams,
-                                                                     command.cullMode, command.wireframe,
-                                                                     command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 1, instVertexBuffer, 0, command.instVbData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU Instanced3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, command.instanceCount,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(bindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(instVertexBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU Instanced3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, command.instanceCount,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        instancedDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, command.instanceCount, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(bindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(instVertexBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 
     WGPUSampler WebGPUGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
@@ -5279,13 +5281,14 @@ struct VSOut {
             std::copy(std::begin(rgba), std::end(rgba), vertex.color);
         }
         spriteCommands_.push_back(command);
+        // REMED-GFX-159: the public position of this sprite, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::Sprite, spriteCommands_.size() - 1);
         framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::RenderSprites(WGPURenderPassEncoder pass,
-                                              WGPUTextureFormat targetFormat,
-                                              std::uint32_t targetSampleCount)
+    void WebGPUGraphicsBackend::UploadSpriteVertices()
     {
+        spriteVertexBytes_ = 0;
         if (spriteCommands_.empty())
             return;
         const std::uint64_t required = Align4(spriteCommands_.size() * 6u * sizeof(SpriteVertex));
@@ -5301,64 +5304,225 @@ struct VSOut {
             spriteVertexCapacityBytes_ = descriptor.size;
         }
 
+        // REMED-GFX-159: every sprite of the cycle still goes into ONE buffer in ONE write, exactly
+        // as before -- interleaving changes when each sprite is DRAWN, not how its vertices are
+        // staged, so a sprite's vertices stay at offset i*6 and there is still no per-sprite
+        // allocation. This is a queue-timeline write, so it is ordered against the submit below
+        // rather than against the draws being recorded, and may still happen up front.
         std::vector<SpriteVertex> vertices;
         vertices.reserve(spriteCommands_.size() * 6u);
         for (const SpriteCommand& command : spriteCommands_)
             vertices.insert(vertices.end(), command.vertices.begin(), command.vertices.end());
-        wgpuQueueWriteBuffer(queue_, spriteVertexBuffer_, 0, vertices.data(), vertices.size() * sizeof(SpriteVertex));
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, spriteVertexBuffer_, 0, vertices.size() * sizeof(SpriteVertex));
+        spriteVertexBytes_ = vertices.size() * sizeof(SpriteVertex);
+        wgpuQueueWriteBuffer(queue_, spriteVertexBuffer_, 0, vertices.data(), spriteVertexBytes_);
+    }
 
-        WGPURenderPipeline boundPipeline = nullptr;
-        for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
+    void WebGPUGraphicsBackend::IssueSprite(WGPURenderPassEncoder pass,
+                                            const SpriteCommand& command,
+                                            std::uint32_t spriteIndex,
+                                            WGPUTextureFormat targetFormat,
+                                            std::uint32_t targetSampleCount,
+                                            ReplayState& state)
+    {
+        if (command.blend.targetFormat != targetFormat ||
+            command.blend.sampleCount != targetSampleCount)
         {
-            const SpriteCommand& command = spriteCommands_[i];
-            if (command.blend.targetFormat != targetFormat ||
-                command.blend.sampleCount != targetSampleCount)
-            {
-                throw std::runtime_error(
-                    "CNA WebGPU: queued SpriteBatch target compatibility changed before replay");
-            }
-
-            // REMED-GFX-102: cache lookup happens per static-state transition; native pipeline
-            // creation happens only on a cache miss for a previously unseen complete key. It is
-            // never unconditional/per-sprite creation, and the dynamic BlendFactor RGBA value is
-            // intentionally absent from GetOrCreateSpritePipeline's key.
-            const WGPURenderPipeline pipeline = GetOrCreateSpritePipeline(command.blend);
-            if (pipeline != boundPipeline)
-            {
-                wgpuRenderPassEncoderSetPipeline(pass, pipeline);
-                boundPipeline = pipeline;
-            }
-            const WGPUColor blendConstant{
-                command.blend.blendFactorR, command.blend.blendFactorG,
-                command.blend.blendFactorB, command.blend.blendFactorA
-            };
-            wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
-
-            // REMED-GFX-072/116: this sprite's OWN captured Viewport. A sub-region sprite was
-            // baked viewport-local at enqueue and lands at Viewport.X/Y from here; a target-
-            // relative sprite's snapshot IS the whole target by construction, so it resets the
-            // rasterizer after a preceding sub-region draw and can no longer inherit a viewport
-            // that was set after it was queued. RenderSprites runs last in the pass, but the 3D
-            // families now drive the same per-draw state, so neither can disturb the other.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            std::array<WGPUBindGroupEntry, 2> entries{};
-            entries[0].binding = 0;
-            entries[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-            entries[1].binding = 1;
-            entries[1].textureView = command.texture->View();
-            WGPUBindGroupDescriptor descriptor{};
-            descriptor.label = StringView("CNA WebGPU SpriteBatch BindGroup");
-            descriptor.layout = spriteBindGroupLayout_;
-            descriptor.entryCount = entries.size();
-            descriptor.entries = entries.data();
-            WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &descriptor);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
-            wgpuRenderPassEncoderDraw(pass, 6, 1, static_cast<std::uint32_t>(i * 6u), 0);
-            wgpuBindGroupRelease(bindGroup);
+            throw std::runtime_error(
+                "CNA WebGPU: queued SpriteBatch target compatibility changed before replay");
         }
+
+        // REMED-GFX-159: vertex slot 0 is shared with every 3D family, each of which binds its own
+        // buffer there, so the sprite buffer is rebound whenever a 3D draw has intervened -- once
+        // per sprite RUN, not once per sprite.
+        if (!state.spriteVerticesBound)
+        {
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, spriteVertexBuffer_, 0, spriteVertexBytes_);
+            state.spriteVerticesBound = true;
+        }
+
+        // REMED-GFX-102: cache lookup happens per static-state transition; native pipeline
+        // creation happens only on a cache miss for a previously unseen complete key. It is
+        // never unconditional/per-sprite creation, and the dynamic BlendFactor RGBA value is
+        // intentionally absent from GetOrCreateSpritePipeline's key.
+        // REMED-GFX-159: the redundant-bind skip is tracked across ALL families now, so it cannot
+        // skip a rebind after a 3D draw bound a pipeline of its own.
+        const WGPURenderPipeline pipeline = GetOrCreateSpritePipeline(command.blend);
+        if (pipeline != state.boundPipeline)
+        {
+            wgpuRenderPassEncoderSetPipeline(pass, pipeline);
+            state.boundPipeline = pipeline;
+        }
+        const WGPUColor blendConstant{
+            command.blend.blendFactorR, command.blend.blendFactorG,
+            command.blend.blendFactorB, command.blend.blendFactorA
+        };
+        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+        state.blendConstantIsPassDefault = false;
+
+        // REMED-GFX-072/116: this sprite's OWN captured Viewport. A sub-region sprite was
+        // baked viewport-local at enqueue and lands at Viewport.X/Y from here; a target-
+        // relative sprite's snapshot IS the whole target by construction, so it resets the
+        // rasterizer after a preceding sub-region draw and can no longer inherit a viewport
+        // that was set after it was queued. Sprites no longer run last in the pass, but every
+        // family drives the same per-draw state, so neither can disturb the other.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        std::array<WGPUBindGroupEntry, 2> entries{};
+        entries[0].binding = 0;
+        entries[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        entries[1].binding = 1;
+        entries[1].textureView = command.texture->View();
+        WGPUBindGroupDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU SpriteBatch BindGroup");
+        descriptor.layout = spriteBindGroupLayout_;
+        descriptor.entryCount = entries.size();
+        descriptor.entries = entries.data();
+        WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &descriptor);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
+        wgpuBindGroupRelease(bindGroup);
+    }
+
+    void WebGPUGraphicsBackend::Begin3DDrawState(WGPURenderPassEncoder pass, ReplayState& state)
+    {
+        // REMED-GFX-159: a sprite sets the blend constant from its own captured BlendState
+        // (REMED-GFX-102). Before interleaving, every 3D draw was guaranteed the pass-level value
+        // because sprites could only ever run after them; now one can precede a 3D draw, so the
+        // pass-level value is restored rather than inherited. What a 3D draw sees is therefore
+        // byte-identical to what it saw before this change.
+        if (!state.blendConstantIsPassDefault)
+        {
+            const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
+            wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+            state.blendConstantIsPassDefault = true;
+        }
+        // Every 3D issue function binds its own pipeline and its own vertex buffer into slot 0
+        // unconditionally, so a following sprite must assume neither is still its own.
+        state.boundPipeline = nullptr;
+        state.spriteVerticesBound = false;
+    }
+
+    /**
+     * @brief REMED-GFX-159: name of a deferred draw family, for the order trace below.
+     *
+     * A family is exactly one shader/pipeline family here, so this doubles as the program identity
+     * the trace reports, and (family, slot) names one queued command -- and therefore its geometry
+     * -- uniquely for as long as the bind cycle it belongs to is being recorded.
+     */
+    const char* WebGPUGraphicsBackend::DrawFamilyName(DrawFamily family) noexcept
+    {
+        switch (family)
+        {
+        case DrawFamily::Sprite:      return "sprite";
+        case DrawFamily::Colored:     return "colored3d";
+        case DrawFamily::Textured:    return "textured3d";
+        case DrawFamily::LitTextured: return "litTextured3d";
+        case DrawFamily::AlphaTest:   return "alphaTest3d";
+        case DrawFamily::DualTexture: return "dualTexture3d";
+        case DrawFamily::EnvMap:      return "envMap3d";
+        case DrawFamily::Instanced:   return "instanced3d";
+        case DrawFamily::Pbr:         return "pbr3d";
+        case DrawFamily::Skinned:     return "skinned3d";
+        case DrawFamily::SkinnedPbr:  return "skinnedPbr3d";
+        }
+        return "unknown";
+    }
+
+    /**
+     * @brief REMED-GFX-159: whether the draw-order trace is switched on for this process.
+     *
+     * Off unless `CNA_WEBGPU_TRACE_DRAW_ORDER` is set in the environment, read exactly once. This
+     * exists so an ordering claim can be checked against what the backend actually recorded rather
+     * than inferred from pixels alone -- a family-grouped replay and a correct one can produce the
+     * same image for one of the two orderings, which is how the defect it measures survived.
+     */
+    static bool TraceDrawOrder() noexcept
+    {
+        static const bool enabled = std::getenv("CNA_WEBGPU_TRACE_DRAW_ORDER") != nullptr;
+        return enabled;
+    }
+
+    void WebGPUGraphicsBackend::RecordDrawOrder(DrawFamily family, std::size_t index)
+    {
+        if (TraceDrawOrder())
+        {
+            std::fprintf(stderr, "[wgpu-order] enqueue #%zu family=%s slot=%zu\n",
+                         drawOrder_.size(), DrawFamilyName(family), index);
+        }
+        drawOrder_.push_back(DrawOrderEntry{family, static_cast<std::uint32_t>(index),
+                                            static_cast<std::uint32_t>(drawOrder_.size())});
+    }
+
+    void WebGPUGraphicsBackend::DiscardQueuedSprites()
+    {
+        spriteCommands_.clear();
+        // The 3D families are deliberately NOT cleared here (they never were), so their entries
+        // keep addressing live commands and only the sprite references are dropped.
+        drawOrder_.erase(std::remove_if(drawOrder_.begin(), drawOrder_.end(),
+                                        [](const DrawOrderEntry& e)
+                                        { return e.family == DrawFamily::Sprite; }),
+                         drawOrder_.end());
+    }
+
+    void WebGPUGraphicsBackend::ReplayDrawsInOrder(WGPURenderPassEncoder pass,
+                                                    WGPUTextureFormat targetFormat,
+                                                    std::uint32_t targetSampleCount,
+                                                    const char* destination)
+    {
+        UploadSpriteVertices();
+
+        const bool trace = TraceDrawOrder();
+        if (trace)
+        {
+            std::fprintf(stderr,
+                         "[wgpu-order] pass #%zu destination=%s queued=%zu\n",
+                         renderPassCount_, destination, drawOrder_.size());
+        }
+
+        ReplayState state{};
+        std::size_t issued = 0;
+        for (const DrawOrderEntry& entry : drawOrder_)
+        {
+            const std::size_t i = entry.index;
+            if (trace)
+            {
+                std::fprintf(stderr,
+                             "[wgpu-order]   issue #%zu <- enqueue #%u family=%s slot=%u\n",
+                             issued, entry.order, DrawFamilyName(entry.family), entry.index);
+            }
+            ++issued;
+            switch (entry.family)
+            {
+            case DrawFamily::Sprite:
+                IssueSprite(pass, spriteCommands_[i], entry.index, targetFormat,
+                            targetSampleCount, state);
+                break;
+            case DrawFamily::Colored:     IssueColoredDraw(pass, coloredDrawCommands_[i], state); break;
+            case DrawFamily::Textured:    IssueTexturedDraw(pass, texturedDrawCommands_[i], state); break;
+            case DrawFamily::LitTextured: IssueLitTexturedDraw(pass, litTexturedDrawCommands_[i], state); break;
+            case DrawFamily::AlphaTest:   IssueAlphaTestDraw(pass, alphaTestDrawCommands_[i], state); break;
+            case DrawFamily::DualTexture: IssueDualTextureDraw(pass, dualTextureDrawCommands_[i], state); break;
+            case DrawFamily::EnvMap:      IssueEnvMapDraw(pass, envMapDrawCommands_[i], state); break;
+            case DrawFamily::Instanced:   IssueInstancedDraw(pass, instancedDrawCommands_[i], state); break;
+            case DrawFamily::Pbr:         IssuePbrDraw(pass, pbrDrawCommands_[i], state); break;
+            case DrawFamily::Skinned:     IssueSkinnedDraw(pass, skinnedDrawCommands_[i], state); break;
+            case DrawFamily::SkinnedPbr:  IssueSkinnedPbrDraw(pass, skinnedPbrDrawCommands_[i], state); break;
+            }
+        }
+
+        drawOrder_.clear();
+        spriteCommands_.clear();
+        coloredDrawCommands_.clear();
+        texturedDrawCommands_.clear();
+        litTexturedDrawCommands_.clear();
+        alphaTestDrawCommands_.clear();
+        dualTextureDrawCommands_.clear();
+        envMapDrawCommands_.clear();
+        instancedDrawCommands_.clear();
+        pbrDrawCommands_.clear();
+        skinnedDrawCommands_.clear();
+        skinnedPbrDrawCommands_.clear();
     }
 
     void WebGPUGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
@@ -5680,7 +5844,9 @@ struct VSOut {
             ConfigureSurface(false);
             if (!surfaceConfigured_)
             {
-                spriteCommands_.clear();
+                // REMED-GFX-159: and their ordered-stream entries with them, so the surviving
+                // 3D entries cannot address a sprite slot that no longer exists.
+                DiscardQueuedSprites();
                 return false;
             }
 
@@ -5697,7 +5863,9 @@ struct VSOut {
                     throw std::runtime_error(
                         "CNA WebGPU: unrecoverable surface acquisition failure (status " +
                         std::to_string(static_cast<int>(surfaceTexture.status)) + ")");
-                spriteCommands_.clear();
+                // REMED-GFX-159: and their ordered-stream entries with them, so the surviving
+                // 3D entries cannot address a sprite slot that no longer exists.
+                DiscardQueuedSprites();
                 return false;
             }
 
@@ -5781,20 +5949,13 @@ struct VSOut {
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
 
-        // 3D draws first, 2D SpriteBatch/UI on top -- matches typical XNA game draw order
-        // (World.Draw() then a HUD SpriteBatch pass), both collapsed into this one deferred pass.
-        RenderColoredDraws(pass);
-        RenderTexturedDraws(pass);
-        RenderLitTexturedDraws(pass);
-        RenderAlphaTestDraws(pass);
-        RenderDualTextureDraws(pass);
-        RenderEnvMapDraws(pass);
-        RenderInstancedDraws(pass);
-        RenderPbrDraws(pass);
-        RenderSkinnedDraws(pass);
-        RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, surfaceFormat_,
-                      static_cast<std::uint32_t>(std::max(1, sampleCount_)));
+        // REMED-GFX-159: ONE ordered replay across all eleven deferred families. This used
+        // to be a fixed list of per-family loops ending in the sprites, justified as "3D first,
+        // 2D SpriteBatch/UI on top -- matches typical XNA game draw order". A typical order is
+        // not a contract: it made the source order of those calls, rather than the game's, decide
+        // what executed first, so a game drawing its HUD before its world got the two swapped.
+        ReplayDrawsInOrder(pass, surfaceFormat_,
+                           static_cast<std::uint32_t>(std::max(1, sampleCount_)), "backbuffer");
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
@@ -5817,7 +5978,6 @@ struct VSOut {
         pendingBindGroupReleases_.clear();
         pendingBufferReleases_.clear();
 
-        spriteCommands_.clear();
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
@@ -5891,18 +6051,12 @@ struct VSOut {
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
 
-        RenderColoredDraws(pass);
-        RenderTexturedDraws(pass);
-        RenderLitTexturedDraws(pass);
-        RenderAlphaTestDraws(pass);
-        RenderDualTextureDraws(pass);
-        RenderEnvMapDraws(pass);
-        RenderInstancedDraws(pass);
-        RenderPbrDraws(pass);
-        RenderSkinnedDraws(pass);
-        RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, target->ColorFormat(),
-                      static_cast<std::uint32_t>(std::max(1, target->GetMultiSampleCount())));
+        // REMED-GFX-159: ONE ordered replay across all eleven deferred families. This used
+        // to be a fixed list of per-family loops ending in the sprites, which meant the
+        // source order of these calls -- not the game's -- decided what executed first.
+        ReplayDrawsInOrder(pass, target->ColorFormat(),
+                           static_cast<std::uint32_t>(std::max(1, target->GetMultiSampleCount())),
+                           "rendertarget2d");
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
@@ -5921,10 +6075,9 @@ struct VSOut {
         pendingBindGroupReleases_.clear();
         pendingBufferReleases_.clear();
 
-        // RenderSprites() does not clear spriteCommands_ itself (matching EnsureFrameRendered()'s
-        // own identical tail); every other Render*Draws() call above already clears its own
-        // *DrawCommands_ vector at its own tail.
-        spriteCommands_.clear();
+        // REMED-GFX-159: ReplayDrawsInOrder() clears the ordered stream and all eleven family
+        // vectors together at its own tail -- the vectors have to outlive the whole walk now, so
+        // no family may drop its own commands part-way through it.
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
@@ -6007,17 +6160,10 @@ struct VSOut {
         wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
         wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
 
-        RenderColoredDraws(pass);
-        RenderTexturedDraws(pass);
-        RenderLitTexturedDraws(pass);
-        RenderAlphaTestDraws(pass);
-        RenderDualTextureDraws(pass);
-        RenderEnvMapDraws(pass);
-        RenderInstancedDraws(pass);
-        RenderPbrDraws(pass);
-        RenderSkinnedDraws(pass);
-        RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, target->ColorFormat(), 1);
+        // REMED-GFX-159: ONE ordered replay across all eleven deferred families. This used
+        // to be a fixed list of per-family loops ending in the sprites, which meant the
+        // source order of these calls -- not the game's -- decided what executed first.
+        ReplayDrawsInOrder(pass, target->ColorFormat(), 1, "rendertargetcube-face");
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
@@ -6034,7 +6180,6 @@ struct VSOut {
         pendingBindGroupReleases_.clear();
         pendingBufferReleases_.clear();
 
-        spriteCommands_.clear();
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
@@ -6623,6 +6768,8 @@ struct VSOut {
         }
 
         coloredDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::Colored, coloredDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -6872,133 +7019,238 @@ struct VSOut {
         FillExtUniforms(command.uniforms, vp, params);
 
         instancedDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::Instanced, instancedDrawCommands_.size() - 1);
     }
 
-    void WebGPUGraphicsBackend::RenderColoredDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssueColoredDraw(WGPURenderPassEncoder pass,
+                                                 const ColoredDrawCommand& command,
+                                                 ReplayState& state)
     {
-        for (const ColoredDrawCommand& command : coloredDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty())
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU Colored3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU Colored3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        WGPUBindGroupEntry bindEntry{};
+        bindEntry.binding = 0;
+        bindEntry.buffer = uniformBuffer;
+        bindEntry.size = sizeof(command.uniforms);
+        WGPUBindGroupDescriptor bindDescriptor{};
+        bindDescriptor.label = StringView("CNA WebGPU Colored3D BindGroup");
+        bindDescriptor.layout = coloredBindGroupLayout_;
+        bindDescriptor.entryCount = 1;
+        bindDescriptor.entries = &bindEntry;
+        WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
+
+        WGPURenderPipeline pipe = GetOrCreatePipelineColored3D(
+                                                               command.topology,
+                                                               RequiredStripIndexFormat(command),
+                                                               command.depthTest,
+                                                               command.depthWrite, command.depthFunc,
+                                                               command.blend, command.blendParams,
+                                                               command.cullMode, command.wireframe,
+                                                               command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty())
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU Colored3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU Colored3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            WGPUBindGroupEntry bindEntry{};
-            bindEntry.binding = 0;
-            bindEntry.buffer = uniformBuffer;
-            bindEntry.size = sizeof(command.uniforms);
-            WGPUBindGroupDescriptor bindDescriptor{};
-            bindDescriptor.label = StringView("CNA WebGPU Colored3D BindGroup");
-            bindDescriptor.layout = coloredBindGroupLayout_;
-            bindDescriptor.entryCount = 1;
-            bindDescriptor.entries = &bindEntry;
-            WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
-
-            WGPURenderPipeline pipe = GetOrCreatePipelineColored3D(
-                                                                   command.topology,
-                                                                   RequiredStripIndexFormat(command),
-                                                                   command.depthTest,
-                                                                   command.depthWrite, command.depthFunc,
-                                                                   command.blend, command.blendParams,
-                                                                   command.cullMode, command.wireframe,
-                                                                   command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU Colored3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(bindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU Colored3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        coloredDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(bindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 
-    void WebGPUGraphicsBackend::RenderTexturedDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssueTexturedDraw(WGPURenderPassEncoder pass,
+                                                  const TexturedDrawCommand& command,
+                                                  ReplayState& state)
     {
-        for (const TexturedDrawCommand& command : texturedDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU Textured3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU Textured3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        WGPUBindGroupEntry uboEntry{};
+        uboEntry.binding = 0;
+        uboEntry.buffer = uniformBuffer;
+        uboEntry.size = sizeof(command.uniforms);
+        WGPUBindGroupDescriptor uboBindDescriptor{};
+        uboBindDescriptor.label = StringView("CNA WebGPU Textured3D UBO BindGroup");
+        uboBindDescriptor.layout = coloredBindGroupLayout_;
+        uboBindDescriptor.entryCount = 1;
+        uboBindDescriptor.entries = &uboEntry;
+        WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        std::array<WGPUBindGroupEntry, 2> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].sampler = sampler;
+        texEntries[1].binding = 1;
+        texEntries[1].textureView = command.texture->View();
+        WGPUBindGroupDescriptor texBindDescriptor{};
+        texBindDescriptor.label = StringView("CNA WebGPU Textured3D Texture BindGroup");
+        texBindDescriptor.layout = texturedBindGroupLayout_;
+        texBindDescriptor.entryCount = texEntries.size();
+        texBindDescriptor.entries = texEntries.data();
+        WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        WGPURenderPipeline pipe = command.hasVertexColor
+            ? GetOrCreatePipelineColoredTextured3D(
+                                                   command.topology,
+                                                   RequiredStripIndexFormat(command),
+                                                   command.depthTest,
+                                                   command.depthWrite, command.depthFunc,
+                                                   command.blend, command.blendParams,
+                                                   command.cullMode, command.wireframe,
+                                                   command.depthBias, command.slopeScaleDepthBias)
+            : GetOrCreatePipelineTextured3D(
+                                            command.topology,
+                                            RequiredStripIndexFormat(command),
+                                            command.depthTest,
+                                            command.depthWrite, command.depthFunc,
+                                            command.blend, command.blendParams,
+                                            command.cullMode, command.wireframe,
+                                            command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
-                continue;
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU Textured3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
+        }
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
 
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU Textured3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+        pendingBindGroupReleases_.push_back(uboBindGroup);
+        pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
+    }
 
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU Textured3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+    void WebGPUGraphicsBackend::IssueLitTexturedDraw(WGPURenderPassEncoder pass,
+                                                     const LitTexturedDrawCommand& command,
+                                                     ReplayState& state)
+    {
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+            return;
 
-            WGPUBindGroupEntry uboEntry{};
-            uboEntry.binding = 0;
-            uboEntry.buffer = uniformBuffer;
-            uboEntry.size = sizeof(command.uniforms);
-            WGPUBindGroupDescriptor uboBindDescriptor{};
-            uboBindDescriptor.label = StringView("CNA WebGPU Textured3D UBO BindGroup");
-            uboBindDescriptor.layout = coloredBindGroupLayout_;
-            uboBindDescriptor.entryCount = 1;
-            uboBindDescriptor.entries = &uboEntry;
-            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU LitTextured3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
 
-            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
-            std::array<WGPUBindGroupEntry, 2> texEntries{};
-            texEntries[0].binding = 0;
-            texEntries[0].sampler = sampler;
-            texEntries[1].binding = 1;
-            texEntries[1].textureView = command.texture->View();
-            WGPUBindGroupDescriptor texBindDescriptor{};
-            texBindDescriptor.label = StringView("CNA WebGPU Textured3D Texture BindGroup");
-            texBindDescriptor.layout = texturedBindGroupLayout_;
-            texBindDescriptor.entryCount = texEntries.size();
-            texBindDescriptor.entries = texEntries.data();
-            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
 
-            WGPURenderPipeline pipe = command.hasVertexColor
-                ? GetOrCreatePipelineColoredTextured3D(
-                                                       command.topology,
-                                                       RequiredStripIndexFormat(command),
-                                                       command.depthTest,
-                                                       command.depthWrite, command.depthFunc,
-                                                       command.blend, command.blendParams,
-                                                       command.cullMode, command.wireframe,
-                                                       command.depthBias, command.slopeScaleDepthBias)
-                : GetOrCreatePipelineTextured3D(
+        WGPUBufferDescriptor lightUboDescriptor{};
+        lightUboDescriptor.label = StringView("CNA WebGPU LitTextured3D LightUBO");
+        lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        lightUboDescriptor.size = sizeof(command.lightUniforms);
+        WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+        wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+        std::array<WGPUBindGroupEntry, 2> uboEntries{};
+        uboEntries[0].binding = 0;
+        uboEntries[0].buffer = uniformBuffer;
+        uboEntries[0].size = sizeof(command.uniforms);
+        uboEntries[1].binding = 1;
+        uboEntries[1].buffer = lightUniformBuffer;
+        uboEntries[1].size = sizeof(command.lightUniforms);
+        WGPUBindGroupDescriptor uboBindDescriptor{};
+        uboBindDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO BindGroup");
+        uboBindDescriptor.layout = litBindGroupLayout_;
+        uboBindDescriptor.entryCount = uboEntries.size();
+        uboBindDescriptor.entries = uboEntries.data();
+        WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        std::array<WGPUBindGroupEntry, 2> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].sampler = sampler;
+        texEntries[1].binding = 1;
+        texEntries[1].textureView = command.texture->View();
+        WGPUBindGroupDescriptor texBindDescriptor{};
+        texBindDescriptor.label = StringView("CNA WebGPU LitTextured3D Texture BindGroup");
+        texBindDescriptor.layout = texturedBindGroupLayout_;
+        texBindDescriptor.entryCount = texEntries.size();
+        texBindDescriptor.entries = texEntries.data();
+        WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        WGPURenderPipeline pipe = command.preferVertexLit
+            ? GetOrCreatePipelineLitTextured3DVertexLit(
+                                                         command.topology,
+                                                         RequiredStripIndexFormat(command),
+                                                         command.depthTest,
+                                                         command.depthWrite, command.depthFunc,
+                                                         command.blend, command.blendParams,
+                                                         command.cullMode, command.wireframe,
+                                                         command.depthBias, command.slopeScaleDepthBias)
+            : GetOrCreatePipelineLitTextured3D(
                                                 command.topology,
                                                 RequiredStripIndexFormat(command),
                                                 command.depthTest,
@@ -7006,141 +7258,35 @@ struct VSOut {
                                                 command.blend, command.blendParams,
                                                 command.cullMode, command.wireframe,
                                                 command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
 
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU Textured3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(uboBindGroup);
-            pendingBindGroupReleases_.push_back(texBindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
-        }
-        texturedDrawCommands_.clear();
-    }
-
-    void WebGPUGraphicsBackend::RenderLitTexturedDraws(WGPURenderPassEncoder pass)
-    {
-        for (const LitTexturedDrawCommand& command : litTexturedDrawCommands_)
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU LitTextured3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            WGPUBufferDescriptor lightUboDescriptor{};
-            lightUboDescriptor.label = StringView("CNA WebGPU LitTextured3D LightUBO");
-            lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            lightUboDescriptor.size = sizeof(command.lightUniforms);
-            WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
-            wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
-
-            std::array<WGPUBindGroupEntry, 2> uboEntries{};
-            uboEntries[0].binding = 0;
-            uboEntries[0].buffer = uniformBuffer;
-            uboEntries[0].size = sizeof(command.uniforms);
-            uboEntries[1].binding = 1;
-            uboEntries[1].buffer = lightUniformBuffer;
-            uboEntries[1].size = sizeof(command.lightUniforms);
-            WGPUBindGroupDescriptor uboBindDescriptor{};
-            uboBindDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO BindGroup");
-            uboBindDescriptor.layout = litBindGroupLayout_;
-            uboBindDescriptor.entryCount = uboEntries.size();
-            uboBindDescriptor.entries = uboEntries.data();
-            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
-
-            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
-            std::array<WGPUBindGroupEntry, 2> texEntries{};
-            texEntries[0].binding = 0;
-            texEntries[0].sampler = sampler;
-            texEntries[1].binding = 1;
-            texEntries[1].textureView = command.texture->View();
-            WGPUBindGroupDescriptor texBindDescriptor{};
-            texBindDescriptor.label = StringView("CNA WebGPU LitTextured3D Texture BindGroup");
-            texBindDescriptor.layout = texturedBindGroupLayout_;
-            texBindDescriptor.entryCount = texEntries.size();
-            texBindDescriptor.entries = texEntries.data();
-            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
-
-            WGPURenderPipeline pipe = command.preferVertexLit
-                ? GetOrCreatePipelineLitTextured3DVertexLit(
-                                                             command.topology,
-                                                             RequiredStripIndexFormat(command),
-                                                             command.depthTest,
-                                                             command.depthWrite, command.depthFunc,
-                                                             command.blend, command.blendParams,
-                                                             command.cullMode, command.wireframe,
-                                                             command.depthBias, command.slopeScaleDepthBias)
-                : GetOrCreatePipelineLitTextured3D(
-                                                    command.topology,
-                                                    RequiredStripIndexFormat(command),
-                                                    command.depthTest,
-                                                    command.depthWrite, command.depthFunc,
-                                                    command.blend, command.blendParams,
-                                                    command.cullMode, command.wireframe,
-                                                    command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU LitTextured3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(uboBindGroup);
-            pendingBindGroupReleases_.push_back(texBindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(lightUniformBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU LitTextured3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        litTexturedDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(uboBindGroup);
+        pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(lightUniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 
     void WebGPUGraphicsBackend::QueueLitTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
@@ -7213,93 +7359,94 @@ struct VSOut {
         }
 
         litTexturedDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::LitTextured, litTexturedDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::RenderAlphaTestDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssueAlphaTestDraw(WGPURenderPassEncoder pass,
+                                                   const AlphaTestDrawCommand& command,
+                                                   ReplayState& state)
     {
-        for (const AlphaTestDrawCommand& command : alphaTestDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU AlphaTest3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        WGPUBindGroupEntry uboEntry{};
+        uboEntry.binding = 0;
+        uboEntry.buffer = uniformBuffer;
+        uboEntry.size = sizeof(command.uniforms);
+        WGPUBindGroupDescriptor uboBindDescriptor{};
+        uboBindDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO BindGroup");
+        uboBindDescriptor.layout = coloredBindGroupLayout_;
+        uboBindDescriptor.entryCount = 1;
+        uboBindDescriptor.entries = &uboEntry;
+        WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        std::array<WGPUBindGroupEntry, 2> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].sampler = sampler;
+        texEntries[1].binding = 1;
+        texEntries[1].textureView = command.texture->View();
+        WGPUBindGroupDescriptor texBindDescriptor{};
+        texBindDescriptor.label = StringView("CNA WebGPU AlphaTest3D Texture BindGroup");
+        texBindDescriptor.layout = texturedBindGroupLayout_;
+        texBindDescriptor.entryCount = texEntries.size();
+        texBindDescriptor.entries = texEntries.data();
+        WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        WGPURenderPipeline pipe = GetOrCreatePipelineAlphaTest3D(
+                                                                 command.stride,
+                                                                 command.topology,
+                                                                 RequiredStripIndexFormat(command),
+                                                                 command.depthTest, command.depthWrite,
+                                                                 command.depthFunc,
+                                                                 command.blend, command.blendParams,
+                                                                 command.cullMode, command.wireframe,
+                                                                 command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU AlphaTest3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            WGPUBindGroupEntry uboEntry{};
-            uboEntry.binding = 0;
-            uboEntry.buffer = uniformBuffer;
-            uboEntry.size = sizeof(command.uniforms);
-            WGPUBindGroupDescriptor uboBindDescriptor{};
-            uboBindDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO BindGroup");
-            uboBindDescriptor.layout = coloredBindGroupLayout_;
-            uboBindDescriptor.entryCount = 1;
-            uboBindDescriptor.entries = &uboEntry;
-            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
-
-            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
-            std::array<WGPUBindGroupEntry, 2> texEntries{};
-            texEntries[0].binding = 0;
-            texEntries[0].sampler = sampler;
-            texEntries[1].binding = 1;
-            texEntries[1].textureView = command.texture->View();
-            WGPUBindGroupDescriptor texBindDescriptor{};
-            texBindDescriptor.label = StringView("CNA WebGPU AlphaTest3D Texture BindGroup");
-            texBindDescriptor.layout = texturedBindGroupLayout_;
-            texBindDescriptor.entryCount = texEntries.size();
-            texBindDescriptor.entries = texEntries.data();
-            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
-
-            WGPURenderPipeline pipe = GetOrCreatePipelineAlphaTest3D(
-                                                                     command.stride,
-                                                                     command.topology,
-                                                                     RequiredStripIndexFormat(command),
-                                                                     command.depthTest, command.depthWrite,
-                                                                     command.depthFunc,
-                                                                     command.blend, command.blendParams,
-                                                                     command.cullMode, command.wireframe,
-                                                                     command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU AlphaTest3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(uboBindGroup);
-            pendingBindGroupReleases_.push_back(texBindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU AlphaTest3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        alphaTestDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(uboBindGroup);
+        pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 
     void WebGPUGraphicsBackend::QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
@@ -7371,95 +7518,96 @@ struct VSOut {
         }
 
         alphaTestDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::AlphaTest, alphaTestDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::RenderDualTextureDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssueDualTextureDraw(WGPURenderPassEncoder pass,
+                                                     const DualTextureDrawCommand& command,
+                                                     ReplayState& state)
     {
-        for (const DualTextureDrawCommand& command : dualTextureDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty() ||
+            command.texture0 == nullptr || command.texture1 == nullptr)
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU DualTexture3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        WGPUBindGroupEntry uboEntry{};
+        uboEntry.binding = 0;
+        uboEntry.buffer = uniformBuffer;
+        uboEntry.size = sizeof(command.uniforms);
+        WGPUBindGroupDescriptor uboBindDescriptor{};
+        uboBindDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO BindGroup");
+        uboBindDescriptor.layout = coloredBindGroupLayout_;
+        uboBindDescriptor.entryCount = 1;
+        uboBindDescriptor.entries = &uboEntry;
+        WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        std::array<WGPUBindGroupEntry, 3> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].sampler = sampler;
+        texEntries[1].binding = 1;
+        texEntries[1].textureView = command.texture0->View();
+        texEntries[2].binding = 2;
+        texEntries[2].textureView = command.texture1->View();
+        WGPUBindGroupDescriptor texBindDescriptor{};
+        texBindDescriptor.label = StringView("CNA WebGPU DualTexture3D Texture BindGroup");
+        texBindDescriptor.layout = dualTextureBindGroupLayout_;
+        texBindDescriptor.entryCount = texEntries.size();
+        texBindDescriptor.entries = texEntries.data();
+        WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        WGPURenderPipeline pipe = GetOrCreatePipelineDualTexture3D(command.hasVertexColor ? 24 : 20,
+                                                                   command.topology,
+                                                                   RequiredStripIndexFormat(command),
+                                                                   command.depthTest,
+                                                                   command.depthWrite, command.depthFunc,
+                                                                   command.blend, command.blendParams,
+                                                                   command.cullMode, command.wireframe,
+                                                                   command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty() ||
-                command.texture0 == nullptr || command.texture1 == nullptr)
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU DualTexture3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            WGPUBindGroupEntry uboEntry{};
-            uboEntry.binding = 0;
-            uboEntry.buffer = uniformBuffer;
-            uboEntry.size = sizeof(command.uniforms);
-            WGPUBindGroupDescriptor uboBindDescriptor{};
-            uboBindDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO BindGroup");
-            uboBindDescriptor.layout = coloredBindGroupLayout_;
-            uboBindDescriptor.entryCount = 1;
-            uboBindDescriptor.entries = &uboEntry;
-            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
-
-            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
-            std::array<WGPUBindGroupEntry, 3> texEntries{};
-            texEntries[0].binding = 0;
-            texEntries[0].sampler = sampler;
-            texEntries[1].binding = 1;
-            texEntries[1].textureView = command.texture0->View();
-            texEntries[2].binding = 2;
-            texEntries[2].textureView = command.texture1->View();
-            WGPUBindGroupDescriptor texBindDescriptor{};
-            texBindDescriptor.label = StringView("CNA WebGPU DualTexture3D Texture BindGroup");
-            texBindDescriptor.layout = dualTextureBindGroupLayout_;
-            texBindDescriptor.entryCount = texEntries.size();
-            texBindDescriptor.entries = texEntries.data();
-            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
-
-            WGPURenderPipeline pipe = GetOrCreatePipelineDualTexture3D(command.hasVertexColor ? 24 : 20,
-                                                                       command.topology,
-                                                                       RequiredStripIndexFormat(command),
-                                                                       command.depthTest,
-                                                                       command.depthWrite, command.depthFunc,
-                                                                       command.blend, command.blendParams,
-                                                                       command.cullMode, command.wireframe,
-                                                                       command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU DualTexture3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(uboBindGroup);
-            pendingBindGroupReleases_.push_back(texBindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU DualTexture3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        dualTextureDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(uboBindGroup);
+        pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 
     void WebGPUGraphicsBackend::QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
@@ -7532,6 +7680,8 @@ struct VSOut {
         }
 
         dualTextureDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::DualTexture, dualTextureDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -7604,6 +7754,8 @@ struct VSOut {
         }
 
         texturedDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::Textured, texturedDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -8034,124 +8186,125 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         }
 
         pbrDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::Pbr, pbrDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::RenderPbrDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssuePbrDraw(WGPURenderPassEncoder pass,
+                                             const PbrDrawCommand& command,
+                                             ReplayState& state)
     {
-        for (const PbrDrawCommand& command : pbrDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty() || command.baseColorTexture == nullptr ||
+            command.normalMap == nullptr || command.metallicRoughnessMap == nullptr ||
+            command.emissiveMap == nullptr || command.occlusionMap == nullptr)
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU Pbr3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU Pbr3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        WGPUBufferDescriptor lightUboDescriptor{};
+        lightUboDescriptor.label = StringView("CNA WebGPU Pbr3D LightUBO");
+        lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        lightUboDescriptor.size = sizeof(command.lightUniforms);
+        WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+        wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+        WGPUBufferDescriptor factorsUboDescriptor{};
+        factorsUboDescriptor.label = StringView("CNA WebGPU Pbr3D FactorsUBO");
+        factorsUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        factorsUboDescriptor.size = sizeof(command.pbrFactors);
+        WGPUBuffer factorsUniformBuffer = wgpuDeviceCreateBuffer(device_, &factorsUboDescriptor);
+        wgpuQueueWriteBuffer(queue_, factorsUniformBuffer, 0, command.pbrFactors.data(), sizeof(command.pbrFactors));
+
+        std::array<WGPUBindGroupEntry, 3> uboEntries{};
+        uboEntries[0].binding = 0;
+        uboEntries[0].buffer = uniformBuffer;
+        uboEntries[0].size = sizeof(command.uniforms);
+        uboEntries[1].binding = 1;
+        uboEntries[1].buffer = lightUniformBuffer;
+        uboEntries[1].size = sizeof(command.lightUniforms);
+        uboEntries[2].binding = 2;
+        uboEntries[2].buffer = factorsUniformBuffer;
+        uboEntries[2].size = sizeof(command.pbrFactors);
+        WGPUBindGroupDescriptor uboBindDescriptor{};
+        uboBindDescriptor.label = StringView("CNA WebGPU Pbr3D UBO BindGroup");
+        uboBindDescriptor.layout = pbrBindGroupLayout0_;
+        uboBindDescriptor.entryCount = uboEntries.size();
+        uboBindDescriptor.entries = uboEntries.data();
+        WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        std::array<WGPUBindGroupEntry, 6> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].sampler = sampler;
+        texEntries[1].binding = 1;
+        texEntries[1].textureView = command.baseColorTexture->View();
+        texEntries[2].binding = 2;
+        texEntries[2].textureView = command.normalMap->View();
+        texEntries[3].binding = 3;
+        texEntries[3].textureView = command.metallicRoughnessMap->View();
+        texEntries[4].binding = 4;
+        texEntries[4].textureView = command.emissiveMap->View();
+        texEntries[5].binding = 5;
+        texEntries[5].textureView = command.occlusionMap->View();
+        WGPUBindGroupDescriptor texBindDescriptor{};
+        texBindDescriptor.label = StringView("CNA WebGPU Pbr3D Texture BindGroup");
+        texBindDescriptor.layout = pbrBindGroupLayout1_;
+        texBindDescriptor.entryCount = texEntries.size();
+        texBindDescriptor.entries = texEntries.data();
+        WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        WGPURenderPipeline pipe = GetOrCreatePipelinePbr3D(
+                                                           command.topology,
+                                                           RequiredStripIndexFormat(command),
+                                                           command.depthTest,
+                                                           command.depthWrite, command.depthFunc,
+                                                           command.blend, command.blendParams,
+                                                           command.cullMode, command.wireframe,
+                                                           command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty() || command.baseColorTexture == nullptr ||
-                command.normalMap == nullptr || command.metallicRoughnessMap == nullptr ||
-                command.emissiveMap == nullptr || command.occlusionMap == nullptr)
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU Pbr3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU Pbr3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            WGPUBufferDescriptor lightUboDescriptor{};
-            lightUboDescriptor.label = StringView("CNA WebGPU Pbr3D LightUBO");
-            lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            lightUboDescriptor.size = sizeof(command.lightUniforms);
-            WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
-            wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
-
-            WGPUBufferDescriptor factorsUboDescriptor{};
-            factorsUboDescriptor.label = StringView("CNA WebGPU Pbr3D FactorsUBO");
-            factorsUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            factorsUboDescriptor.size = sizeof(command.pbrFactors);
-            WGPUBuffer factorsUniformBuffer = wgpuDeviceCreateBuffer(device_, &factorsUboDescriptor);
-            wgpuQueueWriteBuffer(queue_, factorsUniformBuffer, 0, command.pbrFactors.data(), sizeof(command.pbrFactors));
-
-            std::array<WGPUBindGroupEntry, 3> uboEntries{};
-            uboEntries[0].binding = 0;
-            uboEntries[0].buffer = uniformBuffer;
-            uboEntries[0].size = sizeof(command.uniforms);
-            uboEntries[1].binding = 1;
-            uboEntries[1].buffer = lightUniformBuffer;
-            uboEntries[1].size = sizeof(command.lightUniforms);
-            uboEntries[2].binding = 2;
-            uboEntries[2].buffer = factorsUniformBuffer;
-            uboEntries[2].size = sizeof(command.pbrFactors);
-            WGPUBindGroupDescriptor uboBindDescriptor{};
-            uboBindDescriptor.label = StringView("CNA WebGPU Pbr3D UBO BindGroup");
-            uboBindDescriptor.layout = pbrBindGroupLayout0_;
-            uboBindDescriptor.entryCount = uboEntries.size();
-            uboBindDescriptor.entries = uboEntries.data();
-            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
-
-            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
-            std::array<WGPUBindGroupEntry, 6> texEntries{};
-            texEntries[0].binding = 0;
-            texEntries[0].sampler = sampler;
-            texEntries[1].binding = 1;
-            texEntries[1].textureView = command.baseColorTexture->View();
-            texEntries[2].binding = 2;
-            texEntries[2].textureView = command.normalMap->View();
-            texEntries[3].binding = 3;
-            texEntries[3].textureView = command.metallicRoughnessMap->View();
-            texEntries[4].binding = 4;
-            texEntries[4].textureView = command.emissiveMap->View();
-            texEntries[5].binding = 5;
-            texEntries[5].textureView = command.occlusionMap->View();
-            WGPUBindGroupDescriptor texBindDescriptor{};
-            texBindDescriptor.label = StringView("CNA WebGPU Pbr3D Texture BindGroup");
-            texBindDescriptor.layout = pbrBindGroupLayout1_;
-            texBindDescriptor.entryCount = texEntries.size();
-            texBindDescriptor.entries = texEntries.data();
-            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
-
-            WGPURenderPipeline pipe = GetOrCreatePipelinePbr3D(
-                                                               command.topology,
-                                                               RequiredStripIndexFormat(command),
-                                                               command.depthTest,
-                                                               command.depthWrite, command.depthFunc,
-                                                               command.blend, command.blendParams,
-                                                               command.cullMode, command.wireframe,
-                                                               command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU Pbr3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(uboBindGroup);
-            pendingBindGroupReleases_.push_back(texBindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(lightUniformBuffer);
-            pendingBufferReleases_.push_back(factorsUniformBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU Pbr3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        pbrDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(uboBindGroup);
+        pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(lightUniformBuffer);
+        pendingBufferReleases_.push_back(factorsUniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -8919,114 +9072,115 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         }
 
         skinnedDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::Skinned, skinnedDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::RenderSkinnedDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssueSkinnedDraw(WGPURenderPassEncoder pass,
+                                                 const SkinnedDrawCommand& command,
+                                                 ReplayState& state)
     {
-        for (const SkinnedDrawCommand& command : skinnedDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU Skinned3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU Skinned3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        WGPUBufferDescriptor lightUboDescriptor{};
+        lightUboDescriptor.label = StringView("CNA WebGPU Skinned3D LightUBO");
+        lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        lightUboDescriptor.size = sizeof(command.lightUniforms);
+        WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+        wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+        WGPUBufferDescriptor skinningUboDescriptor{};
+        skinningUboDescriptor.label = StringView("CNA WebGPU Skinned3D SkinningUBO");
+        skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        skinningUboDescriptor.size = sizeof(command.skinningParams);
+        WGPUBuffer skinningUniformBuffer = wgpuDeviceCreateBuffer(device_, &skinningUboDescriptor);
+        wgpuQueueWriteBuffer(queue_, skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
+
+        std::array<WGPUBindGroupEntry, 3> uboEntries{};
+        uboEntries[0].binding = 0;
+        uboEntries[0].buffer = uniformBuffer;
+        uboEntries[0].size = sizeof(command.uniforms);
+        uboEntries[1].binding = 1;
+        uboEntries[1].buffer = lightUniformBuffer;
+        uboEntries[1].size = sizeof(command.lightUniforms);
+        uboEntries[2].binding = 2;
+        uboEntries[2].buffer = skinningUniformBuffer;
+        uboEntries[2].size = sizeof(command.skinningParams);
+        WGPUBindGroupDescriptor uboBindDescriptor{};
+        uboBindDescriptor.label = StringView("CNA WebGPU Skinned3D UBO BindGroup");
+        uboBindDescriptor.layout = skinnedBindGroupLayout_;
+        uboBindDescriptor.entryCount = uboEntries.size();
+        uboBindDescriptor.entries = uboEntries.data();
+        WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        std::array<WGPUBindGroupEntry, 2> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].sampler = sampler;
+        texEntries[1].binding = 1;
+        texEntries[1].textureView = command.texture->View();
+        WGPUBindGroupDescriptor texBindDescriptor{};
+        texBindDescriptor.label = StringView("CNA WebGPU Skinned3D Texture BindGroup");
+        texBindDescriptor.layout = texturedBindGroupLayout_;
+        texBindDescriptor.entryCount = texEntries.size();
+        texBindDescriptor.entries = texEntries.data();
+        WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        WGPURenderPipeline pipe = GetOrCreatePipelineSkinned3D(command.stride, command.preferVertexLit,
+                                                                command.topology,
+                                                                RequiredStripIndexFormat(command),
+                                                                command.depthTest,
+                                                                command.depthWrite, command.depthFunc,
+                                                                command.blend, command.blendParams,
+                                                                command.cullMode, command.wireframe,
+                                                                command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU Skinned3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU Skinned3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            WGPUBufferDescriptor lightUboDescriptor{};
-            lightUboDescriptor.label = StringView("CNA WebGPU Skinned3D LightUBO");
-            lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            lightUboDescriptor.size = sizeof(command.lightUniforms);
-            WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
-            wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
-
-            WGPUBufferDescriptor skinningUboDescriptor{};
-            skinningUboDescriptor.label = StringView("CNA WebGPU Skinned3D SkinningUBO");
-            skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            skinningUboDescriptor.size = sizeof(command.skinningParams);
-            WGPUBuffer skinningUniformBuffer = wgpuDeviceCreateBuffer(device_, &skinningUboDescriptor);
-            wgpuQueueWriteBuffer(queue_, skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
-
-            std::array<WGPUBindGroupEntry, 3> uboEntries{};
-            uboEntries[0].binding = 0;
-            uboEntries[0].buffer = uniformBuffer;
-            uboEntries[0].size = sizeof(command.uniforms);
-            uboEntries[1].binding = 1;
-            uboEntries[1].buffer = lightUniformBuffer;
-            uboEntries[1].size = sizeof(command.lightUniforms);
-            uboEntries[2].binding = 2;
-            uboEntries[2].buffer = skinningUniformBuffer;
-            uboEntries[2].size = sizeof(command.skinningParams);
-            WGPUBindGroupDescriptor uboBindDescriptor{};
-            uboBindDescriptor.label = StringView("CNA WebGPU Skinned3D UBO BindGroup");
-            uboBindDescriptor.layout = skinnedBindGroupLayout_;
-            uboBindDescriptor.entryCount = uboEntries.size();
-            uboBindDescriptor.entries = uboEntries.data();
-            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
-
-            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
-            std::array<WGPUBindGroupEntry, 2> texEntries{};
-            texEntries[0].binding = 0;
-            texEntries[0].sampler = sampler;
-            texEntries[1].binding = 1;
-            texEntries[1].textureView = command.texture->View();
-            WGPUBindGroupDescriptor texBindDescriptor{};
-            texBindDescriptor.label = StringView("CNA WebGPU Skinned3D Texture BindGroup");
-            texBindDescriptor.layout = texturedBindGroupLayout_;
-            texBindDescriptor.entryCount = texEntries.size();
-            texBindDescriptor.entries = texEntries.data();
-            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
-
-            WGPURenderPipeline pipe = GetOrCreatePipelineSkinned3D(command.stride, command.preferVertexLit,
-                                                                    command.topology,
-                                                                    RequiredStripIndexFormat(command),
-                                                                    command.depthTest,
-                                                                    command.depthWrite, command.depthFunc,
-                                                                    command.blend, command.blendParams,
-                                                                    command.cullMode, command.wireframe,
-                                                                    command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU Skinned3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(uboBindGroup);
-            pendingBindGroupReleases_.push_back(texBindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(lightUniformBuffer);
-            pendingBufferReleases_.push_back(skinningUniformBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU Skinned3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        skinnedDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(uboBindGroup);
+        pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(lightUniformBuffer);
+        pendingBufferReleases_.push_back(skinningUniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 
     // ------------------------------------------------------------------------------------------
@@ -9447,135 +9601,136 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         }
 
         skinnedPbrDrawCommands_.push_back(std::move(command));
+        // REMED-GFX-159: the public position of this draw, the only thing replay orders by.
+        RecordDrawOrder(DrawFamily::SkinnedPbr, skinnedPbrDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::RenderSkinnedPbrDraws(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::IssueSkinnedPbrDraw(WGPURenderPassEncoder pass,
+                                                    const SkinnedPbrDrawCommand& command,
+                                                    ReplayState& state)
     {
-        for (const SkinnedPbrDrawCommand& command : skinnedPbrDrawCommands_)
+        Begin3DDrawState(pass, state);
+        if (command.vertexCount == 0 || command.vertexData.empty() || command.baseColorTexture == nullptr ||
+            command.normalMap == nullptr || command.metallicRoughnessMap == nullptr ||
+            command.emissiveMap == nullptr || command.occlusionMap == nullptr)
+            return;
+
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = sizeof(command.uniforms);
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        WGPUBufferDescriptor lightUboDescriptor{};
+        lightUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D LightUBO");
+        lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        lightUboDescriptor.size = sizeof(command.lightUniforms);
+        WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+        wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+        WGPUBufferDescriptor factorsUboDescriptor{};
+        factorsUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D FactorsUBO");
+        factorsUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        factorsUboDescriptor.size = sizeof(command.pbrFactors);
+        WGPUBuffer factorsUniformBuffer = wgpuDeviceCreateBuffer(device_, &factorsUboDescriptor);
+        wgpuQueueWriteBuffer(queue_, factorsUniformBuffer, 0, command.pbrFactors.data(), sizeof(command.pbrFactors));
+
+        WGPUBufferDescriptor skinningUboDescriptor{};
+        skinningUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D SkinningUBO");
+        skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        skinningUboDescriptor.size = sizeof(command.skinningParams);
+        WGPUBuffer skinningUniformBuffer = wgpuDeviceCreateBuffer(device_, &skinningUboDescriptor);
+        wgpuQueueWriteBuffer(queue_, skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
+
+        std::array<WGPUBindGroupEntry, 4> uboEntries{};
+        uboEntries[0].binding = 0;
+        uboEntries[0].buffer = uniformBuffer;
+        uboEntries[0].size = sizeof(command.uniforms);
+        uboEntries[1].binding = 1;
+        uboEntries[1].buffer = lightUniformBuffer;
+        uboEntries[1].size = sizeof(command.lightUniforms);
+        uboEntries[2].binding = 2;
+        uboEntries[2].buffer = factorsUniformBuffer;
+        uboEntries[2].size = sizeof(command.pbrFactors);
+        uboEntries[3].binding = 3;
+        uboEntries[3].buffer = skinningUniformBuffer;
+        uboEntries[3].size = sizeof(command.skinningParams);
+        WGPUBindGroupDescriptor uboBindDescriptor{};
+        uboBindDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D UBO BindGroup");
+        uboBindDescriptor.layout = skinnedPbrBindGroupLayout0_;
+        uboBindDescriptor.entryCount = uboEntries.size();
+        uboBindDescriptor.entries = uboEntries.data();
+        WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        std::array<WGPUBindGroupEntry, 6> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].sampler = sampler;
+        texEntries[1].binding = 1;
+        texEntries[1].textureView = command.baseColorTexture->View();
+        texEntries[2].binding = 2;
+        texEntries[2].textureView = command.normalMap->View();
+        texEntries[3].binding = 3;
+        texEntries[3].textureView = command.metallicRoughnessMap->View();
+        texEntries[4].binding = 4;
+        texEntries[4].textureView = command.emissiveMap->View();
+        texEntries[5].binding = 5;
+        texEntries[5].textureView = command.occlusionMap->View();
+        WGPUBindGroupDescriptor texBindDescriptor{};
+        texBindDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D Texture BindGroup");
+        texBindDescriptor.layout = pbrBindGroupLayout1_;
+        texBindDescriptor.entryCount = texEntries.size();
+        texBindDescriptor.entries = texEntries.data();
+        WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        WGPURenderPipeline pipe = GetOrCreatePipelineSkinnedPbr3D(
+                                                                  command.topology,
+                                                                  RequiredStripIndexFormat(command),
+                                                                  command.depthTest,
+                                                                  command.depthWrite, command.depthFunc,
+                                                                  command.blend, command.blendParams,
+                                                                  command.cullMode, command.wireframe,
+                                                                  command.depthBias, command.slopeScaleDepthBias);
+        // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
+        ApplyDrawViewport(pass, command.viewport);
+        // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
         {
-            if (command.vertexCount == 0 || command.vertexData.empty() || command.baseColorTexture == nullptr ||
-                command.normalMap == nullptr || command.metallicRoughnessMap == nullptr ||
-                command.emissiveMap == nullptr || command.occlusionMap == nullptr)
-                continue;
-
-            WGPUBufferDescriptor vbDescriptor{};
-            vbDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D VertexBuffer");
-            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
-            vbDescriptor.size = Align4(command.vertexData.size());
-            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
-            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
-
-            WGPUBufferDescriptor uboDescriptor{};
-            uboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D UBO");
-            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            uboDescriptor.size = sizeof(command.uniforms);
-            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
-            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            WGPUBufferDescriptor lightUboDescriptor{};
-            lightUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D LightUBO");
-            lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            lightUboDescriptor.size = sizeof(command.lightUniforms);
-            WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
-            wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
-
-            WGPUBufferDescriptor factorsUboDescriptor{};
-            factorsUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D FactorsUBO");
-            factorsUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            factorsUboDescriptor.size = sizeof(command.pbrFactors);
-            WGPUBuffer factorsUniformBuffer = wgpuDeviceCreateBuffer(device_, &factorsUboDescriptor);
-            wgpuQueueWriteBuffer(queue_, factorsUniformBuffer, 0, command.pbrFactors.data(), sizeof(command.pbrFactors));
-
-            WGPUBufferDescriptor skinningUboDescriptor{};
-            skinningUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D SkinningUBO");
-            skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-            skinningUboDescriptor.size = sizeof(command.skinningParams);
-            WGPUBuffer skinningUniformBuffer = wgpuDeviceCreateBuffer(device_, &skinningUboDescriptor);
-            wgpuQueueWriteBuffer(queue_, skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
-
-            std::array<WGPUBindGroupEntry, 4> uboEntries{};
-            uboEntries[0].binding = 0;
-            uboEntries[0].buffer = uniformBuffer;
-            uboEntries[0].size = sizeof(command.uniforms);
-            uboEntries[1].binding = 1;
-            uboEntries[1].buffer = lightUniformBuffer;
-            uboEntries[1].size = sizeof(command.lightUniforms);
-            uboEntries[2].binding = 2;
-            uboEntries[2].buffer = factorsUniformBuffer;
-            uboEntries[2].size = sizeof(command.pbrFactors);
-            uboEntries[3].binding = 3;
-            uboEntries[3].buffer = skinningUniformBuffer;
-            uboEntries[3].size = sizeof(command.skinningParams);
-            WGPUBindGroupDescriptor uboBindDescriptor{};
-            uboBindDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D UBO BindGroup");
-            uboBindDescriptor.layout = skinnedPbrBindGroupLayout0_;
-            uboBindDescriptor.entryCount = uboEntries.size();
-            uboBindDescriptor.entries = uboEntries.data();
-            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
-
-            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
-            std::array<WGPUBindGroupEntry, 6> texEntries{};
-            texEntries[0].binding = 0;
-            texEntries[0].sampler = sampler;
-            texEntries[1].binding = 1;
-            texEntries[1].textureView = command.baseColorTexture->View();
-            texEntries[2].binding = 2;
-            texEntries[2].textureView = command.normalMap->View();
-            texEntries[3].binding = 3;
-            texEntries[3].textureView = command.metallicRoughnessMap->View();
-            texEntries[4].binding = 4;
-            texEntries[4].textureView = command.emissiveMap->View();
-            texEntries[5].binding = 5;
-            texEntries[5].textureView = command.occlusionMap->View();
-            WGPUBindGroupDescriptor texBindDescriptor{};
-            texBindDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D Texture BindGroup");
-            texBindDescriptor.layout = pbrBindGroupLayout1_;
-            texBindDescriptor.entryCount = texEntries.size();
-            texBindDescriptor.entries = texEntries.data();
-            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
-
-            WGPURenderPipeline pipe = GetOrCreatePipelineSkinnedPbr3D(
-                                                                      command.topology,
-                                                                      RequiredStripIndexFormat(command),
-                                                                      command.depthTest,
-                                                                      command.depthWrite, command.depthFunc,
-                                                                      command.blend, command.blendParams,
-                                                                      command.cullMode, command.wireframe,
-                                                                      command.depthBias, command.slopeScaleDepthBias);
-            // REMED-GFX-116: this draw's OWN captured Viewport, never the live backend value.
-            ApplyDrawViewport(pass, command.viewport);
-            // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
-            ApplyDrawScissor(pass, command.scissor);
-            wgpuRenderPassEncoderSetPipeline(pass, pipe);
-            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
-            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
-
-            if (command.indexed && !command.indexData.empty())
-            {
-                WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
-                    device_, queue_, pass, "CNA WebGPU SkinnedPbr3D IndexBuffer",
-                    command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(
-                    pass, command.indexCount, 1,
-                    command.firstIndex, command.baseVertex, 0);
-                pendingBufferReleases_.push_back(indexBuffer);
-            }
-            else
-            {
-                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
-            }
-
-            pendingBindGroupReleases_.push_back(uboBindGroup);
-            pendingBindGroupReleases_.push_back(texBindGroup);
-            pendingBufferReleases_.push_back(uniformBuffer);
-            pendingBufferReleases_.push_back(lightUniformBuffer);
-            pendingBufferReleases_.push_back(factorsUniformBuffer);
-            pendingBufferReleases_.push_back(skinningUniformBuffer);
-            pendingBufferReleases_.push_back(vertexBuffer);
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU SkinnedPbr3D IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1,
+                command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
         }
-        skinnedPbrDrawCommands_.clear();
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(uboBindGroup);
+        pendingBindGroupReleases_.push_back(texBindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(lightUniformBuffer);
+        pendingBufferReleases_.push_back(factorsUniformBuffer);
+        pendingBufferReleases_.push_back(skinningUniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
     }
 }
 
