@@ -2490,9 +2490,10 @@ existing task.
 | REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | OPEN (reproduced 2026-07-29 by REMED-GFX-147; SDL_GPU counterpart of REMED-GFX-078) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
-| REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY RECORDING THE FRAME'S VIEWS IN PUBLIC FIRST-USE ORDER AND PROGRAMMING IT THROUGH `bgfx::setViewOrder` OVER THE FULL 256-ID PERMUTATION. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED; AT MOST 17 VIEWS IN ONE FRAME, IDS CONFINED TO 1-8 AND 192-199, CONSTANT ACROSS FRAMES. NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157.** |
+| REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
 | REMED-GFX-156 | SDL_GPU and WebGPU: a `Clear()` issued AFTER a draw in the same bind cycle is lost — the consumer sees the geometry, on all three `RenderTargetUsage` values, both backends reporting the identical `(20,25,40,255)`. The SDL_GPU/WebGPU counterpart of REMED-GFX-129. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-151 leg G3) |
 | REMED-GFX-157 | A stock 3D draw issued AFTER a SpriteBatch in the SAME bind cycle never reaches the target: the slot it drew into holds the cycle's clear colour. Measured with ORDINARY `Texture2D` sources, so it is unrelated to render targets, and in BOTH backbuffer and render-target bind cycles. Reproduces on BGFX, VULKAN, SOFTWARE and EASYGL; WEBGPU is clean. A 3D draw that comes FIRST in the cycle is unaffected, so it is not "all 3D replayed before all sprites" — it is the presence of an earlier SpriteBatch in the cycle that loses it. Gives the two-queue note inside REMED-GFX-143's record its own ticket, with a measured statement and a measured backend set. | HIGH | P1 | — | OPEN (measured 2026-07-29 by REMED-GFX-155 leg I0, which declares it per backend so fixing it changes that fixture's counts) |
+| REMED-GFX-158 | Bgfx: a `RenderTarget2D` CREATED and rendered into in the same bgfx frame loses that frame's content when its view is the first one bgfx executes that frame. Measured: creating a target and advancing one frame WITHOUT ever rendering into it is enough to make the next one correct, so it is the creation frame that matters, not the drawing. Invisible until REMED-GFX-155 stopped the backbuffer view (id 0) from always executing first, which had acted as an accidental warm-up. A game that allocates a render target and renders into it on its first frame, before any backbuffer work, loses that frame. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-155; `bgfx_rendertarget2d_mip_test.cpp` carries a documented warm-up so it measures its own subject) |
 
 #### REMED-BUILD-010 detail
 
@@ -17573,39 +17574,55 @@ No barrier, fence, flush, wait, extra frame or extra Present was added, because 
 
 ### The fix
 
-`BgfxGraphicsBackend` records the view ids a frame's public commands use, in **first-use order**, at
-the only two places a view becomes the active submission target — `SelectViewportSegment` (both the
-sprite and the 3D draw paths) and `RecordClear` — and programs that as the frame's execution order:
+Two implementations were written. The first, committed as `f9059270`, handed bgfx a full
+permutation of public first-use order through `bgfx::setViewOrder`. It produced the right public
+results and was **replaced**: it changes how bgfx sorts and decodes every draw's view field for a
+whole frame, which is far more machinery than the problem needs, and it entangled this correction
+with an unrelated defect (REMED-GFX-158) that surfaced at the same moment. Both are recorded rather
+than quietly dropped, because the second implementation reproduces GFX-158 identically — so the
+replacement was a blast-radius decision, not a bug fix.
+
+The shipped fix keeps bgfx's default ascending-id execution untouched and makes **the ids ascend
+with public order** instead. REMED-GFX-018/065 already allocate ordered segment ids monotonically
+from `[kFirstSegmentViewId, 255)`, above every render-target base id, precisely so a target's later
+segments cannot overtake its earlier ones. The whole correction is to honour that same rule for the
+*first* operation of every bind cycle:
 
 ```cpp
-void BgfxGraphicsBackend::ApplyFrameViewOrder()
+[[nodiscard]] bool BaseViewPreservesOrderEXT(bgfx::ViewId baseId) const
 {
-    std::array<bgfx::ViewId, Detail::kMaxViews> order{};
-    std::size_t next = 0;
-    for (const bgfx::ViewId id : frameViewOrder_) order[next++] = id;      // public order
-    for (int id = 0; id < Detail::kMaxViews; ++id)                         // then the rest,
-        if (!frameViewOrdered_[id]) order[next++] = bgfx::ViewId(id);      // ascending
-    bgfx::setViewOrder(0, uint16_t(Detail::kMaxViews), order.data());
+    return static_cast<int>(baseId) > highestViewUsedThisFrame_;
 }
 ```
 
-Three details are load-bearing:
+A bind cycle may keep its target's **base** view only when that base sits above everything already
+used this frame; otherwise it starts on the next ordered segment. Applied at the only two places a
+view becomes the active submission target — `SelectViewportSegment` (both draw paths) and
+`RecordClear`. The backbuffer owns id 0, so any backbuffer cycle following render-target work now
+takes a segment above it, which is exactly why a *second* backbuffer batch in one frame already
+worked before this task while the first did not. The same predicate covers the render-target case a
+producer allocated after its consumer would otherwise hit.
 
-1. **The whole `[0, BGFX_CONFIG_MAX_VIEWS)` range is written every time.** `bgfx::setViewOrder`
-   stores the table as given, and `Frame::sort` then *inverts* it with
-   `viewRemap[m_viewRemap[ii]] = ii` over all 256 entries. A partial list is silently clobbered by
-   the identity entries that follow it, so only a full permutation has a well-defined inverse. A
-   `static_assert` pins `kBackbufferFlushViewId == kMaxViews - 1` so the ascending tail keeps view
-   255 last, which is what Task 951's screenshot readback and `ReadTextureRegionEXT`'s blit require.
-2. **Reprogramming happens when the list changes, not once before `bgfx::frame()`.** This backend
-   advances frames from four places, and one of them (`AdvanceFramesUntil`) is a free function with
-   no access to the object. Keeping the order current at all times makes every frame-advance site
-   correct without threading state through them.
-3. **`EndFrameSegments` reprograms the identity permutation after clearing.** bgfx's remap table is
-   *context* state that survives a frame, so leaving the previous frame's permutation installed
-   would order the next frame's first commands by a stale rule.
+`NoteViewUsedEXT` maintains `highestViewUsedThisFrame_` and the frame's ordered id list; it is
+idempotent, so a run of consecutive draws on one view costs nothing.
 
-`NoteViewUsedEXT` is idempotent, so a run of consecutive draws on one view costs nothing.
+**The contract is verified structurally, not only by pixels.** With `CNA_BGFX_TRACE_VIEW_ORDER=1`
+every frame prints the ids its public commands used, in public order, and every frame of the new
+fixture prints a **strictly increasing** sequence. Under bgfx's ascending-id execution, "strictly
+increasing" *is* "native order equals public order".
+
+### The cost this carried, and the partition rebalance
+
+Ordering is not free: a bind cycle whose base view would execute out of turn consumes an ordered
+segment id, so a frame's segment demand roughly doubled. `graphicsdevice_ordered_clear_test` —
+REMED-GFX-018/129's own gate — exhausted the 63-id pool outright and aborted with this backend's own
+clear error rather than corrupting an earlier view.
+
+The two sides of the id split are not comparable quantities: **base ids are consumed one per
+concurrently live render target; ordered segments one per bind cycle within a single frame.** So
+`kFirstSegmentViewId` moves **192 → 64**, trading 191 simultaneous render targets for 63 — a number
+no CNA content approaches — to raise ordered segments per frame from **63 to 190**. Both limits
+still raise a clear, named error instead of wrapping.
 
 ### View identities, and what they execute as now
 
@@ -17637,14 +17654,17 @@ Measured over the whole new fixture with the trace enabled:
 |---|---|---|
 | `bgfx::frame()` per public frame | 1 | **1** |
 | readbacks / waits / device idles added | — | **0** |
+| `bgfx::setViewOrder` calls | 0 | **0** (the shipped design does not remap) |
 | max views used in one frame | 17 | **17** |
-| distinct view ids ever used | 0-8, 192-199 | **0-8, 192-199** |
+| distinct view ids ever used | 0-8, 192-199 | **0, 1, 2, 8, 64-79** |
+| ordered segments per frame available | 63 | **190** |
+| concurrently live render targets available | 191 | **63** |
 | framebuffers, textures, programs, pipelines | — | **unchanged** |
-| `bgfx::setViewOrder` calls | 0 | one per distinct view per frame (2-17), plus one per frame boundary |
 
-The only new cost is a 256-byte table copy inside bgfx per call — no GPU work, no allocation, no
-per-view pipeline or resource. View usage is bounded and identical to before, and repeated frames do
-not grow it (leg L2, eight consecutive frames; leg L1, eight bind cycles in one frame).
+No GPU work, no allocation and no per-view pipeline or resource is added. What *is* added is one
+ordered segment id per out-of-turn bind cycle, which is why the id partition was rebalanced above.
+View usage stays bounded and does not grow across repeated frames (leg L2, eight consecutive frames;
+leg L1, eight producer/consumer bind cycles in one frame).
 
 ### MSAA and mip boundary
 
@@ -17708,7 +17728,36 @@ D3D9/D3D11/D3D12 are **not** registered for this fixture: their Wine/DXVK runtim
 allowed virtual display (this task was restricted to `:101` and did not use `:0`), so they would be
 compile-only. Their backend libraries do build — see the fourteen-library table below.
 
-### Independent finding recorded, not fixed
+### Regression gates
+
+`ctest -R '^Bgfx'` **142/147**. The five failures are A/B-proven pre-existing — each reproduces on
+the pre-fix backend built from `f9059270^`: `Bgfx_RenderTarget2D_MsaaResolve`,
+`Bgfx_RenderTargetCube_MipChain`, `Bgfx_RenderTargetCube_MsaaResolve`,
+`Bgfx_RenderTargetCube_DepthFormat` and `Bgfx_GraphicsDevice_ClearOptions_Vulkan`. Two tests moved
+during this task and both are green in the final state: `Bgfx_RenderTarget2D_MipChain` (REMED-GFX-158,
+below) and `Bgfx_GraphicsDevice_OrderedClear` (the segment-pool exhaustion, fixed by the rebalance).
+
+Four `CnaTests` cases also fail on this shard and all four are A/B-proven pre-existing:
+`XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`,
+`CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks` (both "bgfx
+backend requires pre-compiled binary shaders (not GLSL source)") and
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`. Three `BuiltInVertexLayoutTest` cases time
+out *inside the shard* and pass standalone in 224 ms on both builds — a display-contention artifact
+of running ~3000 window-creating test processes on one `:101`, not a result.
+
+### Independent findings recorded, not fixed
+
+**REMED-GFX-158** — a `RenderTarget2D` **created and rendered into in the same bgfx frame** loses
+that frame's content when its view is the first one bgfx executes that frame. Measured decisively:
+creating a target and advancing one frame **without ever rendering into it** is enough to make the
+next one correct, so it is the *creation* frame that matters, not the drawing. Neither a one-time
+warm-up frame at device creation nor `mipMap=false` changes it, and it reproduces identically under
+both implementations of this task's fix — so it is not the remapping and not the mip chain. It was
+invisible until this task stopped the backbuffer view (id 0) from always executing first, which had
+been acting as an accidental warm-up. This is a real shipping hazard: a game that allocates a render
+target and renders into it on its first frame, before any backbuffer work, loses that frame.
+`bgfx_rendertarget2d_mip_test.cpp` carries a documented warm-up cycle so it measures its own subject
+(the mip chain) rather than this; remove it when GFX-158 is fixed.
 
 **REMED-GFX-157** — a stock 3D draw issued **after** a SpriteBatch in the **same bind cycle** never
 reaches the target; the slot it drew into holds the cycle's clear colour. Measured here with
@@ -17723,8 +17772,10 @@ positions each backend can actually place, so this fixture measures ordering and
 ### Source and generated-artifact changes
 
 Two production files: `BgfxGraphicsBackend.hpp` and `BgfxGraphicsBackend.cpp`. **No shader changed
-and no generated artifact or offline-compiled bytecode was regenerated** — the correction is when a
-view executes, not what it draws. No public API changed.
+and no generated artifact or offline-compiled bytecode was regenerated** — the correction is which
+view id a bind cycle starts on, not what it draws. No public API changed. Four fixtures changed:
+the new `rendertarget_backbuffer_consumer_test.cpp`, the two strengthened false positives, and
+`bgfx_rendertarget2d_mip_test.cpp`'s documented REMED-GFX-158 warm-up.
 
 ### Sanitizers
 
@@ -17764,25 +17815,35 @@ Virtual display **`:101`** for every measurement — pre-existing and shared, ne
 stopped. **`:0` was not used at all.** D3D runtime controls were not attempted (optional for a
 bgfx-only task).
 
-Thermals: started at **53.6 °C** with no unrelated heavy build active. Peak **85.9 °C**; **five
-thermal pauses**, each holding all compilation until the package returned to 62-65 °C. Maximum
-parallelism **2 jobs**, used only for two full-shard builds while the package sat below 60 °C;
-everything else ran at **1 job**. A sustained ~77 °C floor came from the test shard itself rather
-than from compilation, so builds were held rather than stacked on top of it. **No `pkill`, `killall`
-or kill-by-name was used at any point.** Two processes were terminated, both by exact PID and both
-confirmed to belong to this session by reading `CLAUDE_CODE_SESSION_ID` from `/proc/<pid>/environ`:
-an orphaned `CnaTests` left by this session's own first, timed-out `ctest` invocation (SIGTERM, then
-SIGKILL when it did not respond), and that first run's stalled successor. A day-old
-`cna_test_sdlgpu_rendertargetcube_usage` belonging to a **different** session was found, identified
-the same way, and **left alone**. The stall itself was diagnosed, not guessed: two concurrent
-instances of `BuiltInVertexLayoutTest.InferredAndExplicitDeclarationsAgree` deadlocked on display
-`:101`; standalone it passes in **224 ms**.
+Thermals: started at **53.6 °C** with no unrelated heavy build active. Peak **85.9 °C**, reached
+during a UBSan link. Package
+temperature was measured before and after every build step, and on **five** occasions a reading of
+80-86 °C held all further compilation until a later reading came back to 59-65 °C (81.1 → 62.0,
+80.9 → 65.6, 84.1 → 69.8, 85.5 → 59.6, 85.9 → 64.6). Maximum parallelism **2 jobs**, used only for
+the two whole-tree bgfx builds, both begun below 71 °C; everything else ran at **1 job**. A sustained
+~77 °C floor came from the test shard itself rather than from compilation, so builds were held
+rather than stacked on top of it.
+
+**No `pkill`, `killall` or kill-by-name was used at any point.** Two processes were terminated, both
+by exact PID and both confirmed to belong to this session by reading `CLAUDE_CODE_SESSION_ID` from
+`/proc/<pid>/environ`: an orphaned `CnaTests` left by this session's own first, timed-out `ctest`
+invocation (SIGTERM, then SIGKILL when it did not respond), and that first run's stalled successor.
+One `SIGSTOP`/`SIGCONT` pair was also sent to this session's own process group at 85.5 °C; it reached
+only the shell wrapper, because `ctest` had put itself in a different group, so it neither helped nor
+harmed. A day-old `cna_test_sdlgpu_rendertargetcube_usage` belonging to a **different** session was
+found, identified the same way, and **left alone**. The stall itself was diagnosed rather than
+guessed: `BuiltInVertexLayoutTest.InferredAndExplicitDeclarationsAgree` deadlocks on display `:101`
+when a second instance of it is live, and passes standalone in **224 ms**; the re-run carries
+`--timeout 300` so it cannot stall a shard again.
 
 ### Commits
 
 - `aa48a315 test(Task REMED-GFX-155): reproduce bgfx target-to-backbuffer loss`
-- `f9059270 fix(Task REMED-GFX-155): order bgfx views by public submission order`
+- `f9059270 fix(Task REMED-GFX-155): order bgfx views by public submission order` (the
+  `setViewOrder` implementation, superseded below and kept in history because it was measured)
 - `748624d9 test(Task REMED-GFX-155): strengthen the fixtures that hid the defect`
+- `64409791 fix(Task REMED-GFX-155): order views by id instead of remapping them`
+- `c562521c fix(Task REMED-GFX-155): rebalance the bgfx view-id partition`
 - `docs(remediation): record GFX-155 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
