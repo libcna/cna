@@ -2489,7 +2489,8 @@ existing task.
 | REMED-GFX-151 | Vulkan: a `RenderTarget2D` rendered, unbound and then sampled with no intervening `GetData` reproduced 0/32 of the source, because the readback flush filtered the frame's segment list down to the target being READ and so never recorded the PRODUCER's render pass. The canonical XNA render-to-texture sequence. | HIGH | P1 | REMED-GFX-147 leg G0 | **DONE 2026-07-29 — 15/43 -> 43/43 ON A NEW DEDICATED FIXTURE, PLUS 43/43 ON A `PreferMultiSampling` DEVICE WITH THE APPLIED SAMPLE COUNT ASSERTED TO BE 4 AND 43/43 UNDER SYNCHRONIZATION VALIDATION WITH THE LAYER PROVED LIVE AND ZERO MESSAGES OF ANY KIND. FIXED BY MAKING THE FLUSH REPLAY THE TRANSITIVE CLOSURE OF THE BIND CYCLES A READBACK DEPENDS ON — THE READ TARGET'S OWN GROUP PLUS, FOR EACH CYCLE IN THE SET, THE EARLIER CYCLES OF EVERY RENDER-TARGET GROUP IT SAMPLES — STILL IN ASCENDING SEGMENT ORDER. NO BARRIER, FENCE, DEVICE/QUEUE WAIT, SUBMIT-PER-SWITCH, EXTRA PRESENT, EXTRA FRAME OR READBACK ADDED; THE SUBMIT-PER-MRT-PROXY LOOP IS REPLACED BY ONE COMMAND BUFFER AND ONE SUBMIT, SO CARDINALITY GOES DOWN. A SIMPLER POSITIONAL RULE ALSO PASSED THE CANONICAL FIXTURE AND WAS IMPLEMENTED, MEASURED AND REJECTED (LEG I2 0/32). VULKAN SHARD 180/181, THE ONE FAILURE A/B-PROVEN PRE-EXISTING. SIX CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN; 8 OF 48 VULKAN RENDER-TARGET FIXTURES SAMPLE A TARGET AND ALL 8 OBSERVED THE CONSUMER THROUGH `GetBackBufferData`, NEVER THROUGH A TARGET READBACK — ONE STRENGTHENED (2/4 -> 4/4). SPAWNED GFX-155/156.** |
 | REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | **DONE 2026-07-29 — THIRTEEN (NOT TEN) CAST SITES, PROVEN UNDER UBSAN AS `downcast of address … which does not point to an object of type 'SdlGpuTextureBackend'` FOLLOWED BY SIGSEGV, THE FABRICATED HANDLE BEING THE TARGET'S OWN `mipMap_` + THREE BYTES OF UNINITIALISED PADDING + `multiSampleCount_` (0x20612000). FIXED BY ONE SHARED `ResolveSampledTextureEXT`/`ResolveSampledCubeEXT` RETURNING AN `SdlGpuSampledTextureEXT` (SAMPLEABLE NATIVE HANDLE + KEEP-ALIVE), USED BY SPRITEBATCH AND EVERY EFFECT ALIKE; MSAA IS CORRECT BY CONSTRUCTION BECAUSE THE ATTACHMENT IS `COLOR_TARGET`-ONLY AND CANNOT BE SELECTED. NEW PROCESS-ISOLATED FIXTURE 15/18 LEGS SIGSEGV -> 18/18 LEGS, 0 CRASHES, 56/56 CHECKS. NOTHING ADDED: NO PRESENT, GETDATA, CPU COPY, WAIT, EXTRA FRAME/PASS/SUBMIT; SDL CALL-SITE CARDINALITY UNCHANGED EXCEPT `SDL_ReleaseGPUTexture` 15 -> 12. FOUR FALSE-POSITIVE SKIPS REMOVED (THREE A/B-PROVEN LOAD-BEARING, ONE PROVEN OVER-APPLIED). SDL_GPU DEBUG VALIDATION AND FORCED `VK_LAYER_KHRONOS_validation` BOTH CLEAN; ASAN/UBSAN CLEAN. NINE CROSS-BACKEND CONTROLS GREEN. SPAWNED GFX-166/167.** |
 | REMED-GFX-166 | Vulkan: a `RenderTarget2D` (or `Texture2D`) destroyed while its consumer draw is still only QUEUED loses that work — the destination reads back 0/32, all `(0,0,0,0)`, while every live-source check in the same run is byte-exact. So it is the disposal, not the deferral. SDL_GPU keeps such a source alive through REMED-GFX-152's keep-alive; Vulkan has no equivalent. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-152 leg M1, llvmpipe) |
-| REMED-GFX-167 | WebGPU: a `RenderTarget2D` sampled by a stock 3D draw onto the BACKBUFFER passes its own check (1/1) and then kills the process with SIGSEGV during teardown. None of the other seventeen legs of the same fixture crashes, so it is specific to a target having been sampled onto the backbuffer, and it is a teardown defect rather than a sampling one. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-152 leg A3) |
+| REMED-GFX-167 | WebGPU: every deferred command stored the texture it samples as a RAW POINTER to that resource's backend object and called a VIRTUAL method on it at replay, so a source destroyed while its draw was still queued was a heap-use-after-free at `Present()`. | MEDIUM | P2 | — | **DONE 2026-07-29 — THE TICKET WAS WRONG TWICE, BOTH CORRECTIONS MEASURED. NOT TEARDOWN: THE CRASH IS ON THE MAIN THREAD INSIDE `Present()` -> `EnsureFrameRendered()` -> `ReplayOrderedSegments()` -> `ReplayDrawsInOrder()` -> `IssueTexturedDraw()`, AFTER THE LEG'S OWN CHECKS HAVE PRINTED — WHICH IS WHY IT READ AS SHUTDOWN. AND NOT "SPECIFIC TO THE BACKBUFFER": WHAT IS LOAD-BEARING IS THAT NOTHING FLUSHED BETWEEN THE DRAW AND THE DESTRUCTOR, AND WEBGPU RENDERS A RENDER-TARGET DESTINATION AT `SetRenderTarget()`. ASAN: `heap-use-after-free` AT `:7228`, FREED IN `~WebGPURenderTargetBackend()` AT `:1746` VIA `RenderTarget2D::~RenderTarget2D()`; WITHOUT A SANITIZER SIGSEGV (139) WITH THE PC IN NO MAPPED MODULE (THE FREED VTABLE SLOT). NINETEEN SLOTS ACROSS NINE FAMILIES. FIXED BY RESOLVING ONCE AT THE PUBLIC DRAW CALL INTO A `WebGPUSampledTextureEXT` (RESOLVED VIEW + ONE NATIVE REFERENCE ON THE VIEW AND ITS TEXTURE VIA `WebGPUSampledResourceEXT`), CLOSING THE DEREFERENCE AND THE DANGLING HANDLE TOGETHER; RELEASE IS A REFCOUNT DECREMENT, NOT `wgpuTextureDestroy`, SO THE RESOURCE STAYS USABLE AND THE PROOF IS PIXELS. A HAZARD THE FIX ITSELF INTRODUCED WAS FOUND AND CLOSED: THE FAMILY VECTORS ARE MEMBERS, DESTROYED AFTER THE DESTRUCTOR BODY RELEASES THE DEVICE, SO `DiscardQueuedCommands()` IS NOW CALLED FIRST — DECLARED AS ORDERING CORRECTNESS, SINCE THE ABANDONED-FRAME PATH IS NOT PUBLICLY FORCEABLE. NOTHING ADDED PER DRAW (KEEP-ALIVE BUILT ONCE PER RESOURCE); NO EXTRA PASS/SUBMIT/PRESENT/FRAME/WAIT, HELD BY THE THREE EXISTING WEBGPU CARDINALITY GATES. NEW PROCESS-ISOLATED 14-LEG FIXTURE WITH A PIXEL ORACLE: **4/14 LEGS AND 10 SIGSEGV -> 14/14, 0 CRASHES, 18 CHECKS**; GFX-152'S OWN FIXTURE 17/18 + 1 CRASH -> 18/18, 49/49. THREE FIXTURE DEFECTS FOUND BY RUNNING IT (LEG E1 MEASURED NOTHING AT STRIDE 20; THE PIXEL PROBE SAT 0.0625 TEXEL OFF CENTRE; B1/C1 ASSUMED A FLUSH-AT-UNBIND A WHOLE-FRAME RECORDER DOES NOT DO). ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; LEAK A/B BYTE-IDENTICAL PRE- AND POST-FIX. NATIVE VALIDATION CLEAN (ZERO UNCAPTURED ERRORS, ZERO DEVICE-LOST). SEVEN CROSS-BACKEND CONTROLS ALL 14/14; ONLY WEBGPU PRODUCTION CHANGED. `ctest -L WebGPU` 57/58, ALL 8 FULL-SHARD FAILURES A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-168; ADDED THE MECHANISM TO THE OPEN GFX-165.** |
+| REMED-GFX-168 | EasyGL: destroying a `RenderTarget2D` while it is STILL the bound render target makes the next `SetRenderTarget(nullptr)` dereference the dead object — SIGSEGV inside `GraphicsDevice::SetRenderTarget`, in the UNBIND rather than at teardown. WebGPU and Vulkan both carry a destructor guard clearing `currentRenderTarget_` when it is `this`; EasyGL appears to lack the equivalent. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-167's first draft of leg K1, which was then rewritten so the two subjects stay independently attributable) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -19163,7 +19164,7 @@ change alone.
 | EASYGL | 18/18 | built in `cmake-build-debug`, which is an EASYGL configuration |
 | BGFX | 18/18 | active renderer OpenGL 2.1 |
 | VULKAN | 18/18 | llvmpipe; GFX-166 declared |
-| WEBGPU | 18/18 | GFX-167 declared |
+| WEBGPU | 18/18 | GFX-167 declared — CLOSED 2026-07-29, this fixture now 18/18 with leg A3 asserted rather than declared |
 | D3D9 | **47/47 runtime** | cross-built and RUN under Wine on `:99` |
 | D3D11 | **50/50 runtime** | cross-built and RUN under Wine on `:99` |
 | D3D12 | **cross-build only** | unregistered for the same pre-existing reason as its two neighbouring contract fixtures: a Game-harness test builds a swap chain, which crashes this dev loop's vanilla Wine dxgi.dll (DX-100) |
@@ -19190,6 +19191,11 @@ EASYGL 5/5. All fifteen backend libraries build incrementally.
   is exact). Declared per backend, not fixed here.
 - **REMED-GFX-167** — WebGPU passes leg A3 (1/1) then dies with SIGSEGV during process teardown;
   no other leg of the eighteen crashes there. Declared per backend, not fixed here.
+  **Closed 2026-07-29, and both halves of that description turned out to be wrong.** It is not
+  teardown — the crash is on the main thread inside the very next `Present()`, after this leg's
+  own check has printed — and it is not specific to the backbuffer, but to nothing having
+  FLUSHED between the consumer draw and the source's destructor. Leg A3 is now an asserted
+  contract here, and the dedicated matrix lives in `deferred_source_lifetime_test.cpp`.
 
 Both are outside this ticket's backend and have their own root causes.
 
@@ -19200,5 +19206,186 @@ Both are outside this ticket's backend and have their own root causes.
 - `b36aa7df test(Task REMED-GFX-152): remove the SDL_GPU stock-effect skip from four fixtures`
 - `d95baa9d test(Task REMED-GFX-152): cover effects lifetime and producer-consumer order`
 - `docs(remediation): record GFX-152 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-167 — WebGPU replayed deferred draws through a raw pointer to the sampled resource (DONE 2026-07-29)
+
+### The ticket was wrong twice, and both corrections are measured
+
+REMED-GFX-152 spawned this as *"WebGPU dies at process teardown after a render target has been
+sampled onto the BACKBUFFER"*. Neither half survived contact with a backtrace.
+
+**It is not teardown.** systemd-coredump on the pre-fix binary (there is no gdb in this sandbox):
+
+```
+Signal: 11 (SEGV)          exit status 139
+Stack trace of thread 465732 (the MAIN thread):
+ #0  0x000055f5b82dbb00 n/a (n/a + 0x0)          <-- no mapped module
+ #1  WebGPUGraphicsBackend::ReplayDrawsInOrder(...)
+ #2  WebGPUGraphicsBackend::ReplayOrderedSegments(...)
+ #3  WebGPUGraphicsBackend::EnsureFrameRendered()
+ #4  WebGPUGraphicsBackend::Present()
+ #5  GraphicsDevice::Present()  #6 GraphicsDeviceManager::EndDraw()
+ #7  Game::EndDraw()  #8 Game::Tick()  #9 Game::RunLoop()  #10 Game::Run()
+```
+
+The crash is inside the very next `Present()`, on the main thread, *after* the leg's own check has
+already printed `[PASS] ... 1/1`. That ordering — a success line followed by process death — is
+exactly what made it read as shutdown. Frame `#0` is a program counter in no mapped module: the
+vtable slot of a freed object.
+
+**It is not "specific to the backbuffer" either.** What is load-bearing is that **nothing FLUSHED**
+between the consumer draw and the source's destructor. WebGPU renders a *render-target* destination
+at `SetRenderTarget()`, so only a backbuffer destination leaves the queue alive across the death.
+Leg B1 of the new fixture destroys its source **after** the destination unbind and passes even
+against the unfixed backend; leg B2 moves the destructor **before** the unbind and crashes. That is
+the whole difference, and it is precisely why REMED-GFX-152's own lifetime leg never caught this:
+it unbinds first.
+
+### Root cause
+
+Nineteen slots across nine deferred command families stored the bound texture as a raw
+`const IWebGPUSamplable*` — a pointer to the resource's **backend object** — and called the virtual
+`View()` on it at replay:
+
+| family | slots |
+|---|---|
+| `SpriteCommand`, `Textured`, `LitTextured`, `AlphaTest`, `Skinned` | 1 each |
+| `DualTexture` | 2 (`texture0`, `texture1`) |
+| `EnvMap` | 2 (a 2D slot + the cube one) |
+| `Pbr`, `SkinnedPbr` | 5 each |
+
+The justification was written in the header beside the field:
+
+> "a bound Texture2D's WebGPUTextureBackend is owned by long-lived game/content state (unlike
+> DrawUserPrimitives' transient vertex buffers), so it is guaranteed to still be alive when this
+> command actually renders later in the same frame."
+
+Nothing guarantees that. Under ASan (`cmake-build-webgpu-asan-ubsan`, `DISPLAY=:101`):
+
+```
+ERROR: AddressSanitizer: heap-use-after-free on address 0x508000068528
+  #0 WebGPUGraphicsBackend::IssueTexturedDraw(...)  WebGPUGraphicsBackend.cpp:7228
+  #1 WebGPUGraphicsBackend::ReplayDrawsInOrder(...) WebGPUGraphicsBackend.cpp:5679
+freed by thread T0 here:
+  #1 WebGPURenderTargetBackend::~WebGPURenderTargetBackend()  :1746
+  #9 RenderTarget2D::~RenderTarget2D()
+previously allocated by thread T0 here:
+  #2 WebGPUGraphicsBackend::CreateRenderTarget2D(...)         :6656
+```
+
+### The fix
+
+Resolve **once**, at the public draw call, while the resource is unambiguously alive. Commands now
+carry a `WebGPUSampledTextureEXT` by value: the already-resolved `WGPUTextureView` plus a
+`shared_ptr` to a `WebGPUSampledResourceEXT` holding one native reference on that view **and** its
+texture. Two independent halves close together:
+
+* the **dereference** — replay never touches a wrapper again;
+* the **handle** — `wgpuTextureRelease`/`wgpuTextureViewRelease` are refcount decrements, not the
+  destructive `wgpuTextureDestroy`, so a held reference keeps the resource genuinely **usable**
+  rather than merely addressable. Both handles are referenced, so this does not depend on
+  wgpu-native's internal parent reference. The proof is pixels, not absence of a crash.
+
+`ResolveSamplable()` / `ResolveCubeSamplable()` keep their `dynamic_cast` and their degrade-to-unbound
+behaviour for a null or incompatible slot; returning a **value** instead of a pointer is what made
+the conversion compiler-checked — a missed site cannot compile.
+
+### A hazard the fix itself introduced
+
+The eleven family vectors and the ordered stream are plain **members**, destroyed *after* the
+destructor body releases `queue_`, `device_`, `adapter_` and `instance_`. Now that a command holds
+native references, a populated vector would release textures with the device already gone. The
+clear block at the tail of `ReplayOrderedSegments` became a named `DiscardQueuedCommands()`, and the
+destructor calls it **first**. Stated honestly: the reachable path is a frame *abandoned* rather
+than presented (`EnsureFrameRendered()` returns early on surface-acquisition failure), which is not
+deterministically forceable through the public API — so this is ordering correctness, not an
+observed failure, and is not claimed as measured.
+
+### Cost — nothing per draw
+
+Each samplable backend builds its keep-alive **once**, at construction, so copying it into a command
+is a refcount increment and allocates nothing. No extra pass, submit, `Present`, frame or wait; the
+three existing WebGPU cardinality gates (`DrawOrder`, `Viewport`, `Scissor`) hold that and are green.
+Only the **sampled** pair is kept alive — a render target's depth and multisample attachments stay
+with the wrapper, because a pass destination is built and consumed synchronously while the target is
+still bound.
+
+### Results
+
+| fixture | pre-fix | post-fix |
+|---|---|---|
+| `deferred_source_lifetime` (new, 14 legs) | **4/14 legs, 10 SIGSEGV** | **14/14, 0 crashes, 18 checks** |
+| `rendertarget_effect_source` (GFX-152's) | 17/18 legs, 1 SIGSEGV | **18/18, 0 crashes, 49/49** |
+
+Leg K1 reproduces the reported symptom exactly: pre-fix it prints `[PASS] ... completes` and *then*
+the process dies.
+
+### Cross-backend controls — only WebGPU production changed
+
+| backend | legs | checks | notes |
+|---|---|---|---|
+| WEBGPU | 14/14 | 18 | the subject |
+| SOFTWARE | 14/14 | 18 | |
+| EASYGL | 14/14 | 19 | |
+| BGFX | 14/14 | 19 | |
+| SDL_GPU | 14/14 | 6 | no backbuffer readback (GFX-165); its render-target legs carry the oracle |
+| VULKAN | 14/14 | 4 | GFX-166 declared, not folded in |
+| HEADLESS | 14/14 | 2 | non-rasterizing |
+
+### Three fixture defects found by RUNNING it
+
+* Leg E1 **measured nothing**: a stride-20 `VertexPositionTexture` quad is routed away from the
+  env-map family (`needsEnvMap && stride == 32`), so the cube slot was never bound — it PASSED
+  against the unfixed backend until corrected to `VertexPositionNormalTexture`.
+* The pixel probe sat **0.0625 texel off centre** (an even block has no middle pixel), so Software
+  and Vulkan reported `(21,27,51,248)` for `(20,25,40,255)` on the LIVE control — a filtering
+  artefact wearing a lifetime failure's clothes. Nine pixels per texel makes the probe byte-exact
+  under point *and* linear sampling, with no tolerance that would also admit a wrong resource.
+* Legs B1/C1 assumed a flush-at-unbind that a whole-frame recorder does not do, so on Vulkan they
+  reported REMED-GFX-166 as this task's failure.
+
+### Sanitizers, validation and leaks
+
+ASan and UBSan **0 reports** on both fixtures, both runtimes proved linked by symbol (26 sanitizer
+symbols). Native validation clean: **zero** uncaptured errors and **zero** device-lost events across
+every leg. The leak A/B is **byte-identical** pre- and post-fix on the legs that survive both —
+1247252 B/714 allocs (A1), 1248928/717 (B1), 1251544/721 (C1) — so no leaked byte and no allocation
+was added; the residual is wgpu-native's own exit leak.
+
+### Regressions
+
+`ctest -L WebGPU` **57/58**; the single failure `WebGPU_Clear_Readback` is A/B-proven pre-existing
+(blend/wrap/mirror sampler checks). The full shard is 5826/5834, and **all 8 failures are
+A/B-proven pre-existing** — 7 fail identically against the pre-fix backend, and the eighth
+(`CueTest.PauseAfterDisposeIsANoOp`, audio) passes 5/5 in isolation with the fix in place. Green and
+preserved: `WebGPU_GraphicsDevice_OrderedClear` (GFX-156), `WebGPU_DrawOrder_Cardinality` (GFX-159),
+`WebGPU_FrontFaceWinding` (GFX-160), `WebGPU_Deferred_Scissor`/`WebGPU_Scissor_Cardinality`
+(GFX-146), `WebGPU_Deferred_Viewport`/`WebGPU_Viewport_Cardinality` (GFX-116),
+`WebGPU_SpriteBatch_BlendState` (GFX-102), `WebGPU_ColorSpace_MidTone` (GFX-131), and every
+render-target producer/consumer, cube and readback-contract fixture. All fourteen backend libraries
+build incrementally.
+
+### Independent findings
+
+- **REMED-GFX-168** — EasyGL faults inside `GraphicsDevice::SetRenderTarget` when the previously
+  bound `RenderTarget2D` has already been destroyed. Found by this task's first draft of leg K1,
+  which was then rewritten so the two subjects stay independently attributable. Not fixed here.
+- **REMED-GFX-165** (already open) — its mechanism is now identified: a rectangle-less
+  `GetBackBufferData` sizes its region from the backend's live viewport, not from
+  `PresentationParameters`, and on WebGPU that viewport is stale until the first `SetRenderTarget`
+  round trip. Recorded, not fixed.
+- **REMED-GFX-166** remains independently declared and Vulkan production was not touched.
+
+### Commits
+
+- `5f93db60 test(Task REMED-GFX-167): reproduce the WebGPU dead-source replay crash`
+- `b83bf20d fix(Task REMED-GFX-167): resolve WebGPU sampled textures at queue time`
+- `19b6fb34 test(Task REMED-GFX-167): make the lifetime matrix exact on every backend`
+- `63f1f9f1 fix(Task REMED-GFX-167): drain the WebGPU command queue before device teardown`
+- `docs(remediation): record GFX-167 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
