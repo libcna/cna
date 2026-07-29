@@ -427,4 +427,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_register_backend_test(NAME D3D9_CubeVolume_SetDataContract
         COMMAND ${_d3d9_cube_volume_setdata_contract_cmd}
         TIMEOUT 60 LABELS "D3D9")
+    # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
+    # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
+    # frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame advance
+    # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
+    # including the bound target's), so this run is what establishes that D3D9 already honoured the
+    # contract rather than being made to.
+    cna_d3d9_test(cna_test_d3d9_rt_first_use examples/rendertarget_first_use_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_rt_first_use_cmd cna_test_d3d9_rt_first_use)
+    cna_register_backend_test(NAME D3D9_RenderTarget_FirstUse
+        COMMAND ${_d3d9_rt_first_use_cmd}
+        TIMEOUT 180 LABELS "D3D9")
+
 endif()

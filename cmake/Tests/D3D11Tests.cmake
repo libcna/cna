@@ -328,4 +328,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # GetBackBufferData / the backend's staging-copy), so ColorWriteChannels/MultiSampleMask are
     # verified through the smoke test's established back-buffer draw+readback discipline (Check P),
     # not the RT-readback Game harness the native SdlGpu/WebGPU backends use.
+    # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
+    # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
+    # frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame advance
+    # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
+    # including the bound target's), so this run is what establishes that D3D11 already honoured the
+    # contract rather than being made to.
+    cna_d3d11_test(cna_test_d3d11_rt_first_use examples/rendertarget_first_use_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_rt_first_use_cmd cna_test_d3d11_rt_first_use)
+    cna_register_backend_test(NAME D3D11_RenderTarget_FirstUse
+        COMMAND ${_d3d11_rt_first_use_cmd}
+        TIMEOUT 180 LABELS "D3D11")
+
 endif()
