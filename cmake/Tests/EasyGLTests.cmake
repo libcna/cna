@@ -1656,6 +1656,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             examples/rendertarget_effect_source_test.cpp)
         cna_register_backend_test(NAME EasyGL_RenderTarget_EffectSource
             COMMAND cna_test_easygl_rt_effect_source
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-167 deferred-source lifetime: a resource sampled by a draw that has only been
         # QUEUED must stay bindable until that draw actually renders, and destroying the public wrapper
@@ -1668,7 +1669,6 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_easygl_test(cna_test_easygl_deferred_source_lifetime
             examples/deferred_source_lifetime_test.cpp)
         cna_register_backend_test(NAME EasyGL_DeferredSourceLifetime COMMAND cna_test_easygl_deferred_source_lifetime
-            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public

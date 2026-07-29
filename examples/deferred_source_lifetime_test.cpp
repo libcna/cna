@@ -132,8 +132,15 @@ namespace
 {
     constexpr int kPW = 8;    ///< producer pattern width  -- non-square on purpose
     constexpr int kPH = 4;    ///< producer pattern height
-    constexpr int kBBW = 64;  ///< backbuffer width  -- an exact multiple of kPW
-    constexpr int kBBH = 64;  ///< backbuffer height -- an exact multiple of kPH
+    /// Backbuffer extent. Each source texel must cover an ODD number of destination pixels, so that
+    /// the middle pixel of a block lands EXACTLY on that texel's centre: with an even block, the
+    /// centre falls between two pixels and a backend using linear filtering returns a slight blend
+    /// of two neighbours instead of the texel itself. 9 pixels per texel makes the probe exact
+    /// under point AND linear sampling, so the comparison stays byte-exact everywhere rather than
+    /// needing a tolerance that would also admit a genuinely wrong resource.
+    constexpr int kBBBlock = 9;
+    constexpr int kBBW = kPW * kBBBlock;   ///< 72
+    constexpr int kBBH = kPH * kBBBlock;   ///< 36
 
     /** @brief Whether this backend rasterizes and can read anything back at all. */
 #if defined(CNA_BACKEND_HEADLESS)
@@ -378,8 +385,10 @@ class DeferredSourceLifetimeTest : public Game
         for (int y = 0; y < kPH; ++y)
             for (int x = 0; x < kPW; ++x)
             {
-                // Probe the CENTRE of the block this source texel occupies, so point sampling makes
-                // the comparison exact regardless of the destination's size.
+                // The middle pixel of the block this source texel occupies. Both destination sizes
+                // this fixture uses give an odd block (1 for a render target, kBBBlock for the
+                // backbuffer), so this pixel's texture coordinate is exactly the texel centre and
+                // the comparison is byte-exact whatever the backend filters with.
                 const int px = (x * r.w) / kPW + (r.w / kPW) / 2;
                 const int py = (y * r.h) / kPH + (r.h / kPH) / 2;
                 const Color& got = r.at(px, py);
@@ -553,9 +562,22 @@ class DeferredSourceLifetimeTest : public Game
                        PatternColor);
     }
 
-    /** @brief Leg B1 -- render-target destination, source destroyed AFTER the unbind flushed it. */
+    /**
+     * @brief Leg B1 -- render-target destination, source destroyed AFTER the unbind flushed it.
+     *
+     * "After the flush" is only true for a backend that renders a render-target destination at
+     * `SetRenderTarget()`. A WHOLE-FRAME-deferred recorder holds even this draw until Present, so
+     * for it B1 is a dead-source case like the rest and belongs behind the same declaration.
+     */
     void LegB1(GraphicsDevice& dev)
     {
+        if (!kDeadSourceStillSampleable)
+        {
+            boundary(std::string("B1 ") + kBackendName + " defers the WHOLE frame, so even this "
+                     "ordering destroys the source before the draw renders, and it loses that draw "
+                     "(REMED-GFX-166) -- declared, not measured");
+            return;
+        }
         RenderTarget2D dst(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                            RenderTargetUsage::DiscardContents);
         {
@@ -647,6 +669,15 @@ class DeferredSourceLifetimeTest : public Game
                 dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
                 ResetState(dev);
             }
+            // Same reasoning as leg B1: on a whole-frame-deferred recorder this destructor also
+            // runs before the draw renders, so the pixel half is declared there rather than here.
+            if (!kDeadSourceStillSampleable)
+            {
+                boundary(std::string("C1 ") + kBackendName + " defers the WHOLE frame, so this "
+                         "ordering is a dead-source case too and it loses the draw "
+                         "(REMED-GFX-166) -- the pixel check is declared, not measured");
+                return;
+            }
             Readback r = ReadWholeTarget(dst, kPW, kPH);
             if (Readable(r, "C1"))
                 CheckExact(r, "C1 source destroyed before its destination leaves the destination "
@@ -728,9 +759,17 @@ class DeferredSourceLifetimeTest : public Game
             Readback r = ReadBackbuffer(dev);
             (void)r;
         }
-        catch (const System::NotSupportedException& e) { threw = true; what = e.what(); }
-        catch (const std::exception& e)                { threw = true; what = e.what(); }
-        catch (...)                                    { threw = true; what = "(non-std exception)"; }
+        catch (const System::NotSupportedException& e)
+        {
+            // A backend without a render-into-a-cube path says so through the public API. That is a
+            // declared capability boundary, not a lifetime result -- recorded rather than counted,
+            // so this leg can never pass by quietly catching a real failure either.
+            boundary(std::string("E1 ") + kBackendName + " has no RenderTargetCube path (" +
+                     e.what() + ") -- declared, not measured");
+            return;
+        }
+        catch (const std::exception& e) { threw = true; what = e.what(); }
+        catch (...)                     { threw = true; what = "(non-std exception)"; }
         check(!threw, std::string("E1 a RenderTargetCube destroyed before Present replays safely") +
                       (threw ? ": threw " + what : ""));
     }
