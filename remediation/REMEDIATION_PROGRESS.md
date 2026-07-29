@@ -2491,7 +2491,7 @@ existing task.
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
-| REMED-GFX-156 | SDL_GPU and WebGPU: a `Clear()` issued AFTER a draw in the same bind cycle is lost — the consumer sees the geometry, on all three `RenderTargetUsage` values, both backends reporting the identical `(20,25,40,255)`. The SDL_GPU/WebGPU counterpart of REMED-GFX-129. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-151 leg G3) |
+| REMED-GFX-156 | SDL_GPU and WebGPU: a `Clear()` issued AFTER a draw in the same bind cycle was lost — both delivered a clear only through a render pass's load action, and a pass has exactly one. Two DIFFERENT root causes: SDL_GPU scoped the load action to the whole bind cycle (Clear was already ordered); WebGPU had no ordered Clear at all, only global pending flags and one value slot. Fixed by logical pass segmentation on both — one native pass per observable Clear, none extra for a leading one. | MEDIUM | P2 | — | DONE (2026-07-29) |
 | REMED-GFX-157 | A bind cycle's SpriteBatch draws and its stock 3D draws were replayed GROUPED BY FAMILY instead of in the order the game issued them, so within ONE cycle `3D draw; SpriteBatch.Draw` came out inverted. The ticket's original statement ("a 3D draw after a SpriteBatch never reaches the target on BGFX/VULKAN/SOFTWARE/EASYGL, WEBGPU clean") was wrong in every particular: that draw was CULLED by state SpriteBatch legitimately leaves behind, not lost. | HIGH | P1 | — | **DONE 2026-07-29 — RECLASSIFIED, THEN FIXED. THE REPORTED SYMPTOM WAS A FIXTURE DEFECT: REMED-GFX-155'S LEG I0 PASSED A NULL rasterizerState TO SpriteBatch.Begin, WHICH FNA DEFINES AS RasterizerState.CullCounterClockwise AND ASSIGNS TO THE DEVICE WITHOUT EVER RESTORING IT, AND THEN DREW A QUAD OF EXACTLY THE WINDING FOUR BACKENDS CULL UNDER IT. PROVEN THREE WAYS (EXPLICIT CullNone; RESTORING ONLY RasterizerState; AND THE DRAW'S FATE AFTER A SpriteBatch BEING BYTE-IDENTICAL TO ITS FATE UNDER AN EXPLICIT CullCounterClockwise). WEBGPU LOOKED CLEAN ONLY BECAUSE ITS FRONT-FACE WINDING IS INVERTED (GFX-160). THE REAL DEFECT IS THE OPPOSITE DIRECTION AND A DIFFERENT BACKEND SET: VULKAN AND BGFX REPLAY ALL SPRITES THEN ALL 3D DRAWS; SOFTWARE AND EASYGL WERE ALWAYS CORRECT; WEBGPU GROUPS THE OTHER WAY ROUND (GFX-159, NOT CHANGED — SCOPED OUT). FIXED ON VULKAN BY SPLITTING EACH PASS'S ORDER RANGE AT EVERY FAMILY CHANGE AND REPLAYING THE RUNS THROUGH THE EXISTING LAMBDAS, AND ON BGFX BY SETTING EVERY VIEW TO ViewMode::Sequential AT INIT. NO PASS, SUBMIT, BARRIER, PRESENT, FLUSH, WAIT OR EXTRA FRAME ADDED. NEW DEDICATED FIXTURE WITH A STAIRCASE ORACLE: VULKAN 42/60 -> 60/60, BGFX 41/60 -> 60/60, SOFTWARE 61/61, EASYGL 60/60, WEBGPU 39/39, SDL_GPU 40/40, HEADLESS 2/2. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED (LEG I0: SOFTWARE 77->86, VULKAN/EASYGL/BGFX 81->90, WEBGPU 84->87; CHECK O3 GAINED CHECK O4 FOR THE UNTESTED DIRECTION). ctest ^Vulkan 182/183 AND ^Bgfx 143/148, EVERY FAILURE A/B-PROVEN PRE-EXISTING. ASAN/UBSAN CLEAN; VULKAN VALIDATION 1.4.309 LIVE AND SILENT; ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-159/160/161/162.** |
 | REMED-GFX-158 | Bgfx: a `RenderTarget2D` CREATED and rendered into in the same bgfx frame loses that frame's content when its view is the first one bgfx executes that frame. Measured: creating a target and advancing one frame WITHOUT ever rendering into it is enough to make the next one correct, so it is the creation frame that matters, not the drawing. Invisible until REMED-GFX-155 stopped the backbuffer view (id 0) from always executing first, which had acted as an accidental warm-up. A game that allocates a render target and renders into it on its first frame, before any backbuffer work, loses that frame. | MEDIUM | P2 | — | **DONE 2026-07-29 — THE TICKET'S SYMPTOM IS REAL AND ITS EXPLANATION IS WRONG. NOT DEFERRED RESOURCE CREATION, NOT A BGFX FRAME LATENCY, NOT THE MIP CHAIN, NOT VIEW-EXECUTION ORDER. `bgfx::reset()` ENDS BY DISCARDING EVERY VIEW'S FRAMEBUFFER BINDING (`for (ii < BGFX_CONFIG_MAX_VIEWS) m_view[ii].setFrameBuffer(BGFX_INVALID_HANDLE)`, bgfx_p.h Context::reset), INCLUDING THE ONE JUST PROGRAMMED FOR THE TARGET BOUND RIGHT NOW; BGFX RESOLVES VIEW STATE ONLY AT frame(), SO THE CYCLE'S OPERATIONS RESOLVED AGAINST THE BACKBUFFER AND THE TARGET WAS NEVER WRITTEN. THIS BACKEND CALLS reset() FROM EnsureViewState() THE FIRST TIME THE WINDOW'S REAL SIZE DIFFERS FROM THE SIZE BGFX WAS INITIALISED WITH, WHICH LANDS BETWEEN THE BIND AND THE FIRST DRAW. MEASURED AT THE CALL SITE: `bgfx::reset 800x480 -> 64x64 (currentViewId_=1)`, TARGET READ BACK (0,0,0,0) — NOT EVEN ITS OWN DiscardContents CLEAR (0,0,0,255). A WARM-UP FRAME CURED IT ONLY BECAUSE ANY OPERATION BEFORE THE BIND ABSORBS THE RESET WHILE NO TARGET IS BOUND; A TARGET WHOSE CONTENT LANDS ON AN ORDERED SEGMENT VIEW, PROGRAMMED AFTER THE RESET, SURVIVES THE SAME FRAME UNTOUCHED — WHICH IS WHY GFX-155'S OWN FIXTURE WAS GREEN AND THE MIP TEST WAS NOT. NOT A FIRST-FRAME DEFECT EITHER: ANY RESET DOES IT, INCLUDING A WINDOW RESIZE AND A SetSwapInterval VSYNC CHANGE. FIXED BY MIRRORING EVERY VIEW->FRAMEBUFFER BINDING THIS BACKEND PROGRAMS (Detail::SetViewFrameBufferEXT, ALL TEN SITES) AND REPLAYING THE MIRROR STRAIGHT AFTER THE RESET (Detail::ResetBackbufferEXT, BOTH RESET SITES), WITH Detail::ForgetFrameBufferEXT DROPPING A FRAMEBUFFER BEFORE IT IS DESTROYED SO A RECYCLED HANDLE INDEX CANNOT BE REPLAYED AS A RESURRECTED BINDING. COST MEASURED WITH COUNTERS: 106 ARRAY STORES AND EXACTLY 1 EXTRA setViewFrameBuffer OVER THE WHOLE 16-LEG RUN, FROM 2 RESETS; ZERO EXTRA FRAMES, PRESENTS, READBACKS OR WAITS. NEW rendertarget_first_use_test.cpp 21/22 -> 26/26; FOUR SINGLE-LEG CTEST CASES (A1 DRAW-FIRST, A3 CLEAR-FIRST, A4 BIND-CLEAR-ONLY, J 3D-FIRST) EACH 0/32 -> 32/32, PLUS LEG N FOR THE CUBE-FACE REGISTRATION PATH. TWO FALSE POSITIVES A/B-PROVEN AND REMOVED FROM bgfx_rendertarget2d_mip_test.cpp (A DOCUMENTED WARM-UP CYCLE AND A 20-ATTEMPT RETRY LOOP), AND ITS INHERITED "SECOND SAMPLING CYCLE READS BLACK" CLAIM MEASURED (LEG C2) AND DISPROVED. ctest -R '^Bgfx' 150/155, THE FIVE A/B-PROVEN PRE-EXISTING. CONTROLS: VULKAN 26/26, EASYGL 26/26, WEBGPU 26/26, SOFTWARE 25/25, SDL_GPU 17/17, HEADLESS 16/16; D3D9/D3D11 CROSS-BUILD BUT ARE ENVIRONMENT-UNAVAILABLE ON XVFB. ASAN/UBSAN 26/26 CLEAN. GFX-155 VIEW ORDER, GFX-157 FAMILY ORDER AND GFX-160 WINDING PRESERVED. ALL FOURTEEN BACKEND LIBRARIES BUILD. BGFX VULKAN UNTESTED (THE SANDBOX SELECTS OPENGL 2.1).** |
 | REMED-GFX-159 | A bind cycle's draws were replayed grouped by family on all three WebGPU pass recorders — all 3D draws, then all sprites — so a SpriteBatch followed by an OVERLAPPING stock 3D draw came out with the sprite on top. The ticket is correct but incomplete: the ten 3D families were ordered against each other by the same mechanism. | HIGH | P1 | — | **DONE 2026-07-29 — ROOT CAUSE: ALL THREE PASS RECORDERS REPLAYED A CYCLE AS A FIXED LIST OF ELEVEN PER-FAMILY LOOPS, JUSTIFIED IN A COMMENT AS "3D DRAWS FIRST, 2D SPRITEBATCH/UI ON TOP — MATCHES TYPICAL XNA GAME DRAW ORDER". A TYPICAL ORDER IS NOT A CONTRACT, AND THERE WAS NO ORDER COUNTER ANYWHERE IN THE BACKEND, SO THE SOURCE ORDER OF THOSE ELEVEN CALLS DECIDED EXECUTION ORDER. WHAT THE TICKET MISSES, MEASURED NOT ASSUMED: `textured BasicEffect; vertex-colour BasicEffect` INVERTED WITH NO SPRITEBATCH ANYWHERE, ON FOUR EFFECT PAIRS IN BOTH DIRECTIONS, EACH REVERSE ORDERING RENDERING CORRECTLY BY ACCIDENT. FIXED BY ADDING ONE ORDERED REFERENCE STREAM OF (FAMILY, SLOT, PUBLIC ORDER) APPENDED AT THE PUBLIC CALL, WALKED ONCE AT REPLAY; EVERY COMMAND STRUCT, CAPTURE AND Queue*Draw() IS UNCHANGED AND THE TEN FORMER LOOPS BECAME PER-COMMAND Issue*Draw FUNCTIONS. REFERENCES ARE INDICES, NOT POINTERS — THE FAMILY VECTORS GROW WHILE A CYCLE RECORDS. THREE PIECES OF PASS STATE EACH FAMILY COULD PREVIOUSLY ASSUME UNTOUCHED ARE HANDLED AT A BOUNDARY: THE SPRITE PATH'S REDUNDANT-PIPELINE-BIND SKIP IS NOW TRACKED ACROSS ALL FAMILIES, THE SHARED SPRITE VERTEX BUFFER IS REBOUND ONCE PER SPRITE RUN, AND THE PASS-LEVEL BLEND CONSTANT IS RESTORED BEFORE A 3D DRAW SO A 3D DRAW SEES BYTE-IDENTICALLY WHAT IT SAW BEFORE. NO PASS, SUBMIT, WAIT, BARRIER, FLUSH, PRESENT, TARGET SWITCH OR EXTRA FRAME ADDED; NO PIPELINE VARIANT KEYED ON ORDER; NO PER-VERTEX OR PER-SPRITE ALLOCATION; NO SORT. ORDERING WAS MEASURED NATIVELY VIA A NEW ENV-GATED TRACE (CNA_WEBGPU_TRACE_DRAW_ORDER): PRE-FIX THE FIVE-ALTERNATION SEQUENCE ENQUEUED 0,1,2,3,4 AND ISSUED 1,3,0,2,4; POST-FIX ALL 191 DRAWS ACROSS 101 PASSES ISSUE AT EXACTLY THEIR PUBLIC POSITION, AND THE 191/101 TOTALS ARE IDENTICAL BEFORE AND AFTER. WEBGPU 27/69 -> 67/67. NEW webgpu_draw_order_cardinality_test.cpp 21/21 PROVES 8 AND 16 ALTERNATING DRAWS EACH COST EXACTLY 1 RENDER PASS, 1 SUBMIT, 0 NEW PIPELINES, 1 setViewport AND 1 setScissorRect ON BACKBUFFER, TARGET AND CUBE FACE, WITH ITS LEG D7 COVERING THE CUBE-FACE RECORDER BY PIXELS IN BOTH DIRECTIONS (A/B-PROVEN: D7a FAILS PRE-FIX, D7b PASSES PRE-FIX). TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED: backbuffer_pass_order_test.cpp 29/30 -> 30/30 AND rendertarget_backbuffer_consumer_test.cpp LEG I0 86/87 -> 87/87. ctest -R '^WebGPU' 54/55, THE ONE FAILURE A/B-PROVEN PRE-EXISTING WITH BYTE-IDENTICAL FAILURES. ASAN+UBSAN CLEAN WITH RUNTIMES PROVED LINKED BY SYMBOL; THE EXIT LEAK IS 63 ALLOCATIONS BOTH PRE- AND POST-FIX. WEBGPU VALIDATION SILENT. CROSS-BACKEND CONTROLS UNCHANGED (SOFTWARE 70/70, EASYGL 69/69, VULKAN 69/69, BGFX 69/69, SDL_GPU 49/49, HEADLESS 2/2) AND REAL-D3D RUNTIME CONTROLS GREEN ON :101 UNDER WINE (D3D9 30/30, D3D11 30/30). ALL FOURTEEN BACKEND LIBRARIES BUILD. ONE INDEPENDENT FINDING RECORDED, NOT FIXED: WEBGPU'S MID-CYCLE Clear IS LOAD-OP-ONLY, THE COUNTERPART OF REMED-GFX-129'S VULKAN WORK.** |
@@ -17437,6 +17437,8 @@ task, which changes Vulkan files only.
   cycle is lost, so the consumer sees the geometry instead of the clear, on all three
   `RenderTargetUsage` values, both backends reporting the identical `(20,25,40,255)`. The SDL_GPU /
   WebGPU counterpart of REMED-GFX-129, which fixed exactly this on Vulkan and was scoped to Vulkan.
+  **Closed 2026-07-29** — leg G3 now asserts the ordered contract on both; see the REMED-GFX-156
+  record at the end of this file. The two backends turned out to have two different root causes.
 
 ### Source and generated-artifact changes
 
@@ -18655,5 +18657,334 @@ whole eight-job budget belonged to the main agent throughout. Package started at
 - `e9ff8a3a test(Task REMED-GFX-158): cover the cube registration path and boundary exits`
 - `80cc9f02 test(Task REMED-GFX-158): register the D3D9 and D3D11 first-use controls`
 - `docs(remediation): record GFX-158 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-156 — ordered mid-cycle `Clear()` on SDL_GPU and WebGPU (DONE 2026-07-29)
+
+### Classification
+
+**The symptom is one sentence and it is identical on both backends; the cause is not the same
+cause, and treating it as one would have fixed only half of it.**
+
+A `Clear()` issued after a draw inside one public bind cycle was lost. Both backends deliver a
+clear only through a native render pass's load action, and a pass has exactly one set of them, so
+the clear necessarily ran before every draw of the pass it belonged to. That is where the shared
+description ends.
+
+| question | SDL_GPU | WebGPU |
+|---|---|---|
+| stores only one pending Clear value | no — one per **segment** since REMED-GFX-145 | **yes** — one global `clearColor_`/`clearDepth_`/`clearStencil_` |
+| applies Clear solely when the pass begins | **yes** | **yes** |
+| a later Clear overwrites an earlier one | **yes**, within one segment | **yes**, globally |
+| excludes Clear from its ordered command stream | **no** — `PassSegment` carries it, `drawOrder_` stamps every draw with its segment | **yes** — `drawOrder_` held the eleven draw families and nothing else |
+| records Clear order but ignores it at pass construction | **yes** — this is the whole defect | n/a, there was no order to ignore |
+| one native pass for the entire bind cycle | **yes** | **yes** |
+| fails to close and restart the pass at Clear | **yes** | **yes** |
+| reloads/discards unaffected attachments incorrectly | no — per-aspect `clearX ? CLEAR : LOAD` was already right | no — same shape |
+| backbuffer handled differently from targets | no — REMED-GFX-143 already unified it | no — same three recorders, same flags |
+| loses Clear across target A → B → A | no — each cycle already owned its own clear | no — a target switch **is** the flush there |
+| clears colour but not depth/stencil | no — every aspect used the same mechanism, so every aspect had the same defect |  same |
+| relies on target rebinding as a boundary | **yes, accidentally** — a rebind was the only thing that ever opened a new load action | **yes, accidentally** — same |
+
+**SDL_GPU root cause.** Not that `Clear()` was unordered — it already was ordered. The unit that
+owns a load action was the **bind cycle** rather than a pass segment. `SdlGpuGraphicsBackend::Clear`
+wrote `clearColorRequested`/`clearColor` onto `CurrentSegment()`, the segment REMED-GFX-145 opens
+per public bind, and that segment becomes exactly one `SDL_BeginGPURenderPass`. A `Clear()` issued
+after a draw landed on the segment that draw was already in, so `SDL_GPUColorTargetInfo.load_op`
+hoisted it in front of the draw it was meant to erase. "The last Clear wins" inside one cycle had
+the same single cause: one pass, one `clear_color`.
+
+**WebGPU root cause.** `Clear()` was not in the command stream at all. Each entry point set a global
+`clearColorPending_`/`clearDepthPending_`/`clearStencilPending_` flag plus one value slot, and the
+three pass recorders read those flags once, when building the bind cycle's single
+`WGPURenderPassDescriptor`, to pick `WGPULoadOp_Clear` or `WGPULoadOp_Load`. The ordered stream
+REMED-GFX-159 built carried draws only, so Clear had no position to be ordered by, and two `Clear()`s
+of one cycle collapsed to the second one's value because there was one slot and the flag was
+already set.
+
+**REMED-GFX-159 is what exposed the WebGPU half.** While the replay was family-grouped, the clear
+leg of `spritebatch_3d_order_test.cpp` skipped behind the family-order gate; turning that gate over
+is what first ran it.
+
+### Pre-fix public order vs native order
+
+Traced with `CNA_SDLGPU_TRACE_CLEAR_ORDER` / `CNA_WEBGPU_TRACE_DRAW_ORDER` on
+`SetRenderTarget(preserving); FillTarget(red); Clear(green); FillLeftHalf(blue)`:
+
+| | public order | pending order | native passes | load actions | result |
+|---|---|---|---|---|---|
+| pre-fix | draw(red), Clear(green), draw(blue) | one segment, one clear request | **1** | colour = CLEAR(green) | blue-left / **red**-right |
+| post-fix | same | segment A: draw(red); segment B: Clear(green) + draw(blue) | **2** | A colour = LOAD/CLEAR-on-first-use, store; B colour = CLEAR(green), depth = LOAD | blue-left / **green**-right |
+
+### Corrected ordering architecture
+
+Both are *logical pass segmentation*, never a fullscreen coloured triangle — a real load action can
+express every colour/depth/stencil combination each backend supports, so no geometry-based clear was
+needed and none was written.
+
+* **SDL_GPU** — `SegmentForOrderedClear()` closes the open `PassSegment` and opens another over the
+  same destination (same render target, same cube face, same MRT attachment set) when
+  `PassSegment::hasDraws` is set, and folds the request into the open segment when it is not.
+  `hasDraws` is set in `PushDrawOrder`, the one choke point every `Queue*Draw()`/`QueueSprite()`
+  already routes through. Everything downstream was already per-segment and per-aspect and needed no
+  change.
+* **WebGPU** — `RecordOrderedClear()` appends an `OrderedClearCommand` (aspects **and values**
+  captured at the public call) plus a `DrawOrderEntry` with `OrderedKind::Clear` addressing it **by
+  index**, since `clearCommands_` reallocates while the cycle records. `BuildPassSegments()` — pure
+  bookkeeping, no GPU calls — cuts the stream into one `PassSegmentPlan` per native pass, and
+  `ReplayOrderedSegments()` records them. That replaced three near-identical pass bodies with one
+  loop over a `PassDestination`, shared by the backbuffer, `RenderTarget2D` and a cube face.
+
+`clearXPending_` is **kept** on both. It carries a second, unrelated meaning — "this attachment was
+just recreated and holds undefined bytes, force a real clear" (`ApplyMultiSampleCount`) — which
+belongs to the bind cycle, not to a public command, and still decides the first segment's load
+actions along with `RenderTargetUsage`.
+
+### Results
+
+Canonical fixture `examples/graphicsdevice_ordered_clear_test.cpp` (extended by this task):
+
+| backend | pre-fix | post-fix |
+|---|---|---|
+| SDL_GPU | **24/46** | **46/46** |
+| WEBGPU | **22/44** | **44/44** |
+| VULKAN (principal positive control) | 49/49 | 49/49 |
+| BGFX | 49/49 | 49/49 |
+| EASYGL | 49/49 | 49/49 |
+| D3D9 | 49/49 | 49/49 |
+| D3D11 | 49/49 | 49/49 |
+| SOFTWARE | 41/41 | 41/41 |
+| HEADLESS | 35/35 | 35/35 |
+
+* **Clear → draw** stays correct everywhere (O2, O6, O7, U2, R1) and still costs **one** pass.
+* **draw → Clear** correct (O1, K1, M1, S1, U1, J2, X3, K7, C4, G3).
+* **draw → Clear → draw** correct (O3, U1, S1, J1, J5).
+* **multiple ordered Clears** correct (O4, O5, R1 with 33 in one cycle and 8×4 across cycles, J4, J6).
+* **ClearOptions matrix**: `Target` (O1–O7), `DepthBuffer` (D1, D7), `Stencil` (D2, D8),
+  `Target|DepthBuffer` (D3), `Target|Stencil` (D4), `DepthBuffer|Stencil` (D5),
+  `Target|DepthBuffer|Stencil` (D6), and A1 for two consecutive Clears naming different aspects.
+* **Preservation**: a colour-only Clear leaves depth and stencil (D1, C5), a depth-only Clear leaves
+  colour and stencil (D1, D3), a stencil-only Clear leaves colour and depth (D2) — all proven by
+  RENDERING geometry the stored buffer must accept or reject, never by reading depth back.
+* **Destinations**: backbuffer (B1, C4; SDL_GPU has no public backbuffer readback, so its backbuffer
+  judgement is skipped and the property is carried by the render-target oracle), `RenderTarget2D`
+  (O1–O7), cube face (K1, T4 on two different faces with the others proven untouched),
+  A → B → A (U3), backbuffer → target → backbuffer (T1), two equal-sized targets (T2), two
+  differently sized targets (T3), MRT (M1), multisampled target (S1).
+* **RenderTargetUsage**: `DiscardContents` (U1), `PlatformContents` (U2), `PreserveContents`
+  (O1–O7), and the producer/consumer G3 leg runs all three. A public Clear defines the aspects it
+  names regardless of previous content; ending a segment never discards an attachment the next
+  segment must load.
+
+Draw-family coverage (`examples/spritebatch_3d_order_test.cpp`, new leg P — byte-exact parity against
+the same draw at the head of a fresh bind cycle, so no effect's shading has to be predicted):
+`DrawUserPrimitives`, `DrawUserIndexedPrimitives` (16- and 32-bit), vertex-colour user primitives,
+`SetVertexBuffer`+`DrawPrimitives`, `DrawIndexedPrimitives`, and both nonzero-range variants;
+`BasicEffect` textured and vertex-colour, `AlphaTestEffect`, `DualTextureEffect`,
+`EnvironmentMapEffect`, `SkinnedEffect`. SDL_GPU 66/66 (5 skipped), WEBGPU 84/84 (2 skipped),
+VULKAN 83/83, BGFX 83/83, EASYGL 83/83, SOFTWARE 86/86, HEADLESS 2/2 (14 skipped).
+`EnvironmentMapEffect` renders nothing on SDL_GPU **as the first draw of a cycle too**, so its P11
+case skips for a pre-existing reason unrelated to clears.
+
+### State restoration after a pass restart
+
+Checks P1–P5 measure it directly, by parity: Viewport, ScissorRectangle, BlendFactor (the blend
+constant, made observable by `SourceBlend=BlendFactor` over opaque white), depth state and stencil
+state each render byte-identically after a boundary and at the head of a fresh cycle. Leg P's twelve
+family cases cover pipeline, vertex/index buffers, vertex declaration, topology, texture and sampler
+bindings, bind/resource groups, blend/depth/rasterizer state and effect uniforms in the same way.
+Neither backend relies on native state surviving pass termination: SDL_GPU reapplies everything per
+draw already (REMED-GFX-064/068/069 captured it per draw), and WebGPU reopens
+`BeginPassViewport`/`BeginPassScissor`/blend constant/stencil reference per segment with a fresh
+`ReplayState`.
+
+### Native load/store actions
+
+SDL_GPU, `draw; Clear(Target); draw` on a preserving target:
+`pass#0 segment=10 opened-by=bind colorLoad=clear colorStore=store draws=1`,
+`pass#1 segment=11 opened-by=clear clear=target colorLoad=clear colorStore=store draws=1`.
+WebGPU, same sequence: `segment=0/2 opened-by=bind colorLoad=clear depthLoad=load draws=1`,
+`segment=1/2 opened-by=clear clear=target colorLoad=clear depthLoad=load resolve=yes draws=1`.
+A leading Clear, or a run of Clear()s, records `segment=0/1` — one pass.
+
+One store action had to be corrected on SDL_GPU, and it is why a depth-only or stencil-only ordered
+Clear on a multisampled target would otherwise have become a new defect: `SDL_GPU_STOREOP_RESOLVE`
+explicitly leaves multisample contents undefined and the following segment LOADs them.
+`FillColorTargetInfo` now takes `SDL_GPU_STOREOP_RESOLVE_AND_STORE` whenever a later segment of the
+frame renders into the same colour resource (`SegmentColorLoadedLater`) — the same correction
+REMED-GFX-141 made for preserving cube faces, extended to 2D targets and to discarding cubes this
+frame splits. WebGPU sets `resolveTarget` on the LAST segment only, so the samples cross the boundary
+through Store/Load and are resolved once rather than per segment.
+
+### Cardinality and performance
+
+Measured from the native traces, not estimated.
+
+| sequence (one bind cycle) | public commands | ordered entries | segments | native passes | submits | waits | Present | native draws |
+|---|---|---|---|---|---|---|---|---|
+| `Clear; draw` | 2 | 2 | 1 | **1** (unchanged) | 1 | 0 | 0 | 1 |
+| `Clear; Clear; Clear` | 3 | 3 | 1 | **1** (unchanged) | 1 | 0 | 0 | 0 |
+| `draw; Clear` | 2 | 2 | 2 | **2** (+1) | 1 | 0 | 0 | 1 |
+| `draw; Clear; draw` | 3 | 3 | 2 | **2** (+1) | 1 | 0 | 0 | 2 |
+| `Clear; draw; Clear; draw; Clear` | 5 | 5 | 3 | **3** (+2) | 1 | 0 | 0 | 2 |
+| `draw; Clear; Clear` | 3 | 3 | 2 | **2** (+1) | 1 | 0 | 0 | 1 |
+
+Exactly one extra native render pass per **observable** mid-cycle Clear, none for a leading one or
+for a run of Clears. No extra queue submit (SDL_GPU records every segment into the frame's one
+command buffer; WebGPU keeps one encoder and one submit per bind cycle), no wait, no `Present`, no
+extra frame, no readback, no extra geometry draw for a clear, no pipeline keyed on clear order, and
+no per-pixel/per-vertex/per-sprite allocation. Per-Clear metadata is bounded and compact: SDL_GPU
+adds two `bool`s to `PassSegment` and one `PassSegment` per split; WebGPU adds one
+`OrderedClearCommand` (three bools + a `WGPUColor` + a float + a `uint32_t`) and one
+`DrawOrderEntry` per public Clear.
+
+### False-positive tests found and strengthened
+
+**Six** fixtures declared some part of this property; **five** asserted the defective shape and so
+turn red the day a backend is corrected, and **one was worse than that**.
+
+| fixture | flag | blind spot | A/B proof |
+|---|---|---|---|
+| `graphicsdevice_ordered_clear_test.cpp` | `orderedClear` | asserted the collapsed result | SDL_GPU 24/46 → 46/46, WEBGPU 22/44 → 44/44 |
+| `spritebatch_3d_order_test.cpp` | `kClearAfterDrawWins` | **SKIPPED its entire clear leg** on exactly the two backends that needed it, so a file with 80+ ordering checks measured no Clear behaviour there at all | 17 failures each pre-fix → SDL_GPU 66/66, WEBGPU 84/84 |
+| `rendertarget_producer_consumer_test.cpp` | `kOrderedClearAfterDrawWins` (G3) | asserted "the trailing clear is LOST" | 29/32 → 32/32, 35/38 → 38/38 |
+| `rendertarget_pass_boundary_test.cpp` | `clearAfterDrawWins` (X3) | asserted load-op-only | SDL_GPU 39/39, WEBGPU 42/42 |
+| `rendertarget_depthstencil_usage_test.cpp` | `orderedClearInCycle` (K7) | asserted the collapsed result | SDL_GPU 29/29, WEBGPU 29/29 |
+| `backbuffer_pass_order_test.cpp` | `clearAfterDrawWinsOnBackbuffer` (C4) | asserted load-op-only | WEBGPU 29/30 → 30/30 |
+
+The two gates that could hide a regression rather than fail — `kOrderedClearAfterDrawWins` and
+`kClearAfterDrawWins` — are now `static_assert`ed at their use sites, so a future backend that
+regresses must restore the declaration rather than re-introduce a skip.
+
+Beyond the declarations, the pre-existing checks reached only SpriteBatch and one BasicEffect draw
+and could not observe a pass restart at all. This task added P1–P5 (pass state across the boundary),
+T1–T4 (backbuffer → target → backbuffer, two equal-sized targets, two differently sized targets, a
+second cube face), A1 (aspect coalescing), J3–J6 (the reverse family pair, alternating Clear/draw
+runs, two consecutive Clears) and leg P's twelve family cases.
+
+### Validation
+
+* **SDL_GPU** runs with `SDL_CreateGPUDevice(..., debugMode=true, ...)` in these Debug trees, so
+  SDL_gpu's own validation and the Vulkan validation layer were live for every run. Zero messages
+  about ending a pass with pending draws, beginning a second pass on the same texture, an invalid
+  load action on an uninitialized attachment, a missing Store before a later Load, attachment
+  transitions, stale resource sets, viewport/scissor outside target bounds, a destroyed resource
+  retained by a later segment, a command after pass end, or device loss.
+* **WebGPU** ran with the uncaptured-error and device-lost callbacks armed (they print to stderr and
+  increment `uncapturedErrorCount_`) plus `RUST_LOG=wgpu_core=warn,wgpu_hal=warn`. **Zero** uncaptured
+  errors, zero device-lost, zero warnings, across the ordered-clear, family-order, pass-boundary and
+  depth/stencil-usage fixtures.
+* One validation message does appear on SDL_GPU: `VUID-vkDestroyDevice-device-05137` at process
+  teardown in `spritebatch_3d_order`. **A/B-classified exactly**: 8 occurrences with the pre-fix
+  backend, 4 with the fix — pre-existing, unrelated to pass segmentation, and reduced rather than
+  introduced. Nothing was suppressed.
+
+### Sanitizers
+
+Persistent trees reused: `cmake-build-sdlgpu-asan`, `cmake-build-sdlgpu-ubsan`,
+`cmake-build-webgpu-asan-ubsan`. **No sanitizer directory was created.**
+
+Zero use-after-free, zero unstable-reference access, zero invalid segment index, zero stale
+attachment access, zero integer overflow, zero uninitialized load/store state, zero UBSan runtime
+errors. Coverage: repeated pass splitting (R1's 33 clears in one cycle and 8×4 across cycles), every
+supported ClearOptions combination, alternating Clear/draw, all draw families, A → B → A, cube faces,
+viewport/scissor transitions, `drawOrder_`/`clearCommands_` vector growth, resource mutation and
+disposal, and repeated frames.
+
+Leaks are **A/B-classified exactly**, not waved through as pre-existing:
+
+| fixture | pre-fix | post-fix |
+|---|---|---|
+| SDL_GPU ordered clear (ASan) | 624 B / 6 allocs | **624 B / 6 allocs — identical** |
+| WEBGPU ordered clear | 368 B / 4 | **368 B / 4 — identical** |
+| WEBGPU pass boundary | 368 B / 4 | **368 B / 4 — identical** |
+| WEBGPU producer/consumer | 1 259 252 B / 729 | **1 259 252 B / 729 — identical** |
+| WEBGPU family order | 9 758 B / 63 | **32 B / 1 — reduced** |
+
+Every leaked allocation resolves to `realloc`/`calloc` inside an unloaded shared object
+(`<unknown module>`), i.e. driver-side, with no CNA frame in any stack.
+
+### Regression gates
+
+`ctest -L SdlGpu` **57/58** and `ctest -L WebGPU` **55/56**. Both failures A/B-proven pre-existing by
+rebuilding the same test against the pre-fix backend:
+
+* `SdlGpu_RenderState` — aborts with `Cannot present while render targets are bound`, identically
+  pre-fix.
+* `WebGPU_Clear_Readback` — the same three checks (50%-alpha blend, `AddressMode::Wrap`,
+  `AddressMode::Mirror`) fail identically pre-fix. Despite the name, none of them is a clear-ordering
+  check.
+
+GFX-102 SpriteBatch BlendState, GFX-104/105 indexed WebGPU behaviour, GFX-116 WebGPU viewport
+snapshots, GFX-129 Vulkan ordered Clear, GFX-131 WebGPU colour semantics, GFX-136/142 target-usage
+semantics, GFX-143/145 SDL_GPU segmentation, GFX-146 WebGPU scissor snapshots, GFX-157 mixed-family
+order, GFX-158 bgfx reset binding replay, GFX-159 WebGPU unified draw ordering, GFX-160
+culling/winding, and target readback / sampling / producer-consumer behaviour all hold.
+
+### Unsupported boundaries, honestly inventoried
+
+* **WebGPU stencil.** `ApplyDepthStencilState` stores the stencil state and deliberately never bakes
+  it into a pipeline's `WGPUStencilFaceState` (WEBGPU-83), so every fragment passes the stencil test.
+  `stencilInRT` is declared false and D2/D4/D5/D6/D8/P5 skip there. **No stencil implementation was
+  started** — the ordered-clear architecture routes a stencil clear correctly the day that capability
+  lands, and the gap is recorded, not closed.
+* **SDL_GPU stencil.** `stencilBuffer3D` is likewise declared false: the stencil attachment and the
+  public stencil state exist and the stencil aspect's load action is ordered along with the others,
+  but a stencil-gated 3D draw is not gated, so the same checks skip. Same treatment.
+* **SDL_GPU backbuffer readback.** There is no `ReadBackbuffer` override, so B1, C4 and C6 issue
+  their sequences and skip the judgement. `clearAfterDrawWinsOnBackbuffer` and
+  `backbufferDepthOnlyClear` were deliberately **left declared false** in
+  `backbuffer_pass_order_test.cpp` for SDL_GPU rather than flipped: the property is genuinely true
+  now, but it is not observable there through any public API, and flipping an unmeasurable
+  declaration would be a claim without evidence. The render-target oracle carries it instead.
+* **WebGPU MSAA.** The device applied no multisampling at the requested 4x on this machine, so S1
+  skips there; the multisampled path is measured on SDL_GPU, where it applies and passes.
+
+### Independent findings recorded, not fixed
+
+* **SDL_GPU multisampled `RenderTarget2D` store action.** `FillColorTargetInfo` used plain
+  `SDL_GPU_STOREOP_RESOLVE` unconditionally, so a *second bind cycle* of a preserving multisampled
+  2D target already loaded undefined multisample contents — the 2D counterpart of what REMED-GFX-141
+  fixed for cube faces, and latent before this task. It is corrected here because segmentation would
+  otherwise have made it reachable within a single cycle; recorded so the pre-existing half is not
+  credited to this task.
+* **`SdlGpu_RenderState`** aborts with `Cannot present while render targets are bound` — pre-existing,
+  A/B-proven, unrelated.
+* **`WebGPU_Clear_Readback`** fails three sampler/blend checks — pre-existing, A/B-proven, unrelated
+  to clear ordering despite the fixture's name.
+* **`cna_reference_dump` (ascii tree)** fails to link on an undefined `SpriteFont` constructor, and
+  **`third_party/enet/unix.c` (canvas tree)** fails to compile on a typedef redefinition. Both are
+  outside this change's reach — neither target compiles any file this task touched — and both
+  backend libraries themselves build clean.
+
+### Source and generated-artifact changes
+
+Four production files: `SdlGpuGraphicsBackend.cpp`/`.hpp` and `WebGPUGraphicsBackend.cpp`/`.hpp`.
+**No shader changed and no generated artifact or offline-compiled bytecode was regenerated** — the
+correction is which render passes get recorded and with which load actions, not what they draw. No
+public API changed.
+
+### Build directories
+
+All **reused**; **no directory was created**, none cleaned or recreated, **no temporary build tree
+anywhere**, and no build ran in the scratchpad or under `/tmp`. `CNA_USE_CCACHE=ON` verified in every
+cache used.
+
+`cmake-build-sdlgpu`, `cmake-build-sdlgpu-asan`, `cmake-build-sdlgpu-ubsan`, `cmake-build-webgpu`,
+`cmake-build-webgpu-asan-ubsan`, `cmake-build-vulkan`, `cmake-build-bgfx`, `cmake-build-easygl-asan`,
+`cmake-build-software`, `cmake-build-headless`, `cmake-build-ascii`, `cmake-build-canvas`,
+`cmake-build-dx3`, `cmake-build-sdlrenderer`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`,
+`cmake-build-d3d12-mingw` — the fourteen trees whose test suites reference the six changed fixtures,
+plus the sanitizer trees.
+
+### Commits
+
+- `82b62e92 test(Task REMED-GFX-156): reproduce ordered mid-cycle Clear failures`
+- `fb25723a fix(Task REMED-GFX-156): preserve WebGPU Clear command order`
+- `e313bbfb fix(Task REMED-GFX-156): preserve SDL_GPU Clear command order`
+- `docs(remediation): record GFX-156 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
