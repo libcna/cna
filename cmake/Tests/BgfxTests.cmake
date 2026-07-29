@@ -1084,6 +1084,30 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_bgfx_rt_backbuffer_consumer --msaa
         TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-158, the home backend of the finding: a RenderTarget2D constructed during a public
+    # frame must be usable in that same frame with no warm-up. `bgfx::reset()` -- which this backend
+    # calls the moment the SDL window's size differs from the size bgfx was initialised with -- ends
+    # by discarding EVERY view's framebuffer binding, including the one just programmed for the
+    # target that is bound right now, and bgfx resolves view state only at frame(). The bind cycle's
+    # operations then resolved against the backbuffer and the target was never written: measured
+    # (0,0,0,0), not even its own DiscardContents clear. Fixed by mirroring the view->framebuffer
+    # bindings this backend programs and replaying the mirror straight after any reset.
+    #
+    # The resolution settles exactly once per process, so only a process's FIRST bind cycle can
+    # observe it. `--leg=<id>` runs one leg alone, which puts that leg in first position; the four
+    # single-leg runs below are the four distinguishable first operations a brand-new target can
+    # have (a draw, a public clear, the bind's own discard clear, and a stock 3D draw) and every one
+    # of them is red pre-fix.
+    cna_bgfx_test(cna_test_bgfx_rt_first_use
+        examples/rendertarget_first_use_test.cpp)
+    cna_register_backend_test(NAME Bgfx_RenderTarget_FirstUse COMMAND cna_test_bgfx_rt_first_use
+        TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    foreach(_gfx158_leg A1 A3 A4 J)
+        cna_register_backend_test(NAME Bgfx_RenderTarget_FirstUse_Leg${_gfx158_leg}
+            COMMAND cna_test_bgfx_rt_first_use --leg=${_gfx158_leg}
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endforeach()
+
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
