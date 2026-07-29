@@ -295,6 +295,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         COMMAND ${_d3d9_rt_producer_consumer_cmd}
         TIMEOUT 120 LABELS "D3D9")
 
+    # REMED-GFX-152 cross-backend control: a RenderTarget2D handed to a stock or custom 3D effect as
+    # its texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
+    # stock-effect paths static_cast an ITextureBackend* to the unrelated sibling
+    # SdlGpuTextureBackend, fabricating an SDL_GPUTexture* out of a render target's own fields); this
+    # run is what establishes that D3D9 already honoured the contract rather than being made to.
+    cna_d3d9_test(cna_test_d3d9_rt_effect_source
+                   examples/rendertarget_effect_source_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_rt_effect_source_cmd cna_test_d3d9_rt_effect_source)
+    cna_register_backend_test(NAME D3D9_RenderTarget_EffectSource
+        COMMAND ${_d3d9_rt_effect_source_cmd}
+        TIMEOUT 300 LABELS "D3D9")
+
     # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
     # volume GetData paths converted their own zero-initialized scratch buffer for the caller
     # regardless of whether the backend read anything back. The volume half needs a

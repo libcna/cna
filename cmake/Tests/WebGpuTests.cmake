@@ -487,6 +487,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_RenderTarget_ProducerConsumer COMMAND cna_test_webgpu_rt_producer_consumer
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-152 cross-backend control: a RenderTarget2D handed to a stock or custom 3D effect as
+    # its texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
+    # stock-effect paths static_cast an ITextureBackend* to the unrelated sibling
+    # SdlGpuTextureBackend, fabricating an SDL_GPUTexture* out of a render target's own fields); this
+    # run is what establishes that WEBGPU already honoured the contract rather than being made to.
+    cna_webgpu_test(cna_test_webgpu_rt_effect_source
+                    examples/rendertarget_effect_source_test.cpp)
+    cna_register_backend_test(NAME WebGPU_RenderTarget_EffectSource COMMAND cna_test_webgpu_rt_effect_source
+        TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

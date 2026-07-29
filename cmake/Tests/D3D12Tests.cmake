@@ -48,6 +48,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     cna_d3d12_test(cna_test_d3d12_cube_volume_getdata_contract
                    examples/texturecube_texture3d_getdata_contract_test.cpp)
 
+    # REMED-GFX-152 cross-backend control: a RenderTarget2D handed to a stock 3D effect as its
+    # texture must be sampled, not reinterpreted. The defect was SDL_GPU-local and fatal (its
+    # stock-effect paths static_cast an ITextureBackend* to the unrelated sibling
+    # SdlGpuTextureBackend). Built, not ctest-registered, for the same reason as the two above --
+    # this is a Game-harness test, so it constructs a window and swap chain, which DX-100's spike
+    # found crashes under this dev loop's vanilla Wine dxgi.dll. The cross-build is the control here.
+    cna_d3d12_test(cna_test_d3d12_rt_effect_source
+                   examples/rendertarget_effect_source_test.cpp)
+
     # REMED-GFX-134: `RenderTargetCube::GetData` must return the face that was really rendered or
     # reject the request deterministically. REMED-GFX-130 made the reporting honest but left the
     # readback itself implemented on only two backends, so a rendered cube face had no byte-exact
