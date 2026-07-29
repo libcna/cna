@@ -177,27 +177,29 @@ namespace
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
-    // `mixedQueuesKeepPublicOrder` false: measured. bgfx has the same shape as Vulkan -- sprites
-    // and 3D draws live in separate queues and every view replays one family after the other -- so
-    // within ONE bind cycle a 3D draw issued before a sprite still lands on top of it. Recorded as
-    // an independent finding by REMED-GFX-143, distinct from segment boundaries: every other check
-    // in this file passes here, so bgfx already interleaves backbuffer and target work correctly.
+    // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157. bgfx submits both families
+    // immediately into a view, and bgfx's DEFAULT view mode radix-sorts a view's draws by sort key
+    // to minimise state changes -- which discards submission order, so within ONE bind cycle a 3D
+    // draw issued before a sprite still landed on top of it. Every view id is now set to
+    // ViewMode::Sequential at init, the within-view half of REMED-GFX-155's between-view ordering,
+    // and this declaration turned over; it was measured red the moment the fix landed.
     constexpr Contract kContract{"BGFX", Support::Exact, true, Support::Exact,
-                                 true, true, false, true, true, true, false, true, true, false};
+                                 true, true, true, true, true, true, false, true, true, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // REMED-GFX-143's primary subject. `orderedBackbufferSegments` was false until this task:
     // Phase 2 of RecordCommandBuffer was one trailing swapchain pass passed `kAllSegments`.
-    // `mixedQueuesKeepPublicOrder` false: `activeBatches_` and `pending3D_` are two queues and
-    // every pass replays all sprites then all 3D draws, so within ONE segment a 3D draw issued
-    // before a sprite still lands on top of it (recorded as an independent finding, not fixed
-    // here). `clearAfterDrawWinsOnBackbuffer` / `backbufferDepthOnlyClear` were BOTH false while
+    // `mixedQueuesKeepPublicOrder` was false until REMED-GFX-157: `activeBatches_` and
+    // `pending3D_` are two queues and every pass replayed all sprites and then all 3D draws, so
+    // within ONE segment a 3D draw issued before a sprite still landed on top of it. Each pass now
+    // splits its order range at every family change and replays the runs in order, and this
+    // declaration turned over; it was measured red the moment the fix landed. `clearAfterDrawWinsOnBackbuffer` / `backbufferDepthOnlyClear` were BOTH false while
     // REMED-GFX-129 was open -- the clear colour reached the swapchain only through the render-pass
     // load op, and `ClearDepth` was the one clear entry point that recorded no clear request at
     // all. REMED-GFX-129 made Clear an ordered vkCmdClearAttachments command, so checks C4 and C6
     // now assert the correct behaviour on this backend; both were measured red the moment the fix
     // landed, which is what turned these two declarations over.
     constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
-                                 true, true, false, true, true, true, true, true, true, false};
+                                 true, true, true, true, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     // `clearAfterDrawWinsOnBackbuffer` false: WebGPU delivers a backbuffer clear colour only
     // through the render-pass load op, the same mechanism REMED-GFX-140 records for its render
@@ -211,8 +213,14 @@ namespace
     // reverse (a target switch IS the flush on this backend, so live state still matched).
     // REMED-GFX-146 captures the whole scissor state per draw and this declaration turned over;
     // it was measured red the moment the fix landed.
+    // `mixedQueuesKeepPublicOrder` false: measured by REMED-GFX-157. WebGPU groups a bind cycle's
+    // draws by family too, but the OTHER way round -- all 3D draws, then all sprites -- so
+    // `3D -> SpriteBatch` (check O3) looks correct here while `SpriteBatch -> 3D` (check O4) is the
+    // one that inverts. That direction is why this declaration was `true` for as long as O3 was the
+    // only mixed-family check in this file. Recorded as its own finding; REMED-GFX-157 was scoped
+    // not to change WebGPU production.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
-                                 true, true, true, false, true, true, true, true, true, false};
+                                 true, true, false, false, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override, so `GetBackBufferData` raises and this file's
     // backbuffer oracle cannot run here at all. REMED-GFX-143's SdlGpu half is measured
@@ -244,6 +252,35 @@ namespace
 #else
 #error "REMED-GFX-143: this backend has no declared backbuffer command-order contract."
 #endif
+
+    /**
+     * @brief When `mixedQueuesKeepPublicOrder` is false, which family this backend replays FIRST.
+     *
+     * REMED-GFX-157: "does it keep public order" and "if not, which way does it group" are two
+     * different facts, and O3 alone could only ever see the first. A backend that replays all
+     * sprites and then all 3D draws inverts `3D; sprite`; one that replays all 3D draws and then
+     * all sprites inverts `sprite; 3D` instead. Only meaningful when the contract above says the
+     * order is not public; checks O3 and O4 derive both of their predictions from the pair, so
+     * there is exactly one place to change when a backend is corrected.
+     */
+    constexpr bool kMixedGroupingReplays3DFirst =
+#if defined(CNA_BACKEND_WEBGPU)
+        true;
+#else
+        false;
+#endif
+
+    /**
+     * @brief Whether the SPRITE is the last of the pair to reach the target.
+     *
+     * @param spriteIssuedSecond True when the game issued the sprite after the 3D draw.
+     * @return True when the sprite wins the overlapped stripe.
+     */
+    constexpr bool SpriteWinsMixedPair(bool spriteIssuedSecond)
+    {
+        return kContract.mixedQueuesKeepPublicOrder ? spriteIssuedSecond
+                                                    : kMixedGroupingReplays3DFirst;
+    }
 
     /// Fully saturated, so sRGB encoding is the identity on every asserted texel.
     const Color kBlack (  0,   0,   0, 255);
@@ -981,14 +1018,47 @@ class BackbufferPassOrderTest : public Game
         Draw3D(dev, *nearStripeVb_[0], false);        // green stripe 0
         SpriteStripes(0, 1, kBlue);                   // issued after, same stripe
         Frame f = ReadBackbuffer(dev);
-        if (kContract.mixedQueuesKeepPublicOrder)
-            CheckStripes(f, { kBlue, kBlack, kBlack, kBlack },
-                         label + ": a sprite issued after a 3D draw inside ONE cycle covers it", false);
-        else
-            CheckStripes(f, { kGreen, kBlack, kBlack, kBlack },
-                         label + ": this backend replays all sprites then all 3D draws inside one "
-                                 "cycle, so the 3D draw wins regardless of public order (declared "
-                                 "open defect with its own root cause, not segmentation)", false);
+        // The sprite was issued SECOND, so public order puts it on top.
+        CheckStripes(f, { SpriteWinsMixedPair(true) ? kBlue : kGreen, kBlack, kBlack, kBlack },
+                     label + (kContract.mixedQueuesKeepPublicOrder
+                                  ? ": a sprite issued after a 3D draw inside ONE cycle covers it"
+                                  : ": this backend groups a cycle's draws by family, so the winner "
+                                    "is fixed by the grouping and not by public order (declared "
+                                    "open defect with its own root cause, not segmentation)"),
+                     false);
+    }
+
+    /**
+     * @brief O4 -- the OTHER direction of the same pair, which O3 alone could never see.
+     *
+     * REMED-GFX-157: O3 only ever measured `3D draw; sprite`. A backend that replays all sprites
+     * and then all 3D draws produces the CORRECT picture for `sprite; 3D draw` by accident, so half
+     * of the mixed-queue contract went unmeasured for as long as O3 was the only check -- and a
+     * backend that groups the other way round (all 3D, then all sprites) passed O3 outright while
+     * inverting this direction. Both directions are now asserted, and the same per-backend
+     * declaration governs both, so neither grouping can hide behind the other.
+     */
+    void RunMixedQueuesInOneCycleReversed(GraphicsDevice& dev)
+    {
+        const std::string label = "O4 mixed queues in one cycle, sprite first";
+        if (!kContract.draws3D)
+        {
+            skip(label + ": skipped -- no 3D rasterization here");
+            return;
+        }
+
+        dev.Clear(kBlack);
+        SpriteStripes(0, 1, kBlue);                   // blue stripe 0
+        Draw3D(dev, *nearStripeVb_[0], false);        // issued after, same stripe: must cover it
+        Frame f = ReadBackbuffer(dev);
+        // The sprite was issued FIRST, so public order puts the 3D draw on top.
+        CheckStripes(f, { SpriteWinsMixedPair(false) ? kBlue : kGreen, kBlack, kBlack, kBlack },
+                     label + (kContract.mixedQueuesKeepPublicOrder
+                                  ? ": a 3D draw issued after a sprite inside ONE cycle covers it"
+                                  : ": this backend groups a cycle's draws by family, so the winner "
+                                    "is fixed by the grouping and not by public order (declared "
+                                    "open defect)"),
+                     false);
     }
 
     // =====================================================================
@@ -1362,6 +1432,7 @@ protected:
             Run3DThenSpritesAcrossCycles(dev);
             RunSpritesThen3DAcrossCycles(dev);
             RunMixedQueuesInOneCycle(dev);
+        RunMixedQueuesInOneCycleReversed(dev);
             RunViewportPerCycle(dev);
             RunScissorPerCycle(dev);
             RunUploadIsolation(dev);

@@ -176,6 +176,23 @@ namespace
         true;
 #endif
 
+    /**
+     * @brief Whether a bind cycle's SpriteBatch and stock 3D draws replay in public order.
+     *
+     * REMED-GFX-157 corrected Vulkan and bgfx, which grouped a cycle's draws by family. WEBGPU
+     * groups them the other way round -- all 3D draws, then all sprites -- so a SpriteBatch
+     * followed by an OVERLAPPING 3D draw comes out with the sprite on top there. That is declared
+     * rather than absorbed, and only leg I0's overlapping render-target probe can see it: every
+     * other leg here draws its two families into disjoint slots, which any grouping renders
+     * correctly. REMED-GFX-157 was scoped not to change WebGPU production.
+     */
+    constexpr bool kFamiliesReplayInPublicOrder =
+#if defined(CNA_BACKEND_WEBGPU)
+        false;
+#else
+        true;
+#endif
+
     constexpr int kBBW = 64;   ///< Backbuffer width.  Eight pattern slots across.
     constexpr int kBBH = 64;   ///< Backbuffer height.
 
@@ -367,7 +384,15 @@ class RenderTargetBackbufferConsumerTest : public Game
     {
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
-        sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+        // REMED-GFX-157: pass the depth and rasterizer states EXPLICITLY. A null means
+        // "DepthStencilState.None and RasterizerState.CullCounterClockwise" (FNA SpriteBatch.cs:
+        // `rasterizerState ?? RasterizerState.CullCounterClockwise`), and FNA's PrepRenderState
+        // assigns them to the device and never restores them -- so a null left CullCounterClockwise
+        // behind, and leg I below then reported the following 3D draw as LOST when it had merely
+        // been culled. Ordering is what this fixture measures, so it states the state it wants.
+        DepthStencilState noDepth = DepthStencilState::None;
+        RasterizerState noCull = RasterizerState::CullNone;
+        sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
         sb.Draw(source, Slot(slot), Rectangle(0, 0, kPW, kPH), Color::White);
         sb.End();
     }
@@ -379,7 +404,9 @@ class RenderTargetBackbufferConsumerTest : public Game
     {
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
-        sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+        DepthStencilState noDepth = DepthStencilState::None;
+        RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+        sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
         sb.Draw(a, Slot(slotA), Rectangle(0, 0, kPW, kPH), Color::White);
         sb.Draw(b, Slot(slotB), Rectangle(0, 0, kPW, kPH), Color::White);
         sb.End();
@@ -426,7 +453,9 @@ class RenderTargetBackbufferConsumerTest : public Game
         dev.Clear(Color(0, 0, 0, 255));
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
-        sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+        DepthStencilState noDepth = DepthStencilState::None;
+        RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157, see DrawSpriteSlot
+        sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
         sb.Draw(source, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
         sb.End();
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -538,7 +567,9 @@ class RenderTargetBackbufferConsumerTest : public Game
         {
             SpriteBatch sb(dev);
             SamplerState point = SamplerState::PointClamp;
-            sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            DepthStencilState noDepth = DepthStencilState::None;
+            RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+            sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
             sb.Draw(a, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
             sb.End();
         }
@@ -758,7 +789,9 @@ class RenderTargetBackbufferConsumerTest : public Game
             {
                 SpriteBatch sb(dev);
                 SamplerState point = SamplerState::PointClamp;
-                sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+                DepthStencilState noDepth = DepthStencilState::None;
+                RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+                sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
                 sb.Draw(producer, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
                 sb.End();
             }
@@ -874,7 +907,9 @@ class RenderTargetBackbufferConsumerTest : public Game
         {
             SpriteBatch sb(dev);
             SamplerState point = SamplerState::PointClamp;
-            sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            DepthStencilState noDepth = DepthStencilState::None;
+            RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+            sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
             sb.Draw(patternTex_, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
             sb.End();
         }
@@ -995,16 +1030,25 @@ class RenderTargetBackbufferConsumerTest : public Game
 
         const bool c1Mid  = controlPlaced(c1, 1, AltPatternColor);   // 3D between two sprite batches
         const bool c2Last = controlPlaced(c2, 2, PatternColor);      // 3D after a sprite batch
-        if (!c1Mid || !c2Last)
+
+        // REMED-GFX-157: these two were a DECLARATION here, not a check -- an INFO line reporting
+        // that this backend "cannot place a stock 3D draw issued after a SpriteBatch in the same
+        // bind cycle", which then restricted the render-target cases below to the positions the
+        // backend was believed able to place. Both halves of that were wrong. The draw was not
+        // lost: this leg let SpriteBatch.Begin default the rasterizer state (a null means
+        // RasterizerState.CullCounterClockwise, which FNA assigns to the device and never restores)
+        // and then drew a quad of exactly the winding four backends cull under it. DrawSpriteSlot
+        // now states the state it wants, and the contract is asserted rather than declared.
+        check(c1Mid,
+              "I0 a stock 3D draw issued BETWEEN two SpriteBatch cycles reaches the backbuffer, "
+              "with an ordinary Texture2D source and no render target involved at all");
+        check(c2Last,
+              "I0 a stock 3D draw issued AFTER a SpriteBatch in the same backbuffer bind cycle "
+              "reaches the backbuffer, likewise with an ordinary Texture2D source");
+
+        // The same sequence inside a RENDER TARGET bind cycle, so the contract is asserted for both
+        // destinations and not only for the backbuffer.
         {
-            // An independent draw-family defect: a stock 3D draw issued AFTER a SpriteBatch in the
-            // same bind cycle does not reach the backbuffer even for an ordinary texture. It is not
-            // a render-target ordering question and is recorded rather than absorbed here; the
-            // render-target cases below are then restricted to the positions this backend can
-            // actually place, so this fixture measures ordering and not that separate defect.
-            // Scope: does the same loss happen inside a RENDER TARGET bind cycle, or only on the
-            // backbuffer? Measured rather than guessed, so the separate ticket states its real
-            // extent. Both draws use an ordinary texture and the target's full extent.
             RenderTarget2D probe(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                  RenderTargetUsage::DiscardContents);
             dev.SetRenderTarget(&probe);
@@ -1013,7 +1057,9 @@ class RenderTargetBackbufferConsumerTest : public Game
             {
                 SpriteBatch sb(dev);
                 SamplerState point = SamplerState::PointClamp;
-                sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+                DepthStencilState noDepth = DepthStencilState::None;
+                RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+                sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
                 sb.Draw(altPatternTex_, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH),
                         Color::White);
                 sb.End();
@@ -1039,20 +1085,31 @@ class RenderTargetBackbufferConsumerTest : public Game
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             ResetState(dev);
             Readback pr = ReadWholeTarget(probe, kPW, kPH);
-            bool rtCycleOk = pr.ok();
-            if (rtCycleOk)
-                for (int y = 0; y < kPH && rtCycleOk; ++y)
-                    for (int x = 0; x < kPW && rtCycleOk; ++x)
-                        if (!Same(pr.at(x, y), PatternColor(x, y))) rtCycleOk = false;
-
-            std::printf("[INFO] I0 %s cannot place a stock 3D draw issued after a SpriteBatch in the "
-                        "same backbuffer bind cycle: 3D-between-sprites %s, 3D-after-sprite %s; the "
-                        "same sequence inside a RENDER TARGET bind cycle is %s -- measured with "
-                        "ORDINARY textures throughout, so it is independent of render-target "
-                        "ordering and is recorded separately, not fixed here\n",
-                        kBackendName, c1Mid ? "OK" : "LOST", c2Last ? "OK" : "LOST",
-                        pr.ok() ? (rtCycleOk ? "OK" : "LOST") : "not readable");
-            std::fflush(stdout);
+            if (pr.ok())
+            {
+                // The sprite filled the whole target with the ALT pattern and the 3D draw covered
+                // it with the pattern, so this is the one place in this file where the two families
+                // OVERLAP and the winner names the replay order.
+                PatternFn want = kFamiliesReplayInPublicOrder ? PatternColor : AltPatternColor;
+                int good = 0;
+                for (int y = 0; y < kPH; ++y)
+                    for (int x = 0; x < kPW; ++x)
+                        if (Same(pr.at(x, y), want(x, y))) ++good;
+                check(good == kPW * kPH,
+                      std::string("I0 the same SpriteBatch -> 3D sequence inside a RENDER TARGET "
+                                  "bind cycle ") +
+                      (kFamiliesReplayInPublicOrder
+                           ? "puts the 3D draw on top"
+                           : "puts the SPRITE on top, because this backend groups a cycle's draws "
+                             "by family and replays all 3D draws first (declared open finding)") +
+                      " (" + std::to_string(good) + "/" + std::to_string(kPW * kPH) + ")");
+            }
+            else
+            {
+                std::printf("[INFO] I0 the render-target probe is not readable on %s -- boundary "
+                            "recorded\n", kBackendName);
+                std::fflush(stdout);
+            }
         }
 
         RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -1215,7 +1272,9 @@ class RenderTargetBackbufferConsumerTest : public Game
                 {
                     SpriteBatch sb(dev);
                     SamplerState point = SamplerState::PointClamp;
-                    sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+                    DepthStencilState noDepth = DepthStencilState::None;
+                    RasterizerState noCull = RasterizerState::CullNone;   // REMED-GFX-157
+                    sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, &noDepth, &noCull);
                     sb.Draw(patternTex_, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH),
                             Color::White);
                     sb.End();
