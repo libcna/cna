@@ -8,6 +8,11 @@
 #include <bit>
 #include <algorithm>
 #include <cassert>
+#include <cstdarg>
+#include <cstdint>
+#include <type_traits>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <limits>
@@ -22,6 +27,71 @@ namespace CNA::Internal::Backends::Vulkan
 {
     using Microsoft::Xna::Framework::Matrix;
     using Microsoft::Xna::Framework::Graphics::DepthFormat;
+
+    // -------------------------------------------------------------------------
+    // REMED-GFX-166: native ownership trace
+    //
+    // A deferred renderer's lifetime defects are invisible from C++ object lifetime alone: a
+    // wrapper can be long dead while its VkImage is legitimately still alive in the retirement
+    // queue, and a draw can be recorded against a framebuffer whose contents nothing ever wrote.
+    // Set CNA_VULKAN_LIFETIME_TRACE=1 to emit one line per ownership transition -- enqueue,
+    // descriptor resolution, disposal request, retirement insertion, segment recording, draw
+    // issue, submit, native free -- each carrying the public command order, the backend object,
+    // the VkImage/VkImageView/VkDescriptorSet involved and the frame generation. Off (and free
+    // beyond one already-resolved bool test) unless the variable is set.
+    // -------------------------------------------------------------------------
+    namespace
+    {
+        bool VulkanLifetimeTraceOnEXT()
+        {
+            static const bool on = [] {
+                const char* v = std::getenv("CNA_VULKAN_LIFETIME_TRACE");
+                return v != nullptr && v[0] != '\0' && v[0] != '0';
+            }();
+            return on;
+        }
+
+        void VkLifetimeTraceEXT(const char* fmt, ...)
+        {
+            if (!VulkanLifetimeTraceOnEXT()) return;
+            std::fputs("[VKLT] ", stderr);
+            va_list ap;
+            va_start(ap, fmt);
+            std::vfprintf(stderr, fmt, ap);
+            va_end(ap);
+            std::fputc('\n', stderr);
+            std::fflush(stderr);
+        }
+
+        /// REMED-GFX-166: which deferred 3D command family a draw belongs to, for the trace.
+        /// The flags are mutually exclusive by construction at every enqueue site; the order here
+        /// mirrors the recorder's own pipeline-selection order so the two cannot disagree.
+        template <typename D>
+        const char* Pending3DFamilyEXT(const D& d)
+        {
+            if (d.isMarker)        return "Marker";
+            if (d.usePbrSkinned)   return "PbrSkinned";
+            if (d.usePbr)          return "Pbr";
+            if (d.useSkinned)      return "Skinned";
+            if (d.useEnvMap)       return "EnvMap";
+            if (d.useDualTexture)  return "DualTexture";
+            if (d.useAlphaTest)    return "AlphaTest";
+            if (d.useLitTextured)  return "LitTextured";
+            if (d.useInstanced)    return "Instanced";
+            if (d.useFogTex3D)     return "BasicEffect";
+            return "Colored";
+        }
+
+        /// Opaque handle value of any Vulkan object, for tracing on 32- and 64-bit handle builds.
+        template <typename T>
+        unsigned long long VkH(T handle)
+        {
+            if constexpr (std::is_pointer_v<T>)
+                return static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(handle));
+            else
+                return static_cast<unsigned long long>(handle);
+        }
+    }
 
     static const char* const kValidationLayers[] = { "VK_LAYER_KHRONOS_validation" };
     static const char* const kDeviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -382,6 +452,8 @@ namespace CNA::Internal::Backends::Vulkan
 
     VulkanTextureBackend::~VulkanTextureBackend()
     {
+        if (owner_) owner_->TraceTargetDisposalEXT("tex2d", this, nullptr, image_, imageView_,
+                                                    VK_NULL_HANDLE);
         if (owner_) {
             auto& list = owner_->liveTextures_;
             list.erase(std::remove(list.begin(), list.end(), this), list.end());
@@ -690,7 +762,38 @@ namespace CNA::Internal::Backends::Vulkan
         write.pImageInfo      = &imgDesc;
         vkUpdateDescriptorSets(dev, 1, &write, 0, nullptr);
 
+        // REMED-GFX-166: the destination the deferred queues will name. Built from the handles
+        // above, all of which are final at this point and never replaced -- so this description
+        // stays correct after ReleaseVulkanResources() has handed those handles to the retirement
+        // queue, which is the window a command outliving this wrapper has to be replayed in.
+        pass_ = std::make_shared<VulkanTargetPassEXT>();
+        pass_->framebuffer   = (msaaFramebuffer_ != VK_NULL_HANDLE) ? msaaFramebuffer_ : framebuffer_;
+        pass_->renderPass    = (msaaFramebuffer_ != VK_NULL_HANDLE)
+                               ? owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_,
+                                                                     /*discardContents=*/true)
+                               : owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
+        pass_->width         = width_;
+        pass_->height        = height_;
+        pass_->msaa          = (msaaFramebuffer_ != VK_NULL_HANDLE);
+        pass_->depthFormat   = depthVkFormat_;
+        // REMED-GFX-129: a PreserveContents target's non-MSAA pass loads its colour, so a leading
+        // Clear() cannot ride the load action there. The MSAA variant this target asks for is
+        // DiscardContents-shaped for every usage (see the framebuffer branch above).
+        pass_->loadOpIsClear = pass_->msaa || !preserveContents_;
+        pass_->mipImage      = colorImage_;
+        pass_->mipLevels     = levelCount_;
+        pass_->mipLayer      = 0;
+
         owner_->liveRenderTargets_.push_back(this);
+        VkLifetimeTraceEXT("rt2d.create      backend=%p image=0x%llx sampleView=0x%llx "
+                           "fb=0x%llx msaaFb=0x%llx descSet=0x%llx %dx%d levels=%d gen=%llu",
+                           static_cast<const void*>(this), VkH(colorImage_), VkH(colorSampleView_),
+                           VkH(framebuffer_), VkH(msaaFramebuffer_), VkH(descriptorSet_),
+                           width_, height_, levelCount_,
+                           static_cast<unsigned long long>(owner_->frameGeneration_));
+        VkLifetimeTraceEXT("rt2d.pass        backend=%p pass=%p fb=0x%llx renderPass=0x%llx",
+                           static_cast<const void*>(this), static_cast<const void*>(pass_.get()),
+                           VkH(pass_->framebuffer), VkH(pass_->renderPass));
     }
 
     void VulkanRenderTargetBackend::ReleaseVulkanResources()
@@ -724,51 +827,44 @@ namespace CNA::Internal::Backends::Vulkan
 
     VulkanRenderTargetBackend::~VulkanRenderTargetBackend()
     {
+        if (owner_) owner_->TraceTargetDisposalEXT("rt2d", this, pass_.get(), colorImage_,
+                                                    colorSampleView_, framebuffer_);
         if (owner_) {
-            // REMED-GFX-074: drop any deferred work still queued into this target BEFORE its GPU
-            // resources are freed, otherwise the raw VulkanRTSource* left in activeBatches_/
-            // pending3D_/pendingClears_ dangles and the next Present dereferences freed memory.
-            owner_->PurgeDeferredWorkForTarget(this);
+            // REMED-GFX-166: queued work into this target is NOT dropped. Every entry that names
+            // pass_ owns a share of it, so the description and its handles stay valid until the
+            // frame that replays them -- which is what makes the producer of a target sampled by a
+            // still-queued consumer actually run (see PassEXT()).
             auto& list = owner_->liveRenderTargets_;
             list.erase(std::remove(list.begin(), list.end(), this), list.end());
-            if (owner_->currentRT_ == this) owner_->BeginRenderPassSegmentEXT(nullptr);
+            if (owner_->currentRT_ == pass_) owner_->BeginRenderPassSegmentEXT(nullptr);
         }
         ReleaseVulkanResources();
     }
 
-    VkFramebuffer VulkanRenderTargetBackend::GetFramebuffer() const
-    {
-        return (msaaFramebuffer_ != VK_NULL_HANDLE) ? msaaFramebuffer_ : framebuffer_;
-    }
-
-    VkRenderPass VulkanRenderTargetBackend::GetRenderPass() const
-    {
-        if (!owner_) return VK_NULL_HANDLE;
-        // REMED-GFX-141: the CLEAR variant, matching the framebuffer this target was built with --
-        // see the constructor's own comment for why the 2D leg stays on it.
-        if (msaaFramebuffer_ != VK_NULL_HANDLE)
-            return owner_->GetOrCreateRTRenderPassMsaa(depthVkFormat_, /*discardContents=*/true);
-        return owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
-    }
-
     void VulkanRenderTargetBackend::BindAsRenderTarget()
     {
-        if (owner_) owner_->BeginRenderPassSegmentEXT(this);
+        if (owner_) owner_->BeginRenderPassSegmentEXT(pass_);
     }
 
     void VulkanRenderTargetBackend::UnbindAsRenderTarget()
     {
-        if (owner_ && owner_->currentRT_ == this) owner_->BeginRenderPassSegmentEXT(nullptr);
+        if (owner_ && owner_->currentRT_ == pass_) owner_->BeginRenderPassSegmentEXT(nullptr);
     }
 
-    // Task 878: regenerate the mip chain from level 0's just-rendered (and, if this RT engaged
-    // MSAA, just-resolved) content via a vkCmdBlitImage cascade -- the Vulkan equivalent of
+    // Task 878/907: regenerate a target's mip chain from level 0's just-rendered (and, where MSAA
+    // was engaged, just-resolved) content via a vkCmdBlitImage cascade -- the Vulkan equivalent of
     // EasyGL's glGenerateMipmap-on-unbind (Task 336) / FNA3D's OPENGL_ResolveTarget. Called from
-    // RecordCommandBuffer right after this RT's render pass ends, so level 0 is already in
+    // RecordCommandBuffer right after this pass's render pass ends, so level 0 is already in
     // SHADER_READ_ONLY_OPTIMAL (the RT render pass's finalLayout) when this runs.
-    void VulkanRenderTargetBackend::MaybeGenerateMips(VkCommandBuffer cb)
+    //
+    // REMED-GFX-166: one implementation for both destination kinds. RenderTarget2D owns layer 0 of
+    // its own image and a RenderTargetCube face owns layer `mipLayer` of the cube's six-layer
+    // image; the two previously identical cascades differed only in that subresource layer, so they
+    // are the same code with `mipLayer` filled in, and neither can drift from the other.
+    void VulkanTargetPassEXT::MaybeGenerateMips(VkCommandBuffer cb)
     {
-        if (levelCount_ <= 1) return;
+        if (mipLevels <= 1 || mipImage == VK_NULL_HANDLE) return;
+        const uint32_t layer = mipLayer;
 
         auto barrier = [&](uint32_t level, VkImageLayout oldL, VkImageLayout newL,
                             VkAccessFlags srcAccess, VkAccessFlags dstAccess,
@@ -780,8 +876,8 @@ namespace CNA::Internal::Backends::Vulkan
             b.newLayout           = newL;
             b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            b.image               = colorImage_;
-            b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, level, 1, 0, 1 };
+            b.image               = mipImage;
+            b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, level, 1, layer, 1 };
             b.srcAccessMask       = srcAccess;
             b.dstAccessMask       = dstAccess;
             vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
@@ -791,8 +887,8 @@ namespace CNA::Internal::Backends::Vulkan
                 VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-        int srcW = width_, srcH = height_;
-        for (int level = 1; level < levelCount_; ++level) {
+        int srcW = width, srcH = height;
+        for (int level = 1; level < mipLevels; ++level) {
             const int dstW = std::max(1, srcW / 2);
             const int dstH = std::max(1, srcH / 2);
 
@@ -802,12 +898,12 @@ namespace CNA::Internal::Backends::Vulkan
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
             VkImageBlit blit{};
-            blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level - 1), 0, 1 };
+            blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level - 1), layer, 1 };
             blit.srcOffsets[1]  = { srcW, srcH, 1 };
-            blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+            blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), layer, 1 };
             blit.dstOffsets[1]  = { dstW, dstH, 1 };
-            vkCmdBlitImage(cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                              colorImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            vkCmdBlitImage(cb, mipImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                              mipImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                               1, &blit, VK_FILTER_LINEAR);
 
             // level-1 is done being read from -- restore it to its steady-state layout.
@@ -816,7 +912,7 @@ namespace CNA::Internal::Backends::Vulkan
                     VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
-            if (level < levelCount_ - 1) {
+            if (level < mipLevels - 1) {
                 // Becomes the source for the next iteration.
                 barrier(static_cast<uint32_t>(level),
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -849,7 +945,7 @@ namespace CNA::Internal::Backends::Vulkan
         // capability instead of handing the caller its own zero-initialized scratch buffer.
         if (!owner_ || colorImage_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
 
-        owner_->FlushDeferredRenderTarget(const_cast<VulkanRenderTargetBackend*>(this));
+        owner_->FlushDeferredRenderTarget(pass_.get(), this);
 
         VkDevice dev = owner_->device_;
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -1015,6 +1111,12 @@ namespace CNA::Internal::Backends::Vulkan
             backend_->activeBatches_.push_back(
                 { std::move(snapshot), activeRT_, activeSegment_,
                   backend_->NextCommandOrderEXT() });
+            VkLifetimeTraceEXT("enqueue.sprite   order=%llu family=SpriteBatch rt=%p seg=%llu "
+                               "draws=%zu",
+                               static_cast<unsigned long long>(backend_->activeBatches_.back().order),
+                               static_cast<const void*>(activeRT_.get()),
+                               static_cast<unsigned long long>(activeSegment_),
+                               backend_->activeBatches_.back().snapshot->draws.size());
         }
     }
 
@@ -7088,7 +7190,7 @@ namespace CNA::Internal::Backends::Vulkan
                 // actually emits are recorded, so only their queries are reset/recorded here; every
                 // other query is left untouched for the real Present(). REMED-GFX-151: which draws
                 // those are is now the positional predicate, matching the segment filter below.
-                if (rtOnly && !recordedByFlush(draw.rt, draw.segment)) continue;
+                if (rtOnly && !recordedByFlush(draw.rt.get(), draw.segment)) continue;
                 if (draw.occlusionQuery &&
                     std::find(queriesThisFrame.begin(), queriesThisFrame.end(), draw.occlusionQuery)
                         == queriesThisFrame.end())
@@ -7190,7 +7292,7 @@ namespace CNA::Internal::Backends::Vulkan
             VkDeviceSize& ibOff = spriteIbCursor;
             for (auto& entry : activeBatches_) {
                 const auto& snapshot = entry.snapshot;
-                VulkanRTSource* batchRT = entry.rt;
+                VulkanRTSource* batchRT = entry.rt.get();
                 if (batchRT != targetRT) continue;
                 // REMED-GFX-140/143: one pass per bind cycle, backbuffer cycles included, so a
                 // batch belongs to exactly the segment it was issued in. There is no longer any
@@ -7338,6 +7440,12 @@ namespace CNA::Internal::Backends::Vulkan
                 for (const auto& d : draws) {
                     vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                         activeLayout, 0, 1, &d.descSet, 0, nullptr);
+                    VkLifetimeTraceEXT("record.sprite    order=%llu family=SpriteBatch rt=%p "
+                                       "seg=%llu boundSet=0x%llx indices=%u",
+                                       static_cast<unsigned long long>(entry.order),
+                                       static_cast<const void*>(batchRT),
+                                       static_cast<unsigned long long>(entry.segment),
+                                       VkH(d.descSet), d.indexCount);
                     vkCmdDrawIndexed(cb, d.indexCount, 1, d.firstIndex, 0, 0);
                 }
 
@@ -7389,7 +7497,7 @@ namespace CNA::Internal::Backends::Vulkan
             VkDeviceSize& instVbOff = frame3DInstVbCursor;
             VulkanOcclusionQueryBackend*& openQuery = openQuery3D;
             for (const auto& draw : pending3D_) {
-                if (draw.rt != targetRT) continue;
+                if (draw.rt.get() != targetRT) continue;
                 if (draw.segment != segment) continue;
                 if (draw.order <= afterOrder || draw.order >= beforeOrder) continue;
                 if (draw.isMarker) {
@@ -7752,6 +7860,13 @@ namespace CNA::Internal::Backends::Vulkan
                     // FillExtPushConst() uses, filled by DrawPrimitivesEx for stride==16 draws.
                     vkCmdPushConstants(cb, pipelineLayout3D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 128, draw.pushConst);
                 }
+                VkLifetimeTraceEXT("record.draw3D    order=%llu family=%s rt=%p seg=%llu "
+                                   "boundSet=0x%llx count=%u instances=%u",
+                                   static_cast<unsigned long long>(draw.order),
+                                   Pending3DFamilyEXT(draw),
+                                   static_cast<const void*>(draw.rt.get()),
+                                   static_cast<unsigned long long>(draw.segment),
+                                   VkH(draw.descSet), draw.drawCount, draw.instanceCount);
                 vkCmdBindVertexBuffers(cb, 0, 1, &frame3DVB_[currentFrame_], &vbOff);
                 if (draw.useInstanced && !draw.instVbData.empty()) {
                     vkCmdBindVertexBuffers(cb, 1, 1, &frame3DInstVB_[currentFrame_], &instVbOff);
@@ -7799,12 +7914,12 @@ namespace CNA::Internal::Backends::Vulkan
             std::vector<Item> items;
             items.reserve(activeBatches_.size() + pending3D_.size());
             for (const auto& e : activeBatches_) {
-                if (e.rt != targetRT || e.segment != segment) continue;
+                if (e.rt.get() != targetRT || e.segment != segment) continue;
                 if (e.order <= afterOrder || e.order >= beforeOrder) continue;
                 items.push_back({ e.order, true });
             }
             for (const auto& d : pending3D_) {
-                if (d.rt != targetRT || d.segment != segment) continue;
+                if (d.rt.get() != targetRT || d.segment != segment) continue;
                 if (d.order <= afterOrder || d.order >= beforeOrder) continue;
                 items.push_back({ d.order, false });
             }
@@ -7874,13 +7989,13 @@ namespace CNA::Internal::Backends::Vulkan
         // command in a cycle is a Clear() must still get that cycle's own load action.
         // pendingClears_ is already in public call order, so each segment's list comes out ordered.
         for (const auto& c : pendingClears_)
-            segmentFor(c.segment, c.rt).clears.push_back(&c);
+            segmentFor(c.segment, c.rt.get()).clears.push_back(&c);
         for (const auto& entry : activeBatches_) {
-            PassSegment& seg = segmentFor(entry.segment, entry.rt);
+            PassSegment& seg = segmentFor(entry.segment, entry.rt.get());
             seg.firstDrawOrder = std::min(seg.firstDrawOrder, entry.order);
         }
         for (const auto& draw : pending3D_) {
-            PassSegment& seg = segmentFor(draw.segment, draw.rt);
+            PassSegment& seg = segmentFor(draw.segment, draw.rt.get());
             seg.firstDrawOrder = std::min(seg.firstDrawOrder, draw.order);
         }
         std::sort(segments.begin(), segments.end(),
@@ -8060,6 +8175,13 @@ namespace CNA::Internal::Backends::Vulkan
             }
 
             VulkanRTSource* rt = seg.rt;
+            VkLifetimeTraceEXT("record.segment   seg=%llu rt=%p fb=0x%llx pass=0x%llx %dx%d "
+                               "clears=%zu firstDraw=%llu",
+                               static_cast<unsigned long long>(seg.id),
+                               static_cast<const void*>(rt), VkH(rt->GetFramebuffer()),
+                               VkH(rt->GetRenderPass()), rt->GetWidth(), rt->GetHeight(),
+                               seg.clears.size(),
+                               static_cast<unsigned long long>(seg.firstDrawOrder));
             const uint32_t nColor = rt->GetColorAttachmentCount();
             const bool rtMsaa = rt->WantsMsaa();
             const bool hasDepth = rt->GetDepthFormat() != VK_FORMAT_UNDEFINED;
@@ -8149,13 +8271,13 @@ namespace CNA::Internal::Backends::Vulkan
             // predicate the segment filter used -- so Present() never replays an entry this flush
             // already emitted, and never drops one it did not.
             activeBatches_.erase(std::remove_if(activeBatches_.begin(), activeBatches_.end(),
-                [&recordedByFlush](const PendingBatch& p) { return recordedByFlush(p.rt, p.segment); }),
+                [&recordedByFlush](const PendingBatch& p) { return recordedByFlush(p.rt.get(), p.segment); }),
                 activeBatches_.end());
             pending3D_.erase(std::remove_if(pending3D_.begin(), pending3D_.end(),
-                [&recordedByFlush](const Pending3DDraw& d) { return recordedByFlush(d.rt, d.segment); }),
+                [&recordedByFlush](const Pending3DDraw& d) { return recordedByFlush(d.rt.get(), d.segment); }),
                 pending3D_.end());
             pendingClears_.erase(std::remove_if(pendingClears_.begin(), pendingClears_.end(),
-                [&recordedByFlush](const PendingClear& c) { return recordedByFlush(c.rt, c.segment); }),
+                [&recordedByFlush](const PendingClear& c) { return recordedByFlush(c.rt.get(), c.segment); }),
                 pendingClears_.end());
             // REMED-GFX-151: a consumed cycle's sampling dependencies are spent with it, so the
             // graph stays the size of the still-pending frame rather than growing per readback.
@@ -8314,6 +8436,9 @@ namespace CNA::Internal::Backends::Vulkan
         // generation clock so resources retired during this frame's build are freed only after this
         // submit's fence has completed (generation + MaxFramesInFlight later). See RetireResources.
         ++frameGeneration_;
+        VkLifetimeTraceEXT("frame.submitted  gen=%llu retiredBuckets=%zu",
+                           static_cast<unsigned long long>(frameGeneration_),
+                           retiredResources_.size());
 
         if (deferSwap) {
             // Wait for render + readback copy to complete, but hold the image. The caller
@@ -8536,6 +8661,9 @@ namespace CNA::Internal::Backends::Vulkan
     {
         auto tex = std::make_unique<VulkanTextureBackend>(data, this);
         liveTextures_.push_back(tex.get());
+        VkLifetimeTraceEXT("tex2d.create     backend=%p %dx%d gen=%llu",
+                           static_cast<const void*>(tex.get()), data.width, data.height,
+                           static_cast<unsigned long long>(frameGeneration_));
         return tex;
     }
 
@@ -8562,9 +8690,9 @@ namespace CNA::Internal::Backends::Vulkan
     // two logical passes with two independent load actions -- merging them is the defect this
     // fixes. An advance that ends up with no queued entry costs nothing: RecordCommandBuffer builds
     // its segment list from the entries themselves, so an empty segment produces no native pass.
-    void VulkanGraphicsBackend::BeginRenderPassSegmentEXT(VulkanRTSource* rt)
+    void VulkanGraphicsBackend::BeginRenderPassSegmentEXT(std::shared_ptr<VulkanRTSource> rt)
     {
-        currentRT_ = rt;
+        currentRT_ = std::move(rt);
         ++currentSegment_;
     }
 
@@ -8591,6 +8719,11 @@ namespace CNA::Internal::Backends::Vulkan
                                    clearDepth_, clearStencil_,
                                    color, depth, stencil,
                                    NextCommandOrderEXT() });
+        VkLifetimeTraceEXT("enqueue.clear    order=%llu rt=%p seg=%llu color=%d depth=%d stencil=%d",
+                           static_cast<unsigned long long>(pendingClears_.back().order),
+                           static_cast<const void*>(currentRT_.get()),
+                           static_cast<unsigned long long>(currentSegment_),
+                           color ? 1 : 0, depth ? 1 : 0, stencil ? 1 : 0);
     }
 
     namespace
@@ -8798,6 +8931,16 @@ namespace CNA::Internal::Backends::Vulkan
         // REMED-GFX-129: position in the frame's public command stream, so an ordered Clear() can
         // be replayed between exactly the draws it was issued between.
         d.order = NextCommandOrderEXT();
+        if (VulkanLifetimeTraceOnEXT())
+            VkLifetimeTraceEXT("enqueue.3D       order=%llu family=%s rt=%p seg=%llu "
+                               "descSet=0x%llx dualTex=0x%llx envMap=0x%llx lit=0x%llx "
+                               "skinned=0x%llx pbr=0x%llx fogTex=0x%llx",
+                               static_cast<unsigned long long>(d.order), Pending3DFamilyEXT(d),
+                               static_cast<const void*>(d.rt.get()),
+                               static_cast<unsigned long long>(d.segment),
+                               VkH(d.descSet), VkH(d.dualTexDescSet), VkH(d.envMapDescSet),
+                               VkH(d.litTexturedDescSet), VkH(d.skinnedDescSet),
+                               VkH(d.pbrDescSet), VkH(d.fogTex3DDescSet));
         pending3D_.push_back(std::move(d));
     }
 
@@ -8806,6 +8949,12 @@ namespace CNA::Internal::Backends::Vulkan
     // consumes any deferred entry referencing it has certainly completed on the GPU.
     void VulkanGraphicsBackend::RetireResources(RetiredResources&& r)
     {
+        VkLifetimeTraceEXT("retire.insert    gen=%llu views=%zu images=%zu mem=%zu fbs=%zu "
+                           "descSets=%zu poolSets=%zu",
+                           static_cast<unsigned long long>(frameGeneration_),
+                           r.imageViews.size(), r.images.size(), r.memories.size(),
+                           r.framebuffers.size(), r.descriptorSets.size(),
+                           r.poolDescriptorSets.size());
         r.generation = frameGeneration_;
         retiredResources_.push_back(std::move(r));
     }
@@ -8817,6 +8966,7 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::EvictSampledViewFromCaches(VkImageView view, RetiredResources& into)
     {
         if (view == VK_NULL_HANDLE) return;
+        const std::size_t before = into.descriptorSets.size() + into.poolDescriptorSets.size();
         // The plain sprite/3D single-sampler cache is (view,sampler)-keyed -> direct reverse lookup.
         for (auto it = texSamplerDescSets_.begin(); it != texSamplerDescSets_.end(); )
         {
@@ -8837,6 +8987,10 @@ namespace CNA::Internal::Backends::Vulkan
         EvictViewFromEffectCache(skinnedDescSets_,     descriptorPoolSkinned_,     view, into);
         EvictViewFromEffectCache(pbrDescSets_,         descriptorPoolPbr_,         view, into);
         EvictViewFromEffectCache(pbrSkinnedDescSets_,  descriptorPoolPbrSkinned_,  view, into);
+        VkLifetimeTraceEXT("cache.evict      view=0x%llx evictedSets=%zu gen=%llu",
+                           VkH(view),
+                           into.descriptorSets.size() + into.poolDescriptorSets.size() - before,
+                           static_cast<unsigned long long>(frameGeneration_));
     }
 
     // REMED-GFX-076: drop every entry in one effect descriptor-set cache (all frame slots) that
@@ -8905,6 +9059,12 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (device_ == VK_NULL_HANDLE) return;
         auto freeBucket = [this](RetiredResources& r) {
+            VkLifetimeTraceEXT("retire.FREE      gen=%llu now=%llu views=%zu images=%zu fbs=%zu "
+                               "descSets=%zu",
+                               static_cast<unsigned long long>(r.generation),
+                               static_cast<unsigned long long>(frameGeneration_),
+                               r.imageViews.size(), r.images.size(), r.framebuffers.size(),
+                               r.descriptorSets.size());
             for (VkDescriptorSet s : r.descriptorSets)
                 if (s != VK_NULL_HANDLE && descriptorPool_ != VK_NULL_HANDLE)
                     vkFreeDescriptorSets(device_, descriptorPool_, 1, &s);
@@ -8927,7 +9087,7 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto it = retiredMrtProxies_.begin(); it != retiredMrtProxies_.end(); )
         {
             if (force || it->first + MaxFramesInFlight < frameGeneration_)
-                it = retiredMrtProxies_.erase(it);   // unique_ptr frees the proxy (device_ still valid)
+                it = retiredMrtProxies_.erase(it);   // last share frees the proxy (device_ still valid)
             else
                 ++it;
         }
@@ -8953,20 +9113,27 @@ namespace CNA::Internal::Backends::Vulkan
         if (activeOcclusionQuery_ == q) activeOcclusionQuery_ = nullptr;
     }
 
-    // REMED-GFX-074: see the header. Removes every deferred entry (sprite batch, 3D draw, bare
-    // Clear()) targeting `rt`, so a render target destroyed before Present() leaves no dangling
-    // VulkanRTSource* behind for RecordCommandBuffer() to dereference.
-    void VulkanGraphicsBackend::PurgeDeferredWorkForTarget(VulkanRTSource* rt)
+    // REMED-GFX-166: see the header. The two counts at the end are the whole point -- they say, at
+    // the instant of disposal, how much already-issued work would still have to run for this
+    // resource's observable effect to survive.
+    void VulkanGraphicsBackend::TraceTargetDisposalEXT(const char* kind, const void* backend,
+                                                      const void* dest, VkImage image,
+                                                      VkImageView view, VkFramebuffer fb) const
     {
-        if (!rt) return;
-        activeBatches_.erase(std::remove_if(activeBatches_.begin(), activeBatches_.end(),
-            [rt](const PendingBatch& p) { return p.rt == rt; }),
-            activeBatches_.end());
-        pending3D_.erase(std::remove_if(pending3D_.begin(), pending3D_.end(),
-            [rt](const Pending3DDraw& d) { return d.rt == rt; }), pending3D_.end());
-        pendingClears_.erase(std::remove_if(pendingClears_.begin(), pendingClears_.end(),
-            [rt](const PendingClear& c) { return c.rt == rt; }),
-            pendingClears_.end());
+        if (!VulkanLifetimeTraceOnEXT()) return;
+        std::size_t asDest = 0;
+        if (dest) {
+            for (const auto& d : pending3D_)     if (static_cast<const void*>(d.rt.get()) == dest) ++asDest;
+            for (const auto& b : activeBatches_) if (static_cast<const void*>(b.rt.get()) == dest) ++asDest;
+            for (const auto& c : pendingClears_) if (static_cast<const void*>(c.rt.get()) == dest) ++asDest;
+        }
+        std::size_t asSource = 0;
+        for (const auto& e : segmentSampledGroups_)
+            if (dest && e.second == dest) ++asSource;
+        VkLifetimeTraceEXT("%s.dispose     backend=%p dest=%p image=0x%llx view=0x%llx fb=0x%llx "
+                           "gen=%llu queuedAsDestination=%zu queuedAsSampledSource=%zu",
+                           kind, backend, dest, VkH(image), VkH(view), VkH(fb),
+                           static_cast<unsigned long long>(frameGeneration_), asDest, asSource);
     }
 
     // REMED-GFX-151: the depth/stencil group that identifies a sampled render target, or nullptr
@@ -8974,10 +9141,14 @@ namespace CNA::Internal::Backends::Vulkan
     // already what FlushDeferredRenderTarget and RecordCommandBuffer treat as "one target" (all six
     // faces of a RenderTargetCube answer with the cube's own colour image), so a dependency and the
     // work that satisfies it are keyed identically and cannot drift apart.
+    // REMED-GFX-166: a RenderTarget2D's destination is its VulkanTargetPassEXT, not the backend
+    // object itself, so the question "is this sampled texture a render target, and which one" is
+    // asked of the concrete type and answered by that pass. Deliberately a dynamic_cast to the
+    // concrete class and not a static one between siblings -- REMED-GFX-152's defect exactly.
     const void* VulkanGraphicsBackend::SampledRenderTargetGroupEXT(const ITextureBackend* tex)
     {
-        if (const auto* src = dynamic_cast<const VulkanRTSource*>(tex))
-            return src->DepthStencilOwnerEXT();
+        if (const auto* rt = dynamic_cast<const VulkanRenderTargetBackend*>(tex))
+            return rt->PassEXT() ? rt->PassEXT()->DepthStencilOwnerEXT() : nullptr;
         return nullptr;
     }
 
@@ -9004,8 +9175,9 @@ namespace CNA::Internal::Backends::Vulkan
         if (!tex) return;
         // An IVulkanSamplable and an ITextureBackend are separate bases of the same object, so the
         // cast has to go through the most-derived object rather than between siblings.
-        if (const auto* src = dynamic_cast<const VulkanRTSource*>(tex))
-            NoteSampledRenderTargetGroupEXT(segment, src->DepthStencilOwnerEXT());
+        if (const auto* rt = dynamic_cast<const VulkanRenderTargetBackend*>(tex))
+            if (rt->PassEXT())
+                NoteSampledRenderTargetGroupEXT(segment, rt->PassEXT()->DepthStencilOwnerEXT());
     }
 
     // REMED-GFX-151: every render target this draw samples, in one place, so a new stock-effect
@@ -9049,7 +9221,8 @@ namespace CNA::Internal::Backends::Vulkan
     // the backbuffer; bind u; draw; unbind; bind t; draw; unbind; t.GetData()`) reproduced 0/32 with
     // the positional rule and is exact with this one. Pulling in only genuine producers keeps
     // REMED-GFX-143's ascending-id backbuffer contract intact.
-    void VulkanGraphicsBackend::FlushDeferredRenderTarget(VulkanRTSource* rt)
+    void VulkanGraphicsBackend::FlushDeferredRenderTarget(
+        VulkanRTSource* rt, const VulkanRenderTargetBackend* mrtResolveOwner)
     {
         if (!initialized_ || !rt || device_ == VK_NULL_HANDLE) return;
 
@@ -9059,14 +9232,14 @@ namespace CNA::Internal::Backends::Vulkan
         // so excluding them can never lose a producer.
         struct PendingSegment { uint64_t id; const void* group; };
         std::vector<PendingSegment> pendingSegments;
-        auto notePendingSegment = [&pendingSegments](VulkanRTSource* source, uint64_t id) {
+        auto notePendingSegment = [&pendingSegments](const VulkanRTSource* source, uint64_t id) {
             if (source == nullptr) return;
             for (const auto& s : pendingSegments) if (s.id == id) return;
             pendingSegments.push_back({ id, source->DepthStencilOwnerEXT() });
         };
-        for (const auto& p : activeBatches_)  notePendingSegment(p.rt, p.segment);
-        for (const auto& d : pending3D_)      notePendingSegment(d.rt, d.segment);
-        for (const auto& c : pendingClears_)  notePendingSegment(c.rt, c.segment);
+        for (const auto& p : activeBatches_)  notePendingSegment(p.rt.get(), p.segment);
+        for (const auto& d : pending3D_)      notePendingSegment(d.rt.get(), d.segment);
+        for (const auto& c : pendingClears_)  notePendingSegment(c.rt.get(), c.segment);
 
         // Seed: `rt`'s own depth/stencil group. REMED-GFX-142 -- a RenderTargetCube's six faces
         // share one depth image, so reading one face replays the whole group in public order rather
@@ -9076,14 +9249,17 @@ namespace CNA::Internal::Backends::Vulkan
         // pointer. Resolve-view identity safely maps GetData(target) back to every pending proxy
         // that writes that target; the target's retirement keeps the view handle alive, so it cannot
         // be recycled while the proxy is still pending.
-        if (auto* concrete = dynamic_cast<VulkanRenderTargetBackend*>(rt)) {
-            for (auto& retired : retiredMrtProxies_) {
-                VulkanMRTProxy* proxy = retired.second.get();
-                if (proxy && proxy->ContainsResolveTargetEXT(*concrete))
-                    groups.push_back(proxy->DepthStencilOwnerEXT());
-            }
-            if (mrtProxy_ && mrtProxy_->ContainsResolveTargetEXT(*concrete))
-                groups.push_back(mrtProxy_->DepthStencilOwnerEXT());
+        // REMED-GFX-166: a 2D target's destination is a VulkanTargetPassEXT now, so the concrete
+        // render target being read is passed in rather than recovered from `rt` by a downcast.
+        if (mrtResolveOwner) {
+            auto noteProxy = [&](VulkanMRTProxy* proxy) {
+                if (!proxy || !proxy->ContainsResolveTargetEXT(*mrtResolveOwner)) return;
+                const void* g = proxy->DepthStencilOwnerEXT();
+                for (const void* have : groups) if (have == g) return;
+                groups.push_back(g);
+            };
+            for (auto& retired : retiredMrtProxies_) noteProxy(retired.second.get());
+            noteProxy(mrtProxy_.get());
         }
 
         std::vector<uint64_t> flushSegments;
@@ -9952,7 +10128,7 @@ namespace CNA::Internal::Backends::Vulkan
         // REMED-GFX-136: preserveContents is the public RenderTargetUsage, reaching a cube target
         // for the first time -- see VulkanRenderTargetCubeBackend's own constructor comment.
         // mipMap (Task 907): real per-face vkCmdBlitImage cascade, mirroring Task 878's
-        // RenderTarget2D fix -- see VulkanRenderTargetCubeBackend::FaceProxy::MaybeGenerateMips.
+        // RenderTarget2D fix -- see VulkanTargetPassEXT::MaybeGenerateMips.
         // multiSampleCount (Task 903): now wired up -- mirrors VulkanRenderTargetBackend's
         // Task 878/879 "piggyback on the backend's own sampleCount_" MSAA treatment, applied per
         // cube face via a shared MSAA color image (see VulkanRenderTargetCubeBackend's
@@ -9966,24 +10142,22 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
-        // REMED-GFX-075: the MRT proxy is a VulkanRTSource DESTINATION whose raw pointer is stored in
-        // the deferred queues (d.rt/batchRT). Retiring it to backbuffer or a new binding must NOT
-        // destroy the old proxy while its already-queued render work legitimately awaits Present --
-        // that would dangle the pointer RecordCommandBuffer dereferences (GetFramebuffer/GetRenderPass).
-        // Move it into the retirement queue so the object and its framebuffer outlive the frame
-        // that consumes those entries, instead of dropping the draws (they were issued). Its
-        // borrowed target views are retained by the same frame-generation mechanism.
-        auto retireMrtProxy = [this]() {
-            if (mrtProxy_)
-                retiredMrtProxies_.emplace_back(frameGeneration_, std::move(mrtProxy_));
+        // REMED-GFX-075: a proxy is a VulkanRTSource DESTINATION referenced by the deferred
+        // queues. Retiring to backbuffer or to a new binding must not destroy the old proxy while
+        // its already-queued render work legitimately awaits Present. It goes to the frame-gated
+        // retirement list, which is what keeps its VkFramebuffer alive until the GPU is done with
+        // it; REMED-GFX-166's shared destinations independently keep the OBJECT alive until the
+        // record that consumes those entries.
+        auto releaseMrtProxy = [this]() {
+            if (mrtProxy_) retiredMrtProxies_.emplace_back(frameGeneration_, std::move(mrtProxy_));
         };
         if (!renderTargets || count <= 0) {
             BeginRenderPassSegmentEXT(nullptr);
-            retireMrtProxy();
+            releaseMrtProxy();
             return;
         }
         if (count == 1) {
-            retireMrtProxy();
+            releaseMrtProxy();
             if (renderTargets[0].IsRenderTargetCubeFace()) {
                 auto* cube = dynamic_cast<VulkanRenderTargetCubeBackend*>(
                     renderTargets[0].GetRenderTargetCube());
@@ -10002,10 +10176,10 @@ namespace CNA::Internal::Backends::Vulkan
             return;
         }
         // Build MRT proxy for N > 1.
-        retireMrtProxy();
-        mrtProxy_ = std::make_unique<VulkanMRTProxy>(
+        releaseMrtProxy();
+        mrtProxy_ = std::make_shared<VulkanMRTProxy>(
             this, renderTargets, static_cast<uint32_t>(count));
-        BeginRenderPassSegmentEXT(mrtProxy_.get());
+        BeginRenderPassSegmentEXT(mrtProxy_);
     }
 
     // --- VulkanMRTProxy ---
@@ -10066,7 +10240,8 @@ namespace CNA::Internal::Backends::Vulkan
                 result.resolveView = rt2D->GetResolveColorViewEXT();
                 result.msaaView = rt2D->GetMsaaColorViewEXT();
                 result.depthView = rt2D->GetDepthView();
-                result.depthFormat = rt2D->GetDepthFormat();
+                result.depthFormat = rt2D->PassEXT() ? rt2D->PassEXT()->GetDepthFormat()
+                                                    : VK_FORMAT_UNDEFINED;
             }
             return result;
         };
@@ -10743,6 +10918,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkDevice    dev  = owner_->device_;
         const auto  us   = static_cast<uint32_t>(size);
         levelCount_ = mipMap ? CalculateVulkanRTMipLevels(size, size) : 1;
+        // REMED-GFX-166: one independently owned destination per face -- see facePasses_.
+        for (auto& fp : facePasses_) fp = std::make_shared<VulkanTargetPassEXT>();
 
         // Task 911: real per-instance DepthStencilFormat fidelity, mirroring
         // VulkanRenderTargetBackend's identical constructor fix -- None means no depth
@@ -10768,7 +10945,7 @@ namespace CNA::Internal::Backends::Vulkan
         colorInfo.arrayLayers   = 6;
         colorInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
         colorInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        // TRANSFER_SRC/DST (Task 907): needed by FaceProxy::MaybeGenerateMips' vkCmdBlitImage
+        // TRANSFER_SRC/DST (Task 907): needed by VulkanTargetPassEXT::MaybeGenerateMips' vkCmdBlitImage
         // cascade when levelCount_ > 1; harmless when levelCount_==1.
         colorInfo.usage         = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
                                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -10819,7 +10996,7 @@ namespace CNA::Internal::Backends::Vulkan
         // Level 0 of an actually-rendered face gets this from its own render pass's finalLayout
         // regardless (matching this class's pre-existing, unchanged behavior for the non-mip
         // case), but levels 1..levelCount_-1 are NEVER touched by any render pass -- only by
-        // FaceProxy::MaybeGenerateMips' blit cascade, whose own first barrier for each
+        // VulkanTargetPassEXT::MaybeGenerateMips' blit cascade, whose own first barrier for each
         // destination level assumes it starts in SHADER_READ_ONLY_OPTIMAL. Without this upfront
         // transition that assumption is false the first time any face is ever rendered,
         // producing live VUID-vkCmdDraw-None-09600 validation errors (mirrors
@@ -11033,9 +11210,10 @@ namespace CNA::Internal::Backends::Vulkan
                 if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &msaaFramebuffers_[face]) != VK_SUCCESS)
                     throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateFramebuffer (MSAA) failed");
 
-                faceProxies_[face].msaaFramebuffer = msaaFramebuffers_[face];
-                faceProxies_[face].msaaRenderPass  = owner_->GetOrCreateRTRenderPassMsaa(
+                facePasses_[face]->framebuffer = msaaFramebuffers_[face];
+                facePasses_[face]->renderPass  = owner_->GetOrCreateRTRenderPassMsaa(
                     depthVkFormat_, !preserveContents_);
+                facePasses_[face]->msaa        = true;
             }
             else
             {
@@ -11059,31 +11237,42 @@ namespace CNA::Internal::Backends::Vulkan
                 if (vkCreateFramebuffer(dev, &fbInfo, nullptr, &framebuffers_[face]) != VK_SUCCESS)
                     throw std::runtime_error("VulkanRenderTargetCubeBackend: vkCreateFramebuffer failed");
 
-                faceProxies_[face].framebuffer = framebuffers_[face];
-                faceProxies_[face].renderPass  = owner_->GetOrCreateRTRenderPass(depthVkFormat_, !preserveContents_);
+                facePasses_[face]->framebuffer = framebuffers_[face];
+                facePasses_[face]->renderPass  = owner_->GetOrCreateRTRenderPass(depthVkFormat_,
+                                                                                 !preserveContents_);
+                facePasses_[face]->msaa        = false;
             }
 
-            faceProxies_[face].size        = size;
-            faceProxies_[face].image       = image_;
-            faceProxies_[face].levelCount  = levelCount_;
-            faceProxies_[face].faceIndex   = face;
-            faceProxies_[face].depthFormat = depthVkFormat_;
+            facePasses_[face]->width       = size;
+            facePasses_[face]->height      = size;
+            facePasses_[face]->mipImage    = image_;
+            facePasses_[face]->mipLevels   = levelCount_;
+            facePasses_[face]->mipLayer    = static_cast<uint32_t>(face);
+            facePasses_[face]->depthFormat = depthVkFormat_;
             // REMED-GFX-129: the face needs the same usage the render pass above was picked with,
             // so it can report whether its colour attachment is cleared or loaded on entry.
-            faceProxies_[face].preserveContents = preserveContents_;
+            facePasses_[face]->loadOpIsClear = !preserveContents_;
+            // REMED-GFX-142: all six faces of one cube share depthImage_, so they are ONE
+            // depth/stencil group, keyed on the cube's own colour image exactly as before.
+            facePasses_[face]->depthGroup  = static_cast<const void*>(image_);
         }
     }
 
     VulkanRenderTargetCubeBackend::~VulkanRenderTargetCubeBackend()
     {
         if (owner_) {
-            // REMED-GFX-074: purge deferred work queued into any of this cube's 6 face proxies and
-            // clear currentRT_ if it points to one, before their GPU resources are freed -- same
-            // dangling-VulkanRTSource* hazard as the 2D render target destructor.
-            for (auto& fp : faceProxies_) {
-                owner_->PurgeDeferredWorkForTarget(&fp);
-                if (owner_->currentRT_ == &fp) owner_->BeginRenderPassSegmentEXT(nullptr);
-            }
+            // REMED-GFX-166: queued work into this cube's faces is NOT dropped -- each face's pass
+            // is co-owned by the commands that render into it, so it outlives this wrapper and its
+            // producer still runs for a consumer that samples the cube. Same reasoning as the 2D
+            // render target destructor; only currentRT_ still has to let go.
+            for (auto& fp : facePasses_)
+                if (owner_->currentRT_ == fp) {
+                    owner_->BeginRenderPassSegmentEXT(nullptr);
+                    break;
+                }
+            owner_->TraceTargetDisposalEXT("rtcube", this,
+                                           facePasses_[0] ? facePasses_[0].get() : nullptr,
+                                           image_, cubeView_, framebuffers_[0]);
         }
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         // REMED-GFX-075: a RenderTargetCube used as a sampled SOURCE (its cubeView_ baked into a
@@ -11116,14 +11305,14 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
     {
         if (owner_ && face >= 0 && face < 6)
-            owner_->BeginRenderPassSegmentEXT(&faceProxies_[face]);
+            owner_->BeginRenderPassSegmentEXT(facePasses_[static_cast<std::size_t>(face)]);
     }
 
     void VulkanRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
         if (owner_) {
-            for (auto& fp : faceProxies_)
-                if (owner_->currentRT_ == &fp) {
+            for (auto& fp : facePasses_)
+                if (owner_->currentRT_ == fp) {
                     owner_->BeginRenderPassSegmentEXT(nullptr);
                     return;
                 }
@@ -11146,8 +11335,7 @@ namespace CNA::Internal::Backends::Vulkan
         // REMED-GFX-074's readback flush, applied to this face's own proxy: a face whose draws are
         // still queued for Present must be read AFTER them, not before. A no-op when nothing is
         // pending for this proxy.
-        owner_->FlushDeferredRenderTarget(
-            const_cast<FaceProxy*>(&faceProxies_[static_cast<std::size_t>(face)]));
+        owner_->FlushDeferredRenderTarget(facePasses_[static_cast<std::size_t>(face)].get());
 
         VkDevice dev = owner_->device_;
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -11219,75 +11407,6 @@ namespace CNA::Internal::Backends::Vulkan
         return true;
     }
 
-    // Task 907: regenerate this face's mip chain (levels 0..levelCount-1 of the shared 6-layer
-    // `image`, this face's own `faceIndex` layer) via a vkCmdBlitImage cascade -- identical
-    // mechanism to VulkanRenderTargetBackend::MaybeGenerateMips (Task 878), just scoped to one
-    // array layer instead of the whole (non-array) 2D image.
-    void VulkanRenderTargetCubeBackend::FaceProxy::MaybeGenerateMips(VkCommandBuffer cb)
-    {
-        if (levelCount <= 1) return;
-        const uint32_t layer = static_cast<uint32_t>(faceIndex);
-
-        auto barrier = [&](uint32_t level, VkImageLayout oldL, VkImageLayout newL,
-                            VkAccessFlags srcAccess, VkAccessFlags dstAccess,
-                            VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
-        {
-            VkImageMemoryBarrier b{};
-            b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            b.oldLayout           = oldL;
-            b.newLayout           = newL;
-            b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            b.image               = image;
-            b.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, level, 1, layer, 1 };
-            b.srcAccessMask       = srcAccess;
-            b.dstAccessMask       = dstAccess;
-            vkCmdPipelineBarrier(cb, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
-        };
-
-        barrier(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-        int srcW = size, srcH = size;
-        for (int level = 1; level < levelCount; ++level) {
-            const int dstW = std::max(1, srcW / 2);
-            const int dstH = std::max(1, srcH / 2);
-
-            barrier(static_cast<uint32_t>(level),
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-            VkImageBlit blit{};
-            blit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level - 1), layer, 1 };
-            blit.srcOffsets[1]  = { srcW, srcH, 1 };
-            blit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), layer, 1 };
-            blit.dstOffsets[1]  = { dstW, dstH, 1 };
-            vkCmdBlitImage(cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                              image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                              1, &blit, VK_FILTER_LINEAR);
-
-            barrier(static_cast<uint32_t>(level - 1),
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-
-            if (level < levelCount - 1) {
-                barrier(static_cast<uint32_t>(level),
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-            } else {
-                barrier(static_cast<uint32_t>(level),
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-            }
-
-            srcW = dstW; srcH = dstH;
-        }
-    }
 
 } // namespace CNA::Internal::Backends::Vulkan
 

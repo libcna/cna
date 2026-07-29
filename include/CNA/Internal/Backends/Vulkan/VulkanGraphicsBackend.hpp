@@ -71,6 +71,79 @@ namespace CNA::Internal::Backends::Vulkan
         virtual ~VulkanRTSource() = default;
     };
 
+    /**
+     * @brief REMED-GFX-166: one deferred render-pass DESTINATION, owned independently of its wrapper.
+     *
+     * A `VulkanRTSource*` stored in the deferred queues used to be the render-target BACKEND object,
+     * which the public wrapper owns and destroys. That made a legal public sequence -- render into a
+     * target, sample it onto the backbuffer, drop the target, let the frame present -- leave dangling
+     * pointers behind, and REMED-GFX-074 answered that by DISCARDING the dying target's queued work.
+     * The discard is what REMED-GFX-166 measured: the work being discarded is the PRODUCER, so the
+     * still-queued consumer went on to sample an image nothing had rendered into.
+     *
+     * A destination is therefore no longer the wrapper's object. It is this: a separately allocated,
+     * IMMUTABLE value describing the pass, `shared_ptr`-owned by both the render target and every
+     * deferred command queued against it. Nothing is discarded, nothing dangles, and the object's
+     * address is a stable identity for as long as any command names it -- so a later target cannot
+     * alias a dead one by landing on the same heap address.
+     *
+     * Every field is fixed at the owning target's construction (see the render-target constructors:
+     * the framebuffer, the render pass, the extent and the mip chain are all created there and never
+     * replaced), so a copy taken then stays correct even after `ReleaseVulkanResources()` has handed
+     * the handles to the retirement queue -- which is exactly the window this fix has to survive.
+     * The native handles themselves are kept valid across it by REMED-GFX-075's frame-generation
+     * retirement, which already covers both the CPU record window and in-flight GPU reads.
+     */
+    struct VulkanTargetPassEXT final : public VulkanRTSource
+    {
+        /** @brief The framebuffer this pass renders into (already the MSAA one where engaged). */
+        VkFramebuffer framebuffer   = VK_NULL_HANDLE;
+        /** @brief The render pass this framebuffer was built against. */
+        VkRenderPass  renderPass    = VK_NULL_HANDLE;
+        /** @brief Render-area width in texels. */
+        int           width         = 0;
+        /** @brief Render-area height in texels. */
+        int           height        = 0;
+        /** @brief True when `framebuffer` carries multisample colour plus single-sample resolves. */
+        bool          msaa          = false;
+        /** @brief This target's own depth format, VK_FORMAT_UNDEFINED for no depth attachment. */
+        VkFormat      depthFormat   = VK_FORMAT_UNDEFINED;
+        /** @brief Whether `renderPass` begins its colour attachments with LOAD_OP_CLEAR. */
+        bool          loadOpIsClear = true;
+        /** @brief Shared depth/stencil group identity (REMED-GFX-142); null = this pass alone. */
+        const void*   depthGroup    = nullptr;
+        /** @brief The colour image whose mip chain MaybeGenerateMips regenerates. */
+        VkImage       mipImage      = VK_NULL_HANDLE;
+        /** @brief Mip levels `mipImage` owns; 1 disables regeneration. */
+        int           mipLevels     = 1;
+        /** @brief Array layer of `mipImage` this pass owns (a cube face index, else 0). */
+        uint32_t      mipLayer      = 0;
+
+        /** @brief @copydoc VulkanRTSource::GetFramebuffer */
+        VkFramebuffer GetFramebuffer()          const override { return framebuffer; }
+        /** @brief @copydoc VulkanRTSource::GetRenderPass */
+        VkRenderPass  GetRenderPass()           const override { return renderPass; }
+        /** @brief @copydoc VulkanRTSource::GetWidth */
+        int           GetWidth()                const override { return width; }
+        /** @brief @copydoc VulkanRTSource::GetHeight */
+        int           GetHeight()               const override { return height; }
+        /** @brief @copydoc VulkanRTSource::GetColorAttachmentCount */
+        uint32_t      GetColorAttachmentCount() const override { return 1; }
+        /** @brief @copydoc VulkanRTSource::WantsMsaa */
+        bool          WantsMsaa()               const override { return msaa; }
+        /** @brief @copydoc VulkanRTSource::GetDepthFormat */
+        VkFormat      GetDepthFormat()          const override { return depthFormat; }
+        /** @brief @copydoc VulkanRTSource::ColorLoadOpIsClearEXT */
+        bool          ColorLoadOpIsClearEXT()   const override { return loadOpIsClear; }
+        /** @brief @copydoc VulkanRTSource::DepthStencilOwnerEXT */
+        const void*   DepthStencilOwnerEXT()    const override
+        {
+            return depthGroup != nullptr ? depthGroup : static_cast<const void*>(this);
+        }
+        /** @brief @copydoc VulkanRTSource::MaybeGenerateMips */
+        void          MaybeGenerateMips(VkCommandBuffer cb) override;
+    };
+
     // -------------------------------------------------------------------------
     // IVulkanSamplable — common interface for any Vulkan object that can be
     // bound as a sampled texture (regular Texture2D and RenderTarget2D).
@@ -142,8 +215,7 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanRenderTargetBackend
     // -------------------------------------------------------------------------
 
-    class VulkanRenderTargetBackend : public IRenderTargetBackend, public VulkanRTSource,
-                                      public IVulkanSamplable
+    class VulkanRenderTargetBackend : public IRenderTargetBackend, public IVulkanSamplable
     {
     public:
         // Task 911: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
@@ -168,21 +240,18 @@ namespace CNA::Internal::Backends::Vulkan
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
 
-        VkFramebuffer   GetFramebuffer()          const override;
-        VkRenderPass    GetRenderPass()            const override;
-        uint32_t        GetColorAttachmentCount()  const override { return 1; }
+        /**
+         * @brief REMED-GFX-166: this target's deferred-pass destination, shared with every command.
+         *
+         * The deferred queues own a share of this, so the pass outlives the public wrapper for as
+         * long as any queued command still renders into it. Also the target's identity in
+         * REMED-GFX-151's render-to-texture dependency graph and in REMED-GFX-074's readback flush.
+         *
+         * @return The shared destination description; never null for a constructed target.
+         */
+        NOXNA [[nodiscard]] const std::shared_ptr<VulkanTargetPassEXT>& PassEXT() const { return pass_; }
         // Task 878/879: true once this instance actually engaged MSAA (msaaFramebuffer_ created).
-        bool            WantsMsaa()                const override { return msaaFramebuffer_ != VK_NULL_HANDLE; }
-        // Task 911: this instance's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
-        // attachment, DepthFormat::None).
-        VkFormat        GetDepthFormat()            const override { return depthVkFormat_; }
-        // REMED-GFX-129: a PreserveContents target's non-MSAA pass loads its colour, so a leading
-        // Clear() cannot ride the load action there and is recorded as an ordered command instead.
-        // The MSAA variant is DiscardContents-shaped for every usage (see its own comment).
-        bool            ColorLoadOpIsClearEXT()     const override
-        {
-            return WantsMsaa() || !preserveContents_;
-        }
+        bool            WantsMsaa()                const { return msaaFramebuffer_ != VK_NULL_HANDLE; }
         // Real, backend-clamped applied MultiSampleCount (0 if MSAA wasn't engaged — see the
         // "piggyback on the backend's own sampleCount_" scope decision in plan_graphics.md).
         int             GetMultiSampleCount()      const override { return appliedMultiSampleCount_; }
@@ -204,13 +273,6 @@ namespace CNA::Internal::Backends::Vulkan
         // an ordinary texture (on-the-fly descriptor sets built by RecordCommandBuffer's texture
         // dispatch), not just via GetDescriptorSet()'s own precreated one.
         VkImageView     GetVkImageView()           const override { return colorSampleView_; }
-
-        // Task 878: regenerates the full mip chain (levels 1..levelCount_-1) from level 0's
-        // just-rendered content via a vkCmdBlitImage cascade, mirroring EasyGL's
-        // glGenerateMipmap-on-unbind behavior (Task 336) / FNA3D's OPENGL_ResolveTarget. Called
-        // once per frame this RT was actually rendered into, right after its render pass ends
-        // (see VulkanGraphicsBackend::RecordCommandBuffer). No-op when mipMap was false.
-        void MaybeGenerateMips(VkCommandBuffer cb) override;
 
         // REMED-GFX-074: real GPU readback of this render target's colour image so that
         // RenderTarget2D::GetData() observes prior sprite/3D rendering into it even BEFORE
@@ -260,6 +322,10 @@ namespace CNA::Internal::Backends::Vulkan
         int                     appliedMultiSampleCount_ = 0;
         VkDescriptorSet         descriptorSet_ = VK_NULL_HANDLE;
         VulkanGraphicsBackend*  owner_        = nullptr;
+        // REMED-GFX-166: the destination the deferred queues name, built once at the end of the
+        // constructor from the immutable handles above. Shared, so a command queued against this
+        // target keeps the pass alive past this wrapper's destruction instead of being discarded.
+        std::shared_ptr<VulkanTargetPassEXT> pass_;
     };
 
     // -------------------------------------------------------------------------
@@ -479,7 +545,9 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<DrawCall>            draws_;
         const IVulkanSamplable*          currentTexture_      = nullptr;
         uint32_t                         batchFirstIndex_     = 0;
-        VulkanRTSource*                  activeRT_            = nullptr;
+        // REMED-GFX-166: a share of the destination pass, captured at Begin() and held until the
+        // batch is recorded -- the target may be unbound AND destroyed in between.
+        std::shared_ptr<VulkanRTSource>  activeRT_;
         // REMED-GFX-140: the logical render-pass segment active at Begin(), captured with
         // activeRT_ and for the same reason -- the batch belongs to the bind cycle that opened
         // it, even if End() happens after the target was unbound.
@@ -703,7 +771,7 @@ namespace CNA::Internal::Backends::Vulkan
                 : VK_NULL_HANDLE;
         }
         /// REMED-GFX-151: the key identifying this cube as ONE render target in the readback
-        /// flush's dependency graph. Deliberately the same value all six `FaceProxy`s answer from
+        /// flush's dependency graph. Deliberately the same value all six face passes answer from
         /// `DepthStencilOwnerEXT()` (REMED-GFX-142), so a draw sampling the cube and the six cycles
         /// that fill its faces resolve to the same group.
         [[nodiscard]] const void* RenderTargetGroupEXT() const
@@ -744,7 +812,7 @@ namespace CNA::Internal::Backends::Vulkan
          *
          * MSAA resolves into this same image at `vkCmdEndRenderPass` through the render pass's own
          * `pResolveAttachments`, and a mip chain is regenerated into these same layers by
-         * `FaceProxy::MaybeGenerateMips`, so both are read here without a separate resolve step.
+         * `VulkanTargetPassEXT::MaybeGenerateMips`, so both are read here without a separate resolve step.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @param level      Mip level to read.
@@ -764,55 +832,6 @@ namespace CNA::Internal::Backends::Vulkan
         [[nodiscard]] VkImageView GetVkCubeImageView() const override { return cubeView_; }
 
     private:
-        // Task 907: per-face proxy also knows how to regenerate its OWN layer's mip chain
-        // (levels 0..levelCount-1 of the shared 6-layer `image_`, layer = faceIndex) via a
-        // vkCmdBlitImage cascade, mirroring VulkanRenderTargetBackend::MaybeGenerateMips (Task 878).
-        // Task 903: also knows how to report/serve its own MSAA framebuffer + render pass, when
-        // this cube engaged MSAA -- mirrors VulkanRenderTargetBackend's msaaFramebuffer_ pattern.
-        struct FaceProxy : public VulkanRTSource {
-            VkFramebuffer framebuffer     = VK_NULL_HANDLE;
-            VkRenderPass  renderPass      = VK_NULL_HANDLE;
-            VkFramebuffer msaaFramebuffer = VK_NULL_HANDLE;
-            VkRenderPass  msaaRenderPass  = VK_NULL_HANDLE;
-            int           size         = 0;
-            VkImage       image        = VK_NULL_HANDLE;
-            int           levelCount   = 1;
-            int           faceIndex    = 0;
-            /// Task 911: this cube's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
-            /// attachment, DepthFormat::None), mirrored from the owning
-            /// VulkanRenderTargetCubeBackend's depthVkFormat_.
-            VkFormat      depthFormat  = VK_FORMAT_UNDEFINED;
-            /// REMED-GFX-129: mirrored from the owning cube's preserveContents_, so this face can
-            /// answer whether its own render pass clears or loads its colour attachment.
-            bool          preserveContents = false;
-            VkFramebuffer GetFramebuffer()          const override { return (msaaFramebuffer != VK_NULL_HANDLE) ? msaaFramebuffer : framebuffer; }
-            VkRenderPass  GetRenderPass()            const override { return (msaaFramebuffer != VK_NULL_HANDLE) ? msaaRenderPass : renderPass; }
-            int GetWidth()                          const override { return size; }
-            int GetHeight()                         const override { return size; }
-            uint32_t GetColorAttachmentCount()      const override { return 1; }
-            bool WantsMsaa()                        const override { return msaaFramebuffer != VK_NULL_HANDLE; }
-            VkFormat GetDepthFormat()               const override { return depthFormat; }
-            bool ColorLoadOpIsClearEXT()            const override
-            {
-                // REMED-GFX-141: the MSAA pass no longer forces a clear. It has a real LOAD variant
-                // now (GetOrCreateRTRenderPassMsaa's `discardContents`) and this face's framebuffer
-                // was built against whichever one its usage selected, so both the MSAA and the
-                // non-MSAA leg answer the same question the same way -- which is what lets
-                // REMED-GFX-129 fold a leading Clear() into the load action on a discarding
-                // multisampled face and record it as an ordered vkCmdClearAttachments on a
-                // preserving one.
-                return !preserveContents;
-            }
-            /// REMED-GFX-142: all six faces of one cube share `depthImage_`, so they are one
-            /// depth/stencil group. `image` is the cube's own colour image handle, identical for
-            /// all six proxies of this cube and distinct from every other target's.
-            const void* DepthStencilOwnerEXT() const override
-            {
-                return static_cast<const void*>(image);
-            }
-            void MaybeGenerateMips(VkCommandBuffer cb) override;
-        };
-
         VulkanGraphicsBackend*     owner_     = nullptr;
         VkImage                    image_     = VK_NULL_HANDLE;
         VkDeviceMemory             memory_    = VK_NULL_HANDLE;
@@ -847,7 +866,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkDeviceMemory                msaaColorMemory_ = VK_NULL_HANDLE;
         std::array<VkImageView, 6>    msaaColorViews_  = {};
         std::array<VkFramebuffer, 6>  msaaFramebuffers_ = {};
-        std::array<FaceProxy, 6>     faceProxies_;
+        // REMED-GFX-166: six independently owned face destinations, replacing the value-member
+        // value-member FaceProxy array. All six carry the same `depthGroup` (this cube's colour image), which is
+        // exactly the shared depth/stencil identity REMED-GFX-142 established, so a readback still
+        // flushes the whole cube as one group.
+        std::array<std::shared_ptr<VulkanTargetPassEXT>, 6> facePasses_;
         int                        size_      = 0;
         int                        levelCount_ = 1;
         int                        appliedMultiSampleCount_ = 0;
@@ -1584,7 +1607,9 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VulkanRenderTargetBackend*>  liveRenderTargets_;
 
         // --- MRT proxy (one active binding; old bindings retire through the frame fence) ---
-        std::unique_ptr<VulkanMRTProxy>          mrtProxy_;
+        // REMED-GFX-166: shared, so a deferred entry queued against this proxy keeps it alive
+        // after SetRenderTargets() has moved on (see the retirement-list removal below).
+        std::shared_ptr<VulkanMRTProxy>          mrtProxy_;
         VkSampleCountFlagBits lastMrtPipelineSampleCountEXT_ = VK_SAMPLE_COUNT_1_BIT;
         uint32_t              lastMrtPipelineColorCountEXT_ = 0;
 
@@ -1620,7 +1645,10 @@ namespace CNA::Internal::Backends::Vulkan
             BlendKeyParams          blendParams;  // Task 868: real per-channel blend factors/funcs
             int                     cullMode;     // XNA CullMode: 0=None, 1=CW, 2=CCW
             VkIndexType             indexType;    // VK_INDEX_TYPE_UINT16 or UINT32
-            VulkanRTSource*         rt = nullptr; // nullptr = backbuffer
+            // REMED-GFX-166: a SHARE of the destination pass, not a borrowed pointer into the
+            // public wrapper's backend object. Holding it is what lets the wrapper be destroyed
+            // between this draw and the frame that replays it.
+            std::shared_ptr<VulkanRTSource> rt; // null = backbuffer
             std::size_t             stride = 16;  // vertex stride in bytes
             VkDescriptorSet         descSet = VK_NULL_HANDLE; // texture (or null)
             // Task 899: true for BasicEffect draws with no alpha-test/dual-tex/env-map/skinned/
@@ -1755,7 +1783,8 @@ namespace CNA::Internal::Backends::Vulkan
         // same `rt` were indistinguishable, which is exactly what let two bind cycles merge.
         struct PendingBatch {
             std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot> snapshot;
-            VulkanRTSource* rt      = nullptr;
+            /// REMED-GFX-166: a share of the destination pass -- see Pending3DDraw::rt.
+            std::shared_ptr<VulkanRTSource> rt;
             uint64_t        segment = 0;
             // REMED-GFX-129: this batch's position in the whole frame's public command stream, so
             // RecordCommandBuffer can place an ordered Clear() exactly where the game issued it.
@@ -1786,7 +1815,8 @@ namespace CNA::Internal::Backends::Vulkan
         // draws it belongs between.
         struct PendingClear {
             uint64_t        segment = 0;
-            VulkanRTSource* rt      = nullptr;
+            /// REMED-GFX-166: a share of the destination pass -- see Pending3DDraw::rt.
+            std::shared_ptr<VulkanRTSource> rt;
             float           r = 0.f, g = 0.f, b = 0.f, a = 1.f;
             float           depth   = 1.0f;
             int             stencil = 0;
@@ -1857,11 +1887,18 @@ namespace CNA::Internal::Backends::Vulkan
             std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>> poolDescriptorSets;
         };
         std::vector<RetiredResources>                                    retiredResources_;
-        // MRT proxies are retired as whole objects (they are VulkanRTSource DESTINATIONS referenced
-        // by their pointer in the deferred queues): SetRenderTargets() replaces the live proxy while
-        // its queued render work legitimately remains, so the old proxy is kept alive here until the
-        // consuming frame drains, instead of being destroyed out from under those entries.
-        std::vector<std::pair<uint64_t, std::unique_ptr<VulkanMRTProxy>>> retiredMrtProxies_;
+        // MRT proxies are retired as whole objects: SetRenderTargets() replaces the live proxy
+        // while its queued render work legitimately remains, so the old proxy is kept alive here
+        // until the consuming frame drains, instead of being destroyed out from under those entries.
+        //
+        // REMED-GFX-166 made every deferred destination SHARED, so the queued entries co-own the
+        // proxy as well -- and this list is deliberately KEPT rather than replaced by that. Unlike a
+        // VulkanTargetPassEXT, which owns nothing and is safe to drop the instant the queues are
+        // cleared, a proxy OWNS its VkFramebuffer, and the queues are cleared inside
+        // RecordCommandBuffer -- before the command buffer that references that framebuffer is
+        // submitted. The two gates answer the two different questions: this list is the GPU one
+        // (generations must drain), the shared entries are the CPU one (the record must happen).
+        std::vector<std::pair<uint64_t, std::shared_ptr<VulkanMRTProxy>>> retiredMrtProxies_;
         // Monotonic count of Full frame records submitted; the retirement generation clock.
         uint64_t frameGeneration_ = 0;
 
@@ -1917,7 +1954,9 @@ namespace CNA::Internal::Backends::Vulkan
         // replacing a previously-hardcoded clear value of 1.0f (mirrors clearStencil_ exactly).
         float    clearDepth_ = 1.0f;
         bool     initialized_       = false;
-        VulkanRTSource*            currentRT_ = nullptr;
+        // REMED-GFX-166: shared with every command enqueued while it is bound, so the pass a
+        // command names cannot be destroyed under it.
+        std::shared_ptr<VulkanRTSource> currentRT_;
         // REMED-GFX-129: monotonic position in the frame's public command stream. Every deferred
         // entry -- sprite batch, 3D draw and Clear() -- is stamped with the next value, so a
         // segment's contents can be replayed in exactly the order the game issued them instead of
@@ -1944,7 +1983,7 @@ namespace CNA::Internal::Backends::Vulkan
         // one swapchain pass holding both backbuffer draws.
         uint64_t                   currentSegment_ = 0;
         /// Advances the segment counter and binds @p rt (nullptr = backbuffer). REMED-GFX-140.
-        void BeginRenderPassSegmentEXT(VulkanRTSource* rt);
+        void BeginRenderPassSegmentEXT(std::shared_ptr<VulkanRTSource> rt);
         bool     depthTestEnabled_  = true;
         bool     depthWriteEnabled_ = true;
         bool     blendEnabled_      = false;
@@ -2273,20 +2312,44 @@ namespace CNA::Internal::Backends::Vulkan
         /** @brief Notes every render target a 3D draw samples, across all GpuDrawParams slots. */
         void NoteSampledSourcesEXT(const GpuDrawParams& params);
 
-        // REMED-GFX-074: drop every deferred sprite-batch / 3D-draw / clear entry whose target is
-        // `rt` from the pending queues, so a render target destroyed before Present() cannot leave
-        // a dangling VulkanRTSource* for RecordCommandBuffer() to dereference. Called from each
-        // render-target backend destructor. A destroyed target is unobservable (its GetData can no
-        // longer be called, and sampling its freed image is already broken independently), so
-        // discarding its unflushed draws is observationally identical to XNA's eager model where
-        // those draws had already executed by the time the resource was disposed.
-        void PurgeDeferredWorkForTarget(VulkanRTSource* rt);
+        // REMED-GFX-166 removed PurgeDeferredWorkForTarget. It existed only because a queued
+        // entry's destination was a borrowed pointer into the dying wrapper's backend object; the
+        // entries are now co-owners of an independent VulkanTargetPassEXT, so nothing dangles and
+        // nothing has to be thrown away. Its stated justification -- "a destroyed target is
+        // unobservable" -- was false: the discarded work is the PRODUCER, and the surviving
+        // consumer draw that samples the target is exactly what observes it (REMED-GFX-166).
+
+        /**
+         * @brief REMED-GFX-166: trace one resource's public disposal against the deferred queues.
+         *
+         * Records what the backend object was, which native handles it is about to hand to the
+         * retirement queue, the current frame generation, and -- the part that cannot be seen from
+         * C++ object lifetime alone -- how much already-queued work still names it, as a
+         * destination and (via REMED-GFX-151's dependency graph) as a sampled source. Emits
+         * nothing unless CNA_VULKAN_LIFETIME_TRACE is set.
+         *
+         * @param kind    Short resource-kind tag, e.g. "rt2d".
+         * @param backend The backend object being disposed.
+         * @param dest    Its destination identity as the deferred queues hold it (the
+         *                `VulkanRTSource`, which for a multiply-inheriting backend is NOT the same
+         *                address as @p backend), or nullptr for a resource that is never a
+         *                destination.
+         * @param image   Its VkImage, for correlation with the retirement and free lines.
+         * @param view    Its sampled VkImageView.
+         * @param fb      Its VkFramebuffer, VK_NULL_HANDLE for a non-destination resource.
+         */
+        NOXNA void TraceTargetDisposalEXT(const char* kind, const void* backend, const void* dest,
+                                         VkImage image, VkImageView view, VkFramebuffer fb) const;
 
         // REMED-GFX-074: if `rt` has pending deferred work, record + submit ONLY its off-screen
         // pass now (no present, no swapchain, no frame-bookkeeping advance) so its colour image
         // holds the rendered result before a GetData readback, then drop the consumed entries so
         // Present() never replays them (no double-render). No-op if nothing is queued for `rt`.
-        void FlushDeferredRenderTarget(VulkanRTSource* rt);
+        // REMED-GFX-166: `mrtResolveOwner` is the concrete RenderTarget2D being read, when there
+        // is one. A 2D target's destination is now a VulkanTargetPassEXT rather than the backend
+        // object, so `rt` alone can no longer be asked whether some MRT proxy resolves into it.
+        void FlushDeferredRenderTarget(VulkanRTSource* rt,
+                                       const VulkanRenderTargetBackend* mrtResolveOwner = nullptr);
 
         // Submits one frame (render + optional deferred readback copy). When deferSwap is
         // true the swapchain image is acquired, rendered and the GPU is waited on, but
