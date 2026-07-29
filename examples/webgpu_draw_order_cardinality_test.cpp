@@ -45,7 +45,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -282,6 +284,61 @@ class WebGpuDrawOrderCardinalityTest : public Game
             checkCount(d.submits, 1, "D5 eight alternating draws on the BACKBUFFER: queue submits");
             checkCount(d.pipelines, 0,
                        "D5 eight alternating draws on the BACKBUFFER: NEW Colored3D pipelines");
+        }
+
+        // ---- D7: the RenderTargetCube FACE recorder, by pixels ----
+        //
+        // This backend has three pass recorders and all three shared the fixed per-family replay
+        // list. The cross-backend pixel oracle in spritebatch_3d_order_test.cpp reaches the
+        // backbuffer and RenderTarget2D; the cube-face recorder is WebGPU-shaped and lives here,
+        // so its ordering is measured here rather than left as "the same code path, presumed
+        // covered". Both directions are run: a fixed replay list renders one of the two correctly
+        // by accident, which is exactly how this defect survived REMED-GFX-143's check O3.
+        {
+            RenderTargetCube cube(dev, kRT, false, SurfaceFormat::Color, DepthFormat::Depth24Stencil8,
+                                  0, RenderTargetUsage::DiscardContents);
+            const Color kBlue(0, 0, 255, 255);
+            struct Leg { bool spriteFirst; Color want; const char* name; };
+            const Leg legs[] = {
+                { true,  kBlue, "D7a a cube face's SpriteBatch -> 3D leaves the 3D draw on top" },
+                { false, kRed,  "D7b a cube face's 3D -> SpriteBatch leaves the sprite on top" },
+            };
+            for (const Leg& leg : legs)
+            {
+                dev.SetRenderTarget(&cube, CubeMapFace::PositiveX);
+                const Counters before = Sample(backend);
+                dev.Clear(kBlack);
+                if (leg.spriteFirst) { DrawSprite(kRed);   Draw3D(dev, kBlue); }
+                else                 { Draw3D(dev, kBlue); DrawSprite(kRed);   }
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                const Counters d = Delta(before, Sample(backend));
+
+                checkCount(d.passes, 1, std::string(leg.name) + ": render passes");
+                checkCount(d.submits, 1, std::string(leg.name) + ": queue submits");
+
+                std::vector<Color> face(static_cast<std::size_t>(kRT) * kRT, kBlack);
+                try
+                {
+                    cube.GetData(CubeMapFace::PositiveX, face.data(),
+                                 static_cast<int>(face.size()));
+                    const Color got = face[face.size() / 2 + kRT / 2];
+                    const bool ok = got.getRProperty() == leg.want.getRProperty() &&
+                                    got.getGProperty() == leg.want.getGProperty() &&
+                                    got.getBProperty() == leg.want.getBProperty();
+                    check(ok, ok ? std::string(leg.name)
+                                 : std::string(leg.name) + ": centre texel is (" +
+                                       std::to_string(static_cast<int>(got.getRProperty())) + "," +
+                                       std::to_string(static_cast<int>(got.getGProperty())) + "," +
+                                       std::to_string(static_cast<int>(got.getBProperty())) +
+                                       "), so the later draw did not win");
+                }
+                catch (const std::exception& e)
+                {
+                    std::printf("[INFO] %s: face readback unavailable here (%s) -- the pass and "
+                                "submit counts above still hold\n", leg.name, e.what());
+                    std::fflush(stdout);
+                }
+            }
         }
 
         // ---- D6: validation stayed silent through every family transition ----
