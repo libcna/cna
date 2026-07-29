@@ -2486,10 +2486,12 @@ existing task.
 | REMED-GFX-147 | EasyGL sampled a `RenderTarget2D` bottom-up while `GetData` and ordinary `Texture2D` sampling were both top-down: an OpenGL framebuffer's origin is bottom-left, readback already compensated, sampling did not. | MEDIUM | P2 | REMED-GFX-131 cross-backend controls | **DONE 2026-07-29 — CORRECTED AT SAMPLE TIME THROUGH ONE PREDICATE SHARED BY SPRITEBATCH AND THE ELEVEN STOCK 3D SHADERS; `GetData` UNTOUCHED, NO COPY/READBACK/RE-UPLOAD, NO PROGRAM VARIANT. 25/60 -> 60/60. ONE ORIENTATION-BLIND FIXTURE STRENGTHENED. SPAWNED GFX-149/150/151/152/153/154.** |
 | REMED-GFX-149 | `Texture2D::GetData(Color*, startIndex, elementCount)` gates its render-target backend fallback on `startIndex == 0` and throws for any other offset, while the rectangle overload honours the same offset. Shared layer, every backend. | LOW | P3 | — | OPEN (measured 2026-07-29 during REMED-GFX-147) |
 | REMED-GFX-150 | Software's SpriteBatch interpolates when magnifying even with `SamplerState::PointClamp`: 4/128 texels exact vs EasyGL's 128/128 on the identical plain-`Texture2D` draw. | MEDIUM | P2 | — | OPEN (isolated 2026-07-29 during REMED-GFX-147) |
-| REMED-GFX-151 | Vulkan: a `RenderTarget2D` rendered, unbound and then sampled with no intervening `GetData` reproduces 0/32 of the source; one `GetData` of that target makes the identical draw correct. The canonical XNA render-to-texture sequence. | HIGH | P1 | — | OPEN (reproduced 2026-07-29 by REMED-GFX-147 leg G0) |
+| REMED-GFX-151 | Vulkan: a `RenderTarget2D` rendered, unbound and then sampled with no intervening `GetData` reproduced 0/32 of the source, because the readback flush filtered the frame's segment list down to the target being READ and so never recorded the PRODUCER's render pass. The canonical XNA render-to-texture sequence. | HIGH | P1 | REMED-GFX-147 leg G0 | **DONE 2026-07-29 — 15/43 -> 43/43 ON A NEW DEDICATED FIXTURE, PLUS 43/43 ON A `PreferMultiSampling` DEVICE WITH THE APPLIED SAMPLE COUNT ASSERTED TO BE 4 AND 43/43 UNDER SYNCHRONIZATION VALIDATION WITH THE LAYER PROVED LIVE AND ZERO MESSAGES OF ANY KIND. FIXED BY MAKING THE FLUSH REPLAY THE TRANSITIVE CLOSURE OF THE BIND CYCLES A READBACK DEPENDS ON — THE READ TARGET'S OWN GROUP PLUS, FOR EACH CYCLE IN THE SET, THE EARLIER CYCLES OF EVERY RENDER-TARGET GROUP IT SAMPLES — STILL IN ASCENDING SEGMENT ORDER. NO BARRIER, FENCE, DEVICE/QUEUE WAIT, SUBMIT-PER-SWITCH, EXTRA PRESENT, EXTRA FRAME OR READBACK ADDED; THE SUBMIT-PER-MRT-PROXY LOOP IS REPLACED BY ONE COMMAND BUFFER AND ONE SUBMIT, SO CARDINALITY GOES DOWN. A SIMPLER POSITIONAL RULE ALSO PASSED THE CANONICAL FIXTURE AND WAS IMPLEMENTED, MEASURED AND REJECTED (LEG I2 0/32). VULKAN SHARD 180/181, THE ONE FAILURE A/B-PROVEN PRE-EXISTING. SIX CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN; 8 OF 48 VULKAN RENDER-TARGET FIXTURES SAMPLE A TARGET AND ALL 8 OBSERVED THE CONSUMER THROUGH `GetBackBufferData`, NEVER THROUGH A TARGET READBACK — ONE STRENGTHENED (2/4 -> 4/4). SPAWNED GFX-155/156.** |
 | REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | OPEN (reproduced 2026-07-29 by REMED-GFX-147; SDL_GPU counterpart of REMED-GFX-078) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
+| REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | OPEN (measured 2026-07-29 by REMED-GFX-151 legs D6/I2) |
+| REMED-GFX-156 | SDL_GPU and WebGPU: a `Clear()` issued AFTER a draw in the same bind cycle is lost — the consumer sees the geometry, on all three `RenderTargetUsage` values, both backends reporting the identical `(20,25,40,255)`. The SDL_GPU/WebGPU counterpart of REMED-GFX-129. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-151 leg G3) |
 
 #### REMED-BUILD-010 detail
 
@@ -17165,5 +17167,325 @@ paused until the machine returned to 44 °C; never reached 85 °C. Maximum paral
 - `7aa15613 test(Task REMED-GFX-147): cover SpriteBatch, 3D, chains and cross-backend controls`
 - `a7390a59 test(Task REMED-GFX-147): strengthen orientation tests that could not fail`
 - `docs(remediation): record GFX-147 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-151 — Vulkan same-frame render-to-texture (DONE 2026-07-29)
+
+### Classification and root cause
+
+**Not a missing barrier, not a missing layout transition, not a stale view, not a resolve or mip
+timing problem, and not "needs a flush". The producer's render pass was never recorded at all.**
+
+The Vulkan backend is a whole-frame-deferred recorder: every `Clear()`, SpriteBatch cycle and 3D
+draw is queued and replayed once, at Present, into a single command buffer whose passes are ordered
+by the public bind-cycle ("segment") id. A `GetData` readback cannot wait for Present, so
+REMED-GFX-074 added an early flush that records and submits the read target's passes immediately
+and — to avoid double-rendering at Present — consumes what it recorded. That flush filtered the
+frame's segment list down to the target being **read**:
+
+```cpp
+if (rtOnly)
+    segments.erase(remove_if(... !inFlushGroup(seg.rt) ...));   // pre-fix
+```
+
+`inFlushGroup` is a predicate on the **destination** of a draw. It silently assumed a target's
+content depends only on the draws issued *into* it. It also depends on every render target those
+draws **sample**, and a producer is a different target — so in the canonical XNA sequence the
+producer's segment was erased.
+
+### Pre-fix public sequence and what happened natively
+
+| Public call | Segment | Pre-fix native outcome |
+|---|---|---|
+| `SetRenderTarget(A)` | 1 opens | queued |
+| `Clear`; SpriteBatch pattern into A | 1 | queued, **never recorded** |
+| `SetRenderTarget(dst)` | 2 opens | queued |
+| `Clear`; SpriteBatch drawing **A** into dst | 2 | queued |
+| `SetRenderTarget(nullptr)` | — | — |
+| `dst.GetData(...)` | — | flush(dst) keeps segment 2 only; records **one** render pass |
+
+So `dst`'s consumer pass executed while `A`'s colour image had never been rendered into. `A`'s
+producer pass was recorded later, at Present — after the read that was supposed to observe it.
+
+Measured, `DISPLAY=:101`, llvmpipe: **0/32** texels correct, **14 entirely `(0,0,0,0)`**, first
+mismatch `(0,0) want=(20,25,40,255) got=(40,50,80,255)`. Every readback-observed leg failed the same
+way; the fixture scored **9/37** on first run and **15/43** in its final form.
+
+### Why `GetData` on the source repaired it
+
+`A.GetData()` runs the *same* flush for `A`, which records and submits `A`'s own segment and
+consumes it. By the time `dst`'s flush ran, `A`'s colour image genuinely held the pattern. GetData
+was an accidental **execution** barrier: the missing native operation was the producer's render
+pass, not a wait, a fence or a transition.
+
+Two legs isolate this precisely, and both **passed pre-fix**:
+
+- **leg B** — the identical sequence with one `A.GetData()` inserted between producer and consumer;
+- **leg D6** — producer → **backbuffer** consumer, observed with `GetBackBufferData`. That path goes
+  through Present's ordered record, never through the filtered flush, and scored **32/32 pre-fix**.
+
+So the Present-time ordered stream (REMED-GFX-140/143) was already correct, and the defect lived
+exclusively in the readback flush.
+
+### What was already correct, and is therefore NOT the fix
+
+Each candidate cause was checked and eliminated against the running backend:
+
+| Candidate | Finding |
+|---|---|
+| Producer image left in `COLOR_ATTACHMENT_OPTIMAL` | No. The RT render pass declares `finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`, and a never-rendered target is put there by its constructor's init barrier. |
+| No colour-write → shader-read dependency | No. `deps[1]` of every RT render pass is already `srcSubpass=0 → dstSubpass=EXTERNAL`, `srcStage=COLOR_ATTACHMENT_OUTPUT`, `srcAccess=COLOR_ATTACHMENT_WRITE`, `dstStage=FRAGMENT_SHADER \| TRANSFER`, `dstAccess=SHADER_READ \| TRANSFER_READ`, `BY_REGION`. |
+| Descriptor references a stale or different view | No. The consumer's descriptor set is built at enqueue time from `A`'s `colorSampleView_` (all mip levels), which is the correct sampling view of the correct image. **The identity was right; the content was absent.** |
+| MSAA resolve only during readback | No. The resolve is the RT MSAA render pass's own resolve attachment, so it completes at pass end — once the pass is recorded. Leg E confirms with an applied sample count of 4. |
+| Mip generation only during readback | No. `MaybeGenerateMips(cb)` is emitted immediately after `vkCmdEndRenderPass` for that target's pass in the same record. Leg F confirms with `LevelCount=4`. |
+| Consumer segment recorded before producer segment | No. Segments are sorted by ascending id, which is exactly public order. |
+| Pending work retired or reset before recording | No. |
+| Layout tracking reports `SHADER_READ_ONLY` without a real barrier | Not the cause — it *is* in that layout, legitimately, and simply holds nothing. |
+| **One target-source filter excludes the producer when flushing for the consumer** | **Yes. This is the defect.** |
+
+No new barrier, transition, fence, submit or wait was added, because none was missing.
+
+### The fix
+
+`FlushDeferredRenderTarget` now computes the exact **transitive closure** of the bind cycles a
+readback depends on, and `RecordCommandBuffer` replays exactly that set, still in ascending segment
+order:
+
+1. seed with every pending segment of the read target's own depth/stencil group (plus any MRT proxy
+   resolving into it) — this is REMED-GFX-074's original set, unchanged, and REMED-GFX-142's
+   whole-cube-group rule with it;
+2. for each segment already in the set, pull in the pending segments of every render-target group
+   that segment **samples** whose id is strictly smaller;
+3. repeat to fixpoint. It terminates because each pulled-in segment has a strictly smaller id than
+   the one that needed it.
+
+The dependency graph is `(bind cycle, sampled render-target group)`, recorded at **enqueue** time —
+where the source object is known and provably alive — from the only four places a texture reaches
+this backend: `VulkanSpriteBatchBackend::FlushTexture` and the three `GpuDrawParams` draw entry
+points, covering `texture0`, `texture1`, `envMap` and the four PBR maps. The group key is
+`VulkanRTSource::DepthStencilOwnerEXT()`, already the recorder's own notion of "one target", so a
+dependency and the work that satisfies it cannot drift apart. The graph is consumed and cleared with
+the pending queues, so it never outlives them.
+
+Consumption uses the identical predicate as recording, so Present replays nothing the flush already
+emitted and drops nothing it did not.
+
+### Why a closure and not the simpler positional rule
+
+The obvious cheaper rule — "replay every pending off-screen segment up to the readback point" — also
+turns the canonical fixture green (37/37 at the time). It was **implemented, measured and rejected**:
+it advances *unrelated* targets early, so a backbuffer draw still deferred to Present then samples a
+target whose later bind cycle has already run. Leg I2 was written for exactly this and reproduced
+**0/32**, returning the alt pattern `(245,235,30,90)` where the first cycle's `(20,25,40,255)` was
+required:
+
+```
+bind u; draw A into u; unbind;      // cycle 1
+draw u onto the BACKBUFFER;         // cycle 2 -- must still show A
+bind u; draw B into u; unbind;      // cycle 3
+bind t; draw; unbind; t.GetData();  // cycle 4 -- an unrelated target, read mid-frame
+```
+
+Pulling in only genuine producers keeps REMED-GFX-143's ascending-id backbuffer contract intact; leg
+I2 is exact under the closure.
+
+### Image, view and layout identities
+
+| Role | Handle |
+|---|---|
+| Producer colour attachment (non-MSAA) | `VulkanRenderTargetBackend::colorImage_`, attached through `colorView_` (mip 0) |
+| Producer colour attachment (MSAA) | `msaaColorImage_` through `msaaColorView_`, with `colorImage_` as the **resolve** attachment |
+| Sampled by the consumer | `colorSampleView_` (all `levelCount_` levels), returned by `GetVkImageView()` |
+| Mip range / array layer | levels `0..levelCount_-1`, layer 0 |
+
+Layout path, unchanged by this task and now actually executed:
+`UNDEFINED` (DiscardContents) or `SHADER_READ_ONLY_OPTIMAL` (PreserveContents, `LOAD_OP_LOAD`)
+→ `COLOR_ATTACHMENT_OPTIMAL` in the subpass → `SHADER_READ_ONLY_OPTIMAL` as `finalLayout`, with the
+`deps[1]` memory dependency above making the writes visible to the consumer's fragment-shader reads
+in the following pass of the same command buffer.
+
+### Results
+
+| Fixture | Pre-fix | Post-fix |
+|---|---|---|
+| `rendertarget_producer_consumer_test` (VULKAN) | **15/43** on the fixture as it stood then | **44/44** |
+| the same, `--msaa` (applied sample count **4**, asserted) | — | **44/44** |
+| the same, `--syncval` | — | **44/44** |
+| `rendertarget_sampling_orientation_test` leg G0 | pinned 0/32 | **32/32**, whole fixture 57/57 |
+| `vulkan_rt_roundtrip_test` (strengthened) | **2/4** | **4/4** |
+
+Leg coverage: canonical producer→consumer; the GetData-barrier diagnostic; four stock 3D consumers
+(BasicEffect indexed and non-indexed, AlphaTestEffect, DualTextureEffect); six chains (texture→A→B,
+A→B→C, one producer with two consumers, two producers consumed in reverse order, A→B→A,
+producer→backbuffer); MSAA; mipmapped producer; all three `RenderTargetUsage` values crossed with
+clear-only / clear-then-draw / draw-then-clear producers; source rectangle; PointClamp and
+LinearClamp; the backbuffer boundary; and Khronos validation.
+
+### Validation
+
+`VK_LAYER_KHRONOS_validation` **loaded and asserted live** (`IsValidationActiveEXT()`), in all three
+runs. **Zero** validation messages of any kind — 0 synchronization hazards (classified by the stable
+`SYNC-HAZARD` message-id prefix, not by matching a sentence), 0 naming `vkAcquireNextImageKHR`
+(REMED-GFX-144 stays clean), 0 other messages. The `--syncval` run requests
+`VkValidationFeaturesEXT` synchronization validation — which is **not** in the default validation
+set — before the `Game` is constructed, the only point the instance can receive it.
+
+### Cardinality and performance
+
+| Counter | Pre-fix | Post-fix |
+|---|---|---|
+| Render passes recorded per frame, total | one per pending segment | **unchanged** — each segment is still recorded exactly once, in a flush or at Present |
+| Command buffers per readback flush | **one per source** (target + each MRT proxy) | **1** |
+| `vkQueueSubmit` per readback flush | **one per source** | **1** |
+| `vkQueueWaitIdle` per readback flush | one per source | **1** |
+| `vkDeviceWaitIdle` per readback flush | 1 | 1 (unchanged) |
+| CPU fence waits added | — | **0** |
+| `vkCmdPipelineBarrier` added | — | **0** |
+| Image views, descriptor sets, samplers | — | **0 added**; no per-transition resource |
+| Resolve operations | one per MSAA pass | unchanged |
+| Staging / readback buffers | GetData's own | unchanged |
+| Extra Present / extra frame / readback / reupload / CPU copy / sleep | — | **none** |
+
+The only new state is one `std::vector<std::pair<uint64_t, const void*>>` bounded by
+(bind cycles this frame × distinct sampled targets), cleared with the pending queues — no per-frame
+growth. Submit count strictly **decreases** whenever MRT proxies are involved, and their passes are
+now ordered by public order rather than by the order the proxies happened to be discovered. Whole
+Vulkan shard wall clock: 154.86 s for 181 tests.
+
+### False-positive test audit
+
+Of the **48** Vulkan-registered example fixtures that build a render target, **8** sample one as a
+texture — and **all 8 observe the consumer through `GetBackBufferData`**, i.e. Present's ordered
+record, which was always correct. **Not one** observed a consumer through a *target* readback, the
+only path that reaches the filtered flush. That is precisely why a HIGH-severity defect on the
+canonical XNA render-to-texture sequence survived every one of them.
+
+**One strengthened**, the archetype: `vulkan_rt_roundtrip_test.cpp` ("fill a target with `Clear()`
+only, unbind, sample it") now runs the same producer and consumer a second time with the consumer
+writing into a **target** read byte-exactly with `GetData`. A/B-measured with the final file against
+pre-fix production: its two original legs still passed, the two new ones returned `(0,0,0)`.
+**2/4 → 4/4.**
+
+`easygl_bloom_pipeline_test.cpp` — a real four-stage RT chain with no source readback anywhere — was
+inspected and would *not* have caught this either: its final observation is a backbuffer draw read
+with `GetBackBufferData`, the path leg D6 proves was already correct. Recorded, not changed (it is
+an EasyGL registration and this task changes Vulkan only).
+
+REMED-GFX-147's leg G0 declaration is **flipped**: `kSampleWithoutReadbackWorks` is now `true` for
+every backend, the per-leg GetData workaround it forced is deleted, and a `static_assert` keeps a
+future regression failing G0 rather than re-declaring it.
+
+### Regression results
+
+Full Vulkan shard **180/181**. The single failure, `Vulkan_DepthBias`, is **A/B-proven
+pre-existing**: 3/4 with the identical binary against pre-fix production, failing the same
+`DepthBias=-1e6 (flat)` check. It reads the backbuffer and never touches a render-target readback.
+
+Every named gate green: REMED-GFX-018 ClearOptions, GFX-039 active-target validation, GFX-093 image
+transitions, GFX-095 MRT+MSAA, GFX-096 target/cube binding, GFX-112 index-arena alignment,
+GFX-127/134 honest readback (`Vulkan_Texture2D_GetDataContract`, `Vulkan_CubeVolume_GetDataContract`,
+`Vulkan_RenderTargetCube_GetDataContract`), GFX-136/142 usage semantics
+(`Vulkan_RenderTarget_DepthStencilUsage`, `Vulkan_RenderTargetCube_Usage`), GFX-140/143 pass ordering
+(`Vulkan_Backbuffer_PassOrder`, `Vulkan_RenderTarget_PassBoundary`), GFX-144 swapchain
+synchronization, GFX-129 ordered Clear, GFX-141 cube MSAA (`Vulkan_RenderTargetCube_MsaaFace`), and
+GFX-147 orientation.
+
+### Cross-backend controls
+
+Only Vulkan production changed; these runs establish that every other backend already honoured the
+contract rather than being made to.
+
+| Backend | Result |
+|---|---|
+| SOFTWARE | 41/41 |
+| HEADLESS | 29/29 |
+| EASYGL | 41/41 |
+| BGFX | 37/37 (with REMED-GFX-155 declared) |
+| SDL_GPU | 32/32 (with REMED-GFX-152 and REMED-GFX-156 declared) |
+| WEBGPU | 38/38 (with REMED-GFX-156 declared; mipmapped targets unsupported, boundary recorded) |
+| D3D9 | 40/40 (`DualTextureEffect` rejects this fixture's `VertexPositionTexture` stride -- plan_dx9.md D9-82d, a documented vertex-layout boundary; the other three stock-effect cases run) |
+| D3D11 | 41/41 |
+| VULKAN | 44/44 |
+
+SDL_GPU's REMED-GFX-152 crash path is **not** exercised — the stock-3D leg is skipped there by the
+existing declaration, so the control runs rather than being blocked.
+
+### Independent findings recorded, not fixed
+
+Both are **declared per backend in the fixture**, so each is pinned rather than tolerated: fixing
+either fails this fixture and forces the declaration to be updated. Neither can be caused by this
+task, which changes Vulkan files only.
+
+- **REMED-GFX-155** — Bgfx: a render target produced and unbound in this frame samples as entirely
+  empty when the consumer draws to the **backbuffer** (0/32, all 32 texels `(0,0,0,0)`), while the
+  identical source sampled into another **render target** is byte-exact (legs D1–D5) and an ordinary
+  `Texture2D` drawn in the same backbuffer batch is byte-exact too. So it is neither "the target is
+  empty" nor "the backbuffer draw is broken" — it is specifically a never-read target reaching a
+  backbuffer consumer. Every prior bgfx fixture read its source at some point. **HIGH** — the bgfx
+  shape of the canonical render-to-texture sequence.
+- **REMED-GFX-156** — SDL_GPU **and** WebGPU: a `Clear()` issued *after* a draw in the same bind
+  cycle is lost, so the consumer sees the geometry instead of the clear, on all three
+  `RenderTargetUsage` values, both backends reporting the identical `(20,25,40,255)`. The SDL_GPU /
+  WebGPU counterpart of REMED-GFX-129, which fixed exactly this on Vulkan and was scoped to Vulkan.
+
+### Source and generated-artifact changes
+
+Two production files: `VulkanGraphicsBackend.cpp` and `VulkanGraphicsBackend.hpp`. **No shader
+changed, and no generated artifact or offline-compiled bytecode was regenerated** — the correction is
+which render passes get recorded, not what they draw.
+
+### Sanitizers
+
+Both reuse the persistent Vulkan sanitizer trees; **no sanitizer directory was created**.
+
+| Tree | `CNA_SANITIZE` | Producer/consumer | `--msaa` | `rt_roundtrip` | orientation | Reports |
+|---|---|---|---|---|---|---|
+| `cmake-build-vulkan-asan` | `address` | 44/44 | 44/44 | 4/4 | 57/57 | **0** |
+| `cmake-build-vulkan-ubsan` | `undefined` | 44/44 | 44/44 | 4/4 | 57/57 | **0** |
+
+Covered by those runs: producer → consumer; same-frame target chains including A→B→A and two
+producers consumed in reverse order; MSAA; a mipmapped target; SpriteBatch and stock 3D consumers;
+two live targets; repeated bind cycles; and every target destroyed while its work was still queued
+(each leg builds its targets as locals and drops them at scope exit, which is REMED-GFX-074's
+`PurgeDeferredWorkForTarget` path). No invalid access, stale descriptor or view, use-after-free,
+overflow or command-lifetime error.
+
+### Build directories, ccache and displays
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-vulkan` | VULKAN | yes | reused |
+| `cmake-build-vulkan-asan` · `cmake-build-vulkan-ubsan` | VULKAN + ASan / UBSan | yes | reused |
+| `cmake-build-software` · `cmake-build-headless` · `cmake-build-debug` (EasyGL) · `cmake-build-bgfx` · `cmake-build-sdlgpu` · `cmake-build-webgpu` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` | the cross-backend controls | yes | reused |
+| `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-sdlrenderer` · `cmake-build-dx3` · `cmake-build-d3d12-mingw` | the remaining backend libraries | yes | reused |
+
+**No build directory was created, cleaned, deleted or recreated**, every configure was incremental,
+and **no clean build occurred**. **No build tree was created under `/tmp`, `/var/tmp` or
+`/dev/shm`** — the scratchpad held only logs, three short driver scripts and this draft. All
+fourteen backend libraries build incrementally: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12, DX3,
+EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan and WebGPU.
+
+Virtual display **`:101`** for every Vulkan and Linux measurement — pre-existing and shared, neither
+created nor stopped. `:0` was used for **one** thing only: the two Wine/DXVK controls, because
+DXVK's dxgi probe cannot use an Xvfb display (measured this session: `SDL_InitSubSystem(SDL_INIT_VIDEO)
+failed: No displays available` on `:101`). No display was created and none was stopped.
+
+Thermals: started at **49.8 °C** with an unrelated build owned by another session already running,
+which was left alone and allowed to finish first. Peak **89 °C**, reached twice at `-j1` before the
+governor's sampling interval was tightened; after that a supervisor suspended this session's own
+build process group (`SIGSTOP` by exact pgid) at 83 °C and resumed it at 70 °C, giving **6 thermal
+pauses** in total. Maximum parallelism **2 jobs**, used only for the first two short fixture builds
+while the package sat at 40–70 °C, and dropped to **1 job** for everything afterwards once a
+sustained 82 °C was measured at `-j2`. **No `pkill`, `killall` or kill-by-name was used at any
+point**; the only signals sent were `TERM`, `STOP` and `CONT` to process groups this session
+created, by exact pgid.
+
+### Commits
+
+- `99cefc6f test(Task REMED-GFX-151): reproduce Vulkan same-frame render-to-texture loss`
+- `8f3f63ca fix(Task REMED-GFX-151): record a Vulkan readback flush's producers`
+- `882aeb44 test(Task REMED-GFX-151): cover chains, resolve, usage, validation and the backbuffer boundary`
+- `docs(remediation): record GFX-151 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
