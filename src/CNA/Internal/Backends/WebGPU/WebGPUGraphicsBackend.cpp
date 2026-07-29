@@ -5454,42 +5454,219 @@ struct VSOut {
                                             static_cast<std::uint32_t>(drawOrder_.size())});
     }
 
+    void WebGPUGraphicsBackend::RecordOrderedClear(bool color, bool depth, bool stencil)
+    {
+        OrderedClearCommand command;
+        command.color = color;
+        command.depth = depth;
+        command.stencil = stencil;
+        command.colorValue = clearColor_;
+        command.depthValue = clearDepth_;
+        command.stencilValue = clearStencil_;
+        if (TraceDrawOrder())
+        {
+            std::fprintf(stderr, "[wgpu-order] enqueue #%zu clear aspects=%s%s%s\n",
+                         drawOrder_.size(), color ? "target" : "", depth ? "|depth" : "",
+                         stencil ? "|stencil" : "");
+        }
+        clearCommands_.push_back(command);
+        drawOrder_.push_back(DrawOrderEntry{DrawFamily::Sprite,
+                                            static_cast<std::uint32_t>(clearCommands_.size() - 1),
+                                            static_cast<std::uint32_t>(drawOrder_.size()),
+                                            OrderedKind::Clear});
+    }
+
     void WebGPUGraphicsBackend::DiscardQueuedSprites()
     {
         spriteCommands_.clear();
         // The 3D families are deliberately NOT cleared here (they never were), so their entries
         // keep addressing live commands and only the sprite references are dropped.
+        // REMED-GFX-156: `kind` first -- a Clear entry stores its clearCommands_ slot in `index`
+        // and leaves `family` at its default, which happens to be Sprite, so testing the family
+        // alone would drop every ordered clear of the cycle along with the sprites.
         drawOrder_.erase(std::remove_if(drawOrder_.begin(), drawOrder_.end(),
                                         [](const DrawOrderEntry& e)
-                                        { return e.family == DrawFamily::Sprite; }),
+                                        {
+                                            return e.kind == OrderedKind::Draw &&
+                                                   e.family == DrawFamily::Sprite;
+                                        }),
                          drawOrder_.end());
+    }
+
+    std::vector<WebGPUGraphicsBackend::PassSegmentPlan>
+    WebGPUGraphicsBackend::BuildPassSegments() const
+    {
+        std::vector<PassSegmentPlan> segments;
+        segments.push_back(PassSegmentPlan{});
+        for (std::size_t i = 0; i < drawOrder_.size(); ++i)
+        {
+            const DrawOrderEntry& entry = drawOrder_[i];
+            if (entry.kind == OrderedKind::Clear)
+            {
+                // Nothing observable separates this clear from the segment's own load action, so it
+                // folds in: consecutive Clear()s are one pass, and a later request overrides an
+                // earlier one only for the aspects it actually names. A draw in between makes the
+                // clear observable, which is a boundary and therefore a second pass.
+                if (segments.back().entryCount != 0)
+                {
+                    PassSegmentPlan next;
+                    next.firstEntry = i + 1;
+                    segments.push_back(next);
+                }
+                const OrderedClearCommand& request = clearCommands_[entry.index];
+                OrderedClearCommand& accumulated = segments.back().clear;
+                if (request.color)
+                {
+                    accumulated.color = true;
+                    accumulated.colorValue = request.colorValue;
+                }
+                if (request.depth)
+                {
+                    accumulated.depth = true;
+                    accumulated.depthValue = request.depthValue;
+                }
+                if (request.stencil)
+                {
+                    accumulated.stencil = true;
+                    accumulated.stencilValue = request.stencilValue;
+                }
+                continue;
+            }
+            if (segments.back().entryCount == 0)
+                segments.back().firstEntry = i;
+            segments.back().entryCount = i + 1 - segments.back().firstEntry;
+        }
+        return segments;
+    }
+
+    void WebGPUGraphicsBackend::ReplayOrderedSegments(WGPUCommandEncoder encoder,
+                                                       const PassDestination& destination)
+    {
+        // One upload for the whole bind cycle, before any pass opens: wgpuQueueWriteBuffer is not
+        // legal inside a render pass, and every segment reads the same shared sprite buffer.
+        UploadSpriteVertices();
+
+        const std::vector<PassSegmentPlan> segments = BuildPassSegments();
+        const bool trace = TraceDrawOrder();
+
+        for (std::size_t s = 0; s < segments.size(); ++s)
+        {
+            const PassSegmentPlan& segment = segments[s];
+            const bool isFirst = (s == 0);
+            const bool isLast = (s + 1 == segments.size());
+            // The bind cycle's usage policy and the "the attachment was just recreated and holds
+            // undefined bytes" forcing flags belong to the cycle, so they apply to its FIRST
+            // segment only; every later segment loads whatever the previous one stored unless its
+            // own Clear() named that aspect.
+            const bool clearColor = segment.clear.color ||
+                                    (isFirst && (clearColorPending_ || destination.discardFirstSegment));
+            const bool clearDepth = segment.clear.depth ||
+                                    (isFirst && (clearDepthPending_ || destination.discardFirstSegment));
+            const bool clearStencil = segment.clear.stencil ||
+                                      (isFirst && (clearStencilPending_ || destination.discardFirstSegment));
+
+            WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+            colorAttachment.view = destination.colorView;
+            // Resolving once, at the end of the cycle, is enough: the multisampled attachment is
+            // stored and reloaded across the segment boundary, so the final resolve sees every
+            // segment's samples. An intermediate resolve would be pure extra bandwidth.
+            colorAttachment.resolveTarget = isLast ? destination.resolveView : nullptr;
+            colorAttachment.loadOp = clearColor ? WGPULoadOp_Clear : WGPULoadOp_Load;
+            colorAttachment.storeOp = WGPUStoreOp_Store;
+            colorAttachment.clearValue = segment.clear.color ? segment.clear.colorValue : clearColor_;
+
+            WGPURenderPassDepthStencilAttachment depthAttachment{};
+            depthAttachment.view = destination.depthView;
+            depthAttachment.depthLoadOp = clearDepth ? WGPULoadOp_Clear : WGPULoadOp_Load;
+            depthAttachment.depthStoreOp = WGPUStoreOp_Store;
+            depthAttachment.depthClearValue = segment.clear.depth ? segment.clear.depthValue : clearDepth_;
+            depthAttachment.depthReadOnly = false;
+            depthAttachment.stencilLoadOp = clearStencil ? WGPULoadOp_Clear : WGPULoadOp_Load;
+            depthAttachment.stencilStoreOp = WGPUStoreOp_Store;
+            depthAttachment.stencilClearValue =
+                segment.clear.stencil ? segment.clear.stencilValue : clearStencil_;
+            depthAttachment.stencilReadOnly = false;
+
+            WGPURenderPassDescriptor passDescriptor{};
+            passDescriptor.label = StringView(destination.passLabel);
+            passDescriptor.colorAttachmentCount = 1;
+            passDescriptor.colorAttachments = &colorAttachment;
+            passDescriptor.depthStencilAttachment =
+                destination.depthView != nullptr ? &depthAttachment : nullptr;
+            WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+
+            if (trace)
+            {
+                std::fprintf(stderr,
+                             "[wgpu-order] pass #%zu destination=%s segment=%zu/%zu opened-by=%s "
+                             "clear=%s%s%s colorLoad=%s colorStore=store resolve=%s depthLoad=%s "
+                             "stencilLoad=%s draws=%zu\n",
+                             renderPassCount_, destination.traceName, s, segments.size(),
+                             isFirst ? "bind" : "clear",
+                             segment.clear.color ? "target" : "",
+                             segment.clear.depth ? "|depth" : "",
+                             segment.clear.stencil ? "|stencil" : "",
+                             clearColor ? "clear" : "load",
+                             colorAttachment.resolveTarget != nullptr ? "yes" : "no",
+                             destination.depthView == nullptr ? "none" : (clearDepth ? "clear" : "load"),
+                             destination.depthView == nullptr ? "none"
+                                                              : (clearStencil ? "clear" : "load"),
+                             segment.entryCount);
+            }
+            ++renderPassCount_;
+
+            // Nothing survives the end of a render pass, so every segment reopens the whole pass
+            // state: the viewport and scissor bookkeeping REMED-GFX-116/146 install at the target
+            // extents, plus the two genuinely dynamic pass values. Each draw then reapplies its own
+            // captured viewport/scissor/blend constant on top, exactly as within one pass.
+            BeginPassViewport(pass, destination.width, destination.height);
+            BeginPassScissor(pass, destination.width, destination.height);
+            const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
+            wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+            wgpuRenderPassEncoderSetStencilReference(pass,
+                                                     static_cast<std::uint32_t>(referenceStencil_));
+
+            ReplayDrawsInOrder(pass, destination.colorFormat, destination.sampleCount,
+                               destination.traceName, segment.firstEntry, segment.entryCount);
+            wgpuRenderPassEncoderEnd(pass);
+            wgpuRenderPassEncoderRelease(pass);
+        }
+
+        drawOrder_.clear();
+        clearCommands_.clear();
+        spriteCommands_.clear();
+        coloredDrawCommands_.clear();
+        texturedDrawCommands_.clear();
+        litTexturedDrawCommands_.clear();
+        alphaTestDrawCommands_.clear();
+        dualTextureDrawCommands_.clear();
+        envMapDrawCommands_.clear();
+        instancedDrawCommands_.clear();
+        pbrDrawCommands_.clear();
+        skinnedDrawCommands_.clear();
+        skinnedPbrDrawCommands_.clear();
     }
 
     void WebGPUGraphicsBackend::ReplayDrawsInOrder(WGPURenderPassEncoder pass,
                                                     WGPUTextureFormat targetFormat,
                                                     std::uint32_t targetSampleCount,
-                                                    const char* destination)
+                                                    const char* destination,
+                                                    std::size_t firstEntry, std::size_t entryCount)
     {
-        UploadSpriteVertices();
-
         const bool trace = TraceDrawOrder();
-        if (trace)
-        {
-            std::fprintf(stderr,
-                         "[wgpu-order] pass #%zu destination=%s queued=%zu\n",
-                         renderPassCount_, destination, drawOrder_.size());
-        }
 
         ReplayState state{};
         std::size_t issued = 0;
-        for (const DrawOrderEntry& entry : drawOrder_)
+        for (std::size_t e = firstEntry; e < firstEntry + entryCount; ++e)
         {
+            const DrawOrderEntry& entry = drawOrder_[e];
             const std::size_t i = entry.index;
             if (trace)
             {
                 std::fprintf(stderr,
-                             "[wgpu-order]   issue #%zu <- enqueue #%u family=%s slot=%u\n",
-                             issued, entry.order, DrawFamilyName(entry.family), entry.index);
+                             "[wgpu-order]   %s issue #%zu <- enqueue #%u family=%s slot=%u\n",
+                             destination, issued, entry.order, DrawFamilyName(entry.family),
+                             entry.index);
             }
             ++issued;
             switch (entry.family)
@@ -5510,19 +5687,6 @@ struct VSOut {
             case DrawFamily::SkinnedPbr:  IssueSkinnedPbrDraw(pass, skinnedPbrDrawCommands_[i], state); break;
             }
         }
-
-        drawOrder_.clear();
-        spriteCommands_.clear();
-        coloredDrawCommands_.clear();
-        texturedDrawCommands_.clear();
-        litTexturedDrawCommands_.clear();
-        alphaTestDrawCommands_.clear();
-        dualTextureDrawCommands_.clear();
-        envMapDrawCommands_.clear();
-        instancedDrawCommands_.clear();
-        pbrDrawCommands_.clear();
-        skinnedDrawCommands_.clear();
-        skinnedPbrDrawCommands_.clear();
     }
 
     void WebGPUGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
@@ -5818,11 +5982,21 @@ struct VSOut {
         return sampler;
     }
 
+    // REMED-GFX-156: every entry point below records ONE ordered clear command carrying exactly the
+    // aspects its ClearOptions mask named, at its public call position in the same stream the eleven
+    // draw families use (REMED-GFX-159). The clearXPending_ flags are kept and still decide the
+    // FIRST segment's load actions, because they carry a second, unrelated meaning -- "this
+    // attachment was just recreated and holds undefined bytes, force a real clear" (see
+    // ApplyMultiSampleCount) -- which is a property of the bind cycle, not of a public command.
+    // A multi-aspect public Clear() reaches several of these in one call; each records its own
+    // entry, and BuildPassSegments folds them back together because no draw separates them, so one
+    // public Clear() is still one pass boundary.
     void WebGPUGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         clearColor_ = WGPUColor{r, g, b, a};
         clearColorPending_ = true;
         framePending_ = true;
+        RecordOrderedClear(true, false, false);
     }
 
     void WebGPUGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
@@ -5830,8 +6004,10 @@ struct VSOut {
         Clear(r, g, b, a);
         ClearDepth(depth);
     }
-    void WebGPUGraphicsBackend::ClearDepth(float depth) { clearDepth_ = depth; clearDepthPending_ = true; framePending_ = true; }
-    void WebGPUGraphicsBackend::ClearStencil(int stencil) { clearStencil_ = static_cast<std::uint32_t>(stencil); clearStencilPending_ = true; framePending_ = true; }
+    void WebGPUGraphicsBackend::ClearDepth(float depth)
+    { clearDepth_ = depth; clearDepthPending_ = true; framePending_ = true; RecordOrderedClear(false, true, false); }
+    void WebGPUGraphicsBackend::ClearStencil(int stencil)
+    { clearStencil_ = static_cast<std::uint32_t>(stencil); clearStencilPending_ = true; framePending_ = true; RecordOrderedClear(false, false, true); }
     void WebGPUGraphicsBackend::ClearDepthAndStencil(float depth, int stencil) { ClearDepth(depth); ClearStencil(stencil); }
     void WebGPUGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil) { Clear(r, g, b, a); ClearStencil(stencil); }
     void WebGPUGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
@@ -5903,35 +6079,10 @@ struct VSOut {
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU Frame Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
-        WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-        colorAttachment.view = useMsaa ? msaaColorView_ : backBuffer;
-        colorAttachment.resolveTarget = useMsaa ? backBuffer : nullptr;
-        colorAttachment.loadOp = clearColorPending_ ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        colorAttachment.storeOp = WGPUStoreOp_Store;
-        colorAttachment.clearValue = clearColor_;
-
-        WGPURenderPassDepthStencilAttachment depthAttachment{};
-        depthAttachment.view = depthView_;
-        depthAttachment.depthLoadOp = clearDepthPending_ ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        depthAttachment.depthStoreOp = WGPUStoreOp_Store;
-        depthAttachment.depthClearValue = clearDepth_;
-        depthAttachment.depthReadOnly = false;
-        depthAttachment.stencilLoadOp = clearStencilPending_ ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        depthAttachment.stencilStoreOp = WGPUStoreOp_Store;
-        depthAttachment.stencilClearValue = clearStencil_;
-        depthAttachment.stencilReadOnly = false;
-
-        WGPURenderPassDescriptor passDescriptor{};
-        passDescriptor.label = StringView("CNA WebGPU Main RenderPass");
-        passDescriptor.colorAttachmentCount = 1;
-        passDescriptor.colorAttachments = &colorAttachment;
-        passDescriptor.depthStencilAttachment = depthView_ != nullptr ? &depthAttachment : nullptr;
-        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
-        ++renderPassCount_;
 
         // WEBGPU-29/30: the blend constant and the reference stencil are genuinely dynamic
         // wgpu-native render-pass state (unlike blend/cull/wireframe/depthBias, which are baked
-        // per-pipeline above) and are still applied once here from whatever is currently stored.
+        // per-pipeline above) and are applied once per PASS from whatever is currently stored.
         // REMED-GFX-116: the VIEWPORT is no longer in that list. It used to be applied here from
         // the live viewport*_ members, which handed every already-queued draw whatever viewport
         // happened to be current at flush time; BeginPassViewport() now installs the whole target
@@ -5943,21 +6094,26 @@ struct VSOut {
         // BeginPassScissor() opens the pass at the whole target and ApplyDrawScissor() replays each
         // command's own captured state -- including its ScissorTestEnable, since WebGPU has no
         // separate scissor-test toggle and "disabled" therefore means "rect == the whole target".
-        BeginPassViewport(pass, physicalWidth_, physicalHeight_);
-        BeginPassScissor(pass, physicalWidth_, physicalHeight_);
-        const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
-        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
-        wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
-
         // REMED-GFX-159: ONE ordered replay across all eleven deferred families. This used
         // to be a fixed list of per-family loops ending in the sprites, justified as "3D first,
         // 2D SpriteBatch/UI on top -- matches typical XNA game draw order". A typical order is
         // not a contract: it made the source order of those calls, rather than the game's, decide
         // what executed first, so a game drawing its HUD before its world got the two swapped.
-        ReplayDrawsInOrder(pass, surfaceFormat_,
-                           static_cast<std::uint32_t>(std::max(1, sampleCount_)), "backbuffer");
-        wgpuRenderPassEncoderEnd(pass);
-        wgpuRenderPassEncoderRelease(pass);
+        // REMED-GFX-156: and Clear() is in that same stream now, so the cycle may become several
+        // native passes -- ReplayOrderedSegments owns the whole loop, including the per-pass state
+        // above, which no longer survives from one segment to the next.
+        PassDestination destination;
+        destination.colorView = useMsaa ? msaaColorView_ : backBuffer;
+        destination.resolveView = useMsaa ? backBuffer : nullptr;
+        destination.depthView = depthView_;
+        destination.colorFormat = surfaceFormat_;
+        destination.sampleCount = static_cast<std::uint32_t>(std::max(1, sampleCount_));
+        destination.width = physicalWidth_;
+        destination.height = physicalHeight_;
+        destination.discardFirstSegment = false;   // the backbuffer has no RenderTargetUsage.
+        destination.passLabel = "CNA WebGPU Main RenderPass";
+        destination.traceName = "backbuffer";
+        ReplayOrderedSegments(encoder, destination);
 
         CaptureReadback(encoder, acquiredTexture_);
 
@@ -5997,9 +6153,6 @@ struct VSOut {
         // colorView_ as the resolveTarget wgpu-native resolves into automatically; both are the
         // same texture/view (no resolve) when this target is not multisampled, identical to
         // before MSAA existed.
-        WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-        colorAttachment.view = target->ColorAttachmentView();
-        colorAttachment.resolveTarget = target->ResolveTargetView();
         // RenderTargetUsage.DiscardContents (XNA's own default) means content is not guaranteed
         // to survive between separate SetRenderTarget bind cycles -- mirrors
         // VulkanRenderTargetBackend::GetRenderPass()'s own discardContents=!preserveContents_
@@ -6011,54 +6164,24 @@ struct VSOut {
         // (potentially stale from the last explicit Clear() anywhere, not a fresh per-target
         // default) -- a real, documented imprecision this shares with the Vulkan reference
         // backend rather than a new one introduced here.
-        const bool discard = !target->PreserveContents();
-        const bool doClearColor = clearColorPending_ || discard;
-        colorAttachment.loadOp = doClearColor ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        colorAttachment.storeOp = WGPUStoreOp_Store;
-        colorAttachment.clearValue = clearColor_;
-
-        // WEBGPU-53/54/8/9: this target's own real Depth24PlusStencil8 attachment (always
-        // present -- see WebGPURenderTargetBackend's constructor comment) -- so, unlike
-        // EnsureFrameRendered()'s backbuffer pass (which defensively checks depthView_ != nullptr
-        // for the physicalWidth_/physicalHeight_ <= 0 edge case), this is unconditional.
-        WGPURenderPassDepthStencilAttachment depthAttachment{};
-        depthAttachment.view = target->DepthView();
-        const bool doClearDepth = clearDepthPending_ || discard;
-        depthAttachment.depthLoadOp = doClearDepth ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        depthAttachment.depthStoreOp = WGPUStoreOp_Store;
-        depthAttachment.depthClearValue = clearDepth_;
-        depthAttachment.depthReadOnly = false;
-        const bool doClearStencil = clearStencilPending_ || discard;
-        depthAttachment.stencilLoadOp = doClearStencil ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        depthAttachment.stencilStoreOp = WGPUStoreOp_Store;
-        depthAttachment.stencilClearValue = clearStencil_;
-        depthAttachment.stencilReadOnly = false;
-
-        WGPURenderPassDescriptor passDescriptor{};
-        passDescriptor.label = StringView("CNA WebGPU RenderTarget RenderPass");
-        passDescriptor.colorAttachmentCount = 1;
-        passDescriptor.colorAttachments = &colorAttachment;
-        passDescriptor.depthStencilAttachment = &depthAttachment;
-        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
-        ++renderPassCount_;
-
-        // Blend constant and reference stencil: same "whatever's currently stored" model as
-        // EnsureFrameRendered()'s identical block -- see that function's own comment. The viewport
-        // (REMED-GFX-116) and the scissor (REMED-GFX-146) are per-draw captured state instead.
-        BeginPassViewport(pass, target->GetWidth(), target->GetHeight());
-        BeginPassScissor(pass, target->GetWidth(), target->GetHeight());
-        const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
-        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
-        wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
-
-        // REMED-GFX-159: ONE ordered replay across all eleven deferred families. This used
-        // to be a fixed list of per-family loops ending in the sprites, which meant the
-        // source order of these calls -- not the game's -- decided what executed first.
-        ReplayDrawsInOrder(pass, target->ColorFormat(),
-                           static_cast<std::uint32_t>(std::max(1, target->GetMultiSampleCount())),
-                           "rendertarget2d");
-        wgpuRenderPassEncoderEnd(pass);
-        wgpuRenderPassEncoderRelease(pass);
+        // WEBGPU-53/54/8/9: this target's own real Depth24PlusStencil8 attachment is always
+        // present -- see WebGPURenderTargetBackend's constructor comment.
+        // REMED-GFX-159/156: ONE ordered replay across all eleven deferred families AND the
+        // ordered Clear()s between them, which may cut this bind cycle into several native passes.
+        // The per-family loops this replaced meant the source order of those calls -- not the
+        // game's -- decided what executed first.
+        PassDestination destination;
+        destination.colorView = target->ColorAttachmentView();
+        destination.resolveView = target->ResolveTargetView();
+        destination.depthView = target->DepthView();
+        destination.colorFormat = target->ColorFormat();
+        destination.sampleCount = static_cast<std::uint32_t>(std::max(1, target->GetMultiSampleCount()));
+        destination.width = target->GetWidth();
+        destination.height = target->GetHeight();
+        destination.discardFirstSegment = !target->PreserveContents();
+        destination.passLabel = "CNA WebGPU RenderTarget RenderPass";
+        destination.traceName = "rendertarget2d";
+        ReplayOrderedSegments(encoder, destination);
 
         WGPUCommandBufferDescriptor commandBufferDescriptor{};
         commandBufferDescriptor.label = StringView("CNA WebGPU RenderTarget Commands");
@@ -6112,15 +6235,6 @@ struct VSOut {
         // moment the pass descriptor is built, and preserveContents_ is immutable after
         // construction -- so an A -> B -> A sequence can never apply target B's policy to target A,
         // whichever order the flushes happen in.
-        const bool discard = !target->PreserveContents();
-        WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-        colorAttachment.view = target->ColorAttachmentView(face);
-        colorAttachment.resolveTarget = nullptr;
-        const bool doClearColor = clearColorPending_ || discard;
-        colorAttachment.loadOp = doClearColor ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        colorAttachment.storeOp = WGPUStoreOp_Store;
-        colorAttachment.clearValue = clearColor_;
-
         // REMED-GFX-142: depth/stencil now follows the same rule as the 2D sibling above, which is
         // also FNA3D's own (its SDL_GPU driver loads both aspects unless a clear is pending, and
         // its GL and D3D11 drivers preserve them because an FBO attachment and a DSV simply
@@ -6130,42 +6244,23 @@ struct VSOut {
         // storing the "color/depth/stencil" contents, and FNA's RenderTargetCube allocates exactly
         // ONE glDepthStencilBuffer for the whole cube, so face A seeing face B's depth IS the
         // reference behaviour rather than a hazard to design around.
-        const bool doClearDepthCube = clearDepthPending_ || discard;
-        const bool doClearStencilCube = clearStencilPending_ || discard;
-        WGPURenderPassDepthStencilAttachment depthAttachment{};
-        depthAttachment.view = target->DepthView();
-        depthAttachment.depthLoadOp = doClearDepthCube ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        depthAttachment.depthStoreOp = WGPUStoreOp_Store;
-        depthAttachment.depthClearValue = clearDepth_;
-        depthAttachment.depthReadOnly = false;
-        depthAttachment.stencilLoadOp = doClearStencilCube ? WGPULoadOp_Clear : WGPULoadOp_Load;
-        depthAttachment.stencilStoreOp = WGPUStoreOp_Store;
-        depthAttachment.stencilClearValue = clearStencil_;
-        depthAttachment.stencilReadOnly = false;
-
-        WGPURenderPassDescriptor passDescriptor{};
-        passDescriptor.label = StringView("CNA WebGPU RenderTargetCube RenderPass");
-        passDescriptor.colorAttachmentCount = 1;
-        passDescriptor.colorAttachments = &colorAttachment;
-        passDescriptor.depthStencilAttachment = &depthAttachment;
-        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
-        ++renderPassCount_;
-
-        // Blend constant and reference stencil: same "whatever's currently stored" model as
-        // RenderPendingDrawsToRenderTarget()'s identical block. The viewport (REMED-GFX-116) and
-        // the scissor (REMED-GFX-146) are per-draw captured state instead.
-        BeginPassViewport(pass, target->GetSize(), target->GetSize());
-        BeginPassScissor(pass, target->GetSize(), target->GetSize());
-        const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
-        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
-        wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
-
-        // REMED-GFX-159: ONE ordered replay across all eleven deferred families. This used
-        // to be a fixed list of per-family loops ending in the sprites, which meant the
-        // source order of these calls -- not the game's -- decided what executed first.
-        ReplayDrawsInOrder(pass, target->ColorFormat(), 1, "rendertargetcube-face");
-        wgpuRenderPassEncoderEnd(pass);
-        wgpuRenderPassEncoderRelease(pass);
+        // REMED-GFX-159/156: ONE ordered replay across all eleven deferred families and the
+        // ordered Clear()s between them. `discard` is read from the target THIS cycle is being
+        // recorded for, so an A -> B -> A sequence can never apply target B's policy to target A.
+        // This face's own single-layer 2D view is the colour attachment -- this class implements no
+        // MSAA at all, so there is never a resolve target.
+        PassDestination destination;
+        destination.colorView = target->ColorAttachmentView(face);
+        destination.resolveView = nullptr;
+        destination.depthView = target->DepthView();
+        destination.colorFormat = target->ColorFormat();
+        destination.sampleCount = 1;
+        destination.width = target->GetSize();
+        destination.height = target->GetSize();
+        destination.discardFirstSegment = !target->PreserveContents();
+        destination.passLabel = "CNA WebGPU RenderTargetCube RenderPass";
+        destination.traceName = "rendertargetcube-face";
+        ReplayOrderedSegments(encoder, destination);
 
         WGPUCommandBufferDescriptor commandBufferDescriptor{};
         commandBufferDescriptor.label = StringView("CNA WebGPU RenderTargetCube Commands");

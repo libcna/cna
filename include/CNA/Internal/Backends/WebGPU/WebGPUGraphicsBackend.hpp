@@ -991,9 +991,23 @@ namespace CNA::Internal::Backends::WebGPU
          * An INDEX, never a pointer: the family vectors grow while a bind cycle is being recorded,
          * and a pointer into one of them would dangle the moment it reallocated.
          */
+        /**
+         * @brief REMED-GFX-156: what one entry of the ordered stream actually is.
+         *
+         * Clear() is a public graphics command with an observable position among the draws, so it
+         * belongs in the SAME monotonic stream rather than in a side channel consumed at pass
+         * construction. `Draw` entries address a family command vector; `Clear` entries address
+         * @ref clearCommands_ and @ref DrawOrderEntry::family is not read at all.
+         */
+        enum class OrderedKind : std::uint8_t
+        {
+            Draw,
+            Clear
+        };
+
         struct DrawOrderEntry
         {
-            DrawFamily    family;  ///< Which vector @ref index addresses.
+            DrawFamily    family;  ///< Which vector @ref index addresses (Draw entries only).
             std::uint32_t index;   ///< Position inside that family's own command vector.
             /**
              * @brief This draw's public call number within the bind cycle.
@@ -1004,6 +1018,67 @@ namespace CNA::Internal::Backends::WebGPU
              * that reordered the stream reports them differing instead of relabelling itself.
              */
             std::uint32_t order;
+            /// REMED-GFX-156: draw or ordered Clear(). Trailing, so existing three-field
+            /// aggregate initialisations at the eleven draw-recording sites keep their meaning.
+            OrderedKind kind = OrderedKind::Draw;
+        };
+
+        /**
+         * @brief REMED-GFX-156: one public GraphicsDevice.Clear() and the aspects it named.
+         *
+         * Values are captured HERE, at the public call, rather than read from the backend's global
+         * clearColor_/clearDepth_/clearStencil_ when the pass is built -- otherwise two Clear()s of
+         * one bind cycle would both deliver the last one's colour, which is precisely how "the last
+         * Clear wins" survived as a defect.
+         */
+        struct OrderedClearCommand
+        {
+            bool color = false;    ///< ClearOptions::Target was named.
+            bool depth = false;    ///< ClearOptions::DepthBuffer was named.
+            bool stencil = false;  ///< ClearOptions::Stencil was named.
+            WGPUColor colorValue{0.0, 0.0, 0.0, 1.0};
+            float depthValue = 1.0f;
+            std::uint32_t stencilValue = 0;
+        };
+
+        /**
+         * @brief REMED-GFX-156: one native render pass's worth of the ordered stream.
+         *
+         * wgpu delivers a clear only through a pass load action, and a pass has exactly one set of
+         * them, so an ordered Clear() that follows a draw is a PASS BOUNDARY: the stream is cut
+         * into segments, each of which is one native render pass whose load actions are the clear
+         * the segment opens with and whose remaining attachments Load. Consecutive Clear()s with no
+         * draw between them share a segment, so a run of clears still costs one pass.
+         */
+        struct PassSegmentPlan
+        {
+            OrderedClearCommand clear;   ///< Aspects this segment's pass must clear at load.
+            std::size_t firstEntry = 0;  ///< First @ref drawOrder_ index this segment issues.
+            std::size_t entryCount = 0;  ///< How many entries from @ref firstEntry it issues.
+        };
+
+        /**
+         * @brief REMED-GFX-156: everything a pass recorder needs that differs per destination.
+         *
+         * The backbuffer, a RenderTarget2D and a RenderTargetCube face used to each build their own
+         * attachment descriptors around an identical replay call; segmenting the stream means every
+         * one of them must be able to build those descriptors once PER SEGMENT, so the parts that
+         * actually differ are gathered here and the pass loop itself is written once.
+         */
+        struct PassDestination
+        {
+            WGPUTextureView colorView = nullptr;    ///< The colour attachment (multisampled if any).
+            WGPUTextureView resolveView = nullptr;  ///< Its resolve target, or null when 1x.
+            WGPUTextureView depthView = nullptr;    ///< Depth/stencil attachment, or null.
+            WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined;
+            std::uint32_t sampleCount = 1;
+            int width = 0;
+            int height = 0;
+            /// RenderTargetUsage::DiscardContents (or PlatformContents resolving to it): the FIRST
+            /// segment of the bind cycle clears whatever the game did not ask to clear itself.
+            bool discardFirstSegment = false;
+            const char* passLabel = "CNA WebGPU RenderPass";
+            const char* traceName = "destination";
         };
 
         /**
@@ -1042,18 +1117,58 @@ namespace CNA::Internal::Backends::WebGPU
         void RecordDrawOrder(DrawFamily family, std::size_t index);
 
         /**
-         * @brief Replays every queued draw of this bind cycle into @p pass in public call order.
+         * @brief Replays one pass segment's queued draws into @p pass in public call order.
          *
-         * Walks the ordered stream once, dispatching each entry to its family's own single-command
-         * issue function, then clears every command vector and the stream itself.
+         * Walks the segment's slice of the ordered stream once, dispatching each entry to its
+         * family's own single-command issue function. REMED-GFX-156: the slice, and the clearing of
+         * the command vectors afterwards, moved out to @ref ReplayOrderedSegments -- the vectors
+         * have to outlive every segment of the cycle, not just the first.
          *
-         * @param pass The open render pass encoder for this bind cycle's destination.
+         * @param pass The open render pass encoder for this segment.
          * @param targetFormat The colour format sprite pipelines must have been built against.
          * @param targetSampleCount The sample count sprite pipelines must have been built against.
          * @param destination Which of the three pass recorders is replaying, for the order trace.
+         * @param firstEntry First @ref drawOrder_ index belonging to this segment.
+         * @param entryCount How many entries from @p firstEntry belong to it.
          */
         void ReplayDrawsInOrder(WGPURenderPassEncoder pass, WGPUTextureFormat targetFormat,
-                                std::uint32_t targetSampleCount, const char* destination);
+                                std::uint32_t targetSampleCount, const char* destination,
+                                std::size_t firstEntry, std::size_t entryCount);
+
+        /**
+         * @brief REMED-GFX-156: cuts the ordered stream into one plan per native render pass.
+         *
+         * Pure bookkeeping over @ref drawOrder_ and @ref clearCommands_ -- no GPU calls -- so the
+         * segmentation can be reasoned about, traced and asserted independently of any encoder.
+         *
+         * @return At least one segment, always: a bind cycle that queued nothing still records the
+         *         one pass that applies its RenderTargetUsage and any Clear() it did issue.
+         */
+        [[nodiscard]] std::vector<PassSegmentPlan> BuildPassSegments() const;
+
+        /**
+         * @brief REMED-GFX-156: records this bind cycle's whole ordered stream into @p encoder.
+         *
+         * One native render pass per segment, each opened with the load actions its own segment
+         * asks for and Load for every attachment it does not, then replayed in public order. Every
+         * pass reopens the full pass state (viewport, scissor, blend constant, stencil reference)
+         * and every draw reapplies its own captured state, because none of it survives the end of a
+         * render pass. Consumes the stream: the family vectors, @ref clearCommands_ and
+         * @ref drawOrder_ are all empty on return.
+         *
+         * @param encoder The command encoder this bind cycle is being recorded into.
+         * @param destination Attachments, extents and usage policy of the bound destination.
+         */
+        void ReplayOrderedSegments(WGPUCommandEncoder encoder, const PassDestination& destination);
+
+        /**
+         * @brief REMED-GFX-156: appends one public Clear() to the ordered stream.
+         *
+         * @param color True when ClearOptions::Target was named.
+         * @param depth True when ClearOptions::DepthBuffer was named.
+         * @param stencil True when ClearOptions::Stencil was named.
+         */
+        void RecordOrderedClear(bool color, bool depth, bool stencil);
 
         /** @brief Drops queued sprites, and their ordered-stream entries, without replaying them. */
         void DiscardQueuedSprites();
@@ -1311,6 +1426,15 @@ namespace CNA::Internal::Backends::WebGPU
          * order; the eleven family vectors decide only where a command's payload lives.
          */
         std::vector<DrawOrderEntry> drawOrder_;
+        /**
+         * @brief REMED-GFX-156: the payload of every ordered Clear() of the current bind cycle.
+         *
+         * A twelfth "family" vector in every respect that matters: entries are appended at the
+         * public call, addressed from @ref drawOrder_ by INDEX (never a pointer -- this vector
+         * reallocates as the cycle is recorded), and cleared together with the eleven draw families
+         * once the cycle has been replayed.
+         */
+        std::vector<OrderedClearCommand> clearCommands_;
         std::atomic<std::size_t> uncapturedErrorCount_{0};
         int physicalWidth_ = 0;
         int physicalHeight_ = 0;
