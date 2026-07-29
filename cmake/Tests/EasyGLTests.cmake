@@ -1635,6 +1635,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_rt_sampling_orientation
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
+        # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
+        # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
+        # recorder's readback flush filtered the frame's segment list down to the target being READ, so a
+        # producer's pass was never recorded before the consumer that sampled it); these runs are what
+        # establish that every other backend already honoured the contract rather than being made to.
+        cna_easygl_test(cna_test_easygl_rt_producer_consumer
+            examples/rendertarget_producer_consumer_test.cpp)
+        cna_register_backend_test(NAME EasyGL_RenderTarget_ProducerConsumer
+            COMMAND cna_test_easygl_rt_producer_consumer
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_texture2d_getdata_contract
                         examples/texture2d_getdata_contract_test.cpp)
         cna_register_backend_test(NAME EasyGL_Texture2D_GetDataContract COMMAND cna_test_easygl_texture2d_getdata_contract

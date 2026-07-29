@@ -155,6 +155,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_RenderTarget_SamplingOrientation COMMAND cna_test_software_rt_sampling_orientation
         TIMEOUT 120 LABELS "Software")
 
+    # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
+    # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
+    # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
+    # recorder's readback flush filtered the frame's segment list down to the target being READ, so a
+    # producer's pass was never recorded before the consumer that sampled it); these runs are what
+    # establish that every other backend already honoured the contract rather than being made to.
+    cna_software_test(cna_test_software_rt_producer_consumer
+        examples/rendertarget_producer_consumer_test.cpp)
+    cna_register_backend_test(NAME Software_RenderTarget_ProducerConsumer COMMAND cna_test_software_rt_producer_consumer
+        TIMEOUT 120 LABELS "Software")
+
     cna_software_test(cna_test_software_texture2d_getdata_contract
                       examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Software_Texture2D_GetDataContract

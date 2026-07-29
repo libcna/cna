@@ -464,4 +464,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/rendertarget_sampling_orientation_test.cpp)
     cna_register_backend_test(NAME WebGPU_RenderTarget_SamplingOrientation COMMAND cna_test_webgpu_rt_sampling_orientation
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
+    # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
+    # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
+    # recorder's readback flush filtered the frame's segment list down to the target being READ, so a
+    # producer's pass was never recorded before the consumer that sampled it); these runs are what
+    # establish that every other backend already honoured the contract rather than being made to.
+    cna_webgpu_test(cna_test_webgpu_rt_producer_consumer
+                    examples/rendertarget_producer_consumer_test.cpp)
+    cna_register_backend_test(NAME WebGPU_RenderTarget_ProducerConsumer COMMAND cna_test_webgpu_rt_producer_consumer
+        TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

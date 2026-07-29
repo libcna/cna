@@ -1197,6 +1197,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             examples/rendertarget_producer_consumer_test.cpp)
         cna_register_backend_test(NAME Vulkan_RenderTarget_ProducerConsumer COMMAND cna_test_vulkan_rt_producer_consumer
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # The same fixture on a multisampled device. A Vulkan render target derives its sample count
+        # from the device's own, so only this run makes leg E a genuinely multisampled producer --
+        # its resolve has to complete before the consumer samples it, with no readback to trigger it.
+        cna_register_backend_test(NAME Vulkan_RenderTarget_ProducerConsumer_Msaa
+            COMMAND cna_test_vulkan_rt_producer_consumer --msaa
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # The same matrix under Khronos SYNCHRONIZATION validation, which is not part of the default
+        # validation set. Recording a producer's render pass in the same command buffer as the
+        # consumer that samples it is exactly the change that can introduce a read-after-write hazard
+        # while every pixel still comes out right on a permissive driver, so the hazard count is
+        # asserted, together with the layer's own liveness.
+        cna_register_backend_test(NAME Vulkan_RenderTarget_ProducerConsumer_SyncVal
+            COMMAND cna_test_vulkan_rt_producer_consumer --syncval
+            TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_texture2d_getdata_contract
                         examples/texture2d_getdata_contract_test.cpp)

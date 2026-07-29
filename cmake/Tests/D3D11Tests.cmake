@@ -179,6 +179,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${_d3d11_rt_sampling_orientation_cmd}
         TIMEOUT 120 LABELS "D3D11")
 
+    # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
+    # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
+    # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
+    # recorder's readback flush filtered the frame's segment list down to the target being READ, so a
+    # producer's pass was never recorded before the consumer that sampled it); these runs are what
+    # establish that every other backend already honoured the contract rather than being made to.
+    cna_d3d11_test(cna_test_d3d11_rt_producer_consumer
+                   examples/rendertarget_producer_consumer_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_rt_producer_consumer_cmd cna_test_d3d11_rt_producer_consumer)
+    cna_register_backend_test(NAME D3D11_RenderTarget_ProducerConsumer
+        COMMAND ${_d3d11_rt_producer_consumer_cmd}
+        TIMEOUT 120 LABELS "D3D11")
+
     # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. Both public cube and
     # volume GetData paths converted their own zero-initialized scratch buffer for the caller
     # regardless of whether the backend read anything back.

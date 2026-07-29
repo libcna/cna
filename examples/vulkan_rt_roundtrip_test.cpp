@@ -40,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
 #include <cstdio>
+#include <vector>
 #include <cstdlib>
 #include <memory>
 
@@ -115,6 +116,43 @@ class VulkanRtRoundtripTest : public Game
         return px;
     }
 
+    // REMED-GFX-151 false-positive audit. The routine above samples a render target, but observes
+    // the consumer through GetBackBufferData -- which on Vulkan is Present's ordered record, where
+    // producer and consumer were always replayed in public order. So it could not fail on
+    // REMED-GFX-151, whose defect lived exclusively in the OTHER observation path: a mid-frame
+    // GetData of the consumer, which used to record the target being read and nothing else, leaving
+    // the producer's pass unrecorded. A/B-measured with THIS file against pre-fix production: RT1
+    // and RT2 (the routine above) still passed, RT3 and RT4 returned (0,0,0). 2/4 -> 4/4.
+    //
+    // Same producer, same consumer draw, same frame; only the DESTINATION and the observation
+    // differ, and the comparison is byte-exact rather than the backbuffer's +/-8 tolerance because
+    // an off-screen target needs no colour-space allowance.
+    Color ClearOnlyThenSampleIntoTarget(GraphicsDevice& dev, const Color& fillColor)
+    {
+        RenderTarget2D rt(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                          DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        dev.SetRenderTarget(&rt);
+        dev.Clear(fillColor);   // the exact bug scenario: no draw call follows
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        // NOTHING between producer and consumer: no GetData of `rt`, no Present, no extra frame.
+        RenderTarget2D dst(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                           DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        dev.SetRenderTarget(&dst);
+        dev.Clear(Color(0, 0, 0, 255));
+        dev.setBlendStateProperty(BlendState::Opaque);
+        sb_->Begin();
+        sb_->Draw(rt, Rectangle(0, 0, kRTSize, kRTSize), Rectangle(0, 0, kRTSize, kRTSize),
+                  Color::White);
+        sb_->End();
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        std::vector<Color> pixels(static_cast<std::size_t>(kRTSize) * kRTSize,
+                                  Color(0xCD, 0xCD, 0xCD, 0xCD));
+        dst.GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
+        return pixels[static_cast<std::size_t>(kRTSize / 2) * kRTSize + kRTSize / 2];
+    }
+
 protected:
     void Initialize() override
     {
@@ -139,6 +177,24 @@ protected:
         check(matches(gotBlue, Color::Blue),
               "RT2 (blue, Clear-only, no draw) sampled correctly after unbind",
               gotBlue, "(0,0,255)");
+
+        // REMED-GFX-151: the same two producers, consumed into a TARGET and read with GetData --
+        // the observation path the two checks above never took. Byte-exact.
+        Color tgtGreen = ClearOnlyThenSampleIntoTarget(dev, Color::Green);
+        check(tgtGreen.getRProperty() == Color::Green.getRProperty()
+              && tgtGreen.getGProperty() == Color::Green.getGProperty()
+              && tgtGreen.getBProperty() == Color::Green.getBProperty()
+              && tgtGreen.getAProperty() == Color::Green.getAProperty(),
+              "RT3 (green, Clear-only) sampled into a TARGET read with GetData, no barrier between",
+              tgtGreen, "(0,128,0,255)");
+
+        Color tgtBlue = ClearOnlyThenSampleIntoTarget(dev, Color::Blue);
+        check(tgtBlue.getRProperty() == Color::Blue.getRProperty()
+              && tgtBlue.getGProperty() == Color::Blue.getGProperty()
+              && tgtBlue.getBProperty() == Color::Blue.getBProperty()
+              && tgtBlue.getAProperty() == Color::Blue.getAProperty(),
+              "RT4 (blue, Clear-only) sampled into a TARGET read with GetData, no barrier between",
+              tgtBlue, "(0,0,255,255)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();

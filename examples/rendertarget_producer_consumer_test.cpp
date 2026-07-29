@@ -61,6 +61,8 @@
 //   G  Preserve/Discard/Platform + Clear    clear-only, geometry-only, clear-then-draw,
 //                                          draw-then-clear producers
 //   H  SpriteBatch knobs                   source rectangle, PointClamp and LinearClamp
+//   I  backbuffer boundary                 a mid-frame readback must not advance what a pending
+//                                          backbuffer draw sees of a target it sampled earlier
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -92,6 +94,14 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/NotSupportedException.hpp"
+
+#if defined(CNA_BACKEND_VULKAN)
+// REMED-GFX-151 is a Vulkan finding, so the Vulkan build of this fixture additionally judges the
+// Khronos validation layer -- standard AND synchronization checks -- over the whole matrix above.
+// The fix reorders when render passes are recorded, which is exactly the kind of change that can
+// introduce a read-after-write hazard without changing a single pixel on a permissive driver.
+#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#endif
 
 #include <cstdint>
 #include <cstdio>
@@ -821,14 +831,24 @@ class RenderTargetProducerConsumerTest : public Game
      * The DESTINATION is deliberately single-sampled and is the only thing read, so this leg
      * measures the producer's resolve-before-sample ordering and never the separate question of
      * whether a multisampled target's own first readback works (REMED-GFX-154 on bgfx).
+     *
+     * Whether the requested sample count is genuinely APPLIED is measured, not assumed. Several
+     * backends (Vulkan among them) derive a render target's sample count from the device's own, so
+     * a run without GraphicsDeviceManager.PreferMultiSampling reports 0 here and this leg is an
+     * honest sample-count-one case. The `--msaa` run of this same fixture sets that property, which
+     * is what makes "one genuinely applied MSAA count" a measured claim rather than a request.
      */
     void LegMsaa(GraphicsDevice& dev)
     {
         RenderTarget2D a(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 4,
                          RenderTargetUsage::DiscardContents);
-        std::printf("[INFO] E1 requested MultiSampleCount 4, applied %d\n",
-                    a.getMultiSampleCountProperty());
+        const int applied = a.getMultiSampleCountProperty();
+        std::printf("[INFO] E1 requested MultiSampleCount 4, applied %d (device %s multisampling)\n",
+                    applied, preferMultiSampling_ ? "PREFERS" : "does not prefer");
         std::fflush(stdout);
+        check(!preferMultiSampling_ || applied > 1,
+              "E0 the --msaa run genuinely applies a multisample count on this backend (applied " +
+              std::to_string(applied) + ")");
         ProduceInto(dev, a, patternTex_);
 
         RenderTarget2D dst(dev, kPW * 2, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
@@ -851,7 +871,9 @@ class RenderTargetProducerConsumerTest : public Game
         if (!RequireReadable(r, "E1 MSAA producer -> consumer")) return;
         // The pattern is drawn 1:1 with point sampling and axis-aligned edges, so every sample of
         // every pixel lands inside one source texel and the resolve is exact, not an average.
-        CheckAgainstControl(r, 0, kPW, "E1 a multisampled producer resolves before it is sampled",
+        CheckAgainstControl(r, 0, kPW,
+                            std::string("E1 a producer with applied sample count ") +
+                            std::to_string(applied) + " resolves before it is sampled",
                             PatternColor);
     }
 
@@ -1056,6 +1078,125 @@ class RenderTargetProducerConsumerTest : public Game
         }
     }
 
+    /**
+     * @brief Leg I -- the backbuffer boundary a mid-frame readback must not disturb.
+     *
+     * A mid-frame `GetData` of one target forces work to the GPU early. The exact public sequence
+     * measured here is the one where "early" could mean "too early" for something else:
+     *
+     *     bind u; draw A into u; unbind;      // cycle 1
+     *     draw u onto the BACKBUFFER;         // cycle 2 -- must see A
+     *     bind u; draw B into u; unbind;      // cycle 3
+     *     bind t; draw; unbind; t.GetData();  // cycle 4 -- an unrelated target, read mid-frame
+     *
+     * The backbuffer draw sits between u's two cycles and must still show A, not B, even though
+     * the readback of `t` happened after both. This is REMED-GFX-143's ascending-id contract seen
+     * from the readback side, and it is asserted here rather than assumed because REMED-GFX-151's
+     * fix is what decides how much of the frame a readback replays.
+     */
+    void LegBackbufferBoundary(GraphicsDevice& dev)
+    {
+        RenderTarget2D u(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                         RenderTargetUsage::DiscardContents);
+        ProduceInto(dev, u, patternTex_);                 // cycle 1: u := pattern
+
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        ResetState(dev);
+        dev.Clear(Color(0, 0, 0, 255));
+        {                                                 // cycle 2: backbuffer samples u
+            SpriteBatch sb(dev);
+            SamplerState point = SamplerState::PointClamp;
+            sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+            sb.Draw(u, Rectangle(0, 0, kPW, kPH), Rectangle(0, 0, kPW, kPH), Color::White);
+            sb.End();
+        }
+
+        ProduceInto(dev, u, altPatternTex_);              // cycle 3: u := alt pattern
+
+        RenderTarget2D t(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                         RenderTargetUsage::DiscardContents);
+        ProduceInto(dev, t, patternTex_);                 // cycle 4: an unrelated target ...
+        Readback rt = ReadWhole(t, kPW, kPH);             // ... read mid-frame
+        if (RequireReadable(rt, "I1 unrelated mid-frame readback"))
+            CheckRegion(rt, 0, "I1 an unrelated target read mid-frame is its own content",
+                        PatternColor);
+
+        std::vector<Color> frame(static_cast<std::size_t>(kBBW) * kBBH,
+                                 Color(0xCD, 0xCD, 0xCD, 0xCD));
+        bool threw = false;
+        std::string what;
+        try { dev.GetBackBufferData(frame.data(), 0, static_cast<int>(frame.size())); }
+        catch (const System::NotSupportedException&) { threw = true; what = "NotSupportedException"; }
+        catch (const std::exception& e) { threw = true; what = e.what(); }
+
+        if (threw || Unsupported())
+        {
+            std::printf("[INFO] I2 backbuffer oracle unavailable on %s (%s) -- boundary recorded\n",
+                        kBackendName, threw ? what.c_str() : "non-rasterizing");
+            std::fflush(stdout);
+            return;
+        }
+        Readback r;
+        r.w = kBBW; r.h = kBBH; r.pixels = frame;
+        CheckRegion(r, 0, "I2 a backbuffer draw between two cycles of the same target still shows "
+                          "the cycle it was issued after, despite a later mid-frame readback",
+                    PatternColor);
+    }
+
+#if defined(CNA_BACKEND_VULKAN)
+    /**
+     * @brief Leg V -- Khronos validation over everything the legs above just did.
+     *
+     * Classification is by the stable `SYNC-HAZARD` message-id prefix rather than by matching a
+     * complete diagnostic sentence, so a layer rewording cannot turn a real hazard green. The
+     * layer's own liveness is asserted separately: a zero hazard count from a layer that never
+     * loaded is not evidence of anything, and REMED-GFX-144's acquire hazards are called out by
+     * name so a regression there is named rather than merely counted.
+     */
+    void LegValidation()
+    {
+        auto* vk = dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
+            &getGraphicsDeviceProperty().GetBackend());
+        check(CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend::IsValidationActiveEXT(),
+              "V1 VK_LAYER_KHRONOS_validation is loaded, so the counts below mean something");
+        if (!vk) { check(false, "V1 Vulkan backend not reachable"); return; }
+
+        const auto& msgs = vk->GetValidationMessagesEXT();
+        const auto& ids  = vk->GetValidationMessageIdNamesEXT();
+        int sync = 0, acquire = 0, other = 0;
+        std::string firstSync, firstOther;
+        for (std::size_t i = 0; i < msgs.size(); ++i)
+        {
+            const std::string& m  = msgs[i];
+            const std::string& id = (i < ids.size()) ? ids[i] : std::string();
+            if (id.find("SYNC-HAZARD") != std::string::npos ||
+                m.find("hazard detected") != std::string::npos)
+            {
+                ++sync;
+                if (m.find("vkAcquireNextImageKHR") != std::string::npos) ++acquire;
+                if (firstSync.empty()) firstSync = id + " -- " + m.substr(0, 220);
+            }
+            else
+            {
+                ++other;
+                if (firstOther.empty()) firstOther = id + " -- " + m.substr(0, 220);
+            }
+        }
+        std::printf("[INFO] V0 sync validation %s; %d validation messages total\n",
+                    syncValidation_ ? "REQUESTED" : "not requested",
+                    static_cast<int>(msgs.size()));
+        std::fflush(stdout);
+        check(sync == 0, "V2 zero synchronization hazards across the whole producer/consumer "
+                         "matrix" + (sync == 0 ? std::string()
+                                               : " -- got " + std::to_string(sync) + " (" +
+                                                 std::to_string(acquire) +
+                                                 " naming vkAcquireNextImageKHR): " + firstSync));
+        check(other == 0, "V3 zero other validation messages" +
+                          (other == 0 ? std::string()
+                                      : " -- got " + std::to_string(other) + ": " + firstOther));
+    }
+#endif
+
 protected:
     void Initialize() override
     {
@@ -1091,7 +1232,8 @@ protected:
         dev.Clear(Color(0, 0, 0, 255));
 
         std::printf("[INFO] REMED-GFX-151 same-frame render-to-texture producer/consumer on %s "
-                    "(%dx%d pattern)\n", kBackendName, kPW, kPH);
+                    "(%dx%d pattern, %s)\n", kBackendName, kPW, kPH,
+                    preferMultiSampling_ ? "PreferMultiSampling=true" : "PreferMultiSampling=false");
         std::fflush(stdout);
 
         LegCanonical(dev);
@@ -1102,6 +1244,10 @@ protected:
         LegMips(dev);
         LegUsageAndClear(dev);
         LegSpriteBatchKnobs(dev);
+        LegBackbufferBoundary(dev);
+#if defined(CNA_BACKEND_VULKAN)
+        LegValidation();
+#endif
 
         std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
         std::fflush(stdout);
@@ -1110,19 +1256,50 @@ protected:
     }
 
 public:
-    RenderTargetProducerConsumerTest()
+    /**
+     * @brief Builds the fixture.
+     *
+     * @param preferMultiSampling Requests a multisampled device. Backends that derive a render
+     *        target's sample count from the device's own only apply a target MultiSampleCount when
+     *        this is set, so the `--msaa` run is what turns leg E into a genuinely multisampled
+     *        producer instead of a second sample-count-one case.
+     */
+    explicit RenderTargetProducerConsumerTest(bool preferMultiSampling, bool syncValidation)
+        : preferMultiSampling_(preferMultiSampling), syncValidation_(syncValidation)
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kBBW);
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
+        if (preferMultiSampling) gdm_->setPreferMultiSamplingProperty(true);
     }
 
     [[nodiscard]] int Result() const { return result_; }
+
+private:
+    bool preferMultiSampling_ = false;
+    bool syncValidation_      = false;
 };
 
-int main(int, char**)
+int main(int argc, char** argv)
 {
-    RenderTargetProducerConsumerTest test;
+    bool msaa = false;
+    bool syncval = false;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--msaa")    msaa = true;
+        if (std::string(argv[i]) == "--syncval") syncval = true;
+    }
+
+#if defined(CNA_BACKEND_VULKAN)
+    // BEFORE the Game is constructed: the backend creates its VkInstance during construction, and
+    // VkValidationFeaturesEXT can only be supplied there. Asking later silently produces an
+    // instance WITHOUT synchronization validation, which would make leg V pass for the wrong
+    // reason -- which is why V1 asserts the layer's liveness separately from the counts.
+    if (syncval)
+        CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend::SetSyncValidationEnabledEXT(true);
+#endif
+
+    RenderTargetProducerConsumerTest test(msaa, syncval);
     test.Run();
     return test.Result();
 }

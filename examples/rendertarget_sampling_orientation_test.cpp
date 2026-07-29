@@ -3,6 +3,10 @@
 // REMED-GFX-147: a RenderTarget2D used as a texture must sample in the SAME logical orientation as
 // an ordinary Texture2D holding identical bytes.
 //
+// REMED-GFX-151 update: leg G0 -- the canonical render-to-texture sequence with NO readback of the
+// source -- used to be DECLARED broken on Vulkan and is now an ordinary orientation check on every
+// backend. See its own fixture, examples/rendertarget_producer_consumer_test.cpp.
+//
 // The public contract this pins down, in CNA/XNA/FNA terms:
 //
 //   * Texture2D's logical origin is top-left: SetData element (y * width + x) is row y from the
@@ -164,18 +168,16 @@ namespace
     /**
      * @brief Whether a render target that has never been read back can be SAMPLED at all.
      *
-     * REMED-GFX-151 (recorded here, not owned by this task): on Vulkan a RenderTarget2D that is
-     * rendered, unbound and then used as a texture without an intervening GetData samples as
-     * entirely empty; inserting one GetData of that target makes the identical draw correct. That
-     * is the canonical XNA render-to-texture sequence, so it is asserted below in its own right
-     * (leg G0) rather than merely worked around.
+     * REMED-GFX-151 (found here by leg G0, fixed under its own ticket): on Vulkan a RenderTarget2D
+     * that was rendered, unbound and then used as a texture without an intervening GetData sampled
+     * as entirely empty, and inserting one GetData of that target made the identical draw correct --
+     * the canonical XNA render-to-texture sequence, reproduced at 0/32 with 14 texels entirely
+     * (0,0,0,0). The cause was the deferred recorder's readback flush filtering the frame's segment
+     * list down to the target being READ, so a PRODUCER target's pass was never recorded before the
+     * consumer that sampled it; GetData was an accidental execution barrier. Now true everywhere,
+     * which is what leg G0 asserts.
      */
-    constexpr bool kSampleWithoutReadbackWorks =
-#if defined(CNA_BACKEND_VULKAN)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kSampleWithoutReadbackWorks = true;
 
     /**
      * @brief Whether a RenderTarget2D may be handed to a stock 3D effect as its texture.
@@ -812,15 +814,6 @@ class RenderTargetSamplingOrientationTest : public Game
         }
     }
 
-    /// REMED-GFX-151 boundary. On a backend that cannot sample a target which has never been read
-    /// back, one throwaway GetData is issued so the legs that follow measure ORIENTATION rather
-    /// than that separate defect. Leg G0 is where the defect itself is asserted.
-    static void MaterializeForSampling(RenderTarget2D& rt, int w, int h)
-    {
-        if (kSampleWithoutReadbackWorks) return;
-        (void)ReadWhole(rt, w, h);
-    }
-
     /// Leg G0: the canonical XNA render-to-texture sequence -- render, unbind, sample -- with NO
     /// readback of the source anywhere. Every other leg reads its source at some point, which is
     /// exactly how a backend that only materialises a target on readback stays hidden.
@@ -842,29 +835,11 @@ class RenderTargetSamplingOrientationTest : public Game
         Readback r = ReadWhole(dst, kPW, kPH);
         if (!RequireReadable(r, "G0 sample a never-read target")) return;
 
-        if (kSampleWithoutReadbackWorks)
-        {
-            CheckPattern(r, "G0 render -> unbind -> sample with no readback of the source is upright");
-            return;
-        }
-        int matched = 0, empty = 0;
-        for (int y = 0; y < kPH; ++y)
-            for (int x = 0; x < kPW; ++x)
-            {
-                const Color& c = r.at(x, y);
-                if (Same(c, PatternColor(x, y))) ++matched;
-                if (c.getRProperty() == 0 && c.getGProperty() == 0 && c.getBProperty() == 0 &&
-                    c.getAProperty() == 0) ++empty;
-            }
-        // Asserted as "the canonical sequence does NOT reproduce the source", which is the claim,
-        // rather than as one specific corrupt pattern -- what the backend leaves in the target is
-        // undefined, not a value worth freezing.
-        check(matched < kPW * kPH,
-              "G0 REMED-GFX-151 pinned: render -> unbind -> sample with no readback does NOT "
-              "reproduce the source on this backend (" + std::to_string(matched) + "/" +
-              std::to_string(kPW * kPH) + " texels correct, " + std::to_string(empty) +
-              " entirely empty, (0,0)=" + ColorText(r.at(0, 0)) +
-              "). Fixing REMED-GFX-151 must flip this declaration.");
+        static_assert(kSampleWithoutReadbackWorks,
+                      "REMED-GFX-151 is fixed on every backend; this leg is an orientation check "
+                      "again, not a pinned defect. A backend that regresses must fail G0, not "
+                      "re-declare it.");
+        CheckPattern(r, "G0 render -> unbind -> sample with no readback of the source is upright");
     }
 
     /// Leg E/G: chains. Each sampling leg must preserve the orientation, never alternate it.
@@ -918,7 +893,6 @@ class RenderTargetSamplingOrientationTest : public Game
         }
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         ResetState(dev);
-        MaterializeForSampling(big, kPW * 2, kPH * 2);
 
         RenderTarget2D small(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                              RenderTargetUsage::DiscardContents);
@@ -943,7 +917,6 @@ class RenderTargetSamplingOrientationTest : public Game
         RenderTarget2D twin(dev, kPW, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                             RenderTargetUsage::DiscardContents);
         RenderPatternInto(dev, twin);
-        MaterializeForSampling(twin, kPW, kPH);
         RenderTarget2D pairDst(dev, kPW * 2, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,
                                RenderTargetUsage::DiscardContents);
         dev.SetRenderTarget(&pairDst);
