@@ -497,4 +497,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/spritebatch_3d_order_test.cpp)
     cna_register_backend_test(NAME WebGPU_SpriteBatch3DOrder COMMAND cna_test_webgpu_spritebatch_3d_order
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-160: the XNA/FNA front-face winding contract. FNA's SpriteBatch emits
+    # CLOCKWISE-as-displayed triangles and they must survive RasterizerState.CullCounterClockwise --
+    # the state SpriteBatch.Begin itself defaults to -- so clockwise-as-displayed is XNA's FRONT face
+    # and each enum names the face it CULLS. Two triangles in disjoint quadrants, one wound each way,
+    # make every cull mode's expected answer complementary in one readback.
+    cna_webgpu_test(cna_test_webgpu_frontface_winding
+                    examples/frontface_winding_test.cpp)
+    cna_register_backend_test(NAME WebGPU_FrontFaceWinding COMMAND cna_test_webgpu_frontface_winding
+        TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

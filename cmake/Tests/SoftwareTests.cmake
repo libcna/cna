@@ -189,6 +189,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_spritebatch_3d_order
         TIMEOUT 300 LABELS "Software")
 
+    # REMED-GFX-160: the XNA/FNA front-face winding contract. FNA's SpriteBatch lays its corners
+    # out TL, TR, BL, BR and indexes them j,j+1,j+2 / j+3,j+2,j+1, so both of its triangles are
+    # CLOCKWISE as displayed, and they must survive RasterizerState.CullCounterClockwise -- the
+    # state SpriteBatch.Begin itself defaults to. Clockwise-as-displayed is therefore XNA's FRONT
+    # face and each enum names the face it CULLS. Two triangles in disjoint quadrants, one wound
+    # each way, make every cull mode's expected answer complementary in a single readback.
+    cna_software_test(cna_test_software_frontface_winding
+        examples/frontface_winding_test.cpp)
+    cna_register_backend_test(NAME Software_FrontFaceWinding
+        COMMAND cna_test_software_frontface_winding
+        TIMEOUT 300 LABELS "Software")
+
     cna_software_test(cna_test_software_texture2d_getdata_contract
                       examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Software_Texture2D_GetDataContract

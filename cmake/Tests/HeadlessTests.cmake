@@ -103,6 +103,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
         COMMAND cna_test_headless_spritebatch_3d_order
         TIMEOUT 300 LABELS "Headless")
 
+    # REMED-GFX-160: the XNA/FNA front-face winding contract. This backend rasterizes nothing, so
+    # REMED-GFX-127/130's contract makes every readback reject and the fixture asserts that
+    # rejection rather than a pixel value.
+    cna_headless_test(cna_test_headless_frontface_winding
+        examples/frontface_winding_test.cpp)
+    cna_register_backend_test(NAME Headless_FrontFaceWinding
+        COMMAND cna_test_headless_frontface_winding
+        TIMEOUT 300 LABELS "Headless")
+
     cna_headless_test(cna_test_headless_texture2d_getdata_contract
                       examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Headless_Texture2D_GetDataContract

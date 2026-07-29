@@ -325,6 +325,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_SpriteBatch3DOrder COMMAND cna_test_sdlgpu_spritebatch_3d_order
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-160: the XNA/FNA front-face winding contract. FNA's SpriteBatch emits
+    # CLOCKWISE-as-displayed triangles and they must survive RasterizerState.CullCounterClockwise --
+    # the state SpriteBatch.Begin itself defaults to -- so clockwise-as-displayed is XNA's FRONT face
+    # and each enum names the face it CULLS. This backend has no public backbuffer readback, so the
+    # render-target legs carry the contract and the backbuffer ones record their boundary.
+    cna_sdlgpu_test(cna_test_sdlgpu_frontface_winding
+        examples/frontface_winding_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_FrontFaceWinding COMMAND cna_test_sdlgpu_frontface_winding
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_sdlgpu_test(cna_test_sdlgpu_texture2d_getdata_contract
                     examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME SdlGpu_Texture2D_GetDataContract COMMAND cna_test_sdlgpu_texture2d_getdata_contract
