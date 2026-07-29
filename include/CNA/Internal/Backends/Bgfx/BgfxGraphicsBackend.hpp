@@ -78,6 +78,53 @@ namespace CNA::Internal::Backends::Bgfx
         // long-running games that create/destroy render targets don't exhaust bgfx's ~256 view ids.
         bgfx::ViewId AllocateRtViewId();
         void ReleaseRtViewId(bgfx::ViewId id);
+
+        // REMED-GFX-158: `bgfx::reset()` ends by discarding EVERY view's framebuffer binding --
+        //
+        //     for (uint32_t ii = 0; ii < BGFX_CONFIG_MAX_VIEWS; ++ii)
+        //         m_view[ii].setFrameBuffer(BGFX_INVALID_HANDLE);   // bgfx_p.h, Context::reset
+        //
+        // including the binding just programmed for the render target that is bound RIGHT NOW.
+        // bgfx resolves view state once, at bgfx::frame(), so the operations already submitted
+        // against that view do not follow the target they were aimed at: they resolve against the
+        // backbuffer and the target is never written. That is why a RenderTarget2D constructed and
+        // rendered into in the same public frame could lose that frame -- this backend calls
+        // bgfx::reset() the moment it notices the SDL window's size differs from the size bgfx was
+        // initialised with, which for a brand-new target's first bind cycle happens between the
+        // bind and the draw. It is not deferred resource creation and not a bgfx frame latency:
+        // the texture and framebuffer are both complete before the frame's draws are submitted
+        // (bgfx.cpp, Context::renderFrame executes m_cmdPre first).
+        //
+        // The correction is to make the loss recoverable rather than to avoid the reset: every
+        // view->framebuffer binding this backend programs goes through SetViewFrameBufferEXT,
+        // which mirrors it, and ResetBackbufferEXT replays the mirror straight after the reset,
+        // restoring exactly what the reset discarded. Nothing is deferred, no frame is advanced.
+        // A framebuffer must be handed to ForgetFrameBufferEXT before it is destroyed, so a
+        // recycled bgfx handle index can never be replayed as a resurrected binding.
+
+        /**
+         * @brief Programs a view's framebuffer and records it, so a later reset can restore it.
+         *
+         * @param id View id to program.
+         * @param fb Framebuffer to bind, or BGFX_INVALID_HANDLE for the backbuffer.
+         */
+        void SetViewFrameBufferEXT(bgfx::ViewId id, bgfx::FrameBufferHandle fb);
+
+        /**
+         * @brief Drops @p fb from the mirror. Must be called before destroying a framebuffer.
+         *
+         * @param fb The framebuffer about to be destroyed. An invalid handle is ignored.
+         */
+        void ForgetFrameBufferEXT(bgfx::FrameBufferHandle fb);
+
+        /**
+         * @brief Calls bgfx::reset and restores the view->framebuffer bindings it discards.
+         *
+         * @param width  New backbuffer width.
+         * @param height New backbuffer height.
+         * @param flags  bgfx reset flags.
+         */
+        void ResetBackbufferEXT(uint16_t width, uint16_t height, uint32_t flags);
     }
 
     class BgfxGraphicsBackend;

@@ -310,7 +310,7 @@ namespace CNA::Internal::Backends::Bgfx
         // it (rather than resetting any real render target's own view) never discards a still-
         // pending draw queued against a concurrently-active render target within this same
         // un-advanced frame.
-        bgfx::setViewFrameBuffer(Detail::kBackbufferFlushViewId, BGFX_INVALID_HANDLE);
+        Detail::SetViewFrameBufferEXT(Detail::kBackbufferFlushViewId, BGFX_INVALID_HANDLE);
         bgfx::touch(Detail::kBackbufferFlushViewId);
 
         // Request a screenshot of the default backbuffer (BGFX_INVALID_HANDLE = swapchain).
@@ -802,6 +802,48 @@ namespace CNA::Internal::Backends::Bgfx
         {
             RtViewIdFreeList().push_back(id);
         }
+
+        // REMED-GFX-158: this backend's own record of what every view's framebuffer binding is
+        // meant to be. bgfx's view state is context state that survives a frame, and the only
+        // thing other than this backend that ever changes it is bgfx::reset(), which wipes all of
+        // it -- so this array IS the intended state, and replaying it after a reset restores
+        // precisely what the reset destroyed. Process-wide like RtViewIdFreeList() above, and for
+        // the same reason: bgfx itself is a process-wide singleton.
+        static std::array<bgfx::FrameBufferHandle, kMaxViews>& ViewFrameBufferMirror()
+        {
+            static std::array<bgfx::FrameBufferHandle, kMaxViews> mirror = [] {
+                std::array<bgfx::FrameBufferHandle, kMaxViews> initial{};
+                initial.fill(bgfx::FrameBufferHandle{bgfx::kInvalidHandle});
+                return initial;
+            }();
+            return mirror;
+        }
+
+        void SetViewFrameBufferEXT(bgfx::ViewId id, bgfx::FrameBufferHandle fb)
+        {
+            bgfx::setViewFrameBuffer(id, fb);
+            if (static_cast<int>(id) < kMaxViews)
+                ViewFrameBufferMirror()[id] = fb;
+        }
+
+        void ForgetFrameBufferEXT(bgfx::FrameBufferHandle fb)
+        {
+            if (!bgfx::isValid(fb)) return;
+            for (auto& entry : ViewFrameBufferMirror())
+                if (entry.idx == fb.idx)
+                    entry = bgfx::FrameBufferHandle{bgfx::kInvalidHandle};
+        }
+
+        void ResetBackbufferEXT(uint16_t width, uint16_t height, uint32_t flags)
+        {
+            bgfx::reset(width, height, flags);
+            // Restore only the bindings that name a real framebuffer: reset has already left every
+            // other view on the backbuffer, which is what an invalid entry means.
+            const auto& mirror = ViewFrameBufferMirror();
+            for (std::size_t id = 0; id < mirror.size(); ++id)
+                if (bgfx::isValid(mirror[id]))
+                    bgfx::setViewFrameBuffer(static_cast<bgfx::ViewId>(id), mirror[id]);
+        }
     }
 
     BgfxRenderTargetBackend::BgfxRenderTargetBackend(BgfxGraphicsBackend* owner,
@@ -859,13 +901,19 @@ namespace CNA::Internal::Backends::Bgfx
     BgfxRenderTargetBackend::~BgfxRenderTargetBackend()
     {
         if (bgfx::isValid(fbo))
+        {
+            // REMED-GFX-158: drop the mirrored bindings first -- bgfx recycles handle indices, so a
+            // replay after this handle is gone could otherwise point a view at an unrelated
+            // framebuffer that happened to inherit the index.
+            Detail::ForgetFrameBufferEXT(fbo);
             bgfx::destroy(fbo);
+        }
         Detail::ReleaseRtViewId(viewId_);
     }
 
     void BgfxRenderTargetBackend::BindAsRenderTarget()
     {
-        bgfx::setViewFrameBuffer(viewId_, fbo);
+        Detail::SetViewFrameBufferEXT(viewId_, fbo);
         bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(width), static_cast<uint16_t>(height));
         // REMED-GFX-018: do not mutate this base view's clear state here. A same-frame A->B->A
         // rebind would retroactively overwrite A's already-recorded clear because bgfx view state
@@ -875,7 +923,7 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxRenderTargetBackend::UnbindAsRenderTarget()
     {
-        bgfx::setViewFrameBuffer(viewId_, BGFX_INVALID_HANDLE);
+        Detail::SetViewFrameBufferEXT(viewId_, BGFX_INVALID_HANDLE);
     }
 
     bool BgfxRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
@@ -954,7 +1002,7 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
-        if (bgfx::isValid(mrtFbo_)) { bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
+        if (bgfx::isValid(mrtFbo_)) { Detail::ForgetFrameBufferEXT(mrtFbo_); bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
         if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
         if (rt)
         {
@@ -972,7 +1020,7 @@ namespace CNA::Internal::Backends::Bgfx
         }
         else
         {
-            bgfx::setViewFrameBuffer(0, BGFX_INVALID_HANDLE);
+            Detail::SetViewFrameBufferEXT(0, BGFX_INVALID_HANDLE);
             currentViewId_ = 0;
             spriteViewId = 0;
             currentRtWidth_ = currentRtHeight_ = 0;
@@ -984,7 +1032,7 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxGraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
-        if (bgfx::isValid(mrtFbo_)) { bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
+        if (bgfx::isValid(mrtFbo_)) { Detail::ForgetFrameBufferEXT(mrtFbo_); bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
         if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
         if (count <= 0)
         {
@@ -1021,7 +1069,7 @@ namespace CNA::Internal::Backends::Bgfx
         }
         mrtFbo_ = bgfx::createFrameBuffer(static_cast<uint8_t>(n), attachments);
         mrtViewId_ = Detail::AllocateRtViewId();
-        bgfx::setViewFrameBuffer(mrtViewId_, mrtFbo_);
+        Detail::SetViewFrameBufferEXT(mrtViewId_, mrtFbo_);
         currentViewId_ = mrtViewId_;
         spriteViewId = mrtViewId_;
         currentRtWidth_  = static_cast<uint16_t>(renderTargets[0].GetWidth());
@@ -1093,7 +1141,11 @@ namespace CNA::Internal::Backends::Bgfx
     {
         // REMED-GFX-134: `fbo` is only an alias into faceFbos_, so it is never destroyed separately.
         for (auto& faceFbo : faceFbos_)
-            if (bgfx::isValid(faceFbo)) bgfx::destroy(faceFbo);
+            if (bgfx::isValid(faceFbo))
+            {
+                Detail::ForgetFrameBufferEXT(faceFbo);   // REMED-GFX-158, see the 2D destructor
+                bgfx::destroy(faceFbo);
+            }
         fbo = BGFX_INVALID_HANDLE;
         if (bgfx::isValid(cubeTex))  bgfx::destroy(cubeTex);
         if (bgfx::isValid(depthTex)) bgfx::destroy(depthTex);
@@ -1136,7 +1188,7 @@ namespace CNA::Internal::Backends::Bgfx
         // this face's attachment, which is exactly how the first face's content was lost.
         if (owner_ == nullptr || !owner_->BaseViewUsedThisFrameEXT(viewId_))
         {
-            bgfx::setViewFrameBuffer(viewId_, fbo);
+            Detail::SetViewFrameBufferEXT(viewId_, fbo);
             bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(size_),
                               static_cast<uint16_t>(size_));
         }
@@ -1144,7 +1196,7 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
-        bgfx::setViewFrameBuffer(viewId_, BGFX_INVALID_HANDLE);
+        Detail::SetViewFrameBufferEXT(viewId_, BGFX_INVALID_HANDLE);
     }
 
     bool BgfxRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
@@ -1691,7 +1743,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(envMap3DProgram_);
         destroyP(pbr3DProgram_);
         destroyP(pbrSkinned3DProgram_);
-        if (bgfx::isValid(mrtFbo_))         { bgfx::destroy(mrtFbo_);         mrtFbo_         = BGFX_INVALID_HANDLE; }
+        if (bgfx::isValid(mrtFbo_))         { Detail::ForgetFrameBufferEXT(mrtFbo_); bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
         if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
         if (bgfx::isValid(textureSampler))  { bgfx::destroy(textureSampler);  textureSampler  = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(spriteProgram))   { bgfx::destroy(spriteProgram);   spriteProgram   = BGFX_INVALID_HANDLE; }
@@ -1719,7 +1771,11 @@ namespace CNA::Internal::Backends::Bgfx
         {
             cachedWidth = newWidth;
             cachedHeight = newHeight;
-            bgfx::reset(cachedWidth, cachedHeight, resetFlags_);
+            // REMED-GFX-158: bgfx::reset() discards every view's framebuffer binding, including the
+            // one belonging to the render target bound right now -- and this is reached from within
+            // a bind cycle, between the bind and its first draw, whenever the window's real size
+            // first differs from the size bgfx was initialised with. Restore what it drops.
+            Detail::ResetBackbufferEXT(cachedWidth, cachedHeight, resetFlags_);
         }
 
         // Task 878/879 fix: when spriteViewId is currently bound to a RenderTarget2D
@@ -1810,7 +1866,7 @@ namespace CNA::Internal::Backends::Bgfx
         else
         {
             const bgfx::ViewId segmentId = AllocateSegmentViewId();
-            bgfx::setViewFrameBuffer(segmentId, segmentTargetFbo_);
+            Detail::SetViewFrameBufferEXT(segmentId, segmentTargetFbo_);
             currentViewId_ = spriteViewId = segmentId;
             segCurIsBase_ = false;
         }
@@ -1848,7 +1904,8 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxGraphicsBackend::SetSwapInterval(int interval)
     {
         resetFlags_ = (interval > 0) ? BGFX_RESET_VSYNC : BGFX_RESET_NONE;
-        bgfx::reset(cachedWidth, cachedHeight, resetFlags_);
+        // REMED-GFX-158: a vsync change is a reset like any other and discards the same bindings.
+        Detail::ResetBackbufferEXT(cachedWidth, cachedHeight, resetFlags_);
     }
 
     void BgfxGraphicsBackend::GetViewportSize(int& width, int& height)
@@ -2492,7 +2549,7 @@ namespace CNA::Internal::Backends::Bgfx
             if (segmentNeedsFreshView_ || !BaseViewPreservesOrderEXT(segmentTargetBaseId_))
             {
                 const bgfx::ViewId segmentId = AllocateSegmentViewId();
-                bgfx::setViewFrameBuffer(segmentId, segmentTargetFbo_);
+                Detail::SetViewFrameBufferEXT(segmentId, segmentTargetFbo_);
                 currentViewId_ = spriteViewId = segmentId;
                 segCurIsBase_ = false;
             }
@@ -2541,7 +2598,7 @@ namespace CNA::Internal::Backends::Bgfx
         // A different viewport OR (sprite path) a different view transform appeared on this target within
         // the frame -> next ordered segment view.
         const bgfx::ViewId segId = AllocateSegmentViewId();
-        bgfx::setViewFrameBuffer(segId, segmentTargetFbo_);
+        Detail::SetViewFrameBufferEXT(segId, segmentTargetFbo_);
         // Default to the target's FULL rect (the sprite path keeps this + an offset ortho; a custom 3D
         // viewport shrinks it in ApplyViewportOverride). This is a draw-only view and therefore LOADS
         // every attachment. GFX-018 records full-target clears on their own ordered views, so viewport
