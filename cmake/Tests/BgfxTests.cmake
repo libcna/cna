@@ -1095,14 +1095,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     #
     # The resolution settles exactly once per process, so only a process's FIRST bind cycle can
     # observe it. `--leg=<id>` runs one leg alone, which puts that leg in first position; the four
-    # single-leg runs below are the four distinguishable first operations a brand-new target can
-    # have (a draw, a public clear, the bind's own discard clear, and a stock 3D draw) and every one
-    # of them is red pre-fix.
+    # single-leg runs below are the four distinguishable first operations a brand-new RenderTarget2D
+    # can have (a draw, a public clear, the bind's own discard clear, and a stock 3D draw), every one
+    # of them red pre-fix, plus a RenderTargetCube face -- a second registration path
+    # (BindAsRenderTargetFace) through the same reset.
     cna_bgfx_test(cna_test_bgfx_rt_first_use
         examples/rendertarget_first_use_test.cpp)
     cna_register_backend_test(NAME Bgfx_RenderTarget_FirstUse COMMAND cna_test_bgfx_rt_first_use
         TIMEOUT 180 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-    foreach(_gfx158_leg A1 A3 A4 J)
+    foreach(_gfx158_leg A1 A3 A4 J N)
         cna_register_backend_test(NAME Bgfx_RenderTarget_FirstUse_Leg${_gfx158_leg}
             COMMAND cna_test_bgfx_rt_first_use --leg=${_gfx158_leg}
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

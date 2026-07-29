@@ -53,8 +53,9 @@
 // HOW TO READ A PRE-FIX RUN. The resolution settles once, so only the FIRST bind cycle of a process
 // can observe it. Leg order is therefore load-bearing here in a way it is not in other fixtures, and
 // `--leg=<id>` runs one leg on its own so that leg is the first thing the process does. The CMake
-// registration uses that to put four different legs in first position in four separate processes;
-// every one of them is red pre-fix and green after.
+// registration uses that to put five different legs in first position in five separate processes;
+// the four RenderTarget2D ones are red pre-fix and green after, and the cube leg covers the second
+// registration path (BindAsRenderTargetFace) through the same reset.
 //
 // THE PATTERN is 8x4 -- deliberately NON-SQUARE, so a transpose cannot masquerade as a pass -- and
 // every one of its 32 texels is unique in (R, G). A stale buffer, a zero buffer, a uniform fill, a
@@ -78,6 +79,7 @@
 //   K   SpriteBatch and 3D in one first cycle    REMED-GFX-157 order preserved
 //   L   dispose and recreate                     same frame, repeatedly, address reuse
 //   M   cardinality                              many new targets per frame, many frames
+//   N   a brand-new RenderTargetCube face       a second registration path through the reset
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -96,7 +98,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -1024,6 +1028,69 @@ class RenderTargetFirstUseTest : public Game
         check(allOk, "M every one of those targets holds its own content" + firstFailure);
     }
 
+    /// N -- a brand-new RenderTargetCube FACE as the process's first bind cycle. A cube face is
+    /// registered through its own path (BindAsRenderTargetFace, one framebuffer per face created
+    /// lazily on first bind), so a fix that only restored the 2D path would leave this red.
+    void LegN(GraphicsDevice& dev)
+    {
+        std::unique_ptr<RenderTargetCube> cube;
+        try
+        {
+            cube = std::make_unique<RenderTargetCube>(dev, kPW, /*mipMap=*/false,
+                                                      SurfaceFormat::Color, DepthFormat::None, 0,
+                                                      RenderTargetUsage::DiscardContents);
+            dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveX);
+        }
+        catch (const std::exception& e)
+        {
+            std::printf("[INFO] N: %s cannot bind a RenderTargetCube face (%s) -- boundary "
+                        "recorded\n", kBackendName, e.what());
+            std::fflush(stdout);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            return;
+        }
+
+        // The draw is the cycle's first public operation, exactly as in leg A1.
+        ResetState(dev);
+        DrawFull(dev, patternTex_);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        ResetState(dev);
+
+        std::vector<Color> face(static_cast<std::size_t>(kPW) * kPW, Color(0xCD, 0xCD, 0xCD, 0xCD));
+        std::string what;
+        try { cube->GetData(CubeMapFace::PositiveX, face.data(), 0, static_cast<int>(face.size())); }
+        catch (const std::exception& e) { what = e.what(); }
+        catch (...) { what = "(non-std exception)"; }
+        if (!what.empty())
+        {
+            if (Unsupported())
+                check(true, "N declared non-rasterizing, cube readback rejects (" + what + ")");
+            else
+            {
+                std::printf("[INFO] N: cube readback unavailable on %s (%s) -- boundary recorded\n",
+                            kBackendName, what.c_str());
+                std::fflush(stdout);
+            }
+            return;
+        }
+
+        // Only the pattern's own kPW x kPH region was drawn into the kPW x kPW face.
+        int good = 0;
+        std::string first;
+        for (int y = 0; y < kPH; ++y)
+            for (int x = 0; x < kPW; ++x)
+            {
+                const Color& got = face[static_cast<std::size_t>(y) * kPW + x];
+                if (Same(got, PatternColor(x, y))) ++good;
+                else if (first.empty())
+                    first = " first at (" + std::to_string(x) + "," + std::to_string(y) +
+                            ") want=" + ColorText(PatternColor(x, y)) + " got=" + ColorText(got);
+            }
+        check(good == kPW * kPH,
+              "N a brand-new RenderTargetCube face holds its first cycle's content (" +
+              std::to_string(good) + "/" + std::to_string(kPW * kPH) + ")" + first);
+    }
+
 protected:
     void Initialize() override
     {
@@ -1077,6 +1144,7 @@ protected:
             { "K",  &RenderTargetFirstUseTest::LegK,  true  },
             { "L",  &RenderTargetFirstUseTest::LegL,  false },
             { "M",  &RenderTargetFirstUseTest::LegM,  false },
+            { "N",  &RenderTargetFirstUseTest::LegN,  false },
         };
 
         bool matched = false;
@@ -1098,7 +1166,10 @@ protected:
 
         std::printf("[INFO] %s: %d/%d checks passed\n", kBackendName, passCount_, totalCount_);
         std::fflush(stdout);
-        result_ = (passCount_ == totalCount_ && totalCount_ > 0) ? 0 : 1;
+        // A leg that records only a declared backend boundary contributes no checks and is not a
+        // failure; an unmatched --leg filter adds its own failing check above, so a run that
+        // measured nothing at all still cannot pass silently.
+        result_ = (passCount_ == totalCount_) ? 0 : 1;
         Exit();
     }
 
