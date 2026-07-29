@@ -185,6 +185,20 @@ namespace
         true;
 #endif
 
+    /**
+     * @brief Whether a mipMap=true RenderTarget2D is implemented at all.
+     *
+     * WEBGPU declares this unimplemented (plan_webgpu.md WEBGPU-53/54) and throws when the target's
+     * mip chain would have to be regenerated. That predates and is unrelated to first use, so leg I
+     * asserts the deterministic rejection there instead of a value.
+     */
+    constexpr bool kMipmappedRenderTargetSupported =
+#if defined(CNA_BACKEND_WEBGPU)
+        false;
+#else
+        true;
+#endif
+
     constexpr int kBBW = 64;   ///< Backbuffer width.  Eight pattern slots across.
     constexpr int kBBH = 64;   ///< Backbuffer height.
 
@@ -676,6 +690,19 @@ class RenderTargetFirstUseTest : public Game
         if (!ReadBackbufferOr(dev, r, "C")) return;
         CheckSlotAgainstControl(r, 0, 1, "C brand-new render target consumed on the backbuffer",
                                 PatternColor);
+
+        // A SECOND independent Clear + draw + GetBackBufferData cycle over the SAME producer.
+        // bgfx_rendertarget2d_mip_test.cpp carried an inherited claim that only the first such
+        // cycle produces fresh data on this backend and that every later one reads solid black
+        // "no matter how many retries", and it kept a 20-attempt retry loop because of it. This
+        // measures that claim rather than working around it.
+        BeginBackbuffer(dev);
+        DrawSpriteSlots(dev, a, 2, patternTex_, 3);
+        Readback r2;
+        if (!ReadBackbufferOr(dev, r2, "C2")) return;
+        CheckSlotAgainstControl(r2, 2, 3,
+                                "C2 the same producer sampled again in a later backbuffer cycle",
+                                PatternColor);
     }
 
     /// D -- producer and consumer both constructed in this frame, in that order, and used in it.
@@ -813,6 +840,26 @@ class RenderTargetFirstUseTest : public Game
     /// chain itself is bgfx_rendertarget2d_mip_test.cpp's subject, not this file's.
     void LegI(GraphicsDevice& dev)
     {
+        if (!kMipmappedRenderTargetSupported)
+        {
+            std::string what;
+            try
+            {
+                RenderTarget2D a(dev, kPW, kPH, /*mipMap=*/true, SurfaceFormat::Color,
+                                 DepthFormat::None);
+                ProduceFirstOp(dev, a, patternTex_);
+            }
+            catch (const std::exception& e) { what = e.what(); }
+            catch (...) { what = "(non-std exception)"; }
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            ResetState(dev);
+            check(!what.empty(),
+                  "I " + std::string(kBackendName) +
+                  " declares mipmapped render targets unimplemented and rejects deterministically" +
+                  (what.empty() ? "" : " (" + what + ")"));
+            return;
+        }
+
         RenderTarget2D a(dev, kPW, kPH, /*mipMap=*/true, SurfaceFormat::Color, DepthFormat::None);
         ProduceFirstOp(dev, a, patternTex_);
         Readback r = ReadWholeTarget(a, kPW, kPH);

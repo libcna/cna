@@ -23,15 +23,15 @@
 // glGenerateMipmap equivalent"), which was only true of bgfx::blit() (a same-size copy, still not
 // a resize/filter primitive), not of the framebuffer-resolve path.
 //
-// Bgfx-only test-harness finding (separate from the mip work itself): sampling the SAME
-// RenderTarget2D object via SpriteBatch across more than one independent Clear+Draw+
-// GetBackBufferData cycle only reliably produces fresh data on the FIRST such cycle -- every
-// later cycle reads back solid black no matter how many retries, even with mipMap=false
-// (confirmed empirically, so this is unrelated to Task 906's own change). Every other multi-
-// checkpoint Bgfx pixel test in this project avoids the pattern by constructing a fresh
-// RenderTarget2D per checkpoint (see bgfx_rendertarget2d_msaa_test.cpp's RenderAndReadRow) rather
-// than reusing one persistent instance -- this test follows that same established, proven-working
-// shape instead of reusing a single rt_ across all 3 checkpoints.
+// This file constructs a fresh RenderTarget2D per checkpoint (mirroring
+// bgfx_rendertarget2d_msaa_test.cpp's RenderAndReadRow) rather than reusing one persistent
+// instance across all checkpoints. It used to carry a harness claim that reuse was what forced
+// that shape -- that sampling the same RenderTarget2D across more than one independent
+// Clear+Draw+GetBackBufferData cycle produced fresh data only on the first such cycle and solid
+// black afterwards. REMED-GFX-158 measured that directly (rendertarget_first_use_test.cpp, leg C2)
+// and it does not hold: a producer sampled again in a later backbuffer cycle is byte-exact. The
+// fresh-target-per-checkpoint shape is kept because each checkpoint is an independent measurement,
+// not because reuse is unsafe.
 //
 // Exit code 0 = both checks PASS, 1 = either FAILs.
 
@@ -67,15 +67,11 @@ class BgfxRenderTarget2DMipTest : public Game
 
     // Renders the 7:1 red/blue split into a FRESH RenderTarget2D, unbinds it (triggering bgfx's
     // own auto-mip-regeneration), then draws it back scaled to destW x destH and reads back a
-    // single column of destH pixels at column sampleX -- retried until non-black (Bgfx's
-    // first-read-per-frame quirk). A fresh RT per call (mirroring
-    // bgfx_rendertarget2d_msaa_test.cpp's RenderAndReadRow) and exactly ONE GetBackBufferData
-    // call per independent render (mirroring every other multi-point Bgfx pixel test in this
-    // project, e.g. bgfx_viewport_subregion_test.cpp's renderAndReadFresh) avoids a harness-only
-    // issue found while writing this test: sampling the same already-rendered RT/texture a
-    // SECOND time via a separate Clear+Draw+Read cycle does not reliably reproduce the first
-    // cycle's correct content, regardless of retries -- confirmed unrelated to Task 906's own
-    // mip fix (reproduces identically with mipMap=false).
+    // single column of destH pixels at column sampleX. REMED-GFX-158: this used to retry the read
+    // up to twenty times, breaking out on the first non-black result, on the belief that this
+    // backend only produced fresh data on the first read of a frame. The single read here is
+    // deliberate -- a retry loop cannot distinguish "eventually correct" from "correct", so it
+    // would hide exactly the kind of first-use loss that task fixed.
     std::vector<Color> RenderIntoRTAndReadColumn(GraphicsDevice& device, SamplerState& sampler,
                                                   int destW, int destH, int sampleX)
     {
@@ -90,22 +86,14 @@ class BgfxRenderTarget2DMipTest : public Game
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         std::vector<Color> column(destH, Color(0, 0, 0, 0));
-        for (int i = 0; i < 20; ++i)
-        {
-            device.Clear(Color(0, 0, 0, 255));
-            sb_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
-            sb_->Draw(rt, Rectangle(0, 0, destW, destH), Rectangle(0, 0, kRTSize, kRTSize),
-                      Color::White);
-            sb_->End();
+        device.Clear(Color(0, 0, 0, 255));
+        sb_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
+        sb_->Draw(rt, Rectangle(0, 0, destW, destH), Rectangle(0, 0, kRTSize, kRTSize),
+                  Color::White);
+        sb_->End();
 
-            const Rectangle reg(sampleX, 0, 1, destH);
-            device.GetBackBufferData(&reg, column.data(), 0, destH);
-            bool anyNonBlack = false;
-            for (const auto& c : column)
-                if (c.getRProperty() > 10 || c.getGProperty() > 10 || c.getBProperty() > 10)
-                { anyNonBlack = true; break; }
-            if (anyNonBlack) break;
-        }
+        const Rectangle reg(sampleX, 0, 1, destH);
+        device.GetBackBufferData(&reg, column.data(), 0, destH);
         return column;
     }
 
@@ -134,23 +122,15 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
 
-        // REMED-GFX-158: this backend loses a render target's content when the target is CREATED
-        // and rendered into in the same bgfx frame AND its view is the first one bgfx executes that
-        // frame. Measured: creating a target and advancing one frame WITHOUT ever rendering into it
-        // is enough to make the next one work, so it is the creation frame that matters, not the
-        // drawing. It became observable only when REMED-GFX-155 stopped forcing the backbuffer view
-        // to execute first in every frame -- before that, the backbuffer always ran ahead of any
-        // render target and hid it. This warm-up is here so the file measures the MIP CHAIN, which
-        // is its subject, rather than that separate defect; remove it when GFX-158 is fixed.
-        {
-            RenderTarget2D warmUp(device, kRTSize, kRTSize, /*mipMap=*/true,
-                                  SurfaceFormat::Color, DepthFormat::None);
-            device.Clear(Color(0, 0, 0, 255));
-            Color discard(0, 0, 0, 0);
-            const Rectangle onePixel(0, 0, 1, 1);
-            device.GetBackBufferData(&onePixel, &discard, 0, 1);
-        }
-
+        // REMED-GFX-158: this file used to open with a warm-up cycle -- a throwaway RenderTarget2D,
+        // a Clear and a one-pixel GetBackBufferData -- because check 1 otherwise read solid black on
+        // all 20 retries. That was not a property of mip chains: `bgfx::reset()` discards every
+        // view's framebuffer binding, and this backend calls it the first time the window's real
+        // size differs from the size bgfx was initialised with, which lands between check 1's bind
+        // and its draw. The warm-up worked only because it absorbed that reset while no render
+        // target was bound. The binding is now restored at the reset itself, so check 1 measures the
+        // mip chain with the target it actually creates, on the very first frame and with no
+        // preamble.
         device.setBlendStateProperty(BlendState::Opaque);
         SamplerState point = SamplerState::PointClamp;
         SamplerState linear = SamplerState::LinearClamp;

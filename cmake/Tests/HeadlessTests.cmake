@@ -91,6 +91,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_RenderTarget_BackbufferConsumer COMMAND cna_test_headless_rt_backbuffer_consumer
         TIMEOUT 180 LABELS "Headless")
 
+    # REMED-GFX-158's control: a RenderTarget2D constructed during a public frame must be usable in
+    # that same frame -- bound, cleared and/or drawn into, unbound and observed -- with no warm-up
+    # frame, Present, GetData-before-first-render, dummy draw, empty bind cycle, manual frame advance
+    # or wait. The defect was bgfx-local (`bgfx::reset()` discards every view's framebuffer binding,
+    # including the bound target's), so this run is what establishes that HEADLESS already honoured the
+    # contract rather than being made to.
+    cna_headless_test(cna_test_headless_rt_first_use
+        examples/rendertarget_first_use_test.cpp)
+    cna_register_backend_test(NAME Headless_RenderTarget_FirstUse COMMAND cna_test_headless_rt_first_use
+        TIMEOUT 180 LABELS "Headless")
+
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
