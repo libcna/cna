@@ -110,13 +110,16 @@ namespace
     /**
      * @brief Row order this backend produces when a RenderTarget2D is SAMPLED as a texture.
      *
-     * `TopDown` -- texel (x, y) of the target is sampled at (x, y). What every backend should do.
-     * `BottomUp` -- the sampled image arrives vertically flipped. REMED-GFX-147: measured on
-     * EasyGL, where leg D (sampling a plain Texture2D) is exactly top-down but leg E (sampling a
-     * render target) is not, so the asymmetry is in render-target sampling alone. This is the
-     * EasyGL counterpart of REMED-GFX-067's bgfx finding and is recorded, not fixed, here --
-     * declaring it keeps every COLOUR assertion in this file at full strength on that backend
-     * while this file stays about colour space rather than orientation.
+     * `TopDown` -- texel (x, y) of the target is sampled at (x, y). What every backend does.
+     * `BottomUp` -- the sampled image arrives vertically flipped.
+     *
+     * REMED-GFX-147 was measured here: EasyGL's leg D (sampling a plain Texture2D) was exactly
+     * top-down while its leg E (sampling a render target) was not, so the asymmetry was in
+     * render-target sampling alone. Declaring it per backend is what kept every COLOUR assertion
+     * in this file at full strength while the orientation defect was open, and is what made
+     * fixing it show up HERE as a failure rather than passing silently. REMED-GFX-147 is now
+     * closed and no backend declares `BottomUp`; the enum stays because that is the property this
+     * file must keep pinning.
      */
     enum class RtSampleOrientation
     {
@@ -154,7 +157,9 @@ namespace
 #elif defined(CNA_BACKEND_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = true;
-    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::BottomUp;
+    // REMED-GFX-147 fixed: EasyGL now samples a render target in the same logical orientation as
+    // an ordinary Texture2D holding identical bytes.
+    constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
     constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kBackendName = "EASYGL";
 #elif defined(CNA_BACKEND_BGFX)
@@ -721,10 +726,12 @@ class ColorSpaceMidToneContractTest : public Game
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         ResetState(dev);
         Readback r = ReadWhole(second, kW, kH);
-        // REMED-GFX-147: on a backend that samples a render target bottom-up, undo ONLY the row
-        // order before comparing. Every colour comparison below stays byte-exact, which is what
-        // this file is for; the orientation divergence is declared per backend so it is pinned
-        // rather than tolerated, and a change in either direction still fails.
+        // REMED-GFX-147: on a backend that DECLARES it samples a render target bottom-up, undo
+        // ONLY the row order before comparing, so every colour comparison below stays byte-exact --
+        // which is what this file is for. No backend declares that any more (REMED-GFX-147 is
+        // fixed), so this is inert; it stays because the declaration is what makes an orientation
+        // change in either direction fail here instead of passing silently. The dedicated
+        // orientation contract lives in rendertarget_sampling_orientation_test.cpp.
         if (kRtSampleOrientation == RtSampleOrientation::BottomUp && !r.pixels.empty() &&
             !r.threwNotSupported && !r.threwSomethingElse)
         {
