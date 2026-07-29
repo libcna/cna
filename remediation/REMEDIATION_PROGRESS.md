@@ -2487,7 +2487,9 @@ existing task.
 | REMED-GFX-149 | `Texture2D::GetData(Color*, startIndex, elementCount)` gates its render-target backend fallback on `startIndex == 0` and throws for any other offset, while the rectangle overload honours the same offset. Shared layer, every backend. | LOW | P3 | — | OPEN (measured 2026-07-29 during REMED-GFX-147) |
 | REMED-GFX-150 | Software's SpriteBatch interpolates when magnifying even with `SamplerState::PointClamp`: 4/128 texels exact vs EasyGL's 128/128 on the identical plain-`Texture2D` draw. | MEDIUM | P2 | — | OPEN (isolated 2026-07-29 during REMED-GFX-147) |
 | REMED-GFX-151 | Vulkan: a `RenderTarget2D` rendered, unbound and then sampled with no intervening `GetData` reproduced 0/32 of the source, because the readback flush filtered the frame's segment list down to the target being READ and so never recorded the PRODUCER's render pass. The canonical XNA render-to-texture sequence. | HIGH | P1 | REMED-GFX-147 leg G0 | **DONE 2026-07-29 — 15/43 -> 43/43 ON A NEW DEDICATED FIXTURE, PLUS 43/43 ON A `PreferMultiSampling` DEVICE WITH THE APPLIED SAMPLE COUNT ASSERTED TO BE 4 AND 43/43 UNDER SYNCHRONIZATION VALIDATION WITH THE LAYER PROVED LIVE AND ZERO MESSAGES OF ANY KIND. FIXED BY MAKING THE FLUSH REPLAY THE TRANSITIVE CLOSURE OF THE BIND CYCLES A READBACK DEPENDS ON — THE READ TARGET'S OWN GROUP PLUS, FOR EACH CYCLE IN THE SET, THE EARLIER CYCLES OF EVERY RENDER-TARGET GROUP IT SAMPLES — STILL IN ASCENDING SEGMENT ORDER. NO BARRIER, FENCE, DEVICE/QUEUE WAIT, SUBMIT-PER-SWITCH, EXTRA PRESENT, EXTRA FRAME OR READBACK ADDED; THE SUBMIT-PER-MRT-PROXY LOOP IS REPLACED BY ONE COMMAND BUFFER AND ONE SUBMIT, SO CARDINALITY GOES DOWN. A SIMPLER POSITIONAL RULE ALSO PASSED THE CANONICAL FIXTURE AND WAS IMPLEMENTED, MEASURED AND REJECTED (LEG I2 0/32). VULKAN SHARD 180/181, THE ONE FAILURE A/B-PROVEN PRE-EXISTING. SIX CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN; 8 OF 48 VULKAN RENDER-TARGET FIXTURES SAMPLE A TARGET AND ALL 8 OBSERVED THE CONSUMER THROUGH `GetBackBufferData`, NEVER THROUGH A TARGET READBACK — ONE STRENGTHENED (2/4 -> 4/4). SPAWNED GFX-155/156.** |
-| REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | OPEN (reproduced 2026-07-29 by REMED-GFX-147; SDL_GPU counterpart of REMED-GFX-078) |
+| REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | **DONE 2026-07-29 — THIRTEEN (NOT TEN) CAST SITES, PROVEN UNDER UBSAN AS `downcast of address … which does not point to an object of type 'SdlGpuTextureBackend'` FOLLOWED BY SIGSEGV, THE FABRICATED HANDLE BEING THE TARGET'S OWN `mipMap_` + THREE BYTES OF UNINITIALISED PADDING + `multiSampleCount_` (0x20612000). FIXED BY ONE SHARED `ResolveSampledTextureEXT`/`ResolveSampledCubeEXT` RETURNING AN `SdlGpuSampledTextureEXT` (SAMPLEABLE NATIVE HANDLE + KEEP-ALIVE), USED BY SPRITEBATCH AND EVERY EFFECT ALIKE; MSAA IS CORRECT BY CONSTRUCTION BECAUSE THE ATTACHMENT IS `COLOR_TARGET`-ONLY AND CANNOT BE SELECTED. NEW PROCESS-ISOLATED FIXTURE 15/18 LEGS SIGSEGV -> 18/18 LEGS, 0 CRASHES, 56/56 CHECKS. NOTHING ADDED: NO PRESENT, GETDATA, CPU COPY, WAIT, EXTRA FRAME/PASS/SUBMIT; SDL CALL-SITE CARDINALITY UNCHANGED EXCEPT `SDL_ReleaseGPUTexture` 15 -> 12. FOUR FALSE-POSITIVE SKIPS REMOVED (THREE A/B-PROVEN LOAD-BEARING, ONE PROVEN OVER-APPLIED). SDL_GPU DEBUG VALIDATION AND FORCED `VK_LAYER_KHRONOS_validation` BOTH CLEAN; ASAN/UBSAN CLEAN. NINE CROSS-BACKEND CONTROLS GREEN. SPAWNED GFX-166/167.** |
+| REMED-GFX-166 | Vulkan: a `RenderTarget2D` (or `Texture2D`) destroyed while its consumer draw is still only QUEUED loses that work — the destination reads back 0/32, all `(0,0,0,0)`, while every live-source check in the same run is byte-exact. So it is the disposal, not the deferral. SDL_GPU keeps such a source alive through REMED-GFX-152's keep-alive; Vulkan has no equivalent. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-152 leg M1, llvmpipe) |
+| REMED-GFX-167 | WebGPU: a `RenderTarget2D` sampled by a stock 3D draw onto the BACKBUFFER passes its own check (1/1) and then kills the process with SIGSEGV during teardown. None of the other seventeen legs of the same fixture crashes, so it is specific to a target having been sampled onto the backbuffer, and it is a teardown defect rather than a sampling one. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-152 leg A3) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -18986,5 +18988,217 @@ plus the sanitizer trees.
 - `fb25723a fix(Task REMED-GFX-156): preserve WebGPU Clear command order`
 - `e313bbfb fix(Task REMED-GFX-156): preserve SDL_GPU Clear command order`
 - `docs(remediation): record GFX-156 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-152 — SDL_GPU: a render target used as an effect's texture (2026-07-29)
+
+**DONE.** A `RenderTarget2D` handed to a stock or custom 3D effect as its `Texture` is now
+sampled rather than reinterpreted.
+
+### Root cause — a TYPE defect, measured not inferred
+
+Not synchronization, ordering, image layout, visibility, MSAA resolve, a variant tag, a stale
+generation index or a segment retaining a pointer. `SdlGpuTextureBackend` and
+`SdlGpuRenderTargetBackend` are unrelated **siblings** under `ITextureBackend`, and the former is
+`final`, so a render target can never be one. **Thirteen** sites (the ticket said ten) did
+
+```cpp
+command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+```
+
+UBSan named all three steps, on `cmake-build-sdlgpu-ubsan`, `DISPLAY=:101`:
+
+```
+SdlGpuGraphicsBackend.cpp:3367: runtime error: downcast of address 0x55cb63b1f080 which does not
+    point to an object of type 'SdlGpuTextureBackend'
+    note: object is of type 'CNA::Internal::Backends::SdlGpu::SdlGpuRenderTargetBackend'
+SdlGpuGraphicsBackend.cpp:4817: runtime error: member call on address 0x55cb63b1f080 which ...
+SdlGpuGraphicsBackend.hpp:119:  runtime error: member access within address 0x55cb63b1f080 which ...
+```
+
+then **SIGSEGV, exit 139**. The failing expression is `command.texture->Texture()`, i.e.
+`return texture_;` at `SdlGpuGraphicsBackend.hpp:119`, reading offset 16 of the object. In
+`SdlGpuRenderTargetBackend`'s layout (`vptr` 0, `owner_` 8, `mipMap_` 16, padding 17–19,
+`multiSampleCount_` 20, `state_` 24) those eight bytes are **`mipMap_`, three bytes of
+uninitialised padding and `multiSampleCount_`** — in the captured object `0x0000000020612000`,
+visible in UBSan's own hex dump. That value was passed to `SDL_BindGPUFragmentSamplers`.
+
+The queue-time downcast is UB but harmless in practice; the fatal read happens at render time,
+inside `EnsureFrameRendered()`, because this backend defers every draw to Present.
+
+**Why only the 3D legs died:** `SdlGpuSpriteBatchBackend::Draw` already asked the object with
+`dynamic_cast`, and `QueueEnvMapDraw` already did for its cube slot. One binding route asked, the
+others assumed, and only the assuming ones could die. That asymmetry is the whole finding.
+
+### Fix — one resolver, used by every route
+
+`ResolveSampledTextureEXT(const ITextureBackend*, const char* usage)` and
+`ResolveSampledCubeEXT(const ITextureCubeBackend*, const char* usage)` are now the only places this
+backend decides what a texture resource is. They `dynamic_cast`, return an empty (falsy) value for
+a null optional slot, and throw a **named** `std::invalid_argument` carrying the public API name
+(`"BasicEffect.Texture"`, `"PbrEffect.NormalMap"`, …) for anything else — never reinterpreting it.
+
+Each returns `SdlGpuSampledTextureEXT { SDL_GPUTexture* texture; std::shared_ptr<const void> keepAlive; }`.
+Commands store that value instead of a concrete wrapper pointer, which closes the lifetime half
+too: a command is replayed at Present, by when a short-lived public texture may be gone.
+
+**MSAA is correct by construction, not by a new step.** `SdlGpuRenderTargetBackend::Sampled()`
+returns `state_->colorTexture`, the single-sample texture the multisample attachment resolves
+INTO via `SDL_GPUColorTargetInfo.resolve_texture` at render-pass end. The attachment is created
+`SDL_GPU_TEXTUREUSAGE_COLOR_TARGET` only (`SdlGpuGraphicsBackend.cpp:5715`), so it is not a legal
+sampler binding at all and can no longer be selected. Same for the cube's per-face attachments.
+
+Ordinary `Texture2D` and `TextureCube` gained the `shared_ptr`-owned `SdlGpuSampledTextureState`
+that render targets already had, so their release defers to the same drain point. The backend
+destructor now clears queued commands, sprites and segments **before** that drain, so a resource
+whose last reference was a command releases while the device is still alive.
+
+**Honest scope on the lifetime half:** restoring an immediate `SDL_ReleaseGPUTexture` and
+re-measuring produced neither a wrong pixel nor an ASan report — SDL_gpu defers the real
+destruction internally. It is therefore hardening that removes a dependence on another library's
+internal deferral, **not a defect observed failing**, and the source comment says so.
+
+### Cardinality and performance
+
+SDL entry-point call sites, pre vs post: `SDL_CreateGPUTexture` 10/10,
+`SDL_BindGPUFragmentSamplers` 8/8, `SDL_BeginGPURenderPass` 3/3, `SDL_SubmitGPUCommandBuffer` 7/7,
+`SDL_AcquireGPUCommandBuffer` 10/10, `SDL_WaitForGPUFences` 4/4, `SDL_DownloadFromGPUTexture` 4/4,
+`SDL_CreateGPUSampler` 1/1, `SDL_CreateGPUTransferBuffer` 11/11; **`SDL_ReleaseGPUTexture` 15 → 12**
+as three immediate sites joined the shared deferred path. Zero CPU copies, readbacks, waits, extra
+frames, extra passes and extra submits. One `dynamic_cast` per texture binding; **one** extra
+`make_shared` per `Texture2D`/`TextureCube` object and **none per draw** — copying a resolved
+binding is a refcount increment, not an allocation.
+
+### The oracle
+
+New `examples/rendertarget_effect_source_test.cpp`. Because the pre-fix failure is a SIGSEGV rather
+than an assertion, it **supervises each of its eighteen legs in its own child process** (re-exec
+with `--leg=<id>`), classifying each as PASS / FAIL / **CRASH with the signal named**. Process death
+is an attributable result instead of a lost CTest shard.
+
+Every consumer leg is a difference test: the render target and an ordinary `Texture2D` holding the
+identical expected bytes, drawn through the same geometry, sampler and blend state in the same
+frame, required byte-identical. The producer is never read — `GetData` observes only the consumer's
+destination. The 8x4 pattern is non-square and every texel unique in (R, G).
+
+**A/B, pre-fix backend restored under the same fixture: 15 of 18 legs killed by signal 11, 10
+checks. Post-fix: 18/18 legs, 0 crashes, 56/56 checks.** The three pre-fix survivors are exactly
+C1 (SpriteBatch), L1 (the cube slot) — the two routes that already used `dynamic_cast` — and O1,
+which resolves no texture at all. Nothing else about those legs differs.
+
+Legs: A the finding on RT and backbuffer destinations; B all nine stock-effect families with a 2D
+texture slot; C SpriteBatch plus a custom `ShaderEffect`; D five draw modes; E several consumers of
+one producer and two producers alternating; F A→B→A; G equal and unequal extents; H cross-route
+production; I samplers (Point/Linear/Wrap) and a UV subregion with a discrimination check; J formats
+and mips; K MSAA; L `RenderTargetCube`; M disposal, handle reuse, interleaved lifetimes; N an
+earlier-frame producer; O honest failure; P REMED-GFX-156 ordered-Clear interaction.
+
+### Capability boundaries, declared not skipped
+
+- **Custom effects in 3D:** SDL_GPU routes a custom `ShaderEffect` through SpriteBatch only
+  (`SetCustomEffect` lives on its sprite backend); its stock 3D paths have no custom-shader slot.
+  Leg C1 therefore exercises a custom effect on the route that has one — and it goes through the
+  same resolver.
+- **Second sampleable format:** SDL_GPU creates every `Texture2D` and render target as one fixed
+  native format, so `SurfaceFormat::Color` is the only sampleable colour format it offers.
+- **`DrawInstancedPrimitives`:** not implemented on SDL_GPU at all; probed with a real draw inside a
+  self-contained bind cycle, and recorded. The other four draw modes carry leg D1 there.
+- **Cube:** `RenderTargetCube` is genuinely supported — leg L1 produces into +X and −X, samples the
+  cube through `EnvironmentMapEffect`'s cube slot without an unsafe cast, and proves the faces do
+  not alias through the cube's own `GetData` contract (REMED-GFX-134).
+
+### Native validation
+
+SDL_GPU debug mode was enabled in all eighteen child processes; **zero** errors, warnings or
+validation messages. Repeated with `VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` forced and the
+layer proved loaded from `/usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json`:
+**zero VUID reports**, 18/18.
+
+### Sanitizers
+
+ASan and UBSan, runtimes proved linked by symbol (39 and 15 respectively), over the new fixture plus
+the GFX-147/151/155/158 fixtures: **zero reports of any kind**, all green. UBSan is the direct A/B —
+three `runtime error` reports pre-fix, **0** post-fix.
+
+### False positives found and strengthened
+
+Four fixtures declared `kStockEffectRtSourceSupported = false` on SDL_GPU. All four are now
+unconditionally true, and each was A/B-measured rather than merely re-enabled.
+
+| fixture | pre-fix with the gate open | post-fix | was |
+|---|---|---|---|
+| `rendertarget_sampling_orientation_test` | 5 PASS then **SIGSEGV** | 57/57 | 51/51 |
+| `rendertarget_producer_consumer_test` | 5 PASS then **SIGSEGV** | 36/36 | 32/32 |
+| `rendertarget_backbuffer_consumer_test` | 1 PASS then **SIGSEGV** | 4/4 | 4/4 |
+| `rendertarget_first_use_test` | 20/20 (passes) | 20/20 | 17/17 |
+
+The backbuffer fixture gains no check because it has no `ReadBackbuffer` oracle here, but its 3D
+consumer draws now execute instead of being skipped — and they are what crashes pre-fix, so the
+skip was hiding a real death.
+
+The fourth is recorded as what it is rather than dressed up as a fourth crash proof: in
+`rendertarget_first_use_test.cpp` the flag was **over-applied**. Legs J and K carry
+`needsStockEffectRtSource = true`, but neither hands a render target to an effect — both bind an
+ordinary `Texture2D` and merely render INTO a target. Measured against the pre-fix backend they
+PASS (J 1/1, K 2/2). That skip hid nothing and simply cost three checks of first-use coverage.
+
+**A fifth false positive was found in this task's own new fixture** and fixed before it could
+mislead: REMED-GFX-125's trap. The `VertexBuffer` draw modes passed
+`sizeof(VertexPositionTexture)` as the GPU stream stride. That is **32, not 20** — the type derives
+from the polymorphic `IVertexType` and carries a vptr plus tail padding — so those legs declared a
+32-byte stream that some backends read as `VertexPositionNormalTexture`. A packed 20-byte
+`PackedPositionTexture` with a `static_assert` now backs them; D3D9 went 43/46 → 47/47 on that
+change alone.
+
+### Cross-backend controls — only SDL_GPU production changed
+
+| backend | result | notes |
+|---|---|---|
+| SDL_GPU | **18/18 legs, 56/56** | the fixed backend |
+| SOFTWARE | 18/18 | |
+| HEADLESS | 18/18 | non-rasterizing; asserts the deterministic rejection |
+| EASYGL | 18/18 | built in `cmake-build-debug`, which is an EASYGL configuration |
+| BGFX | 18/18 | active renderer OpenGL 2.1 |
+| VULKAN | 18/18 | llvmpipe; GFX-166 declared |
+| WEBGPU | 18/18 | GFX-167 declared |
+| D3D9 | **47/47 runtime** | cross-built and RUN under Wine on `:99` |
+| D3D11 | **50/50 runtime** | cross-built and RUN under Wine on `:99` |
+| D3D12 | **cross-build only** | unregistered for the same pre-existing reason as its two neighbouring contract fixtures: a Game-harness test builds a swap chain, which crashes this dev loop's vanilla Wine dxgi.dll (DX-100) |
+
+A Windows build has no `fork`/`execv`, so the supervisor compiles out and every leg runs in-process
+there — which is why D3D9/D3D11 report one total rather than eighteen leg results.
+
+### Regressions
+
+`ctest -R '^SdlGpu'` **85/86**. The single failure, `SdlGpu_RenderState` (`Subprocess aborted`,
+"Cannot present while render targets are bound"), is **A/B-proven pre-existing**: it aborts
+identically against the pre-fix backend. Preserved and green: `SdlGpu_GraphicsDevice_OrderedClear`
+(GFX-156), `SdlGpu_RenderTarget_PassBoundary` and `SdlGpu_Backbuffer_PassOrder` (GFX-143/145),
+`SdlGpu_SpriteBatch3DOrder` (GFX-157), `SdlGpu_FrontFaceWinding` (GFX-160),
+`SdlGpu_RenderTargetCube_*` (GFX-134/141), `SdlGpu_Texture2D_GetDataContract` (GFX-127),
+`SdlGpu_RenderTargetLifetime`, `SdlGpu_RenderTarget2DMSAA`. The five shared render-target fixtures
+pass on every other backend too: VULKAN 7/7, BGFX 11/11, WEBGPU 5/5, SOFTWARE 5/5, HEADLESS 5/5,
+EASYGL 5/5. All fifteen backend libraries build incrementally.
+
+### Independent findings spawned
+
+- **REMED-GFX-166** — Vulkan loses a queued draw whose source was destroyed before the frame
+  rendered (leg M1's two dead-source checks read 0/32 while every live-source check in the same run
+  is exact). Declared per backend, not fixed here.
+- **REMED-GFX-167** — WebGPU passes leg A3 (1/1) then dies with SIGSEGV during process teardown;
+  no other leg of the eighteen crashes there. Declared per backend, not fixed here.
+
+Both are outside this ticket's backend and have their own root causes.
+
+### Commits
+
+- `48ec5347 test(Task REMED-GFX-152): reproduce SDL_GPU target-sampling crash`
+- `c3d8cc0b fix(Task REMED-GFX-152): resolve sampleable target resources safely`
+- `b36aa7df test(Task REMED-GFX-152): remove the SDL_GPU stock-effect skip from four fixtures`
+- `d95baa9d test(Task REMED-GFX-152): cover effects lifetime and producer-consumer order`
+- `docs(remediation): record GFX-152 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
