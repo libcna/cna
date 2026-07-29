@@ -2493,7 +2493,7 @@ existing task.
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
 | REMED-GFX-156 | SDL_GPU and WebGPU: a `Clear()` issued AFTER a draw in the same bind cycle is lost — the consumer sees the geometry, on all three `RenderTargetUsage` values, both backends reporting the identical `(20,25,40,255)`. The SDL_GPU/WebGPU counterpart of REMED-GFX-129. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-151 leg G3) |
 | REMED-GFX-157 | A bind cycle's SpriteBatch draws and its stock 3D draws were replayed GROUPED BY FAMILY instead of in the order the game issued them, so within ONE cycle `3D draw; SpriteBatch.Draw` came out inverted. The ticket's original statement ("a 3D draw after a SpriteBatch never reaches the target on BGFX/VULKAN/SOFTWARE/EASYGL, WEBGPU clean") was wrong in every particular: that draw was CULLED by state SpriteBatch legitimately leaves behind, not lost. | HIGH | P1 | — | **DONE 2026-07-29 — RECLASSIFIED, THEN FIXED. THE REPORTED SYMPTOM WAS A FIXTURE DEFECT: REMED-GFX-155'S LEG I0 PASSED A NULL rasterizerState TO SpriteBatch.Begin, WHICH FNA DEFINES AS RasterizerState.CullCounterClockwise AND ASSIGNS TO THE DEVICE WITHOUT EVER RESTORING IT, AND THEN DREW A QUAD OF EXACTLY THE WINDING FOUR BACKENDS CULL UNDER IT. PROVEN THREE WAYS (EXPLICIT CullNone; RESTORING ONLY RasterizerState; AND THE DRAW'S FATE AFTER A SpriteBatch BEING BYTE-IDENTICAL TO ITS FATE UNDER AN EXPLICIT CullCounterClockwise). WEBGPU LOOKED CLEAN ONLY BECAUSE ITS FRONT-FACE WINDING IS INVERTED (GFX-160). THE REAL DEFECT IS THE OPPOSITE DIRECTION AND A DIFFERENT BACKEND SET: VULKAN AND BGFX REPLAY ALL SPRITES THEN ALL 3D DRAWS; SOFTWARE AND EASYGL WERE ALWAYS CORRECT; WEBGPU GROUPS THE OTHER WAY ROUND (GFX-159, NOT CHANGED — SCOPED OUT). FIXED ON VULKAN BY SPLITTING EACH PASS'S ORDER RANGE AT EVERY FAMILY CHANGE AND REPLAYING THE RUNS THROUGH THE EXISTING LAMBDAS, AND ON BGFX BY SETTING EVERY VIEW TO ViewMode::Sequential AT INIT. NO PASS, SUBMIT, BARRIER, PRESENT, FLUSH, WAIT OR EXTRA FRAME ADDED. NEW DEDICATED FIXTURE WITH A STAIRCASE ORACLE: VULKAN 42/60 -> 60/60, BGFX 41/60 -> 60/60, SOFTWARE 61/61, EASYGL 60/60, WEBGPU 39/39, SDL_GPU 40/40, HEADLESS 2/2. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED (LEG I0: SOFTWARE 77->86, VULKAN/EASYGL/BGFX 81->90, WEBGPU 84->87; CHECK O3 GAINED CHECK O4 FOR THE UNTESTED DIRECTION). ctest ^Vulkan 182/183 AND ^Bgfx 143/148, EVERY FAILURE A/B-PROVEN PRE-EXISTING. ASAN/UBSAN CLEAN; VULKAN VALIDATION 1.4.309 LIVE AND SILENT; ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-159/160/161/162.** |
-| REMED-GFX-158 | Bgfx: a `RenderTarget2D` CREATED and rendered into in the same bgfx frame loses that frame's content when its view is the first one bgfx executes that frame. Measured: creating a target and advancing one frame WITHOUT ever rendering into it is enough to make the next one correct, so it is the creation frame that matters, not the drawing. Invisible until REMED-GFX-155 stopped the backbuffer view (id 0) from always executing first, which had acted as an accidental warm-up. A game that allocates a render target and renders into it on its first frame, before any backbuffer work, loses that frame. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-155; `bgfx_rendertarget2d_mip_test.cpp` carries a documented warm-up so it measures its own subject) |
+| REMED-GFX-158 | Bgfx: a `RenderTarget2D` CREATED and rendered into in the same bgfx frame loses that frame's content when its view is the first one bgfx executes that frame. Measured: creating a target and advancing one frame WITHOUT ever rendering into it is enough to make the next one correct, so it is the creation frame that matters, not the drawing. Invisible until REMED-GFX-155 stopped the backbuffer view (id 0) from always executing first, which had acted as an accidental warm-up. A game that allocates a render target and renders into it on its first frame, before any backbuffer work, loses that frame. | MEDIUM | P2 | — | **DONE 2026-07-29 — THE TICKET'S SYMPTOM IS REAL AND ITS EXPLANATION IS WRONG. NOT DEFERRED RESOURCE CREATION, NOT A BGFX FRAME LATENCY, NOT THE MIP CHAIN, NOT VIEW-EXECUTION ORDER. `bgfx::reset()` ENDS BY DISCARDING EVERY VIEW'S FRAMEBUFFER BINDING (`for (ii < BGFX_CONFIG_MAX_VIEWS) m_view[ii].setFrameBuffer(BGFX_INVALID_HANDLE)`, bgfx_p.h Context::reset), INCLUDING THE ONE JUST PROGRAMMED FOR THE TARGET BOUND RIGHT NOW; BGFX RESOLVES VIEW STATE ONLY AT frame(), SO THE CYCLE'S OPERATIONS RESOLVED AGAINST THE BACKBUFFER AND THE TARGET WAS NEVER WRITTEN. THIS BACKEND CALLS reset() FROM EnsureViewState() THE FIRST TIME THE WINDOW'S REAL SIZE DIFFERS FROM THE SIZE BGFX WAS INITIALISED WITH, WHICH LANDS BETWEEN THE BIND AND THE FIRST DRAW. MEASURED AT THE CALL SITE: `bgfx::reset 800x480 -> 64x64 (currentViewId_=1)`, TARGET READ BACK (0,0,0,0) — NOT EVEN ITS OWN DiscardContents CLEAR (0,0,0,255). A WARM-UP FRAME CURED IT ONLY BECAUSE ANY OPERATION BEFORE THE BIND ABSORBS THE RESET WHILE NO TARGET IS BOUND; A TARGET WHOSE CONTENT LANDS ON AN ORDERED SEGMENT VIEW, PROGRAMMED AFTER THE RESET, SURVIVES THE SAME FRAME UNTOUCHED — WHICH IS WHY GFX-155'S OWN FIXTURE WAS GREEN AND THE MIP TEST WAS NOT. NOT A FIRST-FRAME DEFECT EITHER: ANY RESET DOES IT, INCLUDING A WINDOW RESIZE AND A SetSwapInterval VSYNC CHANGE. FIXED BY MIRRORING EVERY VIEW->FRAMEBUFFER BINDING THIS BACKEND PROGRAMS (Detail::SetViewFrameBufferEXT, ALL TEN SITES) AND REPLAYING THE MIRROR STRAIGHT AFTER THE RESET (Detail::ResetBackbufferEXT, BOTH RESET SITES), WITH Detail::ForgetFrameBufferEXT DROPPING A FRAMEBUFFER BEFORE IT IS DESTROYED SO A RECYCLED HANDLE INDEX CANNOT BE REPLAYED AS A RESURRECTED BINDING. COST MEASURED WITH COUNTERS: 106 ARRAY STORES AND EXACTLY 1 EXTRA setViewFrameBuffer OVER THE WHOLE 16-LEG RUN, FROM 2 RESETS; ZERO EXTRA FRAMES, PRESENTS, READBACKS OR WAITS. NEW rendertarget_first_use_test.cpp 21/22 -> 26/26; FOUR SINGLE-LEG CTEST CASES (A1 DRAW-FIRST, A3 CLEAR-FIRST, A4 BIND-CLEAR-ONLY, J 3D-FIRST) EACH 0/32 -> 32/32, PLUS LEG N FOR THE CUBE-FACE REGISTRATION PATH. TWO FALSE POSITIVES A/B-PROVEN AND REMOVED FROM bgfx_rendertarget2d_mip_test.cpp (A DOCUMENTED WARM-UP CYCLE AND A 20-ATTEMPT RETRY LOOP), AND ITS INHERITED "SECOND SAMPLING CYCLE READS BLACK" CLAIM MEASURED (LEG C2) AND DISPROVED. ctest -R '^Bgfx' 150/155, THE FIVE A/B-PROVEN PRE-EXISTING. CONTROLS: VULKAN 26/26, EASYGL 26/26, WEBGPU 26/26, SOFTWARE 25/25, SDL_GPU 17/17, HEADLESS 16/16; D3D9/D3D11 CROSS-BUILD BUT ARE ENVIRONMENT-UNAVAILABLE ON XVFB. ASAN/UBSAN 26/26 CLEAN. GFX-155 VIEW ORDER, GFX-157 FAMILY ORDER AND GFX-160 WINDING PRESERVED. ALL FOURTEEN BACKEND LIBRARIES BUILD. BGFX VULKAN UNTESTED (THE SANDBOX SELECTS OPENGL 2.1).** |
 | REMED-GFX-159 | A bind cycle's draws were replayed grouped by family on all three WebGPU pass recorders — all 3D draws, then all sprites — so a SpriteBatch followed by an OVERLAPPING stock 3D draw came out with the sprite on top. The ticket is correct but incomplete: the ten 3D families were ordered against each other by the same mechanism. | HIGH | P1 | — | **DONE 2026-07-29 — ROOT CAUSE: ALL THREE PASS RECORDERS REPLAYED A CYCLE AS A FIXED LIST OF ELEVEN PER-FAMILY LOOPS, JUSTIFIED IN A COMMENT AS "3D DRAWS FIRST, 2D SPRITEBATCH/UI ON TOP — MATCHES TYPICAL XNA GAME DRAW ORDER". A TYPICAL ORDER IS NOT A CONTRACT, AND THERE WAS NO ORDER COUNTER ANYWHERE IN THE BACKEND, SO THE SOURCE ORDER OF THOSE ELEVEN CALLS DECIDED EXECUTION ORDER. WHAT THE TICKET MISSES, MEASURED NOT ASSUMED: `textured BasicEffect; vertex-colour BasicEffect` INVERTED WITH NO SPRITEBATCH ANYWHERE, ON FOUR EFFECT PAIRS IN BOTH DIRECTIONS, EACH REVERSE ORDERING RENDERING CORRECTLY BY ACCIDENT. FIXED BY ADDING ONE ORDERED REFERENCE STREAM OF (FAMILY, SLOT, PUBLIC ORDER) APPENDED AT THE PUBLIC CALL, WALKED ONCE AT REPLAY; EVERY COMMAND STRUCT, CAPTURE AND Queue*Draw() IS UNCHANGED AND THE TEN FORMER LOOPS BECAME PER-COMMAND Issue*Draw FUNCTIONS. REFERENCES ARE INDICES, NOT POINTERS — THE FAMILY VECTORS GROW WHILE A CYCLE RECORDS. THREE PIECES OF PASS STATE EACH FAMILY COULD PREVIOUSLY ASSUME UNTOUCHED ARE HANDLED AT A BOUNDARY: THE SPRITE PATH'S REDUNDANT-PIPELINE-BIND SKIP IS NOW TRACKED ACROSS ALL FAMILIES, THE SHARED SPRITE VERTEX BUFFER IS REBOUND ONCE PER SPRITE RUN, AND THE PASS-LEVEL BLEND CONSTANT IS RESTORED BEFORE A 3D DRAW SO A 3D DRAW SEES BYTE-IDENTICALLY WHAT IT SAW BEFORE. NO PASS, SUBMIT, WAIT, BARRIER, FLUSH, PRESENT, TARGET SWITCH OR EXTRA FRAME ADDED; NO PIPELINE VARIANT KEYED ON ORDER; NO PER-VERTEX OR PER-SPRITE ALLOCATION; NO SORT. ORDERING WAS MEASURED NATIVELY VIA A NEW ENV-GATED TRACE (CNA_WEBGPU_TRACE_DRAW_ORDER): PRE-FIX THE FIVE-ALTERNATION SEQUENCE ENQUEUED 0,1,2,3,4 AND ISSUED 1,3,0,2,4; POST-FIX ALL 191 DRAWS ACROSS 101 PASSES ISSUE AT EXACTLY THEIR PUBLIC POSITION, AND THE 191/101 TOTALS ARE IDENTICAL BEFORE AND AFTER. WEBGPU 27/69 -> 67/67. NEW webgpu_draw_order_cardinality_test.cpp 21/21 PROVES 8 AND 16 ALTERNATING DRAWS EACH COST EXACTLY 1 RENDER PASS, 1 SUBMIT, 0 NEW PIPELINES, 1 setViewport AND 1 setScissorRect ON BACKBUFFER, TARGET AND CUBE FACE, WITH ITS LEG D7 COVERING THE CUBE-FACE RECORDER BY PIXELS IN BOTH DIRECTIONS (A/B-PROVEN: D7a FAILS PRE-FIX, D7b PASSES PRE-FIX). TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED: backbuffer_pass_order_test.cpp 29/30 -> 30/30 AND rendertarget_backbuffer_consumer_test.cpp LEG I0 86/87 -> 87/87. ctest -R '^WebGPU' 54/55, THE ONE FAILURE A/B-PROVEN PRE-EXISTING WITH BYTE-IDENTICAL FAILURES. ASAN+UBSAN CLEAN WITH RUNTIMES PROVED LINKED BY SYMBOL; THE EXIT LEAK IS 63 ALLOCATIONS BOTH PRE- AND POST-FIX. WEBGPU VALIDATION SILENT. CROSS-BACKEND CONTROLS UNCHANGED (SOFTWARE 70/70, EASYGL 69/69, VULKAN 69/69, BGFX 69/69, SDL_GPU 49/49, HEADLESS 2/2) AND REAL-D3D RUNTIME CONTROLS GREEN ON :101 UNDER WINE (D3D9 30/30, D3D11 30/30). ALL FOURTEEN BACKEND LIBRARIES BUILD. ONE INDEPENDENT FINDING RECORDED, NOT FIXED: WEBGPU'S MID-CYCLE Clear IS LOAD-OP-ONLY, THE COUNTERPART OF REMED-GFX-129'S VULKAN WORK.** |
 | REMED-GFX-160 | The stock 3D front-face winding convention was reported inverted on SOFTWARE, EASYGL, VULKAN and BGFX relative to XNA/FNA, with WEBGPU "the XNA-correct one". Measured against an explicit oracle it is exactly the other way round: WEBGPU was the only inverted backend. | HIGH | P1 | — | **DONE 2026-07-29 — RECLASSIFIED, THEN FIXED. THE TICKET WAS BACKWARDS AND ITS PREMISE WAS WRONG AT THE SOURCE. IT CLAIMED FNA'S SpriteBatch LAYS ITS CORNERS OUT TL, BL, TR, BR SO ITS FIRST TRIANGLE IS TL->BL->TR, AND THAT THE ACCUSING FIXTURE'S TL->BL->BR QUAD WAS 'THE SAME WINDING'. FNA SpriteBatch.cs ACTUALLY DECLARES CornerOffsetX = { 0, 1, 0, 1 } AND CornerOffsetY = { 0, 0, 1, 1 } -- TL, TR, BL, BR -- AND GenerateVertexInfo() BUILDS Position0..3 FROM EXACTLY THAT PROGRESSION, SO WITH GenerateIndexArray()'S j,j+1,j+2 / j+3,j+2,j+1 THE SPRITE TRIANGLES ARE TL->TR->BL AND BR->BL->TR, BOTH CLOCKWISE AS DISPLAYED. SINCE SpriteBatch.Begin DEFAULTS ITS RASTERIZER STATE TO RasterizerState.CullCounterClockwise AND SPRITES ARE VISIBLE, CLOCKWISE-AS-DISPLAYED IS XNA'S FRONT FACE AND EACH ENUM NAMES THE FACE IT CULLS. THE FIXTURE'S TL->BL->BR QUAD IS THE OPPOSITE WINDING -- AN XNA BACK FACE -- SO THE FOUR ACCUSED BACKENDS WERE CORRECT ALL ALONG. TWO INDEPENDENT FNA3D DRIVERS AGREE BY DIFFERENT ROUTES (OpenGL's XNAToGL_FrontFace = { -, GL_CW, GL_CCW } WITH glCullFace(GL_BACK), SINCE GL WINDOW SPACE IS Y-UP SO GL'S 'CCW' IS DISPLAYED-CW; AND D3D11's FrontCounterClockwise = 1 WITH A SWAPPED CULL ENUM, A DOUBLE INVERSION NETTING TO THE SAME CONTRACT), AS DO CNA'S OWN PUBLIC DOCS IN RasterizerState.hpp AND CullMode.hpp. ROOT CAUSE ON WEBGPU: EVERY 3D PIPELINE SETS frontFace = WGPUFrontFace_CCW AND WEBGPU DECIDES FACING FROM THE SIGNED AREA IN FRAMEBUFFER SPACE (Y DOWN), SO ITS FRONT FACE IS THE DISPLAYED-CCW ONE, YET ToWGPUCullMode MAPPED CullClockwiseFace->Front AND CullCounterClockwiseFace->Back -- BOTH BACKWARDS. THE FIX IS SWAPPING THOSE TWO ARMS AND NOTHING ELSE: frontFace UNTOUCHED, NO GEOMETRY REWRITTEN, NO INDEX BUFFER REVERSED, NO PIPELINE VARIANT ADDED OR REMOVED, NO PASS/SUBMIT/DRAW/ALLOCATION ADDED, IDENTICAL COST. IT ESCAPED NOTICE BECAUSE THE SPRITEBATCH PIPELINE HARDCODES WGPUCullMode_None, SO ONLY THE STOCK 3D PATH COULD SHOW IT. NEW DEDICATED frontface_winding_test.cpp: TWO TRIANGLES IN DISJOINT QUADRANTS WOUND OPPOSITE WAYS SO ONE READBACK CLASSIFIES BOTH; REVERSING THE THREE INDICES KEEPS COVERAGE IDENTICAL SO 'CULLED' IS NEVER CONFOUNDED WITH 'MOVED'; THE TWO NEVER-COVERED QUADRANTS ARE ASSERTED CLEAR IN EVERY LEG (MIRROR DETECTOR); CullNone ASSERTED FIRST (DEAD-PROBE DETECTOR); COMPLEMENTARITY ASSERTED AS ITS OWN CHECK (CULL-ALL/CULL-NOTHING DETECTOR). COVERS BACKBUFFER, RENDERTARGET2D, MSAA, DESTINATION TRANSITIONS, SEVEN DRAW ENTRY POINTS INCLUDING NONZERO vertexStart/startIndex/baseVertex AND TriangleStrip, FOUR STOCK EFFECTS, A->B->A STATE TRANSITIONS, A DISTINCT-BUT-EQUAL RasterizerState, DEPTH/BLEND INDEPENDENCE, AND A SPRITEBATCH REFERENCE LEG; THE TRANSFORM LEG COMPARES THE WORLD MATRIX'S DETERMINANT SIGN AGAINST THE OBSERVED FACING AND PROBES THE TRANSFORMED CENTROID, SO AN INTENTIONAL MIRROR IS NEVER COMPENSATED TWICE. WEBGPU 52/119 -> 119/119. UNCHANGED AND ALREADY CORRECT: SOFTWARE 119/119, EASYGL 119/119, VULKAN 127/127, BGFX 119/119, SDL_GPU 17/17, HEADLESS 3/3. REAL-D3D RUNTIME CONTROLS RUN AND GREEN ON DISPLAY=:101 UNDER WINE/DXVK: THE PROJECT'S OWN PRE-EXISTING cna_test_d3d9_rasterizerstate_cullmode AND cna_test_d3d11_rasterizerstate_cullmode EACH 6/6 PASS, AND BOTH ALREADY MEASURE EXACTLY THIS CONTRACT OVER BOTH WINDINGS AND ALL THREE MODES (CullCounterClockwiseFace KEEPS CW AND CULLS CCW; CullClockwiseFace DOES THE REVERSE). THOSE TWO TESTS PRE-DATE THIS TICKET AND WERE PASSING THROUGHOUT -- INDEPENDENT RUNTIME PROOF ON XNA'S OWN NATIVE API. D3D9/D3D11/D3D12 SOURCE AGREES. THREE FALSE POSITIVES A/B-PROVEN AND STRENGTHENED, ALL ONE CLASS: webgpu_graphicsstate_test.cpp CHECKS A/B (THE ORIGIN OF THE PRODUCTION DEFECT) NOW FOUR CHECKS OVER BOTH WINDINGS 8->10; THE SAME FILE'S SCISSOR CHECKS E/H, WHICH BUILT A FRESH RasterizerState DEFAULTING TO CullCounterClockwiseFace AND SO REQUIRED A BACK FACE TO STAY VISIBLE; AND webgpu_instanced3d_test.cpp WHOSE kSmallQuadIdx WAS THE BACK-FACING ORDER WHILE THE TEST NEVER SETS A RasterizerState AT ALL. REMED-GFX-157'S LEG M5 CONSTANT kCcwCullsSpriteWoundQuad, WHICH DECLARED FOUR BACKENDS DEFECTIVE, IS DELETED AND M5 NOW ASSERTS THE CONTRACT UNCONDITIONALLY (SOFTWARE 61/61, EASYGL 60/60, VULKAN 60/60, BGFX 60/60, SDL_GPU 40/40, HEADLESS 2/2, WEBGPU 38/38). ASAN+UBSAN CLEAN WITH RUNTIMES PROVED LINKED BY SYMBOL: SOFTWARE 119/119 EXIT 0 WITH ZERO REPORTS ON BOTH; THE WEBGPU ASAN TOTAL IS A WGPU-NATIVE-INTERNAL PROCESS-EXIT LEAK MEASURED BYTE-IDENTICAL (1257822 B / 729 ALLOCS) WITH THE SWAP APPLIED AND REVERTED. ctest -R '^WebGPU' 53/54, THE ONE FAILURE A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND LIBRARIES BUILD INCREMENTALLY. INDEPENDENT FINDINGS RECORDED: BGFX ASSERTS ON AN MSAA RENDER TARGET THAT ALSO CARRIES A DEPTH FORMAT; WEBGPU AND SDL_GPU REJECT A CORRECTLY SIZED GetBackBufferData FOR A 64x64 BACKBUFFER; EASYGL AND BGFX MSAA RENDER TARGETS READ BACK ALL-ZERO RATHER THAN THE CLEAR COLOUR.** |
 | REMED-GFX-161 | WebGPU: the FIRST GetBackBufferData of a process returns successfully while leaving part of the caller's buffer unwritten; every later read in the same run is correct and the render-target oracle is correct from its first read. A caller cannot distinguish it from a rendered frame. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-157; `spritebatch_3d_order_test.cpp` carries one documented discarded read so it measures its own subject) |
@@ -17971,6 +17971,14 @@ target and renders into it on its first frame, before any backbuffer work, loses
 `bgfx_rendertarget2d_mip_test.cpp` carries a documented warm-up cycle so it measures its own subject
 (the mip chain) rather than this; remove it when GFX-158 is fixed.
 
+*(Closed 2026-07-29 — and the explanation above is wrong on every count. `bgfx::reset()` discards
+every view's framebuffer binding, including the bound target's, and this backend calls it from
+`EnsureViewState()` between the bind and the first draw the first time the window's real size
+differs from the size bgfx was initialised with. Nothing is deferred and nothing is latent; the
+"creation frame" correlation is just that any operation before the bind absorbs the reset while no
+target is bound. The mip test's warm-up and its retry loop are both removed. See REMED-GFX-158's own
+record below.)*
+
 **REMED-GFX-157** — a stock 3D draw issued **after** a SpriteBatch in the **same bind cycle** never
 reaches the target; the slot it drew into holds the cycle's clear colour. Measured here with
 **ordinary `Texture2D` sources**, so it has nothing to do with render targets, and in **both**
@@ -18308,5 +18316,344 @@ never approached. Final **69.8 °C**.
 - `fae3ccfa test(Task REMED-GFX-159): strengthen the fixtures that declared this open`
 - `a1c8353f test(Task REMED-GFX-159): cover the cube-face pass recorder by pixels`
 - `docs(remediation): record GFX-159 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-158 — a bgfx render target usable the instant it is constructed (DONE 2026-07-29)
+
+### Classification
+
+**The ticket's symptom is real and reproduces exactly as written. Its explanation is wrong on every
+count, including the one it was most confident about.**
+
+The ticket said a `RenderTarget2D` created and rendered into in the same bgfx frame loses that
+frame "when its view is the first one bgfx executes that frame", and that creating the target one
+public frame earlier — with no drawing — cures it, so "it is the creation frame that matters".
+Both observations are accurate. Neither cause is.
+
+| candidate the task listed | measured answer |
+|---|---|
+| native texture creation processed after the view referencing it | **no** — `Context::renderFrame` executes `m_cmdPre` before `m_renderCtx->submit`, so both resources are complete before the frame's draws |
+| framebuffer creation processed after `setViewFrameBuffer` | **no**, same reason |
+| first target view omitted from the current frame | **no** — the view executes; it executes against the *backbuffer* |
+| view state established before the framebuffer handle is ready | **no** — the handle is valid and correct when programmed |
+| target registered too late for the view-order list | **no** — `NoteViewUsedEXT` records it, and the traced order is right |
+| resource and rendering command buffers processed in an unexpected order | **no** |
+| view-id assignment conflicting with REMED-GFX-155's monotonic scheme | **no** — the traced sequence is strictly increasing pre- and post-fix |
+| first bind using a stale/invalid framebuffer handle | **the binding is DESTROYED after being programmed correctly** — see below |
+| resolve or mip texture not initialized before first draw | **no** — `mipMap=false` reproduces identically |
+| first frame target clear/draw submitted but discarded | **no** — submitted and executed, against the wrong framebuffer |
+| framebuffer replacement occurring after submissions | **yes, in the one sense that matters**: `bgfx::reset()` replaces every view's framebuffer with none |
+| the target's first native version retired or overwritten | **no** |
+| first-use only on specific bgfx renderers | **not renderer-specific** — it is API-level bgfx context state, not a renderer path |
+| "bgfx is one frame latent" | **no.** bgfx's own contract is the opposite: a resource created before `frame()` is usable in that frame |
+
+### Root cause
+
+`bgfx::reset()` ends like this (`bgfx_p.h`, `Context::reset`):
+
+```cpp
+for (uint32_t ii = 0; ii < BGFX_CONFIG_MAX_VIEWS; ++ii)
+{
+    m_view[ii].setFrameBuffer(BGFX_INVALID_HANDLE);
+}
+```
+
+It discards **every** view's framebuffer binding — including the one `BindAsRenderTarget()` had
+just programmed for the render target that is bound *right now*. bgfx resolves view state once, at
+`bgfx::frame()`, so the operations already submitted against that view do not follow the target
+they were aimed at: they resolve against the **backbuffer**, and the target is never written.
+
+This backend calls `bgfx::reset()` from `EnsureViewState()` the moment it notices the SDL window's
+real size differs from the size bgfx was initialised with. `EnsureViewState()` runs from
+`RecordClear` and `EnsureViewState`'s own callers — that is, from the bind cycle's **first
+operation**. So for a brand-new target the sequence is:
+
+1. `RenderTarget2D a(...)` — `createTexture2D` + `createFrameBuffer`, both into `m_cmdPre`;
+2. `SetRenderTarget(&a)` — `setViewFrameBuffer(1, fboA)`, correct;
+3. the cycle's first operation calls `EnsureViewState()` → **`bgfx::reset()` wipes view 1's binding**;
+4. the operation is submitted to view 1 and, at `frame()`, resolves against the backbuffer;
+5. `a` reads back as never written.
+
+Measured at the call site (`DISPLAY=:101`, active renderer **OpenGL 2.1**):
+
+```
+[reset] bgfx::reset 800x480 -> 64x64  (currentViewId_=1 segmentTargetBaseId_=1 rtSize=8x8)
+[bgfx-view-order] frame used 2 view(s) in public order: 1 64
+A(first): GetData[0]=(0,0,0,0)  expected (60,120,180,255)
+B(second): GetData[0]=(90,30,210,255)  expected (90,30,210,255)
+C(third): GetData[0]=(10,200,100,255)  expected (10,200,100,255)
+```
+
+`(0,0,0,0)` and not the target's own `DiscardContents` clear colour `(0,0,0,255)`: the cycle's
+**first** operation is lost as well, so nothing at all reached the texture.
+
+### Why every one of the ticket's observations follows from that
+
+* **"Creating it one frame earlier cures it, even with no drawing."** The resolution settles exactly
+  once. Any public operation that runs before the target is bound absorbs the reset while no render
+  target is bound — and a warm-up frame always contains at least a `Clear`. Every target created
+  afterwards then works. It is not the creation frame that matters; it is *whether a reset is still
+  pending when the target's own cycle starts*.
+* **"Invisible until REMED-GFX-155 stopped the backbuffer view executing first."** Before GFX-155
+  the backbuffer's view 0 sorted ahead of everything, so a frame's first public operation was almost
+  always a backbuffer `Clear`, which absorbed the reset. GFX-155 did not create this defect; it
+  removed the accident that hid it.
+* **"It reproduces under both of GFX-155's implementations."** Naturally — neither touches view
+  framebuffer bindings.
+* **`mipMap=false` reproduces**, and **a one-time warm-up frame at device creation does not help**
+  unless it actually performs a public operation.
+* **The one thing nobody had explained**: `bgfx_rendertarget2d_mip_test.cpp` needed a warm-up while
+  REMED-GFX-155's own fixture did not. The difference is a single line. GFX-155's `ProduceInto`
+  issues `dev.Clear(...)` before drawing, so the cycle's *first* operation (the bind's discard
+  clear) lands on the base view and is lost, but the explicit `Clear` and the draw are routed to an
+  ordered **segment** view whose `setViewFrameBuffer` is programmed *after* the reset — and survive.
+  The mip test draws with no explicit `Clear`, so everything stays on the base view and everything
+  is lost. Both behaviours, from one cause.
+
+**And it is not really a first-frame defect.** Any `bgfx::reset()` does this — a genuine window
+resize, or a vsync change through `SetSwapInterval` (a second, independent `bgfx::reset()` call
+site in this backend). The first frame is simply where a fixture meets it.
+
+### The fix
+
+Make the loss recoverable rather than avoid the reset. `bgfx` view state is *context* state that
+survives a frame, and the only writer other than this backend is `reset()` itself — so a mirror of
+what this backend programmed **is** the intended state, and replaying it after a reset restores
+precisely what the reset discarded.
+
+* `Detail::SetViewFrameBufferEXT(id, fb)` programs and mirrors. All **ten** `bgfx::setViewFrameBuffer`
+  call sites in the backend now go through it — the 2D bind/unbind, the cube face bind/unbind, the
+  MRT bind, the backbuffer unbind, the reserved flush view, and the three ordered-segment sites.
+* `Detail::ResetBackbufferEXT(w, h, flags)` calls `bgfx::reset` and then replays every mirrored
+  entry that names a real framebuffer. Both reset sites use it: `EnsureViewState()` and
+  `SetSwapInterval()`.
+* `Detail::ForgetFrameBufferEXT(fb)` drops a framebuffer from the mirror **before** it is destroyed
+  — the 2D destructor, the cube destructor and all three `mrtFbo_` destroys — so a recycled bgfx
+  handle index can never be replayed as a resurrected binding pointing at an unrelated framebuffer.
+
+Nothing was added: no `bgfx::frame()`, Present, `GetData`, readback, wait, sleep, flush, dummy
+submit or hidden warm-up draw, and no public API changed.
+
+**REMED-GFX-155 is untouched.** The fix restores *bindings*; it does not choose view ids. The
+traced per-frame view sequence is strictly increasing before and after, base ids stay in
+`[1, 64)`, ordered segments in `[64, 255)` and the flush view at 255.
+
+### Cardinality and performance
+
+Measured with temporary counters on the shipped build:
+
+| run | mirrored bindings (array stores) | `bgfx::reset()` calls | extra `setViewFrameBuffer` from the replay | traced frame advances |
+|---|---|---|---|---|
+| leg A1 alone | 2 | 2 | **1** | 2 |
+| all sixteen legs | 106 | 2 | **1** | 48 |
+
+So the entire cost of the fix over a sixteen-leg run is 106 stores into a 256-entry array plus
+**one** extra bgfx call. Frame advances, views, framebuffers, submits, resolves, readbacks,
+pipelines and waits are unchanged; there is no per-bind allocation, no duplicate target storage,
+and the mirror is a fixed 512-byte array. Destruction remains exactly-once — `ForgetFrameBufferEXT`
+only clears mirror entries, it never destroys.
+
+### Tests
+
+**New `examples/rendertarget_first_use_test.cpp`** — sixteen legs, **21/22 → 26/26** on bgfx:
+
+| leg | question |
+|---|---|
+| A1 | a draw as the cycle's first operation |
+| A2 | the ticket's canonical `Clear(mid-tone)` then draw |
+| A3 | a public `Clear` as the first operation (`PreserveContents`) |
+| A4 | bind and unbind with no work — the target's own discard clear must land |
+| B | consumed by an OLDER render target created before the producer |
+| C / C2 | consumed on the backbuffer beside a Texture2D control, twice |
+| D | producer and consumer both constructed in this frame |
+| E | constructed after the frame's earlier draws were already queued |
+| F | two brand-new targets, neither taking the other's content |
+| G | bind, unbind, rebind in one frame |
+| H | MSAA, consumed by SAMPLING (REMED-GFX-154/164 own multisampled readback) |
+| I | mipmapped, level 0 |
+| J | a stock 3D draw as the first operation |
+| K | SpriteBatch and stock 3D in one first cycle (REMED-GFX-157 order) |
+| L | construct / use / dispose four times in one frame |
+| M | 24 brand-new targets across three frames, no pool exhausted |
+| N | a brand-new `RenderTargetCube` face — the second registration path |
+
+The resolution settles once per process, so only a process's **first** bind cycle can observe the
+defect. `--leg=<id>` runs one leg alone, which puts it in first position, and five separate ctest
+cases use that. Four are **red pre-fix and green after**, each **0/32 → 32/32**:
+
+| leg | first operation | pre-fix |
+|---|---|---|
+| A1 | SpriteBatch draw | `0/32 correct, 32 entirely empty`, got `(0,0,0,0)` |
+| A3 | public `Clear(70,130,190,255)` | `0/32`, got `(0,0,0,0)` |
+| A4 | the bind's own discard clear | `0/32`, want `(0,0,0,255)`, got `(0,0,0,0)` |
+| J | `BasicEffect` `DrawUserPrimitives` | `0/32 correct, 32 entirely empty` |
+
+Leg N (cube face) covers `BindAsRenderTargetFace`, which creates one framebuffer per face lazily on
+first bind — a fix that restored only the 2D path would leave it broken. **BGFX 32/32.**
+
+### False positives found and strengthened
+
+**Two, both in `bgfx_rendertarget2d_mip_test.cpp`, both A/B-proven.**
+
+1. A **documented warm-up cycle** — a throwaway `RenderTarget2D`, a `Clear` and a one-pixel
+   `GetBackBufferData` — placed ahead of the file's first measurement, with a comment naming
+   REMED-GFX-158 and saying to remove it when that was fixed. Removed. Without it and without the
+   fix, check 1 reads `top=(0,0,0) bottom=(0,0,0)`; with the fix and without it,
+   `top=(255,0,0) bottom=(0,0,255)`.
+2. A **20-attempt retry loop** around every read, breaking out on the first non-black result,
+   justified as "Bgfx's first-read-per-frame quirk". Removed in favour of a single read: a retry
+   loop cannot distinguish "eventually correct" from "correct", which is the whole distinction this
+   task turns on. The file passes on the first read.
+
+That file also carried an inherited claim that sampling one `RenderTarget2D` across more than one
+independent `Clear`+draw+`GetBackBufferData` cycle produced fresh data only on the first cycle and
+solid black afterwards "no matter how many retries". **Leg C2 measures it instead of working around
+it, and it does not hold on any backend** — a producer sampled again in a later backbuffer cycle is
+byte-exact. The comment is corrected to state why the fresh-target-per-checkpoint shape is kept
+(each checkpoint is an independent measurement), not to repeat an unchecked claim.
+
+No other bgfx render-target fixture was found to contain a warm-up frame, a Present after creation,
+a `GetData` before the first draw, a discarded first result, a first-frame skip, a dummy bind/unbind,
+or a comment documenting first-use latency as expected.
+
+### Regression gates
+
+**A/B against `4eba39fc^`** (the two production files narrowly restored with `git show`, rebuilt,
+measured, restored — no stash, no reset, no checkout of the tree):
+
+| | pre-fix | post-fix |
+|---|---|---|
+| `Bgfx_RenderTarget_FirstUse` + its four leg cases | **all 5 FAIL** | all 5 pass |
+| `Bgfx_RenderTarget2D_MipChain` (warm-up removed) | **FAIL** | pass |
+| the five long-standing failures | FAIL | FAIL (unchanged) |
+
+`ctest -R '^Bgfx'` **150/155**. The five failures are the same set REMED-GFX-155 A/B-proved
+pre-existing and they reproduce identically on the pre-fix backend:
+`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_MipChain`,
+`Bgfx_RenderTargetCube_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat` and
+`Bgfx_GraphicsDevice_ClearOptions_Vulkan`. REMED-GFX-155's view-order suite, REMED-GFX-157's
+mixed-family suite, REMED-GFX-160's winding suite, the ordered-clear, pass-boundary, producer/
+consumer, orientation, scissor, viewport, cube and readback suites are all green.
+
+### Cross-backend controls
+
+Only bgfx production changed — the fix touches two files, both bgfx.
+
+| backend | result |
+|---|---|
+| BGFX | 26/26 |
+| VULKAN | 26/26 |
+| EASYGL | 26/26 |
+| WEBGPU | 26/26 (leg I asserts its declared mipmapped-target rejection, WEBGPU-53/54) |
+| SOFTWARE | 25/25 (cannot bind a `RenderTargetCube` face — boundary recorded) |
+| SDL_GPU | 17/17 (no `ReadBackbuffer`; REMED-GFX-152 blocks its stock-3D legs) |
+| HEADLESS | 16/16 (non-rasterizing — every readback asserted to reject) |
+| D3D9, D3D11 | **environment-unavailable, not passing** |
+
+The two D3D controls are registered and cross-build cleanly for mingw-w64, but under Wine on the
+allowed virtual display `:101` they exit 3 before any check with
+`SDL_InitSubSystem(SDL_INIT_VIDEO) failed: No displays available`. That is a property of the Wine
+route on Xvfb, not of these registrations — a pre-existing D3D9 window test
+(`cna_test_d3d9_deferred_scissor.exe`) fails identically. The usual remedy is a real display, which
+this task was restricted from using.
+
+### Renderer routes
+
+Active renderer **OpenGL 2.1** for every bgfx measurement. `CNA_BGFX_RENDERER=VULKAN` was requested
+and the process still reports `active renderer: OpenGL 2.1`, so **bgfx's Vulkan route is untested**
+— a run reporting OpenGL is not a Vulkan result. The defect is API-level bgfx context state
+(`Context::reset` is renderer-independent), so it is not expected to be renderer-specific, but that
+is reasoning, not a measurement.
+
+### Sanitizers
+
+Both persistent bgfx sanitizer trees reused; **no sanitizer directory was created**. Runtimes proved
+linked by symbol (41 `__asan_*`, 15 `__ubsan_*`).
+
+| tree | first-use (all legs) | A1 / A4 / L / M | GFX-155 + GFX-151 + mip + concurrent + cube contract + 3D order | reports |
+|---|---|---|---|---|
+| `cmake-build-bgfx-asan` | 26/26 | 1/1, 1/1, 1/1, 2/2 | all green | **0** |
+| `cmake-build-bgfx-ubsan` | 26/26 | 1/1, 1/1, 1/1, 2/2 | all green | **0** |
+
+No use-after-free, stale handle, double destruction, invalid view index, overflow or resource
+lifetime error.
+
+### Formats, depth, MSAA and mip boundaries
+
+`SurfaceFormat::Color` throughout — this bgfx backend declares `SurfaceFormat: Color only`
+(Task 176), so a second colour format is not practical here and is recorded as a boundary rather
+than skipped silently. `DepthFormat::None` and a depth-backed target both covered; sample count 1
+and an applied MSAA of 4 (bgfx and EasyGL and Software apply 4; Vulkan and WebGPU derive it from
+the device and applied 0, which the leg prints). `mipMap` false and true. Depth-backed MSAA
+(REMED-GFX-163), MSAA readback (REMED-GFX-164) and first MSAA readback (REMED-GFX-154) are
+deliberately **not** triggered: leg H uses `DepthFormat::None` and consumes the multisampled target
+by SAMPLING it into a plain target, never by reading it back.
+
+### Source and generated-artifact changes
+
+Two production files: `BgfxGraphicsBackend.hpp` and `BgfxGraphicsBackend.cpp`. **No shader changed
+and no generated artifact or offline-compiled bytecode was regenerated** — the correction is that a
+view keeps its framebuffer across a reset, not what it draws. No public API changed. Fixtures: the
+new `rendertarget_first_use_test.cpp`, the strengthened `bgfx_rendertarget2d_mip_test.cpp`, and nine
+CMake test files for registration.
+
+### Independent findings recorded, not fixed
+
+**`bgfx::reset()` is called mid-frame.** `EnsureViewState()` reaches it from inside a bind cycle,
+between the bind and its first draw, and `SetSwapInterval()` can reach it at any point. bgfx's own
+guidance is to reset at a frame boundary. This task makes the one consequence it could measure
+harmless — the discarded bindings — but does not move the call, because the resize must take effect
+in the frame that observes it (the first frame's `GetBackBufferData` depends on the new backbuffer
+size) and moving it would be a separate, backbuffer-facing change with its own gates.
+
+**The general reset case is covered by construction, not by a fixture.** A genuine window resize and
+a vsync change reach the identical bgfx code and the identical restore, but the only public route to
+either is `GraphicsDeviceManager::ApplyChanges()`, which performs a full `GraphicsDevice::Reset()` —
+a device-reset contract of its own that would not measure this. The reproducible public path is the
+first-frame resolution settle, which is what the fixture uses.
+
+### Build directories, ccache and storage
+
+| directory | used for | ccache | status |
+|---|---|---|---|
+| `cmake-build-bgfx` | the home backend: fixture, mip test, full `^Bgfx` shard, A/B runs | ON | **reused** |
+| `cmake-build-bgfx-asan` · `cmake-build-bgfx-ubsan` | the sanitizer matrix | ON | **reused** |
+| `cmake-build-vulkan` · `cmake-build-debug` (EasyGL) · `cmake-build-webgpu` · `cmake-build-software` · `cmake-build-sdlgpu` · `cmake-build-headless` | cross-backend controls | ON | **reused** |
+| `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` | the two D3D cross-builds | ON | **reused** |
+| `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-sdlrenderer` · `cmake-build-dx3` · `cmake-build-d3d12-mingw` | the remaining backend libraries | ON | **reused** |
+
+**No build directory was created, cleaned, deleted or recreated**, every configure was incremental,
+and **no clean build occurred**. **No build tree was created under `/tmp`, `/var/tmp` or
+`/dev/shm`** — the scratchpad held only a probe source file, a fixture backup and this draft. The
+existing bgfx checkout under `cmake-build-bgfx/_deps` was reused as the native reference; nothing
+was downloaded or re-cloned. All fourteen backend libraries build incrementally: ASCII, Bgfx,
+Canvas, D3D9, D3D11, D3D12, DX3, EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan and
+WebGPU.
+
+### Display, processes and thermals
+
+Virtual display **`:101`** for every measurement, including both attempted Wine/DXVK D3D controls —
+pre-existing and shared, neither created nor stopped. **`:0` was not used at all**, and no `pkill`,
+`killall`, kill-by-name or any other global process-termination command was ever issued; no external
+process was signalled.
+
+No unrelated heavy compilation was running at session start (load average 1.06, no `cc1plus`,
+`ninja`, `make` or `cmake` processes). **Global maximum compilation parallelism `-j8`**, one build
+at a time, dropped to **`-j4` for the two sanitizer trees**. **No subagents were used**, so the
+whole eight-job budget belonged to the main agent throughout. Package started at **70.2 °C**, peak
+**80.6 °C** (immediately after the second sanitizer build), typical 54–72 °C during test runs, final
+**71.2 °C**. 85 °C was never reached and no pause was needed.
+
+### Commits
+
+- `fb7c1d17 test(Task REMED-GFX-158): reproduce bgfx same-frame render-target first-use loss`
+- `4eba39fc fix(Task REMED-GFX-158): keep bgfx render-target bindings across bgfx::reset`
+- `1cbb2a10 test(Task REMED-GFX-158): strengthen the fixtures that hid the first-use loss`
+- `e9ff8a3a test(Task REMED-GFX-158): cover the cube registration path and boundary exits`
+- `80cc9f02 test(Task REMED-GFX-158): register the D3D9 and D3D11 first-use controls`
+- `docs(remediation): record GFX-158 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
