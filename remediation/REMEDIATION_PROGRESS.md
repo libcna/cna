@@ -2492,8 +2492,12 @@ existing task.
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
 | REMED-GFX-156 | SDL_GPU and WebGPU: a `Clear()` issued AFTER a draw in the same bind cycle is lost — the consumer sees the geometry, on all three `RenderTargetUsage` values, both backends reporting the identical `(20,25,40,255)`. The SDL_GPU/WebGPU counterpart of REMED-GFX-129. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-151 leg G3) |
-| REMED-GFX-157 | A stock 3D draw issued AFTER a SpriteBatch in the SAME bind cycle never reaches the target: the slot it drew into holds the cycle's clear colour. Measured with ORDINARY `Texture2D` sources, so it is unrelated to render targets, and in BOTH backbuffer and render-target bind cycles. Reproduces on BGFX, VULKAN, SOFTWARE and EASYGL; WEBGPU is clean. A 3D draw that comes FIRST in the cycle is unaffected, so it is not "all 3D replayed before all sprites" — it is the presence of an earlier SpriteBatch in the cycle that loses it. Gives the two-queue note inside REMED-GFX-143's record its own ticket, with a measured statement and a measured backend set. | HIGH | P1 | — | OPEN (measured 2026-07-29 by REMED-GFX-155 leg I0, which declares it per backend so fixing it changes that fixture's counts) |
+| REMED-GFX-157 | A bind cycle's SpriteBatch draws and its stock 3D draws were replayed GROUPED BY FAMILY instead of in the order the game issued them, so within ONE cycle `3D draw; SpriteBatch.Draw` came out inverted. The ticket's original statement ("a 3D draw after a SpriteBatch never reaches the target on BGFX/VULKAN/SOFTWARE/EASYGL, WEBGPU clean") was wrong in every particular: that draw was CULLED by state SpriteBatch legitimately leaves behind, not lost. | HIGH | P1 | — | **DONE 2026-07-29 — RECLASSIFIED, THEN FIXED. THE REPORTED SYMPTOM WAS A FIXTURE DEFECT: REMED-GFX-155'S LEG I0 PASSED A NULL rasterizerState TO SpriteBatch.Begin, WHICH FNA DEFINES AS RasterizerState.CullCounterClockwise AND ASSIGNS TO THE DEVICE WITHOUT EVER RESTORING IT, AND THEN DREW A QUAD OF EXACTLY THE WINDING FOUR BACKENDS CULL UNDER IT. PROVEN THREE WAYS (EXPLICIT CullNone; RESTORING ONLY RasterizerState; AND THE DRAW'S FATE AFTER A SpriteBatch BEING BYTE-IDENTICAL TO ITS FATE UNDER AN EXPLICIT CullCounterClockwise). WEBGPU LOOKED CLEAN ONLY BECAUSE ITS FRONT-FACE WINDING IS INVERTED (GFX-160). THE REAL DEFECT IS THE OPPOSITE DIRECTION AND A DIFFERENT BACKEND SET: VULKAN AND BGFX REPLAY ALL SPRITES THEN ALL 3D DRAWS; SOFTWARE AND EASYGL WERE ALWAYS CORRECT; WEBGPU GROUPS THE OTHER WAY ROUND (GFX-159, NOT CHANGED — SCOPED OUT). FIXED ON VULKAN BY SPLITTING EACH PASS'S ORDER RANGE AT EVERY FAMILY CHANGE AND REPLAYING THE RUNS THROUGH THE EXISTING LAMBDAS, AND ON BGFX BY SETTING EVERY VIEW TO ViewMode::Sequential AT INIT. NO PASS, SUBMIT, BARRIER, PRESENT, FLUSH, WAIT OR EXTRA FRAME ADDED. NEW DEDICATED FIXTURE WITH A STAIRCASE ORACLE: VULKAN 42/60 -> 60/60, BGFX 41/60 -> 60/60, SOFTWARE 61/61, EASYGL 60/60, WEBGPU 39/39, SDL_GPU 40/40, HEADLESS 2/2. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED (LEG I0: SOFTWARE 77->86, VULKAN/EASYGL/BGFX 81->90, WEBGPU 84->87; CHECK O3 GAINED CHECK O4 FOR THE UNTESTED DIRECTION). ctest ^Vulkan 182/183 AND ^Bgfx 143/148, EVERY FAILURE A/B-PROVEN PRE-EXISTING. ASAN/UBSAN CLEAN; VULKAN VALIDATION 1.4.309 LIVE AND SILENT; ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-159/160/161/162.** |
 | REMED-GFX-158 | Bgfx: a `RenderTarget2D` CREATED and rendered into in the same bgfx frame loses that frame's content when its view is the first one bgfx executes that frame. Measured: creating a target and advancing one frame WITHOUT ever rendering into it is enough to make the next one correct, so it is the creation frame that matters, not the drawing. Invisible until REMED-GFX-155 stopped the backbuffer view (id 0) from always executing first, which had acted as an accidental warm-up. A game that allocates a render target and renders into it on its first frame, before any backbuffer work, loses that frame. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-155; `bgfx_rendertarget2d_mip_test.cpp` carries a documented warm-up so it measures its own subject) |
+| REMED-GFX-159 | WebGPU replays a bind cycle's draws grouped by family — all 3D draws, then all sprites — so a SpriteBatch followed by an OVERLAPPING stock 3D draw comes out with the sprite on top. The same root cause REMED-GFX-157 corrected on Vulkan and bgfx, which grouped the other way round. `3D; sprite` looks correct here, which is why REMED-GFX-143's check O3 passed and this went unmeasured. | HIGH | P1 | — | OPEN (measured 2026-07-29 by REMED-GFX-157; declared in three fixtures so it is falsifiable in both directions; not fixed because that task was scoped not to change WebGPU production) |
+| REMED-GFX-160 | The stock 3D front-face winding convention is inverted on SOFTWARE, EASYGL, VULKAN and BGFX relative to XNA/FNA. FNA's SpriteBatch emits a quad whose first triangle is TL->BL->TR and renders correctly under the default RasterizerState.CullCounterClockwise, so that winding is a FRONT face; measured with an explicit cull mode and no SpriteBatch anywhere, those four backends cull it under CullCounterClockwise and draw it under CullClockwise, while WEBGPU does the opposite and is the XNA-correct one. A game porting XNA geometry gets silently empty output under the default cull mode on four of five backends. | HIGH | P1 | — | OPEN (measured 2026-07-29 by REMED-GFX-157 leg M5; this is what made that ticket's original symptom look like a lost draw) |
+| REMED-GFX-161 | WebGPU: the FIRST GetBackBufferData of a process returns successfully while leaving part of the caller's buffer unwritten; every later read in the same run is correct and the render-target oracle is correct from its first read. A caller cannot distinguish it from a rendered frame. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-157; `spritebatch_3d_order_test.cpp` carries one documented discarded read so it measures its own subject) |
+| REMED-GFX-162 | Headless: GetBackBufferData neither rejects nor writes. REMED-GFX-127/130 brought the texture and render-target readbacks under a reject-rather-than-fabricate contract; the backbuffer readback was never brought under it, so a caller cannot tell a non-rasterizing device from a black frame. | LOW | P3 | — | OPEN (measured 2026-07-29 by REMED-GFX-157) |
 
 #### REMED-BUILD-010 detail
 
@@ -17493,6 +17497,209 @@ created, by exact pgid.
 `git diff --check` is clean and `audit/` is untouched.
 
 ---
+
+## REMED-GFX-157 — SpriteBatch/3D public draw order in one bind cycle (DONE 2026-07-29)
+
+### The ticket was wrong, and how that was established
+
+REMED-GFX-157 was filed as: *a stock 3D draw issued AFTER a SpriteBatch in the same bind cycle
+never reaches the target; reproduces on BGFX, VULKAN, SOFTWARE and EASYGL; WEBGPU is clean.*
+Every part of that is incorrect, and the corrected statement is below.
+
+The draw was **culled, not lost**. REMED-GFX-155's leg I0 called
+`sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr)`. A null
+`rasterizerState` is not "leave the device alone": FNA's `SpriteBatch.cs` reads
+`this.rasterizerState = rasterizerState ?? RasterizerState.CullCounterClockwise;` and
+`PrepRenderState()` assigns `GraphicsDevice.RasterizerState = rasterizerState;` and **restores
+nothing**. That is XNA-correct — after `SpriteBatch.End()` the device really is left on
+`CullCounterClockwise`. Leg I0 then drew a quad of exactly the winding four backends cull under it.
+
+Three independent measurements, all in `spritebatch_3d_order_test.cpp` leg M:
+
+| | measurement | result |
+|---|---|---|
+| M1 | leg I0's exact sequence, plus a map of every non-clear cell | cell 1 empty, and **nothing landed anywhere else** — so not a misplaced draw |
+| M2 | the same sequence with the batch given an explicit `CullNone` | the identical draw lands, byte-exact |
+| M3 | the null-rasterizer sequence, restoring **only** `RasterizerState` before the 3D draw | lands, byte-exact — so the command ORDER was never wrong |
+| M4 | `GraphicsDevice.RasterizerState.CullMode` after that `End()`, read publicly | `CullCounterClockwiseFace`, exactly as FNA requires |
+| M5 | the same quad under each explicit cull mode, **no SpriteBatch anywhere** | culled by `CullCounterClockwise`, drawn by `CullClockwise` |
+
+M1's outcome equals M5's `CullCounterClockwise` outcome on every backend, and that equality is now
+the asserted invariant. If a command-order defect were *also* losing that draw the two would
+diverge; they do not.
+
+**Why WEBGPU looked "clean".** Its front-face convention is *inverted*: M5 measures
+`CullCounterClockwise: drawn, CullClockwise: culled` there and the opposite on the other four. The
+"affected backend set" in the ticket was precisely the set of backends whose winding convention
+differs from WebGPU's. That inversion is a real defect on its own and is **GFX-160** — and WebGPU
+is the XNA-correct side of it, because FNA's SpriteBatch emits this very winding and renders
+correctly under the default `CullCounterClockwise`.
+
+### The real defect
+
+With the leaked state removed from the picture, a genuine public-order defect remains, in the
+**opposite direction** and on a **different backend set**:
+
+| backend | `SpriteBatch; 3D` | `3D; SpriteBatch` | replay |
+|---|---|---|---|
+| SOFTWARE | PASS | PASS | correct interleaving |
+| EASYGL | PASS | PASS | correct interleaving |
+| VULKAN | PASS | **FAIL** | all sprites, then all 3D |
+| BGFX | PASS | **FAIL** | all sprites, then all 3D |
+| WEBGPU | **FAIL** | PASS | all 3D, then all sprites |
+
+A family-grouped replay produces the correct picture for one of the two directions by accident,
+which is exactly why this survived: REMED-GFX-143's check O3 named the "two queues" subject but
+only ever measured `3D; sprite`.
+
+### The fix
+
+**Vulkan.** `activeBatches_` and `pending3D_` are two queues and every pass called `drawSpritesFor`
+and then `draw3DFor`. Both lambdas already take the half-open order range REMED-GFX-129 gave them
+for ordered-`Clear()` slicing, and `commandOrder_` is one monotonic counter shared by batches, 3D
+draws and clears — so the whole correction is `drawFamiliesInOrder`, which splits the requested
+range at every family change and calls the existing lambdas once per same-family RUN. Orders are
+unique, so a run `[first, last]` is selected exactly by `(first - 1, last + 1)`. Neither family's
+replay changes; the shared vertex/index arena cursors are still references and still accumulate
+across calls, so every batch is copied once, at the same offset, in the same order.
+
+**Bgfx.** Draws are submitted immediately into a view, and bgfx's **default view mode radix-sorts a
+view's draws by sort key** to minimise state changes, which discards submission order. Every view
+id is set to `ViewMode::Sequential` once at init — view mode is persistent view state and this
+backend never calls `bgfx::resetView`. This is the *within-view* half of REMED-GFX-155, which made
+the views themselves execute in public order.
+
+**Nothing was added:** no pass, submit, barrier, Present, readback, flush, wait, target switch or
+extra frame. The only new cost is one pipeline bind per family switch — the irreducible price of
+actually interleaving — plus one small per-slice vector on Vulkan. A segment using a single family
+still makes exactly one call, as before.
+
+### The new fixture
+
+`examples/spritebatch_3d_order_test.cpp`, registered on Bgfx, Vulkan, Software, EasyGL, WebGPU,
+SdlGpu and Headless. The oracle is a **staircase**: step *i* of an *N*-step sequence covers stripes
+`[0, N-i)`, so the last step to touch stripe *j* is step *N-1-j* and one readback proves both that
+every draw happened and that they happened in the issued order — a dropped draw shows the clear
+colour, a reordered pair swaps two stripes, and the two shapes are distinguishable. Stripes are
+full height so a Y-flip cannot masquerade as a lost draw; the palette is 0/255-only so comparisons
+stay byte-exact under sRGB; 3D geometry is expressed in clip space so the viewport-segmentation
+machinery is never exercised instead of the subject.
+
+Legs G/H use a **parity** oracle instead — the identical 3D draw issued once as the first thing in
+a cycle and once after a SpriteBatch, compared byte for byte — which covers every stock effect and
+every draw entry point without the fixture predicting any effect's shading maths.
+
+Coverage: both destinations and a different-dimension target; target→backbuffer, backbuffer→target,
+A→B→A; textured, untextured, shared-texture and sampler-change controls; `DrawUserPrimitives`,
+`DrawUserIndexedPrimitives` (16- and 32-bit), `DrawPrimitives`, `DrawIndexedPrimitives` and both
+nonzero-range forms; BasicEffect (textured and vertex-colour), AlphaTestEffect, DualTextureEffect
+and EnvironmentMapEffect; repeated `Apply` and two distinct effect objects; depth/blend/rasterizer/
+viewport/scissor transitions between the families; clears between and after them; eight alternations
+in one cycle and eight consecutive cycles; and a **lifetime control** (leg L) using a scope-local
+effect and local buffers, so REMED-GFX-109's question is separated from this one rather than assumed.
+
+| backend | before | after | notes |
+|---|---|---|---|
+| VULKAN | 42/60 | **60/60** | the fix |
+| BGFX | 41/60 | **60/60** | the fix |
+| SOFTWARE | 61/61 | **61/61** | already correct |
+| EASYGL | 60/60 | **60/60** | already correct |
+| WEBGPU | — | **39/39** (8 skipped) | GFX-159 declared |
+| SDL_GPU | — | **40/40** (5 skipped) | load-action-only clear declared |
+| HEADLESS | — | **2/2** (12 skipped) | GFX-162 declared |
+
+### False positives found and strengthened
+
+| fixture | what it hid | after |
+|---|---|---|
+| `rendertarget_backbuffer_consumer_test.cpp` leg I0 | Let `SpriteBatch.Begin` default the rasterizer state and then reported the culled draw as lost — as an `INFO` **declaration**, not a check, which then *restricted the render-target cases below* to the positions the backend was believed able to place. Every sprite batch in the file now states the depth and rasterizer state it wants, and the leg asserts the contract on both destinations. | Software **77→86**, Vulkan/EasyGL/Bgfx **81→90**, WebGPU **84→87** |
+| `backbuffer_pass_order_test.cpp` check O3 | Named the mixed-queue subject but only measured `3D; sprite`. A backend grouping sprites-first renders the other direction correctly by accident, and one grouping 3D-first (WebGPU) passed O3 outright while inverting `sprite; 3D`. New check **O4** asserts that direction; "does it keep public order" is now factored apart from "if not, which family replays first", so one place governs both predictions. | Vulkan/Bgfx declarations turned over to public order, WebGPU's turned over to false; **30/30** on all five |
+
+### Regression gates
+
+`ctest -R '^Vulkan'` **182/183** — `Vulkan_DepthBias` A/B-proven pre-existing against `95bd73ac^`
+(fails identically with only the pre-fix backend file restored). `ctest -R '^Bgfx'` **143/148** —
+all five failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_MipChain`,
+`Bgfx_RenderTargetCube_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`,
+`Bgfx_GraphicsDevice_ClearOptions_Vulkan`) A/B-proven pre-existing the same way, and the same five
+REMED-GFX-155 already documented. REMED-GFX-151's shared producer/consumer fixture: Vulkan 44/44,
+Bgfx 40/40, EasyGL 41/41, Software 41/41, WebGPU 38/38.
+
+### Sanitizers and validation
+
+| tree | `CNA_SANITIZE` | symbols proved linked | fixture | reports |
+|---|---|---|---|---|
+| `cmake-build-vulkan-asan` | `address` | 39 `__asan_*` | 60/60 | 0 memory errors |
+| `cmake-build-vulkan-ubsan` | `undefined` | 15 `__ubsan_*` | 60/60 | **0** |
+| `cmake-build-bgfx-asan` | `address` | 41 `__asan_*` | 60/60 | **0** |
+| `cmake-build-bgfx-ubsan` | `undefined` | 15 `__ubsan_*` | 60/60 | **0** |
+
+LeakSanitizer reports 368 bytes in 4 allocations on Vulkan; every frame is `<unknown module>` inside
+the driver, **no CNA frame**, and the identical report reproduces in the untouched
+`cna_test_vulkan_rt_backbuffer_consumer` control — environmental, not this change. With
+`detect_leaks=0` the run is clean and exits 0. Vulkan validation layer **1.4.309** live (Debug
+build, layer present, no "not available" message) and **silent** — zero VUIDs.
+
+### Independent findings recorded, not fixed
+
+**REMED-GFX-159** — WebGPU groups a cycle's draws by family the other way round (all 3D, then all
+sprites). Same root cause, declared in three fixtures so it stays falsifiable; not fixed because
+this task was explicitly scoped not to change WebGPU production. **This is a live HIGH-severity
+ordering defect and needs its own task.**
+
+**REMED-GFX-160** — the stock 3D front-face winding is inverted on Software, EasyGL, Vulkan and
+bgfx relative to XNA/FNA, and WebGPU is the correct side. A game porting XNA geometry gets silently
+empty output under the default cull mode on four of five backends. This is what made this ticket's
+original symptom look like a lost draw.
+
+**REMED-GFX-161** — WebGPU's first `GetBackBufferData` of a process leaves part of the caller's
+buffer unwritten.
+
+**REMED-GFX-162** — Headless's `GetBackBufferData` neither rejects nor writes, so a caller cannot
+tell a non-rasterizing device from a black frame; REMED-GFX-127/130's contract never reached it.
+
+### Source and generated-artifact changes
+
+Two production files: `VulkanGraphicsBackend.cpp` (one new lambda, four call sites) and
+`BgfxGraphicsBackend.cpp` (one loop at init). **No shader changed and no generated artifact or
+offline-compiled bytecode was regenerated** — the correction is the order draws replay in, not what
+they draw. No public API changed. Three fixtures: the new one and the two strengthened false
+positives, plus seven `cmake/Tests/*.cmake` registrations.
+
+### Build directories, ccache and displays
+
+| directory | role | ccache | status |
+|---|---|---|---|
+| `cmake-build-vulkan` · `cmake-build-bgfx` | the two fixed backends | yes | reused |
+| `cmake-build-vulkan-asan` · `cmake-build-vulkan-ubsan` · `cmake-build-bgfx-asan` · `cmake-build-bgfx-ubsan` | sanitizers | yes | reused |
+| `cmake-build-software` · `cmake-build-debug` (EasyGL) · `cmake-build-webgpu` · `cmake-build-sdlgpu` · `cmake-build-headless` | cross-backend matrix | yes | reused |
+| `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-sdlrenderer` · `cmake-build-dx3` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the remaining backend libraries | yes | reused |
+
+**No build directory was created, cleaned, deleted or recreated**; every configure was incremental
+(re-running `cmake -S . -B <dir>` only to pick up the new fixture's target) and **no clean build
+occurred**. **No build tree was created under `/tmp`, `/var/tmp` or `/dev/shm`** — the scratchpad
+held only logs and two saved copies of production files used for the A/B runs.
+`CNA_USE_CCACHE=ON` verified in every cache used. All **fourteen** backend libraries build
+incrementally: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12, DX3, EasyGL, Headless, SDL_GPU,
+SDL_Renderer, Software, Vulkan and WebGPU.
+
+Virtual display **`:101`** for every measurement — pre-existing and shared, neither created nor
+stopped. **`:0` was not used at all**, and no global process-kill command was ever issued. D3D
+runtime controls were not attempted (their Wine/DXVK runtime cannot use an allowed virtual
+display); those backends are compile-verified through the fourteen-library table.
+
+Thermals: an unrelated heavy build campaign was active at session start (three `cc1plus` at 100%,
+package 71–77 °C) and was left strictly alone; work began only once it ended and the package had
+fallen to **45.5 °C**. Maximum parallelism **`-j1` throughout**. Peak **80.1 °C**, during the full
+Vulkan tree build; test and sanitizer runs sat at 56–72 °C. No pause was needed and 85 °C was never
+approached.
+
+### Commits
+
+- `67b9fd1f test(Task REMED-GFX-157): reproduce SpriteBatch/3D family-ordering loss`
+- `95bd73ac fix(Task REMED-GFX-157): replay both draw families in public order`
+- `53b99dea test(Task REMED-GFX-157): strengthen the fixtures that hid the defect`
+- `docs(remediation): record GFX-157 completion` (this record)
 
 ## REMED-GFX-155 — bgfx same-frame render target → backbuffer consumer (DONE 2026-07-29)
 
