@@ -213,14 +213,15 @@ namespace
     // reverse (a target switch IS the flush on this backend, so live state still matched).
     // REMED-GFX-146 captures the whole scissor state per draw and this declaration turned over;
     // it was measured red the moment the fix landed.
-    // `mixedQueuesKeepPublicOrder` false: measured by REMED-GFX-157. WebGPU groups a bind cycle's
-    // draws by family too, but the OTHER way round -- all 3D draws, then all sprites -- so
-    // `3D -> SpriteBatch` (check O3) looks correct here while `SpriteBatch -> 3D` (check O4) is the
-    // one that inverts. That direction is why this declaration was `true` for as long as O3 was the
-    // only mixed-family check in this file. Recorded as its own finding; REMED-GFX-157 was scoped
-    // not to change WebGPU production.
+    // `mixedQueuesKeepPublicOrder` was false from REMED-GFX-157 until REMED-GFX-159. WebGPU grouped
+    // a bind cycle's draws by family too, but the OTHER way round -- all 3D draws, then all sprites
+    // -- so `3D -> SpriteBatch` (check O3) looked correct here while `SpriteBatch -> 3D` (check O4)
+    // was the one that inverted. That direction is why this declaration was `true` for as long as
+    // O3 was the only mixed-family check in this file. REMED-GFX-159 replaced the fixed list of
+    // per-family replay loops with one ordered reference stream, and this declaration turned over;
+    // both checks were measured red the moment the fix landed.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
-                                 true, true, false, false, true, true, true, true, true, false};
+                                 true, true, true, false, true, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // SdlGpu has no `ReadBackbuffer` override, so `GetBackBufferData` raises and this file's
     // backbuffer oracle cannot run here at all. REMED-GFX-143's SdlGpu half is measured
@@ -262,13 +263,14 @@ namespace
      * all sprites inverts `sprite; 3D` instead. Only meaningful when the contract above says the
      * order is not public; checks O3 and O4 derive both of their predictions from the pair, so
      * there is exactly one place to change when a backend is corrected.
+     *
+     * REMED-GFX-159 turned WEBGPU's `mixedQueuesKeepPublicOrder` over, and it was the last backend
+     * declaring anything but public order -- so nothing consults this today. It is kept, rather
+     * than deleted along with the branch it feeds, because a backend that regresses to a grouped
+     * replay needs somewhere to say WHICH grouping, and rebuilding that distinction after the fact
+     * is what cost REMED-GFX-157 its first measurement.
      */
-    constexpr bool kMixedGroupingReplays3DFirst =
-#if defined(CNA_BACKEND_WEBGPU)
-        true;
-#else
-        false;
-#endif
+    constexpr bool kMixedGroupingReplays3DFirst = false;
 
     /**
      * @brief Whether the SPRITE is the last of the pair to reach the target.

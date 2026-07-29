@@ -431,6 +431,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_Scissor_Cardinality COMMAND cna_test_webgpu_scissor_cardinality
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-159's structural half: replaying the two draw families in public order must not cost
+    # a render-pass split, a submit or wait per family transition, or a pipeline variant keyed on a
+    # draw's position. The pixel oracle in examples/spritebatch_3d_order_test.cpp cannot see any of
+    # those -- each renders the correct picture -- so the cost contract is measured separately, on
+    # both the backbuffer and a render target, against this backend's own native counters.
+    cna_webgpu_test(cna_test_webgpu_draw_order_cardinality
+                    examples/webgpu_draw_order_cardinality_test.cpp)
+    target_link_libraries(cna_test_webgpu_draw_order_cardinality PRIVATE WebGPU::WebGPU)
+    cna_register_backend_test(NAME WebGPU_DrawOrder_Cardinality COMMAND cna_test_webgpu_draw_order_cardinality
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-146 false-positive audit: REMED-GFX-081's shared SpriteBatch.Begin(rasterizerState)
     # fixture was registered for SdlGpu and Vulkan but never for WebGPU, on no recorded grounds, so
     # the one backend whose scissor state was resolved late was the one backend this never ran on.

@@ -180,18 +180,14 @@ namespace
      * @brief Whether a bind cycle's SpriteBatch and stock 3D draws replay in public order.
      *
      * REMED-GFX-157 corrected Vulkan and bgfx, which grouped a cycle's draws by family. WEBGPU
-     * groups them the other way round -- all 3D draws, then all sprites -- so a SpriteBatch
-     * followed by an OVERLAPPING 3D draw comes out with the sprite on top there. That is declared
-     * rather than absorbed, and only leg I0's overlapping render-target probe can see it: every
-     * other leg here draws its two families into disjoint slots, which any grouping renders
-     * correctly. REMED-GFX-157 was scoped not to change WebGPU production.
+     * grouped them the other way round -- all 3D draws, then all sprites -- so a SpriteBatch
+     * followed by an OVERLAPPING 3D draw came out with the sprite on top there, and only leg I0's
+     * overlapping render-target probe could see it: every other leg here draws its two families
+     * into disjoint slots, which any grouping renders correctly. REMED-GFX-159 replaced WebGPU's
+     * fixed per-family replay list with one ordered reference stream, so every backend now owes
+     * public order and this is asserted unconditionally.
      */
-    constexpr bool kFamiliesReplayInPublicOrder =
-#if defined(CNA_BACKEND_WEBGPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kFamiliesReplayInPublicOrder = true;
 
     constexpr int kBBW = 64;   ///< Backbuffer width.  Eight pattern slots across.
     constexpr int kBBH = 64;   ///< Backbuffer height.
