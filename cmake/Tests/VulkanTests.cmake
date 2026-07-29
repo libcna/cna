@@ -1186,6 +1186,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_RenderTarget_SamplingOrientation COMMAND cna_test_vulkan_rt_sampling_orientation
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-151: the canonical XNA render-to-texture sequence -- render into a target,
+        # unbind it, sample it -- must work in ONE public frame with no intervening GetData,
+        # Present, extra frame, manual flush or wait. The defect is Vulkan-local: the deferred
+        # recorder's early readback flush filtered the frame's segment list down to the target being
+        # READ, so a producer target's pass was never recorded before the consumer that sampled it.
+        # This is the home backend of the finding; the same fixture is registered on every other
+        # backend as a control.
+        cna_vulkan_test(cna_test_vulkan_rt_producer_consumer
+            examples/rendertarget_producer_consumer_test.cpp)
+        cna_register_backend_test(NAME Vulkan_RenderTarget_ProducerConsumer COMMAND cna_test_vulkan_rt_producer_consumer
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_texture2d_getdata_contract
                         examples/texture2d_getdata_contract_test.cpp)
         cna_register_backend_test(NAME Vulkan_Texture2D_GetDataContract COMMAND cna_test_vulkan_texture2d_getdata_contract
