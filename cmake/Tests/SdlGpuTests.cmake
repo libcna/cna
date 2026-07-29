@@ -336,6 +336,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_RenderTarget_EffectSource COMMAND cna_test_sdlgpu_rt_effect_source
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-167 deferred-source lifetime: a resource sampled by a draw that has only been
+    # QUEUED must stay bindable until that draw actually renders, and destroying the public wrapper
+    # first must never terminate the process. The defect was WebGPU-local -- every deferred command
+    # stored a raw pointer to the resource's BACKEND OBJECT and called a VIRTUAL method on it at
+    # replay, so a RenderTarget2D produced, sampled onto the BACKBUFFER and dropped inside one
+    # Draw() was a heap-use-after-free at Present(). These runs establish which backends already
+    # honoured the contract rather than being made to; each leg runs in its own process so a
+    # SIGSEGV is an attributable result instead of a lost shard.
+    cna_sdlgpu_test(cna_test_sdlgpu_deferred_source_lifetime
+        examples/deferred_source_lifetime_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_DeferredSourceLifetime COMMAND cna_test_sdlgpu_deferred_source_lifetime
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with

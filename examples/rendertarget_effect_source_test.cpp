@@ -302,23 +302,6 @@ namespace
 #endif
 
     /**
-     * @brief Whether a backbuffer consumer of a render target survives process teardown.
-     *
-     * REMED-GFX-167 (found by REMED-GFX-152, owned by neither): on WEBGPU, leg A3's own check
-     * PASSES -- the sequence completes and reports 1/1 -- and the process then dies with SIGSEGV
-     * during shutdown. Measured 2026-07-29: no other leg of the eighteen crashes there, so it is
-     * specific to a render target having been sampled onto the BACKBUFFER, and it is a teardown
-     * defect rather than a sampling one. Declared here rather than fixed; it is WebGPU-side and has
-     * its own root cause.
-     */
-    constexpr bool kBackbufferConsumerSurvivesTeardown =
-#if defined(CNA_BACKEND_WEBGPU)
-        false;
-#else
-        true;
-#endif
-
-    /**
      * @brief Whether a texture destroyed BEFORE the frame renders is still sampled correctly.
      *
      * REMED-GFX-166 (found by REMED-GFX-152, owned by neither): VULKAN is a whole-frame-deferred
@@ -981,14 +964,14 @@ class RenderTargetEffectSourceTest : public Game
         if (wants("A2"))
             CheckConsumer(dev, "A2 RT -> BasicEffect textured -> RT, indexed", Family::Basic,
                           DrawMode::UserIndexedPrimitives, patternTex_);
-        if (wants("A3") && !kBackbufferConsumerSurvivesTeardown)
+        if (wants("A3"))
         {
-            boundary(std::string("A3 ") + kBackendName + " passes this sequence but then dies "
-                     "during process teardown (REMED-GFX-167) -- boundary recorded; A1 and A2 carry "
-                     "the render-target destination here");
-        }
-        else if (wants("A3"))
-        {
+            // REMED-GFX-167: this leg used to be a declared boundary on WEBGPU -- "passes this
+            // sequence but then dies during process teardown". It was never teardown: the source
+            // `a` below is destroyed while its consumer draw is still only QUEUED for the
+            // backbuffer, and WebGPU replayed that command through the freed object's vtable at the
+            // next Present(). The boundary is gone because the defect is; the dedicated matrix now
+            // lives in deferred_source_lifetime_test.cpp.
             // The backbuffer destination cannot be read on every backend, so this leg judges what
             // it CAN judge everywhere: the sequence completes, binds a real resource and does not
             // terminate the process. Where the destination is observable the A1/A2 oracle already
