@@ -2483,6 +2483,13 @@ existing task.
 | REMED-GFX-131 | WebGPU configured an `*UnormSrgb` surface format and created render targets with it, so a mid-tone channel written through the render pass came back gamma-encoded (128 -> 188) unlike XNA's non-sRGB `SurfaceFormat.Color`. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **DONE 2026-07-28 — MEASURED AS EXACTLY ONE STANDARD LINEAR-TO-SRGB ENCODE ON R, G AND B INDEPENDENTLY; `surfaceFormat_` IS NOW ALWAYS NON-SRGB, WITH A `viewFormats` REINTERPRETATION FOR SRGB-ONLY SURFACES. FOUR FIXTURES HAD ASSERTED THE ENCODED VALUES AND WERE CORRECTED. SPAWNED GFX-147/148.** |
 | REMED-GFX-132 | `cna_reference_dump` links `CNA` without the `--start-group` wrapper its own build-system comment says it needs, so it fails to link under the ASCII backend. | LOW | P3 | REMED-GFX-127 build matrix | **OPEN — `BuildAsciiFontAtlas` REFERENCES `SpriteFont::SpriteFont` FROM AN ALREADY-PASSED ARCHIVE. EVERY BACKEND LIBRARY, EVERY ASCII TEST AND `CnaTests` BUILD; ONLY THIS TOOL TARGET FAILS.** |
 | REMED-GFX-133 | `headless_smoke_test` Check F catches `HeadlessValidationException` for an out-of-range indexed draw that REMED-GFX-110's shared validation now rejects with `System::ArgumentOutOfRangeException` first, so the exception escapes and aborts the executable. | LOW | P3 | REMED-GFX-127 regression matrix | **OPEN — A/B-PROVEN PRE-EXISTING (THE PRE-REMED-GFX-127 SOURCES ABORT IDENTICALLY). WHETHER THE SHARED LAYER OR THE HEADLESS MODE DIAL SHOULD OWN THE REJECTION IS A CONTRACT QUESTION.** |
+| REMED-GFX-147 | EasyGL sampled a `RenderTarget2D` bottom-up while `GetData` and ordinary `Texture2D` sampling were both top-down: an OpenGL framebuffer's origin is bottom-left, readback already compensated, sampling did not. | MEDIUM | P2 | REMED-GFX-131 cross-backend controls | **DONE 2026-07-29 — CORRECTED AT SAMPLE TIME THROUGH ONE PREDICATE SHARED BY SPRITEBATCH AND THE ELEVEN STOCK 3D SHADERS; `GetData` UNTOUCHED, NO COPY/READBACK/RE-UPLOAD, NO PROGRAM VARIANT. 25/60 -> 60/60. ONE ORIENTATION-BLIND FIXTURE STRENGTHENED. SPAWNED GFX-149/150/151/152/153/154.** |
+| REMED-GFX-149 | `Texture2D::GetData(Color*, startIndex, elementCount)` gates its render-target backend fallback on `startIndex == 0` and throws for any other offset, while the rectangle overload honours the same offset. Shared layer, every backend. | LOW | P3 | — | OPEN (measured 2026-07-29 during REMED-GFX-147) |
+| REMED-GFX-150 | Software's SpriteBatch interpolates when magnifying even with `SamplerState::PointClamp`: 4/128 texels exact vs EasyGL's 128/128 on the identical plain-`Texture2D` draw. | MEDIUM | P2 | — | OPEN (isolated 2026-07-29 during REMED-GFX-147) |
+| REMED-GFX-151 | Vulkan: a `RenderTarget2D` rendered, unbound and then sampled with no intervening `GetData` reproduces 0/32 of the source; one `GetData` of that target makes the identical draw correct. The canonical XNA render-to-texture sequence. | HIGH | P1 | — | OPEN (reproduced 2026-07-29 by REMED-GFX-147 leg G0) |
+| REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | OPEN (reproduced 2026-07-29 by REMED-GFX-147; SDL_GPU counterpart of REMED-GFX-078) |
+| REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
+| REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 
 #### REMED-BUILD-010 detail
 
@@ -16944,5 +16951,219 @@ for the first builds.
 - `9cd4eb0f fix(Task REMED-GFX-131): correct WebGPU Color format semantics`
 - `b172ca2b test(Task REMED-GFX-131): cover colour-space paths and backend parity`
 - `docs(remediation): record GFX-131 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-147 — EasyGL render-target sampling orientation (DONE 2026-07-29)
+
+### Classification and root cause
+
+**One root cause, one layer.** An OpenGL framebuffer's origin is bottom-left, so a render target's
+colour texture stores the logical image **bottom-up**: its texel row `v=0` is the LAST logical row.
+`EasyGLRenderTargetBackend::GetData` already compensated for exactly this — it reads with
+`glReadPixels`' bottom-left origin (`x, levelHeight - y - h, w, h`) and then reverses the returned
+rows — which is precisely why the public readback contract has always been correct. **Sampling** did
+not compensate. So the defect was never in the colour storage or in the public readback; it was in
+**treating a rendered texture as a sampled texture**, and the fix is deliberately *not* a flip of
+`GetData`, *not* a global UV inversion, and *not* a change to ordinary `Texture2D` sampling.
+
+This is the EasyGL counterpart of REMED-GFX-067's bgfx finding, hitting SpriteBatch and every stock
+3D textured effect at once.
+
+### Pre-fix orientation, measured in one run
+
+| Path | Pre-fix orientation |
+|---|---|
+| CPU-uploaded ordinary `Texture2D`, sampled | **top-down (correct)** — 32/32 texels |
+| `RenderTarget2D::GetData` | **top-down (correct)** — 32/32 texels, whole / partial rectangle / repeated |
+| `RenderTarget2D` sampled as a texture | **bottom-up (wrong)** — 0/32, `EXACTLY VERTICALLY MIRRORED` on all 34 failing checks |
+
+A texture-free control renders four vertex-coloured quadrants into a target with no sampler bound at
+all and reads TL=red, TR=green, BL=blue, BR=yellow, so the storage/readback pair is proven top-down
+twice — once through an uploaded texture and once without touching a texture.
+
+### Correction architecture
+
+One auditable source of truth, `SampledRowOrderIsBottomUp(const ITextureBackend*)`, answers "did this
+content arrive by being RENDERED rather than uploaded?" — a property of the resource, not of the
+sampler, the bound target, or anything per-draw. Every EasyGL sampling path asks it, so they cannot
+diverge:
+
+- **SpriteBatch** maps each `v -> 1-v` on its own CPU-generated quad. Deliberately in the vertex data
+  rather than in the sprite shader, because `SpriteBatch::Begin` may substitute an arbitrary user
+  `ShaderEffect` whose GLSL this backend does not own — the vertex data is the only place both the
+  built-in and the custom program read from. Resolved **once per bound source, not per sprite**: a
+  batch is one texture by construction, so no per-draw RTTI was added and the flush condition is
+  byte-for-byte the one that was already there.
+- **The eleven stock 3D fragment shaders** route every `sampler2D` fetch through one shared
+  `cnaSampleUV(uv, flip)` helper, kept in a single macro so they cannot drift apart. `uRtFlipV.xyzw`
+  carries texture units 0-3 and `uRtFlipVHi.x` unit 4; each flag is written **beside the bind of the
+  unit it describes**, so a flag and its resource can never disagree, and both are uploaded
+  unconditionally so a previous draw's flag cannot leak onto the next ordinary texture. Same per-slot
+  shape bgfx uses for `u_rtFlipV` (REMED-GFX-067/078).
+- **A custom `ShaderEffect`** is offered the flag on units 0-3 if its GLSL declares `uRtFlipV`, and
+  pays nothing if it does not. This backend cannot rewrite a game's own shader, but it can tell it
+  what it is sampling.
+
+**`v -> 1-v`, not `swap(v1, v2)`.** A swap only reverses rows *inside* the source rectangle and
+coincides with the correct mirror only when that rectangle spans the full texture height. Writing it
+the general way is what made leg K1 pass here — and is how REMED-GFX-153 was found on bgfx, which
+took the swap.
+
+### Results
+
+| Leg | Result |
+|---|---|
+| SpriteBatch: full texture, source rect, scaled dest, rotation+origin, `Begin` transform, PointClamp, LinearClamp, tint, AlphaBlend, custom viewport, scissor | all green |
+| `SpriteEffects` None / FlipVertically / FlipHorizontally / both | all green; the public flip and the backend correction compose instead of cancelling, and the `Texture2D` control is separately asserted to have really performed the requested flip |
+| 3D: `BasicEffect` textured (non-indexed **and** indexed), `AlphaTestEffect`, lit+textured, `DualTextureEffect` slot 0 **and** slot 1 | all green |
+| Target chains: A->B, A->B->C, differently-sized hop, two independent same-size targets, sampled twice in one frame, target->backbuffer | all green, no alternating orientation |
+| MSAA (requested 4, **applied 4**) | resolves top-down and samples upright |
+| Mipmapped target | level 0 upright; generated level 1 orientation-consistent (box-filter distance top-down **3** vs mirrored **1315**) |
+| Readback | unchanged and byte-identical **before and after** the target was sampled; repeated, partial-rectangle and destination-offset reads all top-down |
+| Cube / array | untouched — the predicate only answers for `ITextureBackend`, which cube resources do not derive from; `uEnvMap` is sampled with a direction vector, not a UV. REMED-GFX-137 keeps ownership; leg O1 records the cube face's measured orientation without asserting it. |
+
+**EasyGL 25/60 -> 60/60.**
+
+### GL validation
+
+Renderer confirmed as **OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1**. Run under
+`MESA_DEBUG=flush,incomplete_tex,incomplete_fbo,context` and `MESA_GLSL=errors`: **no user error, no
+incomplete framebuffer or texture, no shader compile or link diagnostic** — stderr carries only
+SDL's window line. No validation was silenced, and the eleven modified shaders all compile and link.
+
+### Cardinality and performance
+
+No new texture, texture view, framebuffer, resolve resource, render pass, draw call, submit,
+allocation or persistent cache entry, and no per-pixel CPU work, readback or re-upload. The stock 3D
+program count is unchanged at **12** — the correction is a uniform, not a `#define`, so no program
+variant is created per target or per source kind. Added cost: **+1 `glUniform4f` per stock 3D draw**
+(+2 for the two PBR programs, which reach unit 4), **+0 GL calls per sprite draw**, and **one
+`dynamic_cast` per bound source** (per batch, not per sprite). SpriteBatch's flush/merge behaviour is
+unchanged: the texture-change condition is logically identical to the one that was already there.
+
+### False-positive audit
+
+Surveyed the EasyGL fixtures that sample a render target. **Four were orientation-blind; one was
+strengthened, and the gap the other three left is now covered by the new suite.**
+
+- `easygl_render_target_test.cpp` — **strengthened.** Its stated purpose is "use the RT as a
+  texture", and its only check was a **solid green clear read at the centre pixel**: a uniform image
+  is identical under every flip and the centre pixel is a fixed point of a vertical mirror, so it
+  could not fail for any orientation, and it passed for as long as the defect existed. It now also
+  renders four different quadrant colours and asserts where each lands. **A/B proven:** on the
+  pre-fix backend the original check still passes while the new one fails with `EXACTLY VERTICALLY
+  MIRRORED`.
+- `easygl_rendertarget2d_mip_test.cpp` (solid blue, centre pixel), `easygl_rendertarget2d_msaa_test.cpp`
+  (edge blending on a diagonal), `easygl_spritebatch_rendertarget_size_test.cpp` (bounding-box
+  extents, which a vertical flip preserves) — found orientation-blind but **not changed**, because
+  each has its own purpose and legs M1/M2/M3, L1/L2 and AB1/K2 now answer the orientation question
+  they cannot.
+- `colorspace_midtone_contract_test.cpp` had already **declared** this divergence for EasyGL while
+  REMED-GFX-147 was open, which is why fixing it surfaced here as a failure instead of passing
+  silently — the declaration doing its job. EasyGL is now `TopDown`; **17/17**.
+
+### Regression results
+
+Full `cmake-build-debug` (EasyGL) shard: **6013/6019**, 6 skipped. All six failures A/B-proven
+pre-existing by restoring the two production files at `a5fb2416`, rebuilding and re-running:
+`EasyGL_DeviceValidation` (`SetVertexBuffers(16) does not throw`) and
+`EasyGL_GraphicsDevice_ReferenceStencil` fail identically pre-fix; `easy-gl-resource-smoke-tests` is
+the vendored easy-gl library's own mock-GL test with no CNA dependency at all;
+`XnbContainerFuzzTest` and `TwoProcessLoopbackTest` are unrelated and already recorded as
+pre-existing in REMED-GFX-131's closure. `EasyGL_ColorSpace_MidTone` was the sixth and is the
+declaration this fix was required to trip — updated and green.
+
+REMED-GFX-018 ClearOptions, GFX-039 validation, GFX-043 VertexDeclaration, GFX-065 viewport, GFX-084
+SpriteBatch transforms, GFX-124/127/130/134 readback, GFX-125 vertex streams, GFX-131 mid-tone,
+GFX-141 cube MSAA, ordinary `Texture2D` sampling and `RenderTarget2D` creation/MSAA/disposal/reuse
+are all green in that shard.
+
+### Sanitizers
+
+`cmake-build-easygl-asan` was **reconfigured in place** from `CNA_SANITIZE=address` to
+`address,undefined` rather than creating a second sanitizer tree — same footprint, both sanitizers,
+matching the existing `cmake-build-webgpu-asan-ubsan` precedent. Focused run over the orientation
+suite, the strengthened render-target test, the mid-tone suite, the `Texture2D` readback contract and
+the MSAA target test: **all exit 0 with zero reports** — no invalid access, no stale orientation
+state, no use-after-free, no overflow, no lifetime issue.
+
+### Cross-backend controls
+
+The same public fixture is registered on all of them. Native runs, all green and **all unchanged** —
+only EasyGL production changed:
+
+| Backend | Result |
+|---|---|
+| EASYGL | **60/60** |
+| SOFTWARE | 59/59 |
+| HEADLESS | 33/33 (declared non-rasterizing) |
+| VULKAN | 57/57 |
+| BGFX | 61/61 |
+| SDL_GPU | 51/51 |
+| WEBGPU | 52/52 |
+| D3D9 / D3D11 | fixture **compiles and links**; not run, because the established Wine/DXVK recipe for this sandbox requires `DISPLAY=:0`, which this session was instructed not to use for post-fix measurements |
+
+Capability boundaries were measured rather than assumed and are recorded in the output: mipmapped
+render targets (WebGPU documents the chain regeneration unimplemented and throws from the
+constructor), mip level 1 readback (Software stores level 0 only), `GetBackBufferData` (SDL_GPU does
+not implement it), `RenderTargetCube` (Software has none), and the applied MSAA count (Vulkan and
+WebGPU applied 0 for a requested 4; EasyGL, Software, Bgfx and SDL_GPU applied 4).
+
+### Independent findings recorded, not fixed
+
+Six, none of which can be caused by this task — it changes EasyGL files only. Four are **declared per
+backend in the fixture**, so each is pinned rather than tolerated: fixing any of them fails this
+fixture and forces the declaration to be updated.
+
+- **REMED-GFX-149** — `Texture2D::GetData(Color*, startIndex, count)` rejects a non-zero
+  `startIndex` on a render target while the rectangle overload accepts it. Shared layer.
+- **REMED-GFX-150** — Software's SpriteBatch interpolates when magnifying even with `PointClamp`
+  (4/128 exact vs EasyGL's 128/128 on the identical plain-`Texture2D` draw).
+- **REMED-GFX-151** — Vulkan: a render target sampled with no intervening `GetData` reproduces 0/32
+  of the source; one `GetData` makes the identical draw correct. **HIGH** — this is the canonical
+  XNA render-to-texture sequence.
+- **REMED-GFX-152** — SDL_GPU: the stock 3D paths `static_cast` a render-target backend to the
+  unrelated sibling `SdlGpuTextureBackend` and kill the process. **HIGH** — the SDL_GPU counterpart
+  of REMED-GFX-078.
+- **REMED-GFX-153** — Bgfx: REMED-GFX-067's V-flip is `swap(v1, v2)`, wrong for a source rectangle.
+- **REMED-GFX-154** — Bgfx: the first readback of a multisampled target is all zeroes.
+
+### Source and generated-artifact changes
+
+Two production files: `EasyGLGraphicsBackend.cpp` and `EasyGLGraphicsBackend.hpp`. The eleven stock
+fragment shaders are GLSL string literals inside that `.cpp`, so they changed with it; **no generated
+artifact, no offline-compiled bytecode and no shader binary was regenerated** — the correction is a
+uniform in source shaders, not a rebuilt artifact.
+
+### Build directories, ccache and displays
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-debug` | EASYGL | yes | reused |
+| `cmake-build-easygl-asan` | EASYGL + ASan **+ UBSan** | yes | reused; sanitizer set widened in place rather than adding a second tree |
+| `cmake-build-software` · `cmake-build-headless` · `cmake-build-vulkan` · `cmake-build-bgfx` · `cmake-build-sdlgpu` · `cmake-build-webgpu` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-sdlrenderer` · `cmake-build-dx3` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other thirteen | yes | reused |
+
+**No build directory was created, cleaned, deleted or recreated**; every configure was incremental
+and no clean build occurred. No build tree was created under `/tmp`, `/var/tmp` or `/dev/shm` — the
+scratchpad held only logs and two fixture backups used during probing. All fourteen backend libraries
+compile incrementally: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12, DX3, EasyGL, Headless, SDL_GPU,
+SDL_Renderer, Software, Vulkan and WebGPU.
+
+Virtual display **`:101`** throughout (pre-existing and shared; not created and not stopped); `:0` was
+never used. No `pkill`, `killall` or kill-by-name was used at any point. Thermals: started at
+**40 °C**, peaked at **83 °C** during the seven-backend fixture build, at which point builds were
+paused until the machine returned to 44 °C; never reached 85 °C. Maximum parallelism **2 jobs**, with
+**1 job** for the first build.
+
+### Commits
+
+- `a5fb2416 test(Task REMED-GFX-147): reproduce EasyGL render-target sampling inversion`
+- `d26d8acb fix(Task REMED-GFX-147): normalize EasyGL render-target texture sampling`
+- `7aa15613 test(Task REMED-GFX-147): cover SpriteBatch, 3D, chains and cross-backend controls`
+- `a7390a59 test(Task REMED-GFX-147): strengthen orientation tests that could not fail`
+- `docs(remediation): record GFX-147 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
