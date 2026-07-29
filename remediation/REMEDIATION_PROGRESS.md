@@ -2488,7 +2488,7 @@ existing task.
 | REMED-GFX-150 | Software's SpriteBatch interpolates when magnifying even with `SamplerState::PointClamp`: 4/128 texels exact vs EasyGL's 128/128 on the identical plain-`Texture2D` draw. | MEDIUM | P2 | — | OPEN (isolated 2026-07-29 during REMED-GFX-147) |
 | REMED-GFX-151 | Vulkan: a `RenderTarget2D` rendered, unbound and then sampled with no intervening `GetData` reproduced 0/32 of the source, because the readback flush filtered the frame's segment list down to the target being READ and so never recorded the PRODUCER's render pass. The canonical XNA render-to-texture sequence. | HIGH | P1 | REMED-GFX-147 leg G0 | **DONE 2026-07-29 — 15/43 -> 43/43 ON A NEW DEDICATED FIXTURE, PLUS 43/43 ON A `PreferMultiSampling` DEVICE WITH THE APPLIED SAMPLE COUNT ASSERTED TO BE 4 AND 43/43 UNDER SYNCHRONIZATION VALIDATION WITH THE LAYER PROVED LIVE AND ZERO MESSAGES OF ANY KIND. FIXED BY MAKING THE FLUSH REPLAY THE TRANSITIVE CLOSURE OF THE BIND CYCLES A READBACK DEPENDS ON — THE READ TARGET'S OWN GROUP PLUS, FOR EACH CYCLE IN THE SET, THE EARLIER CYCLES OF EVERY RENDER-TARGET GROUP IT SAMPLES — STILL IN ASCENDING SEGMENT ORDER. NO BARRIER, FENCE, DEVICE/QUEUE WAIT, SUBMIT-PER-SWITCH, EXTRA PRESENT, EXTRA FRAME OR READBACK ADDED; THE SUBMIT-PER-MRT-PROXY LOOP IS REPLACED BY ONE COMMAND BUFFER AND ONE SUBMIT, SO CARDINALITY GOES DOWN. A SIMPLER POSITIONAL RULE ALSO PASSED THE CANONICAL FIXTURE AND WAS IMPLEMENTED, MEASURED AND REJECTED (LEG I2 0/32). VULKAN SHARD 180/181, THE ONE FAILURE A/B-PROVEN PRE-EXISTING. SIX CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN; 8 OF 48 VULKAN RENDER-TARGET FIXTURES SAMPLE A TARGET AND ALL 8 OBSERVED THE CONSUMER THROUGH `GetBackBufferData`, NEVER THROUGH A TARGET READBACK — ONE STRENGTHENED (2/4 -> 4/4). SPAWNED GFX-155/156.** |
 | REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | **DONE 2026-07-29 — THIRTEEN (NOT TEN) CAST SITES, PROVEN UNDER UBSAN AS `downcast of address … which does not point to an object of type 'SdlGpuTextureBackend'` FOLLOWED BY SIGSEGV, THE FABRICATED HANDLE BEING THE TARGET'S OWN `mipMap_` + THREE BYTES OF UNINITIALISED PADDING + `multiSampleCount_` (0x20612000). FIXED BY ONE SHARED `ResolveSampledTextureEXT`/`ResolveSampledCubeEXT` RETURNING AN `SdlGpuSampledTextureEXT` (SAMPLEABLE NATIVE HANDLE + KEEP-ALIVE), USED BY SPRITEBATCH AND EVERY EFFECT ALIKE; MSAA IS CORRECT BY CONSTRUCTION BECAUSE THE ATTACHMENT IS `COLOR_TARGET`-ONLY AND CANNOT BE SELECTED. NEW PROCESS-ISOLATED FIXTURE 15/18 LEGS SIGSEGV -> 18/18 LEGS, 0 CRASHES, 56/56 CHECKS. NOTHING ADDED: NO PRESENT, GETDATA, CPU COPY, WAIT, EXTRA FRAME/PASS/SUBMIT; SDL CALL-SITE CARDINALITY UNCHANGED EXCEPT `SDL_ReleaseGPUTexture` 15 -> 12. FOUR FALSE-POSITIVE SKIPS REMOVED (THREE A/B-PROVEN LOAD-BEARING, ONE PROVEN OVER-APPLIED). SDL_GPU DEBUG VALIDATION AND FORCED `VK_LAYER_KHRONOS_validation` BOTH CLEAN; ASAN/UBSAN CLEAN. NINE CROSS-BACKEND CONTROLS GREEN. SPAWNED GFX-166/167.** |
-| REMED-GFX-166 | Vulkan: a `RenderTarget2D` (or `Texture2D`) destroyed while its consumer draw is still only QUEUED loses that work — the destination reads back 0/32, all `(0,0,0,0)`, while every live-source check in the same run is byte-exact. So it is the disposal, not the deferral. SDL_GPU keeps such a source alive through REMED-GFX-152's keep-alive; Vulkan has no equivalent. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-152 leg M1, llvmpipe) |
+| REMED-GFX-166 | Vulkan: the lost draw was the PRODUCER and the destroyed resource was that producer's DESTINATION. `~VulkanRenderTargetBackend` ran REMED-GFX-074's `PurgeDeferredWorkForTarget(this)`, erasing every queued entry whose `rt == this`, on the false justification that "a destroyed target is unobservable" — the still-queued consumer that SAMPLES it is exactly what observes it. | MEDIUM | P2 | — | **DONE 2026-07-30 — PROVEN WITH A NEW `CNA_VULKAN_LIFETIME_TRACE`, NOT INFERRED: `purge.DROPPED rt=0x..b668 sprites=1 draws=0 clears=2` WHILE `record.draw3D order=6` STILL RUNS AND THE IMAGE/VIEW ARE ALIVE IN THE RETIREMENT QUEUE, SO NO DRAW IS MISSING AND NOTHING DANGLES — THE SAMPLED IMAGE JUST HAS NO CONTENT, WHICH IS WHY SOME LEGS READ (0,0,0,0) AND OTHERS UNDEFINED GARBAGE. AN ORDINARY TEXTURE2D WAS NEVER AFFECTED (LEG A2 PASSES PRE-FIX), SO THE INHERITED BLANKET DECLARATION WAS OVER-APPLIED. FIXED BY MAKING A DESTINATION AN IMMUTABLE, SEPARATELY ALLOCATED `VulkanTargetPassEXT` CO-OWNED VIA `shared_ptr` BY EVERY QUEUED COMMAND, SO `PurgeDeferredWorkForTarget` IS DELETED RATHER THAN WEAKENED; THE PASS OWNS NO VULKAN HANDLES, KEEPING REMED-GFX-075'S FRAME-GENERATION RETIREMENT AS THE SINGLE RELEASE PATH. 6/14 -> 17/17 LEGS, 24 CHECKS; REMED-GFX-152'S FIXTURE 18 -> 20 LEGS WITH ITS OWN VULKAN DECLARATION DELETED AND PER-FAMILY/PER-DRAW-MODE DEAD-SOURCE SWEEPS (ALL 0/32 PRE-FIX). MSAA AND THE CUBE SLOT NOW MEASURED RATHER THAN DECLARED. TWO FALSE POSITIVES CLOSED: REMED-GFX-075 S3'S INTERMEDIATE `readRt` WAS A FLUSH, AND REMED-GFX-074 S6 ASSERTED ONLY "DID NOT CRASH". CARDINALITY BYTE-IDENTICAL EXCEPT THE ONE PRODUCER PASS PREVIOUSLY DISCARDED. VALIDATION CLEAN WITH THE LAYER PROVEN LOADED; ASAN/UBSAN CLEAN WITH IDENTICAL LEAK TOTALS. SEVEN CROSS-BACKEND CONTROLS 17/17 AND 20/20. SPAWNED ONE INDEPENDENT FINDING (FOUR STOCK-EFFECT FAMILIES RENDER NOTHING ON VULKAN THROUGH A STRIDE-20 STREAM).** |
 | REMED-GFX-167 | WebGPU: every deferred command stored the texture it samples as a RAW POINTER to that resource's backend object and called a VIRTUAL method on it at replay, so a source destroyed while its draw was still queued was a heap-use-after-free at `Present()`. | MEDIUM | P2 | — | **DONE 2026-07-29 — THE TICKET WAS WRONG TWICE, BOTH CORRECTIONS MEASURED. NOT TEARDOWN: THE CRASH IS ON THE MAIN THREAD INSIDE `Present()` -> `EnsureFrameRendered()` -> `ReplayOrderedSegments()` -> `ReplayDrawsInOrder()` -> `IssueTexturedDraw()`, AFTER THE LEG'S OWN CHECKS HAVE PRINTED — WHICH IS WHY IT READ AS SHUTDOWN. AND NOT "SPECIFIC TO THE BACKBUFFER": WHAT IS LOAD-BEARING IS THAT NOTHING FLUSHED BETWEEN THE DRAW AND THE DESTRUCTOR, AND WEBGPU RENDERS A RENDER-TARGET DESTINATION AT `SetRenderTarget()`. ASAN: `heap-use-after-free` AT `:7228`, FREED IN `~WebGPURenderTargetBackend()` AT `:1746` VIA `RenderTarget2D::~RenderTarget2D()`; WITHOUT A SANITIZER SIGSEGV (139) WITH THE PC IN NO MAPPED MODULE (THE FREED VTABLE SLOT). NINETEEN SLOTS ACROSS NINE FAMILIES. FIXED BY RESOLVING ONCE AT THE PUBLIC DRAW CALL INTO A `WebGPUSampledTextureEXT` (RESOLVED VIEW + ONE NATIVE REFERENCE ON THE VIEW AND ITS TEXTURE VIA `WebGPUSampledResourceEXT`), CLOSING THE DEREFERENCE AND THE DANGLING HANDLE TOGETHER; RELEASE IS A REFCOUNT DECREMENT, NOT `wgpuTextureDestroy`, SO THE RESOURCE STAYS USABLE AND THE PROOF IS PIXELS. A HAZARD THE FIX ITSELF INTRODUCED WAS FOUND AND CLOSED: THE FAMILY VECTORS ARE MEMBERS, DESTROYED AFTER THE DESTRUCTOR BODY RELEASES THE DEVICE, SO `DiscardQueuedCommands()` IS NOW CALLED FIRST — DECLARED AS ORDERING CORRECTNESS, SINCE THE ABANDONED-FRAME PATH IS NOT PUBLICLY FORCEABLE. NOTHING ADDED PER DRAW (KEEP-ALIVE BUILT ONCE PER RESOURCE); NO EXTRA PASS/SUBMIT/PRESENT/FRAME/WAIT, HELD BY THE THREE EXISTING WEBGPU CARDINALITY GATES. NEW PROCESS-ISOLATED 14-LEG FIXTURE WITH A PIXEL ORACLE: **4/14 LEGS AND 10 SIGSEGV -> 14/14, 0 CRASHES, 18 CHECKS**; GFX-152'S OWN FIXTURE 17/18 + 1 CRASH -> 18/18, 49/49. THREE FIXTURE DEFECTS FOUND BY RUNNING IT (LEG E1 MEASURED NOTHING AT STRIDE 20; THE PIXEL PROBE SAT 0.0625 TEXEL OFF CENTRE; B1/C1 ASSUMED A FLUSH-AT-UNBIND A WHOLE-FRAME RECORDER DOES NOT DO). ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; LEAK A/B BYTE-IDENTICAL PRE- AND POST-FIX. NATIVE VALIDATION CLEAN (ZERO UNCAPTURED ERRORS, ZERO DEVICE-LOST). SEVEN CROSS-BACKEND CONTROLS ALL 14/14; ONLY WEBGPU PRODUCTION CHANGED. `ctest -L WebGPU` 57/58, ALL 8 FULL-SHARD FAILURES A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-168; ADDED THE MECHANISM TO THE OPEN GFX-165.** |
 | REMED-GFX-168 | EasyGL: destroying a `RenderTarget2D` while it is STILL the bound render target makes the next `SetRenderTarget(nullptr)` dereference the dead object — SIGSEGV inside `GraphicsDevice::SetRenderTarget`, in the UNBIND rather than at teardown. WebGPU and Vulkan both carry a destructor guard clearing `currentRenderTarget_` when it is `this`; EasyGL appears to lack the equivalent. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-167's first draft of leg K1, which was then rewritten so the two subjects stay independently attributable) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
@@ -19389,3 +19389,231 @@ build incrementally.
 - `docs(remediation): record GFX-167 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
+
+
+---
+
+## REMED-GFX-166 — Vulkan discarded a dying render target's QUEUED PRODUCER work (DONE 2026-07-30)
+
+### What the ticket said, and what was actually true
+
+The ticket read "Vulkan loses a queued draw whose SOURCE was destroyed before the frame rendered".
+Both halves are wrong, and both corrections were measured rather than argued.
+
+The draw that is lost is the **producer**, not the consumer. The resource that is destroyed is that
+producer's **destination**, and only incidentally the consumer's source. And an ordinary `Texture2D`
+was never affected at all: leg A2 passes against the unfixed backend, because REMED-GFX-075's
+retirement queue already keeps its view, image and descriptor set valid for the record. The blanket
+`kDeadSourceStillSampleable = false` declaration this ticket inherited from REMED-GFX-152 covered ten
+legs, of which four were already green.
+
+### The failing expression
+
+`~VulkanRenderTargetBackend` called REMED-GFX-074's `PurgeDeferredWorkForTarget(this)`, three
+`remove_if` predicates over `activeBatches_`, `pending3D_` and `pendingClears_`, each `entry.rt ==
+rt`. Its justification sat in the header next to the declaration:
+
+> A destroyed target is unobservable (its GetData can no longer be called, and sampling its freed
+> image is already broken independently), so discarding its unflushed draws is observationally
+> identical to XNA's eager model where those draws had already executed by the time the resource was
+> disposed.
+
+The first clause is false whenever another still-queued command SAMPLES the target — which is the
+entire render-to-texture pattern, and which REMED-GFX-151's own dependency graph already tracked.
+
+### The native trace
+
+`CNA_VULKAN_LIFETIME_TRACE=1` (new, env-gated, free beyond one resolved bool test when unset) emits
+one line per ownership transition. Leg A3, PRE-fix:
+
+```
+enqueue.clear    order=1 rt=(nil)    seg=1
+rt2d.create      backend=0x..b660 image=0x52.. sampleView=0x55.. fb=0x57.. descSet=0x58.. 8x4
+enqueue.clear    order=2 rt=0x..b668 seg=2
+enqueue.clear    order=3 rt=0x..b668 seg=2
+enqueue.sprite   order=4 family=SpriteBatch rt=0x..b668 seg=2 draws=1     <- PRODUCER
+enqueue.clear    order=5 rt=(nil)    seg=4
+enqueue.3D       order=6 family=BasicEffect rt=(nil) seg=4 descSet=0x65..  <- CONSUMER
+rt2d.dispose     backend=0x..b660 ... queuedAsDestination=3 queuedAsSampledSource=1
+purge.DROPPED    rt=0x..b668 sprites=1 draws=0 clears=2                   <- 3 COMMANDS DESTROYED
+cache.evict      view=0x55.. evictedSets=2
+retire.insert    gen=0 views=2 images=1 mem=1 fbs=1 descSets=2 poolSets=1
+record.draw3D    order=6 family=BasicEffect rt=(nil) seg=4 boundSet=0x65..  <- CONSUMER RUNS
+frame.submitted  gen=1
+```
+
+So the consumer draw is issued, its descriptor set is bound, and the image and view are alive in the
+retirement queue until generation 2. There is no missing draw and no dangling handle. The sampled
+image simply has no content — which is why the destination read `(0,0,0,0)` in some legs and
+UNDEFINED garbage in others: `(184,160,0,217)`, `(128,0,0,14)`, `(232,16,0,177)`, `(230,112,0,177)`.
+A draw dropped to black could not produce those.
+
+POST-fix, same leg: no `purge.DROPPED` line at all, and
+`record.segment seg=2 rt=0x..84a0 fb=0x57.. pass=0x56.. 8x4 clears=2 firstDraw=4` followed by
+`record.sprite order=4` then `record.draw3D order=6`, in public order.
+
+### The public lifetime contract, as now established
+
+| # | Sequence | Before | After |
+|---|---|---|---|
+| A | wrapper alive until command replay | correct | correct |
+| B | wrapper disposed after the public draw call, before replay | **producer discarded, consumer sampled an unwritten image** | correct |
+| C | wrapper disposed after recording, before submission | not reachable through the public API — Vulkan records and submits inside one `Present()`/flush | unchanged |
+| D | wrapper disposed after submission, before fence completion | correct (retirement generations) — leg L1 passes pre-fix too | correct |
+| E | normal disposal after completed use | correct | correct |
+| F | device teardown with queued commands | correct (`vkDeviceWaitIdle` then force-free) | correct; the pass owns no handles, so dropping it at teardown frees nothing |
+
+### The correction
+
+A destination is no longer the wrapper's backend object. `VulkanTargetPassEXT` is a separately
+allocated, immutable description of one render pass — framebuffer, render pass, extent, MSAA flag,
+depth format, load-op shape, depth/stencil group, mip image/levels/layer. Every field is final at the
+owning target's construction (the framebuffer, render pass, extent and mip chain are all created
+there and never replaced), so a copy taken then stays correct after `ReleaseVulkanResources()` has
+handed those handles to the retirement queue — exactly the window a command outliving its wrapper has
+to be replayed in.
+
+`Pending3DDraw::rt`, `PendingBatch::rt`, `PendingClear::rt`, `currentRT_` and
+`VulkanSpriteBatchBackend::activeRT_` became `shared_ptr<VulkanRTSource>`, so a queued command
+co-owns its destination:
+
+* nothing dangles, so `PurgeDeferredWorkForTarget` is **deleted**, not weakened;
+* nothing is discarded, so the producer records and the consumer samples real content;
+* the pass address is a stable identity while any command names it, so a later target allocated at
+  the freed wrapper's heap address cannot alias a dead one — what leg F1 measures.
+
+The pass owns **no** Vulkan handles, deliberately. Handle lifetime stays REMED-GFX-075's
+frame-generation retirement, which already covers both the CPU record window and in-flight GPU reads;
+giving the pass ownership would have created a second, differently-timed release path for the same
+handles.
+
+The MRT proxy is the one destination that DOES own its framebuffer, so its generation-gated
+`retiredMrtProxies_` list is kept (now `shared_ptr`) rather than replaced by the new ownership: the
+pending queues are cleared inside `RecordCommandBuffer`, before the command buffer that references
+that framebuffer is submitted. The two gates answer two different questions — the list is the GPU
+one, the shared entries are the CPU one.
+
+`RenderTargetCube`'s six value-member `FaceProxy` members became six shared face passes carrying the
+same `depthGroup` (the cube's colour image), so REMED-GFX-142's whole-cube flush group is unchanged,
+and the two byte-identical mip cascades collapsed into one `VulkanTargetPassEXT::MaybeGenerateMips`
+differing only by array layer. Because a `RenderTarget2D` is no longer itself a `VulkanRTSource`,
+`SampledRenderTargetGroupEXT` asks the concrete type with a `dynamic_cast` and reads the group off
+its pass — never a static cast between siblings (REMED-GFX-152).
+
+### Command families and texture slots
+
+The defect is in the destination, so it is family-independent — but that was a prediction, and this
+campaign has repeatedly punished predictions, so every family was measured. REMED-GFX-152's fixture
+gained legs M2 (families) and M3 (draw modes) as destroyed-RT-versus-live-`Texture2D` difference
+tests through its existing per-family setup.
+
+| Route | Slot ownership before | Pre-fix | Post-fix |
+|---|---|---|---|
+| SpriteBatch | `activeRT_` raw `VulkanRTSource*` | 0/32 | 32/32 |
+| BasicEffect textured | `Pending3DDraw::descSet` (a value) + raw `rt` | 0/32 | 32/32 |
+| BasicEffect + vertex colour | same | 0/32 | 32/32 |
+| AlphaTestEffect | same | 0/32 | 32/32 |
+| DualTextureEffect slot 0 | same | 0/32 | 32/32 |
+| DualTextureEffect slot 1 | same | 0/32 | 32/32 |
+| EnvironmentMapEffect 2D slot | same | declared — renders nothing through a stride-20 stream on Vulkan (independent finding below) | declared |
+| EnvironmentMapEffect cube slot | six raw `FaceProxy*` | 0/32 (leg E2: live `(66,90,220,255)` vs dead `(0,0,0,255)`) | 32/32 |
+| SkinnedEffect / PbrEffect / SkinnedPbrEffect | same | declared — as above | declared |
+| DrawUserPrimitives / DrawUserIndexedPrimitives / DrawPrimitives(VB) / DrawIndexedPrimitives(VB+IB) / DrawInstancedPrimitives | same | 0/32 each | 32/32 each |
+| Custom `Effect` | — | Vulkan has no custom-effect slot on its stock 3D paths (a `ShaderEffect` is a SpriteBatch route there); that route is covered by the SpriteBatch row | unchanged |
+
+Resource kinds: ordinary `Texture2D` correct before and after (leg A2); `RenderTarget2D`
+sample-count 1 fixed; MSAA `RenderTarget2D` fixed and now genuinely measured (leg J1 previously
+reported "applied multisample count 0 for a requested 4" because a Vulkan render target can only
+engage MSAA when the backbuffer itself was created multisampled, which the fixture never requested —
+`PreferMultiSampling` is now set in J1's own child process only, so no other leg's measurement
+moves); `RenderTargetCube` and its individual faces fixed; the multisample attachment is never
+selected because only the resolved single-sample view is what a command retains.
+
+### Cardinality and performance
+
+Leg A3, from the trace, pre vs post:
+
+| Event | Pre | Post |
+|---|---|---|
+| `enqueue.3D` | 1 | 1 |
+| `enqueue.sprite` | 1 | 1 |
+| `enqueue.clear` | 4 | 4 |
+| `frame.submitted` | 2 | 2 |
+| `retire.insert` | 3 | 3 (payloads byte-identical) |
+| `retire.FREE` | 3 | 3 |
+| `cache.evict` | 4 | 4 |
+| `rt2d.create` / `rt2d.dispose` | 1 / 1 | 1 / 1 |
+| `purge.DROPPED` | **1** | **0** |
+| `record.segment` | **0** | **1** |
+| `record.sprite` | **0** | **1** |
+
+No extra submit, Present, frame, wait, CPU copy, target switch, descriptor set, sampler or retirement
+entry. The retirement payloads are identical (`gen=0 views=2 images=1 mem=1 fbs=1 descSets=2
+poolSets=1`, then two `gen=2` buckets), and retirement queues return to baseline. The single delta is
+the producer render pass and its draw — the work the public API asked for and the purge was throwing
+away. Per queued sampled resource the ownership metadata is one `shared_ptr` control block per
+render-target OBJECT (built once at construction), so copying a destination into a command is a
+refcount increment and allocates nothing per draw. Across the whole 17-leg suite post-fix: 28
+`enqueue.3D`, 26 `enqueue.sprite`, 140 `enqueue.clear`, 47 recorded off-screen segments, 41 submits,
+68 retirement insertions and 68 frees — balanced — and zero purges.
+
+### False-positive test audit
+
+| Fixture | Blind spot | Action | Pre-fix |
+|---|---|---|---|
+| `deferred_source_lifetime_test.cpp` | blanket VULKAN `kDeadSourceStillSampleable = false` hid ten legs | declaration deleted | 6/14 legs |
+| same, leg E1 | cube leg asserted only "replays safely" | leg E2 adds a live-versus-dead difference oracle with `EnvironmentMapAmount = 1` (with 0 the cube contributes nothing and the comparison is vacuous) | 0/32 |
+| same, leg J1 | declared MSAA unmeasurable because the fixture never asked for a multisampled backbuffer | `PreferMultiSampling` in J1's own child only | 0/32 |
+| same | no leg chose the effect-versus-source destruction ORDER (`Consume3D` always destroys its effect first) | leg N1, both orders | 0/32 both |
+| `rendertarget_effect_source_test.cpp` | its own blanket VULKAN declaration around leg M1 | deleted | 0/32 both checks |
+| same, legs B1/D1 | dead-source contract measured on one family and one draw mode | legs M2/M3 sweep all families and all draw modes | 0/32 across 5 families and 5 draw modes |
+| `vulkan_deferred_resource_lifetime_test.cpp` scene S3 | `(void)readRt(*rtSrc)`, commented "force rtSrc content into its image", is a FLUSH — it consumed the producer while the source was still alive, so the purge had nothing to drop. Its comment asserted the right thing about the CONSUMER and missed the PRODUCER. | scene S3b is S3 with that line deleted | 0/3072 |
+| same, S3b as first written | the existing loose `IsBlue` predicate PASSED against the unfixed backend, because a purged producer leaves the image UNDEFINED and the recycled device memory happened to be "blue enough" | unique tint compared on all four channels | 0/3072 |
+| `vulkan_rendertarget_getdata_lifetime_test.cpp` scene S6 | asserts only `check(true, "did not crash")` — the one shape of check a silent, non-crashing wrong result always walks past | scene S6b: the target created right after must still be exact. Passes pre-fix too, and says so. | passes pre-fix |
+| same, leg L1 (new) | — | releases the source in the frame AFTER the submit; passes pre-fix, so it is stated as a guard on the fix's GPU half, not a reproduction | passes pre-fix |
+
+### Validation, sanitizers, gates
+
+* Vulkan validation clean with the layer **proven loaded** — `Loading layer library
+  libVkLayer_khronos_validation.so`, eleven layer references — and synchronization validation
+  requested: zero VUIDs, zero destroyed-image/destroyed-view/invalid-descriptor/layout-mismatch
+  reports, zero device-lost across all 17 legs.
+* ASan clean: 0 reports, 17/17 and 20/20 legs, 9/9 scenes; runtime proved linked (39 `__asan_*`).
+* UBSan clean: 0 runtime errors, same leg counts; runtime proved linked (15 `__ubsan_*`).
+* Leak A/B byte-identical pre- and post-fix on every leg measured: 368 bytes in 4 allocations, every
+  frame in `<unknown module>`, i.e. the llvmpipe/loader exit leak. No byte and no allocation added.
+* `ctest -R '^Vulkan'` **186/187**. The one failure, `Vulkan_DepthBias` ("DepthBias=-1e6 (flat)"
+  3/4), is A/B-proven pre-existing: byte-identical output with this task's two production files
+  reverted to their pre-fix content in the same build directory. GFX-039, 107/109, 113/118, 125,
+  127/130, 134/136/142, 140, 144, 151, 157 and 160 gates are all green in that shard, including
+  `Vulkan_EffectDescriptorCacheIdentity` (GFX-076).
+
+### Cross-backend controls
+
+Only Vulkan production changed.
+
+| Backend | `deferred_source_lifetime` | `rendertarget_effect_source` |
+|---|---|---|
+| VULKAN | 17/17 legs, 0 crashes | 20/20 legs, 0 crashes |
+| WEBGPU | 17/17 | 20/20 |
+| SDL_GPU | 17/17 | 20/20 |
+| SOFTWARE | 17/17 | 20/20 |
+| HEADLESS | 17/17 | 20/20 |
+| BGFX | 17/17 | 20/20 |
+| EASYGL | 17/17 | 20/20 |
+| D3D9 / D3D11 / D3D12 | not registered | cross-build only |
+
+WebGPU's REMED-GFX-167 contract stays green; EasyGL's REMED-GFX-168 stays independently declared and
+EasyGL production was not touched.
+
+### Independent findings spawned
+
+- **Four stock-effect families render NOTHING on VULKAN through a stride-20 position+texcoord
+  stream.** `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` and `SkinnedPbrEffect` produce
+  0/32, 0/32, 0/32 and 1/32 non-black pixels respectively, while identical code on SOFTWARE measures
+  all nine families at 32/32. REMED-GFX-152 leg B1's family comparison has therefore been vacuously
+  green for those four on this backend — both sides were equally empty. Found only because leg M2's
+  new comparison refuses to pass on two empty images and requires the live control to differ from
+  the clear on at least a quarter of its probed pixels. Not this ticket's backend defect and not
+  fixed here; leg M2 declares each one with its measured count and fails if NO family was
+  measurable, so the declarations can never carry a run on their own.
