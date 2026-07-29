@@ -46,7 +46,16 @@ namespace CNA::Internal::Backends::Bgfx
         //   255 (kBackbufferFlushViewId)   reserved backbuffer-flush view
         // Segment ids sit ABOVE every RT base id, so within one target its base view (lowest id) plus
         // its later segments (higher ids, monotonic in submission order) always execute in draw order.
-        inline constexpr bgfx::ViewId kFirstSegmentViewId = 192;
+        // REMED-GFX-155 rebalanced this boundary from 192 to 64. Ordering a bind cycle now costs an
+        // ordered segment id whenever its target's base view would execute out of turn, so a frame's
+        // segment demand roughly doubled -- `graphicsdevice_ordered_clear_test` exhausted the old
+        // 63-id pool outright. The two sides of the split are not comparable quantities: base ids
+        // are needed one per CONCURRENTLY LIVE render target, while segments are needed one per
+        // ordered bind cycle WITHIN A SINGLE FRAME. Trading 191 simultaneous render targets (a
+        // number no CNA content approaches) for 63, in exchange for 63 -> 191 ordered segments per
+        // frame, is what keeps the ordering guarantee affordable. Both limits still raise a clear
+        // error rather than wrapping.
+        inline constexpr bgfx::ViewId kFirstSegmentViewId = 64;
 
         // REMED-GFX-155: bgfx's compile-time view-id count (BGFX_CONFIG_MAX_VIEWS). Every id in
         // [0, kMaxViews) is a legal view. Named rather than a literal so the per-frame bookkeeping

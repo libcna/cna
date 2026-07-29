@@ -2350,8 +2350,9 @@ namespace CNA::Internal::Backends::Bgfx
     {
         if (segmentNextId_ >= Detail::kBackbufferFlushViewId)
             throw std::runtime_error(
-                "Bgfx: exhausted per-frame ordered view-segment ids (more than 63 viewport/"
-                "transform/clear/target-rebind segments in one frame -- REMED-GFX-065/GFX-018)");
+                "Bgfx: exhausted per-frame ordered view-segment ids (more than 190 viewport/"
+                "transform/clear/target-rebind/ordering segments in one frame -- "
+                "REMED-GFX-065/GFX-018/GFX-155)");
         return segmentNextId_++;
     }
 
