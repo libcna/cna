@@ -299,6 +299,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_Texture2D_GetDataContract COMMAND cna_test_webgpu_texture2d_getdata_contract
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
+    # DESTINATION element offset and elementCount is the destination capacity available from it;
+    # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
+    # render target, rejected legal excess capacity, and silently returned a partial frame for an
+    # undersized one.
+    cna_webgpu_test(cna_test_webgpu_texture2d_getdata_transfer_range
+                    examples/texture2d_getdata_transfer_range_test.cpp)
+    cna_register_backend_test(NAME WebGPU_Texture2D_GetDataTransferRange COMMAND cna_test_webgpu_texture2d_getdata_transfer_range
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. This backend's own
     # cube/volume readbacks additionally `memset` the caller's destination to zero and returned as if
     # successful whenever the readback buffer could not be mapped -- the same fabrication in backend

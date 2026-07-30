@@ -42,6 +42,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # implementation compile-verified and runnable by hand on real Windows.
     cna_d3d12_test(cna_test_d3d12_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
 
+    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
+    # DESTINATION element offset and elementCount is the destination capacity available from it;
+    # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
+    # render target, rejected legal excess capacity, and silently returned a partial frame for an
+    # undersized one.
+    cna_d3d12_test(cna_test_d3d12_texture2d_getdata_transfer_range examples/texture2d_getdata_transfer_range_test.cpp)
+
     # REMED-GFX-130: the TextureCube/Texture3D half of the same finding. Built, not ctest-registered,
     # for exactly the reason above -- this is a Game-harness test, so it constructs a window and swap
     # chain, which DX-100's spike already found crashes under this dev loop's vanilla Wine dxgi.dll.

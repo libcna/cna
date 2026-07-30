@@ -15,6 +15,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     add_executable(cna_test_canvas_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
     target_link_libraries(cna_test_canvas_texture2d_getdata_contract PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 
+    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
+    # DESTINATION element offset and elementCount is the destination capacity available from it;
+    # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
+    # render target, rejected legal excess capacity, and silently returned a partial frame for an
+    # undersized one.
+    add_executable(cna_test_canvas_texture2d_getdata_transfer_range examples/texture2d_getdata_transfer_range_test.cpp)
+    target_link_libraries(cna_test_canvas_texture2d_getdata_transfer_range PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+
     # REMED-GFX-130: the TextureCube/Texture3D half of the same finding. Built (not ctest-registered,
     # like every Canvas test) so this backend's deterministic cube/volume rejection stays
     # compile-verified on the Emscripten toolchain.

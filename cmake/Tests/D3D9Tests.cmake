@@ -269,6 +269,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         COMMAND ${_d3d9_texture2d_getdata_contract_cmd}
         TIMEOUT 60 LABELS "D3D9")
 
+    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
+    # DESTINATION element offset and elementCount is the destination capacity available from it;
+    # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
+    # render target, rejected legal excess capacity, and silently returned a partial frame for an
+    # undersized one.
+    cna_d3d9_test(cna_test_d3d9_texture2d_getdata_transfer_range examples/texture2d_getdata_transfer_range_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_texture2d_getdata_transfer_range_cmd cna_test_d3d9_texture2d_getdata_transfer_range)
+    cna_register_backend_test(NAME D3D9_Texture2D_GetDataTransferRange
+        COMMAND ${_d3d9_texture2d_getdata_transfer_range_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
     # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
     # as an ordinary Texture2D holding identical bytes. Registered here as a cross-backend control:
     # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's

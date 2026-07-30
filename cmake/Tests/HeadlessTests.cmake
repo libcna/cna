@@ -186,6 +186,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
         COMMAND cna_test_headless_texture2d_getdata_contract
         TIMEOUT 30 LABELS "Headless")
 
+    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
+    # DESTINATION element offset and elementCount is the destination capacity available from it;
+    # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
+    # render target, rejected legal excess capacity, and silently returned a partial frame for an
+    # undersized one.
+    cna_headless_test(cna_test_headless_texture2d_getdata_transfer_range
+                      examples/texture2d_getdata_transfer_range_test.cpp)
+    cna_register_backend_test(NAME Headless_Texture2D_GetDataTransferRange
+        COMMAND cna_test_headless_texture2d_getdata_transfer_range
+        TIMEOUT 30 LABELS "Headless")
+
     # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. This backend is the
     # one that must REJECT both -- its cube SetData is a trace entry rather than a write, and
     # pre-fix its cube GetData actively `std::fill_n`'d the caller's destination with zeros.

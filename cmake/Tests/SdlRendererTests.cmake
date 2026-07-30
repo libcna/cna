@@ -457,6 +457,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME SDL_Renderer_Texture2D_GetDataContract COMMAND cna_test_sdl_texture2d_getdata_contract
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
+    # DESTINATION element offset and elementCount is the destination capacity available from it;
+    # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
+    # render target, rejected legal excess capacity, and silently returned a partial frame for an
+    # undersized one.
+    cna_sdl_test(cna_test_sdl_texture2d_getdata_transfer_range
+                 examples/texture2d_getdata_transfer_range_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_GetDataTransferRange COMMAND cna_test_sdl_texture2d_getdata_transfer_range
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. This backend creates
     # no cube/volume resource at all, so pre-fix a TextureCube here had no storage AND no way to say
     # so -- GetData converted the shared layer's own zeroed scratch buffer into a complete face.

@@ -83,6 +83,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Dx3_Texture2D_GetDataContract COMMAND cna_test_dx3_texture2d_getdata_contract
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
+    # REMED-GFX-149 (and REMED-GFX-128, the same expression): the exact XNA-compatible
+    # startIndex/elementCount contract of every public Texture2D::GetData overload. startIndex is a
+    # DESTINATION element offset and elementCount is the destination capacity available from it;
+    # the whole-level overload applied startIndex to the SOURCE, rejected any non-zero offset on a
+    # render target, rejected legal excess capacity, and silently returned a partial frame for an
+    # undersized one.
+    cna_dx3_test(cna_test_dx3_texture2d_getdata_transfer_range
+                 examples/texture2d_getdata_transfer_range_test.cpp)
+    cna_register_backend_test(NAME Dx3_Texture2D_GetDataTransferRange COMMAND cna_test_dx3_texture2d_getdata_transfer_range
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
     # REMED-GFX-130: the TextureCube/Texture3D half of REMED-GFX-127's finding. DirectDraw is 2D
     # only, so this backend creates neither resource and both public readbacks must reject rather
     # than convert the shared layer's own zeroed scratch buffer into a complete face/volume.
