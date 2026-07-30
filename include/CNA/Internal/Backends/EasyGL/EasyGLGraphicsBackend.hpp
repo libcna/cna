@@ -6,12 +6,55 @@
 #include <easygl/easygl.hpp>
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace CNA::Internal::Backends::EasyGL
 {
     class EasyGLGraphicsBackend;
+    class EasyGLRenderTargetBackend;
+    class EasyGLRenderTargetCubeBackend;
+
+    /**
+     * @brief REMED-GFX-168: the one record of which EasyGL render target is currently bound.
+     *
+     * This used to be six plain members of `EasyGLGraphicsBackend`, three of them raw pointers to
+     * render-target BACKEND OBJECTS. Switching destination calls `UnbindAsRenderTarget()` on the
+     * outgoing one -- a virtual call -- to run its pending MSAA resolve and mip regeneration, and
+     * nothing cleared those pointers when the object behind them died. `RenderTarget2D::Dispose()`
+     * refuses to dispose a bound target, but the DESTRUCTOR is `= default` and never routes through
+     * Dispose, so a scoped target leaving scope while bound released its backend silently and the
+     * next `SetRenderTarget()` dispatched through freed storage.
+     *
+     * Holding the record in its OWN heap allocation, shared between the backend and every render
+     * target it created, is what makes the detach safe in both destruction orders: a dying target
+     * clears its own slots here directly, without calling back into a graphics backend that may
+     * itself already be gone, and a graphics backend that dies first simply takes the record with
+     * it, leaving every surviving target's `weak_ptr` expired and its destructor a no-op.
+     *
+     * Only IDENTITY and EXTENT live here -- no GL handles, no ownership of anything. A target's
+     * native storage stays owned by the target, because the finalization those handles serve writes
+     * into that same target's own `colorTex_`/`cubeTex_`: nothing outside a live wrapper can observe
+     * it, so a destroyed target has no finalization left to owe. The MRT slots are the one case
+     * where the neighbours' finalization IS observable, which is why a detach clears one SLOT rather
+     * than abandoning the set.
+     */
+    struct EasyGLBoundTargetEXT
+    {
+        /** @brief Currently bound single `RenderTarget2D` backend, or nullptr. */
+        IRenderTargetBackend*     rt2D = nullptr;
+        /** @brief Currently bound `RenderTargetCube` backend, or nullptr. */
+        IRenderTargetCubeBackend* cube = nullptr;
+        /** @brief Currently bound ordered multi-target set; entries beyond `mrtCount` are unused. */
+        std::array<EasyGLRenderTargetBackend*, 4> mrt = {};
+        /** @brief Number of live slots in `mrt`; 0 when no multi-target set is bound. */
+        int mrtCount = 0;
+        /** @brief Extent of the bound destination in pixels; 0 means the default framebuffer. */
+        int width  = 0;
+        /** @brief Extent of the bound destination in pixels; 0 means the default framebuffer. */
+        int height = 0;
+    };
 
     /**
      * @brief REMED-GFX-147: whether sampling @p texture needs a vertical coordinate correction.
@@ -65,7 +108,22 @@ namespace CNA::Internal::Backends::EasyGL
     class EasyGLRenderTargetBackend : public IRenderTargetBackend, public ::easygl::RecoverableResource
     {
     public:
+        /**
+         * @brief Creates the FBO, colour texture and optional depth/multisample storage.
+         *
+         * @param w                Width in pixels.
+         * @param h                Height in pixels.
+         * @param depthFormat      Raw `DepthFormat` ordinal; `None` allocates no depth storage.
+         * @param registry         Context-loss registry this target registers with, or nullptr.
+         * @param binding          REMED-GFX-168: the creating backend's shared binding record, so
+         *                         this target can detach itself from it when destroyed. Held as a
+         *                         `weak_ptr`, so a target outliving its graphics backend detaches
+         *                         from nothing instead of touching freed storage.
+         * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
+         * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
+         */
         EasyGLRenderTargetBackend(int w, int h, int depthFormat, ::easygl::ResourceRegistry* registry,
+                                   std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                    bool mipMap = false, int multiSampleCount = 0);
         ~EasyGLRenderTargetBackend() override;
 
@@ -98,6 +156,8 @@ namespace CNA::Internal::Backends::EasyGL
         void CreateResources();
         /// REMED-GFX-168: this target's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
         [[nodiscard]] std::string TraceNativeDetailEXT() const;
+        /// REMED-GFX-168: clears every slot of the shared binding record that names this target.
+        void DetachFromBindingEXT();
         void AttachColorToMRT(
             ::easygl::Framebuffer& framebuffer,
             ::metagl::FramebufferAttachment attachment) const;
@@ -115,6 +175,8 @@ namespace CNA::Internal::Backends::EasyGL
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
         ::easygl::ResourceRegistry* registry_ = nullptr;
+        /// REMED-GFX-168: the creating backend's binding record, so the destructor can detach.
+        std::weak_ptr<EasyGLBoundTargetEXT> binding_;
     };
 
     /// EasyGL cube-map render target: one FBO per face, shared cube-map texture.
@@ -122,7 +184,19 @@ namespace CNA::Internal::Backends::EasyGL
                                            public ::easygl::RecoverableResource
     {
     public:
+        /**
+         * @brief Creates the shared cube texture and its render FBO.
+         *
+         * @param size             Edge length of each face in pixels.
+         * @param depthFormat      Raw `DepthFormat` ordinal; `None` allocates no depth storage.
+         * @param registry         Context-loss registry this target registers with, or nullptr.
+         * @param binding          REMED-GFX-168: the creating backend's shared binding record. See
+         *                         `EasyGLRenderTargetBackend`'s identical parameter.
+         * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
+         * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
+         */
         EasyGLRenderTargetCubeBackend(int size, int depthFormat, ::easygl::ResourceRegistry* registry,
+                                       std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                        bool mipMap = false, int multiSampleCount = 0);
         ~EasyGLRenderTargetCubeBackend() override;
 
@@ -183,6 +257,8 @@ namespace CNA::Internal::Backends::EasyGL
         void CreateResources();
         /// REMED-GFX-168: this cube's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
         [[nodiscard]] std::string TraceNativeDetailEXT() const;
+        /// REMED-GFX-168: clears the shared binding record if it still names this cube.
+        void DetachFromBindingEXT();
 
         ::easygl::Texture      cubeTex_;
         ::easygl::Framebuffer  fbo_;         ///< Render FBO (color = cubeTex_ face, or msaaColorRbos_[face] when MSAA).
@@ -208,6 +284,8 @@ namespace CNA::Internal::Backends::EasyGL
         int  multiSampleCount_ = 0;
         int  lastFace_         = 0;  ///< Most recently bound face, used by UnbindAsRenderTarget's resolve.
         ::easygl::ResourceRegistry* registry_ = nullptr;
+        /// REMED-GFX-168: the creating backend's binding record, so the destructor can detach.
+        std::weak_ptr<EasyGLBoundTargetEXT> binding_;
     };
 
     /// EasyGL 3D (volume) texture backend.
@@ -595,20 +673,19 @@ namespace CNA::Internal::Backends::EasyGL
         // deliberately not part of any shader/pipeline cache.
         ::easygl::Framebuffer mrtFbo_;
         int maxMrtTargets_ = 1;
-        std::array<EasyGLRenderTargetBackend*, 4> currentMrtTargets_ = {};
-        int currentMrtCount_ = 0;
         void FinalizeCurrentMRT();
 
-        // Extent of the currently bound single target or MRT set; 0 = default framebuffer.
-        int currentRtWidth_ = 0;
-        int currentRtHeight_ = 0;
-
-        // Tracks the currently-bound single RenderTarget2D/RenderTargetCube backend (nullptr
-        // when unbound, in MRT mode, or targeting the default framebuffer) so that switching
-        // away from it can trigger UnbindAsRenderTarget()'s mip regeneration (Task 336) — the
-        // interface method is never invoked automatically by anything else.
-        IRenderTargetBackend*     currentRt2D_   = nullptr;
-        IRenderTargetCubeBackend* currentRtCube_ = nullptr;
+        // Which single RenderTarget2D / RenderTargetCube face / ordered MRT set is currently bound,
+        // and its extent. Nothing else in this backend invokes UnbindAsRenderTarget(), so switching
+        // away from a destination is the only thing that runs its MSAA resolve and mip regeneration
+        // (Task 336) — which is why the outgoing target's identity has to be remembered at all.
+        //
+        // REMED-GFX-168: separately allocated and SHARED with every render target this backend
+        // creates, so a target destroyed while it is still bound clears its own slot here instead of
+        // leaving a dangling pointer for the next transition to dispatch through. See
+        // EasyGLBoundTargetEXT for why the record is shared rather than owned outright, and why it
+        // holds identity and extent but no GL handles.
+        std::shared_ptr<EasyGLBoundTargetEXT> bound_ = std::make_shared<EasyGLBoundTargetEXT>();
 
         /// REMED-GFX-168: the binding record as pointer VALUES only, for `CNA_EASYGL_TARGET_TRACE`.
         /// Never dereferences a recorded target -- one of them may already be destroyed storage,

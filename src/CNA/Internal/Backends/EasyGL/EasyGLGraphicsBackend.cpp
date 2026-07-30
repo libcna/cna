@@ -126,12 +126,35 @@ namespace CNA::Internal::Backends::EasyGL
             return ++seq;
         }
 
+        /**
+         * @brief Every GL error pending at this point, drained; "none" when there are none.
+         *
+         * Attached to each trace line so the GL-validation question -- does a transition past a
+         * destroyed target produce an invalid-framebuffer-operation, use a deleted name, or leave an
+         * incomplete framebuffer -- is answered at the transition that would raise it, not by a
+         * summary at the end of a run. Only reached when the trace is enabled, so a normal run does
+         * not pay for a glGetError round trip.
+         */
+        std::string TraceGlErrors()
+        {
+            std::ostringstream os;
+            for (int i = 0; i < 16; ++i)
+            {
+                const auto error = ::metagl::glGetError();
+                if (error == ::metagl::ErrorCode::NoError) break;
+                if (os.tellp() > 0) os << '+';
+                os << ::metagl::to_string(error);
+            }
+            return os.tellp() > 0 ? os.str() : std::string("none");
+        }
+
         /// One trace line. @p detail carries whatever the call site can safely read.
         void TargetTrace(const char* event, const void* object, const std::string& detail)
         {
             if (!TargetTraceEnabled()) return;
             std::cerr << "[GFX168] seq=" << NextTraceSeq() << " ev=" << event
-                      << " obj=" << object << ' ' << detail << std::endl;
+                      << " obj=" << object << ' ' << detail
+                      << " glerr=" << TraceGlErrors() << std::endl;
         }
 
         /// The native identities of one render target, read from the object that owns them.
@@ -700,9 +723,10 @@ namespace CNA::Internal::Backends::EasyGL
 
     EasyGLRenderTargetBackend::EasyGLRenderTargetBackend(int w, int h, int depthFormat,
                                                           ::easygl::ResourceRegistry* registry,
+                                                          std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                                           bool mipMap, int multiSampleCount)
         : width_(w), height_(h), depthFormat_(depthFormat), mipMap_(mipMap),
-          multiSampleCount_(multiSampleCount), registry_(registry)
+          multiSampleCount_(multiSampleCount), registry_(registry), binding_(std::move(binding))
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(w, h) : 1;
         CreateResources();
@@ -713,7 +737,60 @@ namespace CNA::Internal::Backends::EasyGL
     EasyGLRenderTargetBackend::~EasyGLRenderTargetBackend()
     {
         TargetTrace("rt2d.destroy", this, TraceNativeDetailEXT());
+        DetachFromBindingEXT();
         if (registry_) registry_->remove(this);
+    }
+
+    /**
+     * @brief REMED-GFX-168: leaves the shared binding record naming nothing that is about to be freed.
+     *
+     * Runs FIRST in the destructor, before any GL handle is released, so there is no instant at which
+     * the record names this object while its storage is already partly gone.
+     *
+     * Deliberately does NOT run this target's pending finalization on the way out. `UnbindAsRenderTarget`
+     * resolves `msaaColorRbo_` into `colorTex_` and regenerates `colorTex_`'s mip chain -- both write
+     * into members this destructor is about to destroy, and the only public routes to that content
+     * (`RenderTarget2D::GetData`, and sampling the target as a `Texture2D`) both need the live
+     * wrapper. So the work has no reachable observer and skipping it loses nothing; doing it here
+     * would instead issue GL calls from a destructor that may run during context teardown.
+     *
+     * The multi-target case is different and is handled as such: the OTHER slots of a bound set are
+     * live targets whose finalization is still observable, so only this target's own slot is cleared
+     * and `FinalizeCurrentMRT` still resolves the survivors. The set's extent is left alone, because
+     * every member of a set is required to share it.
+     */
+    void EasyGLRenderTargetBackend::DetachFromBindingEXT()
+    {
+        const auto binding = binding_.lock();
+        if (!binding) return;   // the graphics backend went first; there is nothing to detach from
+        if (binding->rt2D == this)
+        {
+            TargetTrace("rt2d.detach", this, "was the bound single target");
+            binding->rt2D = nullptr;
+            binding->width = 0;
+            binding->height = 0;
+        }
+        bool anySlotLeft = false;
+        for (int i = 0; i < binding->mrtCount; ++i)
+        {
+            if (binding->mrt[static_cast<std::size_t>(i)] == this)
+            {
+                TargetTrace("mrt.detach", this, "slot " + std::to_string(i));
+                binding->mrt[static_cast<std::size_t>(i)] = nullptr;
+            }
+            else if (binding->mrt[static_cast<std::size_t>(i)] != nullptr)
+            {
+                anySlotLeft = true;
+            }
+        }
+        // Every slot of the set has now died. Keeping a positive count would leave
+        // GetCurrentRenderTarget2DSize reporting an extent no live destination has.
+        if (binding->mrtCount > 0 && !anySlotLeft)
+        {
+            binding->mrtCount = 0;
+            binding->width = 0;
+            binding->height = 0;
+        }
     }
 
     std::string EasyGLRenderTargetBackend::TraceNativeDetailEXT() const
@@ -980,9 +1057,10 @@ namespace CNA::Internal::Backends::EasyGL
 
     EasyGLRenderTargetCubeBackend::EasyGLRenderTargetCubeBackend(int size, int depthFormat,
                                                                     ::easygl::ResourceRegistry* registry,
+                                                                    std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                                                     bool mipMap, int multiSampleCount)
         : size_(size), depthFormat_(depthFormat), mipMap_(mipMap),
-          multiSampleCount_(multiSampleCount), registry_(registry)
+          multiSampleCount_(multiSampleCount), registry_(registry), binding_(std::move(binding))
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
         CreateResources();
@@ -993,7 +1071,33 @@ namespace CNA::Internal::Backends::EasyGL
     EasyGLRenderTargetCubeBackend::~EasyGLRenderTargetCubeBackend()
     {
         TargetTrace("cube.destroy", this, TraceNativeDetailEXT());
+        DetachFromBindingEXT();
         if (registry_) registry_->remove(this);
+    }
+
+    /**
+     * @brief REMED-GFX-168: the cube counterpart of `EasyGLRenderTargetBackend::DetachFromBindingEXT`.
+     *
+     * A cube is recorded as ONE binding whatever face is active -- the face index lives in the cube's
+     * own `lastFace_` -- so detaching the resource detaches every face of it at once, and a face
+     * binding cannot outlive its parent. A cube is never a member of a multi-target set (EasyGL's
+     * `SetRenderTargets` refuses cube faces in one), so there are no slots to walk.
+     *
+     * Its pending finalization -- resolving `msaaColorRbos_[lastFace_]` into `cubeTex_` and
+     * regenerating that face's mip chain -- writes into members this destructor destroys, exactly as
+     * for a 2D target, so there is nothing observable left to owe.
+     */
+    void EasyGLRenderTargetCubeBackend::DetachFromBindingEXT()
+    {
+        const auto binding = binding_.lock();
+        if (!binding) return;
+        if (binding->cube == this)
+        {
+            TargetTrace("cube.detach", this, "was the bound cube, face " + std::to_string(lastFace_));
+            binding->cube = nullptr;
+            binding->width = 0;
+            binding->height = 0;
+        }
     }
 
     std::string EasyGLRenderTargetCubeBackend::TraceNativeDetailEXT() const
@@ -1831,6 +1935,14 @@ void main()
 
     EasyGLGraphicsBackend::~EasyGLGraphicsBackend()
     {
+        // REMED-GFX-168: nothing to unwind for the binding record here. `bound_` is the record's only
+        // owner, so its own member destruction is what expires every surviving render target's
+        // weak_ptr -- a target that outlives this backend then detaches from nothing instead of
+        // writing into freed storage. Deliberately not reset early either: the record staying valid
+        // for the whole of this destructor keeps a target destroyed DURING teardown on the ordinary
+        // detach path. (Neither order is reachable through CNA's own Game harness, where
+        // GraphicsDevice_ is a Game base member destroyed after every subclass member; a globally
+        // held render target reaches the first one, which is why the ownership is weak at all.)
         if (window) IGraphicsBackend::UnregisterForWindow(window);
         if (gl_context) SDL_GL_DestroyContext(gl_context);
         // window is NOT owned by the backend.
@@ -1933,7 +2045,7 @@ void main()
         // the read buffer pointing at GL_NONE and glReadPixels returns zeros.
         // When a render-target FBO is bound, the read buffer is already
         // GL_COLOR_ATTACHMENT0, so no explicit call is needed there.
-        if (currentRtHeight_ == 0)
+        if (bound_->height == 0)
         {
             if (sampleCount_ > 1)
             {
@@ -1947,7 +2059,7 @@ void main()
 
         // Use the render-target's own height for the Y-flip when an RT is bound;
         // fall back to the window/viewport height for the default framebuffer.
-        int fbH = currentRtHeight_;
+        int fbH = bound_->height;
         if (fbH == 0)
         {
             int vpW;
@@ -1973,7 +2085,7 @@ void main()
         }
 
         // After reading from FBO 0, restore the MSAA FBO as the draw target.
-        if (sampleCount_ > 1 && currentRtHeight_ == 0)
+        if (sampleCount_ > 1 && bound_->height == 0)
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
     }
 
@@ -2051,9 +2163,9 @@ void main()
 
     bool EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const
     {
-        if (!currentRt2D_ && currentMrtCount_ == 0) return false;
-        width = currentRtWidth_;
-        height = currentRtHeight_;
+        if (!bound_->rt2D && bound_->mrtCount == 0) return false;
+        width = bound_->width;
+        height = bound_->height;
         return true;
     }
 
@@ -2114,7 +2226,11 @@ void main()
 
     std::unique_ptr<IRenderTargetBackend> EasyGLGraphicsBackend::CreateRenderTarget2D(int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<EasyGLRenderTargetBackend>(w, h, depthFormat, RegistryPtr(), mipMap, multiSampleCount);
+        // REMED-GFX-168: `bound_` is handed over as a weak_ptr so the target can clear its own slot
+        // when it is destroyed while still bound. Weak, not shared: a target must never keep this
+        // backend's binding record alive past the backend itself.
+        return std::make_unique<EasyGLRenderTargetBackend>(w, h, depthFormat, RegistryPtr(), bound_,
+                                                           mipMap, multiSampleCount);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> EasyGLGraphicsBackend::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
@@ -2129,7 +2245,9 @@ void main()
         // so binding one still touches nothing and there is still no load action to carry a usage
         // decision.
         (void) preserveContents;
-        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, depthFormat, RegistryPtr(), mipMap, multiSampleCount);
+        // REMED-GFX-168: see CreateRenderTarget2D above for why the binding record is passed weakly.
+        return std::make_unique<EasyGLRenderTargetCubeBackend>(size, depthFormat, RegistryPtr(),
+                                                               bound_, mipMap, multiSampleCount);
     }
 
     std::unique_ptr<ITexture3DBackend> EasyGLGraphicsBackend::CreateTexture3D(
@@ -2161,12 +2279,12 @@ void main()
     std::string EasyGLGraphicsBackend::TraceBindingDetailEXT() const
     {
         std::ostringstream os;
-        os << "cur2d=" << static_cast<const void*>(currentRt2D_)
-           << " curCube=" << static_cast<const void*>(currentRtCube_)
-           << " mrtCount=" << currentMrtCount_
-           << " curDim=" << currentRtWidth_ << 'x' << currentRtHeight_;
-        for (int i = 0; i < currentMrtCount_; ++i)
-            os << " mrt" << i << '=' << static_cast<const void*>(currentMrtTargets_[i]);
+        os << "cur2d=" << static_cast<const void*>(bound_->rt2D)
+           << " curCube=" << static_cast<const void*>(bound_->cube)
+           << " mrtCount=" << bound_->mrtCount
+           << " curDim=" << bound_->width << 'x' << bound_->height;
+        for (int i = 0; i < bound_->mrtCount; ++i)
+            os << " mrt" << i << '=' << static_cast<const void*>(bound_->mrt[i]);
         return os.str();
     }
 
@@ -2176,20 +2294,20 @@ void main()
         FinalizeCurrentMRT();
         // Regenerate mips (if requested) for whatever single RT/cube-face was previously
         // active, before switching away from it — see UnbindAsRenderTarget's Task 336 comment.
-        if (currentRt2D_ && currentRt2D_ != rt) currentRt2D_->UnbindAsRenderTarget();
-        if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
-        currentRtCube_ = nullptr;
-        currentRt2D_   = rt;
+        if (bound_->rt2D && bound_->rt2D != rt) bound_->rt2D->UnbindAsRenderTarget();
+        if (bound_->cube) bound_->cube->UnbindAsRenderTarget();
+        bound_->cube = nullptr;
+        bound_->rt2D   = rt;
         if (rt)
         {
-            currentRtWidth_ = rt->GetWidth();
-            currentRtHeight_ = rt->GetHeight();
+            bound_->width = rt->GetWidth();
+            bound_->height = rt->GetHeight();
             rt->BindAsRenderTarget();
         }
         else
         {
-            currentRtWidth_ = 0;
-            currentRtHeight_ = 0;
+            bound_->width = 0;
+            bound_->height = 0;
             BindDefaultFramebuffer();
         }
         TargetTrace("set2d.exit", rt, TraceBindingDetailEXT());
@@ -2200,28 +2318,28 @@ void main()
         TargetTrace("setcube.enter", rt, TraceBindingDetailEXT() + " reqFace=" + std::to_string(face));
         if (!rt) { SetRenderTarget2D(nullptr); return; }
         FinalizeCurrentMRT();
-        if (currentRt2D_) currentRt2D_->UnbindAsRenderTarget();
-        if (currentRtCube_ && currentRtCube_ != rt) currentRtCube_->UnbindAsRenderTarget();
-        currentRt2D_   = nullptr;
-        currentRtCube_ = rt;
-        currentRtWidth_ = rt->GetSize();
-        currentRtHeight_ = rt->GetSize();
+        if (bound_->rt2D) bound_->rt2D->UnbindAsRenderTarget();
+        if (bound_->cube && bound_->cube != rt) bound_->cube->UnbindAsRenderTarget();
+        bound_->rt2D   = nullptr;
+        bound_->cube = rt;
+        bound_->width = rt->GetSize();
+        bound_->height = rt->GetSize();
         rt->BindAsRenderTargetFace(face);
         TargetTrace("setcube.exit", rt, TraceBindingDetailEXT());
     }
 
     void EasyGLGraphicsBackend::FinalizeCurrentMRT()
     {
-        if (currentMrtCount_ <= 0) return;
+        if (bound_->mrtCount <= 0) return;
         TargetTrace("mrt.finalize", this, TraceBindingDetailEXT());
-        const int count = currentMrtCount_;
-        currentMrtCount_ = 0;
-        currentRtWidth_ = 0;
-        currentRtHeight_ = 0;
+        const int count = bound_->mrtCount;
+        bound_->mrtCount = 0;
+        bound_->width = 0;
+        bound_->height = 0;
         for (int i = 0; i < count; ++i)
         {
-            EasyGLRenderTargetBackend* target = currentMrtTargets_[i];
-            currentMrtTargets_[i] = nullptr;
+            EasyGLRenderTargetBackend* target = bound_->mrt[i];
+            bound_->mrt[i] = nullptr;
             if (target) target->UnbindAsRenderTarget();
         }
     }
@@ -2318,10 +2436,10 @@ void main()
         // Finalize every old destination before replacing the ordered set. This resolves each
         // multisample color buffer and regenerates each requested mip chain.
         FinalizeCurrentMRT();
-        if (currentRt2D_)   currentRt2D_->UnbindAsRenderTarget();
-        if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
-        currentRt2D_   = nullptr;
-        currentRtCube_ = nullptr;
+        if (bound_->rt2D)   bound_->rt2D->UnbindAsRenderTarget();
+        if (bound_->cube) bound_->cube->UnbindAsRenderTarget();
+        bound_->rt2D   = nullptr;
+        bound_->cube = nullptr;
 
         mrtFbo_.create();
         mrtFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
@@ -2373,8 +2491,8 @@ void main()
             || !setupErrors.empty())
         {
             BindDefaultFramebuffer();
-            currentRtWidth_ = 0;
-            currentRtHeight_ = 0;
+            bound_->width = 0;
+            bound_->height = 0;
             throw std::runtime_error(
                 "EasyGL SetRenderTargets: MRT framebuffer setup failed for "
                 + std::to_string(count) + " targets; status="
@@ -2383,10 +2501,10 @@ void main()
                 + (setupErrors.empty() ? std::string("none") : setupErrors));
         }
 
-        currentMrtTargets_ = targets;
-        currentMrtCount_ = count;
-        currentRtWidth_ = renderTargets[0].GetWidth();
-        currentRtHeight_ = renderTargets[0].GetHeight();
+        bound_->mrt = targets;
+        bound_->mrtCount = count;
+        bound_->width = renderTargets[0].GetWidth();
+        bound_->height = renderTargets[0].GetHeight();
         ApplyCurrentColorWriteMasks();
         TargetTrace("mrt.set", this,
                     TraceBindingDetailEXT() + " mrtFbo=" + std::to_string(mrtFbo_.native_handle()));
@@ -2531,7 +2649,7 @@ void main()
 
     bool EasyGLGraphicsBackend::HasRestrictedActiveColorWriteMask() const
     {
-        const int activeCount = currentMrtCount_ > 0 ? currentMrtCount_ : 1;
+        const int activeCount = bound_->mrtCount > 0 ? bound_->mrtCount : 1;
         for (int i = 0; i < activeCount; ++i)
             if (currentColorWriteMasks_[i] != 15) return true;
         return false;
@@ -2543,9 +2661,9 @@ void main()
                                                  const BlendWriteState& writeState)
     {
         if (metagl::IsContextLost()) return;
-        if (!supportsIndexedColorMasks_ && currentMrtCount_ > 1)
+        if (!supportsIndexedColorMasks_ && bound_->mrtCount > 1)
         {
-            for (int i = 1; i < currentMrtCount_; ++i)
+            for (int i = 1; i < bound_->mrtCount; ++i)
                 if (writeState.colorWriteChannels[i]
                     != writeState.colorWriteChannels[0])
                     throw std::runtime_error(
@@ -2668,7 +2786,7 @@ void main()
         // height for the default framebuffer. Task 880: previously always used the
         // window's physical height even while an RT was bound, which is only latent
         // (scissor test is opt-in via RasterizerState.ScissorTestEnable) but wrong.
-        int fbH = currentRtHeight_;
+        int fbH = bound_->height;
         if (fbH == 0)
         {
             int physW;
@@ -2696,7 +2814,7 @@ void main()
         // unconditionally while an RT is bound produces a viewport y-offset that falls
         // entirely outside the RT's actual pixel range whenever the RT is smaller than the
         // window, discarding every fragment.
-        int fbH = currentRtHeight_;
+        int fbH = bound_->height;
         if (fbH == 0)
         {
             int physW;
