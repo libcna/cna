@@ -14,6 +14,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -1073,6 +1075,8 @@ namespace CNA::Internal::Backends::SdlGpu
         pendingTextureReleases_.clear();
         if (depthStencilTexture_ != nullptr)
             SDL_ReleaseGPUTexture(device_, depthStencilTexture_);
+        if (backbufferProxy_ != nullptr)
+            SDL_ReleaseGPUTexture(device_, backbufferProxy_);   // REMED-GFX-165 readback proxy
         if (device_ != nullptr)
         {
             SDL_ReleaseWindowFromGPUDevice(device_, window_);
@@ -1197,6 +1201,18 @@ namespace CNA::Internal::Backends::SdlGpu
         physicalHeight_ = static_cast<int>(swapchainHeight);
         EnsureDepthStencilTexture(swapchainWidth, swapchainHeight);
 
+        // REMED-GFX-165: once the backbuffer has been read at least once, render every backbuffer pass
+        // into a self-owned readable proxy instead of straight into the write-only swapchain texture,
+        // and blit the proxy to the swapchain for present. The proxy is the resource ReadBackbuffer
+        // downloads from. Zero cost until the first read (backbufferReadbackEnabled_ stays false).
+        SDL_GPUTexture* backbufferColorTarget = swapchainTexture;
+        bool renderedThroughProxy = false;
+        if (backbufferReadbackEnabled_ && EnsureBackbufferProxy(swapchainWidth, swapchainHeight))
+        {
+            backbufferColorTarget = backbufferProxy_;
+            renderedThroughProxy = true;
+        }
+
         // Sprite/3D vertex data must be uploaded via a copy pass BEFORE BeginGPURenderPass --
         // SDL_gpu forbids a copy pass nested inside a render pass. Covers every target's draws
         // regardless of which render pass below will consume them.
@@ -1247,7 +1263,7 @@ namespace CNA::Internal::Backends::SdlGpu
                 {
                     if (!draws && !clears && i != lastBackbuffer)
                         continue;
-                    RenderToSwapchain(cmd, segment, swapchainTexture, firstBackbufferPass);
+                    RenderToSwapchain(cmd, segment, backbufferColorTarget, firstBackbufferPass);
                     firstBackbufferPass = false;
                     continue;
                 }
@@ -1282,6 +1298,13 @@ namespace CNA::Internal::Backends::SdlGpu
                 }
             }
         }
+
+        // REMED-GFX-165: the frame's backbuffer content is in the proxy -- present it by copying the
+        // proxy into the acquired (write-only) swapchain texture. A 1:1 same-size, same-format blit,
+        // so it is a straight copy with no scaling. Must be outside any render/copy pass and before
+        // submit, exactly like the mip regen above.
+        if (renderedThroughProxy)
+            BlitBackbufferProxyToSwapchain(cmd, swapchainTexture);
 
             if (!commandBuffer.Submit())
                 throw std::runtime_error(
@@ -1444,6 +1467,167 @@ namespace CNA::Internal::Backends::SdlGpu
                               : SDL_GPU_TEXTUREFORMAT_INVALID,
                           1, segment.id);
         passOwner.End();
+    }
+
+    bool SdlGpuGraphicsBackend::EnsureBackbufferProxy(Uint32 width, Uint32 height)
+    {
+        if (width == 0 || height == 0)
+            return false;
+        const SDL_GPUTextureFormat format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        if (backbufferProxy_ != nullptr && backbufferProxyWidth_ == static_cast<int>(width) &&
+            backbufferProxyHeight_ == static_cast<int>(height) && backbufferProxyFormat_ == format)
+            return true;
+
+        if (backbufferProxy_ != nullptr)
+        {
+            SDL_ReleaseGPUTexture(device_, backbufferProxy_);
+            backbufferProxy_ = nullptr;
+        }
+        // Same format as the swapchain so the backbuffer pipelines (keyed on the swapchain format)
+        // render into it unchanged, and the proxy->swapchain blit is a straight same-format copy.
+        SDL_GPUTextureCreateInfo info{};
+        info.type = SDL_GPU_TEXTURETYPE_2D;
+        info.format = format;
+        info.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        info.width = width;
+        info.height = height;
+        info.layer_count_or_depth = 1;
+        info.num_levels = 1;
+        info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        backbufferProxy_ = SDL_CreateGPUTexture(device_, &info);
+        if (backbufferProxy_ == nullptr)
+        {
+            CNA::Logger::Warn(
+                std::string("CNA SDL_GPU: backbuffer readback proxy creation failed: ") + SDL_GetError(),
+                CNA::LogCategory::GPU);
+            backbufferProxyWidth_ = 0;
+            backbufferProxyHeight_ = 0;
+            return false;
+        }
+        backbufferProxyWidth_ = static_cast<int>(width);
+        backbufferProxyHeight_ = static_cast<int>(height);
+        backbufferProxyFormat_ = format;
+        return true;
+    }
+
+    void SdlGpuGraphicsBackend::BlitBackbufferProxyToSwapchain(SDL_GPUCommandBuffer* cmd,
+                                                               SDL_GPUTexture* swapchainTexture)
+    {
+        SDL_GPUBlitInfo blit{};
+        blit.source.texture = backbufferProxy_;
+        blit.source.w = static_cast<Uint32>(backbufferProxyWidth_);
+        blit.source.h = static_cast<Uint32>(backbufferProxyHeight_);
+        blit.destination.texture = swapchainTexture;
+        blit.destination.w = static_cast<Uint32>(physicalWidth_);
+        blit.destination.h = static_cast<Uint32>(physicalHeight_);
+        blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+        blit.filter = SDL_GPU_FILTER_NEAREST;   // proxy and swapchain are the same size: a 1:1 copy
+        SDL_BlitGPUTexture(cmd, &blit);
+    }
+
+    void SdlGpuGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels)
+    {
+        if (w <= 0 || h <= 0 || pixels == nullptr)
+            return;
+        const std::size_t outBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
+
+        // Lazily switch to proxy-backed presentation, then flush so the read observes this frame's
+        // draws (a no-op if nothing is pending, matching the render-target GetData() contract).
+        backbufferReadbackEnabled_ = true;
+        EnsureFrameRendered();
+
+        if (const char* trace = std::getenv("CNA_BACKBUFFER_READ_TRACE"); trace != nullptr && *trace != '\0')
+        {
+            std::fprintf(stderr,
+                         "[GFX-165][SDL_GPU] ReadBackbuffer req=(%d,%d,%dx%d) physical=%dx%d proxy=%dx%d "
+                         "fmt=%d virtual=%dx%d\n",
+                         x, y, w, h, physicalWidth_, physicalHeight_, backbufferProxyWidth_,
+                         backbufferProxyHeight_, static_cast<int>(backbufferProxyFormat_),
+                         virtualWidth_, virtualHeight_);
+            std::fflush(stderr);
+        }
+
+        std::memset(pixels, 0, outBytes);
+        if (backbufferProxy_ == nullptr)
+            return;   // nothing was rendered (e.g. a minimized window acquired no swapchain texture)
+
+        // The request is in logical backbuffer coordinates; the proxy is the physical (swapchain)
+        // surface. Clamp the copy to the proxy and leave anything outside it zero-filled, so an odd
+        // logical/physical rounding can never read outside the resource (mirrors the WebGPU read).
+        if (x >= backbufferProxyWidth_ || y >= backbufferProxyHeight_)
+            return;
+        const int readX = std::max(0, x);
+        const int readY = std::max(0, y);
+        const int readW = std::min(w - (readX - x), backbufferProxyWidth_ - readX);
+        const int readH = std::min(h - (readY - y), backbufferProxyHeight_ - readY);
+        if (readW <= 0 || readH <= 0)
+            return;
+
+        const Uint32 regionBytes = static_cast<Uint32>(readW) * static_cast<Uint32>(readH) * 4;
+        SDL_GPUTransferBufferCreateInfo transferInfo{};
+        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+        transferInfo.size = regionBytes;
+        SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device_, &transferInfo);
+        if (transferBuffer == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: ReadBackbuffer: failed to create transfer buffer: ") + SDL_GetError());
+
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
+        if (cmd == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: ReadBackbuffer: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+        }
+
+        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTextureRegion region{};
+        region.texture = backbufferProxy_;
+        region.x = static_cast<Uint32>(readX);
+        region.y = static_cast<Uint32>(readY);
+        region.w = static_cast<Uint32>(readW);
+        region.h = static_cast<Uint32>(readH);
+        region.d = 1;
+        SDL_GPUTextureTransferInfo dest{};
+        dest.transfer_buffer = transferBuffer;
+        dest.pixels_per_row = static_cast<Uint32>(readW);
+        dest.rows_per_layer = static_cast<Uint32>(readH);
+        SDL_DownloadFromGPUTexture(copyPass, &region, &dest);
+        SDL_EndGPUCopyPass(copyPass);
+
+        SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+        if (fence == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: ReadBackbuffer: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+        }
+        SDL_WaitForGPUFences(device_, true, &fence, 1);
+        SDL_ReleaseGPUFence(device_, fence);
+
+        void* mapped = SDL_MapGPUTransferBuffer(device_, transferBuffer, false);
+        if (mapped == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: ReadBackbuffer: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+        }
+
+        // The proxy carries the swapchain's own channel order; CNA's public Color is RGBA. Swap R<->B
+        // for a BGRA swapchain so the returned bytes are RGBA whatever the native surface format is.
+        const bool isBgra = (backbufferProxyFormat_ == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM ||
+                             backbufferProxyFormat_ == SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB);
+        const std::uint8_t* srcBase = static_cast<const std::uint8_t*>(mapped);
+        for (int row = 0; row < readH; ++row)
+        {
+            for (int col = 0; col < readW; ++col)
+            {
+                const std::uint8_t* s = srcBase + (static_cast<std::size_t>(row) * readW + col) * 4;
+                const int dx = (readX - x) + col;
+                const int dy = (readY - y) + row;
+                std::uint8_t* d = pixels + (static_cast<std::size_t>(dy) * w + dx) * 4;
+                if (isBgra) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
+                else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
+            }
+        }
+        SDL_UnmapGPUTransferBuffer(device_, transferBuffer);
+        SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
     }
 
     void SdlGpuGraphicsBackend::RenderToTarget(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,

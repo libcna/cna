@@ -1397,6 +1397,16 @@ namespace CNA::Internal::Backends::SdlGpu
         void Present() override;
         /** @brief Returns the current logical (virtual) viewport size. */
         void GetViewportSize(int& width, int& height) override;
+        /**
+         * @brief Reads a region of the backbuffer into a tightly packed RGBA8 buffer (REMED-GFX-165).
+         *
+         * @param x       Left edge of the region, in backbuffer pixels.
+         * @param y       Top edge of the region, in backbuffer pixels.
+         * @param w       Region width in pixels.
+         * @param h       Region height in pixels.
+         * @param pixels  Destination for w*h RGBA8 texels (4 bytes each), top row first.
+         */
+        void ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels) override;
         /** @brief Updates the virtual (game-logic) resolution used for presentation scaling. */
         void SetVirtualResolution(int width, int height) override;
         /** @brief Updates the presentation/scaling policy. */
@@ -1962,6 +1972,14 @@ namespace CNA::Internal::Backends::SdlGpu
          */
         void RenderToSwapchain(SDL_GPUCommandBuffer* cmd, const PassSegment& segment,
                                SDL_GPUTexture* swapchainTexture, bool isFirstBackbuffer);
+        /**
+         * @brief REMED-GFX-165: (re)creates the readback proxy at @p width x @p height in the current
+         *        swapchain format when it does not already match, returning true when a usable proxy
+         *        exists afterwards.
+         */
+        bool EnsureBackbufferProxy(Uint32 width, Uint32 height);
+        /// REMED-GFX-165: copies the readback proxy into the acquired swapchain texture for present.
+        void BlitBackbufferProxyToSwapchain(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchainTexture);
         /// Closes the open segment; subsequent work belongs to the swapchain until the next bind.
         void EndRenderTargetSegment();
         /// The open segment, or null when the swapchain is current.
@@ -2070,6 +2088,22 @@ namespace CNA::Internal::Backends::SdlGpu
         bool registeredForWindow_ = false;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
         SDL_GPUTextureFormat depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+
+        // REMED-GFX-165: the swapchain texture is write-only by permanent SDL contract
+        // (SDL_WaitAndAcquireGPUSwapchainTexture cannot be a sampler/copy/blit SOURCE), so the
+        // backbuffer cannot be read back directly. Once GetBackBufferData is first called, the
+        // backbuffer pass renders into this self-owned SAMPLER|COLOR_TARGET proxy instead of straight
+        // into the swapchain texture, and one SDL_BlitGPUTexture(proxy -> swapchain) presents it;
+        // ReadBackbuffer then downloads from the proxy through the same transfer-buffer+fence path the
+        // render targets already use. Lazily created on the first read, so a game that never reads the
+        // backbuffer pays NOTHING (this resolves plan_sdlgpu.md SDLGPU-39's per-frame-cost objection --
+        // the deferred-frame model means the first read happens while the frame is still pending, so
+        // the proxy genuinely can be allocated on demand rather than "before every frame's draws").
+        SDL_GPUTexture* backbufferProxy_ = nullptr;
+        int backbufferProxyWidth_ = 0;
+        int backbufferProxyHeight_ = 0;
+        SDL_GPUTextureFormat backbufferProxyFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        bool backbufferReadbackEnabled_ = false;
         /// SDLGPU-6: whether SDL_CreateGPUDevice's debug_mode was requested (an #ifndef NDEBUG
         /// CNA-side toggle, mirroring D3D11GraphicsBackend::debugLayerEnabled_'s identical rationale).
         bool debugModeEnabled_ = false;
