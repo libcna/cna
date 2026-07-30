@@ -2485,12 +2485,15 @@ existing task.
 | REMED-GFX-133 | `headless_smoke_test` Check F catches `HeadlessValidationException` for an out-of-range indexed draw that REMED-GFX-110's shared validation now rejects with `System::ArgumentOutOfRangeException` first, so the exception escapes and aborts the executable. | LOW | P3 | REMED-GFX-127 regression matrix | **OPEN — A/B-PROVEN PRE-EXISTING (THE PRE-REMED-GFX-127 SOURCES ABORT IDENTICALLY). WHETHER THE SHARED LAYER OR THE HEADLESS MODE DIAL SHOULD OWN THE REJECTION IS A CONTRACT QUESTION.** |
 | REMED-GFX-147 | EasyGL sampled a `RenderTarget2D` bottom-up while `GetData` and ordinary `Texture2D` sampling were both top-down: an OpenGL framebuffer's origin is bottom-left, readback already compensated, sampling did not. | MEDIUM | P2 | REMED-GFX-131 cross-backend controls | **DONE 2026-07-29 — CORRECTED AT SAMPLE TIME THROUGH ONE PREDICATE SHARED BY SPRITEBATCH AND THE ELEVEN STOCK 3D SHADERS; `GetData` UNTOUCHED, NO COPY/READBACK/RE-UPLOAD, NO PROGRAM VARIANT. 25/60 -> 60/60. ONE ORIENTATION-BLIND FIXTURE STRENGTHENED. SPAWNED GFX-149/150/151/152/153/154.** |
 | REMED-GFX-149 | `Texture2D::GetData(Color*, startIndex, elementCount)` gates its render-target backend fallback on `startIndex == 0` and throws for any other offset, while the rectangle overload honours the same offset. Shared layer, every backend. | LOW | P3 | — | **DONE 2026-07-30 — RECLASSIFIED AND WIDENED: THE TICKET NAMED ONE SYMPTOM OF SEVEN, AND THE WORST ONE KILLS THE PROCESS. REMED-GFX-128 IS THE SAME EXPRESSION AND IS CLOSED BY THE SAME FIX (see its row).** GFX-149 recorded only "the render-target fallback is gated on `startIndex == 0`". Measured, the shared, backend-neutral `Texture2D::GetData(Color*, int startIndex, int elementCount)` violated the contract in SEVEN ways at once: (1) `startIndex` indexed the SOURCE (`src = (startIndex + i) * 4`) while the destination was written from `data[0]` -- exactly inverted, and the exact opposite of the rectangle overload's `dst = startIndex + row * w + col` on the same object (this is REMED-GFX-128, which GFX-149 duplicated without noticing); (2) the render-target fallback rejected any non-zero `startIndex` with `std::runtime_error("no CPU-side pixel data available")` -- the ticket's headline; (3) the same gate required `elementCount == total`, rejecting the legal EXCESS capacity FNA's own `GetData<T>(T[] data)` passes; (4) that fallback wrote from `data[0]`, ignoring `startIndex` even had it been reached; (5) `startIndex + elementCount > total` compared DESTINATION indices against the SOURCE pixel count; (6) an `elementCount` BELOW the region silently returned a partial frame instead of rejecting, unlike the rectangle overload, `TextureCube`, `Texture3D` and `GetBackBufferData`, all four of which already rejected it; (7) `startIndex + elementCount` was evaluated as `int`, so it WRAPPED and the wrapped value passed every later bound -- ASan names the exact line, `Texture2D.cpp:397`, `heap-buffer-overflow READ of size 1` in `Texture2D::GetData`, and without ASan it is a plain SIGSEGV. A public API argument shape killed the process. **AUTHORITATIVE SEMANTICS, established not assumed.** `startIndex` indexes the CALLER'S DESTINATION ARRAY: FNA pins `data` and transfers to `AddrOfPinnedObject() + startIndex * elementSizeInBytes`, and the archived XNA reference documents it as "index of the first element to get", an index into `data`. It is an ELEMENT index, never a byte offset, never a source texel. `elementCount` is the destination CAPACITY available from `startIndex`: FNA hands it to the native transfer as `elementCount * elementSizeInBytes` and derives the transfer size from the REQUESTED REGION, and `GetData<T>(T[] data)` passes `data.Length`, which may exceed the region -- so excess is legal and must be left untouched, and a capacity below the region must be rejected before any transfer. Region = the complete level 0 for the whole-level overloads, this rectangle's own dimensions at this mip level for the rectangle overload; never `elementCount`, never level 0's dimensions, never a previous request. Written range on success: exactly `[startIndex, startIndex + regionPixels)`. Element size is 4 bytes on every path -- the public destination type is `Color` and `Texture::ValidateFormat` accepts only `SurfaceFormat::Color` project-wide, so there is NO templated element type, no compressed block and no per-format pitch case; that is stated rather than invented coverage. **FIX** = one shared `validateTransferWindow()` used by both overloads (capacity checked against the requested region; the destination window computed in 64 bits and rejected before use), the gate deleted, and both copy loops running over the REGION writing at `data[startIndex + i]`. Argument validation runs BEFORE the storage/capability decision, so an undersized or overflowing request keeps its own specific error instead of being weakened into the backend's `NotSupportedException` -- REMED-GFX-162's precedence, preserved from the texture side and asserted on Headless (G4/G5). Validation precedence: null/`elementCount <= 0` -> `std::invalid_argument`; `startIndex < 0` -> `std::out_of_range`; `level < 0` -> `std::out_of_range`; format; rectangle bounds -> `std::out_of_range`; capacity below region -> `std::out_of_range`; `startIndex + elementCount` overflow -> `std::out_of_range`; THEN missing shadow -> `std::runtime_error` / missing capability -> `System::NotSupportedException`. Also adds `CNA_TEXTURE_TRANSFER_TRACE`, an env-gated one-line trace (region, element size, required elements/bytes, authorised destination element AND byte range, row pitch, content source) mirroring `CNA_BACKBUFFER_READ_TRACE`. **NO public signature, NO header, NO enum, NO backend and NO shader changed** -- one production file, `Texture2D.cpp`. **CARDINALITY unchanged:** no extra native copy, staging allocation, map, download, submit, wait, Present, frame advance or target switch; scratch is still sized to the region (not to `elementCount`), validation is O(1), and the copy is proportional to the requested region alone -- the destination prefix and suffix cost nothing. **NEW `examples/texture2d_getdata_transfer_range_test.cpp`**: every destination pre-filled with a DISTINCT per-element guard `Color(i, i >> 8, 0xAB, 0xCD)` that no pattern colour and no readback can produce, so a write before `startIndex`, a write past the authorised range, an unwritten requested element, a duplicated row, a wrong stride and a byte-versus-element mistake are each separately decidable and separately reported with exact indices and coordinates; the plain-texture pattern is invertible (R = column, G = row) on odd, non-square 13x7 and 11x5 resources with four distinct corner values, a mid-tone body and an interior alpha block that is neither 0 nor 255. A render target is measured against the ALREADY-CORRECT rectangle overload at `startIndex` 0, never against absolute colours, so WebGPU's sRGB render-target encoding and every orientation concern stay out of this ticket. **A/B pre-fix (SOFTWARE, narrow restoration of `Texture2D.cpp` alone):** T2/T3/T4/T5 `out_of_range "index out of range"`; T7 (elementCount=1 for a 91-pixel region) NO exception and a one-element partial frame at `data[0]`; T9 offsets 98/202 `out_of_range`; T10 NO exception, wrote `data[0]` from an out-of-bounds read; T11 SIGSEGV. **Post-fix cross-backend:** SOFTWARE/EASYGL/VULKAN/WEBGPU/SDL_GPU/BGFX/D3D9/D3D11 **74/74**, HEADLESS **71/71** (render-target legs assert the GFX-162 rejection), SDL_RENDERER/DX3/ASCII **70/70** (mip storage declared absent and its documented rejection ASSERTED, not skipped), CANVAS cross-built (wasm, no runtime here), D3D12 cross-built with its runtime unavailable for the pre-existing DX-100 reason (vanilla Wine `dxgi_factory_CreateSwapChainForHwnd`), identical on the untouched REMED-GFX-127 fixture used as the control. **FOUR FALSE POSITIVES**, one of which ASSERTED the defect: `software_rendertarget_readback_test.cpp` E10 required `Throws<std::runtime_error>` for a non-zero `startIndex` -- three lines below D7/D8, which assert the opposite for the rectangle overload on the same target -- now asserts the real contract plus the capacity rule never covered on this overload (88/88 -> 91/91); `rendertarget_sampling_orientation_test.cpp` N4 printed an `[INFO]` line either way and asserted nothing, now a real check (60/60); `texture2d_getdata_contract_test.cpp` A4 carried the now-false note "the whole-level overload's is a SOURCE offset", and new A4b asserts the destination-offset guarantee with excess capacity on all fourteen backends (39/39 -> 40/40); `Texture2DTests.cpp` -- five decoder tests read ONE pixel of a 4x4 or 2x2 texture, relying on the partial read XNA never offered, and now read the whole level and assert EVERY pixel (reported honestly as corrected callers, not red-first assertions: a whole-level read at `startIndex` 0 is legal on both sources). **SANITIZERS:** ASan+UBSan Headless 71/71 (39 `__asan_*` / 15 `__ubsan_*` symbols linked), Software ASan 74/74 (39 symbols) and Software UBSan 74/74 (16 symbols) -- zero AddressSanitizer reports, zero `runtime error:` lines, zero leaks, across non-zero `startIndex`, exact boundary writes, one-too-small `elementCount`, oversized destinations, protected prefix/suffix, odd regions, explicit rectangles, mip paths, overflow-shaped inputs, repeated calls and exception unwinding. The SAME ASan build on the pre-fix source reports `heap-buffer-overflow READ` at `Texture2D.cpp:397`, so the clean post-fix run is meaningful rather than vacuous. **NATIVE VALIDATION:** Vulkan validation layer zero VUIDs, WebGPU zero uncaptured errors / device-lost, EasyGL zero GL errors under GL debug, SDL_GPU debug mode zero messages, bgfx zero fatals -- all at 74/74. **REGRESSION GATES**, 7 fixtures x 7 backends, 49/49 green: GFX-127 Texture2D completion, GFX-130 cube/volume boundaries, GFX-134 RenderTargetCube readback, GFX-161 first-read sentinel, GFX-162 Headless rejection, GFX-165 backbuffer dimension, GFX-166/167 bound-target lifetime. `ctest -L Software` **43/43**; `ctest -L Headless` **32/33**, the sole failure `Headless_Smoke` pre-existing and explicitly out of scope; `ctest -R EasyGL` **275/277**, both failures (`EasyGL_DeviceValidation`'s `SetVertexBuffers(16)` and `EasyGL_GraphicsDevice_ReferenceStencil`'s stencil override) A/B-proven identical on the pre-fix source and containing zero `Texture2D::GetData` references. Full Software `CnaTests` 5691/5739 (44 skipped) against a pre-fix baseline of 5692/5739 -- the same three pre-existing failures plus one flaky real-process ENet host-migration test with zero `Texture2D`/`GetData` references. All fourteen backend libraries compile incrementally. **No new ticket ID was created.** Commits: test `0fc528da`, fix `f07f5020`, false positives `0cbc73ee`, coverage `83143dd1`, docs (this). |
-| REMED-GFX-150 | Software's SpriteBatch interpolates when magnifying even with `SamplerState::PointClamp`: 4/128 texels exact vs EasyGL's 128/128 on the identical plain-`Texture2D` draw. | MEDIUM | P2 | — | OPEN (isolated 2026-07-29 during REMED-GFX-147) |
+| REMED-GFX-150 | Software discarded the whole `SamplerState`: `ApplySamplerState` named none of its parameters and `SoftwareSpriteBatchBackend`'s filter/address fields were dead stores, so one `SampleBilinear` served every textured fragment and EVERY draw was LinearClamp — SpriteBatch and all stock 3D effects alike. | MEDIUM | P2 | — | **DONE 2026-07-30 — RECLASSIFIED: NOT SPRITEBATCH, NOT ONLY MAGNIFICATION, AND NOT A MISCOMPUTED POINT COORDINATE — THERE WAS NO POINT PATH. FIXED WITH ONE AUTHORITATIVE `SampleTexture` SEPARATING FILTER SELECTION, ADDRESSING, ADDRESS-MODE TRANSFORM AND DECODE. 80/134 -> 146/146, BYTE-IDENTICAL TO EASYGL. EXACTLY 1.0000 TEXEL FETCHES PER POINT SAMPLE AND 4.0000 PER LINEAR SAMPLE, MEASURED WITH A NEW ENV-GATED TRACE; ZERO ALLOCATION, NO EXTRA DRAW/PASS/FRAME/READBACK. ONE FALSE POSITIVE A/B-PROVEN (9 OF 18 SOFTWARE FIXTURES SAMPLE ONLY A 1x1 SOURCE AND ARE STRUCTURALLY BLIND). ASAN/UBSAN CLEAN WITH RUNTIMES PROVED LINKED AND A NEGATIVE CONTROL FOR float-cast-overflow. ONLY SOFTWARE PRODUCTION CHANGED. SPAWNED GFX-169/170/171.** |
 | REMED-GFX-151 | Vulkan: a `RenderTarget2D` rendered, unbound and then sampled with no intervening `GetData` reproduced 0/32 of the source, because the readback flush filtered the frame's segment list down to the target being READ and so never recorded the PRODUCER's render pass. The canonical XNA render-to-texture sequence. | HIGH | P1 | REMED-GFX-147 leg G0 | **DONE 2026-07-29 — 15/43 -> 43/43 ON A NEW DEDICATED FIXTURE, PLUS 43/43 ON A `PreferMultiSampling` DEVICE WITH THE APPLIED SAMPLE COUNT ASSERTED TO BE 4 AND 43/43 UNDER SYNCHRONIZATION VALIDATION WITH THE LAYER PROVED LIVE AND ZERO MESSAGES OF ANY KIND. FIXED BY MAKING THE FLUSH REPLAY THE TRANSITIVE CLOSURE OF THE BIND CYCLES A READBACK DEPENDS ON — THE READ TARGET'S OWN GROUP PLUS, FOR EACH CYCLE IN THE SET, THE EARLIER CYCLES OF EVERY RENDER-TARGET GROUP IT SAMPLES — STILL IN ASCENDING SEGMENT ORDER. NO BARRIER, FENCE, DEVICE/QUEUE WAIT, SUBMIT-PER-SWITCH, EXTRA PRESENT, EXTRA FRAME OR READBACK ADDED; THE SUBMIT-PER-MRT-PROXY LOOP IS REPLACED BY ONE COMMAND BUFFER AND ONE SUBMIT, SO CARDINALITY GOES DOWN. A SIMPLER POSITIONAL RULE ALSO PASSED THE CANONICAL FIXTURE AND WAS IMPLEMENTED, MEASURED AND REJECTED (LEG I2 0/32). VULKAN SHARD 180/181, THE ONE FAILURE A/B-PROVEN PRE-EXISTING. SIX CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN; 8 OF 48 VULKAN RENDER-TARGET FIXTURES SAMPLE A TARGET AND ALL 8 OBSERVED THE CONSUMER THROUGH `GetBackBufferData`, NEVER THROUGH A TARGET READBACK — ONE STRENGTHENED (2/4 -> 4/4). SPAWNED GFX-155/156.** |
 | REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | **DONE 2026-07-29 — THIRTEEN (NOT TEN) CAST SITES, PROVEN UNDER UBSAN AS `downcast of address … which does not point to an object of type 'SdlGpuTextureBackend'` FOLLOWED BY SIGSEGV, THE FABRICATED HANDLE BEING THE TARGET'S OWN `mipMap_` + THREE BYTES OF UNINITIALISED PADDING + `multiSampleCount_` (0x20612000). FIXED BY ONE SHARED `ResolveSampledTextureEXT`/`ResolveSampledCubeEXT` RETURNING AN `SdlGpuSampledTextureEXT` (SAMPLEABLE NATIVE HANDLE + KEEP-ALIVE), USED BY SPRITEBATCH AND EVERY EFFECT ALIKE; MSAA IS CORRECT BY CONSTRUCTION BECAUSE THE ATTACHMENT IS `COLOR_TARGET`-ONLY AND CANNOT BE SELECTED. NEW PROCESS-ISOLATED FIXTURE 15/18 LEGS SIGSEGV -> 18/18 LEGS, 0 CRASHES, 56/56 CHECKS. NOTHING ADDED: NO PRESENT, GETDATA, CPU COPY, WAIT, EXTRA FRAME/PASS/SUBMIT; SDL CALL-SITE CARDINALITY UNCHANGED EXCEPT `SDL_ReleaseGPUTexture` 15 -> 12. FOUR FALSE-POSITIVE SKIPS REMOVED (THREE A/B-PROVEN LOAD-BEARING, ONE PROVEN OVER-APPLIED). SDL_GPU DEBUG VALIDATION AND FORCED `VK_LAYER_KHRONOS_validation` BOTH CLEAN; ASAN/UBSAN CLEAN. NINE CROSS-BACKEND CONTROLS GREEN. SPAWNED GFX-166/167.** |
 | REMED-GFX-166 | Vulkan: the lost draw was the PRODUCER and the destroyed resource was that producer's DESTINATION. `~VulkanRenderTargetBackend` ran REMED-GFX-074's `PurgeDeferredWorkForTarget(this)`, erasing every queued entry whose `rt == this`, on the false justification that "a destroyed target is unobservable" — the still-queued consumer that SAMPLES it is exactly what observes it. | MEDIUM | P2 | — | **DONE 2026-07-30 — PROVEN WITH A NEW `CNA_VULKAN_LIFETIME_TRACE`, NOT INFERRED: `purge.DROPPED rt=0x..b668 sprites=1 draws=0 clears=2` WHILE `record.draw3D order=6` STILL RUNS AND THE IMAGE/VIEW ARE ALIVE IN THE RETIREMENT QUEUE, SO NO DRAW IS MISSING AND NOTHING DANGLES — THE SAMPLED IMAGE JUST HAS NO CONTENT, WHICH IS WHY SOME LEGS READ (0,0,0,0) AND OTHERS UNDEFINED GARBAGE. AN ORDINARY TEXTURE2D WAS NEVER AFFECTED (LEG A2 PASSES PRE-FIX), SO THE INHERITED BLANKET DECLARATION WAS OVER-APPLIED. FIXED BY MAKING A DESTINATION AN IMMUTABLE, SEPARATELY ALLOCATED `VulkanTargetPassEXT` CO-OWNED VIA `shared_ptr` BY EVERY QUEUED COMMAND, SO `PurgeDeferredWorkForTarget` IS DELETED RATHER THAN WEAKENED; THE PASS OWNS NO VULKAN HANDLES, KEEPING REMED-GFX-075'S FRAME-GENERATION RETIREMENT AS THE SINGLE RELEASE PATH. 6/14 -> 17/17 LEGS, 24 CHECKS; REMED-GFX-152'S FIXTURE 18 -> 20 LEGS WITH ITS OWN VULKAN DECLARATION DELETED AND PER-FAMILY/PER-DRAW-MODE DEAD-SOURCE SWEEPS (ALL 0/32 PRE-FIX). MSAA AND THE CUBE SLOT NOW MEASURED RATHER THAN DECLARED. TWO FALSE POSITIVES CLOSED: REMED-GFX-075 S3'S INTERMEDIATE `readRt` WAS A FLUSH, AND REMED-GFX-074 S6 ASSERTED ONLY "DID NOT CRASH". CARDINALITY BYTE-IDENTICAL EXCEPT THE ONE PRODUCER PASS PREVIOUSLY DISCARDED. VALIDATION CLEAN WITH THE LAYER PROVEN LOADED; ASAN/UBSAN CLEAN WITH IDENTICAL LEAK TOTALS. SEVEN CROSS-BACKEND CONTROLS 17/17 AND 20/20. SPAWNED ONE INDEPENDENT FINDING (FOUR STOCK-EFFECT FAMILIES RENDER NOTHING ON VULKAN THROUGH A STRIDE-20 STREAM).** |
 | REMED-GFX-167 | WebGPU: every deferred command stored the texture it samples as a RAW POINTER to that resource's backend object and called a VIRTUAL method on it at replay, so a source destroyed while its draw was still queued was a heap-use-after-free at `Present()`. | MEDIUM | P2 | — | **DONE 2026-07-29 — THE TICKET WAS WRONG TWICE, BOTH CORRECTIONS MEASURED. NOT TEARDOWN: THE CRASH IS ON THE MAIN THREAD INSIDE `Present()` -> `EnsureFrameRendered()` -> `ReplayOrderedSegments()` -> `ReplayDrawsInOrder()` -> `IssueTexturedDraw()`, AFTER THE LEG'S OWN CHECKS HAVE PRINTED — WHICH IS WHY IT READ AS SHUTDOWN. AND NOT "SPECIFIC TO THE BACKBUFFER": WHAT IS LOAD-BEARING IS THAT NOTHING FLUSHED BETWEEN THE DRAW AND THE DESTRUCTOR, AND WEBGPU RENDERS A RENDER-TARGET DESTINATION AT `SetRenderTarget()`. ASAN: `heap-use-after-free` AT `:7228`, FREED IN `~WebGPURenderTargetBackend()` AT `:1746` VIA `RenderTarget2D::~RenderTarget2D()`; WITHOUT A SANITIZER SIGSEGV (139) WITH THE PC IN NO MAPPED MODULE (THE FREED VTABLE SLOT). NINETEEN SLOTS ACROSS NINE FAMILIES. FIXED BY RESOLVING ONCE AT THE PUBLIC DRAW CALL INTO A `WebGPUSampledTextureEXT` (RESOLVED VIEW + ONE NATIVE REFERENCE ON THE VIEW AND ITS TEXTURE VIA `WebGPUSampledResourceEXT`), CLOSING THE DEREFERENCE AND THE DANGLING HANDLE TOGETHER; RELEASE IS A REFCOUNT DECREMENT, NOT `wgpuTextureDestroy`, SO THE RESOURCE STAYS USABLE AND THE PROOF IS PIXELS. A HAZARD THE FIX ITSELF INTRODUCED WAS FOUND AND CLOSED: THE FAMILY VECTORS ARE MEMBERS, DESTROYED AFTER THE DESTRUCTOR BODY RELEASES THE DEVICE, SO `DiscardQueuedCommands()` IS NOW CALLED FIRST — DECLARED AS ORDERING CORRECTNESS, SINCE THE ABANDONED-FRAME PATH IS NOT PUBLICLY FORCEABLE. NOTHING ADDED PER DRAW (KEEP-ALIVE BUILT ONCE PER RESOURCE); NO EXTRA PASS/SUBMIT/PRESENT/FRAME/WAIT, HELD BY THE THREE EXISTING WEBGPU CARDINALITY GATES. NEW PROCESS-ISOLATED 14-LEG FIXTURE WITH A PIXEL ORACLE: **4/14 LEGS AND 10 SIGSEGV -> 14/14, 0 CRASHES, 18 CHECKS**; GFX-152'S OWN FIXTURE 17/18 + 1 CRASH -> 18/18, 49/49. THREE FIXTURE DEFECTS FOUND BY RUNNING IT (LEG E1 MEASURED NOTHING AT STRIDE 20; THE PIXEL PROBE SAT 0.0625 TEXEL OFF CENTRE; B1/C1 ASSUMED A FLUSH-AT-UNBIND A WHOLE-FRAME RECORDER DOES NOT DO). ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; LEAK A/B BYTE-IDENTICAL PRE- AND POST-FIX. NATIVE VALIDATION CLEAN (ZERO UNCAPTURED ERRORS, ZERO DEVICE-LOST). SEVEN CROSS-BACKEND CONTROLS ALL 14/14; ONLY WEBGPU PRODUCTION CHANGED. `ctest -L WebGPU` 57/58, ALL 8 FULL-SHARD FAILURES A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-168; ADDED THE MECHANISM TO THE OPEN GFX-165.** |
 | REMED-GFX-168 | EasyGL: destroying a `RenderTarget2D` while it is STILL the bound render target made the next `SetRenderTarget` a virtual call through freed storage. | MEDIUM | P2 | — | **DONE 2026-07-30 — AN OWNERSHIP DEFECT, NOT A GL-STATE ONE, AND NOT THE DESTRUCTOR. THE FAULT IS INSIDE THE NEXT `SetRenderTarget`, ON THE MAIN THREAD, WITH THE LEG'S EARLIER CHECKS ALREADY PRINTED. ASAN: `heap-use-after-free`, READ OF SIZE 8, AT `EasyGLGraphicsBackend.cpp:2179` (`currentRt2D_->UnbindAsRenderTarget()`), OFFSET 0 OF A 128-BYTE REGION -- THE VTABLE POINTER -- FREED IN `~EasyGLRenderTargetBackend()` VIA `~RenderTarget2D`; WITHOUT A SANITIZER SIGSEGV (139, CORE DUMPED) WITH THE PC AT `0x0`, IN NO MAPPED MODULE. THE NEW `CNA_EASYGL_TARGET_TRACE` SHOWS `rt2d.destroy` THEN `set2d.enter cur2d=<THE FREED ADDRESS>`, AND **NO `rt2d.unbind` LINE AT ALL** -- THE METHOD BODY NEVER RAN, SO THE FAULT IS THE DISPATCH. NOTHING IN THE SHARED LAYER CLEARS THE POINTER EITHER: `RenderTarget2D::Dispose()` AND `RenderTargetCube::Dispose()` BOTH REFUSE A BOUND TARGET, BUT BOTH DESTRUCTORS ARE `= default` AND NEVER ROUTE THROUGH DISPOSE, SO THE GUARDED PATH IS UNREACHABLE-BY-DESIGN AND THE UNGUARDED ONE IS THE ONLY WAY IN. FIXED BY GIVING THE BINDING RECORD ITS OWN ALLOCATION (`EasyGLBoundTargetEXT`), SHARED FROM THE BACKEND AND HELD WEAKLY BY EVERY TARGET, SO A DYING TARGET CLEARS ITS OWN SLOTS WITHOUT CALLING BACK INTO A BACKEND THAT MAY ALREADY BE GONE -- SAFE IN BOTH DESTRUCTION ORDERS. DETACHING RATHER THAN FINALIZING IS MEASURED, NOT ASSUMED: THE RESOLVE AND MIP REGENERATION WRITE INTO `colorTex_`/`cubeTex_`, MEMBERS THE SAME DESTRUCTOR DESTROYS, AND BOTH PUBLIC ROUTES TO THAT CONTENT NEED THE LIVE WRAPPER -- SO THERE IS NO REACHABLE OBSERVER. MRT IS THE EXCEPTION AND IS TREATED AS ONE: A DETACH CLEARS ONE **SLOT**, AND LEG L1'S TRACE SHOWS THE SURVIVOR'S `rt2d.mipgen` STILL FIRING. `Present()` BOUNDS THE WHOLE WINDOW AND LEG P1 ASSERTS IT -- IT REFUSES A BOUND TARGET FROM A **BOOL** NO DESTRUCTOR TOUCHES, SO THE REFUSAL IS IDENTICAL ALIVE OR DEAD; THREE FIRST-DRAFT LEGS HAD TO BE REWRITTEN BECAUSE "DESTROYED, THEN PRESENT" IS NOT REACHABLE ON ANY BACKEND. NEW PROCESS-ISOLATED 18-LEG FIXTURE: **3/18 LEGS AND 15 SIGSEGV -> 18/18, 0 CRASHES, 43 CHECKS, 0 DECLARED BOUNDARIES**; UNDER ASAN+UBSAN **2/18 WITH 32 heap-use-after-free -> 18/18, 0 REPORTS, 0 RUNTIME ERRORS** (THE UN-SANITIZED COUNT IS HIGHER BECAUSE LEG H1 SURVIVES WITHOUT A SANITIZER -- THE FREED VTABLE POINTER HAPPENED TO STILL DISPATCH). MEASURED REUSE: ONE BACKEND-OBJECT HEAP ADDRESS REUSED **9 TIMES** ACROSS M1'S 121 TARGETS, AND ALL 121 GOT GL FRAMEBUFFER NAME **1**. COST: EXACTLY ONE TRACE EVENT (THE DETACH); ON THE TWO LEGS THAT PASS PRE-FIX THE WHOLE EVENT STREAM IS BYTE-IDENTICAL WITH ZERO DETACHES. LEAK A/B BYTE-IDENTICAL (100956/449 PRE AND POST, INCLUDING ON M1'S 121 TARGETS); 917 TRACED TRANSITIONS ALL `glerr=none`. THE ONE FIXTURE THAT NAMED THIS CASE, `easygl_bound_resource_dispose_test.cpp`, WROTE `SetRenderTarget(nullptr); // unbind before leaving scope` -- STRENGTHENED WITH ALL THREE BINDING SHAPES (10/10 THEN SIGSEGV -> 17/17); AN AUDIT OF THE OTHER 33 EASYGL RT FIXTURES FOUND NONE COVERING IT. SEVEN CROSS-BACKEND CONTROLS ALL **18/18 LEGS, 0 CRASHES**; ONLY EASYGL PRODUCTION CHANGED, VULKAN GFX-166 AND WEBGPU GFX-167 UNTOUCHED AND GREEN. `ctest -R '^EasyGL'` 270/272, BOTH FAILURES A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND CONFIGURATIONS BUILD. THREE INDEPENDENT FINDINGS RECORDED (VULKAN'S MRT-SLOT MIP LEVEL 1, BGFX'S MSAA/MIP READBACK, A STALE CUBE-DISPOSE COMMENT).** |
+| REMED-GFX-169 | Vulkan: the stock 3D effect descriptor writes bind the hardcoded `defaultSampler_` (LINEAR + CLAMP_TO_EDGE) instead of `slotSamplers_[0]`, so `GraphicsDevice.SamplerStates[0]` reaches no stock 3D effect — neither its filter nor its address mode. SpriteBatch is unaffected and uses the slot sampler correctly. | MEDIUM | P2 | REMED-GFX-150 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-150; VULKAN 140/146) |
+| REMED-GFX-170 | WebGPU and SDL_GPU: the SpriteBatch sampler is resolved as `textureFilter == 0 ? LINEAR : NEAREST` in both backends, collapsing Anisotropic(2), LinearMipPoint(3), MinPointMagLinearMipLinear(7) and MinPointMagLinearMipPoint(8) to point magnification. Both already have a correct ordinal table in their own `ApplySamplerState` that this path bypasses. | LOW | P3 | REMED-GFX-150 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-150; WEBGPU 143/146, SDL_GPU 143/146) |
+| REMED-GFX-171 | D3D9: the stock 3D path samples about half a destination pixel low — every one of the 19 mismatching pixels sits just past a texel boundary and returns the LOWER texel. The classic D3D9 pixel-centre convention, uncompensated on the 3D path; SpriteBatch is unaffected. | LOW | P3 | REMED-GFX-150 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-150; D3D9 145/146) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -20184,3 +20187,250 @@ No global process-kill command was issued.
 
 `0fc528da` test (reproduce) · `f07f5020` fix · `0cbc73ee` test (false positives) · `83143dd1` test
 (coverage) · docs (this).
+
+---
+
+## REMED-GFX-150 — Software discarded the whole `SamplerState` (DONE 2026-07-30)
+
+### What the ticket said, and what was actually wrong
+
+The ticket recorded "Software's SpriteBatch interpolates when magnifying even with
+`SamplerState::PointClamp`". That is one symptom of a wider cause, and it names the wrong layer
+twice: it is not SpriteBatch, and it is not only magnification.
+
+`SoftwareGraphicsBackend::ApplySamplerState(int slot, int, int, int, int)` **named none of its
+parameters**. Filter, addressU, addressV and maxAnisotropy were all discarded; the body only
+validated the slot. `SoftwareSpriteBatchBackend::SetSamplerFilter` / `SetSamplerAddressMode` did
+store into `textureFilter_`, `addressU_` and `addressV_`, but **nothing ever read those fields** —
+they were dead stores. One function, `SampleBilinear`, served every textured fragment.
+
+So **every draw on this backend was LinearClamp** whatever the game selected: SpriteBatch,
+BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect and any custom
+effect alike — and the address mode was as absent as the filter. The sampler was ignored *entirely*;
+the point coordinate was not merely miscomputed, because there was no point path to miscompute.
+
+### The authoritative contract
+
+Established from the conforming backend's measured behaviour and the XNA enum semantics, not
+assumed:
+
+* A destination pixel is sampled at its **centre**, `(x + 0.5, y + 0.5)`. The Software rasterizer
+  already used exactly this (`px = x + 0.5f`, `py = y + 0.5f`).
+* That centre maps back through the sprite/primitive geometry to a texel-space coordinate `s`,
+  whose origin is the texture's top-left corner and whose unit is one texel.
+* Point filtering returns `AddressMode(floor(s), size)` **unchanged**.
+* `floor(s)`, **not** `floor(s - 0.5)`. The half-texel shift converts a position into the LINEAR
+  path's lower-neighbour index — correct there, meaningless for selection, because a texel COVERS
+  `[i, i+1)`.
+* A coordinate exactly on a texel boundary selects the **higher** texel.
+* The address mode transforms the **integer index**, after the floor: Clamp reaches the first and
+  last texel and blends with nothing, Wrap tiles at every integer junction, Mirror tiles and flips
+  with period `2 * size`.
+
+### The exact failing expression, and the exact pixels
+
+```
+tx = u * texW - 0.5;   x0 = clamp(floor(tx));  x1 = clamp(x0 + 1);  fx = tx - floor(tx);
+result = lerp(lerp(t[x0,y0], t[x1,y0], fx), lerp(t[x0,y1], t[x1,y1], fx), fy)
+```
+
+On the recorded case — an 8x4 texture magnified onto a 16x8 destination under `PointClamp` —
+destination (2,0) has `u = 0.15625`, so `s = u * 8 = 1.25` and the contract owes texel (1,0). The
+pre-fix path instead took `1.25 - 0.5 = 0.75` and blended:
+
+| | R | G | B |
+|---|---|---|---|
+| texel (0,0) | 20 | 25 | 40 |
+| texel (1,0), the contract's answer | 50 | 25 | 190 |
+| `0.75 * (1,0) + 0.25 * (0,0)` | **42.5** | **25** | **152.5** |
+| stored (truncating) | **42** | **25** | **152** |
+
+which is the recorded value on all three channels. The post-fix trace prints the same pixel:
+
+```
+[sample] tri=9 dest=(2,0) filter=1 addr=(1,1) tex=8x4 uv=(0.156250,0.062500)
+         s=(1.250000,0.250000) POINT texel=(1,0) rgba=(50,25,190,255)
+```
+
+Interpolation was **horizontal and vertical**, not confined to texel boundaries. The 4 of 128
+correct pixels were exactly those where clamping collapsed both interpolation endpoints onto one
+texel: `s_x = x/2 - 0.25` is outside `[0, 7]` only at `x = 0` and `x = 15`, and `s_y = y/2 - 0.25`
+only at `y = 0` and `y = 7` — `2 * 2 = 4`. That is why the count was 4 and not some other number.
+
+### UV interpolation versus sampler filtering
+
+Distinguished rather than assumed. The interpolated `u`/`v` were **correct throughout**: the trace
+shows `uv = (0.156250, 0.062500)` at destination (2,0), which is exactly `(2.5/16, 0.5/8)`, the
+pixel centre mapped through the sprite's own geometry. The 1:1 leg (E1) was byte-exact pre-fix, and
+the quad's two triangles produced no diagonal seam in any leg. The defect was entirely in the
+FILTERING stage.
+
+### The fix
+
+One authoritative `SampleTexture(surface, sampler, magnify, u, v, …)` separating
+
+1. filter selection (magnification vs minification half of the XNA filter),
+2. texel addressing,
+3. address-mode transformation,
+4. format decode.
+
+`ApplySamplerState` now stores a `SoftwareSamplerState` per slot. The four 3D call sites read slots
+0 and 1 — `GraphicsDevice::applySamplerStatesToBackend()` runs before every 3D draw, so both always
+describe the draw being issued. SpriteBatch passes its own `Begin`-resolved sampler **directly**
+into the rasterizer rather than through the device slots, so a sprite batch can neither inherit the
+device's 3D state nor leak into it; `SpriteBatch::Begin` always re-applies (FNA defaults a null
+argument to `LinearClamp`), so it cannot leak between batches either.
+
+Clamp is byte-identical to the previous behaviour. The linear path keeps the established
+construction — its neighbour pair comes from the RAW pre-address indices, so the two endpoints
+cannot collapse through a premature clamp (the bug `Software_Effects`' corner check once caught).
+
+XNA ordinals 5..8 name different minification and magnification filters, so `TriangleMagnifies`
+classifies each triangle once per bound texture using the standard `rho = max(|d(s,t)/dx|,
+|d(s,t)/dy|)` rate: exact for the affine SpriteBatch quads (`invW == 1`), a per-triangle estimate
+for perspective geometry. It selects a **filter, never a mip level**. The other five ordinals use
+one filter for both halves, so it cannot perturb Point or Linear.
+
+`FloorToTexelIndex` saturates in **float** space before converting, so a non-finite or extreme
+coordinate is defined rather than undefined behaviour.
+
+### Declared boundaries
+
+* **Mip.** `SoftwareColorSurface` exposes exactly one level, so sampling is always level 0 and the
+  magnification classification chooses a filter rather than a level. **No mipmapping system was
+  introduced**, and no separate mip-selection defect was found on this backend to file.
+* **Cube.** `SampleCubeMap` remains nearest-only with no cross-face filtering — a pre-existing,
+  already-documented simplification that happens to match Point. Untouched, and not part of this
+  root cause: it never consulted the discarded sampler because it never filtered.
+* **Anisotropy.** `maxAnisotropy` is still not consumed; this backend has no anisotropic filter and
+  `TextureFilter::Anisotropic` resolves to Linear through the same min/mag table as every other
+  ordinal.
+
+### Cardinality and performance
+
+Measured with a new env-gated `CNA_SOFTWARE_SAMPLE_TRACE` (off: one load and one
+perfectly-predicted branch per sample; 1: counters plus an exit summary; 2: a bounded per-sample
+dump of triangle, destination pixel, filter, address modes, texture size, interpolated u/v,
+addressed texel coordinates, linear neighbours and weights, and sampled RGBA). Over the whole
+matrix:
+
+```
+triangles=130 pointSamples=12485 linearSamples=1504 texelFetches=18501
+fetchesPerPointSample=1.0000  fetchesPerLinearSample=4.0000
+```
+
+`12485 + 4*1504 = 18501`. Exactly one texel fetch per point sample, zero interpolation fetches,
+four per linear sample. No allocation per sample, no scratch buffer, no full-texture copy or
+repacking, no extra draw, pass, frame, readback, sampler application or texture duplication. Point
+sampling is now strictly cheaper than the pre-fix path, which always did four.
+
+### Tests
+
+New `examples/point_sampling_contract_test.cpp`, 26 legs, comparing the **complete** destination
+image against an expectation computed by inverting the sprite/primitive geometry in double
+precision — no representative samples, no hash, no tolerance. Uncovered pixels must still hold the
+clear sentinel, so a draw that spills or falls short fails too. Where a scale unavoidably puts
+pixel centres on texel boundaries (an exact integer minification puts EVERY centre there) the leg
+accepts either neighbour and says so; a blend of them still fails.
+
+Coverage: integer (4x, 7x, 5x), non-integer and odd magnification; 1:1; minification; interior,
+edge-touching, one-texel-wide, one-texel-high and single-texel source rectangles; fractional
+placement via the transform; transform scale and anisotropic scale plus translation; all three
+`SpriteEffects` flip combinations composing rather than cancelling; rotation and origin;
+Clamp/Wrap/Mirror and a mixed pair, driven past `[0,1]` by an oversized source rectangle and by
+negative origins; Clamp reaching both the first and last texel with no border colour; the
+Point-vs-Linear and LinearWrap-vs-LinearClamp differentials; sampler transitions including two
+batches with different samplers in one frame; two textures of different sizes in one batch; a
+`RenderTarget2D` source; alpha 0/64/128/200/255 under Opaque and AlphaBlend; the device
+`SamplerStates[0]` 3D path and 3D wrap; a custom viewport; the `TextureFilter` ordinal table; and
+coordinates large enough to overflow the texel index.
+
+**SOFTWARE 80/134 -> 146/146**, byte-identical to EasyGL.
+
+### False positives
+
+**Only 1 of the 18 Software-registered fixtures could see this defect at all.** Nine of the
+eighteen sample only a 1x1 texture or a single-texel `Rectangle(0,0,1,1)` source — structurally
+blind to any filter, and the right tool for the positioning, scissor, viewport, wireframe and blend
+assertions they actually make. Software had **no texture-address-mode coverage of any kind** before
+this task.
+
+The one multi-texel sampling check, `software_effects_test.cpp` Check A, is titled "nearest-neighbor
+texture sampling" but:
+
+* **never selected a sampler**, so it ran under the device default `SamplerState::LinearWrap`;
+* probed only (2,2) and (61,61), **both inside the 2x2 checker's corner cells**, where clamping
+  collapses both bilinear endpoints onto one texel;
+* compared with a `+/-10` tolerance.
+
+A/B-proven by narrow restoration of the two production files: with `PointClamp` explicitly selected
+the original corner pair **still passes on the pre-fix backend**, while the added interior probe at
+(31,31) **fails**. That is precisely why the defect survived. It now selects PointClamp, compares
+byte-exactly, and carries a LinearClamp differential so the point assertion cannot be satisfied by
+a backend that ignores the sampler and happens to clamp. `5/5 -> 7/7`.
+
+It is also the **only existing test whose result changed**, because honouring Wrap turns the device
+default from an effective clamp into real wrapping. New leg X measures that as a public
+differential (LinearClamp collapses the far corner onto the last texel; LinearWrap does not) and
+**EasyGL agrees with it**, so the change is the contract rather than a Software invention.
+
+### Sanitizers
+
+Runtimes proven linked in each case (`libubsan.so.1`, `libasan.so.8`).
+
+* **UBSan** (`cmake-build-software-ubsan`, carrying `-fsanitize=float-cast-overflow`): clean on the
+  full matrix (146/146) and on `software_effects` (7/7). Zero `runtime error:` lines. A negative
+  control compiled with the same flags confirms the check does fire on an unguarded cast of the
+  same magnitude (`1e+30 is outside the range of representable values of type 'int'`), so the clean
+  run is meaningful rather than vacuous.
+* **ASan** (`cmake-build-software-asan`): clean on the full matrix (146/146), `software_effects`
+  (7/7) and the render-target readback suite (91/91).
+
+Zero out-of-bounds texel access, zero integer overflow, zero invalid float-to-integer conversion,
+zero uninitialized interpolation weight, zero use-after-free, zero invalid texture storage access —
+across integer and non-integer magnification, negative and wrapped coordinates, source rectangles,
+odd dimensions, extreme finite coordinates, repeated sampler switching, texture disposal,
+render-target sampling, and both filters.
+
+### Regression gates
+
+Full `ctest` on `cmake-build-software`: **every Software graphics test green**. Three failures
+(`XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`,
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`,
+`GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`) A/B-proven pre-existing by
+narrow file restoration; four Net/audio tests fail only under `-j2` and pass serially.
+REMED-GFX-119/124/125/148/149 remain separate and untouched.
+
+### Cross-backend controls
+
+Only Software production changed.
+
+| Backend | Result | Note |
+|---|---|---|
+| SOFTWARE | 80/134 -> **146/146** | the fix |
+| EASYGL | **146/146** | principal positive control, unchanged throughout |
+| BGFX | **146/146** | |
+| D3D11 | **146/146** | Wine on `:99` |
+| HEADLESS | **1/1** | asserts the REMED-GFX-127 rejection; it rasterizes nothing |
+| VULKAN | 140/146 | **REMED-GFX-169** |
+| WEBGPU | 143/146 | **REMED-GFX-170** |
+| SDL_GPU | 143/146 | **REMED-GFX-170** |
+| D3D9 | 145/146 | **REMED-GFX-171** |
+| D3D12 | cross-built only | runtime unavailable for the pre-existing DX-100 reason |
+
+### New findings
+
+**Three independent findings, recorded and NOT fixed** — REMED-GFX-150 is scoped to Software
+production:
+
+* **REMED-GFX-169** — Vulkan binds the hardcoded `defaultSampler_` in every stock 3D effect
+  descriptor write, so `SamplerStates[0]` reaches no stock 3D effect.
+* **REMED-GFX-170** — WebGPU and SDL_GPU both resolve the sprite sampler as
+  `textureFilter == 0 ? LINEAR : NEAREST`, collapsing four ordinals to point magnification.
+* **REMED-GFX-171** — D3D9 samples the stock 3D path about half a destination pixel low.
+
+### Commits
+
+`1a42a856` test (reproduce) · `85386e41` fix (+ false positive, + leg X) · `e20e77b3` test
+(filter ordinals, extreme coordinates, fetch cardinality) · `d15b12f4` test (cross-backend
+controls) · docs (this).
