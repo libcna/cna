@@ -323,6 +323,11 @@ namespace CNA::Internal::Backends::EasyGL
             levelH = std::max(1, levelH / 2);
             levelD = std::max(1, levelD / 2);
         }
+        // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp. The MinFilter written
+        // below is overridden by whatever sampler object ApplySamplerState binds to this unit, so
+        // the level range is what has to make the texture complete.
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MaxLevel,
+                           levelCount_ - 1);
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MinFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MagFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
@@ -416,6 +421,10 @@ namespace CNA::Internal::Backends::EasyGL
                 levelSize = std::max(1, levelSize / 2);
             }
         }
+        // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp -- a cube sampled through
+        // EnvironmentMapEffect's slot-1 sampler faces exactly the same completeness rule.
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MaxLevel,
+                           levelCount_ - 1);
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MinFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MagFilter, kTexLinear);
         tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
@@ -941,6 +950,21 @@ namespace CNA::Internal::Backends::EasyGL
                 levelH = std::max(1, levelH / 2);
             }
         }
+        // REMED-GFX-174: clamp GL_TEXTURE_MAX_LEVEL to the real level count, exactly as Task 924
+        // already does for an ordinary Texture2D. GL evaluates mipmap completeness over
+        // [BASE_LEVEL, MAX_LEVEL] and GL's own default MAX_LEVEL is 1000, so a render target with
+        // one level was INCOMPLETE under any of the seven ordinals (2..8) whose minification filter
+        // samples a mip chain, and sampled as solid black.
+        //
+        // The MinFilter write below is NOT sufficient on its own and had become dead cover: a
+        // sampler object bound to the texture unit OVERRIDES the texture object's own filters, and
+        // ApplySamplerState binds one for every slot on every draw, so the public TextureFilter --
+        // not this line -- decides the effective min filter. Clamping the level range is what makes
+        // the texture complete whatever that filter turns out to be, and it allocates nothing: the
+        // storage loop above already created exactly levelCount_ levels.
+        colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
+                                ::metagl::TextureParameter::MaxLevel,
+                                levelCount_ - 1);
         // Default GL min-filter is NEAREST_MIPMAP_LINEAR; since the RT has no mipmaps
         // it would be texture-incomplete when sampled.  Use LINEAR (no mipmaps).
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
@@ -1252,6 +1276,10 @@ namespace CNA::Internal::Backends::EasyGL
                 levelSize = std::max(1, levelSize / 2);
             }
         }
+        // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp.
+        cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
+                               ::metagl::TextureParameter::MaxLevel,
+                               levelCount_ - 1);
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
                                ::metagl::TextureParameter::MinFilter,
                                static_cast<int>(::metagl::TextureMagFilter::Linear));
