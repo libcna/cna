@@ -21,9 +21,13 @@
 // since they're DX-111's actual prerequisite; see plan_dx.md's DX-109 row for the honest scope note.
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
+
+#include <cstdint>
+#include <memory>
 
 namespace CNA::Internal::Backends::D3D12
 {
@@ -42,6 +46,10 @@ namespace CNA::Internal::Backends::D3D12
     {
     public:
         D3D12TextureBackend(D3D12GraphicsBackend* backend, const ImageData& data);
+        /// REMED-GFX-177: returns this texture's SRV slot to the shader-visible allocator, which
+        /// reissues it once the GPU has passed the fence value current at destruction. Before this,
+        /// the slot was consumed for the lifetime of the process.
+        ~D3D12TextureBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -53,10 +61,20 @@ namespace CNA::Internal::Backends::D3D12
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }
         /// Raw GPU-resident ID3D12Resource* (NOXNA -- Phase DX-111's draw path / readback tests).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
-        /// Shader-visible-heap CPU handle for this texture's SRV (NOXNA -- descriptor-table binding).
-        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetShaderResourceViewCpuHandleEXT() const { return srvCpuHandle_; }
+        /// Staging-heap CPU handle for this texture's SRV (NOXNA -- where the descriptor itself
+        /// lives; REMED-GFX-177 keeps the authoritative copy in a non-shader-visible heap).
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetShaderResourceViewCpuHandleEXT() const
+        {
+            return heaps_ ? heaps_->cbvSrvUav.StagingCpuHandle(srvIndex_) : D3D12_CPU_DESCRIPTOR_HANDLE{};
+        }
         /// Shader-visible-heap GPU handle for this texture's SRV (NOXNA -- SetGraphicsRootDescriptorTable).
-        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const { return srvGpuHandle_; }
+        /// REMED-GFX-177: resolved on every call against whichever heap is current, never cached.
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const
+        {
+            return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
+        }
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this texture owns (NOXNA).
+        [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
 
     private:
         void UploadRegion(int level, const uint8_t* rgba, int levelW, int levelH, int sourceStrideBytes);
@@ -64,8 +82,9 @@ namespace CNA::Internal::Backends::D3D12
 
         D3D12GraphicsBackend* backend_ = nullptr;
         ComPtr<ID3D12Resource> texture_;
-        D3D12_CPU_DESCRIPTOR_HANDLE srvCpuHandle_{};
-        D3D12_GPU_DESCRIPTOR_HANDLE srvGpuHandle_{};
+        /// Kept alive independently of backend_ so the destructor can always free the slot.
+        std::shared_ptr<D3D12DescriptorHeaps> heaps_;
+        std::uint32_t srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;

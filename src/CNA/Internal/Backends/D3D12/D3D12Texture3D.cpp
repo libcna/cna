@@ -80,8 +80,12 @@ namespace CNA::Internal::Backends::D3D12
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture3D.MipLevels = static_cast<UINT>(mipLevels_);
 
-        backend_->AllocateCbvSrvUavDescriptorEXT(srvCpuHandle_, srvGpuHandle_);
-        backend_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, srvCpuHandle_);
+        heaps_ = backend_->GetDescriptorHeapsEXT();
+        srvIndex_ = backend_->CreateCbvSrvUavDescriptorEXT(
+            [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+            {
+                backend_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
+            });
 
         // No initial pixel data (ITexture3DBackend's own construction contract, unlike
         // D3D12TextureBackend's ImageData-driven level-0 upload) -- transition straight to the
@@ -89,6 +93,11 @@ namespace CNA::Internal::Backends::D3D12
         // matching D3D12TextureBackend's own "no initial pixels still ends up shader-readable"
         // guarantee.
         TransitionToShaderReadableEXT();
+    }
+
+    D3D12Texture3DBackend::~D3D12Texture3DBackend()
+    {
+        if (heaps_) heaps_->cbvSrvUav.Free(srvIndex_);
     }
 
     void D3D12Texture3DBackend::TransitionToShaderReadableEXT()

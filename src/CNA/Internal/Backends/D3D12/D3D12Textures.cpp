@@ -69,8 +69,12 @@ namespace CNA::Internal::Backends::D3D12
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture2D.MipLevels = static_cast<UINT>(mipLevels_);
 
-        backend_->AllocateCbvSrvUavDescriptorEXT(srvCpuHandle_, srvGpuHandle_);
-        backend_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, srvCpuHandle_);
+        heaps_ = backend_->GetDescriptorHeapsEXT();
+        srvIndex_ = backend_->CreateCbvSrvUavDescriptorEXT(
+            [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+            {
+                backend_->GetDeviceEXT()->CreateShaderResourceView(texture_.Get(), &srvDesc, cpu);
+            });
 
         if (!data.pixels.empty())
         {
@@ -80,6 +84,11 @@ namespace CNA::Internal::Backends::D3D12
         {
             TransitionToShaderReadableEXT();
         }
+    }
+
+    D3D12TextureBackend::~D3D12TextureBackend()
+    {
+        if (heaps_) heaps_->cbvSrvUav.Free(srvIndex_);
     }
 
     void D3D12TextureBackend::UploadRegion(

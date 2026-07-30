@@ -10,6 +10,7 @@
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_BACKEND=D3D12).
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "D3D12DescriptorHeaps.hpp"
 #include "D3D12ResourceStateTracker.hpp"
 #include "D3D12PipelineStateCache.hpp"
 #include "D3D12RootSignatureCache.hpp"
@@ -21,6 +22,8 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <functional>
+#include <memory>
 
 namespace CNA::Internal::Backends::D3D12
 {
@@ -254,24 +257,62 @@ namespace CNA::Internal::Backends::D3D12
         /** @brief Real swap chain, or null if IsSwapChainAvailableEXT() is false. */
         [[nodiscard]] IDXGISwapChain3* GetSwapChainEXT() const { return swapChain_.Get(); }
 
-        /** @brief Allocates the next free RTV descriptor from the device-lifetime RTV heap
-         *  (DX-103's bump allocator) and returns its CPU handle. Throws if the heap is exhausted. */
+        /** @brief Allocates an RTV descriptor and returns its CPU handle. REMED-GFX-177: the handle
+         *  is stable for the lifetime of the allocator (RTV capacity grows by appending a heap
+         *  block, never by moving descriptors), and it is reusable once released through
+         *  FreeRtvDescriptorEXT().
+         *  @return A CPU handle valid until it is passed to FreeRtvDescriptorEXT(). */
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE AllocateRtvDescriptorEXT();
-        /** @brief Same as AllocateRtvDescriptorEXT(), for the DSV heap. */
+        /** @brief REMED-GFX-177: returns an RTV descriptor for reuse once the GPU has finished with
+         *  it. A null or foreign handle is ignored.
+         *  @param handle A handle previously returned by AllocateRtvDescriptorEXT(). */
+        void FreeRtvDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE handle);
+        /** @brief Same as AllocateRtvDescriptorEXT(), for the DSV heap.
+         *  @return A CPU handle valid until it is passed to FreeDsvDescriptorEXT(). */
         [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE AllocateDsvDescriptorEXT();
-        /** @brief Allocates the next free slot in the shader-visible CBV/SRV/UAV heap and returns
-         *  both its CPU handle (for CreateXxxView calls) and GPU handle (for
-         *  SetGraphicsRootDescriptorTable). Throws if the heap is exhausted. */
-        void AllocateCbvSrvUavDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE& outCpu,
-                                            D3D12_GPU_DESCRIPTOR_HANDLE& outGpu);
-        /** @brief The shader-visible CBV/SRV/UAV heap itself, for SetDescriptorHeaps() calls. */
-        [[nodiscard]] ID3D12DescriptorHeap* GetCbvSrvUavHeapEXT() const { return cbvSrvUavHeap_.Get(); }
-        /** @brief DX-119: same as AllocateCbvSrvUavDescriptorEXT(), for the shader-visible SAMPLER
-         *  heap. Throws if the heap is exhausted. */
-        void AllocateSamplerDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE& outCpu,
-                                          D3D12_GPU_DESCRIPTOR_HANDLE& outGpu);
-        /** @brief DX-119: the shader-visible SAMPLER heap itself, for SetDescriptorHeaps() calls. */
-        [[nodiscard]] ID3D12DescriptorHeap* GetSamplerHeapEXT() const { return samplerHeap_.Get(); }
+        /** @brief Same as FreeRtvDescriptorEXT(), for the DSV heap.
+         *  @param handle A handle previously returned by AllocateDsvDescriptorEXT(). */
+        void FreeDsvDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE handle);
+
+        /** @brief REMED-GFX-177: allocates a shader-visible CBV/SRV/UAV slot, lets @p createView
+         *  write the descriptor into the staging heap, mirrors it into the shader-visible heap and
+         *  returns the slot's STABLE INDEX.
+         *
+         *  Callers keep the index, not a handle: growing the heap replaces the underlying object, so
+         *  a stored GPU handle would go stale while an index never does.
+         *
+         *  @param createView Invoked with the staging CPU handle the descriptor must be created at.
+         *  @return A stable descriptor index valid until FreeCbvSrvUavDescriptorEXT(). */
+        std::uint32_t CreateCbvSrvUavDescriptorEXT(
+            const std::function<void(D3D12_CPU_DESCRIPTOR_HANDLE)>& createView);
+        /** @brief REMED-GFX-177: returns a CBV/SRV/UAV slot for reuse once the GPU has finished
+         *  with it.
+         *  @param index An index previously returned by CreateCbvSrvUavDescriptorEXT(). */
+        void FreeCbvSrvUavDescriptorEXT(std::uint32_t index);
+        /** @brief REMED-GFX-177: the shader-visible GPU handle for @p index, resolved against the
+         *  heap object that is current right now. Resolve at the point of use; never cache it.
+         *  @param index An index from CreateCbvSrvUavDescriptorEXT().
+         *  @return The GPU handle for SetGraphicsRootDescriptorTable. */
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetCbvSrvUavGpuHandleEXT(std::uint32_t index) const;
+        /** @brief The shader-visible CBV/SRV/UAV heap itself, for SetDescriptorHeaps() calls.
+         *  @return The heap currently bound-able for this type. */
+        [[nodiscard]] ID3D12DescriptorHeap* GetCbvSrvUavHeapEXT() const
+        {
+            return heaps_ ? heaps_->cbvSrvUav.ShaderVisibleHeap() : nullptr;
+        }
+        /** @brief DX-119: the shader-visible SAMPLER heap itself, for SetDescriptorHeaps() calls.
+         *  @return The heap currently bound-able for this type. */
+        [[nodiscard]] ID3D12DescriptorHeap* GetSamplerHeapEXT() const
+        {
+            return heaps_ ? heaps_->sampler.ShaderVisibleHeap() : nullptr;
+        }
+        /** @brief REMED-GFX-177: the shared descriptor-allocator set, captured by every resource
+         *  that owns a descriptor so it can free the slot even if it outlives this backend.
+         *  @return The shared allocator set. */
+        [[nodiscard]] const std::shared_ptr<D3D12DescriptorHeaps>& GetDescriptorHeapsEXT() const
+        {
+            return heaps_;
+        }
         /** @brief DX-119: resolves a real GPU sampler descriptor handle for texture slot @p slot
          *  (0 or 1, this backend's only real texture registers) from whatever SamplerState was last
          *  applied via ApplySamplerState(slot, ...) -- defaults to LINEAR/WRAP (this backend's own
@@ -539,48 +580,24 @@ namespace CNA::Internal::Backends::D3D12
         bool debugLayerEnabled_ = false;
         bool allowTearingSupported_ = false;
 
-        // DX-103: descriptor heaps + bump allocators. Capacities are a deliberately simple first
-        // implementation (plan_dx.md DX-103's own row explicitly allows this) -- no free-list
-        // reuse of released descriptors yet, since nothing releases any yet (DX-109 is unstarted).
-        // DX-111 (closing env_map3d): raised from 8 -- the growing CTest suite (one fresh off-screen
-        // RTV per Check block, no free-list reuse yet, see this class's own DX-103 doc comment)
-        // exhausted the original capacity for real the moment Check U's render target was allocated.
-        // Still a fixed bump allocator, same honest simplification DX-103 already documents -- just
-        // sized for real observed demand instead of an arbitrary guess.
-        // DX-144 (render-target mip-chain generation): raised again from 32 -- exhausted for real
-        // the moment this task's own new render target (the "LL" mip-chain checks) was allocated,
-        // same growing-suite-vs-no-free-list cause as the 8->32 raise above.
-        // DX-152 (RenderTargetCube MSAA): raised again from 48 -- a cube target allocates 6 RTVs
-        // (one per face) in one call, and the growing test suite exhausted 48 the moment this
-        // task's own new cube render target was allocated. Same fixed-bump-allocator simplification,
-        // sized generously (not just to the exact observed demand) to leave headroom for DX-153's
-        // own follow-up cube allocation landing right after this in the same phase.
-        // Task 1107 (plan_graphics.md Phase 80, merged from a branch that raised this same constant
-        // 32->40 from an older baseline): Check O3/S2's own 2 new RTV-allocating blocks are already
-        // comfortably covered by the 64 this history independently arrived at -- no further raise
-        // needed.
-        static constexpr UINT kRtvHeapCapacity = 64;
-        static constexpr UINT kDsvHeapCapacity = 8;
-        static constexpr UINT kCbvSrvUavHeapCapacity = 64;
-        // DX-119: one sampler slot per distinct XNA SamplerState combination actually used across a
-        // test/game's lifetime, not per draw (D3D12SamplerCache only allocates on a genuine cache
-        // miss) -- 16 is a generous first-implementation capacity (matches
-        // SamplerStateCollection::MaxSamplers, the max distinct slots a game could theoretically set
-        // to 16 all-different states), same "simple fixed bump allocator, no free-list yet" honest
-        // scope as every other DX-103 heap.
-        static constexpr UINT kSamplerHeapCapacity = 16;
-        ComPtr<ID3D12DescriptorHeap> rtvHeap_;
-        ComPtr<ID3D12DescriptorHeap> dsvHeap_;
-        ComPtr<ID3D12DescriptorHeap> cbvSrvUavHeap_;
-        ComPtr<ID3D12DescriptorHeap> samplerHeap_;
-        UINT rtvDescriptorSize_ = 0;
-        UINT dsvDescriptorSize_ = 0;
-        UINT cbvSrvUavDescriptorSize_ = 0;
-        UINT samplerDescriptorSize_ = 0;
-        UINT rtvHeapNextIndex_ = 0;
-        UINT dsvHeapNextIndex_ = 0;
-        UINT cbvSrvUavHeapNextIndex_ = 0;
-        UINT samplerHeapNextIndex_ = 0;
+        // DX-103 gave each of the four heaps a fixed capacity and a monotonic bump cursor with no
+        // free list, so a descriptor was consumed for the lifetime of the PROCESS rather than of the
+        // resource that asked for it. Every raise this comment used to record (8 -> 32 -> 48 -> 64)
+        // was that defect being paid for again by a slightly larger test suite. REMED-GFX-177
+        // replaces the four cursors with allocators that reclaim a freed slot and grow on genuine
+        // simultaneous demand (see D3D12DescriptorHeaps.hpp); these constants are now the STARTING
+        // capacity, deliberately left at DX-103's own numbers so the correction is reclamation and
+        // growth rather than a larger arbitrary constant.
+        static constexpr UINT kRtvHeapInitialCapacity = 64;
+        static constexpr UINT kDsvHeapInitialCapacity = 8;
+        static constexpr UINT kCbvSrvUavHeapInitialCapacity = 64;
+        // DX-119: one sampler slot per distinct XNA SamplerState combination actually used, not per
+        // draw (D3D12SamplerCache only allocates on a genuine cache miss). 16 matches
+        // SamplerStateCollection::MaxSamplers; beyond that the allocator grows to the D3D12 ceiling.
+        static constexpr UINT kSamplerHeapInitialCapacity = 16;
+        /// REMED-GFX-177: shared with every resource that owns a descriptor, so a resource destroyed
+        /// after this backend still frees its slot into a live allocator.
+        std::shared_ptr<D3D12DescriptorHeaps> heaps_;
 
         // DX-119: real sampler cache + per-slot tracked XNA-level SamplerState (updated by
         // ApplySamplerState, matching GraphicsDevice::applySamplerStatesToBackend()'s own

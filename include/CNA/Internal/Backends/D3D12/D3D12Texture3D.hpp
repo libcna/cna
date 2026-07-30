@@ -13,9 +13,13 @@
 // DX-111's actual prerequisite") -- this is the real, scoped follow-up.
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
+
+#include <cstdint>
+#include <memory>
 
 namespace CNA::Internal::Backends::D3D12
 {
@@ -27,6 +31,8 @@ namespace CNA::Internal::Backends::D3D12
     {
     public:
         D3D12Texture3DBackend(D3D12GraphicsBackend* backend, int w, int h, int depth, bool mipMap, int surfaceFormat);
+        /// REMED-GFX-177: returns this volume's SRV slot to the shader-visible allocator.
+        ~D3D12Texture3DBackend() override;
 
         /// REMED-GFX-135: same explicit completion contract as D3D12TextureCubeBackend::SetData,
         /// applied to the placed footprint's row pitch and slice pitch.
@@ -43,15 +49,22 @@ namespace CNA::Internal::Backends::D3D12
         /// Raw GPU-resident ID3D12Resource* (NOXNA -- future draw-path/readback-test consumers).
         [[nodiscard]] ID3D12Resource* GetResourceEXT() const { return texture_.Get(); }
         /// Shader-visible-heap GPU handle for this texture's SRV (NOXNA -- SetGraphicsRootDescriptorTable).
-        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const { return srvGpuHandle_; }
+        /// REMED-GFX-177: resolved on every call against whichever heap is current, never cached.
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const
+        {
+            return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
+        }
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this volume owns (NOXNA).
+        [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
 
     private:
         void TransitionToShaderReadableEXT();
 
         D3D12GraphicsBackend* backend_ = nullptr;
         ComPtr<ID3D12Resource> texture_;
-        D3D12_CPU_DESCRIPTOR_HANDLE srvCpuHandle_{};
-        D3D12_GPU_DESCRIPTOR_HANDLE srvGpuHandle_{};
+        /// Kept alive independently of backend_ so the destructor can always free the slot.
+        std::shared_ptr<D3D12DescriptorHeaps> heaps_;
+        std::uint32_t srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
         int width_ = 0;
         int height_ = 0;
         int depth_ = 0;

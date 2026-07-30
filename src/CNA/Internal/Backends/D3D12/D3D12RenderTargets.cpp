@@ -273,6 +273,7 @@ namespace CNA::Internal::Backends::D3D12
 
         owner_->GetResourceStateTrackerEXT().TrackResource(colorResource_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
 
+        heaps_ = owner_->GetDescriptorHeapsEXT();
         rtv_ = owner_->AllocateRtvDescriptorEXT();
         // Explicit MipSlice=0 (rather than a null desc) -- required once levelCount_ > 1, since an
         // RTV can only ever target exactly one mip level and a null desc's inference is not
@@ -314,8 +315,12 @@ namespace CNA::Internal::Backends::D3D12
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // always single-sample -- see GetSampleableColorResourceEXT()
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture2D.MipLevels = static_cast<UINT>(levelCount_);
-        owner_->AllocateCbvSrvUavDescriptorEXT(srvCpu_, srvGpu_);
-        device_->CreateShaderResourceView(isMsaa_ ? resolveResource_.Get() : colorResource_.Get(), &srvDesc, srvCpu_);
+        srvIndex_ = owner_->CreateCbvSrvUavDescriptorEXT(
+            [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+            {
+                device_->CreateShaderResourceView(isMsaa_ ? resolveResource_.Get() : colorResource_.Get(),
+                                                  &srvDesc, cpu);
+            });
 
         const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat);
         hasDepth_ = depthDxgiFormat != DXGI_FORMAT_UNKNOWN;
@@ -349,6 +354,14 @@ namespace CNA::Internal::Backends::D3D12
             dsvDesc.ViewDimension = isMsaa_ ? D3D12_DSV_DIMENSION_TEXTURE2DMS : D3D12_DSV_DIMENSION_TEXTURE2D;
             device_->CreateDepthStencilView(depthResource_.Get(), &dsvDesc, dsv_);
         }
+    }
+
+    D3D12RenderTargetBackend::~D3D12RenderTargetBackend()
+    {
+        if (!heaps_) return;
+        heaps_->cbvSrvUav.Free(srvIndex_);
+        heaps_->rtv.Free(rtv_);
+        if (hasDepth_) heaps_->dsv.Free(dsv_);
     }
 
     void D3D12RenderTargetBackend::BindAsRenderTarget()
@@ -527,6 +540,7 @@ namespace CNA::Internal::Backends::D3D12
 
         for (UINT face = 0; face < 6; ++face)
         {
+            if (!heaps_) heaps_ = owner_->GetDescriptorHeapsEXT();
             rtv_[face] = owner_->AllocateRtvDescriptorEXT();
             D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
             rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -569,8 +583,12 @@ namespace CNA::Internal::Backends::D3D12
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.TextureCube.MipLevels = static_cast<UINT>(levelCount_);
-        owner_->AllocateCbvSrvUavDescriptorEXT(srvCpu_, srvGpu_);
-        device_->CreateShaderResourceView(isMsaa_ ? resolveResource_.Get() : colorResource_.Get(), &srvDesc, srvCpu_);
+        srvIndex_ = owner_->CreateCbvSrvUavDescriptorEXT(
+            [&](D3D12_CPU_DESCRIPTOR_HANDLE cpu)
+            {
+                device_->CreateShaderResourceView(isMsaa_ ? resolveResource_.Get() : colorResource_.Get(),
+                                                  &srvDesc, cpu);
+            });
 
         const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat);
         hasDepth_ = depthDxgiFormat != DXGI_FORMAT_UNKNOWN;
@@ -603,6 +621,14 @@ namespace CNA::Internal::Backends::D3D12
             dsvDesc.ViewDimension = isMsaa_ ? D3D12_DSV_DIMENSION_TEXTURE2DMS : D3D12_DSV_DIMENSION_TEXTURE2D;
             device_->CreateDepthStencilView(depthResource_.Get(), &dsvDesc, dsv_);
         }
+    }
+
+    D3D12RenderTargetCubeBackend::~D3D12RenderTargetCubeBackend()
+    {
+        if (!heaps_) return;
+        heaps_->cbvSrvUav.Free(srvIndex_);
+        for (D3D12_CPU_DESCRIPTOR_HANDLE face : rtv_) heaps_->rtv.Free(face);
+        if (hasDepth_) heaps_->dsv.Free(dsv_);
     }
 
     void D3D12RenderTargetCubeBackend::BindAsRenderTargetFace(int face)

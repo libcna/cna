@@ -19,18 +19,14 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
-    D3D12_GPU_DESCRIPTOR_HANDLE D3D12SamplerCache::GetOrCreate(
-        ID3D12Device* device, int filter, int addressU, int addressV, int maxAnisotropy,
-        const std::function<void(D3D12_CPU_DESCRIPTOR_HANDLE&, D3D12_GPU_DESCRIPTOR_HANDLE&)>& allocateSlot)
+    std::uint32_t D3D12SamplerCache::GetOrCreateIndex(
+        int filter, int addressU, int addressV, int maxAnisotropy,
+        const std::function<std::uint32_t(const D3D12_SAMPLER_DESC&)>& createSlot)
     {
         const std::uint64_t key = MakeKey(filter, addressU, addressV, maxAnisotropy);
         auto it = cache_.find(key);
         if (it != cache_.end())
             return it->second;
-
-        D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle{};
-        D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle{};
-        allocateSlot(cpuHandle, gpuHandle);
 
         D3D12_SAMPLER_DESC desc{};
         desc.Filter = static_cast<D3D12_FILTER>(TextureFilterToD3D11(filter));
@@ -43,8 +39,8 @@ namespace CNA::Internal::Backends::D3D12
         desc.MinLOD = 0.0f;
         desc.MaxLOD = D3D12_FLOAT32_MAX;
 
-        device->CreateSampler(&desc, cpuHandle);
-        cache_.emplace(key, gpuHandle);
-        return gpuHandle;
+        const std::uint32_t index = createSlot(desc);
+        cache_.emplace(key, index);
+        return index;
     }
 }

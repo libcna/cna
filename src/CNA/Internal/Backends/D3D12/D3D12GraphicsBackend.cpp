@@ -236,29 +236,25 @@ namespace CNA::Internal::Backends::D3D12
 
     void D3D12GraphicsBackend::CreateDescriptorHeapResources()
     {
-        auto createHeap = [&](D3D12_DESCRIPTOR_HEAP_TYPE type, UINT capacity, bool shaderVisible,
-                              ComPtr<ID3D12DescriptorHeap>& outHeap, const char* what)
-        {
-            D3D12_DESCRIPTOR_HEAP_DESC desc{};
-            desc.Type = type;
-            desc.NumDescriptors = capacity;
-            desc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-            HRESULT hr = device_->CreateDescriptorHeap(&desc, IID_PPV_ARGS(outHeap.ReleaseAndGetAddressOf()));
-            if (FAILED(hr))
-                throw std::runtime_error(std::string("ID3D12Device::CreateDescriptorHeap(") + what + ") failed, hr=" + FormatHr(hr));
-        };
-
-        createHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvHeapCapacity, false, rtvHeap_, "RTV");
-        createHeap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvHeapCapacity, false, dsvHeap_, "DSV");
-        createHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kCbvSrvUavHeapCapacity, true, cbvSrvUavHeap_, "CBV_SRV_UAV");
+        // REMED-GFX-177: a brand-new allocator set per device. Constructed here rather than reused
+        // across RecreateDeviceEXT() so that a resource created before device loss frees its slot
+        // into the OLD set (harmless bookkeeping on an orphaned object) instead of corrupting the
+        // new device's index space.
+        heaps_ = std::make_shared<D3D12DescriptorHeaps>();
+        heaps_->rtv.Initialize(device_.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvHeapInitialCapacity,
+                               &heaps_->clock, "RTV");
+        heaps_->dsv.Initialize(device_.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvHeapInitialCapacity,
+                               &heaps_->clock, "DSV");
+        heaps_->cbvSrvUav.Initialize(device_.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                                     kCbvSrvUavHeapInitialCapacity,
+                                     D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_1,
+                                     &heaps_->clock, "CBV_SRV_UAV");
         // DX-119: real per-slot SamplerState needs its own shader-visible SAMPLER heap -- D3D12
-        // forbids mixing sampler descriptors into the CBV_SRV_UAV heap type.
-        createHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, kSamplerHeapCapacity, true, samplerHeap_, "SAMPLER");
-
-        rtvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-        dsvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
-        cbvSrvUavDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        samplerDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+        // forbids mixing sampler descriptors into the CBV_SRV_UAV heap type, and caps a
+        // shader-visible sampler heap at a far lower maximum than the CBV/SRV/UAV one.
+        heaps_->sampler.Initialize(device_.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER,
+                                   kSamplerHeapInitialCapacity, D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE,
+                                   &heaps_->clock, "SAMPLER");
     }
 
     void D3D12GraphicsBackend::CreateCommandListResources()
@@ -290,6 +286,10 @@ namespace CNA::Internal::Backends::D3D12
         HRESULT hr = device_->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence_.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("ID3D12Device::CreateFence failed, hr=" + FormatHr(hr));
+
+        // REMED-GFX-177: the descriptor allocators decide when a freed slot or a replaced heap is
+        // safe to reuse/release by reading this same fence.
+        if (heaps_) heaps_->clock.fence = fence_;
 
         fenceEvent_ = CreateEventExW(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
         if (!fenceEvent_)
@@ -413,65 +413,76 @@ namespace CNA::Internal::Backends::D3D12
     void D3D12GraphicsBackend::ReleaseWindowSizeDependentViews()
     {
         UnbindOffscreenColorTargetEXT();
+        // REMED-GFX-177: the RTV/DSV slots these views occupied are returned to their allocators, so
+        // a resize or device recreation no longer consumes capacity permanently. Handles are cleared
+        // so a second release cannot free the same slot twice.
+        for (auto& rtv : backBufferRtvs_)
+        {
+            FreeRtvDescriptorEXT(rtv);
+            rtv = D3D12_CPU_DESCRIPTOR_HANDLE{};
+        }
+        FreeDsvDescriptorEXT(depthStencilViewEXT_);
+        depthStencilViewEXT_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         depthStencilResource_.Reset();
         for (auto& res : backBufferResources_) res.Reset();
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::AllocateRtvDescriptorEXT()
     {
-        if (rtvHeapNextIndex_ >= kRtvHeapCapacity)
-            throw std::runtime_error("D3D12GraphicsBackend: RTV descriptor heap exhausted (DX-103's fixed capacity)");
-        D3D12_CPU_DESCRIPTOR_HANDLE handle = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
-        handle.ptr += static_cast<SIZE_T>(rtvHeapNextIndex_) * rtvDescriptorSize_;
-        ++rtvHeapNextIndex_;
-        return handle;
+        return heaps_->rtv.Allocate();
+    }
+
+    void D3D12GraphicsBackend::FreeRtvDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE handle)
+    {
+        if (heaps_) heaps_->rtv.Free(handle);
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::AllocateDsvDescriptorEXT()
     {
-        if (dsvHeapNextIndex_ >= kDsvHeapCapacity)
-            throw std::runtime_error("D3D12GraphicsBackend: DSV descriptor heap exhausted (DX-103's fixed capacity)");
-        D3D12_CPU_DESCRIPTOR_HANDLE handle = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
-        handle.ptr += static_cast<SIZE_T>(dsvHeapNextIndex_) * dsvDescriptorSize_;
-        ++dsvHeapNextIndex_;
-        return handle;
+        return heaps_->dsv.Allocate();
     }
 
-    void D3D12GraphicsBackend::AllocateCbvSrvUavDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE& outCpu,
-                                                               D3D12_GPU_DESCRIPTOR_HANDLE& outGpu)
+    void D3D12GraphicsBackend::FreeDsvDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE handle)
     {
-        if (cbvSrvUavHeapNextIndex_ >= kCbvSrvUavHeapCapacity)
-            throw std::runtime_error("D3D12GraphicsBackend: CBV/SRV/UAV descriptor heap exhausted (DX-103's fixed capacity)");
-        outCpu = cbvSrvUavHeap_->GetCPUDescriptorHandleForHeapStart();
-        outCpu.ptr += static_cast<SIZE_T>(cbvSrvUavHeapNextIndex_) * cbvSrvUavDescriptorSize_;
-        outGpu = cbvSrvUavHeap_->GetGPUDescriptorHandleForHeapStart();
-        outGpu.ptr += static_cast<UINT64>(cbvSrvUavHeapNextIndex_) * cbvSrvUavDescriptorSize_;
-        ++cbvSrvUavHeapNextIndex_;
+        if (heaps_) heaps_->dsv.Free(handle);
     }
 
-    void D3D12GraphicsBackend::AllocateSamplerDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE& outCpu,
-                                                             D3D12_GPU_DESCRIPTOR_HANDLE& outGpu)
+    std::uint32_t D3D12GraphicsBackend::CreateCbvSrvUavDescriptorEXT(
+        const std::function<void(D3D12_CPU_DESCRIPTOR_HANDLE)>& createView)
     {
-        if (samplerHeapNextIndex_ >= kSamplerHeapCapacity)
-            throw std::runtime_error("D3D12GraphicsBackend: SAMPLER descriptor heap exhausted (DX-119's fixed capacity)");
-        outCpu = samplerHeap_->GetCPUDescriptorHandleForHeapStart();
-        outCpu.ptr += static_cast<SIZE_T>(samplerHeapNextIndex_) * samplerDescriptorSize_;
-        outGpu = samplerHeap_->GetGPUDescriptorHandleForHeapStart();
-        outGpu.ptr += static_cast<UINT64>(samplerHeapNextIndex_) * samplerDescriptorSize_;
-        ++samplerHeapNextIndex_;
+        const std::uint32_t index = heaps_->cbvSrvUav.Allocate();
+        createView(heaps_->cbvSrvUav.StagingCpuHandle(index));
+        heaps_->cbvSrvUav.Publish(index);
+        return index;
+    }
+
+    void D3D12GraphicsBackend::FreeCbvSrvUavDescriptorEXT(std::uint32_t index)
+    {
+        if (heaps_) heaps_->cbvSrvUav.Free(index);
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::GetCbvSrvUavGpuHandleEXT(std::uint32_t index) const
+    {
+        return heaps_ ? heaps_->cbvSrvUav.GpuHandle(index) : D3D12_GPU_DESCRIPTOR_HANDLE{};
     }
 
     D3D12_GPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::GetSamplerGpuHandleEXT(int slot)
     {
         if (slot < 0 || slot >= kMaxSamplerSlots)
             slot = 0;
-        return samplerCache_.GetOrCreate(
-            device_.Get(), currentSamplerFilter_[slot], currentSamplerAddressU_[slot],
+        // REMED-GFX-177: the cache stores the slot INDEX, not a GPU handle -- growing the sampler
+        // heap replaces the heap object, and a cached handle into the old one would be stale.
+        const std::uint32_t index = samplerCache_.GetOrCreateIndex(
+            currentSamplerFilter_[slot], currentSamplerAddressU_[slot],
             currentSamplerAddressV_[slot], currentSamplerMaxAnisotropy_[slot],
-            [this](D3D12_CPU_DESCRIPTOR_HANDLE& cpu, D3D12_GPU_DESCRIPTOR_HANDLE& gpu)
+            [this](const D3D12_SAMPLER_DESC& desc)
             {
-                AllocateSamplerDescriptorEXT(cpu, gpu);
+                const std::uint32_t idx = heaps_->sampler.Allocate();
+                device_->CreateSampler(&desc, heaps_->sampler.StagingCpuHandle(idx));
+                heaps_->sampler.Publish(idx);
+                return idx;
             });
+        return heaps_->sampler.GpuHandle(index);
     }
 
     void D3D12GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
@@ -495,6 +506,9 @@ namespace CNA::Internal::Backends::D3D12
             CheckDeviceRemovedEXT(hr); // DX-110: detection-only here, matching D3D11's own convention
             throw std::runtime_error("ID3D12CommandQueue::Signal failed, hr=" + FormatHr(hr));
         }
+        // REMED-GFX-177: descriptors freed from now on may still be referenced by the command list
+        // just submitted, so they are stamped against this value and reclaimed only once it passes.
+        if (heaps_) heaps_->OnSubmittedEXT(valueToSignal);
 
         if (fence_->GetCompletedValue() < valueToSignal)
         {
@@ -514,6 +528,7 @@ namespace CNA::Internal::Backends::D3D12
             CheckDeviceRemovedEXT(hr);
             throw std::runtime_error("ID3D12CommandQueue::Signal failed, hr=" + FormatHr(hr));
         }
+        if (heaps_) heaps_->OnSubmittedEXT(valueToSignal); // REMED-GFX-177, see ExecuteCommandListAndWaitEXT
 
         const std::uint64_t previousValueForThisFrame = frameFenceValues_[frameIndex];
         if (previousValueForThisFrame != 0 && fence_->GetCompletedValue() < previousValueForThisFrame)
@@ -567,10 +582,11 @@ namespace CNA::Internal::Backends::D3D12
         for (auto& allocator : commandAllocators_) allocator.Reset();
         if (fenceEvent_) { CloseHandle(fenceEvent_); fenceEvent_ = nullptr; }
         fence_.Reset();
-        cbvSrvUavHeap_.Reset();
-        samplerHeap_.Reset();
-        dsvHeap_.Reset();
-        rtvHeap_.Reset();
+        // REMED-GFX-177: drop this device's allocator set. Any resource created against the old
+        // device still holds its own shared_ptr to it, so its destructor frees into that orphaned
+        // set rather than into the new device's index space; the heaps themselves are released as
+        // soon as the last such resource is gone.
+        heaps_.reset();
         commandQueue_.Reset();
         device_.Reset();
         factory_.Reset();
@@ -624,10 +640,8 @@ namespace CNA::Internal::Backends::D3D12
         // calling RecreateDeviceEXT(), same as it must recreate any of its own DX-109 resources.
         UnbindOffscreenColorTargetEXT();
 
-        rtvHeapNextIndex_ = 0;
-        dsvHeapNextIndex_ = 0;
-        cbvSrvUavHeapNextIndex_ = 0;
-        samplerHeapNextIndex_ = 0;
+        // REMED-GFX-177: nothing to reset here any more -- heaps_ was released above and
+        // CreateDescriptorHeapResources() below builds a brand-new allocator set for the new device.
         nextFenceValue_ = 1;
         for (auto& value : frameFenceValues_) value = 0;
         debugLayerEnabled_ = false;
@@ -2270,7 +2284,9 @@ namespace CNA::Internal::Backends::D3D12
             // (GraphicsDevice.SamplerStates[i]), not a hardcoded default. Both the CBV_SRV_UAV heap
             // and the SAMPLER heap are bound together -- D3D12 allows up to 2 shader-visible heaps
             // simultaneously, one per heap type.
-            ID3D12DescriptorHeap* heaps[] = {cbvSrvUavHeap_.Get(), samplerHeap_.Get()};
+            // REMED-GFX-177: resolved per draw, so a heap that grew between draws is picked up
+            // here and every root table below points into the heap actually being bound.
+            ID3D12DescriptorHeap* heaps[] = {GetCbvSrvUavHeapEXT(), GetSamplerHeapEXT()};
             cmdList->SetDescriptorHeaps(2, heaps);
             for (int i = 0; i < numSrvs; ++i)
                 cmdList->SetGraphicsRootDescriptorTable(numCbvs + i, srvHandles[i]);

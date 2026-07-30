@@ -21,26 +21,28 @@ namespace CNA::Internal::Backends::D3D12
     class D3D12SamplerCache
     {
     public:
-        /// Returns the GPU descriptor handle for a cached (or newly created) sampler for the given
-        /// raw XNA TextureFilter/TextureAddressMode ordinals (via D3DStateMapping's existing
+        /// Returns the sampler-heap descriptor INDEX for a cached (or newly created) sampler for the
+        /// given raw XNA TextureFilter/TextureAddressMode ordinals (via D3DStateMapping's existing
         /// TextureFilterToD3D11/TextureAddressModeToD3D11 tables). AddressW is set equal to
         /// addressV -- IGraphicsBackend::ApplySamplerState's signature has no third address mode
         /// parameter (a pre-existing interface limitation, matches D3D11SamplerCache's own
-        /// documented choice, not something this cache can fix on its own.
+        /// documented choice, not something this cache can fix on its own).
         ///
-        /// @p allocateSlot is called ONLY on a genuine cache miss (a fresh sampler heap slot is a
-        /// real, finite, non-reclaimed resource -- DX-103's own bump-allocator discipline -- so a
-        /// cache hit must never consume one). It must fill in a real CPU handle (for
-        /// ID3D12Device::CreateSampler) and the matching GPU handle (for
-        /// SetGraphicsRootDescriptorTable) from the backend's own sampler descriptor heap.
-        D3D12_GPU_DESCRIPTOR_HANDLE GetOrCreate(
-            ID3D12Device* device, int filter, int addressU, int addressV, int maxAnisotropy,
-            const std::function<void(D3D12_CPU_DESCRIPTOR_HANDLE&, D3D12_GPU_DESCRIPTOR_HANDLE&)>& allocateSlot);
+        /// REMED-GFX-177: an INDEX, not a GPU handle. A shader-visible sampler heap that grows is
+        /// replaced by a larger object, so a cached handle would point into a retired heap; an index
+        /// is stable across growth and resolves against whichever heap is current.
+        ///
+        /// @p createSlot is called ONLY on a genuine cache miss, so a cache hit never consumes a
+        /// descriptor. It receives the fully populated D3D12_SAMPLER_DESC and must create the
+        /// sampler in the backend's own sampler heap and return the index it landed at.
+        std::uint32_t GetOrCreateIndex(
+            int filter, int addressU, int addressV, int maxAnisotropy,
+            const std::function<std::uint32_t(const D3D12_SAMPLER_DESC&)>& createSlot);
 
         /// Number of distinct sampler states created so far (NOXNA diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:
-        std::unordered_map<std::uint64_t, D3D12_GPU_DESCRIPTOR_HANDLE> cache_;
+        std::unordered_map<std::uint64_t, std::uint32_t> cache_;
     };
 }

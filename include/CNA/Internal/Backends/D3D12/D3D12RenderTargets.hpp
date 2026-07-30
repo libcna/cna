@@ -44,9 +44,13 @@
 // against a bound render target is DX-118's job, same as it is for the back buffer.
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "D3D12DescriptorHeaps.hpp"
 
 #include <d3d12.h>
 #include <wrl/client.h>
+
+#include <cstdint>
+#include <memory>
 
 namespace CNA::Internal::Backends::D3D12
 {
@@ -61,6 +65,10 @@ namespace CNA::Internal::Backends::D3D12
         D3D12RenderTargetBackend(D3D12GraphicsBackend* owner, ID3D12Device* device,
                                  int w, int h, int depthFormat, bool mipMap = false,
                                  int multiSampleCount = 0);
+        /// REMED-GFX-177: returns this target's SRV slot, RTV and (when it has depth) DSV to their
+        /// allocators, which reissue them once the GPU has passed the fence value current at
+        /// destruction. Before this, all three were consumed for the lifetime of the process.
+        ~D3D12RenderTargetBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -133,7 +141,13 @@ namespace CNA::Internal::Backends::D3D12
         /// Shader-visible-heap GPU handle for this target's own color SRV, so it can be sampled
         /// like any other texture once unbound (NOXNA -- GetSrvGpuHandleForTextureEXT's own
         /// two-concrete-type resolution, mirroring D3D11GraphicsBackend::GetSrvForTextureEXT).
-        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const { return srvGpu_; }
+        /// REMED-GFX-177: resolved on every call against whichever heap is current, never cached.
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const
+        {
+            return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
+        }
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this target owns (NOXNA).
+        [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
         /// Real GPU-resident depth-stencil resource, or null if `depthFormat` was `None`/unrecognized
         /// (NOXNA -- DX-145 real DXGI-format-fidelity introspection).
         [[nodiscard]] ID3D12Resource* GetDepthResourceEXT() const { return depthResource_.Get(); }
@@ -156,10 +170,12 @@ namespace CNA::Internal::Backends::D3D12
         D3D12GraphicsBackend* owner_ = nullptr;
         ComPtr<ID3D12Device> device_;
 
+        /// Kept alive independently of owner_ so the destructor can always free the descriptors.
+        std::shared_ptr<D3D12DescriptorHeaps> heaps_;
+
         ComPtr<ID3D12Resource> colorResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_{};
-        D3D12_CPU_DESCRIPTOR_HANDLE srvCpu_{};
-        D3D12_GPU_DESCRIPTOR_HANDLE srvGpu_{};
+        std::uint32_t srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
         /// MSAA follow-up: the separate single-sample resource `ResolveSubresource()` writes into
         /// on unbind. Only allocated/valid when `isMsaa_`.
         ComPtr<ID3D12Resource> resolveResource_;
@@ -188,6 +204,10 @@ namespace CNA::Internal::Backends::D3D12
         D3D12RenderTargetCubeBackend(D3D12GraphicsBackend* owner, ID3D12Device* device,
                                      int size, int depthFormat, bool mipMap = false,
                                      int multiSampleCount = 0);
+        /// REMED-GFX-177: returns this cube target's SRV slot, its SIX per-face RTVs and (when it
+        /// has depth) its DSV to their allocators. A cube target is the largest single descriptor
+        /// consumer in this backend, so it is also the one a fixed bump allocator exhausted fastest.
+        ~D3D12RenderTargetCubeBackend() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
@@ -207,7 +227,13 @@ namespace CNA::Internal::Backends::D3D12
         {
             return isMsaa_ ? resolveResource_.Get() : colorResource_.Get();
         }
-        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const { return srvGpu_; }
+        /// REMED-GFX-177: resolved on every call against whichever heap is current, never cached.
+        [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const
+        {
+            return heaps_ ? heaps_->cbvSrvUav.GpuHandle(srvIndex_) : D3D12_GPU_DESCRIPTOR_HANDLE{};
+        }
+        /// REMED-GFX-177: the stable shader-visible-heap slot index this cube target owns (NOXNA).
+        [[nodiscard]] std::uint32_t GetShaderResourceViewIndexEXT() const { return srvIndex_; }
         /// Real mip-chain level count this cube target was allocated with (1 when `mipMap` was
         /// false) -- NOXNA, DX-144 subresource math/test introspection. Face `f`'s mip level `m` is
         /// subresource `m + f * GetLevelCountEXT()` (the standard D3D12 texture-array/mip
@@ -256,10 +282,12 @@ namespace CNA::Internal::Backends::D3D12
         D3D12GraphicsBackend* owner_ = nullptr;
         ComPtr<ID3D12Device> device_;
 
+        /// Kept alive independently of owner_ so the destructor can always free the descriptors.
+        std::shared_ptr<D3D12DescriptorHeaps> heaps_;
+
         ComPtr<ID3D12Resource> colorResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_[6]{};
-        D3D12_CPU_DESCRIPTOR_HANDLE srvCpu_{};
-        D3D12_GPU_DESCRIPTOR_HANDLE srvGpu_{};
+        std::uint32_t srvIndex_ = D3D12ShaderVisibleDescriptorAllocator::kInvalidIndex;
         /// DX-152: the separate single-sample resource ResolveSubresource() writes into on unbind.
         /// Only allocated/valid when isMsaa_.
         ComPtr<ID3D12Resource> resolveResource_;
