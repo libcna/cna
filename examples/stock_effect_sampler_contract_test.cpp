@@ -710,12 +710,17 @@ private:
         rt.GetData(pix.data(), 0, static_cast<int>(pix.size()));
 
         // The two halves render the same texture over the same UV range, so with correct sampling
-        // the left half is piecewise constant in x and the right half is not.
+        // the left half is piecewise constant in x and the right half is not. Each half is drawn
+        // into a viewport of HALF the target's width, so the 4-texel texture is magnified 2x, not
+        // 4x, and one texel is 2 destination pixels wide -- not kBlock. Using kBlock here would
+        // count the genuine texel boundaries at x=2 and x=6 as failures (2 per row x 16 rows = the
+        // 32 that a correct point sampler still reports).
+        constexpr int kHalfBlock = (kRT / 2) / kTex;
         int leftVar = 0, rightVar = 0;
         for (int y = 0; y < kRT; ++y)
         {
             for (int x = 1; x < kRT / 2; ++x)
-                if ((x % kBlock) != 0 &&
+                if ((x % kHalfBlock) != 0 &&
                     !SameColor(pix[static_cast<std::size_t>(y) * kRT + x],
                                pix[static_cast<std::size_t>(y) * kRT + x - 1])) ++leftVar;
             for (int x = kRT / 2 + 1; x < kRT; ++x)

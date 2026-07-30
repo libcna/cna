@@ -5078,14 +5078,19 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     VkDescriptorSet VulkanGraphicsBackend::GetOrCreateEnvMapDescSet(
-        uint32_t frameIdx, VkImageView view2D, VkImageView viewCube)
+        uint32_t frameIdx, VkImageView view2D, VkImageView viewCube,
+        VkSampler sampler2D, VkSampler samplerCube)
     {
         EnsureEnvMapResources();
         if (view2D   == VK_NULL_HANDLE) view2D   = defaultWhiteView_;
         if (viewCube == VK_NULL_HANDLE) viewCube = defaultWhiteCubeView_;
 
-        const uint64_t key = reinterpret_cast<uint64_t>(view2D) * 2654435761ULL
-                           ^ reinterpret_cast<uint64_t>(viewCube);
+        // REMED-GFX-169: the samplers are part of the identity of this descriptor set, not just of
+        // its contents -- keying on the views alone handed a second draw the first draw's sampler.
+        const uint64_t key = reinterpret_cast<uint64_t>(view2D)      * 2654435761ULL
+                           ^ reinterpret_cast<uint64_t>(viewCube)
+                           ^ reinterpret_cast<uint64_t>(sampler2D)   * 2246822519ULL
+                           ^ reinterpret_cast<uint64_t>(samplerCube) * 3266489917ULL;
         auto& cache = envMapDescSets_[frameIdx];
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
@@ -5100,8 +5105,8 @@ namespace CNA::Internal::Backends::Vulkan
             return VK_NULL_HANDLE;
 
         VkDescriptorImageInfo imgInfo[2]{};
-        imgInfo[0] = { defaultSampler_, view2D,   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-        imgInfo[1] = { defaultSampler_, viewCube, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        imgInfo[0] = { sampler2D,   view2D,   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        imgInfo[1] = { samplerCube, viewCube, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
         VkSamplerTraceEXT("desc.EnvMap      hit=0 key=0x%llx set=0x%llx "
                           "binding=0 slot=0 view=0x%llx sampler=0x%llx | "
                           "binding=1 slot=1 viewCube=0x%llx sampler=0x%llx",
@@ -5326,12 +5331,14 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     VkDescriptorSet VulkanGraphicsBackend::GetOrCreateLitTexturedDescSet(
-        uint32_t frameIdx, VkImageView view2D)
+        uint32_t frameIdx, VkImageView view2D, VkSampler sampler)
     {
         EnsureLitTexturedResources();
         if (view2D == VK_NULL_HANDLE) view2D = defaultWhiteView_;
 
-        const uint64_t key = reinterpret_cast<uint64_t>(view2D);
+        // REMED-GFX-169: sampler identity is part of the key, not only of the contents.
+        const uint64_t key = reinterpret_cast<uint64_t>(view2D)
+                           ^ reinterpret_cast<uint64_t>(sampler) * 2246822519ULL;
         auto& cache = litTexturedDescSets_[frameIdx];
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
@@ -5345,7 +5352,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
             return VK_NULL_HANDLE;
 
-        VkDescriptorImageInfo imgInfo{ defaultSampler_, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        VkDescriptorImageInfo imgInfo{ sampler, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
         VkSamplerTraceEXT("desc.LitTextured hit=0 key=0x%llx set=0x%llx "
                           "binding=0 slot=0 view=0x%llx sampler=0x%llx",
                           static_cast<unsigned long long>(key), VkH(ds),
@@ -5682,12 +5689,14 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     VkDescriptorSet VulkanGraphicsBackend::GetOrCreateFogTex3DDescSet(
-        uint32_t frameIdx, VkImageView view2D)
+        uint32_t frameIdx, VkImageView view2D, VkSampler sampler)
     {
         EnsureFogTex3DResources();
         if (view2D == VK_NULL_HANDLE) view2D = defaultWhiteView_;
 
-        const uint64_t key = reinterpret_cast<uint64_t>(view2D);
+        // REMED-GFX-169: sampler identity is part of the key, not only of the contents.
+        const uint64_t key = reinterpret_cast<uint64_t>(view2D)
+                           ^ reinterpret_cast<uint64_t>(sampler) * 2246822519ULL;
         auto& cache = fogTex3DDescSets_[frameIdx];
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
@@ -5701,7 +5710,7 @@ namespace CNA::Internal::Backends::Vulkan
         if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
             return VK_NULL_HANDLE;
 
-        VkDescriptorImageInfo imgInfo{ defaultSampler_, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        VkDescriptorImageInfo imgInfo{ sampler, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
         VkSamplerTraceEXT("desc.FogTex3D    hit=0 key=0x%llx set=0x%llx "
                           "binding=0 slot=0 view=0x%llx sampler=0x%llx",
                           static_cast<unsigned long long>(key), VkH(ds),
@@ -6065,12 +6074,14 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     VkDescriptorSet VulkanGraphicsBackend::GetOrCreateSkinnedDescSet(
-        uint32_t frameIdx, VkImageView view2D)
+        uint32_t frameIdx, VkImageView view2D, VkSampler sampler)
     {
         EnsureSkinnedResources();
         if (view2D == VK_NULL_HANDLE) view2D = defaultWhiteView_;
 
-        const uint64_t key = reinterpret_cast<uint64_t>(view2D);
+        // REMED-GFX-169: sampler identity is part of the key, not only of the contents.
+        const uint64_t key = reinterpret_cast<uint64_t>(view2D)
+                           ^ reinterpret_cast<uint64_t>(sampler) * 2246822519ULL;
         auto& cache = skinnedDescSets_[frameIdx];
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
@@ -6085,7 +6096,7 @@ namespace CNA::Internal::Backends::Vulkan
             return VK_NULL_HANDLE;
 
         VkDescriptorImageInfo imgInfo{};
-        imgInfo.sampler     = defaultSampler_;
+        imgInfo.sampler     = sampler;
         VkSamplerTraceEXT("desc.Skinned     hit=0 key=0x%llx set=0x%llx "
                           "binding=0 slot=0 view=0x%llx sampler=0x%llx",
                           static_cast<unsigned long long>(key), VkH(ds),
@@ -6466,7 +6477,8 @@ namespace CNA::Internal::Backends::Vulkan
 
     VkDescriptorSet VulkanGraphicsBackend::GetOrCreatePbrDescSet(
         uint32_t frameIdx, VkImageView baseColor, VkImageView normalMap,
-        VkImageView metallicRoughness, VkImageView emissive, VkImageView occlusion)
+        VkImageView metallicRoughness, VkImageView emissive, VkImageView occlusion,
+        const VkSampler (&samplers)[5])
     {
         EnsurePbrResources();
         if (baseColor          == VK_NULL_HANDLE) baseColor          = defaultWhiteView_;
@@ -6479,6 +6491,10 @@ namespace CNA::Internal::Backends::Vulkan
         uint64_t key = 1469598103934665603ull;
         for (VkImageView v : { baseColor, normalMap, metallicRoughness, emissive, occlusion })
             key = (key ^ reinterpret_cast<uint64_t>(v)) * 1099511628211ull;
+        // REMED-GFX-169: fold all five slot samplers into the same FNV-1a chain, so two draws that
+        // share these five views but assign different SamplerStates get different descriptor sets.
+        for (VkSampler sm : samplers)
+            key = (key ^ reinterpret_cast<uint64_t>(sm)) * 1099511628211ull;
         auto& cache = pbrDescSets_[frameIdx];
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
@@ -6495,7 +6511,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkImageView views[5] = { baseColor, normalMap, metallicRoughness, emissive, occlusion };
         VkDescriptorImageInfo imgInfo[5]{};
         for (uint32_t i = 0; i < 5; ++i)
-            imgInfo[i] = { defaultSampler_, views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+            imgInfo[i] = { samplers[i], views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
         for (uint32_t i = 0; i < 5; ++i)
             VkSamplerTraceEXT("desc.Pbr        hit=0 key=0x%llx set=0x%llx "
                               "binding=%u slot=%u view=0x%llx sampler=0x%llx",
@@ -6717,7 +6733,8 @@ namespace CNA::Internal::Backends::Vulkan
 
     VkDescriptorSet VulkanGraphicsBackend::GetOrCreatePbrSkinnedDescSet(
         uint32_t frameIdx, VkImageView baseColor, VkImageView normalMap,
-        VkImageView metallicRoughness, VkImageView emissive, VkImageView occlusion)
+        VkImageView metallicRoughness, VkImageView emissive, VkImageView occlusion,
+        const VkSampler (&samplers)[5])
     {
         EnsurePbrSkinnedResources();
         if (baseColor          == VK_NULL_HANDLE) baseColor          = defaultWhiteView_;
@@ -6729,6 +6746,10 @@ namespace CNA::Internal::Backends::Vulkan
         uint64_t key = 1469598103934665603ull;
         for (VkImageView v : { baseColor, normalMap, metallicRoughness, emissive, occlusion })
             key = (key ^ reinterpret_cast<uint64_t>(v)) * 1099511628211ull;
+        // REMED-GFX-169: fold all five slot samplers into the same FNV-1a chain, so two draws that
+        // share these five views but assign different SamplerStates get different descriptor sets.
+        for (VkSampler sm : samplers)
+            key = (key ^ reinterpret_cast<uint64_t>(sm)) * 1099511628211ull;
         auto& cache = pbrSkinnedDescSets_[frameIdx];
         auto it = cache.find(key);
         if (it != cache.end()) return it->second.set;
@@ -6745,7 +6766,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkImageView views[5] = { baseColor, normalMap, metallicRoughness, emissive, occlusion };
         VkDescriptorImageInfo imgInfo[5]{};
         for (uint32_t i = 0; i < 5; ++i)
-            imgInfo[i] = { defaultSampler_, views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+            imgInfo[i] = { samplers[i], views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
         for (uint32_t i = 0; i < 5; ++i)
             VkSamplerTraceEXT("desc.PbrSkinned hit=0 key=0x%llx set=0x%llx "
                               "binding=%u slot=%u view=0x%llx sampler=0x%llx",
@@ -9573,7 +9594,8 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
             VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
             VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc);
+            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+                                                        PbrSlotSamplersRawEXT().s);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
             FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex));
@@ -9590,13 +9612,14 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
             VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
             VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc);
+            d.pbrDescSet = GetOrCreatePbrDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+                                                 PbrSlotSamplersRawEXT().s);
             FillPbrUboData(d.pbrUboData, params, 0.0f);
         } else if (needsSkinned) {
             EnsureSkinnedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             VkImageView v2d = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d);
+            d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d, slotSamplers_[0]);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
             d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
@@ -9641,7 +9664,8 @@ namespace CNA::Internal::Backends::Vulkan
             const auto* vtc = dynamic_cast<const IVulkanCubeSamplable*>(params.envMap);
             VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
             VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
-            d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub);
+            d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub,
+                                                        slotSamplers_[0], slotSamplers_[1]);
             // Pack UBO data: eyePos, diffuse, emissive+envMapAmount, light0Dir,
             // light0Diff+fresnelEnabled, envMapSpecular+fresnelFactor
             d.envMapUboData[0]  = params.eyePositionWorld[0];
@@ -9686,7 +9710,7 @@ namespace CNA::Internal::Backends::Vulkan
             EnsureLitTexturedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view);
+            d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view, slotSamplers_[0]);
             // Pack UBO data: light1Dir+pad, light1Diffuse+pad, light2Dir+pad, light2Diffuse+pad,
             // emissiveColor+pad.
             d.litUboData[0]  = params.light1Dir[0];     d.litUboData[1]  = params.light1Dir[1];
@@ -9725,7 +9749,7 @@ namespace CNA::Internal::Backends::Vulkan
             d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
             if (d.useFogTex3D) {
                 EnsureFogTex3DResources();
-                d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view);
+                d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view, slotSamplers_[0]);
                 d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
                 d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
                 d.fogTex3DUboData[4] = params.fogVector[0]; d.fogTex3DUboData[5] = params.fogVector[1];
@@ -9822,7 +9846,8 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
             VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
             VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc);
+            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+                                                        PbrSlotSamplersRawEXT().s);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
             FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex));
@@ -9839,13 +9864,14 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
             VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
             VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc);
+            d.pbrDescSet = GetOrCreatePbrDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+                                                 PbrSlotSamplersRawEXT().s);
             FillPbrUboData(d.pbrUboData, params, 0.0f);
         } else if (needsSkinned) {
             EnsureSkinnedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             VkImageView v2d = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d);
+            d.skinnedDescSet = GetOrCreateSkinnedDescSet(currentFrame_, v2d, slotSamplers_[0]);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
             d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
@@ -9890,7 +9916,8 @@ namespace CNA::Internal::Backends::Vulkan
             const auto* vtc = dynamic_cast<const IVulkanCubeSamplable*>(params.envMap);
             VkImageView v2d  = vs0 ? vs0->GetVkImageView()       : defaultWhiteView_;
             VkImageView vcub = vtc ? vtc->GetVkCubeImageView()    : defaultWhiteCubeView_;
-            d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub);
+            d.envMapDescSet  = GetOrCreateEnvMapDescSet(currentFrame_, v2d, vcub,
+                                                        slotSamplers_[0], slotSamplers_[1]);
             d.envMapUboData[0]  = params.eyePositionWorld[0];
             d.envMapUboData[1]  = params.eyePositionWorld[1];
             d.envMapUboData[2]  = params.eyePositionWorld[2];
@@ -9934,7 +9961,7 @@ namespace CNA::Internal::Backends::Vulkan
             EnsureLitTexturedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             VkImageView view = vs ? vs->GetVkImageView() : defaultWhiteView_;
-            d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view);
+            d.litTexturedDescSet = GetOrCreateLitTexturedDescSet(currentFrame_, view, slotSamplers_[0]);
             d.litUboData[0]  = params.light1Dir[0];     d.litUboData[1]  = params.light1Dir[1];
             d.litUboData[2]  = params.light1Dir[2];     d.litUboData[3]  = 0.f;
             d.litUboData[4]  = params.light1Diffuse[0]; d.litUboData[5]  = params.light1Diffuse[1];
@@ -9971,7 +9998,7 @@ namespace CNA::Internal::Backends::Vulkan
             d.descSet = GetOrCreateTexSamplerDescSet(view, slotSamplers_[0]);
             if (d.useFogTex3D) {
                 EnsureFogTex3DResources();
-                d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view);
+                d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view, slotSamplers_[0]);
                 d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
                 d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
                 d.fogTex3DUboData[4] = params.fogVector[0]; d.fogTex3DUboData[5] = params.fogVector[1];

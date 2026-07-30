@@ -2107,8 +2107,13 @@ namespace CNA::Internal::Backends::Vulkan
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         // EnvironmentMapEffect
         void       EnsureEnvMapResources();
+        /// REMED-GFX-169: `sampler2D`/`samplerCube` are the SamplerStates of slots 0 and 1, the
+        /// same slot convention GetOrCreateDualTexDescSet already uses and EasyGL's texture units
+        /// confirm. Both participate in the cache key, so the same view pair under two different
+        /// samplers cannot share one descriptor set.
         VkDescriptorSet GetOrCreateEnvMapDescSet(uint32_t frameIdx,
-                                                  VkImageView view2D, VkImageView viewCube);
+                                                  VkImageView view2D, VkImageView viewCube,
+                                                  VkSampler sampler2D, VkSampler samplerCube);
         VkPipeline GetOrCreatePipelineEnvMap3D(VkPrimitiveTopology,
                                                 bool depthTest, bool depthWrite,
                                                 bool blend, int cullMode,
@@ -2119,7 +2124,9 @@ namespace CNA::Internal::Backends::Vulkan
         void       FillEnvMapPushConst(float (&pc)[32], const Matrix& wvp, const Matrix& world);
         // SkinnedEffect
         void       EnsureSkinnedResources();
-        VkDescriptorSet GetOrCreateSkinnedDescSet(uint32_t frameIdx, VkImageView view2D);
+        /// REMED-GFX-169: @p sampler is slot 0's SamplerState, keyed as well as written.
+        VkDescriptorSet GetOrCreateSkinnedDescSet(uint32_t frameIdx, VkImageView view2D,
+                                                   VkSampler sampler);
         // `stride` selects the vertex layout/shader variant: 52 = VertexPositionNormalTextureSkinned
         // (no per-vertex color), 56 = the same layout with a per-vertex Color appended (CNB-67 /
         // SkinnedEffect::VertexColorEnabled) -- mirrors GetOrCreatePipelineDualTex3D's own
@@ -2145,9 +2152,12 @@ namespace CNA::Internal::Backends::Vulkan
         // Metallic-roughness BRDF ported from EasyGLGraphicsBackend::EnsurePbrProgram()/
         // EnsurePbrSkinnedProgram() unchanged; only the resource-binding plumbing differs.
         void       EnsurePbrResources();
+        /// REMED-GFX-169: @p samplers are the SamplerStates of slots 0..4, one per material map,
+        /// matching EasyGL's own Texture0..Texture4 units. All five participate in the cache key.
         VkDescriptorSet GetOrCreatePbrDescSet(uint32_t frameIdx, VkImageView baseColor,
                                                VkImageView normalMap, VkImageView metallicRoughness,
-                                               VkImageView emissive, VkImageView occlusion);
+                                               VkImageView emissive, VkImageView occlusion,
+                                               const VkSampler (&samplers)[5]);
         VkPipeline GetOrCreatePipelinePbr3D(VkPrimitiveTopology,
                                              bool depthTest, bool depthWrite,
                                              bool blend, int cullMode,
@@ -2156,9 +2166,11 @@ namespace CNA::Internal::Backends::Vulkan
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       EnsurePbrSkinnedResources();
+        /// REMED-GFX-169: as GetOrCreatePbrDescSet, slots 0..4.
         VkDescriptorSet GetOrCreatePbrSkinnedDescSet(uint32_t frameIdx, VkImageView baseColor,
                                                       VkImageView normalMap, VkImageView metallicRoughness,
-                                                      VkImageView emissive, VkImageView occlusion);
+                                                      VkImageView emissive, VkImageView occlusion,
+                                                      const VkSampler (&samplers)[5]);
         VkPipeline GetOrCreatePipelinePbrSkinned3D(VkPrimitiveTopology,
                                              bool depthTest, bool depthWrite,
                                              bool blend, int cullMode,
@@ -2179,7 +2191,9 @@ namespace CNA::Internal::Backends::Vulkan
         // forwarded via a small UBO (set=0,binding=1) alongside the unchanged 128-byte PC
         // (set=0,binding=0 stays the texture sampler; PC content unchanged from FillExtPushConst).
         void       EnsureLitTexturedResources();
-        VkDescriptorSet GetOrCreateLitTexturedDescSet(uint32_t frameIdx, VkImageView view2D);
+        /// REMED-GFX-169: @p sampler is slot 0's SamplerState, keyed as well as written.
+        VkDescriptorSet GetOrCreateLitTexturedDescSet(uint32_t frameIdx, VkImageView view2D,
+                                                       VkSampler sampler);
         VkPipeline GetOrCreatePipelineLitTextured3D(VkPrimitiveTopology,
                                                      bool depthTest, bool depthWrite,
                                                      bool blend, int cullMode,
@@ -2199,7 +2213,11 @@ namespace CNA::Internal::Backends::Vulkan
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         // BasicEffect fog bundle (Task 899) — shared by colored3d/textured3d/colored_textured3d.
         void       EnsureFogTex3DResources();
-        VkDescriptorSet GetOrCreateFogTex3DDescSet(uint32_t frameIdx, VkImageView view2D);
+        /// REMED-GFX-169: @p sampler is slot 0's SamplerState, keyed as well as written. This is
+        /// the bundle EVERY plain textured BasicEffect draw uses (it is fog-CAPABLE, not
+        /// fog-enabled), so it is the most-travelled of the corrected paths.
+        VkDescriptorSet GetOrCreateFogTex3DDescSet(uint32_t frameIdx, VkImageView view2D,
+                                                    VkSampler sampler);
         VkPipeline GetOrCreatePipelineFogColored3D(VkPrimitiveTopology,
                                                     bool depthTest, bool depthWrite,
                                                     bool blend, int cullMode,
@@ -2252,6 +2270,17 @@ namespace CNA::Internal::Backends::Vulkan
                                int addressU, int addressV,
                                int maxAnisotropy) override;
         VkDescriptorSet GetOrCreateTexSamplerDescSet(VkImageView view, VkSampler sampler);
+
+        /// REMED-GFX-169: slots 0..4 as one array, for the two PBR descriptor builders whose
+        /// five material maps occupy those slots (EasyGL binds the same five to Texture0..4).
+        /// A struct return keeps the array a value at the call site rather than a raw pointer
+        /// into member storage that a later ApplySamplerState could mutate.
+        struct PbrSlotSamplersEXTResult { VkSampler s[5]; };
+        [[nodiscard]] PbrSlotSamplersEXTResult PbrSlotSamplersRawEXT() const
+        {
+            return { { slotSamplers_[0], slotSamplers_[1], slotSamplers_[2],
+                       slotSamplers_[3], slotSamplers_[4] } };
+        }
 
         // --- Custom Effect / SPIR-V loading (Task 119) ---
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
