@@ -1635,6 +1635,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_rt_sampling_orientation
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-150 principal positive control: TextureFilter::Point must select exactly ONE
+        # texel and TextureAddressMode must decide which one. The defect was Software-local, and
+        # EasyGL is the conforming backend the finding was measured against (128/128 exact where
+        # Software managed 4/128) -- so this run is what establishes that the fixture's expectations
+        # are the XNA contract rather than a description of the Software fix.
+        cna_easygl_test(cna_test_easygl_point_sampling
+            examples/point_sampling_contract_test.cpp)
+        cna_register_backend_test(NAME EasyGL_PointSamplingContract
+            COMMAND cna_test_easygl_point_sampling
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
         # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
         # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred

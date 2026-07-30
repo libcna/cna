@@ -407,6 +407,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_cube_volume_setdata_contract
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-150: TextureFilter::Point must select exactly ONE texel and TextureAddressMode must
+    # decide which one, on SpriteBatch and on the device SamplerStates[0] 3D path alike. The defect
+    # was Software-local: ApplySamplerState named none of its parameters, SoftwareSpriteBatchBackend's
+    # textureFilter_/addressU_/addressV_ were dead stores, and one SampleBilinear served every
+    # textured fragment -- so every draw was LinearClamp whatever the game selected. Software is the
+    # deterministic CPU oracle, so the full exact-pixel matrix runs here.
+    cna_software_test(cna_test_software_point_sampling
+                      examples/point_sampling_contract_test.cpp)
+    cna_register_backend_test(NAME Software_PointSamplingContract
+        COMMAND cna_test_software_point_sampling
+        TIMEOUT 300 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
