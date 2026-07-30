@@ -2,7 +2,9 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -344,6 +346,57 @@ namespace Microsoft::Xna::Framework::Graphics
     // GetData
     // -----------------------------------------------------------------------
 
+    // REMED-GFX-149 / REMED-GFX-128. The destination window every GetData overload is authorised to
+    // write, validated once, in ELEMENTS.
+    //
+    //   startIndex   -- an index into the CALLER'S array. XNA documents it as "index of the first
+    //                   element to get" and FNA transfers to
+    //                   `AddrOfPinnedObject() + startIndex * elementSizeInBytes`, i.e. the pinned
+    //                   DESTINATION array's base. It is never a source-texel offset and never a
+    //                   byte offset.
+    //   elementCount -- the destination capacity available from startIndex. FNA hands it to the
+    //                   native transfer as `elementCount * elementSizeInBytes` and derives the
+    //                   transfer size from the requested REGION, so a capacity larger than the
+    //                   region is legal (`GetData<T>(T[] data)` passes `data.Length`) and must be
+    //                   left untouched, while a smaller one must be rejected before any transfer.
+    //
+    // The sum is computed in 64 bits and rejected before use. Evaluated as `int` it wraps for large
+    // arguments and the wrapped value then passes every subsequent bound, so the copy reads and
+    // writes far outside both buffers -- measured as a SIGSEGV, not as a rejected call.
+    static void validateTransferWindow(const char* api, int startIndex, int elementCount,
+                                       int requiredElements)
+    {
+        if (elementCount < requiredElements)
+            throw std::out_of_range(std::string(api) +
+                ": elementCount is less than the number of pixels in the requested region");
+        if (static_cast<std::int64_t>(startIndex) + static_cast<std::int64_t>(elementCount) >
+            static_cast<std::int64_t>(std::numeric_limits<int>::max()))
+            throw std::out_of_range(std::string(api) +
+                ": startIndex + elementCount does not fit in a 32-bit element index");
+    }
+
+    /// Records exactly what a transfer was asked for and what it is authorised to write, so the
+    /// shared layer's interpretation can be compared against a backend's without a debugger.
+    static void traceTransfer(const char* overload, int resourceW, int resourceH, int level,
+                              int x, int y, int w, int h, int startIndex, int elementCount,
+                              int requiredElements, const char* source)
+    {
+        const char* trace = std::getenv("CNA_TEXTURE_TRANSFER_TRACE");
+        if (trace == nullptr || *trace == '\0') return;
+        std::fprintf(stderr,
+                     "[GFX-149] Texture2D::GetData overload=%s resource=%dx%d level=%d "
+                     "region=(%d,%d,%dx%d) bytesPerElement=4 bytesPerPixel=4 startIndex=%d "
+                     "elementCount=%d requiredElements=%d requiredBytes=%lld "
+                     "destElements=[%d,%d) destBytes=[%lld,%lld) rowPitchBytes=%d source=%s\n",
+                     overload, resourceW, resourceH, level, x, y, w, h, startIndex, elementCount,
+                     requiredElements, static_cast<long long>(requiredElements) * 4,
+                     startIndex, startIndex + requiredElements,
+                     static_cast<long long>(startIndex) * 4,
+                     (static_cast<long long>(startIndex) + requiredElements) * 4,
+                     w * 4, source);
+        std::fflush(stderr);
+    }
+
     void Texture2D::GetData(Color* data, int startIndex, int elementCount) const
     {
         if (!data || elementCount <= 0)
@@ -351,23 +404,36 @@ namespace Microsoft::Xna::Framework::Graphics
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         Texture::ValidateGetDataFormat(format_, 4);
+
+        // The requested region of this overload is the COMPLETE level 0 -- never elementCount,
+        // never a viewport, never a previous request. Argument validation runs BEFORE the storage
+        // and capability decision below, so an undersized or overflowing request is answered with
+        // its own specific error on every backend rather than being weakened into a capability
+        // rejection (REMED-GFX-162's precedence, from the texture side).
+        const int total = width * height;
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, total);
+
         if (!cpuPixels_ || cpuPixels_->empty())
         {
             // No CPU-side shadow. For a RenderTarget2D (gpuOnlyContent_), that's normal -- its
             // content comes from GPU rendering, not SetData() -- so fall back to a real backend
-            // readback for the common full-texture-read case. For a plain Texture2D, an empty
-            // shadow means it was freed because context recovery is disabled (MaybeFreeCpuPixels)
-            // -- that must still throw below, not silently read back whatever the backend's GPU
-            // texture currently holds.
-            const int total = width * height;
-            if (gpuOnlyContent_ && backend_ && startIndex == 0 && elementCount == total && total > 0)
+            // readback. For a plain Texture2D, an empty shadow means it was freed because context
+            // recovery is disabled (MaybeFreeCpuPixels) -- that must still throw below, not
+            // silently read back whatever the backend's GPU texture currently holds.
+            if (gpuOnlyContent_ && backend_ && total > 0)
             {
+                traceTransfer("whole-level(gpu)", width, height, 0, 0, 0, width, height,
+                              startIndex, elementCount, total, "backend");
                 // REMED-GFX-127: `pixels` is scratch memory THIS layer owns and zero-initializes,
                 // so converting it unconditionally is not "leaving the caller's buffer untouched"
                 // when the backend has no readback -- it fabricates a complete transparent-black
                 // frame. Conversion happens only when the backend reports it wrote the whole
                 // region; otherwise the caller's `data` is left byte-for-byte as it was and the
                 // missing capability is raised instead of being answered with invented content.
+                //
+                // Sized to the REQUESTED REGION, not to elementCount: the backend fills exactly
+                // width*height texels, so a larger elementCount would otherwise hand the caller
+                // this buffer's untouched tail as if it were content.
                 std::vector<uint8_t> pixels(static_cast<std::size_t>(total) * 4, 0);
                 if (!backend_->GetData(0, 0, 0, width, height, pixels.data(),
                                        static_cast<int>(pixels.size())))
@@ -376,25 +442,27 @@ namespace Microsoft::Xna::Framework::Graphics
                         "Texture2D::GetData: this graphics backend cannot read a render target's "
                         "colour attachment back to the CPU");
                 }
-                for (int i = 0; i < elementCount; ++i)
+                for (int i = 0; i < total; ++i)
                 {
                     const int src = i * 4;
-                    data[i] = Color(pixels[src + 0], pixels[src + 1], pixels[src + 2], pixels[src + 3]);
+                    data[startIndex + i] =
+                        Color(pixels[src + 0], pixels[src + 1], pixels[src + 2], pixels[src + 3]);
                 }
                 return;
             }
             throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
         }
 
-        int total = width * height;
-        if (startIndex + elementCount > total)
-            throw std::out_of_range("Texture2D::GetData: index out of range");
-
         const auto& px = *cpuPixels_;
-        for (int i = 0; i < elementCount; ++i)
+        if (px.size() < static_cast<std::size_t>(total) * 4)
+            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
+
+        traceTransfer("whole-level(cpu)", width, height, 0, 0, 0, width, height,
+                      startIndex, elementCount, total, "cpuPixels_");
+        for (int i = 0; i < total; ++i)
         {
-            int src = (startIndex + i) * 4;
-            data[i] = Color(px[src + 0], px[src + 1], px[src + 2], px[src + 3]);
+            const int src = i * 4;
+            data[startIndex + i] = Color(px[src + 0], px[src + 1], px[src + 2], px[src + 3]);
         }
     }
 
@@ -436,8 +504,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
                 if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelW || y + h > levelH)
                     throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
-                if (elementCount < w * h)
-                    throw std::out_of_range("Texture2D::GetData: elementCount is less than the number of pixels in the requested region");
+                // REMED-GFX-149: the required element count comes from THIS rectangle's own
+                // dimensions at THIS mip level -- never from level 0 and never from the full
+                // resource -- and the destination window is checked overflow-safely.
+                validateTransferWindow("Texture2D::GetData", startIndex, elementCount, w * h);
+                traceTransfer("rectangle(gpu)", levelW, levelH, level, x, y, w, h,
+                              startIndex, elementCount, w * h, "backend");
 
                 // REMED-GFX-127: same contract as the whole-level overload above -- scratch memory
                 // this layer zero-initialized is never handed to the caller as if it were content.
@@ -473,8 +545,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (x < 0 || y < 0 || x + w > levelW || y + h > levelH)
             throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
-        if (elementCount < w * h)
-            throw std::out_of_range("Texture2D::GetData: elementCount is less than the number of pixels in the requested region");
+        // REMED-GFX-149: as above -- this rectangle's own dimensions at this mip level, and an
+        // overflow-safe destination window.
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, w * h);
+        traceTransfer("rectangle(cpu)", levelW, levelH, level, x, y, w, h,
+                      startIndex, elementCount, w * h, "mipShadow");
 
         for (int row = 0; row < h; ++row)
         {
