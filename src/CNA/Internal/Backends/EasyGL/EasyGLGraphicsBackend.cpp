@@ -3001,13 +3001,29 @@ void main()
         // Task 918: real anisotropic filtering via GL_EXT_texture_filter_anisotropic, gated on
         // the extension genuinely being available; falls back to the plain trilinear filter set
         // above (unchanged) when it isn't, exactly like before this fix.
-        if (filter == 2 && metagl::HasExtension("GL_EXT_texture_filter_anisotropic"))
+        //
+        // REMED-GFX-174: anisotropy is a COMPONENT OF THE ORDINAL, so it must be written on every
+        // application exactly like min, mag, wrapS and wrapT above -- not only when the ordinal
+        // happens to be Anisotropic. samplers_[slot] is ONE long-lived GL sampler object that is
+        // mutated in place and reused for every later application on that slot, so a write that
+        // only ever RAISES the value leaves it raised forever: once any ordinal 2 draw set it to
+        // SamplerState's default MaxAnisotropy of 4, every subsequent Point/Linear draw on that
+        // slot kept sampling anisotropically. Anisotropic taps average across the pixel footprint,
+        // which is why the contaminated slot returned the same wide box average for all nine
+        // ordinals and no Point draw could ever return a stored texel again. Vulkan cannot have
+        // this defect because it builds a fresh VkSamplerCreateInfo per sampler; the mutable
+        // shared object is what makes the unconditional write necessary here.
+        if (metagl::HasExtension("GL_EXT_texture_filter_anisotropic"))
         {
-            GLfloat maxAnisoCap = 1.0f;
-            metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
-            float requested = static_cast<float>(maxAnisotropy);
-            float clamped = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
-            if (clamped < 1.0f) clamped = 1.0f;
+            float clamped = 1.0f;
+            if (filter == 2)
+            {
+                GLfloat maxAnisoCap = 1.0f;
+                metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
+                const float requested = static_cast<float>(maxAnisotropy);
+                clamped = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
+                if (clamped < 1.0f) clamped = 1.0f;
+            }
             s.set_parameter(::easygl::SamplerParameter::MaxAnisotropy, clamped);
         }
 
