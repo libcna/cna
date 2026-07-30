@@ -63,6 +63,36 @@ namespace CNA::Internal::Backends::Vulkan
             std::fflush(stderr);
         }
 
+        /// REMED-GFX-169: the sampler/descriptor trace. Set CNA_VULKAN_SAMPLER_TRACE=1 to emit one
+        /// line per public sampler application and one per combined-image-sampler binding written
+        /// into a descriptor set, each carrying the command family, the texture slot, the image
+        /// view, the VkSampler actually written, the descriptor-set cache key, the descriptor set
+        /// and whether the cache HIT. That chain is what distinguishes "the sampler never reached
+        /// the descriptor" from "the descriptor was correct but a stale cache entry was reused":
+        /// two draws with the same image view and different samplers must show different
+        /// `sampler=` values AND different `key=` values. Off (and free beyond one already-resolved
+        /// bool test) unless the variable is set.
+        bool VulkanSamplerTraceOnEXT()
+        {
+            static const bool on = [] {
+                const char* v = std::getenv("CNA_VULKAN_SAMPLER_TRACE");
+                return v != nullptr && v[0] != '\0' && v[0] != '0';
+            }();
+            return on;
+        }
+
+        void VkSamplerTraceEXT(const char* fmt, ...)
+        {
+            if (!VulkanSamplerTraceOnEXT()) return;
+            std::fputs("[VKST] ", stderr);
+            va_list ap;
+            va_start(ap, fmt);
+            std::vfprintf(stderr, fmt, ap);
+            va_end(ap);
+            std::fputc('\n', stderr);
+            std::fflush(stderr);
+        }
+
         /// REMED-GFX-166: which deferred 3D command family a draw belongs to, for the trace.
         /// The flags are mutually exclusive by construction at every enqueue site; the order here
         /// mirrors the recorder's own pipeline-selection order so the two cannot disagree.
@@ -2889,6 +2919,10 @@ namespace CNA::Internal::Backends::Vulkan
         auto it = samplerCache_.find(key);
         if (it != samplerCache_.end()) {
             slotSamplers_[slot] = it->second;
+            VkSamplerTraceEXT("apply.slot       slot=%d filter=%d addrU=%d addrV=%d aniso=%d "
+                              "sampler=0x%llx cached=1 default=0x%llx",
+                              slot, filter, addressU, addressV, maxAnisotropy,
+                              VkH(it->second), VkH(defaultSampler_));
             return;
         }
 
@@ -2943,6 +2977,10 @@ namespace CNA::Internal::Backends::Vulkan
             return; // fallback: keep existing slot sampler
         samplerCache_[key]   = sampler;
         slotSamplers_[slot] = sampler;
+        VkSamplerTraceEXT("apply.slot       slot=%d filter=%d addrU=%d addrV=%d aniso=%d "
+                          "sampler=0x%llx cached=0 default=0x%llx",
+                          slot, filter, addressU, addressV, maxAnisotropy,
+                          VkH(sampler), VkH(defaultSampler_));
     }
 
     VkDescriptorSet VulkanGraphicsBackend::GetOrCreateTexSamplerDescSet(VkImageView view,
@@ -2953,8 +2991,12 @@ namespace CNA::Internal::Backends::Vulkan
 
         auto key = std::make_pair(view, sampler);
         auto it  = texSamplerDescSets_.find(key);
-        if (it != texSamplerDescSets_.end())
+        if (it != texSamplerDescSets_.end()) {
+            VkSamplerTraceEXT("desc.TexSampler  hit=1 key=(0x%llx,0x%llx) set=0x%llx "
+                              "binding=0 slot=0 view=0x%llx sampler=0x%llx",
+                              VkH(view), VkH(sampler), VkH(it->second), VkH(view), VkH(sampler));
             return it->second;
+        }
 
         VkDescriptorSet ds = VK_NULL_HANDLE;
         VkDescriptorSetAllocateInfo dsAI{};
@@ -4704,7 +4746,14 @@ namespace CNA::Internal::Backends::Vulkan
                            ^ reinterpret_cast<uint64_t>(sampler1) * 3266489917ULL;
         auto& cache = dualTexDescSets_[frameIdx];
         auto it = cache.find(key);
-        if (it != cache.end()) return it->second.set;
+        if (it != cache.end()) {
+            VkSamplerTraceEXT("desc.DualTexture hit=1 key=0x%llx set=0x%llx "
+                              "binding=0 slot=0 view=0x%llx sampler=0x%llx | "
+                              "binding=1 slot=1 view=0x%llx sampler=0x%llx",
+                              static_cast<unsigned long long>(key), VkH(it->second.set),
+                              VkH(view0), VkH(sampler0), VkH(view1), VkH(sampler1));
+            return it->second.set;
+        }
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -5053,6 +5102,12 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorImageInfo imgInfo[2]{};
         imgInfo[0] = { defaultSampler_, view2D,   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
         imgInfo[1] = { defaultSampler_, viewCube, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        VkSamplerTraceEXT("desc.EnvMap      hit=0 key=0x%llx set=0x%llx "
+                          "binding=0 slot=0 view=0x%llx sampler=0x%llx | "
+                          "binding=1 slot=1 viewCube=0x%llx sampler=0x%llx",
+                          static_cast<unsigned long long>(key), VkH(ds),
+                          VkH(view2D), VkH(imgInfo[0].sampler),
+                          VkH(viewCube), VkH(imgInfo[1].sampler));
 
         // Binding=2: dynamic UBO pointing to the whole per-frame ring buffer.
         VkDescriptorBufferInfo bufInfo{};
@@ -5291,6 +5346,10 @@ namespace CNA::Internal::Backends::Vulkan
             return VK_NULL_HANDLE;
 
         VkDescriptorImageInfo imgInfo{ defaultSampler_, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        VkSamplerTraceEXT("desc.LitTextured hit=0 key=0x%llx set=0x%llx "
+                          "binding=0 slot=0 view=0x%llx sampler=0x%llx",
+                          static_cast<unsigned long long>(key), VkH(ds),
+                          VkH(view2D), VkH(imgInfo.sampler));
 
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = litTexturedUBO_[frameIdx];
@@ -5643,6 +5702,10 @@ namespace CNA::Internal::Backends::Vulkan
             return VK_NULL_HANDLE;
 
         VkDescriptorImageInfo imgInfo{ defaultSampler_, view2D, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        VkSamplerTraceEXT("desc.FogTex3D    hit=0 key=0x%llx set=0x%llx "
+                          "binding=0 slot=0 view=0x%llx sampler=0x%llx",
+                          static_cast<unsigned long long>(key), VkH(ds),
+                          VkH(view2D), VkH(imgInfo.sampler));
 
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = fogTex3DUBO_[frameIdx];
@@ -6023,6 +6086,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkDescriptorImageInfo imgInfo{};
         imgInfo.sampler     = defaultSampler_;
+        VkSamplerTraceEXT("desc.Skinned     hit=0 key=0x%llx set=0x%llx "
+                          "binding=0 slot=0 view=0x%llx sampler=0x%llx",
+                          static_cast<unsigned long long>(key), VkH(ds),
+                          VkH(view2D), VkH(imgInfo.sampler));
         imgInfo.imageView   = view2D;
         imgInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -6429,6 +6496,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorImageInfo imgInfo[5]{};
         for (uint32_t i = 0; i < 5; ++i)
             imgInfo[i] = { defaultSampler_, views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        for (uint32_t i = 0; i < 5; ++i)
+            VkSamplerTraceEXT("desc.Pbr        hit=0 key=0x%llx set=0x%llx "
+                              "binding=%u slot=%u view=0x%llx sampler=0x%llx",
+                              static_cast<unsigned long long>(key), VkH(ds),
+                              i, i, VkH(views[i]), VkH(imgInfo[i].sampler));
 
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = pbrUBO_[frameIdx];
@@ -6674,6 +6746,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorImageInfo imgInfo[5]{};
         for (uint32_t i = 0; i < 5; ++i)
             imgInfo[i] = { defaultSampler_, views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        for (uint32_t i = 0; i < 5; ++i)
+            VkSamplerTraceEXT("desc.PbrSkinned hit=0 key=0x%llx set=0x%llx "
+                              "binding=%u slot=%u view=0x%llx sampler=0x%llx",
+                              static_cast<unsigned long long>(key), VkH(ds),
+                              i, i, VkH(views[i]), VkH(imgInfo[i].sampler));
 
         VkDescriptorBufferInfo boneBufInfo{};
         boneBufInfo.buffer = pbrSkinnedBoneUBO_[frameIdx];

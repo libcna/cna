@@ -1058,6 +1058,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
 
+
+    # REMED-GFX-169: every stock 3D effect must sample its textures through the public
+    # GraphicsDevice.SamplerStates[slot], exactly like SpriteBatch already does. Vulkan's
+    # ApplySamplerState is correct and SpriteBatch reads slotSamplers_[0], but six stock 3D
+    # descriptor builders take NO sampler parameter at all, so all 15 of their combined-image-
+    # sampler bindings are hardcoded to defaultSampler_ (LINEAR + CLAMP_TO_EDGE) and the sampler is
+    # absent from their cache keys too. Vulkan is where the defect lives; the other backends run the
+    # same public fixture as controls.
+    cna_bgfx_test(cna_test_bgfx_stock_effect_sampler
+        examples/stock_effect_sampler_contract_test.cpp)
+    cna_register_backend_test(NAME Bgfx_StockEffectSamplerContract COMMAND cna_test_bgfx_stock_effect_sampler
+        TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-150 cross-backend control: TextureFilter::Point must select exactly ONE texel and
     # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
     # path alike. The defect was Software-local (its ApplySamplerState named none of its parameters
