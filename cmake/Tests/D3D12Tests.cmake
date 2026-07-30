@@ -67,6 +67,32 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
     cna_d3d12_test(cna_test_d3d12_texture_filter_mip_contract examples/texture_filter_mip_contract_test.cpp)
 
+    # REMED-GFX-177: this backend owned four fixed-capacity descriptor heaps with a monotonic bump
+    # cursor and no free list, so the 65th sampleable resource EVER CREATED threw
+    # `CBV/SRV/UAV descriptor heap exhausted` even when six were alive -- REMED-GFX-175's contract
+    # fixture reached exactly 64 checks here and aborted, having created and destroyed one
+    # RenderTarget2D per measurement. The public fixture drives high-cardinality workloads through
+    # the XNA API and checks every draw against a self-identifying oracle; every other backend runs
+    # the same file as a control. Built, not ctest-registered, for the DX-100 reason recorded above:
+    # it is a Game-harness test, so it constructs a window and swap chain, which crashes under this
+    # dev loop's vanilla Wine dxgi.dll. Run it by hand with SDL_VIDEODRIVER=dummy, which leaves the
+    # backend genuinely swap-chain-less and exercises every descriptor path unchanged.
+    cna_d3d12_test(cna_test_d3d12_descriptor_capacity examples/descriptor_capacity_contract_test.cpp)
+
+    # REMED-GFX-177, the native half: the cardinality and lifetime claims a rendered pixel cannot
+    # show -- recycle counts, growth generations, retired-heap retention, stable indices across a
+    # heap replacement, and a bounded steady state under churn. Off-screen (window == nullptr) like
+    # D3D12_Smoke, so it IS ctest-registered.
+    cna_d3d12_test(cna_test_d3d12_descriptor_allocator examples/d3d12_descriptor_allocator_test.cpp)
+    if(CMAKE_CROSSCOMPILING)
+        set(_d3d12_desc_alloc_cmd ${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh
+            $<TARGET_FILE:cna_test_d3d12_descriptor_allocator>)
+    else()
+        set(_d3d12_desc_alloc_cmd cna_test_d3d12_descriptor_allocator)
+    endif()
+    cna_register_backend_test(NAME D3D12_DescriptorAllocator COMMAND ${_d3d12_desc_alloc_cmd}
+        TIMEOUT 300 LABELS "D3D12")
+
     cna_d3d12_test(cna_test_d3d12_point_sampling examples/point_sampling_contract_test.cpp)
 
 

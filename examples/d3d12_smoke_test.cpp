@@ -457,23 +457,51 @@ int main()
     // ---- Check B: command queue ----
     Check(backend.GetCommandQueueEXT() != nullptr, "B1: ID3D12CommandQueue created");
 
-    // ---- Check C: descriptor heaps, real bump-allocator proof ----
+    // ---- Check C: descriptor heaps, real allocator proof ----
+    //
+    // REMED-GFX-177: this block used to allocate six descriptors, assert only that the cursor
+    // advanced, and free none of them -- so it pinned the bump-allocator behaviour that was the
+    // defect and could never have observed the leak. It now asserts BOTH halves of the real
+    // contract: distinct live allocations are distinct, AND a freed slot comes back.
     {
         D3D12_CPU_DESCRIPTOR_HANDLE rtv0 = backend.AllocateRtvDescriptorEXT();
         D3D12_CPU_DESCRIPTOR_HANDLE rtv1 = backend.AllocateRtvDescriptorEXT();
-        Check(rtv1.ptr > rtv0.ptr, "C1: RTV heap allocator advances");
+        Check(rtv1.ptr != rtv0.ptr, "C1: two live RTV allocations are distinct");
 
         D3D12_CPU_DESCRIPTOR_HANDLE dsv0 = backend.AllocateDsvDescriptorEXT();
         D3D12_CPU_DESCRIPTOR_HANDLE dsv1 = backend.AllocateDsvDescriptorEXT();
-        Check(dsv1.ptr > dsv0.ptr, "C2: DSV heap allocator advances");
+        Check(dsv1.ptr != dsv0.ptr, "C2: two live DSV allocations are distinct");
 
-        D3D12_CPU_DESCRIPTOR_HANDLE cbv0Cpu{}, cbv1Cpu{};
-        D3D12_GPU_DESCRIPTOR_HANDLE cbv0Gpu{}, cbv1Gpu{};
-        backend.AllocateCbvSrvUavDescriptorEXT(cbv0Cpu, cbv0Gpu);
-        backend.AllocateCbvSrvUavDescriptorEXT(cbv1Cpu, cbv1Gpu);
-        Check(cbv1Cpu.ptr > cbv0Cpu.ptr && cbv1Gpu.ptr > cbv0Gpu.ptr,
-              "C3: CBV/SRV/UAV heap allocator advances (both CPU and GPU handles)");
+        const std::uint32_t cbv0 = backend.CreateCbvSrvUavDescriptorEXT([](D3D12_CPU_DESCRIPTOR_HANDLE) {});
+        const std::uint32_t cbv1 = backend.CreateCbvSrvUavDescriptorEXT([](D3D12_CPU_DESCRIPTOR_HANDLE) {});
+        Check(cbv1 != cbv0 &&
+                  backend.GetCbvSrvUavGpuHandleEXT(cbv1).ptr != backend.GetCbvSrvUavGpuHandleEXT(cbv0).ptr,
+              "C3: two live CBV/SRV/UAV allocations are distinct (index and GPU handle)");
         Check(backend.GetCbvSrvUavHeapEXT() != nullptr, "C4: shader-visible CBV/SRV/UAV heap object real");
+
+        // REMED-GFX-177: a freed slot is reissued rather than consumed forever. Submission is
+        // synchronous here, so the fence stamp taken at Free() has already completed and the very
+        // next Allocate() may reuse it -- no wait, no idle, no extra submit is added to get there.
+        backend.FreeRtvDescriptorEXT(rtv1);
+        const D3D12_CPU_DESCRIPTOR_HANDLE rtvReused = backend.AllocateRtvDescriptorEXT();
+        Check(rtvReused.ptr == rtv1.ptr, "C5: a freed RTV slot is reissued, not leaked");
+
+        backend.FreeDsvDescriptorEXT(dsv1);
+        const D3D12_CPU_DESCRIPTOR_HANDLE dsvReused = backend.AllocateDsvDescriptorEXT();
+        Check(dsvReused.ptr == dsv1.ptr, "C6: a freed DSV slot is reissued, not leaked");
+
+        backend.FreeCbvSrvUavDescriptorEXT(cbv1);
+        const std::uint32_t cbvReused =
+            backend.CreateCbvSrvUavDescriptorEXT([](D3D12_CPU_DESCRIPTOR_HANDLE) {});
+        Check(cbvReused == cbv1, "C7: a freed CBV/SRV/UAV slot is reissued, not leaked");
+
+        // Leave the heaps as this block found them, so later checks measure their own demand.
+        backend.FreeRtvDescriptorEXT(rtv0);
+        backend.FreeRtvDescriptorEXT(rtvReused);
+        backend.FreeDsvDescriptorEXT(dsv0);
+        backend.FreeDsvDescriptorEXT(dsvReused);
+        backend.FreeCbvSrvUavDescriptorEXT(cbv0);
+        backend.FreeCbvSrvUavDescriptorEXT(cbvReused);
     }
 
     // ---- Check D: command allocator + command list + queue + fence, wired together ----
