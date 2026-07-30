@@ -90,6 +90,12 @@
 //                                                LinearWrap, so a full-texture quad's far edge blends
 //                                                with the WRAPPED texel -- this is what makes the
 //                                                address mode observable without any explicit sampler
+//   Y  the TextureFilter ordinal table            Anisotropic filters like Linear, and the four
+//                                                ordinals that name DIFFERENT minification and
+//                                                magnification filters use the right half
+//   Z  extreme texture coordinates                a source rectangle far outside the texture, and
+//                                                UVs large enough to overflow, must address a real
+//                                                texel deterministically rather than crash
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -768,6 +774,8 @@ protected:
         RunV_3DWrap(dev);
         RunW_CustomViewport(dev);
         RunX_DefaultSamplerIsLinearWrap(dev);
+        RunY_FilterOrdinals(dev);
+        RunZ_ExtremeCoordinates(dev);
 
         std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
@@ -1461,6 +1469,128 @@ private:
               "X2: under LinearWrap the SAME corner blends with the wrapped texel instead of "
               "clamping -- expected something other than " + Str(last) + ", actual " +
               Str(farWrapped));
+    }
+
+    // Y -----------------------------------------------------------------------------------------
+    void RunY_FilterOrdinals(GraphicsDevice& dev)
+    {
+        const Color white(255, 255, 255, 255);
+        const SpriteGeom mag = Geom(Rectangle(0, 0, 16, 8), Rectangle(0, 0, 8, 4));
+
+        // Anisotropic names Linear for both halves -- it must interpolate, not snap.
+        {
+            RenderTarget2D rt(dev, 16, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+            const std::vector<Color> pix = RenderSprite(dev, rt, 16, 8, t8x4_, mag,
+                MakeSampler(TextureFilter::Anisotropic, TextureAddressMode::Clamp,
+                            TextureAddressMode::Clamp), white);
+            check(CountForeignColors(pix, p8x4_) > 0,
+                  "Y1: TextureFilter::Anisotropic filters like Linear under magnification");
+        }
+
+        // The four ordinals that name a DIFFERENT minification and magnification filter. Only the
+        // MAGNIFICATION half is asserted cross-backend: on a GL-family backend these four also
+        // select a mipmap minification filter, and a texture with no mip chain is then incomplete,
+        // so their minification half is not a portable measurement. Software's own minification
+        // half is covered by Y6/Y7 below, which use ordinals whose two halves agree.
+        struct MagCase { TextureFilter filter; bool point; const char* name; };
+        const MagCase magCases[] = {
+            {TextureFilter::MinLinearMagPointMipLinear, true,  "MinLinearMagPointMipLinear"},
+            {TextureFilter::MinLinearMagPointMipPoint,  true,  "MinLinearMagPointMipPoint"},
+            {TextureFilter::MinPointMagLinearMipLinear, false, "MinPointMagLinearMipLinear"},
+            {TextureFilter::MinPointMagLinearMipPoint,  false, "MinPointMagLinearMipPoint"},
+        };
+        for (const MagCase& c : magCases)
+        {
+            RenderTarget2D rt(dev, 16, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+            const std::vector<Color> pix = RenderSprite(dev, rt, 16, 8, t8x4_,
+                mag, MakeSampler(c.filter, TextureAddressMode::Clamp, TextureAddressMode::Clamp),
+                white);
+            const int foreign = CountForeignColors(pix, p8x4_);
+            if (c.point)
+                check(foreign == 0, std::string("Y2 ") + c.name +
+                      ": magnifies with POINT -- only stored texel values (interpolated=" +
+                      std::to_string(foreign) + ")");
+            else
+                check(foreign > 0, std::string("Y2 ") + c.name +
+                      ": magnifies with LINEAR -- genuinely interpolates (interpolated=" +
+                      std::to_string(foreign) + ")");
+        }
+
+        // Minification, using the two ordinals whose halves agree so no mip chain is implied.
+        const SpriteGeom min = Geom(Rectangle(0, 0, 3, 2), Rectangle(0, 0, 8, 4));
+        {
+            RenderTarget2D rt(dev, 3, 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+            const std::vector<Color> pix = RenderSprite(dev, rt, 3, 2, t8x4_, min,
+                MakeSampler(TextureFilter::Point, TextureAddressMode::Clamp,
+                            TextureAddressMode::Clamp), white);
+            check(CountForeignColors(pix, p8x4_) == 0,
+                  "Y6: TextureFilter::Point minifies with point selection too -- one texel per "
+                  "pixel, no averaging");
+        }
+        {
+            RenderTarget2D rt(dev, 3, 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+            const std::vector<Color> pix = RenderSprite(dev, rt, 3, 2, t8x4_, min,
+                MakeSampler(TextureFilter::Linear, TextureAddressMode::Clamp,
+                            TextureAddressMode::Clamp), white);
+            check(CountForeignColors(pix, p8x4_) > 0,
+                  "Y7: TextureFilter::Linear still interpolates when minifying");
+        }
+    }
+
+    // Z -----------------------------------------------------------------------------------------
+    void RunZ_ExtremeCoordinates(GraphicsDevice& dev)
+    {
+        const Color white(255, 255, 255, 255);
+
+        // A source rectangle a million texels outside the texture. Wrap must still land on a real
+        // texel, and nothing may be read outside the texture's storage.
+        {
+            RenderTarget2D rt(dev, 16, 16, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+            const std::vector<Color> pix = RenderSprite(dev, rt, 16, 16, t4x4_,
+                Geom(Rectangle(0, 0, 16, 16), Rectangle(1000000, 1000000, 8, 8)),
+                MakeSampler(TextureFilter::Point, TextureAddressMode::Wrap,
+                            TextureAddressMode::Wrap), white);
+            check(CountForeignColors(pix, p4x4_) == 0,
+                  "Z1: PointWrap over a source rectangle a million texels away still addresses a "
+                  "stored texel");
+        }
+
+        // A source rectangle spanning a million texels, so the per-pixel step is enormous.
+        {
+            RenderTarget2D rt(dev, 16, 16, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+            const std::vector<Color> pix = RenderSprite(dev, rt, 16, 16, t4x4_,
+                Geom(Rectangle(0, 0, 16, 16), Rectangle(0, 0, 1 << 20, 1 << 20)),
+                MakeSampler(TextureFilter::Point, TextureAddressMode::Clamp,
+                            TextureAddressMode::Clamp), white);
+            check(CountForeignColors(pix, p4x4_) == 0,
+                  "Z2: PointClamp over a million-texel source rectangle stays inside the texture");
+        }
+
+        // UVs large enough that u * width overflows to infinity on the 3D path. The requirement is
+        // that this is DEFINED -- a real texel, no crash, no out-of-bounds read -- not that a
+        // particular texel is chosen, which no backend specifies.
+        {
+            RenderTarget2D rt(dev, 8, 8, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+            bool threw = false;
+            std::vector<Color> pix;
+            try
+            {
+                pix = Render3DQuad(dev, rt, 8, 8, t4x4_, 1.0e30f, 1.0e30f,
+                    MakeSampler(TextureFilter::Point, TextureAddressMode::Wrap,
+                                TextureAddressMode::Wrap));
+            }
+            catch (const std::exception&) { threw = true; }
+            check(!threw && !pix.empty(),
+                  "Z3: a texture coordinate large enough to overflow the texel index is handled "
+                  "deterministically instead of crashing or throwing");
+        }
     }
 
 public:

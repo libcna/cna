@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -293,6 +295,67 @@ namespace CNA::Internal::Backends::Software
             int minX = 0, minY = 0, maxX = -1, maxY = -1;
         };
 
+        /// REMED-GFX-150: env-gated sampler trace. This is how the point path's "exactly one texel
+        /// fetch per sample" claim is MEASURED rather than asserted from reading the code, and how a
+        /// single destination pixel's addressing can be dumped when a result is disputed.
+        ///
+        ///   CNA_SOFTWARE_SAMPLE_TRACE unset or 0  off. One predictable, perfectly-predicted branch
+        ///                                         per sample; no counting, no formatting, no output.
+        ///   CNA_SOFTWARE_SAMPLE_TRACE=1           count samples and texel fetches; print a summary
+        ///                                         line to stderr at exit.
+        ///   CNA_SOFTWARE_SAMPLE_TRACE=2           additionally print one line per sample --
+        ///                                         triangle, destination pixel, filter, address
+        ///                                         modes, texture size, interpolated u/v, addressed
+        ///                                         texel coordinates, linear neighbours and weights,
+        ///                                         and the sampled RGBA -- bounded by
+        ///                                         CNA_SOFTWARE_SAMPLE_TRACE_LIMIT (default 64) so a
+        ///                                         full frame cannot flood the terminal.
+        struct SamplerTrace
+        {
+            bool enabled = false;
+            bool verbose = false;
+            long long limit = 64;
+            long long printed = 0;
+            long long pointSamples = 0;
+            long long linearSamples = 0;
+            long long texelFetches = 0;
+            long long triangles = 0;
+            int fragX = -1;
+            int fragY = -1;
+
+            ~SamplerTrace()
+            {
+                if (!enabled) return;
+                std::fprintf(stderr,
+                             "[CNA_SOFTWARE_SAMPLE_TRACE] triangles=%lld pointSamples=%lld "
+                             "linearSamples=%lld texelFetches=%lld fetchesPerPointSample=%.4f "
+                             "fetchesPerLinearSample=%.4f\n",
+                             triangles, pointSamples, linearSamples, texelFetches,
+                             pointSamples ? static_cast<double>(texelFetches -
+                                            4 * linearSamples) / static_cast<double>(pointSamples) : 0.0,
+                             linearSamples ? 4.0 : 0.0);
+            }
+        };
+
+        SamplerTrace MakeSamplerTrace()
+        {
+            SamplerTrace t;
+            const char* mode = std::getenv("CNA_SOFTWARE_SAMPLE_TRACE");
+            if (mode == nullptr || mode[0] == '0' || mode[0] == '\0') return t;
+            t.enabled = true;
+            t.verbose = (mode[0] == '2');
+            if (const char* lim = std::getenv("CNA_SOFTWARE_SAMPLE_TRACE_LIMIT"))
+            {
+                const long long parsed = std::atoll(lim);
+                if (parsed > 0) t.limit = parsed;
+            }
+            return t;
+        }
+
+        /// Namespace-scope (not function-local) so a disabled trace costs one load and one branch per
+        /// sample, with no thread-safe-static guard.
+        SamplerTrace g_samplerTrace = MakeSamplerTrace();
+
         /// REMED-GFX-150: the largest magnitude a texel index may reach before the float->int
         /// conversion below stops being representable. A coordinate beyond this is saturated in
         /// FLOAT space first, so the conversion itself is always in range: an out-of-range
@@ -411,6 +474,26 @@ namespace CNA::Internal::Backends::Software
                 g = fetch(x, y, 1);
                 b = fetch(x, y, 2);
                 a = fetch(x, y, 3);
+                if (g_samplerTrace.enabled)
+                {
+                    ++g_samplerTrace.pointSamples;
+                    g_samplerTrace.texelFetches += 1;   // ONE texel, all four channels from it
+                    if (g_samplerTrace.verbose && g_samplerTrace.printed < g_samplerTrace.limit)
+                    {
+                        ++g_samplerTrace.printed;
+                        std::fprintf(stderr,
+                                     "[sample] tri=%lld dest=(%d,%d) filter=%d addr=(%d,%d) tex=%dx%d "
+                                     "uv=(%.6f,%.6f) s=(%.6f,%.6f) POINT texel=(%d,%d) "
+                                     "rgba=(%d,%d,%d,%d)\n",
+                                     g_samplerTrace.triangles, g_samplerTrace.fragX, g_samplerTrace.fragY,
+                                     sampler.filter, sampler.addressU, sampler.addressV, texW, texH,
+                                     static_cast<double>(u), static_cast<double>(v),
+                                     static_cast<double>(u) * texW, static_cast<double>(v) * texH,
+                                     x, y,
+                                     static_cast<int>(r * 255.0f + 0.5f), static_cast<int>(g * 255.0f + 0.5f),
+                                     static_cast<int>(b * 255.0f + 0.5f), static_cast<int>(a * 255.0f + 0.5f));
+                    }
+                }
                 return;
             }
 
@@ -439,6 +522,28 @@ namespace CNA::Internal::Backends::Software
             g = bilerp(1);
             b = bilerp(2);
             a = bilerp(3);
+
+            if (g_samplerTrace.enabled)
+            {
+                ++g_samplerTrace.linearSamples;
+                g_samplerTrace.texelFetches += 4;   // four neighbours, all four channels from each
+                if (g_samplerTrace.verbose && g_samplerTrace.printed < g_samplerTrace.limit)
+                {
+                    ++g_samplerTrace.printed;
+                    std::fprintf(stderr,
+                                 "[sample] tri=%lld dest=(%d,%d) filter=%d addr=(%d,%d) tex=%dx%d "
+                                 "uv=(%.6f,%.6f) s=(%.6f,%.6f) LINEAR neighbours=(%d,%d)-(%d,%d) "
+                                 "w=(%.6f,%.6f) rgba=(%d,%d,%d,%d)\n",
+                                 g_samplerTrace.triangles, g_samplerTrace.fragX, g_samplerTrace.fragY,
+                                 sampler.filter, sampler.addressU, sampler.addressV, texW, texH,
+                                 static_cast<double>(u), static_cast<double>(v),
+                                 static_cast<double>(u) * texW, static_cast<double>(v) * texH,
+                                 x0, y0, x1, y1,
+                                 static_cast<double>(fx), static_cast<double>(fy),
+                                 static_cast<int>(r * 255.0f + 0.5f), static_cast<int>(g * 255.0f + 0.5f),
+                                 static_cast<int>(b * 255.0f + 0.5f), static_cast<int>(a * 255.0f + 0.5f));
+                }
+            }
         }
 
         /// REMED-GFX-150: whether this triangle MAGNIFIES the given texture (a destination pixel
@@ -647,6 +752,7 @@ namespace CNA::Internal::Backends::Software
             // depth), matching XNA "no samples written". Default (0xFFFFFFFF) keeps bit 0 set.
             if ((multiSampleMask & 1u) == 0u)
                 return;
+            if (g_samplerTrace.enabled) { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
             // REMED-GFX-030: comparison precedes every color/depth write.
@@ -975,6 +1081,7 @@ namespace CNA::Internal::Backends::Software
             // entirely (no colour, no depth). Default 0xFFFFFFFF keeps bit 0 set.
             if ((ctx.multiSampleMask & 1u) == 0u)
                 return;
+            if (g_samplerTrace.enabled) { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
             // REMED-GFX-030: comparison precedes shading and every color/depth write.
@@ -1145,6 +1252,7 @@ namespace CNA::Internal::Backends::Software
                 return;
             if (ShouldCullTriangle(area, cullMode))
                 return;
+            if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
 
             // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling). hasBias is
             // 0 for the common zero-bias case, so the depth expressions below stay byte-identical then.
