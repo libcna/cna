@@ -12,19 +12,21 @@
 // across levels) is expected to sample the automatically-selected high mip level -> GREEN,
 // proving real mip-level selection works when a Mip-aware filter is requested.
 //
-// TextureFilter::Point is ALSO tested at the same tiny size. CNA's current EasyGL/Vulkan
-// backends deliberately map TextureFilter::Point (and the default Linear) to a *non-mip-aware*
-// GPU filter (plain NEAREST/LINEAR, no _MIPMAP_ suffix in GL terms) rather than the
-// mip-aware GL_NEAREST_MIPMAP_NEAREST/GL_LINEAR_MIPMAP_LINEAR that real XNA/FNA semantics call
-// for - because textures are created without GL_TEXTURE_MAX_LEVEL/VkSamplerCreateInfo maxLod set
-// to match their real level count, so a mip-aware filter on the very common non-mipmapped
-// (mipMap=false, 1-level) texture would render as GL/Vulkan "incomplete" (typically solid
-// black). This is a real, confirmed, documented deviation from FNA - Point/Linear NEVER select
-// a higher mip level regardless of minification - so this half of the test expects RED (level 0)
-// even at extreme minification, and is asserting the CURRENT, known-limited behavior, not a bug
-// discovered fresh here. See plan_graphics.md Task 298 / a new tracked follow-up task for the
-// real fix (set GL_TEXTURE_MAX_LEVEL/maxLod correctly per texture, then switch Point/Linear back
-// to their mip-aware GPU filter equivalents).
+// TextureFilter::Point is ALSO tested at the same tiny size, and REMED-GFX-175 changed what it
+// owes. This half of the test used to expect RED and said so explicitly: EasyGL mapped Point (and
+// the default Linear) onto a non-mip-aware GL filter, so neither ever selected a level however far
+// the texture was minified, and the check asserted that known-limited behaviour rather than the
+// XNA contract. It named the fix it was waiting for -- clamp the texture's level range to its real
+// level count, then give Point and Linear their mip-aware GL filters back -- and that fix has now
+// landed: Task 924 and REMED-GFX-174 clamp GL_TEXTURE_MAX_LEVEL for every sampleable kind,
+// REMED-GFX-175 gives a declared chain storage for every one of its levels, and ApplySamplerState
+// maps Point onto GL_NEAREST_MIPMAP_NEAREST and Linear onto GL_LINEAR_MIPMAP_LINEAR exactly as
+// FNA's own XNAMip table and FNA3D's GL driver require.
+//
+// So Point must now select the high mip level here too, and this half expects GREEN -- the same
+// expectation the Vulkan and Bgfx variants of this fixture have always had, because those two
+// backends already mapped Point to a mip-aware filter. Asserting RED would pin the defect as the
+// contract.
 //
 // Exit code 0 = PASS (both expectations hold), 1 = FAIL.
 
@@ -146,12 +148,14 @@ protected:
         const Color pointOnly = DrawTinyQuadAndSample(device, TextureFilter::Point, 300.0f, W, H);
 
         const bool mipAwareOk = IsGreen(mipAware);
-        const bool pointOnlyOk = IsRed(pointOnly);
+        // REMED-GFX-175: Point names a mip component of POINT, so at log2(128/8)=4 it must select a
+        // level in the GREEN range exactly as LinearMipPoint does.
+        const bool pointOnlyOk = IsGreen(pointOnly);
 
         std::printf("[%s] LinearMipPoint at 8x8px (128->1 texture): sample=(%d,%d,%d), expect GREEN (high mip selected)\n",
                     mipAwareOk ? "PASS" : "FAIL",
                     mipAware.getRProperty(), mipAware.getGProperty(), mipAware.getBProperty());
-        std::printf("[%s] Point at 8x8px (same texture): sample=(%d,%d,%d), expect RED (documented: Point never mip-selects on CNA today)\n",
+        std::printf("[%s] Point at 8x8px (same texture): sample=(%d,%d,%d), expect GREEN (REMED-GFX-175: Point's mip component is POINT, not absent)\n",
                     pointOnlyOk ? "PASS" : "FAIL",
                     pointOnly.getRProperty(), pointOnly.getGProperty(), pointOnly.getBProperty());
 

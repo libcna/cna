@@ -993,8 +993,12 @@ namespace CNA::Internal::Backends::EasyGL
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
                                 ::metagl::TextureParameter::MaxLevel,
                                 levelCount_ - 1);
-        // Default GL min-filter is NEAREST_MIPMAP_LINEAR; since the RT has no mipmaps
-        // it would be texture-incomplete when sampled.  Use LINEAR (no mipmaps).
+        // REMED-GFX-175: this is the texture object's OWN default min filter, which every draw's
+        // sampler object overrides, so it decides nothing about how a game's TextureFilter samples
+        // this target -- the level-range clamp above is what keeps it complete under any of them.
+        // It is left as a defined starting state for a bind that happens before any sampler is
+        // applied; it is no longer, and never really was, the completeness guard its old comment
+        // claimed ("the RT has no mipmaps so a mip filter would be incomplete -- use LINEAR").
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
                                 ::metagl::TextureParameter::MinFilter,
                                 static_cast<int>(::metagl::TextureMagFilter::Linear));
