@@ -1219,6 +1219,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_TextureFilterOrdinalContract COMMAND cna_test_vulkan_texture_filter_ordinal
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
+        # EasyGL mapped ordinals 0 and 1 onto a GL filter with no mipmap term and Software had no
+        # mip pipeline at all; this fixture measures what every other backend does with a chain
+        # whose levels name themselves, so a divergence is classified rather than assumed.
+        cna_vulkan_test(cna_test_vulkan_texture_filter_mip_contract
+            examples/texture_filter_mip_contract_test.cpp)
+        cna_register_backend_test(NAME Vulkan_TextureFilterMipContract COMMAND cna_test_vulkan_texture_filter_mip_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_vulkan_test(cna_test_vulkan_point_sampling
             examples/point_sampling_contract_test.cpp)
         cna_register_backend_test(NAME Vulkan_PointSamplingContract COMMAND cna_test_vulkan_point_sampling

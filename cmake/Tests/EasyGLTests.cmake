@@ -1681,6 +1681,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_sampler_component_isolation
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-175: a TextureFilter ordinal's MIPMAP component is a third, independent decision,
+        # and ordinals 0 (Linear) and 1 (Point) were losing it -- both mapped onto a GL filter with no
+        # mipmap term, so a texture that really owns a chain never mip-filtered under either, the
+        # DEFAULT filter included. This fixture supplies the dimension every existing mip test lacked:
+        # a chain whose levels name themselves, drawn at destination sizes that put the LOD on an
+        # exact integer, so the selected level is read straight out of the framebuffer.
+        cna_easygl_test(cna_test_easygl_texture_filter_mip_contract
+            examples/texture_filter_mip_contract_test.cpp)
+        cna_register_backend_test(NAME EasyGL_TextureFilterMipContract
+            COMMAND cna_test_easygl_texture_filter_mip_contract
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_point_sampling
             examples/point_sampling_contract_test.cpp)
         cna_register_backend_test(NAME EasyGL_PointSamplingContract

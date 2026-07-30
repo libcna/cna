@@ -64,6 +64,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # on every textured stock family; the other backends run it as controls.
     cna_d3d12_test(cna_test_d3d12_texture_filter_ordinal examples/texture_filter_ordinal_contract_test.cpp)
 
+    # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
+    cna_d3d12_test(cna_test_d3d12_texture_filter_mip_contract examples/texture_filter_mip_contract_test.cpp)
+
     cna_d3d12_test(cna_test_d3d12_point_sampling examples/point_sampling_contract_test.cpp)
 
 

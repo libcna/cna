@@ -226,6 +226,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${_d3d11_texture_filter_ordinal_cmd}
         TIMEOUT 300 LABELS "D3D11")
 
+    # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
+    cna_d3d11_test(cna_test_d3d11_texture_filter_mip_contract
+                   examples/texture_filter_mip_contract_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_texture_filter_mip_cmd cna_test_d3d11_texture_filter_mip_contract)
+    cna_register_backend_test(NAME D3D11_TextureFilterMipContract
+        COMMAND ${_d3d11_texture_filter_mip_cmd}
+        TIMEOUT 300 LABELS "D3D11")
+
     cna_d3d11_test(cna_test_d3d11_point_sampling
                    examples/point_sampling_contract_test.cpp)
     cna_d3d11_ctest_command(_d3d11_point_sampling_cmd cna_test_d3d11_point_sampling)

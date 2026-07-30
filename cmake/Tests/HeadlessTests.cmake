@@ -102,6 +102,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_TextureFilterOrdinalContract COMMAND cna_test_headless_texture_filter_ordinal
         TIMEOUT 300 LABELS "Headless")
 
+    # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
+    # EasyGL mapped ordinals 0 and 1 onto a GL filter with no mipmap term and Software had no
+    # mip pipeline at all; this fixture measures what every other backend does with a chain
+    # whose levels name themselves, so a divergence is classified rather than assumed.
+    cna_headless_test(cna_test_headless_texture_filter_mip_contract
+        examples/texture_filter_mip_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_TextureFilterMipContract COMMAND cna_test_headless_texture_filter_mip_contract
+        TIMEOUT 300 LABELS "Headless")
+
     cna_headless_test(cna_test_headless_point_sampling
         examples/point_sampling_contract_test.cpp)
     cna_register_backend_test(NAME Headless_PointSamplingContract COMMAND cna_test_headless_point_sampling

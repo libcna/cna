@@ -448,6 +448,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_sampler_component_isolation
         TIMEOUT 300 LABELS "Software")
 
+    # REMED-GFX-175: the mip component of a TextureFilter ordinal, measured against a chain whose
+    # levels name themselves. Software is the CPU reference implementation, so what it does with a
+    # real chain settles the contract independently of any GPU driver.
+    cna_software_test(cna_test_software_texture_filter_mip_contract
+                      examples/texture_filter_mip_contract_test.cpp)
+    cna_register_backend_test(NAME Software_TextureFilterMipContract
+        COMMAND cna_test_software_texture_filter_mip_contract
+        TIMEOUT 300 LABELS "Software")
+
     cna_software_test(cna_test_software_point_sampling
                       examples/point_sampling_contract_test.cpp)
     cna_register_backend_test(NAME Software_PointSamplingContract
