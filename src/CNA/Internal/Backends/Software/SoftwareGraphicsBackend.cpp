@@ -445,16 +445,18 @@ namespace CNA::Internal::Backends::Software
         /// SoftwareTextureBackend, so a finished RenderTarget2D samples through this exact path --
         /// same filtering, same addressing, same sampler semantics as any other Software texture.
         ///
-        /// MIP BOUNDARY: SoftwareColorSurface exposes exactly one level, so this always samples
-        /// level 0 and @p magnify chooses a FILTER, never a level. Mip selection is outside this
-        /// backend's declared capability and is not introduced here.
-        void SampleTexture(const SoftwareColorSurface& texture, const SoftwareSamplerState& sampler,
-                           bool magnify, float u, float v,
-                           float& r, float& g, float& b, float& a)
+        /// REMED-GFX-175: samples WITHIN one mip level. @p level names the level; @p magnify still
+        /// chooses only between the minification and magnification halves of the filter. Level
+        /// SELECTION is the caller's job (SampleTexture below), which is what keeps the three
+        /// components of an XNA TextureFilter -- min, mag and mip -- genuinely independent here.
+        void SampleLevel(const SoftwareColorSurface& texture, int level,
+                         const SoftwareSamplerState& sampler,
+                         bool magnify, float u, float v,
+                         float& r, float& g, float& b, float& a)
         {
-            const int texW = std::max(1, texture.ColorWidth());
-            const int texH = std::max(1, texture.ColorHeight());
-            const auto& pixels = texture.ColorPixels();
+            const int texW = std::max(1, texture.ColorWidth(level));
+            const int texH = std::max(1, texture.ColorHeight(level));
+            const auto& pixels = texture.ColorPixels(level);
 
             const auto fetch = [&](int px, int py, int channel) -> float {
                 const std::size_t idx = (static_cast<std::size_t>(py) * static_cast<std::size_t>(texW) +
@@ -546,25 +548,110 @@ namespace CNA::Internal::Backends::Software
             }
         }
 
+        /// REMED-GFX-175: whether the MIPMAP half of an XNA TextureFilter is Point -- the third
+        /// component of an ordinal, independent of the min and mag halves above.
+        ///
+        /// The authoritative decomposition is FNA's own XNAMip table: Linear(0) mip LINEAR,
+        /// Point(1) mip POINT, Anisotropic(2) mip LINEAR, LinearMipPoint(3) POINT,
+        /// PointMipLinear(4) LINEAR, MinLinearMagPointMipLinear(5) LINEAR,
+        /// MinLinearMagPointMipPoint(6) POINT, MinPointMagLinearMipLinear(7) LINEAR,
+        /// MinPointMagLinearMipPoint(8) POINT. Ordinals 0 and 1 are FULL filters that name a mip
+        /// component like every other; reading them as "the ordinals without mipmapping" is the
+        /// REMED-GFX-175 defect.
+        constexpr bool FilterSelectsMipWithPoint(int filter)
+        {
+            return filter == 1 || filter == 3 || filter == 6 || filter == 8;
+        }
+
+        /// REMED-GFX-175: the one authoritative texture sample for this backend, now with mip level
+        /// selection in front of the within-level filtering that REMED-GFX-150 established.
+        ///
+        /// The stages are kept strictly separate and in this order:
+        ///   1. the footprint arrives as @p lambda = log2(texels per destination pixel), computed
+        ///      ONCE per triangle by TriangleTexelRate -- no per-fragment derivative work, no
+        ///      allocation, no scratch buffer;
+        ///   2. lambda is clamped to the levels this resource really HOLDS (ColorLevelCount), so a
+        ///      declared-but-unwritten chain can never expose a level nobody filled;
+        ///   3. the mip component of the filter selects the level: POINT picks exactly one, LINEAR
+        ///      brackets two and weights them;
+        ///   4. the min/mag component filters within each participating level, unchanged;
+        ///   5. the address mode transforms texel indices, unchanged.
+        ///
+        /// A resource with one stored level takes the first branch, which is the pre-GFX-175 code
+        /// path exactly: one call, same level, same filter, same fetch count. Point costs ONE
+        /// within-level sample and Linear at most two, so nothing here changes the cost of an
+        /// ordinary draw over a texture that has no chain.
+        void SampleTexture(const SoftwareColorSurface& texture, const SoftwareSamplerState& sampler,
+                           bool magnify, float lambda, float u, float v,
+                           float& r, float& g, float& b, float& a)
+        {
+            const int levels = std::max(1, texture.ColorLevelCount());
+            // No chain, or a magnifying footprint: there is no level below 0 to select, so the mip
+            // component has nothing to decide and the magnification filter owns the result.
+            if (levels <= 1 || magnify || !(lambda > 0.0f))
+            {
+                SampleLevel(texture, 0, sampler, magnify, u, v, r, g, b, a);
+                return;
+            }
+
+            const float maxLevel = static_cast<float>(levels - 1);
+            const float clamped = std::min(lambda, maxLevel);
+
+            if (FilterSelectsMipWithPoint(sampler.filter))
+            {
+                // GL's own rule for a *_MIPMAP_NEAREST filter: d = ceil(lambda + 0.5) - 1, i.e. the
+                // nearest level with a tie resolved DOWNWARD. At an exact integer lambda that is
+                // that level itself, which is what makes the contract fixture's Point checks exact.
+                int level = static_cast<int>(std::ceil(clamped + 0.5f)) - 1;
+                level = std::clamp(level, 0, levels - 1);
+                SampleLevel(texture, level, sampler, false, u, v, r, g, b, a);
+                return;
+            }
+
+            // Mip LINEAR: the two bracketing levels, weighted by the fractional part. At an exact
+            // integer lambda the upper weight is 0, so this degenerates to exactly one level and
+            // costs one within-level sample rather than two.
+            const int lo = std::clamp(static_cast<int>(std::floor(clamped)), 0, levels - 1);
+            const float weight = clamped - static_cast<float>(lo);
+            if (!(weight > 0.0f) || lo >= levels - 1)
+            {
+                SampleLevel(texture, lo, sampler, false, u, v, r, g, b, a);
+                return;
+            }
+
+            float r1 = 0.0f, g1 = 0.0f, b1 = 0.0f, a1 = 0.0f;
+            SampleLevel(texture, lo, sampler, false, u, v, r, g, b, a);
+            SampleLevel(texture, lo + 1, sampler, false, u, v, r1, g1, b1, a1);
+            r += (r1 - r) * weight;
+            g += (g1 - g) * weight;
+            b += (b1 - b) * weight;
+            a += (a1 - a) * weight;
+        }
+
         /// REMED-GFX-150: whether this triangle MAGNIFIES the given texture (a destination pixel
         /// covers at most one texel) or minifies it.
         ///
         /// XNA's TextureFilter names a SEPARATE minification and magnification filter for ordinals
         /// 5..8 (MinLinearMagPoint*, MinPointMagLinear*); the other five use one filter for both, so
-        /// this classification is ignored for them and cannot perturb Point or Linear. It selects a
-        /// FILTER, never a mip level -- SoftwareColorSurface stores exactly one level.
+        /// this classification is ignored for them and cannot perturb Point or Linear.
+        ///
+        /// REMED-GFX-175: the same rate is now also the LOD, so this returns rho itself rather than
+        /// the magnify/minify bit it used to. The classification is unchanged -- rho <= 1 is
+        /// magnification -- so nothing REMED-GFX-150 established moves; what is new is that the
+        /// caller can also take log2(rho) and select a mip level with it.
         ///
         /// The rate is the standard rho = max(|d(s,t)/dx|, |d(s,t)/dy|) in texels per pixel,
         /// evaluated ONCE per triangle from its three vertices: exact for the affine SpriteBatch
         /// quads (invW == 1 throughout), and a per-triangle estimate for perspective 3D geometry,
         /// where the true rate varies across the triangle. RasterVertex stores u,v premultiplied by
-        /// invW, so they are un-premultiplied here first. A degenerate triangle reports magnification
-        /// (its rate is undefined and it covers no pixels worth minifying).
-        bool TriangleMagnifies(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
-                               int texW, int texH)
+        /// invW, so they are un-premultiplied here first. A degenerate triangle reports a rate of 1
+        /// -- magnification, level 0 -- because its rate is undefined and it covers no pixels worth
+        /// minifying.
+        float TriangleTexelRate(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                                int texW, int texH)
         {
             const float area2 = (v1.x - v0.x) * (v2.y - v0.y) - (v2.x - v0.x) * (v1.y - v0.y);
-            if (!(std::abs(area2) > 1e-12f)) return true;
+            if (!(std::abs(area2) > 1e-12f)) return 1.0f;
 
             const float w0 = (v0.invW != 0.0f) ? v0.invW : 1.0f;
             const float w1 = (v1.invW != 0.0f) ? v1.invW : 1.0f;
@@ -584,7 +671,18 @@ namespace CNA::Internal::Backends::Software
             const float rhoX = std::sqrt(dsdx * dsdx + dtdx * dtdx);
             const float rhoY = std::sqrt(dsdy * dsdy + dtdy * dtdy);
             const float rho = std::max(rhoX, rhoY);
-            return !(rho > 1.0f);   // false for NaN as well, which is the safer half here
+            // The `!(rho > 1)` form rejects NaN too, so a non-finite rate collapses onto
+            // magnification/level 0 rather than propagating into a level index.
+            return !(rho > 1.0f) ? 1.0f : rho;
+        }
+
+        /// REMED-GFX-175: the level-of-detail a texel rate implies. rho <= 1 is magnification, which
+        /// this reports as 0 -- there is no level above level 0 to select towards.
+        float LodFromTexelRate(float rho)
+        {
+            if (!(rho > 1.0f)) return 0.0f;
+            const float lambda = std::log2(rho);
+            return (lambda > 0.0f) ? lambda : 0.0f;
         }
 
         /// SOFTWARE-82: applies a column-major 4x4 matrix (GpuDrawParams::worldColMajor's own
@@ -1063,6 +1161,12 @@ namespace CNA::Internal::Backends::Software
             SoftwareSamplerState sampler1;
             bool magnify0;
             bool magnify1;
+            // REMED-GFX-175: this triangle's level-of-detail for each bound texture, log2 of the
+            // texel rate, resolved once per triangle alongside the magnification classification it
+            // is derived from. The mip component of the filter turns it into a level; ordinals whose
+            // resource has a single stored level never consult it.
+            float lambda0;
+            float lambda1;
         };
 
         /// REMED-GFX-082: writes one already-interpolated shaded fragment -- the whole texture/diffuse/
@@ -1104,9 +1208,11 @@ namespace CNA::Internal::Backends::Software
                 // genuine 2-UV vertex format; established precedent already set by this codebase's own
                 // Vulkan dual_texture3d shaders).
                 float t0r, t0g, t0b, t0a;
-                SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, u, v, t0r, t0g, t0b, t0a);
+                SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
+                              t0r, t0g, t0b, t0a);
                 float t1r, t1g, t1b, t1a;
-                SampleTexture(*ctx.texture1, ctx.sampler1, ctx.magnify1, u, v, t1r, t1g, t1b, t1a);
+                SampleTexture(*ctx.texture1, ctx.sampler1, ctx.magnify1, ctx.lambda1, u, v,
+                              t1r, t1g, t1b, t1a);
                 r *= (t0r * 2.0f) * t1r;
                 g *= (t0g * 2.0f) * t1g;
                 b *= (t0b * 2.0f) * t1b;
@@ -1115,7 +1221,8 @@ namespace CNA::Internal::Backends::Software
             else if (ctx.params.textureEnabled && ctx.texture0 != nullptr)
             {
                 float texR, texG, texB, texA;
-                SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, u, v, texR, texG, texB, texA);
+                SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, ctx.lambda0, u, v,
+                              texR, texG, texB, texA);
                 r *= texR;
                 g *= texG;
                 b *= texB;
@@ -1235,17 +1342,23 @@ namespace CNA::Internal::Backends::Software
             // REMED-GFX-150: classify magnification once per triangle per bound texture. Only XNA
             // filters 5..8 distinguish the two halves, so this is inert for Point, Linear and
             // Anisotropic; it is computed only when a texture is actually sampled.
-            const bool magnify0 = (texture0 != nullptr)
-                ? TriangleMagnifies(v0, v1, v2, std::max(1, texture0->ColorWidth()),
+            // REMED-GFX-175: one texel rate per bound texture, resolved once per triangle, feeding
+            // BOTH the magnification classification REMED-GFX-150 established and the level-of-detail
+            // the mip component needs. The two can never disagree because they come from one number.
+            const float rho0 = (texture0 != nullptr)
+                ? TriangleTexelRate(v0, v1, v2, std::max(1, texture0->ColorWidth()),
                                     std::max(1, texture0->ColorHeight()))
-                : true;
-            const bool magnify1 = (texture1 != nullptr)
-                ? TriangleMagnifies(v0, v1, v2, std::max(1, texture1->ColorWidth()),
+                : 1.0f;
+            const float rho1 = (texture1 != nullptr)
+                ? TriangleTexelRate(v0, v1, v2, std::max(1, texture1->ColorWidth()),
                                     std::max(1, texture1->ColorHeight()))
-                : true;
+                : 1.0f;
+            const bool magnify0 = !(rho0 > 1.0f);
+            const bool magnify1 = !(rho1 > 1.0f);
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendEnabled, depthState, colorWriteMask, multiSampleMask,
-                                    sampler0, sampler1, magnify0, magnify1};
+                                    sampler0, sampler1, magnify0, magnify1,
+                                    LodFromTexelRate(rho0), LodFromTexelRate(rho1)};
 
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
@@ -1574,6 +1687,7 @@ namespace CNA::Internal::Backends::Software
 
     SoftwareTextureBackend::SoftwareTextureBackend(const ImageData& data)
         : width_(data.width), height_(data.height)
+        , declaredLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
         pixels_.assign(data.pixels.begin(), data.pixels.end());
     }
@@ -1599,11 +1713,55 @@ namespace CNA::Internal::Backends::Software
         }
     }
 
-    void SoftwareTextureBackend::UpdatePixelsLevel(int, const uint8_t*, int, int)
+    // REMED-GFX-175: mip levels above 0 used to be dropped on the floor here, which is why NO
+    // TextureFilter ordinal could mip-filter on this backend -- not merely ordinals 0 and 1. The
+    // level a caller supplies is now STORED, exactly as given: nothing is downsampled, nothing is
+    // generated, and a level the caller never writes is never invented. `storedLevels_` counts only
+    // the levels held CONTIGUOUSLY from 0, so a chain written out of order, or abandoned half way,
+    // bounds the sampler at the last level that really exists instead of exposing a gap.
+    void SoftwareTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba,
+                                                   int levelW, int levelH)
     {
-        // Mip levels beyond level 0 aren't stored in v1 (no mipmapping support, plan_software.md
-        // Boundaries) -- accepted as a no-op rather than throwing, matching HEADLESS-12's own
-        // precedent for the same real scope trim.
+        if (level <= 0 || rgba == nullptr) return;
+        if (level >= declaredLevels_) return;
+        if (levelW <= 0 || levelH <= 0) return;
+
+        if (static_cast<int>(mipLevels_.size()) < level)
+            mipLevels_.resize(static_cast<std::size_t>(level));
+
+        MipLevel& dst = mipLevels_[static_cast<std::size_t>(level - 1)];
+        dst.width = levelW;
+        dst.height = levelH;
+        const std::size_t bytes = static_cast<std::size_t>(levelW) *
+                                  static_cast<std::size_t>(levelH) * 4u;
+        dst.pixels.assign(rgba, rgba + bytes);
+
+        // Recount from level 1 upward: a level only counts once every level below it is present.
+        int contiguous = 1;
+        for (std::size_t i = 0; i < mipLevels_.size(); ++i)
+        {
+            if (mipLevels_[i].pixels.empty()) break;
+            ++contiguous;
+        }
+        storedLevels_ = contiguous;
+    }
+
+    int SoftwareTextureBackend::ColorWidth(int level) const
+    {
+        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return width_;
+        return mipLevels_[static_cast<std::size_t>(level - 1)].width;
+    }
+
+    int SoftwareTextureBackend::ColorHeight(int level) const
+    {
+        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return height_;
+        return mipLevels_[static_cast<std::size_t>(level - 1)].height;
+    }
+
+    const std::vector<std::uint8_t>& SoftwareTextureBackend::ColorPixels(int level) const
+    {
+        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return pixels_;
+        return mipLevels_[static_cast<std::size_t>(level - 1)].pixels;
     }
 
     // ---- SoftwareTextureCubeBackend (SOFTWARE-82) ----

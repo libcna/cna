@@ -107,6 +107,38 @@ namespace CNA::Internal::Backends::Software
          * @return A reference to the resource's own storage -- never a copy.
          */
         [[nodiscard]] virtual const std::vector<std::uint8_t>& ColorPixels() const = 0;
+
+        /**
+         * @brief How many mip levels this resource really HOLDS, counting from level 0.
+         *
+         * REMED-GFX-175. This is a count of levels whose pixels a caller actually supplied, not the
+         * level count the public resource declares: a `Texture2D` created with `mipMap=true` whose
+         * game only ever wrote level 0 reports 1 here, so the sampler cannot select a level nobody
+         * filled. The default of 1 keeps every resource that has no chain -- render targets, and any
+         * future colour surface -- behaving exactly as it did before mip selection existed.
+         *
+         * @return The number of contiguously stored levels, always at least 1.
+         */
+        [[nodiscard]] virtual int ColorLevelCount() const { return 1; }
+        /**
+         * @brief Width in pixels of mip level @p level.
+         * @param level Mip level, 0 .. ColorLevelCount()-1.
+         * @return The level's width; level 0's width for any resource with a single level.
+         */
+        [[nodiscard]] virtual int ColorWidth(int level) const { (void)level; return ColorWidth(); }
+        /**
+         * @brief Height in pixels of mip level @p level.
+         * @param level Mip level, 0 .. ColorLevelCount()-1.
+         * @return The level's height; level 0's height for any resource with a single level.
+         */
+        [[nodiscard]] virtual int ColorHeight(int level) const { (void)level; return ColorHeight(); }
+        /**
+         * @brief The RGBA8 pixels of mip level @p level, in the same layout as ColorPixels().
+         * @param level Mip level, 0 .. ColorLevelCount()-1.
+         * @return A reference to that level's own storage -- never a copy.
+         */
+        [[nodiscard]] virtual const std::vector<std::uint8_t>& ColorPixels(int level) const
+        { (void)level; return ColorPixels(); }
     };
 
     /**
@@ -149,10 +181,42 @@ namespace CNA::Internal::Backends::Software
         [[nodiscard]] int ColorHeight() const override { return height_; }
         [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels() const override { return pixels_; }
 
+        // REMED-GFX-175: the mip chain, as far as it was actually SUPPLIED. levels_[0] is level 0's
+        // dimensions only -- level 0's pixels stay in pixels_, which UpdatePixels and every existing
+        // consumer already own.
+        [[nodiscard]] int ColorLevelCount() const override { return storedLevels_; }
+        [[nodiscard]] int ColorWidth(int level) const override;
+        [[nodiscard]] int ColorHeight(int level) const override;
+        [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override;
+
     protected:
         int width_ = 0;
         int height_ = 0;
         std::vector<std::uint8_t> pixels_;
+
+        /**
+         * @brief One supplied mip level above level 0.
+         *
+         * REMED-GFX-175. Levels are held only once a caller writes them; nothing here is derived
+         * from level 0, so a texture whose chain was declared but never filled keeps a stored level
+         * count of 1 and samples exactly as it did before mip selection existed.
+         */
+        struct MipLevel
+        {
+            /** @brief Level width in pixels. */
+            int width = 0;
+            /** @brief Level height in pixels. */
+            int height = 0;
+            /** @brief Tightly packed RGBA8 pixels, row-major, top row first. */
+            std::vector<std::uint8_t> pixels;
+        };
+
+        /// Levels 1..N as supplied; index i holds level i+1.
+        std::vector<MipLevel> mipLevels_;
+        /// How many levels are stored CONTIGUOUSLY from 0. Always at least 1.
+        int storedLevels_ = 1;
+        /// The level count the public resource declared, which bounds what may be stored.
+        int declaredLevels_ = 1;
     };
 
     class SoftwareRenderTargetBackend final : public IRenderTargetBackend, public SoftwareColorSurface
