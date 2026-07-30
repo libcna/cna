@@ -1118,6 +1118,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_BackbufferFirstRead COMMAND cna_test_bgfx_backbuffer_first_read
         TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-162 cross-backend control: a rasterizing backend's GetBackBufferData SUCCEEDS and
+    # fully writes the full-surface range (bgfx sub-rectangle read is a declared boundary), so the
+    # Headless rejection is specific, not universal.
+    cna_bgfx_test(cna_test_bgfx_backbuffer_reject
+        examples/backbuffer_headless_reject_test.cpp)
+    cna_register_backend_test(NAME Bgfx_BackbufferReject COMMAND cna_test_bgfx_backbuffer_reject
+        TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-155, the home backend of the finding: the same contract for the one destination the
     # fixture above could only pin -- the BACKBUFFER. bgfx radix-sorts a frame's draws by their
     # view's sort position, which defaults to the numeric view id, and this backend's partition puts

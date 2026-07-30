@@ -585,4 +585,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/backbuffer_first_read_test.cpp)
     cna_register_backend_test(NAME WebGPU_BackbufferFirstRead COMMAND cna_test_webgpu_backbuffer_first_read
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-162 cross-backend control: a rasterizing backend's GetBackBufferData SUCCEEDS and
+    # fully writes the requested range (GFX-161/165 preserved), so the Headless rejection is specific.
+    cna_webgpu_test(cna_test_webgpu_backbuffer_reject
+                    examples/backbuffer_headless_reject_test.cpp)
+    cna_register_backend_test(NAME WebGPU_BackbufferReject COMMAND cna_test_webgpu_backbuffer_reject
+        TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

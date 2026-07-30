@@ -526,4 +526,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
                     examples/backbuffer_first_read_test.cpp)
     cna_register_backend_test(NAME SdlGpu_BackbufferFirstRead COMMAND cna_test_sdlgpu_backbuffer_first_read
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-162 cross-backend control: SdlGpu's lazy-proxy GetBackBufferData (GFX-165) SUCCEEDS
+    # and fully writes the requested range, so the Headless rejection is specific, not universal.
+    cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_reject
+                    examples/backbuffer_headless_reject_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_BackbufferReject COMMAND cna_test_sdlgpu_backbuffer_reject
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

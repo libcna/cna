@@ -1697,6 +1697,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_BackbufferFirstRead COMMAND cna_test_easygl_backbuffer_first_read
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-162 cross-backend control: a rasterizing backend's GetBackBufferData SUCCEEDS and
+        # fully writes the requested range, so the Headless rejection is specific, not universal.
+        cna_easygl_test(cna_test_easygl_backbuffer_reject
+            examples/backbuffer_headless_reject_test.cpp)
+        cna_register_backend_test(NAME EasyGL_BackbufferReject COMMAND cna_test_easygl_backbuffer_reject
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
         # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
         # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

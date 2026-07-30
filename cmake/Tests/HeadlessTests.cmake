@@ -129,6 +129,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_BackbufferFirstRead COMMAND cna_test_headless_backbuffer_first_read
         TIMEOUT 300 LABELS "Headless")
 
+    # REMED-GFX-162: the PRIMARY subject -- Headless rasterizes nothing, so GetBackBufferData must
+    # reject (System::NotSupportedException) rather than fabricate the last Clear() colour, and must
+    # leave the caller's destination untouched while keeping argument-validation precedence.
+    cna_headless_test(cna_test_headless_backbuffer_reject
+        examples/backbuffer_headless_reject_test.cpp)
+    cna_register_backend_test(NAME Headless_BackbufferReject COMMAND cna_test_headless_backbuffer_reject
+        TIMEOUT 300 LABELS "Headless")
+
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
