@@ -50,6 +50,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # undersized one.
     cna_d3d12_test(cna_test_d3d12_texture2d_getdata_transfer_range examples/texture2d_getdata_transfer_range_test.cpp)
 
+    # REMED-GFX-150 cross-backend control: TextureFilter::Point must select exactly ONE texel and
+    # TextureAddressMode must decide which one. The defect was Software-local. Built, not
+    # ctest-registered, for the DX-100 reason below -- this is a Game-harness test, so it constructs
+    # a window and swap chain, which crashes under this dev loop's vanilla Wine dxgi.dll.
+    cna_d3d12_test(cna_test_d3d12_point_sampling examples/point_sampling_contract_test.cpp)
+
     # REMED-GFX-130: the TextureCube/Texture3D half of the same finding. Built, not ctest-registered,
     # for exactly the reason above -- this is a Game-harness test, so it constructs a window and swap
     # chain, which DX-100's spike already found crashes under this dev loop's vanilla Wine dxgi.dll.

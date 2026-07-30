@@ -69,6 +69,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_RenderTarget_SamplingOrientation COMMAND cna_test_headless_rt_sampling_orientation
         TIMEOUT 120 LABELS "Headless")
 
+
+    # REMED-GFX-150 cross-backend control: TextureFilter::Point must select exactly ONE texel and
+    # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
+    # path alike. The defect was Software-local (its ApplySamplerState named none of its parameters
+    # and one bilinear function served every textured fragment, so every draw was LinearClamp); this
+    # run is what establishes that this backend already honoured the contract rather than being made
+    # to.
+    cna_headless_test(cna_test_headless_point_sampling
+        examples/point_sampling_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_PointSamplingContract COMMAND cna_test_headless_point_sampling
+        TIMEOUT 300 LABELS "Headless")
+
     # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
     # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred

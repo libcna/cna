@@ -1057,6 +1057,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTarget_SamplingOrientation COMMAND cna_test_bgfx_rt_sampling_orientation
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+
+    # REMED-GFX-150 cross-backend control: TextureFilter::Point must select exactly ONE texel and
+    # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
+    # path alike. The defect was Software-local (its ApplySamplerState named none of its parameters
+    # and one bilinear function served every textured fragment, so every draw was LinearClamp); this
+    # run is what establishes that this backend already honoured the contract rather than being made
+    # to.
+    cna_bgfx_test(cna_test_bgfx_point_sampling
+        examples/point_sampling_contract_test.cpp)
+    cna_register_backend_test(NAME Bgfx_PointSamplingContract COMMAND cna_test_bgfx_point_sampling
+        TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
     # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred
