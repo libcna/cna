@@ -327,13 +327,58 @@ namespace CNA::Internal::Backends::WebGPU
             }
         }
 
-        [[nodiscard]] int SamplerCacheIndex(int filter, int addressU, int addressV)
+        // REMED-GFX-170: the public TextureFilter ordinal's own name, for CNA_WEBGPU_SAMPLER_TRACE.
+        // Anything outside the enum is reported as such rather than silently printed as a number,
+        // because an out-of-range ordinal is exactly the input the pre-fix expression turned into
+        // Point without saying so.
+        [[nodiscard]] const char* TextureFilterName(int filter)
         {
-            const int filterIndex = filter == 0 ? 0 : 1;
-            const int u = std::clamp(addressU, 0, 2);
-            const int v = std::clamp(addressV, 0, 2);
-            return filterIndex * 9 + u * 3 + v;
+            switch (filter)
+            {
+                case 0: return "Linear";
+                case 1: return "Point";
+                case 2: return "Anisotropic";
+                case 3: return "LinearMipPoint";
+                case 4: return "PointMipLinear";
+                case 5: return "MinLinearMagPointMipLinear";
+                case 6: return "MinLinearMagPointMipPoint";
+                case 7: return "MinPointMagLinearMipLinear";
+                case 8: return "MinPointMagLinearMipPoint";
+                default: return "<out-of-range>";
+            }
         }
+
+        [[nodiscard]] const char* FilterModeName(WGPUFilterMode mode)
+        {
+            return mode == WGPUFilterMode_Linear ? "Linear" : "Nearest";
+        }
+
+        [[nodiscard]] const char* MipmapFilterModeName(WGPUMipmapFilterMode mode)
+        {
+            return mode == WGPUMipmapFilterMode_Linear ? "Linear" : "Nearest";
+        }
+
+        [[nodiscard]] const char* AddressModeName(WGPUAddressMode mode)
+        {
+            switch (mode)
+            {
+                case WGPUAddressMode_Repeat: return "Repeat";
+                case WGPUAddressMode_MirrorRepeat: return "MirrorRepeat";
+                default: return "ClampToEdge";
+            }
+        }
+
+        [[nodiscard]] bool SamplerTraceEnabled()
+        {
+            static const bool enabled = std::getenv("CNA_WEBGPU_SAMPLER_TRACE") != nullptr;
+            return enabled;
+        }
+
+        // REMED-GFX-170: XNA's SamplerState.MaxAnisotropy default. ISpriteBatchBackend carries the
+        // filter ordinal and the two address modes and nothing else, so a sprite cannot express a
+        // non-default anisotropy on ANY backend; this is the value SpriteBatch's own
+        // SamplerState.LinearClamp/PointClamp/AnisotropicClamp all carry anyway.
+        constexpr int kSpriteBatchMaxAnisotropy = 4;
 
         // ---- WEBGPU-41/77/78/79/80/81/82/83: graphics-state -> WGPU translation helpers ----
         // Shared by every 3D GetOrCreatePipeline*() family so the exact same XNA->WGPU mapping is
@@ -2112,11 +2157,7 @@ namespace CNA::Internal::Backends::WebGPU
         catch (...)
         {
             DestroySpriteResources();
-            for (WGPUSampler& sampler : samplerCache_)
-            {
-                if (sampler != nullptr) wgpuSamplerRelease(sampler);
-                sampler = nullptr;
-            }
+            ReleaseSamplerCache();
             if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
             if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
             if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
@@ -2159,12 +2200,7 @@ namespace CNA::Internal::Backends::WebGPU
         envMapDefaultWhiteCube_.reset();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
-        for (WGPUSampler& sampler : samplerCache_)
-        {
-            if (sampler != nullptr)
-                wgpuSamplerRelease(sampler);
-            sampler = nullptr;
-        }
+        ReleaseSamplerCache();
         // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment.
         if (mipBlitPipeline_ != nullptr) wgpuRenderPipelineRelease(mipBlitPipeline_);
         if (mipBlitPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(mipBlitPipelineLayout_);
@@ -4576,7 +4612,8 @@ struct VertexOutput {
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
-                                                     command.addressV, command.maxAnisotropy);
+                                                     command.addressV, command.maxAnisotropy,
+                                                     "EnvironmentMap3D");
         WGPUTextureView texView = command.texture
             ? command.texture.View()
             : envMapDefaultWhiteTexture_->View();
@@ -4876,30 +4913,6 @@ struct VertexOutput {
         pendingBufferReleases_.push_back(uniformBuffer);
         pendingBufferReleases_.push_back(instVertexBuffer);
         pendingBufferReleases_.push_back(vertexBuffer);
-    }
-
-    WGPUSampler WebGPUGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
-    {
-        const int index = SamplerCacheIndex(textureFilter, addressU, addressV);
-        if (samplerCache_[index] != nullptr)
-            return samplerCache_[index];
-        WGPUSamplerDescriptor descriptor{};
-        descriptor.label = StringView("CNA WebGPU SpriteBatch Sampler");
-        descriptor.addressModeU = ToAddressMode(addressU);
-        descriptor.addressModeV = ToAddressMode(addressV);
-        descriptor.addressModeW = WGPUAddressMode_ClampToEdge;
-        const WGPUFilterMode filter = textureFilter == 0 ? WGPUFilterMode_Linear : WGPUFilterMode_Nearest;
-        descriptor.magFilter = filter;
-        descriptor.minFilter = filter;
-        descriptor.mipmapFilter = textureFilter == 0 ? WGPUMipmapFilterMode_Linear : WGPUMipmapFilterMode_Nearest;
-        descriptor.lodMaxClamp = 32.0f;
-        // A zero-initialized descriptor has maxAnisotropy=0, which wgpu-native rejects.
-        // WebGPU's required default is 1 when anisotropic filtering is not requested.
-        descriptor.maxAnisotropy = 1;
-        samplerCache_[index] = wgpuDeviceCreateSampler(device_, &descriptor);
-        if (samplerCache_[index] == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create sampler");
-        return samplerCache_[index];
     }
 
     // WEBGPU-52: lazily creates the shader/bind-group-layout/pipeline-layout/pipeline/sampler
@@ -5403,7 +5416,17 @@ struct VSOut {
         ApplyDrawScissor(pass, command.scissor);
         std::array<WGPUBindGroupEntry, 2> entries{};
         entries[0].binding = 0;
-        entries[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        // REMED-GFX-170: the SAME authoritative translation the 3D families use. This path used to
+        // resolve its own sampler with `textureFilter == 0 ? Linear : Nearest`, which is correct
+        // only for Linear(0) and Point(1) and turned Anisotropic(2), LinearMipPoint(3),
+        // MinPointMagLinearMipLinear(7) and MinPointMagLinearMipPoint(8) into a POINT
+        // magnification they do not name. MaxAnisotropy is the XNA SamplerState default (4)
+        // because ISpriteBatchBackend::SetSamplerFilter carries the filter ordinal alone -- see
+        // that declaration's own note; it is a constant here, so it is trivially immutable per
+        // queued sprite.
+        entries[0].sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                    command.addressV, kSpriteBatchMaxAnisotropy,
+                                                    "SpriteBatch");
         entries[1].binding = 1;
         entries[1].textureView = command.texture.View();
         WGPUBindGroupDescriptor descriptor{};
@@ -6006,24 +6029,63 @@ struct VSOut {
         passScissor_.height = nh;
     }
 
+    // REMED-GFX-170: releases every native sampler this backend owns. The 18-entry SpriteBatch-only
+    // array this replaces WAS released here; slotSamplerCache_ never was, so consolidating the two
+    // caches without this would have turned a pre-existing leak of the 3D samplers into the only
+    // leak. Both are one cache now, and it is released exactly once.
+    void WebGPUGraphicsBackend::ReleaseSamplerCache()
+    {
+        for (auto& [key, sampler] : slotSamplerCache_)
+        {
+            if (sampler != nullptr)
+                wgpuSamplerRelease(sampler);
+        }
+        slotSamplerCache_.clear();
+    }
+
     WGPUSampler WebGPUGraphicsBackend::GetOrCreateSlotSampler(int filter, int addressU, int addressV,
-                                                               int maxAnisotropy)
+                                                               int maxAnisotropy, const char* family)
     {
         const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
         const std::uint32_t key = (static_cast<std::uint32_t>(filter) & 0xFFu)
                                  | ((static_cast<std::uint32_t>(addressU) & 0xFFu) << 8)
                                  | ((static_cast<std::uint32_t>(addressV) & 0xFFu) << 16)
                                  | ((static_cast<std::uint32_t>(clampedAniso) & 0xFFu) << 24);
-        if (auto it = slotSamplerCache_.find(key); it != slotSamplerCache_.end())
-            return it->second;
+        const auto it = slotSamplerCache_.find(key);
+        const bool hit = it != slotSamplerCache_.end();
 
         WGPUSamplerDescriptor descriptor{};
-        descriptor.label = StringView("CNA WebGPU 3D SamplerState Sampler");
+        descriptor.label = StringView("CNA WebGPU SamplerState Sampler");
         FillWGPUSamplerDescriptor(descriptor, filter, addressU, addressV, clampedAniso);
-        WGPUSampler sampler = wgpuDeviceCreateSampler(device_, &descriptor);
-        if (sampler == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create per-slot SamplerState sampler");
-        slotSamplerCache_[key] = sampler;
+        WGPUSampler sampler = nullptr;
+        if (hit)
+        {
+            sampler = it->second;
+        }
+        else
+        {
+            sampler = wgpuDeviceCreateSampler(device_, &descriptor);
+            if (sampler == nullptr)
+                throw std::runtime_error("CNA WebGPU: failed to create per-slot SamplerState sampler");
+            slotSamplerCache_[key] = sampler;
+        }
+        // REMED-GFX-170: the whole public->native translation on one line, so a wrong ordinal
+        // mapping is readable directly instead of being inferred from pixels.
+        if (SamplerTraceEnabled())
+        {
+            std::fprintf(stderr,
+                         "[cna-wgpu-sampler] family=%s filter=%d(%s) mag=%s min=%s mip=%s "
+                         "aniso=%u addrU=%s addrV=%s key=0x%08x sampler=%p %s\n",
+                         family, filter, TextureFilterName(filter),
+                         FilterModeName(descriptor.magFilter),
+                         FilterModeName(descriptor.minFilter),
+                         MipmapFilterModeName(descriptor.mipmapFilter),
+                         static_cast<unsigned>(descriptor.maxAnisotropy),
+                         AddressModeName(descriptor.addressModeU),
+                         AddressModeName(descriptor.addressModeV),
+                         static_cast<unsigned>(key), static_cast<void*>(sampler),
+                         hit ? "HIT" : "CREATE");
+        }
         return sampler;
     }
 
@@ -7276,7 +7338,9 @@ struct VSOut {
         uboBindDescriptor.entries = &uboEntry;
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                     command.addressV, command.maxAnisotropy,
+                                                     "Textured3D");
         std::array<WGPUBindGroupEntry, 2> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
@@ -7379,7 +7443,9 @@ struct VSOut {
         uboBindDescriptor.entries = uboEntries.data();
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                     command.addressV, command.maxAnisotropy,
+                                                     "LitTextured3D");
         std::array<WGPUBindGroupEntry, 2> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
@@ -7548,7 +7614,9 @@ struct VSOut {
         uboBindDescriptor.entries = &uboEntry;
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                     command.addressV, command.maxAnisotropy,
+                                                     "AlphaTest3D");
         std::array<WGPUBindGroupEntry, 2> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
@@ -7708,7 +7776,9 @@ struct VSOut {
         uboBindDescriptor.entries = &uboEntry;
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                     command.addressV, command.maxAnisotropy,
+                                                     "DualTexture3D");
         std::array<WGPUBindGroupEntry, 3> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
@@ -8397,7 +8467,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboBindDescriptor.entries = uboEntries.data();
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                     command.addressV, command.maxAnisotropy,
+                                                     "Pbr3D");
         std::array<WGPUBindGroupEntry, 6> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
@@ -9281,7 +9353,9 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         uboBindDescriptor.entries = uboEntries.data();
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                     command.addressV, command.maxAnisotropy,
+                                                     "Skinned3D");
         std::array<WGPUBindGroupEntry, 2> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
@@ -9822,7 +9896,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboBindDescriptor.entries = uboEntries.data();
         WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
+        WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                     command.addressV, command.maxAnisotropy,
+                                                     "SkinnedPbr3D");
         std::array<WGPUBindGroupEntry, 6> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;

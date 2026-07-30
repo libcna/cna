@@ -881,8 +881,8 @@ namespace CNA::Internal::Backends::WebGPU
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         // WEBGPU-82: per-slot SamplerState -> a genuine WGPUSampler cache (GetOrCreateSlotSampler()
-        // below), distinct from the SpriteBatch-only 18-entry samplerCache_ (see that member's own
-        // comment). Storage-only here; actually read by every texture-consuming Queue*Draw() at
+        // below), which REMED-GFX-170 made the backend's only sampler translation -- SpriteBatch
+        // reaches the same table. Storage-only here; actually read by every texture-consuming Queue*Draw() at
         // queue time for slot 0 (see each command's textureFilter/addressU/addressV capture).
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         // WEBGPU-80/81/29/30: scissor rect, viewport, blend constant and stencil reference are all
@@ -1390,11 +1390,17 @@ namespace CNA::Internal::Backends::WebGPU
         // that, mirroring the pre-existing SetRenderTarget2D() call-then-assign structure.
         void FlushCurrentRenderTarget();
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
-        [[nodiscard]] WGPUSampler GetOrCreateSampler(int textureFilter, int addressU, int addressV);
-        // WEBGPU-82: full per-slot SamplerState cache (filter + address mode + anisotropy), used
-        // by every texture-consuming 3D Queue*Draw() -- distinct from GetOrCreateSampler() above,
-        // which only ever needs SpriteBatch's simpler binary linear/nearest split.
-        [[nodiscard]] WGPUSampler GetOrCreateSlotSampler(int filter, int addressU, int addressV, int maxAnisotropy);
+        // WEBGPU-82: full SamplerState cache (filter + address mode + anisotropy), keyed on the
+        // COMPLETE description and filled by FillWGPUSamplerDescriptor's explicit ordinal table.
+        // REMED-GFX-170: this is now the backend's ONE sampler translation. SpriteBatch used to
+        // resolve its own with a binary `filter == 0 ? Linear : Nearest`, and to cache it in an
+        // 18-entry array whose index collapsed every non-Linear ordinal onto one slot, so the
+        // descriptor and the cache key were wrong in the same way. `family` names the public draw
+        // family for CNA_WEBGPU_SAMPLER_TRACE and has no effect on the cache key.
+        [[nodiscard]] WGPUSampler GetOrCreateSlotSampler(int filter, int addressU, int addressV,
+                                                        int maxAnisotropy, const char* family);
+        /** @brief Releases every native sampler in slotSamplerCache_ and empties it. */
+        void ReleaseSamplerCache();
         [[nodiscard]] WGPUPrimitiveTopology ToTopology(PrimitiveType primitive) const;
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
@@ -1494,7 +1500,6 @@ namespace CNA::Internal::Backends::WebGPU
         /// draws bind their own into the same slot, so it is rebound per sprite run and the bind
         /// needs the size separately from the capacity.
         std::uint64_t spriteVertexBytes_ = 0;
-        std::array<WGPUSampler, 18> samplerCache_{};
 
         // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment. Created
         // lazily on first use (a game that never requests mipMap=true with initial pixel data
