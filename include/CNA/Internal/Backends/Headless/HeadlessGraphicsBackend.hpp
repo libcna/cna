@@ -550,6 +550,22 @@ namespace CNA::Internal::Backends::Headless
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+
+        /**
+         * @brief Backbuffer readback for `GraphicsDevice::GetBackBufferData`. Headless rasterizes
+         *        nothing and owns no backbuffer pixel storage, so it cannot honestly return one.
+         *
+         * REMED-GFX-162: this raises `System::NotSupportedException` instead of fabricating a frame
+         * (it formerly filled the caller's buffer with the last `Clear()` colour, which a caller
+         * could not tell apart from a real black frame). It is the backbuffer counterpart of the
+         * refuse-rather-than-fabricate contract REMED-GFX-127/130 established for the Texture and
+         * render-target readbacks. The throw happens after `GetBackBufferData`'s own argument
+         * validation, so an invalid request still fails with its own exception, and it leaves the
+         * caller's destination completely untouched.
+         *
+         * @param x,y,w,h the requested region (ignored -- the request is always refused).
+         * @param pixels the destination (never written).
+         */
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         SDL_Window* GetWindowInternal() const override { return nullptr; }

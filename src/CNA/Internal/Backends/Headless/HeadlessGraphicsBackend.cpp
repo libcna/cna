@@ -1,5 +1,7 @@
 #include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
 
+#include "System/NotSupportedException.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -539,21 +541,24 @@ namespace CNA::Internal::Backends::Headless
 
     void HeadlessGraphicsBackend::SetPresentationMode(int /*mode*/) {}
 
-    void HeadlessGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    void HeadlessGraphicsBackend::ReadBackbuffer(int /*x*/, int /*y*/, int /*w*/, int /*h*/, uint8_t* /*pixels*/)
     {
-        Require(state_, w >= 0 && h >= 0, "HeadlessGraphicsBackend::ReadBackbuffer: negative width/height");
-        // Nothing was ever rendered -- reports the last Clear() colour for every pixel, which is
-        // the closest honest answer a backend that draws nothing can give (matches what a real
-        // backend would show if every draw call were a no-op but Clear() still worked).
-        const std::uint8_t r = static_cast<std::uint8_t>(std::clamp(clearColor_[0], 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t g = static_cast<std::uint8_t>(std::clamp(clearColor_[1], 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t b = static_cast<std::uint8_t>(std::clamp(clearColor_[2], 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t a = static_cast<std::uint8_t>(std::clamp(clearColor_[3], 0.0f, 1.0f) * 255.0f);
-        for (int i = 0; i < w * h; ++i)
-        {
-            pixels[i * 4 + 0] = r; pixels[i * 4 + 1] = g; pixels[i * 4 + 2] = b; pixels[i * 4 + 3] = a;
-        }
-        (void)x; (void)y;
+        // REMED-GFX-162: Headless rasterizes nothing and owns no backbuffer pixel storage, so it
+        // cannot read one back. It formerly fabricated a frame here -- filling the caller's buffer
+        // with the last Clear() colour for every pixel -- which made a non-rasterizing device
+        // indistinguishable from a real black (or last-cleared) frame. That is exactly the
+        // fabricate-rather-than-refuse behaviour REMED-GFX-127/130 removed from the Texture/render-
+        // target readbacks: a backend with no honest pixel result must reject, not invent one.
+        //
+        // The refusal is raised HERE, after GraphicsDevice::GetBackBufferData has finished all of
+        // its argument validation (null destination, rectangle bounds, element count, format), so
+        // an invalid request still fails with its own std::invalid_argument/std::out_of_range/
+        // std::runtime_error -- capability rejection stays LAST, matching the texture path. The
+        // caller's destination is left completely untouched: this throws before GetBackBufferData's
+        // unpack loop writes a single element.
+        throw System::NotSupportedException(
+            "GraphicsDevice::GetBackBufferData: the Headless backend does not rasterize and has no "
+            "backbuffer pixel storage to read back.");
     }
 
     std::unique_ptr<ITextureBackend> HeadlessGraphicsBackend::CreateTexture(const ImageData& data)
