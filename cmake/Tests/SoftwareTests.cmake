@@ -211,6 +211,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_BackbufferReadbackDimension COMMAND cna_test_software_backbuffer_readback_dimension
         TIMEOUT 300 LABELS "Software")
 
+    # REMED-GFX-161: cross-backend control for the first-read completion contract.
+    cna_software_test(cna_test_software_backbuffer_first_read
+        examples/backbuffer_first_read_test.cpp)
+    cna_register_backend_test(NAME Software_BackbufferFirstRead COMMAND cna_test_software_backbuffer_first_read
+        TIMEOUT 300 LABELS "Software")
+
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

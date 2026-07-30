@@ -268,22 +268,15 @@ namespace
     /** @brief True when this backend honours public order between the two families. */
     constexpr bool kPublicFamilyOrder = (kReplay == Replay::PublicOrder);
 
-    /**
-     * @brief Whether the FIRST public backbuffer readback of a process comes back unwritten here.
-     *
-     * Measured on WEBGPU: the very first `GraphicsDevice.GetBackBufferData` of a run leaves part of
-     * the caller's buffer untouched, so it still holds this file's poison prefill; every later read
-     * in the same run is correct, and the render-target oracle is correct from the first read. That
-     * is a readback warm-up defect, not an ordering one, so leg A performs one discarded read
-     * before its first assertion and this file measures its own subject. Recorded as its own
-     * finding; remove the warm-up when that is fixed.
-     */
-    constexpr bool kFirstBackbufferReadIsWarmUp =
-#if defined(CNA_BACKEND_WEBGPU)
-        true;
-#else
-        false;
-#endif
+    // REMED-GFX-161 (RESOLVED, 2026-07-30): the discarded first-read warm-up this file used to carry
+    // for WEBGPU is gone. The measured symptom -- the very first GetBackBufferData of a run left part
+    // of the caller's buffer holding its poison prefill while later reads were correct -- was the
+    // pre-REMED-GFX-165 rectangle-less dimension source: GraphicsDevice::GetBackBufferData sized the
+    // region from backend_->GetViewportSize() evaluated BEFORE the read's own EnsureFrameRendered
+    // realised the surface, so on the first frame WebGPU's aspect-scaled viewport (53x32 for a 64x32
+    // backbuffer) undersized the region and a trailing block stayed poison. GFX-165 sizes the region
+    // from the authoritative PresentationParameters, so the first read is now complete; leg A asserts
+    // it directly. backbuffer_first_read_test.cpp is the dedicated regression guard.
 
     /**
      * @brief Whether a `Clear()` issued AFTER a draw in the SAME bind cycle wipes that draw.
@@ -1061,12 +1054,8 @@ class SpriteBatch3DOrderTest : public Game
                  "; legs B and C carry the whole contract");
             return;
         }
-        if (kFirstBackbufferReadIsWarmUp)
-        {
-            Begin(dev, bb);
-            SpriteStripes(bb, 0, 1, kWhite);
-            (void)Read(dev, bb);   // discarded: see kFirstBackbufferReadIsWarmUp
-        }
+        // REMED-GFX-161 (RESOLVED): no discarded first-read warm-up here any more -- the first public
+        // backbuffer read of the process is now the measured one and must be complete.
         CanonicalSequences(dev, bb, "A");
     }
 

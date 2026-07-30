@@ -576,4 +576,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/backbuffer_readback_dimension_test.cpp)
     cna_register_backend_test(NAME WebGPU_BackbufferReadbackDimension COMMAND cna_test_webgpu_backbuffer_readback_dimension
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-161: the FIRST GetBackBufferData of a process must fully and synchronously write the
+    # requested destination range. Pre-fix, WebGPU's first backbuffer readback returned successfully
+    # while leaving part of the caller's poison prefill in place; every later read was correct. Each
+    # leg runs in its own process (fork+exec) so its first read is genuinely first.
+    cna_webgpu_test(cna_test_webgpu_backbuffer_first_read
+                    examples/backbuffer_first_read_test.cpp)
+    cna_register_backend_test(NAME WebGPU_BackbufferFirstRead COMMAND cna_test_webgpu_backbuffer_first_read
+        TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

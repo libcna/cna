@@ -1111,6 +1111,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_BackbufferReadbackDimension COMMAND cna_test_bgfx_backbuffer_readback_dimension
         TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-161: cross-backend control for the first-read completion contract. Bgfx's sub-rectangle
+    # backbuffer read is a pre-existing gap (declared as a boundary by the test), not this task's subject.
+    cna_bgfx_test(cna_test_bgfx_backbuffer_first_read
+        examples/backbuffer_first_read_test.cpp)
+    cna_register_backend_test(NAME Bgfx_BackbufferFirstRead COMMAND cna_test_bgfx_backbuffer_first_read
+        TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-155, the home backend of the finding: the same contract for the one destination the
     # fixture above could only pin -- the BACKBUFFER. bgfx radix-sorts a frame's draws by their
     # view's sort position, which defaults to the numeric view id, and this backend's partition puts

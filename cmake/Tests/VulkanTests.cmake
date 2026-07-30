@@ -1242,6 +1242,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_BackbufferReadbackDimension COMMAND cna_test_vulkan_backbuffer_readback_dimension
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-161: cross-backend control for the first-read completion contract.
+        cna_vulkan_test(cna_test_vulkan_backbuffer_first_read
+            examples/backbuffer_first_read_test.cpp)
+        cna_register_backend_test(NAME Vulkan_BackbufferFirstRead COMMAND cna_test_vulkan_backbuffer_first_read
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
         # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
         # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

@@ -519,4 +519,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
                     examples/backbuffer_readback_dimension_test.cpp)
     cna_register_backend_test(NAME SdlGpu_BackbufferReadbackDimension COMMAND cna_test_sdlgpu_backbuffer_readback_dimension
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-161: cross-backend control for the first-read completion contract (preserves the
+    # GFX-165 lazy-proxy backbuffer read; no SDL_GPU production change here).
+    cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_first_read
+                    examples/backbuffer_first_read_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_BackbufferFirstRead COMMAND cna_test_sdlgpu_backbuffer_first_read
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
