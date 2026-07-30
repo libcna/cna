@@ -414,8 +414,10 @@ class Texture2DGetDataContractTest : public Game
         }
 
         // A4: nonzero destination offset into an oversized destination -- the surrounding sentinels
-        // must survive untouched (the rectangle overload's startIndex is a DESTINATION offset; the
-        // whole-level overload's is a SOURCE offset and is REMED-GFX-128's separate concern).
+        // must survive untouched. `startIndex` is a DESTINATION element offset on BOTH overloads;
+        // when this check was written the whole-level overload applied it to the SOURCE instead,
+        // which is why the note here used to exempt it (REMED-GFX-128 / REMED-GFX-149, both now
+        // closed -- A4b below asserts the whole-level overload through the same oracle).
         {
             const Rectangle rect(3, 1, 5, 2);
             const int count = rect.Width * rect.Height;
@@ -447,6 +449,39 @@ class Texture2DGetDataContractTest : public Game
             check(body && leading && trailing,
                   "A4 destination offset 7 writes only its own range, leaving both sentinel margins "
                   "intact" + detail + (leading ? "" : " [leading margin overwritten]") +
+                      (trailing ? "" : " [trailing margin overwritten]"));
+        }
+
+        // A4b: REMED-GFX-149 -- the SAME guarantee through the whole-level overload, which used to
+        // reject every non-zero startIndex on a render target and, on a plain texture, apply it to
+        // the source instead. The excess capacity beyond the region must also stay untouched.
+        {
+            const int start = 7;
+            const int spare = 9;
+            std::vector<Color> got(static_cast<std::size_t>(start) + pattern.size() + spare,
+                                   SentinelA5());
+            tex.GetData(got.data(), start, static_cast<int>(got.size()) - start);
+
+            bool leading = true;
+            for (int i = 0; i < start; ++i)
+                if (!Same(got[static_cast<std::size_t>(i)], SentinelA5())) leading = false;
+            bool trailing = true;
+            for (std::size_t i = static_cast<std::size_t>(start) + pattern.size(); i < got.size(); ++i)
+                if (!Same(got[i], SentinelA5())) trailing = false;
+            bool body = true;
+            std::string detail;
+            for (std::size_t i = 0; i < pattern.size(); ++i)
+                if (!Same(got[static_cast<std::size_t>(start) + i], pattern[i]))
+                {
+                    body = false;
+                    detail = " at element " + std::to_string(i) + ": " +
+                             ColorText(got[static_cast<std::size_t>(start) + i]) +
+                             " != " + ColorText(pattern[i]);
+                    break;
+                }
+            check(body && leading && trailing,
+                  "A4b whole-level overload at destination offset 7 with excess capacity writes "
+                  "only [7,7+region)" + detail + (leading ? "" : " [leading margin overwritten]") +
                       (trailing ? "" : " [trailing margin overwritten]"));
         }
 

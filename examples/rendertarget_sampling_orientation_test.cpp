@@ -1462,18 +1462,31 @@ class RenderTargetSamplingOrientationTest : public Game
                   (guardIntact ? ", guard intact" : ", GUARD OVERWRITTEN") + ")");
         }
 
-        // REMED-GFX-149's measurement, recorded rather than asserted: this task must not bless
-        // either behaviour, and a check that can only pass would be noise.
+        // REMED-GFX-149 was measured here and left as an [INFO] line so this task could not bless
+        // either behaviour. It is now closed: the whole-level overload applies `startIndex` to the
+        // DESTINATION exactly like the rectangle overload above, so N4 asserts the same guarantee
+        // through the other entry point instead of merely reporting it.
         std::vector<Color> offset3(static_cast<std::size_t>(count) + 5, Color(0x11, 0x22, 0x33, 0x44));
-        try
+        ok = true;
+        try { a.GetData(offset3.data(), 5, count); }
+        catch (const std::exception& e) { ok = false; what = e.what(); }
+        if (!ok) { check(false, "N4 whole-level destination-offset readback threw: " + what); }
+        else
         {
-            a.GetData(offset3.data(), 5, count);
-            std::printf("[INFO] N4 GetData(data, startIndex=5, count) on a render target: accepted\n");
-        }
-        catch (const std::exception& e)
-        {
-            std::printf("[INFO] N4 GetData(data, startIndex=5, count) on a render target: rejected "
-                        "(%s) -- REMED-GFX-149 owns this, unrelated to orientation\n", e.what());
+            bool guardIntact = true;
+            for (int i = 0; i < 5; ++i)
+                if (!Same(offset3[static_cast<std::size_t>(i)], Color(0x11, 0x22, 0x33, 0x44)))
+                    guardIntact = false;
+            int good = 0;
+            for (int y = 0; y < kPH; ++y)
+                for (int x = 0; x < kPW; ++x)
+                    if (Same(offset3[static_cast<std::size_t>(5 + y * kPW + x)], PatternColor(x, y)))
+                        ++good;
+            check(guardIntact && good == count,
+                  "N4 GetData(data, startIndex=5, count) on a render target writes only at the "
+                  "offset and stays top-down (" + std::to_string(good) + "/" +
+                  std::to_string(count) +
+                  (guardIntact ? ", guard intact" : ", GUARD OVERWRITTEN") + ")");
         }
         std::fflush(stdout);
         (void)dev;

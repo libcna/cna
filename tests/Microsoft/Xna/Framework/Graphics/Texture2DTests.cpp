@@ -740,9 +740,15 @@ TEST_F(Texture2DFromStreamFormatTest, PngRoundTripDecodesCorrectSizeAndColor)
 
     EXPECT_EQ(loaded.getWidthProperty(), 4);
     EXPECT_EQ(loaded.getHeightProperty(), 4);
-    Color px[1] = { Color(0, 0, 0, 0) };
-    loaded.GetData(px, 0, 1);
-    EXPECT_TRUE(IsCloseTo(px[0], 255, 0, 0, 5)); // PNG is lossless
+    // REMED-GFX-149: `elementCount` is the destination capacity for the WHOLE requested region --
+    // the complete level 0 here -- so a one-element read of a 16-pixel texture is not a legal XNA
+    // call and no longer silently returns a one-pixel partial frame. Reading the whole level also
+    // makes this a real decode assertion: a decoder that got only the first pixel right used to
+    // pass.
+    std::vector<Color> px(16, Color(0, 0, 0, 0));
+    loaded.GetData(px.data(), 0, 16);
+    for (int i = 0; i < 16; ++i)
+        EXPECT_TRUE(IsCloseTo(px[i], 255, 0, 0, 5)) << "pixel " << i; // PNG is lossless
 }
 
 TEST_F(Texture2DFromStreamFormatTest, JpegRoundTripDecodesCorrectSizeAndColor)
@@ -760,9 +766,11 @@ TEST_F(Texture2DFromStreamFormatTest, JpegRoundTripDecodesCorrectSizeAndColor)
 
     EXPECT_EQ(loaded.getWidthProperty(), 4);
     EXPECT_EQ(loaded.getHeightProperty(), 4);
-    Color px[1] = { Color(0, 0, 0, 0) };
-    loaded.GetData(px, 0, 1);
-    EXPECT_TRUE(IsCloseTo(px[0], 0, 255, 0, 40)); // JPEG is lossy — wider tolerance
+    // REMED-GFX-149: whole level, not one pixel -- see the PNG round trip above.
+    std::vector<Color> px(16, Color(0, 0, 0, 0));
+    loaded.GetData(px.data(), 0, 16);
+    for (int i = 0; i < 16; ++i)
+        EXPECT_TRUE(IsCloseTo(px[i], 0, 255, 0, 40)) << "pixel " << i; // JPEG is lossy
 }
 
 TEST_F(Texture2DFromStreamFormatTest, BmpDecodesCorrectSizeAndColor)
@@ -773,9 +781,11 @@ TEST_F(Texture2DFromStreamFormatTest, BmpDecodesCorrectSizeAndColor)
 
     EXPECT_EQ(loaded.getWidthProperty(), 2);
     EXPECT_EQ(loaded.getHeightProperty(), 2);
-    Color px[1] = { Color(0, 0, 0, 0) };
-    loaded.GetData(px, 0, 1);
-    EXPECT_TRUE(IsCloseTo(px[0], 0, 0, 255, 0)); // BMP is uncompressed — exact
+    // REMED-GFX-149: whole level, not one pixel -- see the PNG round trip above.
+    std::vector<Color> px(4, Color(0, 0, 0, 0));
+    loaded.GetData(px.data(), 0, 4);
+    for (int i = 0; i < 4; ++i)
+        EXPECT_TRUE(IsCloseTo(px[i], 0, 0, 255, 0)) << "pixel " << i; // BMP is uncompressed
 }
 
 // -----------------------------------------------------------------------
@@ -944,11 +954,15 @@ TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
 
     EXPECT_EQ(loaded.getWidthProperty(), 2);
     EXPECT_EQ(loaded.getHeightProperty(), 2);
-    Color px[1] = { Color(0, 0, 0, 0) };
-    loaded.GetData(px, 0, 1);
-    EXPECT_EQ(px[0].getRProperty(), 255);
-    EXPECT_EQ(px[0].getGProperty(), 128);
-    EXPECT_EQ(px[0].getBProperty(), 0);
+    // REMED-GFX-149: whole level, not one pixel -- see the PNG round trip above.
+    std::vector<Color> px(4, Color(0, 0, 0, 0));
+    loaded.GetData(px.data(), 0, 4);
+    for (int i = 0; i < 4; ++i)
+    {
+        EXPECT_EQ(px[i].getRProperty(), 255) << "pixel " << i;
+        EXPECT_EQ(px[i].getGProperty(), 128) << "pixel " << i;
+        EXPECT_EQ(px[i].getBProperty(), 0) << "pixel " << i;
+    }
 }
 
 // -----------------------------------------------------------------------
@@ -1094,9 +1108,11 @@ TEST_F(SaveAsJpegTest, FilenameOverloadWritesReadableFile)
 
     EXPECT_EQ(loaded.getWidthProperty(), 2);
     EXPECT_EQ(loaded.getHeightProperty(), 2);
-    Color px[1] = { Color(0, 0, 0, 0) };
-    loaded.GetData(px, 0, 1);
-    EXPECT_TRUE(IsCloseTo(px[0], 255, 128, 0, 40));
+    // REMED-GFX-149: whole level, not one pixel -- see the PNG round trip above.
+    std::vector<Color> px(4, Color(0, 0, 0, 0));
+    loaded.GetData(px.data(), 0, 4);
+    for (int i = 0; i < 4; ++i)
+        EXPECT_TRUE(IsCloseTo(px[i], 255, 128, 0, 40)) << "pixel " << i;
 }
 
 TEST_F(SaveAsJpegTest, QualityEnvVarIsHonoredWithoutThrowing)

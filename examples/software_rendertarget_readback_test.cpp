@@ -631,9 +631,62 @@ protected:
             check(Throws<System::NotSupportedException>(
                       [&] { target.GetData(1, nullptr, buffer.data(), 0, static_cast<int>(total)); }),
                   "E9 mip level above 0 rejected (Software stores level 0 only)");
-            check(Throws<std::runtime_error>(
-                      [&] { target.GetData(buffer.data(), 3, static_cast<int>(total)); }),
-                  "E10 the whole-level overload keeps its documented startIndex == 0 requirement");
+            // REMED-GFX-149 (REMED-GFX-128's expression). This check used to assert the DEFECT --
+            // that the whole-level overload rejected every non-zero startIndex with
+            // std::runtime_error("no CPU-side pixel data available") -- and so pinned the very
+            // behaviour that diverged from XNA, from FNA and from this file's own D7/D8 rectangle
+            // checks three lines above. `startIndex` is a DESTINATION element offset on BOTH
+            // overloads, so the whole-level read must now land at [3, 3 + total) with the three
+            // leading entries and the trailing margin untouched.
+            {
+                const std::size_t margin = 5;
+                std::vector<Color> offset(3 + total + margin, SentinelA5());
+                target.GetData(offset.data(), 3, static_cast<int>(total));
+
+                bool exact = true;
+                std::string detail;
+                for (int y = 0; y < kRTH && exact; ++y)
+                    for (int x = 0; x < kRTW && exact; ++x)
+                    {
+                        const Color actual = offset[3 + static_cast<std::size_t>(y) * kRTW + x];
+                        const Color expected = ExpectedTargetPixel(x, y);
+                        if (!Same(actual, expected))
+                        {
+                            exact = false;
+                            detail = " first mismatch at (" + std::to_string(x) + "," +
+                                     std::to_string(y) + "): " + ColorText(actual) +
+                                     "!=" + ColorText(expected);
+                        }
+                    }
+                check(exact, "E10 the whole-level overload honours a non-zero DESTINATION start "
+                             "index" + detail);
+
+                std::size_t intact = 0;
+                for (std::size_t i = 0; i < 3; ++i)
+                    if (Same(offset[i], SentinelA5())) ++intact;
+                for (std::size_t i = 3 + total; i < offset.size(); ++i)
+                    if (Same(offset[i], SentinelA5())) ++intact;
+                check(intact == 3 + margin,
+                      "E10b the 3 entries before startIndex and the " + std::to_string(margin) +
+                          " after the region kept their sentinel (" + std::to_string(intact) +
+                          " intact)");
+            }
+
+            // The capacity rule is the same on both overloads: one element short of the region is
+            // rejected before any transfer, and a larger capacity is legal and leaves its tail
+            // alone.
+            check(Throws<std::out_of_range>(
+                      [&] { target.GetData(buffer.data(), 0, static_cast<int>(total) - 1); }),
+                  "E10c the whole-level overload rejects an elementCount below the region size");
+            {
+                std::vector<Color> roomy(total + 40, SentinelA5());
+                target.GetData(roomy.data(), 0, static_cast<int>(total) + 40);
+                std::size_t tail = 0;
+                for (std::size_t i = total; i < roomy.size(); ++i)
+                    if (Same(roomy[i], SentinelA5())) ++tail;
+                check(tail == 40, "E10d excess elementCount is accepted and its tail untouched (" +
+                                      std::to_string(tail) + "/40 intact)");
+            }
 
             // The same guards straight against the backend, where a hostile rectangle can be built
             // that the public layer would have rejected first. All arithmetic there is 64-bit, so a
