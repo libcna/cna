@@ -426,19 +426,20 @@ class BoundTargetLifetimeTest : public Game
     }
 
     /**
-     * @brief Reads the kBBW x kBBH backbuffer through the EXPLICIT-rectangle overload.
+     * @brief Reads the kBBW x kBBH backbuffer through the rectangle-LESS overload.
      *
-     * Deliberately not the rectangle-less overload, which sizes its region from the backend's live
-     * viewport -- REMED-GFX-165's mechanism. Naming the rectangle makes this reader depend only on
-     * the size this fixture asked for.
+     * REMED-GFX-165 is fixed: a rectangle-less GetBackBufferData now sizes its region from the
+     * authoritative PresentationParameters backbuffer rather than the backend's live viewport, so it
+     * reads the whole backbuffer correctly on every backend. This used to name an explicit rectangle
+     * to avoid that defect; the workaround has been removed now that the overload it worked around is
+     * correct.
      */
     Readback ReadBackbuffer(GraphicsDevice& dev)
     {
         Readback r;
         r.w = kBBW; r.h = kBBH;
         r.pixels.assign(static_cast<std::size_t>(r.w) * r.h, Color(0xCD, 0xCD, 0xCD, 0xCD));
-        const Rectangle whole(0, 0, r.w, r.h);
-        try { dev.GetBackBufferData(&whole, r.pixels.data(), 0, static_cast<int>(r.pixels.size())); }
+        try { dev.GetBackBufferData(r.pixels.data(), 0, static_cast<int>(r.pixels.size())); }
         catch (const System::NotSupportedException&) { r.threwNotSupported = true; }
         catch (const std::exception& e) { r.threwSomethingElse = true; r.otherWhat = e.what(); }
         catch (...) { r.threwSomethingElse = true; r.otherWhat = "(non-std exception)"; }

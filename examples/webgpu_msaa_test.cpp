@@ -95,6 +95,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -148,8 +149,12 @@ class WebGpuMsaaTest : public Game
     std::vector<Color> RenderBackbufferRow(GraphicsDevice& device)
     {
         const auto& vp = device.getViewportProperty();
-        const int W = vp.getWidthProperty();
-        const int H = vp.getHeightProperty();
+        const auto& pp = device.getPresentationParametersProperty();
+        // Read within the AUTHORITATIVE backbuffer, not the viewport: under FixedHeightDynamicWidth the
+        // logical viewport width is aspect-scaled and can exceed the backbuffer, and REMED-GFX-165's
+        // GetBackBufferData now (correctly) rejects a rectangle that runs past the backbuffer bounds.
+        const int W = std::min(vp.getWidthProperty(), pp.getBackBufferWidthProperty());
+        const int H = std::min(vp.getHeightProperty(), pp.getBackBufferHeightProperty());
 
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         device.setBlendStateProperty(BlendState::Opaque);
