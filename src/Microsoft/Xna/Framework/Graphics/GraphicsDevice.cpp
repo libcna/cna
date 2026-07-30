@@ -35,6 +35,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <limits>
 #include <stdexcept>
@@ -2211,6 +2213,19 @@ namespace Microsoft::Xna::Framework::Graphics
         if (data == nullptr)
             throw std::invalid_argument("data");
 
+        // REMED-GFX-165: the read region is derived from the AUTHORITATIVE backbuffer description --
+        // PresentationParameters -- never from the backend's live viewport. A rectangle-less call
+        // addresses the COMPLETE logical backbuffer (W x H pixels), independent of any sub-viewport,
+        // scissor, previously bound render target or aspect-scaled/stale drawable size the backend may
+        // currently report. Previously this path sized itself from backend_->GetViewportSize(), which
+        // under the default FixedHeightDynamicWidth presentation mode is height-locked to the virtual
+        // resolution and width-scaled by the window's aspect (and, before the window is realised,
+        // derived from a stale physical size) -- so on WebGPU and SDL_GPU a correctly sized W x H read
+        // was rejected as "too small" while it was byte-exact on the backends whose viewport happened
+        // to equal the backbuffer.
+        const int backBufferWidth = presentationParameters_.getBackBufferWidthProperty();
+        const int backBufferHeight = presentationParameters_.getBackBufferHeightProperty();
+
         int x, y, w, h;
         if (rect)
         {
@@ -2218,12 +2233,32 @@ namespace Microsoft::Xna::Framework::Graphics
             y = rect->Y;
             w = rect->Width;
             h = rect->Height;
+            // A rectangle is validated against the REAL backbuffer bounds, before any native copy, so
+            // an out-of-range request fails deterministically rather than reading outside the resource.
+            if (w <= 0 || h <= 0 || x < 0 || y < 0 ||
+                x + w > backBufferWidth || y + h > backBufferHeight)
+                throw std::out_of_range(
+                    "GetBackBufferData: rectangle is outside the backbuffer bounds");
         }
         else
         {
             x = 0;
             y = 0;
-            backend_->GetViewportSize(w, h);
+            w = backBufferWidth;
+            h = backBufferHeight;
+        }
+
+        if (const char* trace = std::getenv("CNA_BACKBUFFER_READ_TRACE"); trace != nullptr && *trace != '\0')
+        {
+            int viewportW = -1, viewportH = -1;
+            if (backend_ != nullptr)
+                backend_->GetViewportSize(viewportW, viewportH);
+            std::fprintf(stderr,
+                         "[GFX-165] GetBackBufferData rect=%d backbuffer=%dx%d viewport=%dx%d "
+                         "region=(%d,%d,%dx%d) elementCount=%d startIndex=%d\n",
+                         rect ? 1 : 0, backBufferWidth, backBufferHeight, viewportW, viewportH,
+                         x, y, w, h, elementCount, startIndex);
+            std::fflush(stderr);
         }
 
         if (elementCount < w * h)

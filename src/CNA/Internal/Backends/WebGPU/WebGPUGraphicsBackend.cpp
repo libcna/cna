@@ -6424,6 +6424,17 @@ struct VSOut {
         // without needing a real Present() in between (matches Vulkan/Bgfx's on-demand submit).
         EnsureFrameRendered();
 
+        if (const char* trace = std::getenv("CNA_BACKBUFFER_READ_TRACE"); trace != nullptr && *trace != '\0')
+        {
+            std::fprintf(stderr,
+                         "[GFX-165][WEBGPU] ReadBackbuffer req=(%d,%d,%dx%d) physical=%dx%d "
+                         "readback=%dx%d bytesPerRow=%u virtual=%dx%d mode=%d\n",
+                         x, y, w, h, physicalWidth_, physicalHeight_, readbackWidth_, readbackHeight_,
+                         readbackBytesPerRow_, virtualWidth_, virtualHeight_,
+                         static_cast<int>(presentationMode_));
+            std::fflush(stderr);
+        }
+
         if (!readbackValid_ || readbackBuffer_ == nullptr)
         {
             std::memset(pixels, 0, static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
