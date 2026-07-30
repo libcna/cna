@@ -457,6 +457,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_texture_filter_mip_contract
         TIMEOUT 300 LABELS "Software")
 
+    # REMED-GFX-177 cross-backend control: descriptor/binding bookkeeping must be a function of what
+    # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
+    # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
+    # were alive. Every draw here is checked against a self-identifying oracle that decodes back to an
+    # integer, so a recycled or grown pool that aliases one resource onto another's binding names the
+    # wrong resource rather than merely producing an odd colour.
+    cna_software_test(cna_test_software_descriptor_capacity
+                      examples/descriptor_capacity_contract_test.cpp)
+    cna_register_backend_test(NAME Software_DescriptorCapacityContract
+        COMMAND cna_test_software_descriptor_capacity
+        TIMEOUT 900 LABELS "Software")
+
     cna_software_test(cna_test_software_point_sampling
                       examples/point_sampling_contract_test.cpp)
     cna_register_backend_test(NAME Software_PointSamplingContract

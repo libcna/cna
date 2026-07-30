@@ -529,6 +529,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_TextureFilterMipContract COMMAND cna_test_webgpu_texture_filter_mip_contract
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-177 cross-backend control: descriptor/binding bookkeeping must be a function of what
+    # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
+    # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
+    # were alive. Every draw here is checked against a self-identifying oracle that decodes back to an
+    # integer, so a recycled or grown pool that aliases one resource onto another's binding names the
+    # wrong resource rather than merely producing an odd colour.
+    cna_webgpu_test(cna_test_webgpu_descriptor_capacity
+        examples/descriptor_capacity_contract_test.cpp)
+    cna_register_backend_test(NAME WebGPU_DescriptorCapacityContract COMMAND cna_test_webgpu_descriptor_capacity
+        TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_webgpu_test(cna_test_webgpu_point_sampling
         examples/point_sampling_contract_test.cpp)
     cna_register_backend_test(NAME WebGPU_PointSamplingContract COMMAND cna_test_webgpu_point_sampling

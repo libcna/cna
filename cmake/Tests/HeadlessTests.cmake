@@ -111,6 +111,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_TextureFilterMipContract COMMAND cna_test_headless_texture_filter_mip_contract
         TIMEOUT 300 LABELS "Headless")
 
+    # REMED-GFX-177 cross-backend control: descriptor/binding bookkeeping must be a function of what
+    # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
+    # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
+    # were alive. Every draw here is checked against a self-identifying oracle that decodes back to an
+    # integer, so a recycled or grown pool that aliases one resource onto another's binding names the
+    # wrong resource rather than merely producing an odd colour.
+    cna_headless_test(cna_test_headless_descriptor_capacity
+        examples/descriptor_capacity_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_DescriptorCapacityContract COMMAND cna_test_headless_descriptor_capacity
+        TIMEOUT 900 LABELS "Headless")
+
     cna_headless_test(cna_test_headless_point_sampling
         examples/point_sampling_contract_test.cpp)
     cna_register_backend_test(NAME Headless_PointSamplingContract COMMAND cna_test_headless_point_sampling
