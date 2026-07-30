@@ -95,6 +95,18 @@ namespace CNA::Internal::Backends::EasyGL
         void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
 
     private:
+        /**
+         * @brief Gives GL storage to every DECLARED mip level above 0, with no pixel data.
+         *
+         * REMED-GFX-175. A texture created with `mipMap=true` declares a chain, and Task 924 widens
+         * `GL_TEXTURE_MAX_LEVEL` to match that declaration -- but only level 0 was ever given
+         * storage, so until the game happened to write every remaining level the texture was
+         * mipmap-incomplete and sampled as opaque black under every ordinal carrying a mipmap term.
+         * Allocating the declared levels is not generating them: no level is derived from another,
+         * and a texture created without `mipMap` has nothing to allocate.
+         */
+        void AllocateDeclaredLevels();
+
         std::shared_ptr<std::vector<uint8_t>> pixels_;
         ::easygl::ResourceRegistry* registry_ = nullptr;
         // Task 924: real mip level count this texture was created with -- GL_TEXTURE_MAX_LEVEL

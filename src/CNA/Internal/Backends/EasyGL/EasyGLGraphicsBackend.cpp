@@ -744,6 +744,7 @@ namespace CNA::Internal::Backends::EasyGL
         height = data.height;
         texture.create();
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, data.pixels.data());
+        AllocateDeclaredLevels();
         // Task 924: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise a mipmap-
         // requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete mipmap chain
         // (GL's own default max level is 1000) and renders solid black, even for an ordinary
@@ -751,6 +752,29 @@ namespace CNA::Internal::Backends::EasyGL
         texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
                                mipLevels_ - 1);
         if (registry_) registry_->add(this);
+    }
+
+    // REMED-GFX-175: a Texture2D created with mipMap=true DECLARES a chain, and Task 924 widens
+    // GL_TEXTURE_MAX_LEVEL to match that declaration. Only level 0 was ever given storage here,
+    // though, so until the game happened to call SetData for every remaining level the texture was
+    // mipmap-INCOMPLETE -- and an incomplete texture samples as opaque black over its whole surface,
+    // magnification included, under every ordinal that carries a mipmap term. That was already true
+    // for ordinals 2..8 before this task; giving ordinals 0 and 1 their mipmap term would have
+    // extended it to the DEFAULT filter, so the declared chain has to be real.
+    //
+    // Every declared level is therefore given storage at creation with no pixel data, exactly as
+    // this backend's render-target, cube and volume constructors already do and exactly as the
+    // reference GL driver's own CreateTexture2D does. This ALLOCATES the levels the caller asked
+    // for; it does not GENERATE them -- no level is downsampled from another, and a texture created
+    // without mipMap keeps its single level untouched (the loop body never runs).
+    void EasyGLTextureBackend::AllocateDeclaredLevels()
+    {
+        for (int level = 1; level < mipLevels_; ++level)
+        {
+            const int levelW = std::max(1, width >> level);
+            const int levelH = std::max(1, height >> level);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level, levelW, levelH, nullptr);
+        }
     }
 
     EasyGLTextureBackend::~EasyGLTextureBackend()
@@ -777,6 +801,10 @@ namespace CNA::Internal::Backends::EasyGL
             texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
                                  width, height, blank.data());
         }
+        // REMED-GFX-175: the fresh GL texture object has storage for level 0 only, so a declared
+        // chain has to be re-allocated here too or the texture comes back from a context loss
+        // mipmap-incomplete and samples black under every mip-filtering ordinal.
+        AllocateDeclaredLevels();
         // Task 924: the fresh GL texture object defaults GL_TEXTURE_MAX_LEVEL back to 1000 --
         // reapply the same clamp the constructor set, matching this texture's real level count.
         texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
@@ -2982,12 +3010,23 @@ void main()
         // XNA: Linear=0, Point=1, Anisotropic=2, LinearMipPoint=3,
         //      PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
         //      MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8
+        //
+        // REMED-GFX-175: an ordinal names a MIPMAP component as well as a minification and a
+        // magnification one, and ordinals 0 and 1 were losing theirs. Linear is min LINEAR, mag
+        // LINEAR, mip LINEAR and Point is min POINT, mag POINT, mip POINT -- FNA's own decomposition
+        // tables say so and FNA3D's GL driver maps them onto GL_LINEAR_MIPMAP_LINEAR and
+        // GL_NEAREST_MIPMAP_NEAREST accordingly. Mapping them onto plain GL_LINEAR/GL_NEAREST drops
+        // the mipmap term entirely, so a texture that really owns a chain never mip-filtered under
+        // either -- including under the DEFAULT filter every game gets unless it says otherwise.
+        // Every ordinal now carries its mipmap term, which is only safe because the level range of
+        // every sampleable kind is clamped to its real level count (Task 924, REMED-GFX-174) and
+        // because a declared chain now allocates every one of its levels (see EasyGLTextureBackend).
         ::easygl::TextureMinFilter minF;
         ::easygl::TextureMagFilter magF;
         switch (filter)
         {
-        case 1: // Point — nearest neighbour, no mipmaps
-            minF = ::easygl::TextureMinFilter::Nearest;
+        case 1: // Point — mip point, min point, mag point
+            minF = ::easygl::TextureMinFilter::NearestMipmapNearest;
             magF = ::easygl::TextureMagFilter::Nearest;
             break;
         case 2: // Anisotropic
@@ -3018,8 +3057,8 @@ void main()
             minF = ::easygl::TextureMinFilter::NearestMipmapNearest;
             magF = ::easygl::TextureMagFilter::Linear;
             break;
-        default: // Linear — bilinear, no mipmaps (CNA does not generate mipmaps by default)
-            minF = ::easygl::TextureMinFilter::Linear;
+        default: // Linear — mip linear, min linear, mag linear
+            minF = ::easygl::TextureMinFilter::LinearMipmapLinear;
             magF = ::easygl::TextureMagFilter::Linear;
             break;
         }
