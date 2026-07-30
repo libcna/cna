@@ -281,10 +281,21 @@ class BackbufferFirstReadTest : public Game
 
     bool Readable(const Readback& r, const std::string& label)
     {
-        if (!kRasterizes || r.threwNotSupported)
+        if (!kRasterizes)
         {
-            boundary(label + ": oracle unavailable on " + kBackendName + " (" +
-                     (!kRasterizes ? "non-rasterizing" : "NotSupportedException") + ")");
+            // REMED-GFX-162: Headless rasterizes nothing, so every backbuffer read must REJECT with
+            // NotSupportedException -- it no longer fabricates the last Clear() colour. This was a
+            // silent "oracle unavailable" boundary; it is now an asserted rejection so this fixture
+            // can no longer pass while Headless quietly hands back a fabricated frame. The full
+            // overload/precedence/destination-integrity matrix lives in
+            // backbuffer_headless_reject_test.cpp (REMED-GFX-162).
+            check(r.threwNotSupported,
+                  label + ": Headless rejects backbuffer readback with NotSupportedException (GFX-162)");
+            return false;
+        }
+        if (r.threwNotSupported)
+        {
+            boundary(label + ": oracle unavailable on " + kBackendName + " (NotSupportedException)");
             return false;
         }
         if (r.threwSomethingElse)

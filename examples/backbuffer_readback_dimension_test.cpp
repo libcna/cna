@@ -315,6 +315,18 @@ class BackbufferReadbackDimensionTest : public Game
     /** @brief Whether the read succeeded AND has the exact size asked for. */
     void CheckSizedOk(const Readback& r, const std::string& label, int w, int h)
     {
+        if (!kRasterizes)
+        {
+            // REMED-GFX-162: a non-rasterizing backend rasterizes no backbuffer, so a VALID read
+            // must reject with NotSupportedException rather than fabricate a correctly-sized frame
+            // (it formerly filled the caller's buffer with the last Clear() colour). The dimension
+            // oracle is therefore unavailable here; the honest, deterministic rejection is asserted
+            // instead. The full rejection matrix lives in backbuffer_headless_reject_test.cpp.
+            check(r.threwNotSupported,
+                  label + ": non-rasterizing backend rejects the readback with NotSupportedException "
+                          "(GFX-162), got " + (r.ok() ? "success" : r.otherWhat));
+            return;
+        }
         if (!r.ok())
         {
             check(false, label + ": rejected -- " +

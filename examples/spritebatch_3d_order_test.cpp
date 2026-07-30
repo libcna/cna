@@ -303,17 +303,13 @@ namespace
      * @brief Whether `GetBackBufferData` rejects on a backend that rasterizes nothing.
      *
      * REMED-GFX-127/130 made the texture and render-target readbacks reject rather than return a
-     * fabricated image. Measured here, HEADLESS's BACKBUFFER readback does neither: it returns
-     * successfully and leaves the caller's buffer untouched, so a caller cannot distinguish a
-     * non-rasterizing device from a rendered frame. Declared, not fixed -- it is a readback-contract
-     * question and this task's subject is draw order.
+     * fabricated image. REMED-GFX-162 brought HEADLESS's BACKBUFFER readback under the same
+     * contract: it formerly returned successfully and FILLED the caller's buffer with the last
+     * Clear() colour (a caller could not distinguish a non-rasterizing device from a rendered
+     * frame), and now raises `System::NotSupportedException` instead. So every backend -- rasterizing
+     * or not -- rejects a readback it cannot honestly satisfy, hence `true` for all of them.
      */
-    constexpr bool kBackbufferReadRejectsWhenNonRasterizing =
-#if defined(CNA_BACKEND_HEADLESS)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kBackbufferReadRejectsWhenNonRasterizing = true;
 
     constexpr int kStripes = 8;   ///< Vertical full-height stripes across every destination.
 
@@ -1036,11 +1032,11 @@ class SpriteBatch3DOrderTest : public Game
                                 : "filled the caller's buffer"));
             // REMED-GFX-127/130 established that a backend which rasterizes nothing must REJECT a
             // readback rather than hand back scratch as if it were a rendered frame. That contract
-            // was established for the TEXTURE and RENDER-TARGET readbacks; measured here,
-            // `GraphicsDevice.GetBackBufferData` on HEADLESS neither rejects nor writes anything,
-            // so a caller cannot tell a non-rasterizing device from a black frame. That is a
-            // readback-contract question, not a family-ordering one, so it is DECLARED here and
-            // recorded as its own finding rather than absorbed into or fixed by this task.
+            // was established for the TEXTURE and RENDER-TARGET readbacks; REMED-GFX-162 extended it
+            // to `GraphicsDevice.GetBackBufferData` on HEADLESS, which formerly filled the caller's
+            // buffer with the last Clear() colour and now rejects deterministically. The dedicated
+            // overload/precedence/destination-integrity oracle lives in
+            // backbuffer_headless_reject_test.cpp; this leg just asserts the rejection is in force.
             check(r.ok() == !kBackbufferReadRejectsWhenNonRasterizing,
                   "A0 the backbuffer readback behaves as declared for a non-rasterizing backend "
                   "(declared: " +
