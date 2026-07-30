@@ -1104,6 +1104,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_BoundTargetLifetime COMMAND cna_test_bgfx_bound_target_lifetime
         TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-165 cross-backend control: Bgfx already honoured the authoritative-dimension
+    # GetBackBufferData contract; this run establishes that the shared fix left it byte-unchanged.
+    cna_bgfx_test(cna_test_bgfx_backbuffer_readback_dimension
+        examples/backbuffer_readback_dimension_test.cpp)
+    cna_register_backend_test(NAME Bgfx_BackbufferReadbackDimension COMMAND cna_test_bgfx_backbuffer_readback_dimension
+        TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-155, the home backend of the finding: the same contract for the one destination the
     # fixture above could only pin -- the BACKBUFFER. bgfx radix-sorts a frame's draws by their
     # view's sort position, which defaults to the numeric view id, and this backend's partition puts

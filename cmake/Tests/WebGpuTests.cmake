@@ -565,4 +565,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/frontface_winding_test.cpp)
     cna_register_backend_test(NAME WebGPU_FrontFaceWinding COMMAND cna_test_webgpu_frontface_winding
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-165: a rectangle-less GetBackBufferData must address the whole logical backbuffer
+    # (PresentationParameters W x H) from the first observable frame, with no SetRenderTarget round
+    # trip, no extra Present and no viewport reset -- sized from the backbuffer description, never from
+    # the backend's live viewport. The defect was WebGPU/SDL_GPU-local (the rectangle-less path asked
+    # backend_->GetViewportSize, which under FixedHeightDynamicWidth is aspect-scaled and, before the
+    # window is realised, stale). Each leg runs in its own process so its first frame is genuinely first.
+    cna_webgpu_test(cna_test_webgpu_backbuffer_readback_dimension
+                    examples/backbuffer_readback_dimension_test.cpp)
+    cna_register_backend_test(NAME WebGPU_BackbufferReadbackDimension COMMAND cna_test_webgpu_backbuffer_readback_dimension
+        TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

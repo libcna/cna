@@ -509,4 +509,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
                     examples/texturecube_texture3d_setdata_contract_test.cpp)
     cna_register_backend_test(NAME SdlGpu_CubeVolume_SetDataContract COMMAND cna_test_sdlgpu_cube_volume_setdata_contract
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-165: a rectangle-less GetBackBufferData must address the whole logical backbuffer
+    # (PresentationParameters W x H) from the first observable frame, with no SetRenderTarget round
+    # trip and no extra Present. SDL_GPU had no backbuffer readback at all (the swapchain texture is
+    # write-only by permanent SDL contract), and its rectangle-less size check tripped on the same
+    # aspect-scaled live viewport WebGPU used; both are addressed here.
+    cna_sdlgpu_test(cna_test_sdlgpu_backbuffer_readback_dimension
+                    examples/backbuffer_readback_dimension_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_BackbufferReadbackDimension COMMAND cna_test_sdlgpu_backbuffer_readback_dimension
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

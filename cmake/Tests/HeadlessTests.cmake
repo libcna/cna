@@ -116,6 +116,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_BoundTargetLifetime COMMAND cna_test_headless_bound_target_lifetime
         TIMEOUT 600 LABELS "Headless")
 
+    # REMED-GFX-165 cross-backend control: Headless does not rasterize, so the pixel oracle is a
+    # declared boundary; the run still exercises the shared dimension/rectangle-validation path.
+    cna_headless_test(cna_test_headless_backbuffer_readback_dimension
+        examples/backbuffer_readback_dimension_test.cpp)
+    cna_register_backend_test(NAME Headless_BackbufferReadbackDimension COMMAND cna_test_headless_backbuffer_readback_dimension
+        TIMEOUT 300 LABELS "Headless")
+
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

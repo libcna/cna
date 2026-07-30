@@ -202,6 +202,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_BoundTargetLifetime COMMAND cna_test_software_bound_target_lifetime
         TIMEOUT 600 LABELS "Software")
 
+    # REMED-GFX-165 cross-backend control: the authoritative-backbuffer-dimension GetBackBufferData
+    # contract. Software's backbuffer is a CPU buffer that genuinely resizes, so it is also where the
+    # post-resize pixel oracle is meaningful. Software already honoured the contract (its viewport
+    # equals the backbuffer); this run establishes that the shared fix left it byte-unchanged.
+    cna_software_test(cna_test_software_backbuffer_readback_dimension
+        examples/backbuffer_readback_dimension_test.cpp)
+    cna_register_backend_test(NAME Software_BackbufferReadbackDimension COMMAND cna_test_software_backbuffer_readback_dimension
+        TIMEOUT 300 LABELS "Software")
+
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

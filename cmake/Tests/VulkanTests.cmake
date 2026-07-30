@@ -1234,6 +1234,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_BoundTargetLifetime COMMAND cna_test_vulkan_bound_target_lifetime
             TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-165 cross-backend control: Vulkan already honoured the authoritative-dimension
+        # GetBackBufferData contract (its swapchain extent equals the backbuffer); this run establishes
+        # that the shared fix left it byte-unchanged and that only WebGPU/SDL_GPU production changed.
+        cna_vulkan_test(cna_test_vulkan_backbuffer_readback_dimension
+            examples/backbuffer_readback_dimension_test.cpp)
+        cna_register_backend_test(NAME Vulkan_BackbufferReadbackDimension COMMAND cna_test_vulkan_backbuffer_readback_dimension
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
         # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
         # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
