@@ -1667,6 +1667,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_texture_filter_ordinal
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-174: a TextureFilter ordinal names four INDEPENDENT components, and EasyGL wrote
+        # GL_TEXTURE_MAX_ANISOTROPY only when the ordinal was Anisotropic. Its per-slot GL sampler
+        # object is mutated in place and reused, so that write could only ever raise the value and it
+        # then stayed raised: every later Point or Linear draw on that slot kept sampling
+        # anisotropically. This fixture is ORDER-SENSITIVE by construction -- it draws Anisotropic
+        # first and then asserts the next ordinal -- which is exactly what the existing per-ordinal
+        # fixtures could not see. It also asserts single-level completeness for both sampleable
+        # texture kinds and mip-level selection where the backend really allocates a chain.
+        cna_easygl_test(cna_test_easygl_sampler_component_isolation
+            examples/sampler_component_isolation_contract_test.cpp)
+        cna_register_backend_test(NAME EasyGL_SamplerComponentIsolation
+            COMMAND cna_test_easygl_sampler_component_isolation
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_point_sampling
             examples/point_sampling_contract_test.cpp)
         cna_register_backend_test(NAME EasyGL_PointSamplingContract

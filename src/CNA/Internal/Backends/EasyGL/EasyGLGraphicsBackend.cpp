@@ -157,6 +157,120 @@ namespace CNA::Internal::Backends::EasyGL
                       << " glerr=" << TraceGlErrors() << std::endl;
         }
 
+        // --- REMED-GFX-174: sampler / texture-completeness trace --------------------------------
+        //
+        // Set CNA_EASYGL_SAMPLER_TRACE=1 to print one line per public sampler application and one
+        // per stock/custom 3D texture bind. The question REMED-GFX-174 has to answer -- is a wrong
+        // pixel true bilinear interpolation, an incomplete-texture fetch, a stale sampler object or
+        // the wrong texture unit -- cannot be answered from pixels alone, because all four can
+        // produce a colour that is in no texel of the source. Every field below is READ BACK FROM
+        // GL rather than echoed from the value CNA just wrote, so a parameter that never reached
+        // the driver is visible as a disagreement. Off by default; costs one cached bool read.
+        bool SamplerTraceEnabled()
+        {
+            static const bool enabled = [] {
+                const char* v = std::getenv("CNA_EASYGL_SAMPLER_TRACE");
+                return v != nullptr && v[0] != '\0' && v[0] != '0';
+            }();
+            return enabled;
+        }
+
+        /// The public TextureFilter ordinal's XNA name, so a trace line names what the game asked
+        /// for rather than only what GL was told.
+        const char* FilterOrdinalName(int filter)
+        {
+            switch (filter)
+            {
+            case 0:  return "Linear";
+            case 1:  return "Point";
+            case 2:  return "Anisotropic";
+            case 3:  return "LinearMipPoint";
+            case 4:  return "PointMipLinear";
+            case 5:  return "MinLinearMagPointMipLinear";
+            case 6:  return "MinLinearMagPointMipPoint";
+            case 7:  return "MinPointMagLinearMipLinear";
+            case 8:  return "MinPointMagLinearMipPoint";
+            default: return "<out-of-range>";
+            }
+        }
+
+        /// True when @p minFilter is one of the four GL minification filters that SAMPLE A MIP
+        /// CHAIN. Those are exactly the filters for which mipmap completeness is evaluated.
+        bool GlMinFilterUsesMipChain(int minFilter)
+        {
+            return minFilter == static_cast<int>(::easygl::TextureMinFilter::NearestMipmapNearest)
+                || minFilter == static_cast<int>(::easygl::TextureMinFilter::LinearMipmapNearest)
+                || minFilter == static_cast<int>(::easygl::TextureMinFilter::NearestMipmapLinear)
+                || minFilter == static_cast<int>(::easygl::TextureMinFilter::LinearMipmapLinear);
+        }
+
+        /// One sampler/texture trace line.
+        void SamplerTrace(const char* event, const std::string& detail)
+        {
+            if (!SamplerTraceEnabled()) return;
+            std::cerr << "[GFX174] seq=" << NextTraceSeq() << " ev=" << event << ' ' << detail
+                      << " glerr=" << TraceGlErrors() << std::endl;
+        }
+
+        /**
+         * @brief Traces the COMPLETE effective sampling state of the currently active texture unit.
+         *
+         * Must be called while the unit of interest is the active one and the texture is bound.
+         * Reports the texture name, its base/max level, the sampler object bound to the same unit,
+         * and -- the point of the whole exercise -- WHICH of the two supplies the effective min/mag
+         * filter. A bound sampler object overrides the texture's own parameters; a unit with sampler
+         * 0 falls back to them, which is exactly how a correctly-configured sampler can still fail
+         * to reach a draw. `complete` applies the GL mipmap-completeness rule to the effective min
+         * filter and the real level range, so an incomplete-texture fetch is distinguishable from
+         * genuine interpolation.
+         */
+        void TraceBoundTextureUnit(const char* event, int unit)
+        {
+            if (!SamplerTraceEnabled()) return;
+
+            int activeUnit = 0, texName = 0, samplerName = 0;
+            ::metagl::glGetIntegerv(::metagl::GetParameter::ActiveTexture, &activeUnit);
+            ::metagl::glGetIntegerv(::metagl::GetParameter::TextureBinding2D, &texName);
+            ::metagl::glGetIntegerv(::metagl::GetParameter::SamplerBinding, &samplerName);
+
+            int texMin = 0, texMag = 0, baseLevel = 0, maxLevel = 0;
+            ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
+                                          ::metagl::TextureParameter::MinFilter, &texMin);
+            ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
+                                          ::metagl::TextureParameter::MagFilter, &texMag);
+            ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
+                                          ::metagl::TextureParameter::BaseLevel, &baseLevel);
+            ::metagl::glGetTexParameteriv(::metagl::TextureTarget::Texture2D,
+                                          ::metagl::TextureParameter::MaxLevel, &maxLevel);
+
+            int effMin = texMin, effMag = texMag;
+            if (samplerName != 0)
+            {
+                ::metagl::glGetSamplerParameteriv(::metagl::SamplerId{static_cast<unsigned int>(samplerName)},
+                                                  ::metagl::SamplerParameter::MinFilter, &effMin);
+                ::metagl::glGetSamplerParameteriv(::metagl::SamplerId{static_cast<unsigned int>(samplerName)},
+                                                  ::metagl::SamplerParameter::MagFilter, &effMag);
+            }
+
+            // GL evaluates mipmap completeness over levels [baseLevel, maxLevel]; a chain of one
+            // level is complete, so MAX_LEVEL clamping alone already satisfies the rule.
+            const bool needsChain = GlMinFilterUsesMipChain(effMin);
+            const bool complete   = !needsChain || maxLevel >= baseLevel;
+
+            std::ostringstream os;
+            os << "unit=" << unit
+               << " activeUnit=0x" << std::hex << activeUnit
+               << " tex=" << std::dec << texName
+               << " sampler=" << samplerName
+               << " src=" << (samplerName != 0 ? "sampler-object" : "texture-object")
+               << " texMin=0x" << std::hex << texMin << " texMag=0x" << texMag
+               << " effMin=0x" << effMin << " effMag=0x" << effMag << std::dec
+               << " base=" << baseLevel << " max=" << maxLevel
+               << " needsMipChain=" << (needsChain ? 1 : 0)
+               << " complete=" << (complete ? 1 : 0);
+            SamplerTrace(event, os.str());
+        }
+
         /// The native identities of one render target, read from the object that owns them.
         std::string NativeDetail(unsigned int fbo, unsigned int color, unsigned int depth,
                                  unsigned int msaaRbo, unsigned int resolveFbo,
@@ -512,6 +626,7 @@ namespace CNA::Internal::Backends::EasyGL
             static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
         ::metagl::glActiveTexture(textureUnit);
         texture->BindGL();
+        TraceBoundTextureUnit("bind-texture-3d", unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
 
         // REMED-GFX-147: a custom ShaderEffect's GLSL belongs to the game, so this backend cannot
@@ -2908,6 +3023,26 @@ void main()
         s.set_parameter(::easygl::SamplerParameter::WrapT, toWrap(addressV));
 
         s.bind(static_cast<unsigned int>(slot));
+
+        if (SamplerTraceEnabled())
+        {
+            int gotMin = 0, gotMag = 0, gotWrapS = 0, gotWrapT = 0;
+            float gotAniso = 1.0f;
+            s.get_parameter_iv(::easygl::SamplerParameter::MinFilter, &gotMin);
+            s.get_parameter_iv(::easygl::SamplerParameter::MagFilter, &gotMag);
+            s.get_parameter_iv(::easygl::SamplerParameter::WrapS, &gotWrapS);
+            s.get_parameter_iv(::easygl::SamplerParameter::WrapT, &gotWrapT);
+            if (metagl::HasExtension("GL_EXT_texture_filter_anisotropic"))
+                s.get_parameter_fv(::easygl::SamplerParameter::MaxAnisotropy, &gotAniso);
+            std::ostringstream os;
+            os << "slot=" << slot
+               << " ordinal=" << filter << '(' << FilterOrdinalName(filter) << ')'
+               << " min=0x" << std::hex << gotMin << " mag=0x" << gotMag
+               << " wrapS=0x" << gotWrapS << " wrapT=0x" << gotWrapT << std::dec
+               << " aniso=" << gotAniso
+               << " minUsesMipChain=" << (GlMinFilterUsesMipChain(gotMin) ? 1 : 0);
+            SamplerTrace("apply-sampler", os.str());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -5006,6 +5141,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
                 params.texture0->BindGL();
             else
                 default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+            TraceBoundTextureUnit("stock3d-texture0", 0);
         }
 
         // Alpha test (always uploaded; default {0,0,1,1} = Always pass)
@@ -5348,6 +5484,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
             return;
 
         vb.vao.bind();
+        TraceBoundTextureUnit("draw-arrays-3d", 0);
         device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
         vb.vao.unbind();
     }

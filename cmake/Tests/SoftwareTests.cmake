@@ -440,6 +440,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_texture_filter_ordinal
         TIMEOUT 300 LABELS "Software")
 
+    # REMED-GFX-174 control: Software is the GFX-150-corrected reference implementation, so it says
+    # what the order-sensitive sampler-component contract owes independently of any GL behaviour.
+    cna_software_test(cna_test_software_sampler_component_isolation
+                      examples/sampler_component_isolation_contract_test.cpp)
+    cna_register_backend_test(NAME Software_SamplerComponentIsolation
+        COMMAND cna_test_software_sampler_component_isolation
+        TIMEOUT 300 LABELS "Software")
+
     cna_software_test(cna_test_software_point_sampling
                       examples/point_sampling_contract_test.cpp)
     cna_register_backend_test(NAME Software_PointSamplingContract
