@@ -56,6 +56,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # a window and swap chain, which crashes under this dev loop's vanilla Wine dxgi.dll.
     cna_d3d12_test(cna_test_d3d12_point_sampling examples/point_sampling_contract_test.cpp)
 
+
+    # REMED-GFX-169 cross-backend control: every stock 3D effect must sample through the public
+    # GraphicsDevice.SamplerStates[slot]. The defect was Vulkan-local (six stock descriptor builders
+    # took no sampler parameter, so all 15 of their bindings used a hardcoded default and the
+    # sampler was absent from their cache keys); this run establishes that this backend already
+    # honoured the contract rather than being made to.
+    # Built, not ctest-registered, for the DX-100 reason below.
+    cna_d3d12_test(cna_test_d3d12_stock_effect_sampler
+                   examples/stock_effect_sampler_contract_test.cpp)
+
     # REMED-GFX-130: the TextureCube/Texture3D half of the same finding. Built, not ctest-registered,
     # for exactly the reason above -- this is a Game-harness test, so it constructs a window and swap
     # chain, which DX-100's spike already found crashes under this dev loop's vanilla Wine dxgi.dll.

@@ -816,7 +816,19 @@ private:
 
         SetSlot(dev, 0, TextureFilter::Point, TextureAddressMode::Clamp);
         SetSlot(dev, 1, TextureFilter::Linear, TextureAddressMode::Clamp);
-        const std::vector<Color> a = Render(dev, drawDual);
+        std::vector<Color> a;
+        try
+        {
+            a = Render(dev, drawDual);
+        }
+        catch (const std::exception& e)
+        {
+            // D3D9 declares stride 20 with vertexColor=false unsupported for DualTextureEffect
+            // (plan_dx9.md D9-82d), so it has no two-slot stock family to measure here.
+            std::printf("[SKIP] M: this backend does not implement DualTextureEffect (%s)\n", e.what());
+            std::fflush(stdout);
+            return;
+        }
 
         SetSlot(dev, 0, TextureFilter::Linear, TextureAddressMode::Clamp);
         SetSlot(dev, 1, TextureFilter::Point, TextureAddressMode::Clamp);

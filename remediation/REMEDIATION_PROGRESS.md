@@ -2491,9 +2491,10 @@ existing task.
 | REMED-GFX-166 | Vulkan: the lost draw was the PRODUCER and the destroyed resource was that producer's DESTINATION. `~VulkanRenderTargetBackend` ran REMED-GFX-074's `PurgeDeferredWorkForTarget(this)`, erasing every queued entry whose `rt == this`, on the false justification that "a destroyed target is unobservable" — the still-queued consumer that SAMPLES it is exactly what observes it. | MEDIUM | P2 | — | **DONE 2026-07-30 — PROVEN WITH A NEW `CNA_VULKAN_LIFETIME_TRACE`, NOT INFERRED: `purge.DROPPED rt=0x..b668 sprites=1 draws=0 clears=2` WHILE `record.draw3D order=6` STILL RUNS AND THE IMAGE/VIEW ARE ALIVE IN THE RETIREMENT QUEUE, SO NO DRAW IS MISSING AND NOTHING DANGLES — THE SAMPLED IMAGE JUST HAS NO CONTENT, WHICH IS WHY SOME LEGS READ (0,0,0,0) AND OTHERS UNDEFINED GARBAGE. AN ORDINARY TEXTURE2D WAS NEVER AFFECTED (LEG A2 PASSES PRE-FIX), SO THE INHERITED BLANKET DECLARATION WAS OVER-APPLIED. FIXED BY MAKING A DESTINATION AN IMMUTABLE, SEPARATELY ALLOCATED `VulkanTargetPassEXT` CO-OWNED VIA `shared_ptr` BY EVERY QUEUED COMMAND, SO `PurgeDeferredWorkForTarget` IS DELETED RATHER THAN WEAKENED; THE PASS OWNS NO VULKAN HANDLES, KEEPING REMED-GFX-075'S FRAME-GENERATION RETIREMENT AS THE SINGLE RELEASE PATH. 6/14 -> 17/17 LEGS, 24 CHECKS; REMED-GFX-152'S FIXTURE 18 -> 20 LEGS WITH ITS OWN VULKAN DECLARATION DELETED AND PER-FAMILY/PER-DRAW-MODE DEAD-SOURCE SWEEPS (ALL 0/32 PRE-FIX). MSAA AND THE CUBE SLOT NOW MEASURED RATHER THAN DECLARED. TWO FALSE POSITIVES CLOSED: REMED-GFX-075 S3'S INTERMEDIATE `readRt` WAS A FLUSH, AND REMED-GFX-074 S6 ASSERTED ONLY "DID NOT CRASH". CARDINALITY BYTE-IDENTICAL EXCEPT THE ONE PRODUCER PASS PREVIOUSLY DISCARDED. VALIDATION CLEAN WITH THE LAYER PROVEN LOADED; ASAN/UBSAN CLEAN WITH IDENTICAL LEAK TOTALS. SEVEN CROSS-BACKEND CONTROLS 17/17 AND 20/20. SPAWNED ONE INDEPENDENT FINDING (FOUR STOCK-EFFECT FAMILIES RENDER NOTHING ON VULKAN THROUGH A STRIDE-20 STREAM).** |
 | REMED-GFX-167 | WebGPU: every deferred command stored the texture it samples as a RAW POINTER to that resource's backend object and called a VIRTUAL method on it at replay, so a source destroyed while its draw was still queued was a heap-use-after-free at `Present()`. | MEDIUM | P2 | — | **DONE 2026-07-29 — THE TICKET WAS WRONG TWICE, BOTH CORRECTIONS MEASURED. NOT TEARDOWN: THE CRASH IS ON THE MAIN THREAD INSIDE `Present()` -> `EnsureFrameRendered()` -> `ReplayOrderedSegments()` -> `ReplayDrawsInOrder()` -> `IssueTexturedDraw()`, AFTER THE LEG'S OWN CHECKS HAVE PRINTED — WHICH IS WHY IT READ AS SHUTDOWN. AND NOT "SPECIFIC TO THE BACKBUFFER": WHAT IS LOAD-BEARING IS THAT NOTHING FLUSHED BETWEEN THE DRAW AND THE DESTRUCTOR, AND WEBGPU RENDERS A RENDER-TARGET DESTINATION AT `SetRenderTarget()`. ASAN: `heap-use-after-free` AT `:7228`, FREED IN `~WebGPURenderTargetBackend()` AT `:1746` VIA `RenderTarget2D::~RenderTarget2D()`; WITHOUT A SANITIZER SIGSEGV (139) WITH THE PC IN NO MAPPED MODULE (THE FREED VTABLE SLOT). NINETEEN SLOTS ACROSS NINE FAMILIES. FIXED BY RESOLVING ONCE AT THE PUBLIC DRAW CALL INTO A `WebGPUSampledTextureEXT` (RESOLVED VIEW + ONE NATIVE REFERENCE ON THE VIEW AND ITS TEXTURE VIA `WebGPUSampledResourceEXT`), CLOSING THE DEREFERENCE AND THE DANGLING HANDLE TOGETHER; RELEASE IS A REFCOUNT DECREMENT, NOT `wgpuTextureDestroy`, SO THE RESOURCE STAYS USABLE AND THE PROOF IS PIXELS. A HAZARD THE FIX ITSELF INTRODUCED WAS FOUND AND CLOSED: THE FAMILY VECTORS ARE MEMBERS, DESTROYED AFTER THE DESTRUCTOR BODY RELEASES THE DEVICE, SO `DiscardQueuedCommands()` IS NOW CALLED FIRST — DECLARED AS ORDERING CORRECTNESS, SINCE THE ABANDONED-FRAME PATH IS NOT PUBLICLY FORCEABLE. NOTHING ADDED PER DRAW (KEEP-ALIVE BUILT ONCE PER RESOURCE); NO EXTRA PASS/SUBMIT/PRESENT/FRAME/WAIT, HELD BY THE THREE EXISTING WEBGPU CARDINALITY GATES. NEW PROCESS-ISOLATED 14-LEG FIXTURE WITH A PIXEL ORACLE: **4/14 LEGS AND 10 SIGSEGV -> 14/14, 0 CRASHES, 18 CHECKS**; GFX-152'S OWN FIXTURE 17/18 + 1 CRASH -> 18/18, 49/49. THREE FIXTURE DEFECTS FOUND BY RUNNING IT (LEG E1 MEASURED NOTHING AT STRIDE 20; THE PIXEL PROBE SAT 0.0625 TEXEL OFF CENTRE; B1/C1 ASSUMED A FLUSH-AT-UNBIND A WHOLE-FRAME RECORDER DOES NOT DO). ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; LEAK A/B BYTE-IDENTICAL PRE- AND POST-FIX. NATIVE VALIDATION CLEAN (ZERO UNCAPTURED ERRORS, ZERO DEVICE-LOST). SEVEN CROSS-BACKEND CONTROLS ALL 14/14; ONLY WEBGPU PRODUCTION CHANGED. `ctest -L WebGPU` 57/58, ALL 8 FULL-SHARD FAILURES A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-168; ADDED THE MECHANISM TO THE OPEN GFX-165.** |
 | REMED-GFX-168 | EasyGL: destroying a `RenderTarget2D` while it is STILL the bound render target made the next `SetRenderTarget` a virtual call through freed storage. | MEDIUM | P2 | — | **DONE 2026-07-30 — AN OWNERSHIP DEFECT, NOT A GL-STATE ONE, AND NOT THE DESTRUCTOR. THE FAULT IS INSIDE THE NEXT `SetRenderTarget`, ON THE MAIN THREAD, WITH THE LEG'S EARLIER CHECKS ALREADY PRINTED. ASAN: `heap-use-after-free`, READ OF SIZE 8, AT `EasyGLGraphicsBackend.cpp:2179` (`currentRt2D_->UnbindAsRenderTarget()`), OFFSET 0 OF A 128-BYTE REGION -- THE VTABLE POINTER -- FREED IN `~EasyGLRenderTargetBackend()` VIA `~RenderTarget2D`; WITHOUT A SANITIZER SIGSEGV (139, CORE DUMPED) WITH THE PC AT `0x0`, IN NO MAPPED MODULE. THE NEW `CNA_EASYGL_TARGET_TRACE` SHOWS `rt2d.destroy` THEN `set2d.enter cur2d=<THE FREED ADDRESS>`, AND **NO `rt2d.unbind` LINE AT ALL** -- THE METHOD BODY NEVER RAN, SO THE FAULT IS THE DISPATCH. NOTHING IN THE SHARED LAYER CLEARS THE POINTER EITHER: `RenderTarget2D::Dispose()` AND `RenderTargetCube::Dispose()` BOTH REFUSE A BOUND TARGET, BUT BOTH DESTRUCTORS ARE `= default` AND NEVER ROUTE THROUGH DISPOSE, SO THE GUARDED PATH IS UNREACHABLE-BY-DESIGN AND THE UNGUARDED ONE IS THE ONLY WAY IN. FIXED BY GIVING THE BINDING RECORD ITS OWN ALLOCATION (`EasyGLBoundTargetEXT`), SHARED FROM THE BACKEND AND HELD WEAKLY BY EVERY TARGET, SO A DYING TARGET CLEARS ITS OWN SLOTS WITHOUT CALLING BACK INTO A BACKEND THAT MAY ALREADY BE GONE -- SAFE IN BOTH DESTRUCTION ORDERS. DETACHING RATHER THAN FINALIZING IS MEASURED, NOT ASSUMED: THE RESOLVE AND MIP REGENERATION WRITE INTO `colorTex_`/`cubeTex_`, MEMBERS THE SAME DESTRUCTOR DESTROYS, AND BOTH PUBLIC ROUTES TO THAT CONTENT NEED THE LIVE WRAPPER -- SO THERE IS NO REACHABLE OBSERVER. MRT IS THE EXCEPTION AND IS TREATED AS ONE: A DETACH CLEARS ONE **SLOT**, AND LEG L1'S TRACE SHOWS THE SURVIVOR'S `rt2d.mipgen` STILL FIRING. `Present()` BOUNDS THE WHOLE WINDOW AND LEG P1 ASSERTS IT -- IT REFUSES A BOUND TARGET FROM A **BOOL** NO DESTRUCTOR TOUCHES, SO THE REFUSAL IS IDENTICAL ALIVE OR DEAD; THREE FIRST-DRAFT LEGS HAD TO BE REWRITTEN BECAUSE "DESTROYED, THEN PRESENT" IS NOT REACHABLE ON ANY BACKEND. NEW PROCESS-ISOLATED 18-LEG FIXTURE: **3/18 LEGS AND 15 SIGSEGV -> 18/18, 0 CRASHES, 43 CHECKS, 0 DECLARED BOUNDARIES**; UNDER ASAN+UBSAN **2/18 WITH 32 heap-use-after-free -> 18/18, 0 REPORTS, 0 RUNTIME ERRORS** (THE UN-SANITIZED COUNT IS HIGHER BECAUSE LEG H1 SURVIVES WITHOUT A SANITIZER -- THE FREED VTABLE POINTER HAPPENED TO STILL DISPATCH). MEASURED REUSE: ONE BACKEND-OBJECT HEAP ADDRESS REUSED **9 TIMES** ACROSS M1'S 121 TARGETS, AND ALL 121 GOT GL FRAMEBUFFER NAME **1**. COST: EXACTLY ONE TRACE EVENT (THE DETACH); ON THE TWO LEGS THAT PASS PRE-FIX THE WHOLE EVENT STREAM IS BYTE-IDENTICAL WITH ZERO DETACHES. LEAK A/B BYTE-IDENTICAL (100956/449 PRE AND POST, INCLUDING ON M1'S 121 TARGETS); 917 TRACED TRANSITIONS ALL `glerr=none`. THE ONE FIXTURE THAT NAMED THIS CASE, `easygl_bound_resource_dispose_test.cpp`, WROTE `SetRenderTarget(nullptr); // unbind before leaving scope` -- STRENGTHENED WITH ALL THREE BINDING SHAPES (10/10 THEN SIGSEGV -> 17/17); AN AUDIT OF THE OTHER 33 EASYGL RT FIXTURES FOUND NONE COVERING IT. SEVEN CROSS-BACKEND CONTROLS ALL **18/18 LEGS, 0 CRASHES**; ONLY EASYGL PRODUCTION CHANGED, VULKAN GFX-166 AND WEBGPU GFX-167 UNTOUCHED AND GREEN. `ctest -R '^EasyGL'` 270/272, BOTH FAILURES A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND CONFIGURATIONS BUILD. THREE INDEPENDENT FINDINGS RECORDED (VULKAN'S MRT-SLOT MIP LEVEL 1, BGFX'S MSAA/MIP READBACK, A STALE CUBE-DISPOSE COMMENT).** |
-| REMED-GFX-169 | Vulkan: the stock 3D effect descriptor writes bind the hardcoded `defaultSampler_` (LINEAR + CLAMP_TO_EDGE) instead of `slotSamplers_[0]`, so `GraphicsDevice.SamplerStates[0]` reaches no stock 3D effect — neither its filter nor its address mode. SpriteBatch is unaffected and uses the slot sampler correctly. | MEDIUM | P2 | REMED-GFX-150 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-150; VULKAN 140/146) |
+| REMED-GFX-169 | Vulkan: six stock 3D descriptor builders took NO sampler parameter, so `SamplerStates[slot]` could be neither written into the descriptor nor keyed in its cache, and all 15 of their combined-image-sampler bindings used the hardcoded `defaultSampler_`. | MEDIUM | P2 | REMED-GFX-150 cross-backend controls | **DONE 2026-07-30 — WIDENED: THE TICKET NAMED THE DESCRIPTOR WRITE, BUT THE CACHE KEY WAS THE OTHER HALF AND A WRITE-ONLY FIX STILL FAILED (LEG K1, 64 IN-BLOCK VARIATIONS). THE STOCK-3D HALF OF THE TASK-665 SPRITEBATCH FIX. 6 BUILDERS / 15 BINDINGS / 12 ENQUEUE SITES; ALPHATEST AND DUALTEXTURE WERE ALREADY CORRECT AND DUALTEXTURE IS THE MODEL THE FIX FOLLOWS. 32/65 -> 65/65, AND GFX-150's FIXTURE 140/146 -> 146/146 ON VULKAN. VALIDATION CLEAN WITH THE LAYER PROVEN LOADED; ASAN/UBSAN CLEAN. 624 SAMPLER APPLICATIONS -> 4 VkSampler CREATIONS; 3 DESCRIPTOR SETS PER CORRECTED FAMILY, THE MINIMUM. 6 FALSE POSITIVES FOUND: EVERY VULKAN FIXTURE NAMED FOR THE SAMPLER CONTRACT DRIVES DUALTEXTUREEFFECT ONLY — THE ONE FAMILY THAT WORKED. ONLY VULKAN PRODUCTION CHANGED. SPAWNED GFX-172.** |
 | REMED-GFX-170 | WebGPU and SDL_GPU: the SpriteBatch sampler is resolved as `textureFilter == 0 ? LINEAR : NEAREST` in both backends, collapsing Anisotropic(2), LinearMipPoint(3), MinPointMagLinearMipLinear(7) and MinPointMagLinearMipPoint(8) to point magnification. Both already have a correct ordinal table in their own `ApplySamplerState` that this path bypasses. | LOW | P3 | REMED-GFX-150 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-150; WEBGPU 143/146, SDL_GPU 143/146) |
 | REMED-GFX-171 | D3D9: the stock 3D path samples about half a destination pixel low — every one of the 19 mismatching pixels sits just past a texel boundary and returns the LOWER texel. The classic D3D9 pixel-centre convention, uncompensated on the 3D path; SpriteBatch is unaffected. | LOW | P3 | REMED-GFX-150 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-150; D3D9 145/146) |
+| REMED-GFX-172 | WebGPU: the DualTexture3D texture bind group has ONE sampler entry for TWO texture views, so `GraphicsDevice.SamplerStates[1]` cannot be expressed and slot 1 inherits slot 0's sampler. Distinct from GFX-170 (SDL_GPU passes the same leg); needs a bind-group-layout and WGSL change. | LOW | P3 | REMED-GFX-169 leg M3 | OPEN (isolated 2026-07-30 during REMED-GFX-169; WEBGPU 64/65) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -20434,3 +20435,184 @@ production:
 `1a42a856` test (reproduce) · `85386e41` fix (+ false positive, + leg X) · `e20e77b3` test
 (filter ordinals, extreme coordinates, fetch cardinality) · `d15b12f4` test (cross-backend
 controls) · docs (this).
+
+---
+
+## REMED-GFX-169 — Vulkan's stock 3D effects never received the public `SamplerState` (DONE 2026-07-30)
+
+### What the ticket said, and what was actually wrong
+
+The ticket recorded that the stock 3D descriptor writes bind `defaultSampler_`. That is true, and it
+is half of it. Six builders take **no sampler parameter at all**, so the sampler could be neither
+written into the descriptor **nor keyed in its cache**. Correcting only the write leaves a cache
+keyed on the image view alone, and the second draw with the same texture and a different sampler is
+handed the first draw's descriptor — measured rather than argued: against a write-only fix, leg K1
+still failed with 64 in-block variations.
+
+`ApplySamplerState` was never at fault. It builds and caches a correct per-slot `VkSampler` from a
+complete XNA ordinal mapping (all nine `TextureFilter` values, all three `TextureAddressMode`
+values, anisotropy gated on device support, `maxLod = VK_LOD_CLAMP_NONE`). **No enum-mapping defect
+was found, so no ticket was raised for one.**
+
+This is the stock-3D half of a correction SpriteBatch already received.
+`VulkanSpriteBatchBackend::FlushTexture` carries its own record of it under Task 665: *"previously
+always used the texture's own pre-baked descriptor set, built once at texture-load time with a fixed
+default sampler, completely bypassing SetSamplerFilter/SetSamplerAddressMode."* That fix never
+propagated to the stock 3D families.
+
+### The complete inventory
+
+Established from the replay dispatch, which selects exactly one descriptor set per draw, rather than
+from the ticket's count:
+
+| Family flag | Descriptor set | Builder | Slots | Status |
+|---|---|---|---|---|
+| `useAlphaTest` | `descSet` | `GetOrCreateTexSamplerDescSet(view, slotSamplers_[0])` | 0 | already correct |
+| `useDualTexture` | `dualTexDescSet` | `GetOrCreateDualTexDescSet(…, sampler0, sampler1)` | 0,1 | already correct — the model |
+| `useFogTex3D` | `fogTex3DDescSet` | `GetOrCreateFogTex3DDescSet` | 0 | **broken** |
+| `useLitTextured` | `litTexturedDescSet` | `GetOrCreateLitTexturedDescSet` | 0 | **broken** |
+| `useSkinned` | `skinnedDescSet` | `GetOrCreateSkinnedDescSet` | 0 | **broken** |
+| `useEnvMap` | `envMapDescSet` | `GetOrCreateEnvMapDescSet` | 0,1 | **broken** |
+| `usePbr` | `pbrDescSet` | `GetOrCreatePbrDescSet` | 0..4 | **broken** |
+| `usePbrSkinned` | `pbrDescSet` | `GetOrCreatePbrSkinnedDescSet` | 0..4 | **broken** |
+
+**15 combined-image-sampler bindings across 6 builders, reached from 12 enqueue sites** (each
+builder is used by both the indexed and the non-indexed path).
+
+`useFogTex3D` is set for **any** plain textured BasicEffect draw — it is the fog-CAPABLE bundle, not
+"fog is on" — so the most ordinary textured 3D draw in the API bound a broken descriptor while the
+correct `descSet`, computed one line earlier, went unused.
+
+### Proof, not inference
+
+`CNA_VULKAN_SAMPLER_TRACE` (new, in the established `CNA_VULKAN_LIFETIME_TRACE` idiom) records the
+whole chain. Slot 0 set to PointClamp:
+
+```
+apply.slot       slot=0 filter=1 addrU=1 addrV=1 sampler=0x700000000070 default=0x1b000000001b
+desc.TexSampler  key=(0x4a…4a,0x70…70)  slot=0 view=0x4a…4a sampler=0x700000000070   OK
+desc.DualTexture slot=0 sampler=0x70…70 | slot=1 sampler=0x70…70                     OK
+desc.FogTex3D    key=0x4a000000004a     slot=0 view=0x4a…4a sampler=0x1b000000001b   BAD
+desc.LitTextured key=0x4a000000004a     slot=0 view=0x4a…4a sampler=0x1b000000001b   BAD
+desc.Skinned     key=0x4a000000004a     slot=0 view=0x4a…4a sampler=0x1b000000001b   BAD
+desc.EnvMap      slot=0 and slot=1      both          sampler=0x1b000000001b         BAD
+desc.Pbr         bindings 0..4          all           sampler=0x1b000000001b         BAD
+```
+
+Both halves are visible in one line: the descriptor received the **default**, and
+`key=0x4a000000004a` **is the image-view handle**, so the cache carried no sampler information.
+Post-fix the same view under three samplers yields three keys and three descriptor sets:
+
+```
+desc.FogTex3D key=0x28945a3a9728945a set=0x80 view=0x4a…4a sampler=0x700000000070
+desc.FogTex3D key=0x28a1f04e7828a1f0 set=0x98 view=0x4a…4a sampler=0x960000000096
+desc.FogTex3D key=0x57d2215a8057d221 set=0xaf view=0x4a…4a sampler=0xad00000000ad
+```
+
+### The fix
+
+`GetOrCreateDualTexDescSet`'s shape applied to all six: take the sampler(s) as parameters, fold them
+into the existing key hash, write them into the `VkDescriptorImageInfo`. The twelve enqueue sites
+already had `slotSamplers_` in hand. The slot convention is DualTex's own, confirmed against
+EasyGL's `Texture0..Texture4` units. PBR snapshots slots 0..4 **by value** through
+`PbrSlotSamplersRawEXT()` rather than passing a pointer into member storage a later
+`ApplySamplerState` could mutate.
+
+`defaultSampler_` remains for slots no `ApplySamplerState` has reached and for the fallback
+white/flat-normal textures. **No public API, no shader, no other backend, no generated artifact, no
+descriptor caching disabled, no per-draw descriptor allocation, no CPU copy, no extra pass, draw,
+submit, wait or frame.**
+
+### Results
+
+* **VULKAN 32/65 -> 65/65** on the new `examples/stock_effect_sampler_contract_test.cpp`.
+* **REMED-GFX-150's fixture 140/146 -> 146/146 on VULKAN**, closing exactly the six legs that
+  control had flagged.
+* Deferred snapshot (leg S) and descriptor-cache key (leg K) both green: a queued draw keeps the
+  sampler it was issued under even after the public state changes twice.
+* Multi-slot (leg M): slot 0 and slot 1 are independent, and swapping their samplers changes the
+  image.
+
+The oracle is modulation-independent by construction — a 4x4 texture magnified 4x must give constant
+4x4 blocks — and every lit family is driven ambient-only so the modulation is spatially uniform and
+the block structure measures the sampler rather than the lighting model.
+
+### Cardinality
+
+624 sampler applications produced **4 `VkSampler` creations** (the sampler cache is untouched and
+still works). Each corrected family created **3 descriptor sets — one per distinct sampler state
+actually used, the minimum**; pre-fix it created 1, because every sampler collapsed onto the
+default. The two already-correct builders still report cache **hits** (TexSampler 9, DualTexture 1),
+so reuse was not disabled and nothing allocates per draw.
+
+### Validation and sanitizers
+
+* `VK_LAYER_KHRONOS_validation` proven loaded (3 loader lines) — **zero** VUIDs, errors or warnings
+  at 65/65.
+* **ASan** and **UBSan** both 65/65 with the runtimes proven linked (`libasan.so.8`,
+  `libubsan.so.1`): no use-after-free, stale sampler pointer, invalid cache-key access, descriptor
+  index overrun, integer overflow or double release.
+
+### False positives — 6 found, and they explain the survival exactly
+
+Of 191 Vulkan-registered fixtures only 19 touch `SamplerStates`, and **all six that are named for
+the sampler contract drive `DualTextureEffect` and nothing else**:
+
+* `easygl_sampler_state_effect_test.cpp`
+* `easygl_texture_filter_point_vs_linear_test.cpp`
+* `easygl_texture_address_mode_clamp_effect_test.cpp`
+* `easygl_texture_address_mode_mirror_effect_test.cpp`
+* `easygl_texture_anisotropic_effect_test.cpp`
+* `vulkan_texture_mip_filter_effect_test.cpp`
+
+DualTexture is the single stock family whose builder already took samplers. Vulkan's entire
+sampler-contract test surface was validating the one path that was not broken, while BasicEffect —
+the most common textured 3D draw of all — lit-textured, EnvMap, Skinned, PBR and PBR-skinned went
+untested. They are correct tests of DualTexture and are left unchanged: the gap was coverage, and
+the new fixture fills it across all eight families.
+
+**One fixture defect of my own, A/B-proven.** Leg K1's two draws each use a HALF-WIDTH viewport, so
+a texel is 2 destination pixels there, not 4. Measuring with the full-width block size counted the
+genuine texel boundaries at x=2 and x=6 as failures — exactly 2 per row x 16 rows = the 32 a correct
+sampler still reported. Corrected; against pre-fix production the corrected leg still FAILS (64
+variations), so it pins the defect rather than accommodating it.
+
+### Regression gates
+
+`ctest -R Vulkan` **193/194**. The single failure, `Vulkan_DepthBias`, is A/B-proven pre-existing by
+narrow restoration of the two Vulkan production files to the red-first commit: it fails identically
+there (3/4, same `DepthBias=-1e6 (flat)` check) and has no sampler involvement.
+
+### Cross-backend controls
+
+Only Vulkan production changed.
+
+| Backend | Result | Note |
+|---|---|---|
+| VULKAN | 32/65 -> **65/65** | the fix |
+| EASYGL | **65/65** | |
+| BGFX | **65/65** | |
+| SDL_GPU | **65/65** | |
+| D3D11 | **65/65** | Wine on `:99` |
+| HEADLESS | **1/1** | asserts the REMED-GFX-127 rejection |
+| SOFTWARE | **51/51** | PBR skipped: strides 48/68 outside its declared 16/20/24/32/52 |
+| D3D9 | **55/55** | DualTextureEffect skipped for plan_dx9.md D9-82d |
+| WEBGPU | 64/65 | **REMED-GFX-172** |
+| D3D12 | cross-built only | runtime unavailable for the pre-existing DX-100 reason |
+
+GFX-170 and GFX-171 remain open with their production untouched; neither was modified to make a
+control green.
+
+### New findings
+
+**One: REMED-GFX-172** — WebGPU's DualTexture3D texture bind group has ONE sampler entry for TWO
+texture views (`texEntries[0].sampler`, then bindings 1 and 2 are the two views), so
+`SamplerStates[1]` cannot be expressed and slot 1 inherits slot 0's sampler. Distinct from GFX-170:
+SDL_GPU passes the same leg, and this is a bind-group-layout and WGSL shape rather than a
+filter-ordinal mapping. Recorded, not fixed — GFX-169 is scoped to Vulkan production and excludes
+shader changes.
+
+### Commits
+
+`99ac5012` test (reproduce + trace) · `92afb97c` fix · `9a704fdd` test (capability boundaries) ·
+DirectX registrations + docs (pending, see the working-tree note).

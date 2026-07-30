@@ -192,6 +192,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         TIMEOUT 120 LABELS "D3D11")
 
 
+
+    # REMED-GFX-169 cross-backend control: every stock 3D effect must sample through the public
+    # GraphicsDevice.SamplerStates[slot]. The defect was Vulkan-local (six stock descriptor builders
+    # took no sampler parameter, so all 15 of their bindings used a hardcoded default and the
+    # sampler was absent from their cache keys); this run establishes that this backend already
+    # honoured the contract rather than being made to.
+    cna_d3d11_test(cna_test_d3d11_stock_effect_sampler
+                   examples/stock_effect_sampler_contract_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_stock_effect_sampler_cmd cna_test_d3d11_stock_effect_sampler)
+    cna_register_backend_test(NAME D3D11_StockEffectSamplerContract
+        COMMAND ${_d3d11_stock_effect_sampler_cmd}
+        TIMEOUT 300 LABELS "D3D11")
+
     # REMED-GFX-150 cross-backend control: TextureFilter::Point must select exactly ONE texel and
     # TextureAddressMode must decide which one, on SpriteBatch and on the device SamplerStates[0] 3D
     # path alike. The defect was Software-local (its ApplySamplerState named none of its parameters
