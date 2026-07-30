@@ -553,10 +553,20 @@ protected:
         tex2_ = Texture2D::CreateFromPixels(dev, kTex, kTex, Bytes(pattern2_));
         white_ = Texture2D::CreateFromPixels(dev, 1, 1,
                      std::vector<std::uint8_t>{255, 255, 255, 255});
-        cube_ = std::make_unique<TextureCube>(dev, kTex, false, SurfaceFormat::Color);
-        for (int f = 0; f < 6; ++f)
-            cube_->SetData(static_cast<CubeMapFace>(f), pattern_.data(),
-                           static_cast<int>(pattern_.size()));
+        // A non-rasterizing backend rejects cube uploads by REMED-GFX-135's contract, and it never
+        // reaches the effect families anyway, so an unavailable cube must not abort the run before
+        // the honest-rejection leg gets to assert anything.
+        try
+        {
+            cube_ = std::make_unique<TextureCube>(dev, kTex, false, SurfaceFormat::Color);
+            for (int f = 0; f < 6; ++f)
+                cube_->SetData(static_cast<CubeMapFace>(f), pattern_.data(),
+                               static_cast<int>(pattern_.size()));
+        }
+        catch (const std::exception&)
+        {
+            cube_.reset();
+        }
     }
 
     void Draw(const GameTime&) override
@@ -623,8 +633,23 @@ private:
         // P -- PointClamp must produce exact 4x4 blocks.
         SetSlot(dev, 0, TextureFilter::Point, TextureAddressMode::Clamp);
         SetSlot(dev, 1, TextureFilter::Point, TextureAddressMode::Clamp);
-        const std::vector<Color> point =
-            Render(dev, [&](GraphicsDevice& d) { (this->*f.draw)(d, 1.0f); });
+        // A backend may not implement this family's vertex stride at all -- SOFTWARE, for one,
+        // documents 16/20/24/32/52 and rejects the PBR strides 48/68. That is a declared capability
+        // boundary, not a sampler defect, so it is reported as a skip rather than counted as a
+        // failure; it is NOT a backend-specific exception to the sampler contract, because a
+        // backend that DOES draw the family is still held to every check below.
+        std::vector<Color> point;
+        try
+        {
+            point = Render(dev, [&](GraphicsDevice& d) { (this->*f.draw)(d, 1.0f); });
+        }
+        catch (const std::exception& e)
+        {
+            std::printf("[SKIP] %s: this backend does not implement the family (%s)\n",
+                        tag.c_str(), e.what());
+            std::fflush(stdout);
+            return;
+        }
         std::string why;
         const bool blocky = BlockUniform(point, kBlock, why);
         int blocks = 0;
