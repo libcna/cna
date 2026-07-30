@@ -2499,7 +2499,9 @@ existing task.
 | REMED-GFX-174 | EasyGL wrote a sampler's anisotropy component only when it was ON, and one long-lived GL sampler object per slot turned that into a LATCH: the first `Anisotropic` draw raised `GL_TEXTURE_MAX_ANISOTROPY` to SamplerState's default 4 and every later Point/Linear draw on that slot kept sampling anisotropically, so no point fetch could return a stored texel again. The record's two "independent components" are one defect: SpriteBatch looked immune only because its legs run before any 3D leg (it passes a hardcoded maxAnisotropy of 1, so it can neither raise nor lower the latch). The record's mipmap-incompleteness component is refuted for ordinary textures (Task 924 already clamps MAX_LEVEL, trace reports complete=1) and REAL for render targets, cube maps and volume textures, where nothing clamped it and a single-level RenderTarget2D sampled under any of the seven mip-chain ordinals rendered solid black. Fixed both; EASYGL 50/70 -> 70/70 and a new 52-check order-sensitive fixture 29/52 -> 52/52. | LOW | P3 | REMED-GFX-170 cross-backend controls | DONE (2026-07-30) |
 | REMED-GFX-175 | A TextureFilter ordinal's MIPMAP component was dropped for `Linear` and `Point` on EasyGL. The contract is settled from FNA's own XNAMin/XNAMag/XNAMip tables and FNA3D's `XNAToGL_MinMipFilter`: Linear(0) is min/mag/mip LINEAR and Point(1) is min/mag/mip POINT, so both are FULL filters and ordinal 0 is the DEFAULT filter. EasyGL mapped them onto plain GL_LINEAR/GL_NEAREST (no mipmap term) while 2..8 were already right, and a declared-but-unwritten chain was mipmap-INCOMPLETE and sampled solid black under every mip-aware ordinal. The ticket's second claim is REFUTED: Software was not dropping a component, it had no mip pipeline at all (UpdatePixelsLevel a documented no-op, no LOD stage), so ALL NINE ordinals sampled level 0 there. Fixed both; new 87-check contract fixture, EASYGL 61/97 -> 87/87 and SOFTWARE 65/97 -> 87/87, with D3D9, D3D11, Vulkan, WebGPU and Bgfx all 87/87 as controls. | LOW | P3 | REMED-GFX-174 leg D4 | DONE (2026-07-30) |
 | REMED-GFX-176 | SDL_GPU: `SdlGpuTextureBackend`'s constructor hardcodes `num_levels = 1` and the class has no `UpdatePixelsLevel` override, so a `mipMap=true` Texture2D is a one-level GPU resource and every level the game writes above 0 is discarded. Consequence: NO TextureFilter ordinal mip-filters — measured 55/87 on REMED-GFX-175's contract fixture, with all nine ordinals sampling level 0 at exact 2x/4x/8x minification. A different defect from GFX-175 (whose EasyGL mechanism spares ordinals 2..8) and the same shape as GFX-175's Software half. The render-target, cube and MSAA paths do pass a real level count, so this is specific to the plain sampled Texture2D route. | LOW | P3 | REMED-GFX-175 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-175) |
-| REMED-GFX-177 | D3D12: the CBV/SRV/UAV descriptor heap has DX-103's fixed capacity with no growth or recycling, so a long enough sequence of legitimate public API calls exhausts it. REMED-GFX-175's fixture passed all 64 checks it reached — the whole Point and Linear LOD matrices, all nine ordinals, within-level filtering and single-level completeness — then aborted in leg G with `CBV/SRV/UAV descriptor heap exhausted`. Not a mip defect; D3D12's mip behaviour is CORRECT for everything measured and UNMEASURED for the remaining 23 checks. | LOW | P3 | REMED-GFX-175 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-175) |
+| REMED-GFX-177 | D3D12's four descriptor heaps were monotonic bump cursors with no free list and no growth, and no sampleable-resource class had a destructor, so a slot was consumed for the lifetime of the PROCESS rather than of the resource. The trace names the exact failure: the 65th CBV/SRV/UAV request, made while only 30 resources were alive — 34 of the 64 occupied slots belonged to already-destroyed resources. The SAMPLER heap failed the same way (GFX-170 died at check 26). Fixed by two allocators that reclaim (fence-stamped free lists) and grow bounded — RTV/DSV by appending a block so issued handles never move, CBV/SRV/UAV and SAMPLER by a non-shader-visible staging heap mirrored into the shader-visible one, addressed by stable index. Starting capacities deliberately unchanged. | LOW | P3 | REMED-GFX-175 cross-backend controls | **DONE 2026-07-30 — NEW 29-CHECK PUBLIC FIXTURE 2/15 -> 29/29 ON D3D12, NEW 55-CHECK NATIVE ALLOCATOR FIXTURE 55/55, AND GFX-175's OWN FIXTURE 64-CHECKS-THEN-ABORT -> 87/87. THRESHOLDS 1/2/31/32/63/64/65/66/96/128/256 ALL GREEN; 5435 ALLOCATIONS OVER THE RUN OF WHICH 5177 RECYCLED, PEAK LIVE 258, CAPACITY 512 AFTER 3 DOUBLINGS, 2 HEAP OBJECTS, NO WAIT/IDLE/EXTRA SUBMIT/EXTRA FRAME ADDED. SIX CROSS-BACKEND CONTROLS GREEN, BGFX 28/29 = REMED-GFX-179. ONE FALSE POSITIVE FOUND AND CORRECTED (d3d12_smoke_test CHECK C ASSERTED THE BUMP ALLOCATOR AND FREED NOTHING). SPAWNED GFX-178/179.** |
+| REMED-GFX-178 | D3D12: `TextureFilter::MinPointMagLinearMipLinear` (ordinal 7) magnifies with POINT. Measured by REMED-GFX-170's ordinal fixture, leg C7: `manufactured colours=0` where its sibling `MinPointMagLinearMipPoint` (ordinal 8) correctly reports 124 on the same geometry, so the two ordinals that share a LINEAR magnification component disagree. Previously UNREACHABLE — pre-REMED-GFX-177 that fixture aborted at check 26 on `SAMPLER descriptor heap exhausted`, so leg C7 had never run on D3D12. Same family as GFX-170/GFX-175 (an ordinal losing one of its three components) but a distinct backend expression, so it is not absorbed. | LOW | P3 | REMED-GFX-177 regression gates | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
+| REMED-GFX-179 | Bgfx: `BgfxGraphicsBackend`'s render-target view-id allocator draws from `[1, kFirstSegmentViewId)` and `kFirstSegmentViewId` is **64**, so **63 concurrently live render targets is a hard ceiling** — REMED-GFX-177's public fixture, leg F, needs 66 and throws `Bgfx: exhausted view ids`. Same SHAPE as the D3D12 defect but not the same mechanism and not the same fix: the free list here already works (leg E's 256 sequential create/destroy cycles pass), what is missing is headroom — bgfx's own `BGFX_CONFIG_MAX_VIEWS` default is 256 and CNA reserves `[64, 255)` for REMED-GFX-065's per-frame viewport-segment views, so the partition, not bgfx, sets the limit. Deliberately NOT fixed under GFX-177, whose boundary forbids changing another backend because its binding model differs. | LOW | P3 | REMED-GFX-177 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -21247,3 +21249,204 @@ value changed, and `audit/` is untouched.
 * **REMED-GFX-176** — SDL_GPU allocates one GPU mip level for every `Texture2D` and discards every
   level above 0, so no ordinal mip-filters.
 * **REMED-GFX-177** — D3D12's fixed CBV/SRV/UAV descriptor heap is exhausted by a long fixture.
+
+---
+
+## REMED-GFX-177 — D3D12 descriptor heaps that reclaim and grow (2026-07-30)
+
+### The symptom, and what it actually was
+
+REMED-GFX-175's contract fixture reached **exactly 64 checks on D3D12** and aborted with
+`D3D12GraphicsBackend: CBV/SRV/UAV descriptor heap exhausted (DX-103's fixed capacity)`. The ticket
+recorded that as a capacity question. It is a **lifetime** question, and the number that settles it
+is not 64.
+
+**The exact first failing allocation, recovered from the new `CNA_D3D12_DESCRIPTOR_TRACE`
+instrumentation:** the **65th** CBV/SRV/UAV descriptor request of the process. At that moment the
+allocator's own counters read `cursor=30 live=30 alloc=64 free=34`, and 78 command lists had been
+submitted and waited on. So the pool of 64 was full **while only 30 sampleable resources were
+alive** — *34 of the 64 occupied slots belonged to resources that had already been destroyed.* The
+heap was never too small; nothing ever gave a slot back.
+
+`AllocateCbvSrvUavDescriptorEXT` (and its RTV/DSV/SAMPLER siblings) was a monotonic bump cursor over
+a fixed heap with **no free list and no growth**, and none of `D3D12TextureBackend`,
+`D3D12TextureCubeBackend`, `D3D12Texture3DBackend`, `D3D12RenderTargetBackend` or
+`D3D12RenderTargetCubeBackend` had a destructor at all. Each takes one CBV/SRV/UAV slot at
+construction (a cube target additionally takes **six** RTVs and a DSV) and returned none. A slot was
+therefore consumed for the lifetime of the **process**, not of the resource.
+
+The clearest evidence that this had been paid for repeatedly rather than fixed is the constant's own
+history, recorded in the header comment this task replaced: **8 -> 32 -> 48 -> 64**, each raise
+triggered by the growing test suite allocating "one fresh off-screen RTV per Check block, no
+free-list reuse yet".
+
+**A second heap fails the same way.** REMED-GFX-170's ordinal fixture died pre-fix on an uncaught
+`SAMPLER descriptor heap exhausted (DX-119's fixed capacity)` after 26 checks. Same defect, second
+pool.
+
+### Heap inventory
+
+| heap | shader-visible | start capacity | pre-fix strategy | who consumes it |
+|---|---|---|---|---|
+| CBV/SRV/UAV | yes | 64 | bump, no free list, no growth | 1 per Texture2D / TextureCube / Texture3D / RenderTarget2D / RenderTargetCube |
+| SAMPLER | yes | 16 | bump, no free list, no growth | 1 per distinct XNA `SamplerState` (cache miss only) |
+| RTV | no | 64 | bump, no free list, no growth | 1 per RenderTarget2D, **6** per RenderTargetCube, 1 per back buffer |
+| DSV | no | 8 | bump, no free list, no growth | 1 per depth-owning target, 1 for the back-buffer depth |
+
+There are no CPU-only mirrors, per-frame arenas or persistent descriptor caches beyond these four,
+and no upload/readback path takes a descriptor (staging goes through plain buffers).
+
+### The D3D12 rules the correction had to obey
+
+Only one shader-visible heap of each type may be bound at a time, and a root table may only point
+into the heap that is currently bound; a heap cannot be resized in place; a descriptor referenced by
+a submitted command list must stay valid until the GPU is done with it; and — the constraint that
+decided the design — **`CopyDescriptors` may not read from a shader-visible source**. A
+shader-visible heap therefore cannot be copied into its own larger successor.
+
+### The correction
+
+Two allocators in one new file, `D3D12DescriptorHeaps.{hpp,cpp}`, because the two heap classes have
+genuinely different constraints.
+
+* **RTV and DSV** are never bound as a heap — `OMSetRenderTargets` takes loose CPU handles and does
+  not care which heap each came from. `D3D12CpuDescriptorAllocator` therefore grows by **appending a
+  block**, each block as large as everything before it (so capacity doubles and the block count stays
+  logarithmic). An issued handle **never moves**, which is exactly what lets
+  `D3D12RenderTargetBackend` keep storing a raw `D3D12_CPU_DESCRIPTOR_HANDLE`.
+
+* **CBV/SRV/UAV and SAMPLER** must be contiguous and bound whole, so the heap has to be replaced.
+  `D3D12ShaderVisibleDescriptorAllocator` keeps the authoritative copy of every descriptor in a
+  **non-shader-visible staging heap** and mirrors it into the shader-visible one; growth creates a
+  larger pair and re-mirrors the live range **from the staging heap**, which is a legal copy source.
+  Callers hold a **stable index**, never a raw handle, so a replaced heap invalidates nothing they
+  own — `GetShaderResourceViewGpuHandleEXT()` resolves against whichever heap is current, on every
+  call.
+
+Both reclaim: every resource now has a destructor that returns its slots, stamped with the fence
+value of the newest submission that could still reference them, and reissued only once the shared
+fence has passed it. Retired heap pairs are held the same way. `D3D12SamplerCache` stores an index
+instead of a GPU handle for the same reason.
+
+**The starting capacities are deliberately unchanged — 64, 16, 64, 8.** The correction is
+reclamation and bounded growth, not a larger constant. Growth doubles and stops at the D3D12
+specification's own ceiling (`D3D12_MAX_SHADER_VISIBLE_DESCRIPTOR_HEAP_SIZE_TIER_1`,
+`D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE`), where it throws an honest message naming the limit.
+
+**Nothing was added per draw.** No device idle, no queue wait, no extra submit, no extra public
+frame, no retry, no heap per draw or per frame. The only new per-descriptor cost is one
+`CopyDescriptorsSimple(1, ...)` at descriptor **creation** (`publishes == allocations`, asserted),
+and one `glTexParameter`-scale bulk re-mirror per growth. `ReleaseWindowSizeDependentViews()` now
+also returns the back-buffer RTVs and depth DSV, so resize and device recreation stop consuming
+capacity permanently.
+
+Growth cannot happen mid-recording: every allocation site is a resource constructor, and this
+backend closes and waits on every command list it opens (`ExecuteCommandListAndWaitEXT`). Both
+`SetDescriptorHeaps` call sites resolve the heap **per draw**, so a heap that grew between draws is
+picked up with every root table rebound against it.
+
+### Results
+
+**Red-first, A/B by narrow restoration of the twelve production files to `HEAD`:**
+
+| fixture | backend | pre-fix | post-fix |
+|---|---|---|---|
+| `descriptor_capacity_contract_test` (new) | D3D12 | **2/15**, twelve of thirteen legs killed by `CBV/SRV/UAV descriptor heap exhausted` | **29/29** |
+| `texture_filter_mip_contract_test` (GFX-175) | D3D12 | **64 checks, then abort** | **87/87** |
+| `texture_filter_ordinal_contract_test` (GFX-170) | D3D12 | **25/26**, uncaught `SAMPLER descriptor heap exhausted` | **69/70** |
+| `point_sampling_contract_test` (GFX-150) | D3D12 | 127 PASS + 2 FAIL, then `CBV/SRV/UAV` abort | **144/146**, same 2 FAIL |
+| `d3d12_smoke_test` | D3D12 | 253/253 | **260/260**, `RESULT: ALL PASS` |
+| `d3d12_descriptor_allocator_test` (new) | D3D12 | n/a (uses the new API) | **55/55** |
+
+**Thresholds, all measured on D3D12 and all green:** 1, 2, 31, 32, 63, 64, 65, 66, 96, 128 and 256
+simultaneously live textures; 256 live texture/sampler pairs; 256 repeated identical draws; 256
+create/draw/read/destroy cycles with at most two resources live; 65 simultaneously live render
+targets sampled back; 96 DualTexture draws; 70 AlphaTest and 70 EnvironmentMap draws; 96 SpriteBatch
+flushes and 96 sprites in one batch; 70 draws each through the indexed, non-indexed and DrawUser
+paths; 8 rounds x 40 textures acquired and released together; 100 destroyed then 100 recreated; 200
+interleaved destroy/create steps; 70 live `TextureCube`s.
+
+**Cardinality over the whole public fixture, from the trace (17084 traced events):**
+
+| heap | allocations | recycled | peak live | final capacity | growths | heap objects |
+|---|---|---|---|---|---|---|
+| CBV/SRV/UAV | 5435 | 5177 | 258 | 512 (64 -> 128 -> 256 -> 512) | 3 | 2 |
+| SAMPLER | 47 | 0 | 47 | 64 (16 -> 32 -> 64) | 2 | 2 |
+| RTV | 340 | 274 | 66 | 128 | 1 | 2 blocks |
+| DSV | 0 | 0 | 0 | 8 | 0 | 1 |
+
+Pre-fix that workload would have needed **5435 CBV/SRV/UAV slots**, 85x the capacity. Post-fix the
+peak live count — 258 — is what capacity tracks, and **95% of allocations are recycled slots**.
+
+**Steady state, measured natively:** 500 destroy/create steps around 50 live textures grow capacity
+by nothing, advance the bump cursor by nothing and create no heap object; 8 frames x 40 textures with
+a real submission and per-frame fence signal each leave the live count exactly where it started;
+a second wave of 300 after releasing 300 needs **no further growth and takes all 300 from the free
+list**; 300 render-target create/destroy cycles grow the RTV pool by nothing.
+
+**Identity under pressure.** Every draw in the public fixture is checked against a self-identifying
+oracle: texture *i* is 2x2 RGBA whose twelve 0/255-only channels spell *i* in binary, drawn
+one-to-one and decoded back to an integer. A recycled slot that aliased one resource onto another's
+descriptor **names the wrong resource** rather than producing a near-miss colour. Measured: 0 wrong
+across every leg, and 0 draws decoding as a destroyed generation in leg L.
+
+**Cross-backend controls, only D3D12 production changed:** EasyGL **29/29**, Software **29/29**,
+Vulkan **29/29**, WebGPU **29/29**, SDL_GPU **29/29**, Headless **SKIP (77)**, Bgfx **28/29** — one
+INDEPENDENT defect, ticketed as REMED-GFX-179, not absorbed. D3D11 and D3D9 cross-compiled and
+linked cleanly; their runtime was **not** measured, because the only recorded working recipe for
+those prefixes uses `DISPLAY=:0`, which this session's display policy forbids, and on `:99` SDL
+reports `No displays available` under that Wine prefix while `SDL_VIDEODRIVER=dummy` yields
+`could not obtain HWND from SDL window`. Stated as an unmeasured boundary, not as a pass.
+
+**Regression gates:** GFX-175 **87/87** on D3D12 (previously unreachable past 64), GFX-169
+`stock_effect_sampler` **65/65**, GFX-149 `texture2d_getdata_transfer_range` **74/74**, GFX-130
+`cube_volume_setdata` **56/56**, `ctest -R D3D12` **2/2**, `ctest -L Software` **49/49**.
+
+### Validation and sanitizers — honestly bounded
+
+The **Microsoft D3D12 debug layer is unavailable** in this runtime (`D3D12 debug layer unavailable;
+continuing without it` — vkd3d-proton does not provide `D3D12GetDebugInterface` here), so GPU-based
+validation and DRED are equally unavailable and are **not** claimed. What was available is
+vkd3d-proton's own `VKD3D_DEBUG=info` logging, which produced **zero errors, warnings or fixmes**
+across both fixtures. Loading the Khronos Vulkan validation layers into the Wine/vkd3d process was
+attempted and **did not work** — the layer never appears in the run's output — so that result is
+reported as unavailable rather than as clean.
+
+D3D12 here is a MinGW cross-build run under Wine, where ASan/UBSan runtimes are not available, and
+`D3D12DescriptorHeaps.cpp` cannot be exercised without a real `ID3D12Device`. That boundary is
+stated rather than worked around. What **was** sanitized is the shared and public half — the new
+fixture itself and every shared graphics path it drives — with runtimes proven linked via `ldd`:
+Software **ASan 29/29** and **UBSan 29/29**, EasyGL **ASan+UBSan 29 checks, 0 FAIL**, all with
+**zero AddressSanitizer errors and zero `runtime error:` lines**. EasyGL's residual LeakSanitizer
+report is **byte-identical (100956 B / 449 allocations)** to the baseline REMED-GFX-174 and
+REMED-GFX-175 already recorded and contains **zero CNA frames**.
+
+### False-positive audit
+
+**31 example fixtures compile against D3D12; exactly one ever touched the descriptor heaps, and it
+asserted the defect.** `examples/d3d12_smoke_test.cpp`'s Check C allocated two RTVs, two DSVs and
+two CBV/SRV/UAVs, asserted only that *the cursor advances*, and freed none of them — a test of the
+bump allocator, written when the bump allocator was the design. It is now **C1..C7**: distinct live
+allocations are distinct **and** a freed slot is reissued, on all three heaps, with the block
+returned to the state it found (253 -> 260 checks).
+
+Nothing else could have caught this. No pre-existing fixture creates 65 sampleable resources in one
+process, and every D3D12 fixture is its own process — which is precisely why a defect that trips on
+the 65th resource ever created survived four capacity raises.
+
+### Scope kept
+
+`REMED-GFX-176`, `REMED-GFX-171`, `REMED-GFX-172`, `REMED-GFX-173`, `REMED-GFX-153` and
+`REMED-GFX-154` were **not** begun and are unmodified. No other backend's production was touched —
+Bgfx's own view-id ceiling was **measured and ticketed, not fixed**, exactly as the boundary
+requires. `audit/` is untouched.
+
+### New findings
+
+* **REMED-GFX-178** — D3D12's `MinPointMagLinearMipLinear` (ordinal 7) magnifies with POINT.
+  Previously unreachable: GFX-170's fixture died at check 26 on the sampler heap, so this leg had
+  never run on D3D12.
+* **REMED-GFX-179** — Bgfx reserves only view ids `[1, 64)` for render targets, so 63 concurrently
+  live render targets is a hard ceiling.
+
+Commits: test `44d92f02`, fix `81af46f1`, coverage `bb55aecb`, docs (this).
