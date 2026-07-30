@@ -211,6 +211,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # and one bilinear function served every textured fragment, so every draw was LinearClamp); this
     # run is what establishes that this backend already honoured the contract rather than being made
     # to.
+    # REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification, a separate
+    # minification and a separate mipmap filter, so a backend may not reduce the ordinal to one
+    # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
+    # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
+    # `filter == 0 ? 0 : 1`, so Anisotropic, LinearMipPoint, MinPointMagLinearMipLinear and
+    # MinPointMagLinearMipPoint all magnified with POINT. This fixture measures the two DIFFERENT
+    # partitions of the nine ordinals that magnification and minification induce, on SpriteBatch and
+    # on every textured stock family; the other backends run it as controls.
+    cna_d3d11_test(cna_test_d3d11_texture_filter_ordinal
+                   examples/texture_filter_ordinal_contract_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_texture_filter_ordinal_cmd cna_test_d3d11_texture_filter_ordinal)
+    cna_register_backend_test(NAME D3D11_TextureFilterOrdinalContract
+        COMMAND ${_d3d11_texture_filter_ordinal_cmd}
+        TIMEOUT 300 LABELS "D3D11")
+
     cna_d3d11_test(cna_test_d3d11_point_sampling
                    examples/point_sampling_contract_test.cpp)
     cna_d3d11_ctest_command(_d3d11_point_sampling_cmd cna_test_d3d11_point_sampling)

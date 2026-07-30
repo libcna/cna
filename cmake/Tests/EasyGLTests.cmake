@@ -1653,6 +1653,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         # EasyGL is the conforming backend the finding was measured against (128/128 exact where
         # Software managed 4/128) -- so this run is what establishes that the fixture's expectations
         # are the XNA contract rather than a description of the Software fix.
+        # REMED-GFX-170: every public TextureFilter ordinal names a SEPARATE magnification, a separate
+        # minification and a separate mipmap filter, so a backend may not reduce the ordinal to one
+        # boolean. WebGPU's SpriteBatch sampler and SDL_GPU's ONE shared sampler helper both resolved
+        # `textureFilter == 0 ? LINEAR : NEAREST`, and both keyed their sampler cache on
+        # `filter == 0 ? 0 : 1`, so Anisotropic, LinearMipPoint, MinPointMagLinearMipLinear and
+        # MinPointMagLinearMipPoint all magnified with POINT. This fixture measures the two DIFFERENT
+        # partitions of the nine ordinals that magnification and minification induce, on SpriteBatch and
+        # on every textured stock family; the other backends run it as controls.
+        cna_easygl_test(cna_test_easygl_texture_filter_ordinal
+            examples/texture_filter_ordinal_contract_test.cpp)
+        cna_register_backend_test(NAME EasyGL_TextureFilterOrdinalContract
+            COMMAND cna_test_easygl_texture_filter_ordinal
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         cna_easygl_test(cna_test_easygl_point_sampling
             examples/point_sampling_contract_test.cpp)
         cna_register_backend_test(NAME EasyGL_PointSamplingContract
