@@ -2496,7 +2496,8 @@ existing task.
 | REMED-GFX-171 | D3D9: the stock 3D path samples about half a destination pixel low — every one of the 19 mismatching pixels sits just past a texel boundary and returns the LOWER texel. The classic D3D9 pixel-centre convention, uncompensated on the 3D path; SpriteBatch is unaffected. | LOW | P3 | REMED-GFX-150 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-150; D3D9 145/146) |
 | REMED-GFX-172 | WebGPU: the DualTexture3D texture bind group has ONE sampler entry for TWO texture views, so `GraphicsDevice.SamplerStates[1]` cannot be expressed and slot 1 inherits slot 0's sampler. Distinct from GFX-170 (SDL_GPU passes the same leg); needs a bind-group-layout and WGSL change. | LOW | P3 | REMED-GFX-169 leg M3 | OPEN (isolated 2026-07-30 during REMED-GFX-169; WEBGPU 64/65) |
 | REMED-GFX-173 | SDL_GPU's `IssueEnvMapDraw` binds a literal LinearClamp sampler for the reflection cube, so `GraphicsDevice.SamplerStates[1]` is ignored for `EnvironmentMapEffect`. Its comment calls this the project-wide convention, which REMED-GFX-169 ended: Vulkan now honours slot 1 for the cube. A state-capture and convention question, not the filter-ordinal translation GFX-170 fixed, and distinct from GFX-172 (SDL_GPU's bind group CAN express it). | LOW | P3 | REMED-GFX-170 sampler trace | OPEN (isolated 2026-07-30 during REMED-GFX-170) |
-| REMED-GFX-174 | EasyGL scores 50/70 on REMED-GFX-170's ordinal fixture while passing both existing sampler fixtures in full. Two components: (a) `ApplySamplerState` maps ordinals 2..8 onto GL `*_MIPMAP_*` minification filters, which makes a single-level texture mipmap-incomplete and the result driver-defined — the boundary GFX-150's leg Y anticipated; (b) separately and unexplained, the 3D path interpolates under `TextureFilter::Point` while every SpriteBatch leg passes. | LOW | P3 | REMED-GFX-170 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-170) |
+| REMED-GFX-174 | EasyGL wrote a sampler's anisotropy component only when it was ON, and one long-lived GL sampler object per slot turned that into a LATCH: the first `Anisotropic` draw raised `GL_TEXTURE_MAX_ANISOTROPY` to SamplerState's default 4 and every later Point/Linear draw on that slot kept sampling anisotropically, so no point fetch could return a stored texel again. The record's two "independent components" are one defect: SpriteBatch looked immune only because its legs run before any 3D leg (it passes a hardcoded maxAnisotropy of 1, so it can neither raise nor lower the latch). The record's mipmap-incompleteness component is refuted for ordinary textures (Task 924 already clamps MAX_LEVEL, trace reports complete=1) and REAL for render targets, cube maps and volume textures, where nothing clamped it and a single-level RenderTarget2D sampled under any of the seven mip-chain ordinals rendered solid black. Fixed both; EASYGL 50/70 -> 70/70 and a new 52-check order-sensitive fixture 29/52 -> 52/52. | LOW | P3 | REMED-GFX-170 cross-backend controls | DONE (2026-07-30) |
+| REMED-GFX-175 | A TextureFilter ordinal's MIPMAP component is dropped for `Linear` and `Point`: both map onto a GL filter with no mipmap term, so a texture that owns a real chain never mip-filters under either — including under the default filter. Measured by REMED-GFX-174's leg D4 against a real 4-level chain (samples LEVEL 0 under Linear; the table says mip=Linear), and it reproduces on SOFTWARE too, so it is a cross-backend contract question rather than an EasyGL defect. Reported as a note, not asserted, and not fixed. | LOW | P3 | REMED-GFX-174 leg D4 | OPEN (isolated 2026-07-30 during REMED-GFX-174) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -20839,3 +20840,193 @@ GFX-171 (D3D9 half-pixel) remains open and untouched.
 
 `5a0aef7e` test (reproduce, all ten registrations) · `98d97b32` fix (WebGPU) · `b7b6725e` fix
 (SDL_GPU) · docs (this).
+
+---
+
+## REMED-GFX-170 — deferred global verification (2026-07-30)
+
+The full regression suite was stopped at 2,709 tests in the session that closed GFX-170, because
+unrelated Firefox/DOSBox load had thermally saturated the machine (93.2 °C). No failure had occurred
+at that point. It has now been run to **completion** from the GFX-170 HEAD (`1eb22c11`), with that
+load removed.
+
+```
+ctest --test-dir cmake-build-debug -j2 --output-on-failure
+```
+
+**6034 tests · 6021 passed · 7 failed · 6 skipped · 515 s.** The registered count is 6034 rather than
+the previously reported 5,842 because GFX-170's own fixture is registered on ten backends and
+`cmake-build-debug` had not reconfigured since; a plain incremental build picked it up.
+
+Every failure classified, none caused by GFX-170:
+
+| # | Test | Class | Evidence |
+|---|------|-------|----------|
+| 538 | `ENetDiscoveryServiceTest.MalformedAnnounceDuringSearch…` | **C** flaky under parallelism | passes at `-j1` |
+| 1264 | `AudioCategoryTest.PauseOnParentCategoryPausesCueInChildCategory` | **C** flaky under parallelism | passes at `-j1` |
+| 746 | `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashes…` | **B** pre-existing | A/B-proven in the GFX-150 record; reproduces at `-j1` |
+| 5888 | `EasyGL_DeviceValidation` (`SetVertexBuffers(16)`) | **B** pre-existing | A/B-proven identical on pre-fix source in an earlier record |
+| 5978 | `EasyGL_GraphicsDevice_ReferenceStencil` | **B** pre-existing | same record; `setReferenceStencilProperty()` has no effect |
+| 6033 | `easy-gl-resource-smoke-tests` | **D** environmental / external | assertion inside the separate `openeggbert/easy-gl` repository, already tracked out-of-scope |
+| 6003 | `EasyGL_TextureFilterOrdinalContract` | already ticketed | this **is** REMED-GFX-174, recorded OPEN by GFX-170 itself |
+
+**No category A and no category E.** No GFX-170 correction was required.
+
+That GFX-170 cannot reach any of these is proven rather than argued: its production change is
+confined to `WebGPUGraphicsBackend.{cpp,hpp}` and `SdlGpuGraphicsBackend.{cpp,hpp}`, and the
+principal suite runs the **EASYGL** configuration, which compiles **neither** — zero object files and
+zero ninja dependencies for either translation unit. That is a stronger statement than an A/B rebuild
+would have produced.
+
+Thermals for the run: start 57.6 °C, peak 81.2 °C at `-j2`, final 55.4 °C, no cooling pause needed.
+Parallelism was held at `-j2` rather than raised, because the measured peak was not safely below
+80 °C.
+
+---
+
+## REMED-GFX-174 — EasyGL sampler components and texture completeness (2026-07-30)
+
+### What the ticket said, and what was actually there
+
+The record listed **two apparently independent components**. Both readings are wrong, and the one it
+described in most detail is the one that had already been fixed years earlier.
+
+**Component (2), the one it called "unexplained", is the root cause.**
+`EasyGLGraphicsBackend::ApplySamplerState` writes the min filter, the mag filter, `wrapS` and `wrapT`
+**unconditionally**, but wrote `GL_TEXTURE_MAX_ANISOTROPY` **only inside the `filter == 2` branch**.
+`samplers_[slot]` is **one long-lived GL sampler object, mutated in place** and reused for every
+later application on that slot, so a write that can only ever *raise* the value leaves it raised
+forever. The first `TextureFilter::Anisotropic` draw set it to `SamplerState`'s default
+`MaxAnisotropy` of **4**, and every subsequent Point or Linear draw on that slot kept sampling
+anisotropically. Anisotropic taps average across the pixel footprint, so **no Point draw could return
+a stored texel again**.
+
+**The evidence, measured not inferred.** Leg D of GFX-170's fixture minifies an 8×4 texture into a
+3×2 target. Its output pre-fix was **byte-identical for all nine ordinals**:
+
+```
+(104,125,123) (135,125,122) (150,125,142)
+(104,125,124) (135,125,128) (150,125,133)
+```
+
+Those are box averages of the source rows — the sampler had literally no effect. The *failing set*
+names the mechanism exactly: leg C walks the ordinals in order, **C0 and C1 pass and C4/C5/C6 fail**,
+because ordinal 2 contaminates the slot part-way through and every later point-magnifying ordinal
+inherits it while every linear one is unaffected.
+
+**Why SpriteBatch looked immune — ordering, not immunity.** `EasyGLSpriteBatchBackend` passes a
+**hardcoded `maxAnisotropy` of 1**, so the sprite path can never *raise* the value; but because the
+write happened only for ordinal 2, it could not *lower* it either. SpriteBatch therefore **never
+causes the contamination and still inherits it**. GFX-170's sprite legs (A, B) run before any 3D leg,
+which is the entire reason they were green. The new fixture's legs F1–F3 run them *after* a 3D
+Anisotropic draw and they fail pre-fix.
+
+**Component (1) is refuted as stated, and real somewhere else.** Ordinals 2..8 do map onto GL
+`*_MIPMAP_*` minification filters, but that does **not** make an ordinary single-level texture
+incomplete: GL evaluates completeness over `[BASE_LEVEL, MAX_LEVEL]`, so a chain of **one** level is
+COMPLETE, and **Task 924 already clamps `GL_TEXTURE_MAX_LEVEL`** for `EasyGLTextureBackend`. The new
+trace reports `base=0 max=0 needsMipChain=1 complete=1` on **every** ordinary-texture draw. But
+**nothing clamped it for the other three sampleable kinds**, where GL's own default of 1000 stood: a
+single-level `RenderTarget2D` sampled under any of the seven mip-chain ordinals rendered **solid
+black, 128 of 128 pixels, on all seven**.
+
+**The `MinFilter` those constructors already set was dead cover.** A sampler object bound to a
+texture unit **overrides** the texture object's own filters, and `ApplySamplerState` binds one for
+every slot on every draw. Its comment — *"since the RT has no mipmaps it would be texture-incomplete
+when sampled. Use LINEAR"* — was correct when written and stopped being true once sampler objects
+took over the decision.
+
+### Fix
+
+1. **Write the anisotropy component on every application**, exactly like every other component:
+   clamped to the extension's cap when the ordinal is Anisotropic, and **1 otherwise**. Vulkan cannot
+   have this defect because it builds a fresh `VkSamplerCreateInfo` per sampler; the mutable shared
+   object is what makes the unconditional write necessary here.
+2. **Clamp `GL_TEXTURE_MAX_LEVEL` to `levelCount_ - 1`** in `EasyGLRenderTargetBackend`,
+   `EasyGLRenderTargetCubeBackend`, `EasyGLTextureCubeBackend` and `EasyGLTexture3DBackend`,
+   mirroring Task 924. It **allocates nothing** — each constructor's storage loop already creates
+   exactly `levelCount_` levels — and only narrows an over-wide *declared* range to the true one.
+
+No forced mip allocation, no shader change, no UV change, no CPU resampling, no texture duplication,
+no extra pass/draw/frame/submit/wait/readback, no public API change, no caching disabled, no other
+backend and no generated artifact touched. **One production file.**
+
+### Native trace
+
+`CNA_EASYGL_SAMPLER_TRACE=1` prints one line per sampler application and per 3D texture bind and
+draw. Every field is **read back from GL** rather than echoed from the value CNA just wrote, so a
+parameter that never reached the driver shows as a disagreement, and each line reports which of the
+sampler object or the texture object supplies the *effective* filter plus the resulting completeness.
+Without that distinction, true interpolation, an incomplete-texture fetch, the wrong texture unit and
+stale sampler state are indistinguishable from pixels alone — all four can manufacture a colour that
+is in no texel of the source.
+
+### Results
+
+| Fixture | Pre-fix | Post-fix |
+|---|---|---|
+| GFX-170 `texture_filter_ordinal_contract_test` (EasyGL) | **50/70** | **70/70** |
+| New `sampler_component_isolation_contract_test` (EasyGL) | **29/52** | **52/52** |
+
+Red-first A/B-proven by narrow file restoration of the single production file.
+
+### The new fixture
+
+`examples/sampler_component_isolation_contract_test.cpp`, 52 checks, registered on EasyGL and on
+Software as the reference control. It is **order-sensitive by construction** — the legs that matter
+draw Anisotropic *first* and then assert the next ordinal, with and without a flush between — which
+is precisely the property every existing fixture lacked. Legs:
+
+* **A** anisotropy is a component, not a latch: clean-slot control, the defect itself, every
+  point-magnifying and every point-minifying ordinal after an Anisotropic draw, `MaxAnisotropy=16`,
+  two draws in one frame with no target switch between them, and that Anisotropic **remains linear**.
+* **B** single-level `Texture2D` completeness under all nine ordinals.
+* **C** the same question for a single-level `RenderTarget2D` — the leg that found the black.
+* **D** a **real 4-level chain** whose levels are distinct flat colours: magnification stays on
+  level 0 for all nine ordinals, mip-POINT minification selects exactly **one stored level**, and no
+  chain is forced onto the single-level texture. The legs first ask the public API how many levels
+  were actually allocated and assert the declared boundary when it is one.
+* **E** sampler transitions, one-texture-many-samplers, many-textures-one-sampler, and slot
+  independence measured **modulation-independently** (DualTextureEffect computes `tex0 * (2 * tex1)`,
+  which saturates, so slot isolation is measured by changing only slot 1 and requiring the image not
+  to move).
+* **F** both SpriteBatch↔3D leak directions.
+
+### Cardinality and performance
+
+Measured through the trace: 1043 sampler applications and 65 3D draws in the new fixture, 566 and 32
+in GFX-170's. **One** native sampler object per slot before and after, so nothing is created per
+draw. The cost is **one extra `glSamplerParameterf` per application** (only where the extension
+exists) and **one `glTexParameteri` per texture creation** — none per draw or per frame.
+
+### Validation and sanitizers
+
+**1803 traced events across both fixtures, zero GL errors**; every trace line drains `glGetError` at
+the event that would raise it. **ASan + UBSan** (`CNA_SANITIZE=address,undefined`, runtimes proven
+linked — `libasan.so.8`, `libubsan.so.1`): 52/52 and 70/70, **zero ASan errors and zero UBSan runtime
+errors**. The residual LeakSanitizer output is **byte-identical (100956 B / 449 allocations) in the
+untouched GFX-170 fixture**, contains **zero CNA frames** and is libGL/Mesa — the same baseline
+GFX-170 recorded.
+
+### Regression gates and cross-backend controls
+
+`ctest -R EasyGL` **281/284**; the three failures are exactly the ones Phase 0 classified as
+pre-existing. GFX-150 **146/146**, GFX-169 **65/65**, GFX-147 and GFX-168 green.
+
+Only EasyGL production changed: SOFTWARE **70/70** and **52/52**, VULKAN **70/70**, WEBGPU **70/70**,
+SDL_GPU **70/70**, BGFX **70/70**, HEADLESS **1/1** asserting the GFX-127 rejection. DirectX is
+structurally unreachable from this change — the changed file is not compiled into those
+configurations — so it is declared rather than re-run. GFX-171, GFX-172 and GFX-173 are untouched.
+
+### New finding
+
+**REMED-GFX-175** — ordinals 0 and 1 carry no GL mipmap term, so a texture that owns a real chain
+never mip-filters under `Linear` or `Point`, including under the default filter. Measured by leg D4
+and **reported as a note rather than asserted**, because asserting the current behaviour would pin
+the wrong contract and asserting the table would make the fixture red for a decision not yet taken.
+It reproduces on SOFTWARE too, so it is a cross-backend contract question, not an EasyGL defect.
+
+### Commits
+
+`1b6a9b1b` test (reproduce + trace) · `11e22980` fix (anisotropy component) · `ca865bc5` fix
+(texture completeness) · docs (this).
