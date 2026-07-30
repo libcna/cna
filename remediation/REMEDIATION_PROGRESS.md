@@ -2477,14 +2477,14 @@ existing task.
 | REMED-GFX-125 | The XNA vertex structs build `getVertexDeclarationStatic()` from `sizeof(T)`, which includes the `IVertexType` virtual base's vtable, so the declared `VertexStride` exceeds the GPU layout. | MEDIUM | P2 | REMED-GFX-119 stride coverage | **DONE 2026-07-27 — ALL SEVEN BUILT-IN DECLARATIONS NOW TAKE THEIR STRIDE FROM `sizeof(stream)` AND EVERY ELEMENT OFFSET FROM `offsetof(stream, member)` OF ONE SHARED PACKED STRUCTURE PER TYPE, SO A STRIDE AND ITS ELEMENT LAYOUT CANNOT DIVERGE; A STRIDE-ONLY PATCH WOULD HAVE BEEN A HALF-FIX, SO EIGHT TYPED EXPLICIT-DECLARATION `DrawUser` OVERLOADS CONVERT AN OBJECT ARRAY INTO THAT STREAM EXACTLY ONCE AND THE RAW `const void*` OVERLOADS KEEP THEIR UNCHANGED CALLER-PACKED CONTRACT; DECLARATION AND 64-BIT RANGE VALIDATION ADDED WHERE A `vertexOffset` OF `0x7FFFFFF0` PREVIOUSLY DUMPED CORE; `VertexBuffer` PROVEN UNAFFECTED; 24/24 ON SEVEN RENDERING BACKENDS, SANITIZERS CLEAN, NO ABI OR PUBLIC-FIELD CHANGE.** |
 | REMED-GFX-126 | Software reports a `MultiSampleCount` it never implements: `SoftwareRenderTargetBackend::GetMultiSampleCount()` returns the requested power-of-two-rounded count although the rasterizer writes one sample per pixel and stores no per-sample data. | LOW | P3 | REMED-GFX-124 multisample boundary | **OPEN — CONTRADICTS `IRenderTargetBackend::GetMultiSampleCount`'S OWN "0 IF NOT SUPPORTED BY THIS BACKEND" CONTRACT AND FNA'S `FNA3D_GetMaxMultiSampleCount` SEMANTICS; READBACK AND SAMPLING ARE UNAFFECTED, SO THIS IS A REPORTING DEFECT. VALUE PINNED BY `Software_RenderTargetReadback` CHECK H3.** |
 | REMED-GFX-127 | `Texture2D::GetData`'s render-target fallback zero-initialized the scratch buffer it handed the backend and converted it for the caller regardless, so a backend with no readback returned a fabricated, fully written transparent-black frame. | MEDIUM | P2 | REMED-GFX-124 pre-fix measurement | **DONE 2026-07-27 — REPRODUCED ON SEVEN BACKENDS (SDL_RENDERER, BGFX, ASCII, DX3, HEADLESS, D3D9, D3D11) AT `sentinelSurvivors=0/128`, `fabricated=128`, `exact=0`, NO EXCEPTION — THE SENTINEL ORACLE PASSES ON EVERY ONE. FIXED BY MAKING `ITextureBackend::GetData` RETURN `bool` (TRUE ONLY FOR A COMPLETE REGION, `[[nodiscard]]` DEFAULT FALSE) AND CONVERTING ONLY ON TRUE, ELSE `System::NotSupportedException` WITH THE DESTINATION UNTOUCHED. REAL READBACK IMPLEMENTED ON SDL_RENDERER/ASCII, BGFX, DX3, D3D9, D3D11, D3D12 AND CANVAS USING EACH BACKEND'S OWN ESTABLISHED MECHANISM; HEADLESS REFUSES EXPLICITLY; TWO WEBGPU `memset`-TO-ZERO-AND-SUCCEED SITES CLOSED. NEW SHARED SUITE 39/39 ON ELEVEN RUNTIME BACKENDS, 34/34 HEADLESS, D3D12 VIA 5 NEW SMOKE CHECKS (247/247), CANVAS COMPILE-VERIFIED; ASAN/UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-129/130/131/132/133.** |
-| REMED-GFX-128 | `Texture2D::GetData`'s two overloads give `startIndex` opposite meanings: a SOURCE offset in `GetData(Color*, int, int)` and a DESTINATION offset in the rectangle overload. | LOW | P3 | REMED-GFX-124 destination-offset coverage | **OPEN — XNA/FNA DEFINE `startIndex` AS THE DESTINATION ARRAY OFFSET IN BOTH; FOR A RENDER TARGET THE DIVERGENCE IS MASKED BY THE WHOLE-LEVEL OVERLOAD'S `startIndex == 0` GATE, WHICH THROWS `std::runtime_error` INSTEAD OF READING. BOTH BEHAVIOURS PINNED BY CHECKS D7/D8/E10.** |
+| REMED-GFX-128 | `Texture2D::GetData`'s two overloads give `startIndex` opposite meanings: a SOURCE offset in `GetData(Color*, int, int)` and a DESTINATION offset in the rectangle overload. | LOW | P3 | REMED-GFX-124 destination-offset coverage | **DONE 2026-07-30 — SAME DEFECT AND SAME EXPRESSION AS REMED-GFX-149, CLOSED BY THE SAME FIX.** GFX-149 was raised on 2026-07-29 during REMED-GFX-147 without noticing that this row, raised 2026-07-27 during REMED-GFX-124, already recorded the identical `Texture2D::GetData` expression -- including the `startIndex == 0 && elementCount == total` gate GFX-149 headlines. They are one defect recorded twice, not two defects, so they could not be fixed independently: making the whole-level overload accept a non-zero `startIndex` on a render target while leaving it a SOURCE offset on a plain texture would have produced a worse asymmetry than the one being removed. The unification GFX-128 asks for IS the GFX-149 fix. The checks that pinned the divergence are updated with it: D7/D8 (rectangle overload) were already correct and are unchanged; E10 asserted the defect and now asserts the contract. See the REMED-GFX-149 row for the full record. |
 | REMED-GFX-129 | Vulkan delivered a clear ONLY through the render-pass load action, so `Clear()` was not an ordered command at all: it was dropped on a `PreserveContents` target, it ran before a draw it was issued after, two clears in one bind cycle collapsed into one, and `ClearDepth` recorded no request whatsoever. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **DONE 2026-07-28 — REPRODUCED RED-FIRST AT 3/34 ON A NEW SHARED ORDERED-CLEAR SUITE, 124/232 ON REMED-GFX-018's CLEAROPTIONS SUITE (REGISTERED ON VULKAN FOR THE FIRST TIME) AND 41/44 ON GFX-140's X1/X2/X3, EVERY MEASUREMENT A/B AGAINST PRE-FIX PRODUCTION WITH THE FINAL TEST FILES. FIXED BY STAMPING EVERY DEFERRED ENTRY WITH ITS POSITION IN THE PUBLIC COMMAND STREAM, MAKING `PendingClear` ONE RECORD PER PUBLIC `Clear()`, AND REPLAYING EACH SEGMENT AS `draws -> vkCmdClearAttachments -> draws`. LOAD-OP FOLDING KEPT ONLY FOR A CLEAR THAT PRECEDES EVERY DRAW OF A CYCLE WHOSE PASS CLEARS ANYWAY. **34/34, 232/232, 44/44**; STANDARD AND SYNCHRONIZATION VALIDATION CLEAN WITH THE LAYER PROVED LOADED; `vkCmdClearAttachments` 0 -> 111/59/4 WITH EVERY OTHER NATIVE COUNTER UNCHANGED; ASAN/UBSAN CLEAN; 9 CROSS-BACKEND CONTROLS GREEN; ALL FOURTEEN BACKEND LIBRARIES BUILD; FOUR FALSE-POSITIVE-CAPABLE FILES STRENGTHENED.** |
 | REMED-GFX-130 | `ITextureCubeBackend::GetData`/`ITexture3DBackend::GetData` kept the no-op `void` default and the public cube/volume `GetData` converted their own zeroed scratch buffer regardless, so `TextureCube`/`Texture3D` readback fabricated the frame REMED-GFX-127 removed from `Texture2D`. | MEDIUM | P2 | REMED-GFX-127 interface survey | **DONE 2026-07-27 — REPRODUCED ON FIVE BACKENDS: HEADLESS 17/33 (`fabricated=64/64`, `sentinelSurvivors=0`, NO EXCEPTION — ITS `GetData` ACTIVELY ZERO-FILLED THE CALLER WHILE `SetData` STORED NOTHING), SOFTWARE 31/33 (CUBE MIP 1 `fabricated=16/16`), SDL_RENDERER 19/33, DX3 19/33, ASCII 32/56 (CUBE **AND** A `Texture3D` THAT CONSTRUCTED WITH NO STORAGE). FIXED BY MAKING BOTH INTERFACES RETURN `[[nodiscard]] bool` (TRUE ONLY FOR A COMPLETE REGION, DEFAULT FALSE), SIZING THE SHARED SCRATCH TO THE REQUESTED REGION RATHER THAN `elementCount`, REFUSING A NULL BACKEND, AND THROWING `ObjectDisposedException` AFTER DISPOSE. THREE WEBGPU `memset`-TO-ZERO-AND-SUCCEED SITES AND EASYGL'S PER-SLICE HALF-READ CLOSED; HEADLESS REFUSES EXPLICITLY AND ITS ZERO-FILLED CUBE/VOXEL STORAGE IS DELETED; ASCII'S FALSE `GraphicsCapability::Texture3D` CLAIM CORRECTED. NEW SHARED SUITE 56/56 ON EASYGL/VULKAN/BGFX/SDL_GPU/WEBGPU/D3D9/D3D11 AND 33/33 ON SOFTWARE/HEADLESS/SDL_RENDERER/ASCII/DX3; D3D12 VIA 4 NEW SMOKE CHECKS (251/251); CANVAS COMPILE-VERIFIED. ASAN+UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-134/135.** |
 | REMED-GFX-131 | WebGPU configured an `*UnormSrgb` surface format and created render targets with it, so a mid-tone channel written through the render pass came back gamma-encoded (128 -> 188) unlike XNA's non-sRGB `SurfaceFormat.Color`. | MEDIUM | P2 | REMED-GFX-127 pattern setup | **DONE 2026-07-28 — MEASURED AS EXACTLY ONE STANDARD LINEAR-TO-SRGB ENCODE ON R, G AND B INDEPENDENTLY; `surfaceFormat_` IS NOW ALWAYS NON-SRGB, WITH A `viewFormats` REINTERPRETATION FOR SRGB-ONLY SURFACES. FOUR FIXTURES HAD ASSERTED THE ENCODED VALUES AND WERE CORRECTED. SPAWNED GFX-147/148.** |
 | REMED-GFX-132 | `cna_reference_dump` links `CNA` without the `--start-group` wrapper its own build-system comment says it needs, so it fails to link under the ASCII backend. | LOW | P3 | REMED-GFX-127 build matrix | **OPEN — `BuildAsciiFontAtlas` REFERENCES `SpriteFont::SpriteFont` FROM AN ALREADY-PASSED ARCHIVE. EVERY BACKEND LIBRARY, EVERY ASCII TEST AND `CnaTests` BUILD; ONLY THIS TOOL TARGET FAILS.** |
 | REMED-GFX-133 | `headless_smoke_test` Check F catches `HeadlessValidationException` for an out-of-range indexed draw that REMED-GFX-110's shared validation now rejects with `System::ArgumentOutOfRangeException` first, so the exception escapes and aborts the executable. | LOW | P3 | REMED-GFX-127 regression matrix | **OPEN — A/B-PROVEN PRE-EXISTING (THE PRE-REMED-GFX-127 SOURCES ABORT IDENTICALLY). WHETHER THE SHARED LAYER OR THE HEADLESS MODE DIAL SHOULD OWN THE REJECTION IS A CONTRACT QUESTION.** |
 | REMED-GFX-147 | EasyGL sampled a `RenderTarget2D` bottom-up while `GetData` and ordinary `Texture2D` sampling were both top-down: an OpenGL framebuffer's origin is bottom-left, readback already compensated, sampling did not. | MEDIUM | P2 | REMED-GFX-131 cross-backend controls | **DONE 2026-07-29 — CORRECTED AT SAMPLE TIME THROUGH ONE PREDICATE SHARED BY SPRITEBATCH AND THE ELEVEN STOCK 3D SHADERS; `GetData` UNTOUCHED, NO COPY/READBACK/RE-UPLOAD, NO PROGRAM VARIANT. 25/60 -> 60/60. ONE ORIENTATION-BLIND FIXTURE STRENGTHENED. SPAWNED GFX-149/150/151/152/153/154.** |
-| REMED-GFX-149 | `Texture2D::GetData(Color*, startIndex, elementCount)` gates its render-target backend fallback on `startIndex == 0` and throws for any other offset, while the rectangle overload honours the same offset. Shared layer, every backend. | LOW | P3 | — | OPEN (measured 2026-07-29 during REMED-GFX-147) |
+| REMED-GFX-149 | `Texture2D::GetData(Color*, startIndex, elementCount)` gates its render-target backend fallback on `startIndex == 0` and throws for any other offset, while the rectangle overload honours the same offset. Shared layer, every backend. | LOW | P3 | — | **DONE 2026-07-30 — RECLASSIFIED AND WIDENED: THE TICKET NAMED ONE SYMPTOM OF SEVEN, AND THE WORST ONE KILLS THE PROCESS. REMED-GFX-128 IS THE SAME EXPRESSION AND IS CLOSED BY THE SAME FIX (see its row).** GFX-149 recorded only "the render-target fallback is gated on `startIndex == 0`". Measured, the shared, backend-neutral `Texture2D::GetData(Color*, int startIndex, int elementCount)` violated the contract in SEVEN ways at once: (1) `startIndex` indexed the SOURCE (`src = (startIndex + i) * 4`) while the destination was written from `data[0]` -- exactly inverted, and the exact opposite of the rectangle overload's `dst = startIndex + row * w + col` on the same object (this is REMED-GFX-128, which GFX-149 duplicated without noticing); (2) the render-target fallback rejected any non-zero `startIndex` with `std::runtime_error("no CPU-side pixel data available")` -- the ticket's headline; (3) the same gate required `elementCount == total`, rejecting the legal EXCESS capacity FNA's own `GetData<T>(T[] data)` passes; (4) that fallback wrote from `data[0]`, ignoring `startIndex` even had it been reached; (5) `startIndex + elementCount > total` compared DESTINATION indices against the SOURCE pixel count; (6) an `elementCount` BELOW the region silently returned a partial frame instead of rejecting, unlike the rectangle overload, `TextureCube`, `Texture3D` and `GetBackBufferData`, all four of which already rejected it; (7) `startIndex + elementCount` was evaluated as `int`, so it WRAPPED and the wrapped value passed every later bound -- ASan names the exact line, `Texture2D.cpp:397`, `heap-buffer-overflow READ of size 1` in `Texture2D::GetData`, and without ASan it is a plain SIGSEGV. A public API argument shape killed the process. **AUTHORITATIVE SEMANTICS, established not assumed.** `startIndex` indexes the CALLER'S DESTINATION ARRAY: FNA pins `data` and transfers to `AddrOfPinnedObject() + startIndex * elementSizeInBytes`, and the archived XNA reference documents it as "index of the first element to get", an index into `data`. It is an ELEMENT index, never a byte offset, never a source texel. `elementCount` is the destination CAPACITY available from `startIndex`: FNA hands it to the native transfer as `elementCount * elementSizeInBytes` and derives the transfer size from the REQUESTED REGION, and `GetData<T>(T[] data)` passes `data.Length`, which may exceed the region -- so excess is legal and must be left untouched, and a capacity below the region must be rejected before any transfer. Region = the complete level 0 for the whole-level overloads, this rectangle's own dimensions at this mip level for the rectangle overload; never `elementCount`, never level 0's dimensions, never a previous request. Written range on success: exactly `[startIndex, startIndex + regionPixels)`. Element size is 4 bytes on every path -- the public destination type is `Color` and `Texture::ValidateFormat` accepts only `SurfaceFormat::Color` project-wide, so there is NO templated element type, no compressed block and no per-format pitch case; that is stated rather than invented coverage. **FIX** = one shared `validateTransferWindow()` used by both overloads (capacity checked against the requested region; the destination window computed in 64 bits and rejected before use), the gate deleted, and both copy loops running over the REGION writing at `data[startIndex + i]`. Argument validation runs BEFORE the storage/capability decision, so an undersized or overflowing request keeps its own specific error instead of being weakened into the backend's `NotSupportedException` -- REMED-GFX-162's precedence, preserved from the texture side and asserted on Headless (G4/G5). Validation precedence: null/`elementCount <= 0` -> `std::invalid_argument`; `startIndex < 0` -> `std::out_of_range`; `level < 0` -> `std::out_of_range`; format; rectangle bounds -> `std::out_of_range`; capacity below region -> `std::out_of_range`; `startIndex + elementCount` overflow -> `std::out_of_range`; THEN missing shadow -> `std::runtime_error` / missing capability -> `System::NotSupportedException`. Also adds `CNA_TEXTURE_TRANSFER_TRACE`, an env-gated one-line trace (region, element size, required elements/bytes, authorised destination element AND byte range, row pitch, content source) mirroring `CNA_BACKBUFFER_READ_TRACE`. **NO public signature, NO header, NO enum, NO backend and NO shader changed** -- one production file, `Texture2D.cpp`. **CARDINALITY unchanged:** no extra native copy, staging allocation, map, download, submit, wait, Present, frame advance or target switch; scratch is still sized to the region (not to `elementCount`), validation is O(1), and the copy is proportional to the requested region alone -- the destination prefix and suffix cost nothing. **NEW `examples/texture2d_getdata_transfer_range_test.cpp`**: every destination pre-filled with a DISTINCT per-element guard `Color(i, i >> 8, 0xAB, 0xCD)` that no pattern colour and no readback can produce, so a write before `startIndex`, a write past the authorised range, an unwritten requested element, a duplicated row, a wrong stride and a byte-versus-element mistake are each separately decidable and separately reported with exact indices and coordinates; the plain-texture pattern is invertible (R = column, G = row) on odd, non-square 13x7 and 11x5 resources with four distinct corner values, a mid-tone body and an interior alpha block that is neither 0 nor 255. A render target is measured against the ALREADY-CORRECT rectangle overload at `startIndex` 0, never against absolute colours, so WebGPU's sRGB render-target encoding and every orientation concern stay out of this ticket. **A/B pre-fix (SOFTWARE, narrow restoration of `Texture2D.cpp` alone):** T2/T3/T4/T5 `out_of_range "index out of range"`; T7 (elementCount=1 for a 91-pixel region) NO exception and a one-element partial frame at `data[0]`; T9 offsets 98/202 `out_of_range`; T10 NO exception, wrote `data[0]` from an out-of-bounds read; T11 SIGSEGV. **Post-fix cross-backend:** SOFTWARE/EASYGL/VULKAN/WEBGPU/SDL_GPU/BGFX/D3D9/D3D11 **74/74**, HEADLESS **71/71** (render-target legs assert the GFX-162 rejection), SDL_RENDERER/DX3/ASCII **70/70** (mip storage declared absent and its documented rejection ASSERTED, not skipped), CANVAS cross-built (wasm, no runtime here), D3D12 cross-built with its runtime unavailable for the pre-existing DX-100 reason (vanilla Wine `dxgi_factory_CreateSwapChainForHwnd`), identical on the untouched REMED-GFX-127 fixture used as the control. **FOUR FALSE POSITIVES**, one of which ASSERTED the defect: `software_rendertarget_readback_test.cpp` E10 required `Throws<std::runtime_error>` for a non-zero `startIndex` -- three lines below D7/D8, which assert the opposite for the rectangle overload on the same target -- now asserts the real contract plus the capacity rule never covered on this overload (88/88 -> 91/91); `rendertarget_sampling_orientation_test.cpp` N4 printed an `[INFO]` line either way and asserted nothing, now a real check (60/60); `texture2d_getdata_contract_test.cpp` A4 carried the now-false note "the whole-level overload's is a SOURCE offset", and new A4b asserts the destination-offset guarantee with excess capacity on all fourteen backends (39/39 -> 40/40); `Texture2DTests.cpp` -- five decoder tests read ONE pixel of a 4x4 or 2x2 texture, relying on the partial read XNA never offered, and now read the whole level and assert EVERY pixel (reported honestly as corrected callers, not red-first assertions: a whole-level read at `startIndex` 0 is legal on both sources). **SANITIZERS:** ASan+UBSan Headless 71/71 (39 `__asan_*` / 15 `__ubsan_*` symbols linked), Software ASan 74/74 (39 symbols) and Software UBSan 74/74 (16 symbols) -- zero AddressSanitizer reports, zero `runtime error:` lines, zero leaks, across non-zero `startIndex`, exact boundary writes, one-too-small `elementCount`, oversized destinations, protected prefix/suffix, odd regions, explicit rectangles, mip paths, overflow-shaped inputs, repeated calls and exception unwinding. The SAME ASan build on the pre-fix source reports `heap-buffer-overflow READ` at `Texture2D.cpp:397`, so the clean post-fix run is meaningful rather than vacuous. **NATIVE VALIDATION:** Vulkan validation layer zero VUIDs, WebGPU zero uncaptured errors / device-lost, EasyGL zero GL errors under GL debug, SDL_GPU debug mode zero messages, bgfx zero fatals -- all at 74/74. **REGRESSION GATES**, 7 fixtures x 7 backends, 49/49 green: GFX-127 Texture2D completion, GFX-130 cube/volume boundaries, GFX-134 RenderTargetCube readback, GFX-161 first-read sentinel, GFX-162 Headless rejection, GFX-165 backbuffer dimension, GFX-166/167 bound-target lifetime. `ctest -L Software` **43/43**; `ctest -L Headless` **32/33**, the sole failure `Headless_Smoke` pre-existing and explicitly out of scope; `ctest -R EasyGL` **275/277**, both failures (`EasyGL_DeviceValidation`'s `SetVertexBuffers(16)` and `EasyGL_GraphicsDevice_ReferenceStencil`'s stencil override) A/B-proven identical on the pre-fix source and containing zero `Texture2D::GetData` references. Full Software `CnaTests` 5691/5739 (44 skipped) against a pre-fix baseline of 5692/5739 -- the same three pre-existing failures plus one flaky real-process ENet host-migration test with zero `Texture2D`/`GetData` references. All fourteen backend libraries compile incrementally. **No new ticket ID was created.** Commits: test `0fc528da`, fix `f07f5020`, false positives `0cbc73ee`, coverage `83143dd1`, docs (this). |
 | REMED-GFX-150 | Software's SpriteBatch interpolates when magnifying even with `SamplerState::PointClamp`: 4/128 texels exact vs EasyGL's 128/128 on the identical plain-`Texture2D` draw. | MEDIUM | P2 | — | OPEN (isolated 2026-07-29 during REMED-GFX-147) |
 | REMED-GFX-151 | Vulkan: a `RenderTarget2D` rendered, unbound and then sampled with no intervening `GetData` reproduced 0/32 of the source, because the readback flush filtered the frame's segment list down to the target being READ and so never recorded the PRODUCER's render pass. The canonical XNA render-to-texture sequence. | HIGH | P1 | REMED-GFX-147 leg G0 | **DONE 2026-07-29 — 15/43 -> 43/43 ON A NEW DEDICATED FIXTURE, PLUS 43/43 ON A `PreferMultiSampling` DEVICE WITH THE APPLIED SAMPLE COUNT ASSERTED TO BE 4 AND 43/43 UNDER SYNCHRONIZATION VALIDATION WITH THE LAYER PROVED LIVE AND ZERO MESSAGES OF ANY KIND. FIXED BY MAKING THE FLUSH REPLAY THE TRANSITIVE CLOSURE OF THE BIND CYCLES A READBACK DEPENDS ON — THE READ TARGET'S OWN GROUP PLUS, FOR EACH CYCLE IN THE SET, THE EARLIER CYCLES OF EVERY RENDER-TARGET GROUP IT SAMPLES — STILL IN ASCENDING SEGMENT ORDER. NO BARRIER, FENCE, DEVICE/QUEUE WAIT, SUBMIT-PER-SWITCH, EXTRA PRESENT, EXTRA FRAME OR READBACK ADDED; THE SUBMIT-PER-MRT-PROXY LOOP IS REPLACED BY ONE COMMAND BUFFER AND ONE SUBMIT, SO CARDINALITY GOES DOWN. A SIMPLER POSITIONAL RULE ALSO PASSED THE CANONICAL FIXTURE AND WAS IMPLEMENTED, MEASURED AND REJECTED (LEG I2 0/32). VULKAN SHARD 180/181, THE ONE FAILURE A/B-PROVEN PRE-EXISTING. SIX CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN; 8 OF 48 VULKAN RENDER-TARGET FIXTURES SAMPLE A TARGET AND ALL 8 OBSERVED THE CONSUMER THROUGH `GetBackBufferData`, NEVER THROUGH A TARGET READBACK — ONE STRENGTHENED (2/4 -> 4/4). SPAWNED GFX-155/156.** |
 | REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | **DONE 2026-07-29 — THIRTEEN (NOT TEN) CAST SITES, PROVEN UNDER UBSAN AS `downcast of address … which does not point to an object of type 'SdlGpuTextureBackend'` FOLLOWED BY SIGSEGV, THE FABRICATED HANDLE BEING THE TARGET'S OWN `mipMap_` + THREE BYTES OF UNINITIALISED PADDING + `multiSampleCount_` (0x20612000). FIXED BY ONE SHARED `ResolveSampledTextureEXT`/`ResolveSampledCubeEXT` RETURNING AN `SdlGpuSampledTextureEXT` (SAMPLEABLE NATIVE HANDLE + KEEP-ALIVE), USED BY SPRITEBATCH AND EVERY EFFECT ALIKE; MSAA IS CORRECT BY CONSTRUCTION BECAUSE THE ATTACHMENT IS `COLOR_TARGET`-ONLY AND CANNOT BE SELECTED. NEW PROCESS-ISOLATED FIXTURE 15/18 LEGS SIGSEGV -> 18/18 LEGS, 0 CRASHES, 56/56 CHECKS. NOTHING ADDED: NO PRESENT, GETDATA, CPU COPY, WAIT, EXTRA FRAME/PASS/SUBMIT; SDL CALL-SITE CARDINALITY UNCHANGED EXCEPT `SDL_ReleaseGPUTexture` 15 -> 12. FOUR FALSE-POSITIVE SKIPS REMOVED (THREE A/B-PROVEN LOAD-BEARING, ONE PROVEN OVER-APPLIED). SDL_GPU DEBUG VALIDATION AND FORCED `VK_LAYER_KHRONOS_validation` BOTH CLEAN; ASAN/UBSAN CLEAN. NINE CROSS-BACKEND CONTROLS GREEN. SPAWNED GFX-166/167.** |
@@ -19908,3 +19908,279 @@ SDL_RENDERER, CANVAS, ASCII, DX3, D3D9, D3D11, D3D12).
 - `docs(remediation): record GFX-168 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-149 — `Texture2D::GetData`'s `startIndex`/`elementCount` contract (DONE 2026-07-30)
+
+Closes **REMED-GFX-128** as well: the same expression, the same defect, the same fix.
+
+### Scope: what the authoritative record actually covers
+
+The ticket names one function — `Texture2D::GetData(Color*, int startIndex, int elementCount)` — and one
+symptom, the `startIndex == 0` gate on its render-target fallback. Reading the code, that function is the
+*only* transfer entry point in the project that does not already implement the XNA contract, and its two
+sibling overloads reach it: `GetData(Color*, int elementCount)` forwards `startIndex = 0`, and
+`GetData(int level, const Rectangle*, ...)` delegates whenever `level == 0 && rect == nullptr`. Three public
+overloads, one defective body.
+
+Everything else was measured and found **already correct**, so nothing else is in scope:
+
+| API | `startIndex` | capacity rule | verdict |
+|---|---|---|---|
+| `Texture2D::GetData(Color*, int, int)` | **SOURCE offset** | `startIndex + elementCount > total` | **defective** |
+| `Texture2D::GetData(Color*, int)` | forwards 0 | inherited | **defective by delegation** |
+| `Texture2D::GetData(int, const Rectangle*, ...)` | destination | `elementCount < w*h` | **defective only on its `level==0 && rect==nullptr` delegation** |
+| `TextureCube::GetData` (all overloads) | destination | `elementCount < w*h` | correct |
+| `Texture3D::GetData` (all overloads) | destination | `elementCount < boxW*boxH*boxD` | correct |
+| `GraphicsDevice::GetBackBufferData` (all overloads) | destination | `elementCount < w*h` | correct |
+| `RenderTarget2D` / `RenderTargetCube` | inherit `Texture2D` / `TextureCube` — no override | | |
+
+`Texture2D::SetData` is untouched and was already right: there `data` is the SOURCE, so
+`src = startIndex + row * w + col` is the correct reading of the same parameter.
+
+### Authoritative public semantics
+
+Established from FNA's implementation and the archived XNA reference, not from the current code.
+
+* **`startIndex` indexes the caller's DESTINATION array.** FNA pins `data` and transfers to
+  `handle.AddrOfPinnedObject() + (startIndex * elementSizeInBytes)`; the archived
+  `Microsoft.Xna.Framework.Graphics.xml` documents it as *"Index of the first element to get"* — an index
+  into the `data` parameter. It is an **element** index, never a byte offset and never a source texel.
+* **`elementCount` is the destination CAPACITY available from `startIndex`.** FNA hands the native
+  transfer `elementCount * elementSizeInBytes` as `dataLengthBytes` and derives the transfer size from the
+  requested region (`subW`/`subH`). `GetData<T>(T[] data)` passes `data.Length`, which may exceed the
+  region — so **excess capacity is legal and must be left untouched**, and a capacity **below** the region
+  must be rejected before any transfer. This is also the rule CNA's own four sibling APIs already enforce.
+* **The requested region** is the complete level 0 for the whole-level overloads, and this rectangle's own
+  dimensions at this mip level for the rectangle overload. Never `elementCount`, never level 0's
+  dimensions for a level-1 read, never a viewport, never a previous request.
+* **Written destination range on success:** exactly `[startIndex, startIndex + regionPixels)`.
+
+### Element versus byte arithmetic
+
+The public destination type is `Color` and `Texture::ValidateFormat` accepts only `SurfaceFormat::Color`
+project-wide, so this API has **no templated element type, no compressed block and no per-format pitch
+case**. The format matrix is one row, and that is stated rather than padded out with invented coverage:
+
+```
+bytesPerElement      = 4                       (Color)
+bytesPerPixel        = 4                       (SurfaceFormat::Color, RGBA8)
+requiredElements     = regionW * regionH       (region, not elementCount, not the full resource)
+requiredBytes        = requiredElements * 4
+destElements         = [startIndex, startIndex + requiredElements)
+destBytes            = [startIndex * 4, (startIndex + requiredElements) * 4)
+rowPitchBytes        = regionW * 4             (native padding is never exposed as caller elements)
+```
+
+`startIndex + elementCount` is computed in `int64_t` and rejected if it exceeds `INT_MAX`.
+
+### The pre-fix behaviour, exactly
+
+```cpp
+if (gpuOnlyContent_ && backend_ && startIndex == 0 && elementCount == total && total > 0)
+    ... for (i < elementCount) data[i] = ...;                     // (2) (3) (4)
+throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
+...
+if (startIndex + elementCount > total)                            // (5) (7)
+    throw std::out_of_range("Texture2D::GetData: index out of range");
+for (i < elementCount) { src = (startIndex + i) * 4; data[i] = ...; }   // (1) (6)
+```
+
+1. **`startIndex` applied to the SOURCE, destination written from `data[0]`** — exactly inverted, and the
+   exact opposite of the rectangle overload's `dst = startIndex + row * w + col` on the same object. This
+   is what REMED-GFX-128 recorded on 2026-07-27; REMED-GFX-149 was raised on 2026-07-29 without noticing.
+2. **Any non-zero `startIndex` on a render target rejected** with "no CPU-side pixel data available" — a
+   legal XNA call answered as though the resource had no content. The ticket's headline.
+3. **`elementCount == total` demanded**, so legal excess capacity was rejected.
+4. The fallback wrote from `data[0]`, ignoring `startIndex` even had it been reached.
+5. **`startIndex + elementCount > total` compares DESTINATION indices against the SOURCE pixel count.**
+6. **An `elementCount` below the region silently returned a partial frame** instead of rejecting, unlike
+   all four sibling APIs.
+7. **`startIndex + elementCount` evaluated as `int`** wraps for large arguments, and the wrapped value
+   passes every later bound, so the copy reads far outside the pixel shadow.
+
+Failing expression for (7), named by AddressSanitizer on the pre-fix source:
+
+```
+ERROR: AddressSanitizer: heap-buffer-overflow ... READ of size 1
+    #0 Microsoft::Xna::Framework::Graphics::Texture2D::GetData(Color*, int, int) const
+       src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp:397
+SUMMARY: AddressSanitizer: heap-buffer-overflow Texture2D.cpp:397 in Texture2D::GetData
+```
+
+Without a sanitizer this is a plain SIGSEGV. A public API argument shape killed the process.
+
+### The fix
+
+One shared helper used by both bodies:
+
+```cpp
+static void validateTransferWindow(const char* api, int startIndex, int elementCount,
+                                   int requiredElements)
+{
+    if (elementCount < requiredElements)  throw std::out_of_range(...);
+    if (static_cast<std::int64_t>(startIndex) + elementCount > INT_MAX)
+                                          throw std::out_of_range(...);
+}
+```
+
+The gate is deleted; both copy loops now run over the **region** and write at `data[startIndex + i]`; the
+render-target scratch buffer stays sized to the region (not to `elementCount`), so a larger capacity can
+never hand the caller an untouched tail as content — REMED-GFX-127's rule, unchanged. A defensive check
+rejects a level-0 shadow smaller than the level rather than reading past it.
+
+**Shared versus backend responsibility.** All four concerns stay where they were: public validation and
+destination range in the shared layer; logical region sizing in the shared layer; native byte layout and
+row pitch in the backend; the CPU unpack loop in the shared layer, at a destination offset the backend
+never sees. No backend was changed and none needs to reinterpret `startIndex`/`elementCount`.
+
+### Validation precedence (preserved, and now asserted)
+
+```
+1  data == nullptr | elementCount <= 0            std::invalid_argument
+2  startIndex < 0                                 std::out_of_range
+3  level < 0                                      std::out_of_range        (rectangle overload)
+4  Texture::ValidateGetDataFormat                 std::invalid_argument
+5  rectangle out of bounds                        std::out_of_range        (rectangle overload)
+6  elementCount < requiredElements                std::out_of_range
+7  startIndex + elementCount overflow             std::out_of_range
+--- only now is storage or capability consulted ---
+8  no CPU shadow, not gpuOnlyContent_             std::runtime_error
+9  backend cannot read this resource back         System::NotSupportedException
+```
+
+Steps 1–7 run **before** 8–9 on every backend, which is REMED-GFX-162's precedence seen from the texture
+side. Checks G4 and G5 assert it on Headless specifically: an undersized `elementCount`, a negative
+`startIndex` and an overflow-shaped request must each raise their own argument error there, **not** be
+weakened into the capability rejection.
+
+### Cost
+
+No behaviour was added, only removed and corrected. Per canonical call, before and after: **1** shared
+validation pass (O(1)), **0 or 1** native readback (unchanged — only the render-target path calls the
+backend, exactly once), **1** scratch allocation sized to the region, **0** retries, **0** priming reads,
+**0** extra `Present`, frame advances, target switches or waits, and **1** CPU copy of exactly
+`regionW * regionH` elements. The destination prefix and suffix cost nothing: they are never read, never
+written and never allocated by this layer.
+
+### Verification
+
+**New fixture** `examples/texture2d_getdata_transfer_range_test.cpp`, registered on all fourteen backends.
+Every destination element carries a distinct guard `Color(i & 0xFF, i >> 8, 0xAB, 0xCD)`; the pattern's
+blue channel is only ever `0x00/0x40/0x80/0xC0/0xFF` and its alpha only `0xFF/0x5A`, so `B == 0xAB &&
+A == 0xCD` decides "still a guard" exactly, and the guard's own index is recoverable from it — a *moved*
+guard is caught, not just a missing one. The pattern is invertible (R = column + 1, G = row + 1) on odd,
+non-square 13×7 and 11×5 resources with four distinct corner values, a mid-tone body and an interior block
+whose alpha is neither 0 nor 255.
+
+A render target is measured against the **already-correct rectangle overload reading at `startIndex` 0**,
+never against absolute colours, so WebGPU's `*UnormSrgb` render-target encoding, every orientation question
+and every MSAA question stay outside this ticket.
+
+Matrix covered: exact capacity at `startIndex` 0 and non-zero; destination exactly `startIndex + required`;
+oversized destination; excess `elementCount`; one element short; grossly short; the two-argument overload;
+repeated reads at three different offsets with the gaps asserted intact; overflow-shaped `startIndex` and
+overflow-shaped `elementCount`; negative `startIndex`; negative and zero `elementCount`; null destination;
+an explicit element-versus-byte probe. Regions: rectangle-less full level, explicit full rectangle,
+one-pixel corner, final row, final column, centred odd sub-rectangle, odd-offset column band, mip level 1
+(6×3 — its own dimensions, not level 0's 91), and a capacity one short of *that* level.
+
+**A/B pre-fix** (Software, narrow restoration of `Texture2D.cpp` alone, no `git stash`):
+
+| leg | pre-fix |
+|---|---|
+| T2 `startIndex=5, elementCount=91` | `out_of_range "index out of range"` |
+| T3 destination exactly `startIndex+91` | `out_of_range` |
+| T4 oversized destination, exact count | `out_of_range` |
+| T5 excess capacity 191 ≥ 91 | `out_of_range` |
+| T7 `elementCount=1` for a 91-pixel region | **no exception**; one-element partial frame at `data[0]` |
+| T9 offsets 98 / 202 | `out_of_range` |
+| T10 `startIndex=INT_MAX-2` | **no exception**; wrote `data[0]` from an out-of-bounds read |
+| T11 `elementCount=INT_MAX` | **SIGSEGV** |
+
+**Post-fix cross-backend:**
+
+| backend | result | note |
+|---|---|---|
+| SOFTWARE · EASYGL · VULKAN · WEBGPU · SDL_GPU · BGFX | **74/74** | |
+| D3D9 (Wine + DXVK, `:99`) | **74/74** | real DXVK engaged |
+| D3D11 (Wine + DXVK, `:99`) | **74/74** | real DXVK engaged |
+| HEADLESS | **71/71** | render-target legs assert the REMED-GFX-162 rejection |
+| SDL_RENDERER · DX3 · ASCII | **70/70** | mip storage declared absent; its documented rejection asserted, not skipped |
+| CANVAS | cross-built | wasm module, no runtime in this environment |
+| D3D12 | cross-built | runtime unavailable: vanilla Wine `dxgi_factory_CreateSwapChainForHwnd` (the pre-existing DX-100 boundary), **identical on the untouched REMED-GFX-127 fixture used as the control** |
+
+**Native validation, all at 74/74:** Vulkan validation layer — zero VUIDs; WebGPU — zero uncaptured errors,
+zero device-lost; EasyGL under GL debug — zero GL errors; SDL_GPU debug mode — zero messages; bgfx — zero
+fatals.
+
+**Sanitizers:** ASan+UBSan Headless **71/71** (39 `__asan_*` / 15 `__ubsan_*` symbols linked), Software ASan
+**74/74** (39 symbols), Software UBSan **74/74** (16 symbols). Zero AddressSanitizer reports, zero
+`runtime error:` lines, zero leaks, zero use-after-free — across non-zero `startIndex`, exact boundary
+writes, one-too-small `elementCount`, oversized destinations, protected prefix/suffix, odd region
+dimensions, explicit rectangles, mip paths, overflow-shaped inputs, repeated calls and exception unwinding.
+The **same ASan build on the pre-fix source reports the `heap-buffer-overflow` quoted above**, so the clean
+post-fix run is meaningful rather than vacuous.
+
+### False-positive test audit
+
+Four sites, found by auditing every `Texture2D::GetData` call in the tree against the corrected contract.
+One of them **asserted the defect**.
+
+| fixture | what it did | now | A/B pre-fix |
+|---|---|---|---|
+| `software_rendertarget_readback_test.cpp` E10 | required `Throws<std::runtime_error>` for a non-zero `startIndex`, three lines below D7/D8 which assert the opposite for the rectangle overload **on the same target** | asserts the real contract (E10/E10b) plus the capacity rule never covered on this overload (E10c/E10d); 88/88 → **91/91** | abort, `runtime_error "no CPU-side pixel data available"` |
+| `rendertarget_sampling_orientation_test.cpp` N4 | printed an `[INFO]` line either way and asserted nothing | real check with N3's guard-and-content oracle; **60/60** | `[FAIL]`, same `runtime_error` |
+| `texture2d_getdata_contract_test.cpp` A4 | carried the now-false note "the whole-level overload's is a SOURCE offset" | note corrected; new A4b asserts the destination-offset guarantee with excess capacity on all fourteen backends; 39/39 → **40/40** | abort, `out_of_range "index out of range"` |
+| `Texture2DTests.cpp` ×5 | read ONE pixel of a 4×4 or 2×2 texture (`GetData(px, 0, 1)`), relying on a partial read XNA never offered | read the whole level and assert **every** pixel, so a decoder that got only the first pixel right no longer passes | not red-first — a whole-level read at `startIndex` 0 is legal on both sources; reported as corrected callers |
+
+### Regression gates
+
+Seven fixtures × seven backends, **49/49 green**: REMED-GFX-127 (Texture2D completion), REMED-GFX-130
+(cube/volume boundaries), REMED-GFX-134 (RenderTargetCube readback), REMED-GFX-161 (first-read sentinel),
+REMED-GFX-162 (Headless rejection and precedence), REMED-GFX-165 (backbuffer dimension), REMED-GFX-166/167
+(bound-target lifetime).
+
+Suites: `ctest -L Software` **43/43**; `ctest -L Headless` **32/33** — the sole failure `Headless_Smoke` is
+pre-existing and explicitly out of this task's scope; `ctest -R EasyGL` **275/277** — `EasyGL_DeviceValidation`
+(`SetVertexBuffers(16) does not throw`) and `EasyGL_GraphicsDevice_ReferenceStencil` (stencil override) both
+**A/B-proven identical on the pre-fix source** and containing zero `Texture2D::GetData` references. Full
+Software `CnaTests` **5691/5739** (44 skipped) against a **5692/5739** pre-fix baseline: the same three
+pre-existing failures (`XnbContainerFuzzTest.MutatedRealModelFixture` — a VertexDeclaration stride error;
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`; `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets`)
+plus one flaky real-process ENet host-migration test with zero `Texture2D`/`GetData` references.
+
+All fourteen backend libraries compile incrementally.
+
+### Source and generated-artifact changes
+
+**One production file:** `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp`. No header, no public
+signature, no enum, no backend, no shader, no generated artifact and no offline-compiled bytecode.
+
+### New findings
+
+**None. No new ticket ID was created.** REMED-GFX-128 is not a new finding — it is the pre-existing record
+of this same expression, and it is marked DONE alongside this task rather than left open against code that
+no longer exists.
+
+### Build directories, ccache and displays
+
+Every directory below was **reused**; none was created, cleaned, deleted or recreated, every configure was
+incremental, no clean build occurred, and no build tree was created under `/tmp`, `/var/tmp` or `/dev/shm`
+— the scratchpad held only logs and two source snapshots used for the narrow A/B restorations.
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-software` · `cmake-build-headless` · `cmake-build-debug` (EasyGL) · `cmake-build-vulkan` · `cmake-build-webgpu` · `cmake-build-sdlgpu` · `cmake-build-bgfx` | the seven native backends | ON | reused |
+| `cmake-build-sdlrenderer` · `cmake-build-dx3` · `cmake-build-ascii` · `cmake-build-canvas` | four more | ON | reused |
+| `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | D3D cross-builds | ON | reused |
+| `cmake-build-headless-asan-ubsan` · `cmake-build-software-asan` · `cmake-build-software-ubsan` | sanitizers | ON | reused |
+
+Displays: `:101` for every native backend, `:99` for the Wine/DXVK/vkd3d D3D controls. `:0` was never used.
+No global process-kill command was issued.
+
+### Commits
+
+`0fc528da` test (reproduce) · `f07f5020` fix · `0cbc73ee` test (false positives) · `83143dd1` test
+(coverage) · docs (this).
