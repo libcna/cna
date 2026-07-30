@@ -2497,7 +2497,9 @@ existing task.
 | REMED-GFX-172 | WebGPU: the DualTexture3D texture bind group has ONE sampler entry for TWO texture views, so `GraphicsDevice.SamplerStates[1]` cannot be expressed and slot 1 inherits slot 0's sampler. Distinct from GFX-170 (SDL_GPU passes the same leg); needs a bind-group-layout and WGSL change. | LOW | P3 | REMED-GFX-169 leg M3 | OPEN (isolated 2026-07-30 during REMED-GFX-169; WEBGPU 64/65) |
 | REMED-GFX-173 | SDL_GPU's `IssueEnvMapDraw` binds a literal LinearClamp sampler for the reflection cube, so `GraphicsDevice.SamplerStates[1]` is ignored for `EnvironmentMapEffect`. Its comment calls this the project-wide convention, which REMED-GFX-169 ended: Vulkan now honours slot 1 for the cube. A state-capture and convention question, not the filter-ordinal translation GFX-170 fixed, and distinct from GFX-172 (SDL_GPU's bind group CAN express it). | LOW | P3 | REMED-GFX-170 sampler trace | OPEN (isolated 2026-07-30 during REMED-GFX-170) |
 | REMED-GFX-174 | EasyGL wrote a sampler's anisotropy component only when it was ON, and one long-lived GL sampler object per slot turned that into a LATCH: the first `Anisotropic` draw raised `GL_TEXTURE_MAX_ANISOTROPY` to SamplerState's default 4 and every later Point/Linear draw on that slot kept sampling anisotropically, so no point fetch could return a stored texel again. The record's two "independent components" are one defect: SpriteBatch looked immune only because its legs run before any 3D leg (it passes a hardcoded maxAnisotropy of 1, so it can neither raise nor lower the latch). The record's mipmap-incompleteness component is refuted for ordinary textures (Task 924 already clamps MAX_LEVEL, trace reports complete=1) and REAL for render targets, cube maps and volume textures, where nothing clamped it and a single-level RenderTarget2D sampled under any of the seven mip-chain ordinals rendered solid black. Fixed both; EASYGL 50/70 -> 70/70 and a new 52-check order-sensitive fixture 29/52 -> 52/52. | LOW | P3 | REMED-GFX-170 cross-backend controls | DONE (2026-07-30) |
-| REMED-GFX-175 | A TextureFilter ordinal's MIPMAP component is dropped for `Linear` and `Point`: both map onto a GL filter with no mipmap term, so a texture that owns a real chain never mip-filters under either — including under the default filter. Measured by REMED-GFX-174's leg D4 against a real 4-level chain (samples LEVEL 0 under Linear; the table says mip=Linear), and it reproduces on SOFTWARE too, so it is a cross-backend contract question rather than an EasyGL defect. Reported as a note, not asserted, and not fixed. | LOW | P3 | REMED-GFX-174 leg D4 | OPEN (isolated 2026-07-30 during REMED-GFX-174) |
+| REMED-GFX-175 | A TextureFilter ordinal's MIPMAP component was dropped for `Linear` and `Point` on EasyGL. The contract is settled from FNA's own XNAMin/XNAMag/XNAMip tables and FNA3D's `XNAToGL_MinMipFilter`: Linear(0) is min/mag/mip LINEAR and Point(1) is min/mag/mip POINT, so both are FULL filters and ordinal 0 is the DEFAULT filter. EasyGL mapped them onto plain GL_LINEAR/GL_NEAREST (no mipmap term) while 2..8 were already right, and a declared-but-unwritten chain was mipmap-INCOMPLETE and sampled solid black under every mip-aware ordinal. The ticket's second claim is REFUTED: Software was not dropping a component, it had no mip pipeline at all (UpdatePixelsLevel a documented no-op, no LOD stage), so ALL NINE ordinals sampled level 0 there. Fixed both; new 87-check contract fixture, EASYGL 61/97 -> 87/87 and SOFTWARE 65/97 -> 87/87, with D3D9, D3D11, Vulkan, WebGPU and Bgfx all 87/87 as controls. | LOW | P3 | REMED-GFX-174 leg D4 | DONE (2026-07-30) |
+| REMED-GFX-176 | SDL_GPU: `SdlGpuTextureBackend`'s constructor hardcodes `num_levels = 1` and the class has no `UpdatePixelsLevel` override, so a `mipMap=true` Texture2D is a one-level GPU resource and every level the game writes above 0 is discarded. Consequence: NO TextureFilter ordinal mip-filters — measured 55/87 on REMED-GFX-175's contract fixture, with all nine ordinals sampling level 0 at exact 2x/4x/8x minification. A different defect from GFX-175 (whose EasyGL mechanism spares ordinals 2..8) and the same shape as GFX-175's Software half. The render-target, cube and MSAA paths do pass a real level count, so this is specific to the plain sampled Texture2D route. | LOW | P3 | REMED-GFX-175 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-175) |
+| REMED-GFX-177 | D3D12: the CBV/SRV/UAV descriptor heap has DX-103's fixed capacity with no growth or recycling, so a long enough sequence of legitimate public API calls exhausts it. REMED-GFX-175's fixture passed all 64 checks it reached — the whole Point and Linear LOD matrices, all nine ordinals, within-level filtering and single-level completeness — then aborted in leg G with `CBV/SRV/UAV descriptor heap exhausted`. Not a mip defect; D3D12's mip behaviour is CORRECT for everything measured and UNMEASURED for the remaining 23 checks. | LOW | P3 | REMED-GFX-175 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-175) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -21030,3 +21032,218 @@ It reproduces on SOFTWARE too, so it is a cross-backend contract question, not a
 
 `1b6a9b1b` test (reproduce + trace) · `11e22980` fix (anisotropy component) · `ca865bc5` fix
 (texture completeness) · docs (this).
+
+## REMED-GFX-175 — the mipmap component of `Linear` and `Point` (2026-07-30)
+
+### The authoritative contract, settled before anything was changed
+
+The ticket asked which behaviour is correct, so the answer was taken from the reference
+implementation rather than from any backend's convention.
+
+**FNA** decomposes every ordinal into three components explicitly, in
+`src/Graphics/Effect/Effect.cs` — the `XNAMin`, `XNAMag` and `XNAMip` tables. `XNAMip` reads
+`LINEAR` for ordinal 0 and `POINT` for ordinal 1. **FNA3D**'s OpenGL driver
+(`src/FNA3D_Driver_OpenGL.c`, `XNAToGL_MinMipFilter`) maps those two onto
+`GL_LINEAR_MIPMAP_LINEAR` and `GL_NEAREST_MIPMAP_NEAREST`.
+
+| ordinal | name | min | mag | **mip** |
+|---|---|---|---|---|
+| 0 | `Linear` | linear | linear | **linear** |
+| 1 | `Point`  | point  | point  | **point**  |
+
+So `Linear` and `Point` are **full filters that mip-filter a real chain**. They are not "the
+ordinals without a mip component", and reading them that way is the defect. `Linear` is also the
+**default filter** — `SamplerState::LinearWrap` — so dropping its mip term drops mipmapping for
+almost every real game.
+
+Five independent backends already implemented exactly this and scored 87/87 on the new fixture
+without a single production change: **D3D9, D3D11, Vulkan, WebGPU, Bgfx**. D3D9 is the real
+XNA-semantics backend, which is what makes the fixture's expectations XNA's and not a local
+convention.
+
+### EasyGL — the ticket's mechanism, confirmed exactly, plus a second layer
+
+**(a) The mip term.** `ApplySamplerState` mapped ordinal 0 onto plain `GL_LINEAR` and ordinal 1 onto
+plain `GL_NEAREST`. Neither carries a mipmap term. Measured on a real 4-level chain whose levels are
+distinct flat colours, a 4x minification returned:
+
+```
+Linear                       -> level 0   (255,0,0)      WRONG, table says mip=linear
+Point                        -> level 0   (255,0,0)      WRONG, table says mip=point
+Anisotropic                  -> level 2   (0,0,255)      correct
+LinearMipPoint               -> level 2   (0,0,255)      correct
+PointMipLinear               -> level 2   (0,0,255)      correct
+MinLinearMagPointMipLinear   -> level 2   (0,0,255)      correct
+MinLinearMagPointMipPoint    -> level 2   (0,0,255)      correct
+MinPointMagLinearMipLinear   -> level 2   (0,0,255)      correct
+MinPointMagLinearMipPoint    -> level 2   (0,0,255)      correct
+```
+
+Exactly two ordinals wrong and seven right is the signature of a dropped component, not of a missing
+mechanism — and it is what distinguishes EasyGL from Software and SDL_GPU below.
+
+**(b) The layer that made (a) unsafe, found by the new fixture's leg G.** A `Texture2D` created with
+`mipMap=true` DECLARES a chain, and Task 924 widens `GL_TEXTURE_MAX_LEVEL` to match the declaration —
+but `EasyGLTextureBackend`'s constructor only ever gave storage to **level 0**. GL evaluates
+completeness over `[BASE_LEVEL, MAX_LEVEL]`, so until the game happened to call `SetData` for every
+remaining level the texture was mipmap-INCOMPLETE, and an incomplete texture samples as **opaque
+black over its whole surface — magnification included**. Measured pre-fix: **256/256 black pixels at
+a 4x MAGNIFICATION** under every ordinal 2..8. That was already true before this task; giving
+ordinals 0 and 1 a mipmap term would have extended it to the **default filter**, which is why the
+completeness layer had to be closed in the same task rather than filed separately.
+
+The fix allocates every declared level at creation and after a context loss, exactly as this
+backend's own render-target, cube and volume constructors already do and exactly as FNA3D's
+`OPENGL_CreateTexture2D` does. It **allocates** what the caller asked for; it does not **generate**
+it — no level is derived from another, and a `mipMap=false` texture has an empty loop body.
+
+### Software — the ticket's second claim is refuted
+
+The record says leg D4 "reports the same result on SOFTWARE, so this is a cross-backend contract
+question rather than an EasyGL defect". The symptom matches; the mechanism does not, and the
+difference decides the fix.
+
+**All nine ordinals sampled level 0 on Software** — `LinearMipPoint`, `PointMipLinear` and the four
+`Min*Mag*` ordinals included, every one of which names a mip component explicitly. Software was not
+dropping a component. It had **no mip pipeline at all**:
+
+* `SoftwareTextureBackend::UpdatePixelsLevel` was a documented **no-op**, so every level the game
+  supplied above 0 was discarded as it arrived;
+* `SampleTexture` had **no level-of-detail stage** — its own comment declared mip selection outside
+  the backend's capability.
+
+Fixing ordinals 0 and 1 alone is not possible there: the missing machinery is shared by all nine. So
+GFX-175's fix on Software necessarily covers the whole enum, and that is recorded rather than
+presented as the ticket's own scope.
+
+The new sampler keeps five stages strictly separate — footprint/LOD, clamp, mip selection,
+within-level filter, address mode. `TriangleMagnifies` became `TriangleTexelRate` so that
+REMED-GFX-150's magnification classification and the new LOD come from **one number** and cannot
+disagree. Storage counts only the levels held **contiguously from 0**, so a chain declared with
+`mipMap=true` but never written stays at one level and is sampled exactly as before — the sampler
+can never reach a level nobody filled.
+
+### Cross-backend classification
+
+| backend | Linear on a real chain | Point on a real chain | result | verdict |
+|---|---|---|---|---|
+| EasyGL | level 0 -> **selects correctly** | level 0 -> **selects correctly** | 61/97 -> **87/87** | FIXED here |
+| Software | level 0 -> **selects correctly** | level 0 -> **selects correctly** | 65/97 -> **87/87** | FIXED here |
+| D3D9 | selects | selects | **87/87** | already correct (XNA reference) |
+| D3D11 | selects | selects | **87/87** | already correct |
+| Vulkan | selects | selects | **87/87** | already correct |
+| WebGPU | selects | selects | **87/87** | already correct |
+| Bgfx | selects | selects | **87/87** | already correct |
+| D3D12 | selects | selects | **64 checks, then aborted** | correct as far as measured; heap boundary = REMED-GFX-177 |
+| SDL_GPU | level 0 | level 0 | **55/87** | INDEPENDENT defect = REMED-GFX-176, not absorbed |
+| Headless | — | — | **SKIP** | honest non-rasterizing boundary |
+
+SDL_GPU fails on **all nine** ordinals, which is why it is not GFX-175: `SdlGpuTextureBackend`
+hardcodes `num_levels = 1` and has no `UpdatePixelsLevel` override, so a `mipMap=true` texture is a
+one-level GPU resource. Same shape as Software's half, different backend, its own ticket.
+
+### The LOD matrix, and why the assertions are shaped the way they are
+
+Every 3D leg draws a full-viewport quad with uv 0..1, so a destination of NxN pixels covers the whole
+8-texel width and the footprint is exactly `8/N` texels per pixel:
+
+| dest | rho | lambda | expected level | asserted |
+|---|---|---|---|---|
+| 32 | 0.25 | −2 | 0 (magnification) | exact |
+| 8 | 1 | 0 | 0 (one-to-one) | exact |
+| 4 | 2 | 1 | 1 | exact |
+| 2 | 4 | 2 | 2 | exact |
+| 1 | 8 | 3 | 3 | exact |
+| 6 | 1.33 | 0.415 | between 0 and 1 | bounded |
+| 3 | 2.67 | 1.415 | between 1 and 2 | bounded |
+
+At an **integer lambda** the cross-level weight is zero, so a trilinear filter degenerates to exactly
+one level and Linear is byte-exact there with **no tolerance**. Between levels the exact weight is
+the hardware's own lambda precision, so those legs assert only the property the contract really fixes
+— the result is a blend of the two bracketing levels **and of nothing else**, which the 0/255-only
+identity colours make checkable per channel. **Point is exact everywhere and is never weakened to a
+tolerance.**
+
+### False-positive audit
+
+Inspected: every `*mip*` and `*sampler*` fixture in `examples/`, plus the sampler comments in the
+EasyGL and WebGPU backends. **One test was pinning the defect as the contract, and it is fixed.**
+
+`examples/easygl_texture_mip_filter_effect_test.cpp` asserted that `Point` samples **RED** (level 0)
+at `log2(128/8) = 4` minification, and its header called that "a real, confirmed, documented
+deviation from FNA — Point/Linear NEVER select a higher mip level". It even named the exact fix it
+was waiting for: *"set `GL_TEXTURE_MAX_LEVEL`/maxLod correctly per texture, then switch Point/Linear
+back to their mip-aware GPU filter equivalents"*. That fix is this task. Its **Vulkan and Bgfx
+siblings have always expected GREEN**, because those backends already mapped Point to a mip-aware
+filter — so the EasyGL variant was the outlier, not the rule. Corrected to GREEN; **1/2 -> 2/2**.
+
+Inspected and deliberately **not** changed: `easygl_texture_filter_point_vs_linear_test.cpp` and its
+Bgfx sibling mention "generates no mipmaps by default", but that is a statement about texture
+creation and both use single-level textures, so neither asserts a mip contract. The stale comment on
+`EasyGLRenderTargetBackend`'s own `MinFilter` write — which REMED-GFX-174 already identified as dead
+cover — was corrected in place, since it claimed to be the completeness guard and is not.
+
+### Validation, sanitizers, cardinality
+
+**GL validation**, from the `CNA_EASYGL_SAMPLER_TRACE` instrumentation, every field read back from GL
+rather than echoed:
+
+* **1550 traced events, `glerr=none` on every one** — zero GL errors;
+* **`complete=0` on none** — no incomplete texture at any point, which is leg G's whole question;
+* **one** GL sampler object (`sampler=1`) across **1380 sampler applications** — nothing created per
+  draw, unchanged from REMED-GFX-174;
+* the only effective min filters observed are `0x2700`, `0x2701`, `0x2702`, `0x2703` —
+  `NEAREST_MIPMAP_NEAREST`, `LINEAR_MIPMAP_NEAREST`, `NEAREST_MIPMAP_LINEAR`,
+  `LINEAR_MIPMAP_LINEAR`. Plain `GL_NEAREST` (`0x2600`) and `GL_LINEAR` (`0x2601`) **no longer appear
+  as a minification filter at all**, which is the fix proven from GL's own readback.
+
+**Sanitizers**, runtimes proven linked in every case (`libasan.so.8`, `libubsan.so.1` via `ldd`):
+
+| build | fixture | result | ASan | UBSan |
+|---|---|---|---|---|
+| `cmake-build-easygl-asan` (address,undefined) | GFX-175 | 87/87 | 0 errors | 0 runtime errors |
+| `cmake-build-easygl-asan` | GFX-174 | 52/52 | 0 | 0 |
+| `cmake-build-easygl-asan` | GFX-170 | 70/70 | 0 | 0 |
+| `cmake-build-software-asan` (address) | GFX-175 | 87/87 | 0 | — |
+| `cmake-build-software-asan` | GFX-150 | 146/146 | 0 | — |
+| `cmake-build-software-asan` | GFX-174 | 52/52 | 0 | — |
+| `cmake-build-software-ubsan` (undefined) | GFX-175 | 87/87 | — | 0 |
+| `cmake-build-software-ubsan` | GFX-150 | 146/146 | — | 0 |
+| `cmake-build-software-ubsan` | GFX-174 | 52/52 | — | 0 |
+
+The residual LeakSanitizer output on EasyGL is **byte-identical — 100956 bytes in 449 allocations —
+in the UNTOUCHED GFX-170 fixture**, and contains **zero CNA frames**. That matches REMED-GFX-174's
+recorded libGL/Mesa baseline exactly.
+
+**Cardinality and cost.** No forced mip allocation for a one-level resource; no extra draw, pass,
+frame, readback, wait or resource copy; no native sampler created per draw (one object per slot,
+before and after). EasyGL's added cost is `levelCount-1` `glTexImage2D` calls **once per mipmapped
+texture creation** and nothing per draw. Software's point-mip path performs exactly **one**
+within-level sample and its linear-mip path **two**, collapsing to one at an integer lambda; a
+single-level resource takes the pre-fix branch with the same level, same filter and same fetch count.
+
+### Regression gates
+
+GFX-170 **70/70** on EasyGL, Software, Vulkan, WebGPU, SDL_GPU and Bgfx. GFX-174 **52/52** on EasyGL
+and Software. GFX-150 **146/146** on Software. All unweakened.
+
+### Full suites
+
+| suite | result | classification |
+|---|---|---|
+| `ctest -j2` in `cmake-build-software` | 5 failed | `ENetDiscoveryServiceTest.UnregisterHostStopsAnsweringQueries` and `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` parallel-load flakes; `XnbContainerFuzzTest`, `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` and `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` all A/B-proven pre-existing in earlier records |
+| `ctest -j2` in `cmake-build-debug` (EasyGL), intermediate | 6028/6036, 6 skipped | as above, plus **`EasyGL_TextureMipFilter_DualTextureEffect`, the only failure this task caused** — the false-positive test above, corrected and now 2/2 |
+| `ctest -j2` in `cmake-build-debug` (EasyGL), **final, run alone** | **6029/6036, 7 failed, 6 skipped**, 438.64 s | `EasyGL_DeviceValidation`, `EasyGL_GraphicsDevice_ReferenceStencil` and `easy-gl-resource-smoke-tests` pre-recorded by REMED-GFX-174; `XnbContainerFuzzTest` A/B-proven pre-existing; `ENetDiscoveryServiceTest.FindSessionsReturnsEmptyWhenNoHostIsRegistered`, `ENetDiscoveryServiceTest.PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking` and `NetworkSessionTest.FindReturnsEmptyCollection` **proven parallel-load flakes, 3/3 in isolation** — and the ENet set DIFFERS between the two runs, which is itself the evidence. **`EasyGL_TextureMipFilter_DualTextureEffect` no longer appears.** Zero failures caused by this task. |
+
+### Scope kept
+
+`REMED-GFX-171`, `REMED-GFX-172`, `REMED-GFX-173`, `REMED-GFX-153` and `REMED-GFX-154` were not
+begun and are unmodified. No mip **content** generation was touched, no MRT mip finding absorbed, no
+anisotropic Software filtering implemented, no shader or LOD-bias manipulation used, no public enum
+value changed, and `audit/` is untouched.
+
+### New findings
+
+* **REMED-GFX-176** — SDL_GPU allocates one GPU mip level for every `Texture2D` and discards every
+  level above 0, so no ordinal mip-filters.
+* **REMED-GFX-177** — D3D12's fixed CBV/SRV/UAV descriptor heap is exhausted by a long fixture.
