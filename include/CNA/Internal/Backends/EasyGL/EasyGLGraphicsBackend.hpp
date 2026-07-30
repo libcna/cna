@@ -6,6 +6,7 @@
 #include <easygl/easygl.hpp>
 #include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace CNA::Internal::Backends::EasyGL
@@ -95,6 +96,8 @@ namespace CNA::Internal::Backends::EasyGL
         friend class EasyGLGraphicsBackend;
 
         void CreateResources();
+        /// REMED-GFX-168: this target's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
+        [[nodiscard]] std::string TraceNativeDetailEXT() const;
         void AttachColorToMRT(
             ::easygl::Framebuffer& framebuffer,
             ::metagl::FramebufferAttachment attachment) const;
@@ -178,6 +181,8 @@ namespace CNA::Internal::Backends::EasyGL
 
     private:
         void CreateResources();
+        /// REMED-GFX-168: this cube's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
+        [[nodiscard]] std::string TraceNativeDetailEXT() const;
 
         ::easygl::Texture      cubeTex_;
         ::easygl::Framebuffer  fbo_;         ///< Render FBO (color = cubeTex_ face, or msaaColorRbos_[face] when MSAA).
@@ -604,6 +609,11 @@ namespace CNA::Internal::Backends::EasyGL
         // interface method is never invoked automatically by anything else.
         IRenderTargetBackend*     currentRt2D_   = nullptr;
         IRenderTargetCubeBackend* currentRtCube_ = nullptr;
+
+        /// REMED-GFX-168: the binding record as pointer VALUES only, for `CNA_EASYGL_TARGET_TRACE`.
+        /// Never dereferences a recorded target -- one of them may already be destroyed storage,
+        /// which is precisely what the trace exists to record.
+        [[nodiscard]] std::string TraceBindingDetailEXT() const;
 
         // FillMode::WireFrame emulation (OpenGL ES has no glPolygonMode):
         // when active, triangle draws are re-expanded into GL_LINES.

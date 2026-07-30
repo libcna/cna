@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <span>
 
@@ -94,6 +95,56 @@ namespace CNA::Internal::Backends::EasyGL
     bool SampledRowOrderIsBottomUp(const ITextureBackend* texture)
     {
         return dynamic_cast<const IRenderTargetBackend*>(texture) != nullptr;
+    }
+
+    // --- REMED-GFX-168: render-target ownership trace -------------------------------------------
+    //
+    // Set CNA_EASYGL_TARGET_TRACE=1 to have every render-target ownership transition print one line
+    // to stderr. This exists because the question REMED-GFX-168 had to answer -- is the object gone,
+    // are the GL names gone, and which of the two does the next transition touch -- cannot be
+    // answered from a crash address alone. Off by default and costs one already-cached bool read
+    // per event.
+    //
+    // Deliberately prints POINTER VALUES for anything that may already be destroyed and reads
+    // fields only from the object whose own method is running, so enabling the trace can never turn
+    // a survivable state into a dereference.
+    namespace
+    {
+        bool TargetTraceEnabled()
+        {
+            static const bool enabled = [] {
+                const char* v = std::getenv("CNA_EASYGL_TARGET_TRACE");
+                return v != nullptr && v[0] != '\0' && v[0] != '0';
+            }();
+            return enabled;
+        }
+
+        /// Monotonic event counter, so the ORDER of two events is readable without timestamps.
+        unsigned long NextTraceSeq()
+        {
+            static unsigned long seq = 0;
+            return ++seq;
+        }
+
+        /// One trace line. @p detail carries whatever the call site can safely read.
+        void TargetTrace(const char* event, const void* object, const std::string& detail)
+        {
+            if (!TargetTraceEnabled()) return;
+            std::cerr << "[GFX168] seq=" << NextTraceSeq() << " ev=" << event
+                      << " obj=" << object << ' ' << detail << std::endl;
+        }
+
+        /// The native identities of one render target, read from the object that owns them.
+        std::string NativeDetail(unsigned int fbo, unsigned int color, unsigned int depth,
+                                 unsigned int msaaRbo, unsigned int resolveFbo,
+                                 int w, int h, int samples, int levels)
+        {
+            std::ostringstream os;
+            os << "fbo=" << fbo << " color=" << color << " depth=" << depth
+               << " msaaRbo=" << msaaRbo << " resolveFbo=" << resolveFbo
+               << " dim=" << w << 'x' << h << " msaa=" << samples << " levels=" << levels;
+            return os.str();
+        }
     }
 
     // --- EasyGLTexture3DBackend ---
@@ -656,11 +707,21 @@ namespace CNA::Internal::Backends::EasyGL
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(w, h) : 1;
         CreateResources();
         if (registry_) registry_->add(this);
+        TargetTrace("rt2d.create", this, TraceNativeDetailEXT());
     }
 
     EasyGLRenderTargetBackend::~EasyGLRenderTargetBackend()
     {
+        TargetTrace("rt2d.destroy", this, TraceNativeDetailEXT());
         if (registry_) registry_->remove(this);
+    }
+
+    std::string EasyGLRenderTargetBackend::TraceNativeDetailEXT() const
+    {
+        return NativeDetail(fbo_.native_handle(), colorTex_.native_handle(),
+                            depthRbo_.native_handle(), msaaColorRbo_.native_handle(),
+                            resolveFbo_.native_handle(), width_, height_, multiSampleCount_,
+                            levelCount_);
     }
 
     void EasyGLRenderTargetBackend::CreateResources()
@@ -769,15 +830,18 @@ namespace CNA::Internal::Backends::EasyGL
 
     void EasyGLRenderTargetBackend::BindAsRenderTarget()
     {
+        TargetTrace("rt2d.bind", this, TraceNativeDetailEXT());
         fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
     }
 
     void EasyGLRenderTargetBackend::UnbindAsRenderTarget()
     {
+        TargetTrace("rt2d.unbind", this, TraceNativeDetailEXT());
         // Resolve the multisampled color renderbuffer into colorTex_ before mips (if any) are
         // regenerated from it, matching FNA3D's OPENGL_ResolveTarget resolve-then-mipmap order.
         if (multiSampleCount_ > 0)
         {
+            TargetTrace("rt2d.resolve", this, TraceNativeDetailEXT());
             fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
             resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
             ::easygl::Framebuffer::blit(0, 0, width_, height_,
@@ -790,6 +854,7 @@ namespace CNA::Internal::Backends::EasyGL
         // glGenerateMipmap... }".
         if (levelCount_ > 1)
         {
+            TargetTrace("rt2d.mipgen", this, TraceNativeDetailEXT());
             colorTex_.bind(::easygl::TextureTarget::Texture2D);
             colorTex_.generate_mipmap(::easygl::TextureTarget::Texture2D);
         }
@@ -922,11 +987,22 @@ namespace CNA::Internal::Backends::EasyGL
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
         CreateResources();
         if (registry_) registry_->add(this);
+        TargetTrace("cube.create", this, TraceNativeDetailEXT());
     }
 
     EasyGLRenderTargetCubeBackend::~EasyGLRenderTargetCubeBackend()
     {
+        TargetTrace("cube.destroy", this, TraceNativeDetailEXT());
         if (registry_) registry_->remove(this);
+    }
+
+    std::string EasyGLRenderTargetCubeBackend::TraceNativeDetailEXT() const
+    {
+        return NativeDetail(fbo_.native_handle(), cubeTex_.native_handle(),
+                            depthRbo_.native_handle(),
+                            msaaColorRbos_[static_cast<std::size_t>(lastFace_)].native_handle(),
+                            resolveFbo_.native_handle(), size_, size_, multiSampleCount_,
+                            levelCount_) + " face=" + std::to_string(lastFace_);
     }
 
     void EasyGLRenderTargetCubeBackend::CreateResources()
@@ -1030,6 +1106,7 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
     {
         lastFace_ = face;
+        TargetTrace("cube.bindface", this, TraceNativeDetailEXT());
         fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         const auto faceTarget = static_cast<::easygl::TextureTarget>(
             static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX) + face);
@@ -1058,8 +1135,10 @@ namespace CNA::Internal::Backends::EasyGL
 
     void EasyGLRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
+        TargetTrace("cube.unbind", this, TraceNativeDetailEXT());
         if (multiSampleCount_ > 0)
         {
+            TargetTrace("cube.resolve", this, TraceNativeDetailEXT());
             const auto faceTarget = static_cast<::easygl::TextureTarget>(
                 static_cast<unsigned int>(::easygl::TextureTarget::TextureCubeMapPositiveX) + lastFace_);
             resolveFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
@@ -2073,8 +2152,27 @@ void main()
         return backend;
     }
 
+    /**
+     * @brief REMED-GFX-168: the binding record, as pointer VALUES only.
+     *
+     * Never dereferences any of them -- the whole point of the trace is that one of these may already
+     * be destroyed storage, which is exactly what the pre-fix `set2d.enter` line records.
+     */
+    std::string EasyGLGraphicsBackend::TraceBindingDetailEXT() const
+    {
+        std::ostringstream os;
+        os << "cur2d=" << static_cast<const void*>(currentRt2D_)
+           << " curCube=" << static_cast<const void*>(currentRtCube_)
+           << " mrtCount=" << currentMrtCount_
+           << " curDim=" << currentRtWidth_ << 'x' << currentRtHeight_;
+        for (int i = 0; i < currentMrtCount_; ++i)
+            os << " mrt" << i << '=' << static_cast<const void*>(currentMrtTargets_[i]);
+        return os.str();
+    }
+
     void EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
+        TargetTrace("set2d.enter", rt, TraceBindingDetailEXT());
         FinalizeCurrentMRT();
         // Regenerate mips (if requested) for whatever single RT/cube-face was previously
         // active, before switching away from it — see UnbindAsRenderTarget's Task 336 comment.
@@ -2094,10 +2192,12 @@ void main()
             currentRtHeight_ = 0;
             BindDefaultFramebuffer();
         }
+        TargetTrace("set2d.exit", rt, TraceBindingDetailEXT());
     }
 
     void EasyGLGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
     {
+        TargetTrace("setcube.enter", rt, TraceBindingDetailEXT() + " reqFace=" + std::to_string(face));
         if (!rt) { SetRenderTarget2D(nullptr); return; }
         FinalizeCurrentMRT();
         if (currentRt2D_) currentRt2D_->UnbindAsRenderTarget();
@@ -2107,11 +2207,13 @@ void main()
         currentRtWidth_ = rt->GetSize();
         currentRtHeight_ = rt->GetSize();
         rt->BindAsRenderTargetFace(face);
+        TargetTrace("setcube.exit", rt, TraceBindingDetailEXT());
     }
 
     void EasyGLGraphicsBackend::FinalizeCurrentMRT()
     {
         if (currentMrtCount_ <= 0) return;
+        TargetTrace("mrt.finalize", this, TraceBindingDetailEXT());
         const int count = currentMrtCount_;
         currentMrtCount_ = 0;
         currentRtWidth_ = 0;
@@ -2286,6 +2388,8 @@ void main()
         currentRtWidth_ = renderTargets[0].GetWidth();
         currentRtHeight_ = renderTargets[0].GetHeight();
         ApplyCurrentColorWriteMasks();
+        TargetTrace("mrt.set", this,
+                    TraceBindingDetailEXT() + " mrtFbo=" + std::to_string(mrtFbo_.native_handle()));
     }
 
     namespace

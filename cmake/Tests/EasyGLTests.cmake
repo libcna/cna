@@ -1671,6 +1671,19 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_DeferredSourceLifetime COMMAND cna_test_easygl_deferred_source_lifetime
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-168 bound-target lifetime: destroying a RenderTarget2D that is STILL the bound
+        # render target must never make the next SetRenderTarget transition unsafe, and must leave the
+        # next target and the backbuffer exactly correct. The defect was EasyGL-local -- the backend
+        # remembered the bound destination as a raw IRenderTargetBackend* and the next transition
+        # called UnbindAsRenderTarget() on it to run that target's pending MSAA resolve and mip
+        # regeneration, so a scoped target that went out of scope while bound made the next
+        # SetRenderTarget() a virtual call through freed storage. Each leg runs in its own process so a
+        # SIGSEGV is an attributable result instead of a lost shard.
+        cna_easygl_test(cna_test_easygl_bound_target_lifetime
+            examples/bound_target_lifetime_test.cpp)
+        cna_register_backend_test(NAME EasyGL_BoundTargetLifetime COMMAND cna_test_easygl_bound_target_lifetime
+            TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
         # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
         # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
