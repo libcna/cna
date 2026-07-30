@@ -1146,6 +1146,9 @@ namespace CNA::Internal::Backends::SdlGpu
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
+            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
+            int maxAnisotropy = 4;
             bool hasVertexColor = false;  ///< stride 24 vs stride 20
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -1175,6 +1178,9 @@ namespace CNA::Internal::Backends::SdlGpu
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
+            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
+            int maxAnisotropy = 4;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -1205,6 +1211,9 @@ namespace CNA::Internal::Backends::SdlGpu
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
+            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
+            int maxAnisotropy = 4;
             std::size_t stride = 20;  ///< 20, 24, or 32 -- selects vertex layout + shader
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -1239,9 +1248,11 @@ namespace CNA::Internal::Backends::SdlGpu
             int texture0Filter = 0;
             int texture0AddressU = 0;
             int texture0AddressV = 0;
+            int texture0MaxAnisotropy = 4;  ///< REMED-GFX-170: captured with the filter
             int texture1Filter = 0;
             int texture1AddressU = 0;
             int texture1AddressV = 0;
+            int texture1MaxAnisotropy = 4;  ///< REMED-GFX-170: captured with the filter
             ///@}
             bool hasVertexColor = false;  ///< stride 24 vs stride 20
             DrawTarget target;  ///< default = swapchain
@@ -1277,6 +1288,9 @@ namespace CNA::Internal::Backends::SdlGpu
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
+            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
+            int maxAnisotropy = 4;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -1317,6 +1331,9 @@ namespace CNA::Internal::Backends::SdlGpu
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
+            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
+            int maxAnisotropy = 4;
             bool hasVertexColor = false;  ///< stride 56 vs stride 52
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -1361,6 +1378,9 @@ namespace CNA::Internal::Backends::SdlGpu
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
+            /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
+            /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
+            int maxAnisotropy = 4;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -1533,10 +1553,10 @@ namespace CNA::Internal::Backends::SdlGpu
          * already had its own separate path before this. Stores into `samplerSlots_[slot]`, read
          * directly into each `DrawCommand`'s own `textureFilter`/`addressU`/`addressV` fields at
          * the next `Queue*Draw()` call (slot 0 for every single-texture family; slots 0 and 1
-         * independently for `DualTextureEffect`'s two texture units). `maxAnisotropy` is stored but
-         * not applied -- `GetOrCreateSampler()`'s own cache has no anisotropic-filtering dimension
-         * yet, a pre-existing limitation shared with `SpriteBatch`'s own sampler path, not
-         * introduced here.
+         * independently for `DualTextureEffect`'s two texture units). `REMED-GFX-170`: since that
+         * task, `maxAnisotropy` is captured into the command alongside the filter and genuinely
+         * reaches `SDL_GPUSamplerCreateInfo::max_anisotropy` (only `TextureFilter::Anisotropic`
+         * enables it), and it participates in the sampler cache key.
          */
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
 
@@ -1717,9 +1737,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // in ~SdlGpuGraphicsBackend() in case no further frame ever renders.
         void QueueTextureRelease(SDL_GPUTexture* texture);
 
-        // sprite2d pipeline: shader modules, compatibility-keyed pipelines, and a sampler cache
-        // keyed by (filter, addressU, addressV), mirroring
-        // WebGPUGraphicsBackend::SamplerCacheIndex's exact indexing scheme (filterIndex*9+u*3+v).
+        // sprite2d pipeline: shader modules, compatibility-keyed pipelines, and the backend-wide
+        // sampler cache, keyed by the COMPLETE description (filter, addressU, addressV,
+        // maxAnisotropy) since REMED-GFX-170.
         // DepthStencilState.None disables tests/writes but does NOT erase pipeline target
         // metadata: REMED-GFX-097 therefore passes the active pass's actual depth format (or
         // INVALID for no attachment) into creation and cache selection.
@@ -1731,7 +1751,25 @@ namespace CNA::Internal::Backends::SdlGpu
                                                                           int colorTargetCount,
                                                                           bool depthTest, bool depthWrite, int depthFunc,
                                                                           const RenderStateSnapshot& renderState);
-        [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU, int addressV);
+        /**
+         * @brief Resolves one complete public `SamplerState` to a cached native `SDL_GPUSampler*`.
+         *
+         * REMED-GFX-170: this is the backend's ONE sampler translation, used by SpriteBatch and by
+         * every 3D family alike. It used to resolve `textureFilter == 0 ? LINEAR : NEAREST` and to
+         * key an 18-entry array on `filter == 0 ? 0 : 1`, so both the descriptor and the cache key
+         * collapsed all eight non-`Linear` ordinals onto Point.
+         *
+         * @param textureFilter Raw XNA `TextureFilter` ordinal (0..8).
+         * @param addressU Raw `TextureAddressMode` ordinal for U (0=Wrap, 1=Clamp, 2=Mirror).
+         * @param addressV Raw `TextureAddressMode` ordinal for V.
+         * @param maxAnisotropy Public `SamplerState.MaxAnisotropy`, clamped to 1..16; applied only
+         *        for `TextureFilter::Anisotropic`, but always part of the cache key.
+         * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
+         * @return The cached or newly created native sampler; never null.
+         */
+        [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU,
+                                                         int addressV, int maxAnisotropy,
+                                                         const char* family);
         // Uploads all queued sprite vertex data (copy pass) -- must run BEFORE
         // BeginGPURenderPass; SDL_gpu forbids a copy pass nested inside a render pass.
         void UploadSpriteVertexData(SDL_GPUCommandBuffer* cmd);
@@ -2114,7 +2152,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // format vs. render-target R8G8B8A8_UNORM), unlike Phases 1-7 where sprites only ever
         // targeted the swapchain.
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> spritePipelines_;
-        std::array<SDL_GPUSampler*, 18> samplerCache_{};
+        /// REMED-GFX-170: keyed on the complete sampler description (filter | addressU | addressV |
+        /// maxAnisotropy), so two states that differ in ANY component get their own native sampler.
+        std::unordered_map<std::uint32_t, SDL_GPUSampler*> samplerCache_;
         SDL_GPUBuffer* spriteVertexBuffer_ = nullptr;
         Uint32 spriteVertexCapacityBytes_ = 0;
         std::vector<SpriteCommand> spriteCommands_;

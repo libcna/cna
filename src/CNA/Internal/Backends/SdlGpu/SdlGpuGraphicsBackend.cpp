@@ -213,14 +213,18 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_GPUCopyPass* pass_ = nullptr;
         };
 
-        // Mirrors WebGPUGraphicsBackend::SamplerCacheIndex's exact indexing scheme so both
-        // backends' sampler caches read the same way: filterIndex*9 + u*3 + v, 18 entries total.
-        [[nodiscard]] int SamplerCacheIndex(int filter, int addressU, int addressV)
+        // REMED-GFX-170: the cache key is the COMPLETE sampler description, exactly like
+        // WebGPUGraphicsBackend::GetOrCreateSlotSampler's own. It used to be `filterIndex*9+u*3+v`
+        // with `filterIndex = filter == 0 ? 0 : 1`, an 18-entry array that collapsed all eight
+        // non-Linear ordinals onto ONE entry -- so even a corrected descriptor would have been
+        // handed the first non-Linear sampler ever built for that address-mode pair.
+        [[nodiscard]] std::uint32_t SamplerCacheKey(int filter, int addressU, int addressV,
+                                                    int maxAnisotropy)
         {
-            const int filterIndex = filter == 0 ? 0 : 1;
-            const int u = std::clamp(addressU, 0, 2);
-            const int v = std::clamp(addressV, 0, 2);
-            return filterIndex * 9 + u * 3 + v;
+            return (static_cast<std::uint32_t>(filter) & 0xFFu)
+                 | ((static_cast<std::uint32_t>(addressU) & 0xFFu) << 8)
+                 | ((static_cast<std::uint32_t>(addressV) & 0xFFu) << 16)
+                 | ((static_cast<std::uint32_t>(maxAnisotropy) & 0xFFu) << 24);
         }
 
         [[nodiscard]] SDL_GPUSamplerAddressMode ToAddressMode(int mode)
@@ -232,6 +236,98 @@ namespace CNA::Internal::Backends::SdlGpu
                 default: return SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
             }
         }
+
+        // REMED-GFX-170: fills a complete SDL_GPUSamplerCreateInfo from a public XNA SamplerState.
+        // Every TextureFilter ordinal is handled explicitly and separately for its three
+        // components; there is no default branch that quietly turns an unrecognised value into
+        // Point or Linear. Mirrors WebGPUGraphicsBackend's FillWGPUSamplerDescriptor and
+        // VulkanGraphicsBackend::ApplySamplerState, which carry the identical table.
+        void FillSdlGpuSamplerCreateInfo(SDL_GPUSamplerCreateInfo& createInfo, int filter,
+                                         int addressU, int addressV, int maxAnisotropy)
+        {
+            // XNA TextureFilter: 0=Linear,1=Point,2=Anisotropic,3=LinearMipPoint,4=PointMipLinear,
+            // 5=MinLinearMagPointMipLinear,6=MinLinearMagPointMipPoint,
+            // 7=MinPointMagLinearMipLinear,8=MinPointMagLinearMipPoint.
+            SDL_GPUFilter magF = SDL_GPU_FILTER_LINEAR;
+            SDL_GPUFilter minF = SDL_GPU_FILTER_LINEAR;
+            SDL_GPUSamplerMipmapMode mipMode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+            bool enableAniso = false;
+            switch (filter)
+            {
+                case 1: magF = SDL_GPU_FILTER_NEAREST; minF = SDL_GPU_FILTER_NEAREST; mipMode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST; break;
+                case 2: magF = SDL_GPU_FILTER_LINEAR;  minF = SDL_GPU_FILTER_LINEAR;  mipMode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;  enableAniso = true; break;
+                case 3: magF = SDL_GPU_FILTER_LINEAR;  minF = SDL_GPU_FILTER_LINEAR;  mipMode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST; break;
+                case 4: magF = SDL_GPU_FILTER_NEAREST; minF = SDL_GPU_FILTER_NEAREST; mipMode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;  break;
+                case 5: magF = SDL_GPU_FILTER_NEAREST; minF = SDL_GPU_FILTER_LINEAR;  mipMode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;  break;
+                case 6: magF = SDL_GPU_FILTER_NEAREST; minF = SDL_GPU_FILTER_LINEAR;  mipMode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST; break;
+                case 7: magF = SDL_GPU_FILTER_LINEAR;  minF = SDL_GPU_FILTER_NEAREST; mipMode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;  break;
+                case 8: magF = SDL_GPU_FILTER_LINEAR;  minF = SDL_GPU_FILTER_NEAREST; mipMode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST; break;
+                default: break; // Linear (0)
+            }
+            createInfo.min_filter = minF;
+            createInfo.mag_filter = magF;
+            createInfo.mipmap_mode = mipMode;
+            createInfo.address_mode_u = ToAddressMode(addressU);
+            createInfo.address_mode_v = ToAddressMode(addressV);
+            createInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+            createInfo.max_lod = 32.0f;
+            // Only TextureFilter::Anisotropic names anisotropic filtering; every other ordinal
+            // must leave it off, or a Point ordinal would silently become a filtered fetch. The
+            // Vulkan driver under SDL_GPU rejects a maxAnisotropy above its own device limit, so
+            // the public value is clamped to the 16 the XNA API tops out at.
+            createInfo.enable_anisotropy = enableAniso;
+            createInfo.max_anisotropy =
+                enableAniso ? static_cast<float>(std::clamp(maxAnisotropy, 1, 16)) : 1.0f;
+        }
+
+        // REMED-GFX-170: the public TextureFilter ordinal's own name, for CNA_SDLGPU_SAMPLER_TRACE.
+        [[nodiscard]] const char* TextureFilterName(int filter)
+        {
+            switch (filter)
+            {
+                case 0: return "Linear";
+                case 1: return "Point";
+                case 2: return "Anisotropic";
+                case 3: return "LinearMipPoint";
+                case 4: return "PointMipLinear";
+                case 5: return "MinLinearMagPointMipLinear";
+                case 6: return "MinLinearMagPointMipPoint";
+                case 7: return "MinPointMagLinearMipLinear";
+                case 8: return "MinPointMagLinearMipPoint";
+                default: return "<out-of-range>";
+            }
+        }
+
+        [[nodiscard]] const char* SdlFilterName(SDL_GPUFilter f)
+        {
+            return f == SDL_GPU_FILTER_LINEAR ? "Linear" : "Nearest";
+        }
+
+        [[nodiscard]] const char* SdlMipmapModeName(SDL_GPUSamplerMipmapMode m)
+        {
+            return m == SDL_GPU_SAMPLERMIPMAPMODE_LINEAR ? "Linear" : "Nearest";
+        }
+
+        [[nodiscard]] const char* SdlAddressModeName(SDL_GPUSamplerAddressMode m)
+        {
+            switch (m)
+            {
+                case SDL_GPU_SAMPLERADDRESSMODE_REPEAT: return "Repeat";
+                case SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT: return "MirrorRepeat";
+                default: return "ClampToEdge";
+            }
+        }
+
+        [[nodiscard]] bool SamplerTraceEnabled()
+        {
+            static const bool enabled = std::getenv("CNA_SDLGPU_SAMPLER_TRACE") != nullptr;
+            return enabled;
+        }
+
+        // REMED-GFX-170: XNA's SamplerState.MaxAnisotropy default. ISpriteBatchBackend carries the
+        // filter ordinal and the two address modes and nothing else, so a sprite cannot express a
+        // non-default anisotropy on ANY backend.
+        constexpr int kSpriteBatchMaxAnisotropy = 4;
 
         // Mirrors VulkanGraphicsBackend::ToVkCompareOp's exact XNA CompareFunction ordinal table:
         // Always=0, Never=1, Less=2, LessEqual=3, Equal=4, GreaterEqual=5, Greater=6, NotEqual=7.
@@ -2654,8 +2750,9 @@ namespace CNA::Internal::Backends::SdlGpu
         for (auto& [key, pipeline] : spritePipelines_)
             ReleaseGraphicsPipeline(pipeline);
         spritePipelines_.clear();
-        for (SDL_GPUSampler*& sampler : samplerCache_)
+        for (auto& [key, sampler] : samplerCache_)
             ReleaseSampler(sampler);
+        samplerCache_.clear();
         if (spriteVertexBuffer_ != nullptr)
         {
             SDL_ReleaseGPUBuffer(device_, spriteVertexBuffer_);
@@ -2733,29 +2830,51 @@ namespace CNA::Internal::Backends::SdlGpu
         return CacheGraphicsPipeline(spritePipelines_, key, pipeline);
     }
 
-    SDL_GPUSampler* SdlGpuGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
+    SDL_GPUSampler* SdlGpuGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU,
+                                                              int addressV, int maxAnisotropy,
+                                                              const char* family)
     {
-        const int index = SamplerCacheIndex(textureFilter, addressU, addressV);
-        if (samplerCache_[index] != nullptr)
-            return samplerCache_[index];
+        const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
+        const std::uint32_t key = SamplerCacheKey(textureFilter, addressU, addressV, clampedAniso);
+        const auto it = samplerCache_.find(key);
+        const bool hit = it != samplerCache_.end();
 
-        const SDL_GPUFilter filter = textureFilter == 0 ? SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;
         SDL_GPUSamplerCreateInfo createInfo{};
-        createInfo.min_filter = filter;
-        createInfo.mag_filter = filter;
-        createInfo.mipmap_mode = textureFilter == 0 ? SDL_GPU_SAMPLERMIPMAPMODE_LINEAR : SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
-        createInfo.address_mode_u = ToAddressMode(addressU);
-        createInfo.address_mode_v = ToAddressMode(addressV);
-        createInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-        createInfo.max_lod = 32.0f;
+        FillSdlGpuSamplerCreateInfo(createInfo, textureFilter, addressU, addressV, clampedAniso);
 
-        MaybeFailForTest(SdlGpuFailurePointEXT::SamplerCreation);
-        SDL_GPUSampler* sampler = SDL_CreateGPUSampler(device_, &createInfo);
-        if (sampler == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sampler: ") + SDL_GetError());
-        NotifyResourceEvent(SdlGpuResourceKindEXT::Sampler,
-                            SdlGpuResourceEventEXT::Acquired);
-        samplerCache_[index] = sampler;
+        SDL_GPUSampler* sampler = nullptr;
+        if (hit)
+        {
+            sampler = it->second;
+        }
+        else
+        {
+            MaybeFailForTest(SdlGpuFailurePointEXT::SamplerCreation);
+            sampler = SDL_CreateGPUSampler(device_, &createInfo);
+            if (sampler == nullptr)
+                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sampler: ") + SDL_GetError());
+            NotifyResourceEvent(SdlGpuResourceKindEXT::Sampler,
+                                SdlGpuResourceEventEXT::Acquired);
+            samplerCache_[key] = sampler;
+        }
+        // REMED-GFX-170: the whole public->native translation on one line, so a wrong ordinal
+        // mapping is readable directly instead of being inferred from pixels.
+        if (SamplerTraceEnabled())
+        {
+            std::fprintf(stderr,
+                         "[cna-sdlgpu-sampler] family=%s filter=%d(%s) mag=%s min=%s mip=%s "
+                         "aniso=%s/%.1f addrU=%s addrV=%s key=0x%08x sampler=%p %s\n",
+                         family, textureFilter, TextureFilterName(textureFilter),
+                         SdlFilterName(createInfo.mag_filter),
+                         SdlFilterName(createInfo.min_filter),
+                         SdlMipmapModeName(createInfo.mipmap_mode),
+                         createInfo.enable_anisotropy ? "on" : "off",
+                         static_cast<double>(createInfo.max_anisotropy),
+                         SdlAddressModeName(createInfo.address_mode_u),
+                         SdlAddressModeName(createInfo.address_mode_v),
+                         static_cast<unsigned>(key), static_cast<void*>(sampler),
+                         hit ? "HIT" : "CREATE");
+        }
         return sampler;
     }
 
@@ -2767,7 +2886,8 @@ namespace CNA::Internal::Backends::SdlGpu
             colorFormat, SDL_GPU_SAMPLECOUNT_1, depthStencilFormat_, 1,
             /*depthTest=*/false, /*depthWrite=*/false, /*depthFunc=*/3,
             CaptureRenderState());
-        (void)GetOrCreateSampler(/*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1);
+        (void)GetOrCreateSampler(/*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1,
+                                 kSpriteBatchMaxAnisotropy, "SpriteBatch/warmup");
     }
 
     void SdlGpuGraphicsBackend::UploadSpriteVertexData(SDL_GPUCommandBuffer* cmd)
@@ -2879,7 +2999,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         samplerBinding.texture = command.texture.texture;
-        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
+                                                   command.addressV, kSpriteBatchMaxAnisotropy,
+                                                   "SpriteBatch");
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
@@ -3562,6 +3684,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
+        command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
 
         if (ib != nullptr)
         {
@@ -3612,6 +3735,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
+        command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
 
         if (ib != nullptr)
         {
@@ -4312,6 +4436,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
+        command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
 
         if (ib != nullptr)
         {
@@ -4363,9 +4488,11 @@ namespace CNA::Internal::Backends::SdlGpu
         command.texture0Filter = samplerSlots_[0].filter;
         command.texture0AddressU = samplerSlots_[0].addressU;
         command.texture0AddressV = samplerSlots_[0].addressV;
+        command.texture0MaxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
         command.texture1Filter = samplerSlots_[1].filter;
         command.texture1AddressU = samplerSlots_[1].addressU;
         command.texture1AddressV = samplerSlots_[1].addressV;
+        command.texture1MaxAnisotropy = samplerSlots_[1].maxAnisotropy;  // REMED-GFX-170
 
         if (ib != nullptr)
         {
@@ -4426,6 +4553,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
+        command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
 
         if (ib != nullptr)
         {
@@ -4480,6 +4608,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
+        command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
 
         if (ib != nullptr)
         {
@@ -4552,6 +4681,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
+        command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
 
         if (ib != nullptr)
         {
@@ -4595,7 +4725,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         samplerBinding.texture = command.texture.texture;
-        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
+                                                   command.addressV, command.maxAnisotropy,
+                                                   "AlphaTest3D");
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -4636,9 +4768,15 @@ namespace CNA::Internal::Backends::SdlGpu
         // slots in real XNA -- each gets its own sampler object, not a shared one.
         SDL_GPUTextureSamplerBinding samplerBindings[2]{};
         samplerBindings[0].texture = command.texture0.texture;
-        samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU, command.texture0AddressV);
+        samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU,
+                                                      command.texture0AddressV,
+                                                      command.texture0MaxAnisotropy,
+                                                      "DualTexture3D/slot0");
         samplerBindings[1].texture = command.texture1.texture;
-        samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU, command.texture1AddressV);
+        samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU,
+                                                      command.texture1AddressV,
+                                                      command.texture1MaxAnisotropy,
+                                                      "DualTexture3D/slot1");
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -4680,11 +4818,20 @@ namespace CNA::Internal::Backends::SdlGpu
         // The env map is always sampled Linear+Clamp regardless of texture0's own filter/
         // address settings -- matches this project's other backends' fixed reflection-map
         // sampling convention (address mode is largely moot for a direction-addressed cube map).
+        // REMED-GFX-173 (recorded, NOT fixed here): Vulkan's EnvironmentMapEffect now honours
+        // GraphicsDevice.SamplerStates[1] for this cube after REMED-GFX-169, so the convention is
+        // no longer uniform across backends. That is a state-capture question, not the filter
+        // ordinal translation REMED-GFX-170 is scoped to, so the LinearClamp constant is kept
+        // here byte-for-byte and the divergence is filed separately.
         SDL_GPUTextureSamplerBinding samplerBindings[2]{};
         samplerBindings[0].texture = command.texture.texture;
-        samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
+                                                      command.addressV, command.maxAnisotropy,
+                                                      "EnvironmentMap3D");
         samplerBindings[1].texture = command.envMapTexture.texture;
-        samplerBindings[1].sampler = GetOrCreateSampler(0, 1, 1);
+        samplerBindings[1].sampler = GetOrCreateSampler(/*textureFilter=*/0, /*addressU=*/1,
+                                                       /*addressV=*/1, kSpriteBatchMaxAnisotropy,
+                                                       "EnvironmentMap3D/cube");
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -4731,7 +4878,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         samplerBinding.texture = command.texture.texture;
-        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
+                                                   command.addressV, command.maxAnisotropy,
+                                                   "Skinned3D");
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -4784,7 +4933,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // color texture's own sampler state (GraphicsDevice.SamplerStates[0]) -- GpuDrawParams has
         // no independent per-PBR-map sampler state to select from.
         SDL_GPUTextureSamplerBinding samplerBindings[5]{};
-        SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
+                                                    command.addressV, command.maxAnisotropy,
+                                                    "Pbr3D");
         samplerBindings[0].texture = command.texture.texture;
         samplerBindings[0].sampler = sampler;
         samplerBindings[1].texture = command.normalMap ? command.normalMap.texture : defaultFlatNormalTexture_->Texture();
@@ -5001,7 +5152,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         samplerBinding.texture = command.texture.texture;
-        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
+                                                   command.addressV, command.maxAnisotropy,
+                                                   "Textured3D");
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
@@ -5042,7 +5195,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
         samplerBinding.texture = command.texture.texture;
-        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
+                                                   command.addressV, command.maxAnisotropy,
+                                                   "LitTextured3D");
         SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
