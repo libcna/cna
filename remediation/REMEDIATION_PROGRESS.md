@@ -2490,7 +2490,7 @@ existing task.
 | REMED-GFX-152 | SDL_GPU: the stock 3D effect paths `static_cast` an `ITextureBackend*` to `SdlGpuTextureBackend`, but a `RenderTarget2D`'s backend is the unrelated sibling `SdlGpuRenderTargetBackend` — UB, kills the process. SpriteBatch uses `dynamic_cast` and is fine. | HIGH | P1 | — | **DONE 2026-07-29 — THIRTEEN (NOT TEN) CAST SITES, PROVEN UNDER UBSAN AS `downcast of address … which does not point to an object of type 'SdlGpuTextureBackend'` FOLLOWED BY SIGSEGV, THE FABRICATED HANDLE BEING THE TARGET'S OWN `mipMap_` + THREE BYTES OF UNINITIALISED PADDING + `multiSampleCount_` (0x20612000). FIXED BY ONE SHARED `ResolveSampledTextureEXT`/`ResolveSampledCubeEXT` RETURNING AN `SdlGpuSampledTextureEXT` (SAMPLEABLE NATIVE HANDLE + KEEP-ALIVE), USED BY SPRITEBATCH AND EVERY EFFECT ALIKE; MSAA IS CORRECT BY CONSTRUCTION BECAUSE THE ATTACHMENT IS `COLOR_TARGET`-ONLY AND CANNOT BE SELECTED. NEW PROCESS-ISOLATED FIXTURE 15/18 LEGS SIGSEGV -> 18/18 LEGS, 0 CRASHES, 56/56 CHECKS. NOTHING ADDED: NO PRESENT, GETDATA, CPU COPY, WAIT, EXTRA FRAME/PASS/SUBMIT; SDL CALL-SITE CARDINALITY UNCHANGED EXCEPT `SDL_ReleaseGPUTexture` 15 -> 12. FOUR FALSE-POSITIVE SKIPS REMOVED (THREE A/B-PROVEN LOAD-BEARING, ONE PROVEN OVER-APPLIED). SDL_GPU DEBUG VALIDATION AND FORCED `VK_LAYER_KHRONOS_validation` BOTH CLEAN; ASAN/UBSAN CLEAN. NINE CROSS-BACKEND CONTROLS GREEN. SPAWNED GFX-166/167.** |
 | REMED-GFX-166 | Vulkan: the lost draw was the PRODUCER and the destroyed resource was that producer's DESTINATION. `~VulkanRenderTargetBackend` ran REMED-GFX-074's `PurgeDeferredWorkForTarget(this)`, erasing every queued entry whose `rt == this`, on the false justification that "a destroyed target is unobservable" — the still-queued consumer that SAMPLES it is exactly what observes it. | MEDIUM | P2 | — | **DONE 2026-07-30 — PROVEN WITH A NEW `CNA_VULKAN_LIFETIME_TRACE`, NOT INFERRED: `purge.DROPPED rt=0x..b668 sprites=1 draws=0 clears=2` WHILE `record.draw3D order=6` STILL RUNS AND THE IMAGE/VIEW ARE ALIVE IN THE RETIREMENT QUEUE, SO NO DRAW IS MISSING AND NOTHING DANGLES — THE SAMPLED IMAGE JUST HAS NO CONTENT, WHICH IS WHY SOME LEGS READ (0,0,0,0) AND OTHERS UNDEFINED GARBAGE. AN ORDINARY TEXTURE2D WAS NEVER AFFECTED (LEG A2 PASSES PRE-FIX), SO THE INHERITED BLANKET DECLARATION WAS OVER-APPLIED. FIXED BY MAKING A DESTINATION AN IMMUTABLE, SEPARATELY ALLOCATED `VulkanTargetPassEXT` CO-OWNED VIA `shared_ptr` BY EVERY QUEUED COMMAND, SO `PurgeDeferredWorkForTarget` IS DELETED RATHER THAN WEAKENED; THE PASS OWNS NO VULKAN HANDLES, KEEPING REMED-GFX-075'S FRAME-GENERATION RETIREMENT AS THE SINGLE RELEASE PATH. 6/14 -> 17/17 LEGS, 24 CHECKS; REMED-GFX-152'S FIXTURE 18 -> 20 LEGS WITH ITS OWN VULKAN DECLARATION DELETED AND PER-FAMILY/PER-DRAW-MODE DEAD-SOURCE SWEEPS (ALL 0/32 PRE-FIX). MSAA AND THE CUBE SLOT NOW MEASURED RATHER THAN DECLARED. TWO FALSE POSITIVES CLOSED: REMED-GFX-075 S3'S INTERMEDIATE `readRt` WAS A FLUSH, AND REMED-GFX-074 S6 ASSERTED ONLY "DID NOT CRASH". CARDINALITY BYTE-IDENTICAL EXCEPT THE ONE PRODUCER PASS PREVIOUSLY DISCARDED. VALIDATION CLEAN WITH THE LAYER PROVEN LOADED; ASAN/UBSAN CLEAN WITH IDENTICAL LEAK TOTALS. SEVEN CROSS-BACKEND CONTROLS 17/17 AND 20/20. SPAWNED ONE INDEPENDENT FINDING (FOUR STOCK-EFFECT FAMILIES RENDER NOTHING ON VULKAN THROUGH A STRIDE-20 STREAM).** |
 | REMED-GFX-167 | WebGPU: every deferred command stored the texture it samples as a RAW POINTER to that resource's backend object and called a VIRTUAL method on it at replay, so a source destroyed while its draw was still queued was a heap-use-after-free at `Present()`. | MEDIUM | P2 | — | **DONE 2026-07-29 — THE TICKET WAS WRONG TWICE, BOTH CORRECTIONS MEASURED. NOT TEARDOWN: THE CRASH IS ON THE MAIN THREAD INSIDE `Present()` -> `EnsureFrameRendered()` -> `ReplayOrderedSegments()` -> `ReplayDrawsInOrder()` -> `IssueTexturedDraw()`, AFTER THE LEG'S OWN CHECKS HAVE PRINTED — WHICH IS WHY IT READ AS SHUTDOWN. AND NOT "SPECIFIC TO THE BACKBUFFER": WHAT IS LOAD-BEARING IS THAT NOTHING FLUSHED BETWEEN THE DRAW AND THE DESTRUCTOR, AND WEBGPU RENDERS A RENDER-TARGET DESTINATION AT `SetRenderTarget()`. ASAN: `heap-use-after-free` AT `:7228`, FREED IN `~WebGPURenderTargetBackend()` AT `:1746` VIA `RenderTarget2D::~RenderTarget2D()`; WITHOUT A SANITIZER SIGSEGV (139) WITH THE PC IN NO MAPPED MODULE (THE FREED VTABLE SLOT). NINETEEN SLOTS ACROSS NINE FAMILIES. FIXED BY RESOLVING ONCE AT THE PUBLIC DRAW CALL INTO A `WebGPUSampledTextureEXT` (RESOLVED VIEW + ONE NATIVE REFERENCE ON THE VIEW AND ITS TEXTURE VIA `WebGPUSampledResourceEXT`), CLOSING THE DEREFERENCE AND THE DANGLING HANDLE TOGETHER; RELEASE IS A REFCOUNT DECREMENT, NOT `wgpuTextureDestroy`, SO THE RESOURCE STAYS USABLE AND THE PROOF IS PIXELS. A HAZARD THE FIX ITSELF INTRODUCED WAS FOUND AND CLOSED: THE FAMILY VECTORS ARE MEMBERS, DESTROYED AFTER THE DESTRUCTOR BODY RELEASES THE DEVICE, SO `DiscardQueuedCommands()` IS NOW CALLED FIRST — DECLARED AS ORDERING CORRECTNESS, SINCE THE ABANDONED-FRAME PATH IS NOT PUBLICLY FORCEABLE. NOTHING ADDED PER DRAW (KEEP-ALIVE BUILT ONCE PER RESOURCE); NO EXTRA PASS/SUBMIT/PRESENT/FRAME/WAIT, HELD BY THE THREE EXISTING WEBGPU CARDINALITY GATES. NEW PROCESS-ISOLATED 14-LEG FIXTURE WITH A PIXEL ORACLE: **4/14 LEGS AND 10 SIGSEGV -> 14/14, 0 CRASHES, 18 CHECKS**; GFX-152'S OWN FIXTURE 17/18 + 1 CRASH -> 18/18, 49/49. THREE FIXTURE DEFECTS FOUND BY RUNNING IT (LEG E1 MEASURED NOTHING AT STRIDE 20; THE PIXEL PROBE SAT 0.0625 TEXEL OFF CENTRE; B1/C1 ASSUMED A FLUSH-AT-UNBIND A WHOLE-FRAME RECORDER DOES NOT DO). ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; LEAK A/B BYTE-IDENTICAL PRE- AND POST-FIX. NATIVE VALIDATION CLEAN (ZERO UNCAPTURED ERRORS, ZERO DEVICE-LOST). SEVEN CROSS-BACKEND CONTROLS ALL 14/14; ONLY WEBGPU PRODUCTION CHANGED. `ctest -L WebGPU` 57/58, ALL 8 FULL-SHARD FAILURES A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND LIBRARIES BUILD. SPAWNED GFX-168; ADDED THE MECHANISM TO THE OPEN GFX-165.** |
-| REMED-GFX-168 | EasyGL: destroying a `RenderTarget2D` while it is STILL the bound render target makes the next `SetRenderTarget(nullptr)` dereference the dead object — SIGSEGV inside `GraphicsDevice::SetRenderTarget`, in the UNBIND rather than at teardown. WebGPU and Vulkan both carry a destructor guard clearing `currentRenderTarget_` when it is `this`; EasyGL appears to lack the equivalent. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-167's first draft of leg K1, which was then rewritten so the two subjects stay independently attributable) |
+| REMED-GFX-168 | EasyGL: destroying a `RenderTarget2D` while it is STILL the bound render target made the next `SetRenderTarget` a virtual call through freed storage. | MEDIUM | P2 | — | **DONE 2026-07-30 — AN OWNERSHIP DEFECT, NOT A GL-STATE ONE, AND NOT THE DESTRUCTOR. THE FAULT IS INSIDE THE NEXT `SetRenderTarget`, ON THE MAIN THREAD, WITH THE LEG'S EARLIER CHECKS ALREADY PRINTED. ASAN: `heap-use-after-free`, READ OF SIZE 8, AT `EasyGLGraphicsBackend.cpp:2179` (`currentRt2D_->UnbindAsRenderTarget()`), OFFSET 0 OF A 128-BYTE REGION -- THE VTABLE POINTER -- FREED IN `~EasyGLRenderTargetBackend()` VIA `~RenderTarget2D`; WITHOUT A SANITIZER SIGSEGV (139, CORE DUMPED) WITH THE PC AT `0x0`, IN NO MAPPED MODULE. THE NEW `CNA_EASYGL_TARGET_TRACE` SHOWS `rt2d.destroy` THEN `set2d.enter cur2d=<THE FREED ADDRESS>`, AND **NO `rt2d.unbind` LINE AT ALL** -- THE METHOD BODY NEVER RAN, SO THE FAULT IS THE DISPATCH. NOTHING IN THE SHARED LAYER CLEARS THE POINTER EITHER: `RenderTarget2D::Dispose()` AND `RenderTargetCube::Dispose()` BOTH REFUSE A BOUND TARGET, BUT BOTH DESTRUCTORS ARE `= default` AND NEVER ROUTE THROUGH DISPOSE, SO THE GUARDED PATH IS UNREACHABLE-BY-DESIGN AND THE UNGUARDED ONE IS THE ONLY WAY IN. FIXED BY GIVING THE BINDING RECORD ITS OWN ALLOCATION (`EasyGLBoundTargetEXT`), SHARED FROM THE BACKEND AND HELD WEAKLY BY EVERY TARGET, SO A DYING TARGET CLEARS ITS OWN SLOTS WITHOUT CALLING BACK INTO A BACKEND THAT MAY ALREADY BE GONE -- SAFE IN BOTH DESTRUCTION ORDERS. DETACHING RATHER THAN FINALIZING IS MEASURED, NOT ASSUMED: THE RESOLVE AND MIP REGENERATION WRITE INTO `colorTex_`/`cubeTex_`, MEMBERS THE SAME DESTRUCTOR DESTROYS, AND BOTH PUBLIC ROUTES TO THAT CONTENT NEED THE LIVE WRAPPER -- SO THERE IS NO REACHABLE OBSERVER. MRT IS THE EXCEPTION AND IS TREATED AS ONE: A DETACH CLEARS ONE **SLOT**, AND LEG L1'S TRACE SHOWS THE SURVIVOR'S `rt2d.mipgen` STILL FIRING. `Present()` BOUNDS THE WHOLE WINDOW AND LEG P1 ASSERTS IT -- IT REFUSES A BOUND TARGET FROM A **BOOL** NO DESTRUCTOR TOUCHES, SO THE REFUSAL IS IDENTICAL ALIVE OR DEAD; THREE FIRST-DRAFT LEGS HAD TO BE REWRITTEN BECAUSE "DESTROYED, THEN PRESENT" IS NOT REACHABLE ON ANY BACKEND. NEW PROCESS-ISOLATED 18-LEG FIXTURE: **3/18 LEGS AND 15 SIGSEGV -> 18/18, 0 CRASHES, 43 CHECKS, 0 DECLARED BOUNDARIES**; UNDER ASAN+UBSAN **2/18 WITH 32 heap-use-after-free -> 18/18, 0 REPORTS, 0 RUNTIME ERRORS** (THE UN-SANITIZED COUNT IS HIGHER BECAUSE LEG H1 SURVIVES WITHOUT A SANITIZER -- THE FREED VTABLE POINTER HAPPENED TO STILL DISPATCH). MEASURED REUSE: ONE BACKEND-OBJECT HEAP ADDRESS REUSED **9 TIMES** ACROSS M1'S 121 TARGETS, AND ALL 121 GOT GL FRAMEBUFFER NAME **1**. COST: EXACTLY ONE TRACE EVENT (THE DETACH); ON THE TWO LEGS THAT PASS PRE-FIX THE WHOLE EVENT STREAM IS BYTE-IDENTICAL WITH ZERO DETACHES. LEAK A/B BYTE-IDENTICAL (100956/449 PRE AND POST, INCLUDING ON M1'S 121 TARGETS); 917 TRACED TRANSITIONS ALL `glerr=none`. THE ONE FIXTURE THAT NAMED THIS CASE, `easygl_bound_resource_dispose_test.cpp`, WROTE `SetRenderTarget(nullptr); // unbind before leaving scope` -- STRENGTHENED WITH ALL THREE BINDING SHAPES (10/10 THEN SIGSEGV -> 17/17); AN AUDIT OF THE OTHER 33 EASYGL RT FIXTURES FOUND NONE COVERING IT. SEVEN CROSS-BACKEND CONTROLS ALL **18/18 LEGS, 0 CRASHES**; ONLY EASYGL PRODUCTION CHANGED, VULKAN GFX-166 AND WEBGPU GFX-167 UNTOUCHED AND GREEN. `ctest -R '^EasyGL'` 270/272, BOTH FAILURES A/B-PROVEN PRE-EXISTING. ALL FOURTEEN BACKEND CONFIGURATIONS BUILD. THREE INDEPENDENT FINDINGS RECORDED (VULKAN'S MRT-SLOT MIP LEVEL 1, BGFX'S MSAA/MIP READBACK, A STALE CUBE-DISPOSE COMMENT).** |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -19374,6 +19374,10 @@ build incrementally.
 - **REMED-GFX-168** — EasyGL faults inside `GraphicsDevice::SetRenderTarget` when the previously
   bound `RenderTarget2D` has already been destroyed. Found by this task's first draft of leg K1,
   which was then rewritten so the two subjects stay independently attributable. Not fixed here.
+  *(Closed 2026-07-30 — see its own record below. The mechanism turned out to be the same SHAPE as
+  this task's, one object further along: a raw pointer to a render-target backend object, called
+  virtually after that object died. Where WebGPU held the sampled SOURCE, EasyGL held the bound
+  DESTINATION.)*
 - **REMED-GFX-165** (already open) — its mechanism is now identified: a rectangle-less
   `GetBackBufferData` sizes its region from the backend's live viewport, not from
   `PresentationParameters`, and on WebGPU that viewport is stale until the first `SetRenderTarget`
@@ -19617,3 +19621,275 @@ EasyGL production was not touched.
   the clear on at least a quarter of its probed pixels. Not this ticket's backend defect and not
   fixed here; leg M2 declares each one with its measured count and fails if NO family was
   measurable, so the declarations can never carry a run on their own.
+
+
+---
+
+## REMED-GFX-168 — EasyGL dispatched the next `SetRenderTarget` through a destroyed target (DONE 2026-07-30)
+
+### The exact pre-fix failure
+
+Public sequence, and nothing more than this:
+
+```cpp
+{
+    RenderTarget2D a(dev, 8, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                     RenderTargetUsage::DiscardContents);
+    dev.SetRenderTarget(&a);
+    dev.Clear(...); /* draw */          // a is BOUND
+}                                        // a's DESTRUCTOR runs, still bound
+dev.SetRenderTarget(nullptr);            // <-- faults HERE
+```
+
+Measured in `cmake-build-easygl-asan` on `DISPLAY=:101`:
+
+```
+ERROR: AddressSanitizer: heap-use-after-free on address 0x50c000179680
+READ of size 8 at 0x50c000179680 thread T0
+  #0 EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend*)  EasyGLGraphicsBackend.cpp:2179
+  #1 GraphicsDevice::SetRenderTarget(RenderTarget2D*)                 GraphicsDevice.cpp:2257
+freed by thread T0 here:
+  #1 EasyGLRenderTargetBackend::~EasyGLRenderTargetBackend()          EasyGLGraphicsBackend.cpp:717
+  #8 Texture2D::~Texture2D()                                          Texture2D.cpp:212
+  #9 RenderTarget2D::~RenderTarget2D()
+previously allocated by thread T0 here:
+  #2 EasyGLGraphicsBackend::CreateRenderTarget2D(...)                 EasyGLGraphicsBackend.cpp:2117
+```
+
+`0x...680` is **offset 0 of a 128-byte region** — the object's vtable pointer — and line 2179 is
+`if (currentRt2D_ && currentRt2D_ != rt) currentRt2D_->UnbindAsRenderTarget();`. Without a sanitizer
+the same leg is **SIGSEGV, exit 139, core dumped**, and `coredumpctl` gives the program counter as
+`#0 0x0000000000000000 n/a (n/a + 0x0)` — in no mapped module — called from
+`#1 GraphicsDevice::SetRenderTarget(RenderTarget2D*)`. Single thread, the main thread. **It is not the
+destructor that faults and it is not teardown**: the fault is inside the *next* `SetRenderTarget`,
+with the leg's earlier checks already printed.
+
+The new `CNA_EASYGL_TARGET_TRACE` closes the question a crash address cannot answer. Pre-fix, leg B1:
+
+```
+seq=4 ev=set2d.exit    obj=0x558f9a6211e0 cur2d=0x558f9a6211e0 curDim=8x4
+seq=5 ev=rt2d.destroy  obj=0x558f9a6211e0 fbo=1 color=3 dim=8x4 msaa=0 levels=1
+seq=6 ev=set2d.enter   obj=0            cur2d=0x558f9a6211e0 curDim=8x4      <-- dead object named
+        (process dies; `rt2d.unbind` never prints)
+```
+
+so: the public wrapper is gone, the backend object's storage is gone, GL framebuffer 1 and colour
+texture 3 were deleted with it, and the record still names the freed address. The **absence** of the
+`rt2d.unbind` line is the sharper proof — `UnbindAsRenderTarget`'s body never ran at all, so the fault
+is in the virtual dispatch itself, not in any GL call inside it.
+
+### Root cause
+
+`EasyGLGraphicsBackend` held the bound destination as raw pointers to render-target **backend
+objects** — `currentRt2D_`, `currentRtCube_`, and `currentMrtTargets_[4]` — plus the bound extent in
+`currentRtWidth_`/`currentRtHeight_`. Nothing else in the backend invokes `UnbindAsRenderTarget()`, so
+switching destination is the only thing that runs a target's pending MSAA resolve and mip
+regeneration; that is why the outgoing target's identity had to be remembered at all. Nothing cleared
+those pointers when the object behind them died.
+
+Nothing in the shared layer clears them either, and that is the load-bearing half. **`RenderTarget2D::Dispose()`
+refuses** to dispose a bound target (`InvalidOperationException("Disposing target that is still
+bound")`), and `RenderTargetCube::Dispose()` carries the identical guard — but both **destructors are
+`= default` and never route through `Dispose`**. So the guarded path is unreachable-by-design and the
+unguarded one is the only way in.
+
+**What is load-bearing is only that the target was still BOUND when it died.** Every ordering that
+transitions first is safe even pre-fix: legs A1 (unbind, sample, then release) and A2 (release after
+`SetRenderTarget(B)`) pass against the unfixed backend, which is exactly why no existing fixture
+caught this.
+
+### Public contract, and what "pending finalization" really costs
+
+`UnbindAsRenderTarget()` does real work: it blits `msaaColorRbo_` into `colorTex_` and regenerates
+`colorTex_`'s mip chain. Skipping it is nevertheless correct here, and that is a measured claim rather
+than a convenience. **Both operations write into members the destructor is about to destroy** —
+`colorTex_` for a 2D target, `cubeTex_` for a cube — and the only public routes to that content,
+`RenderTarget2D::GetData` and sampling the target as a `Texture2D`, both need the live wrapper. A
+target destroyed while bound therefore has **no reachable observer** for its own finalization. Legs
+D1a and E1a assert the converse directly: with the target unbound FIRST, the resolve and level 1 must
+still be byte-exact.
+
+**MRT is the one shape where that reasoning does not extend to the set**, because the other slots are
+live targets whose finalization IS observable. Leg L1's post-fix trace is the proof:
+
+```
+seq=3  ev=mrt.set       mrtCount=2 mrt0=0x...420 mrt1=0x...c90 mrtFbo=3
+seq=4  ev=rt2d.destroy  obj=0x...420 fbo=2 color=4
+seq=5  ev=mrt.detach    obj=0x...420 slot 0
+seq=6  ev=set2d.enter   mrtCount=2 mrt0=0 mrt1=0x...c90      <-- the SET survives, one slot nulled
+seq=7  ev=mrt.finalize  mrtCount=2 mrt0=0 mrt1=0x...c90
+seq=9  ev=rt2d.mipgen   obj=0x...c90 levels=4                 <-- the SURVIVOR still regenerates
+```
+
+**`Present()` bounds the whole window, and that is asserted, not assumed.** `GraphicsDevice::Present()`
+refuses to present while a render target is bound and decides that from `renderTargetBound_` — a
+**bool** no destructor touches — so the refusal is identical for a live and for a destroyed bound
+target: a thrown `InvalidOperationException`, never a dereference. Leg P1 asserts both. Three legs of
+the first draft (`destroyed while bound, then Present`) had to be rewritten because that sequence is
+not reachable on **any** backend; they now place their frame boundary after the transition.
+
+### The fix
+
+The binding record is now a separately allocated `EasyGLBoundTargetEXT`, **shared** between the
+graphics backend (`std::shared_ptr bound_`) and every render target it creates
+(`std::weak_ptr binding_`, handed over in `CreateRenderTarget2D`/`CreateRenderTargetCube`). A dying
+target clears its own slots in `DetachFromBindingEXT()`, called first in its destructor.
+
+Sharing the record is what makes the detach safe in **both** destruction orders. A dying target never
+calls back into a graphics backend that may itself already be gone; a graphics backend that dies first
+takes the record with it, leaving every surviving target's `weak_ptr` expired and its destructor a
+no-op. **That second order is not reachable through CNA's own `Game` harness** — `GraphicsDevice_` is a
+`Game` base member, destroyed after every subclass member — so it is stated as ordering correctness,
+not as a reproduced fault, exactly as REMED-GFX-167 stated its abandoned-frame path. A globally held
+render target reaches it, which is why the ownership is weak rather than shared.
+
+Only **identity and extent** live in the record: no GL handles, no ownership of anything, no
+retirement list, so there is nothing to grow and nothing to free later. A detach clears one MRT
+**slot** and leaves the count and extent alone, so `FinalizeCurrentMRT` still resolves the survivors;
+only when every slot of a set has died is the count cleared, since a positive count with no live slot
+would leave `GetCurrentRenderTarget2DSize` reporting an extent nothing has.
+
+**No GL work is added or removed.** Deleting a framebuffer reverts the GL binding to zero by
+specification, and every transition already binds its destination explicitly
+(`BindAsRenderTarget`, `BindDefaultFramebuffer`, or the MRT FBO with a full re-attachment), so the
+transition after a detach needs nothing extra.
+
+### Results
+
+**EASYGL: 3/18 legs and 15 SIGSEGV -> 18/18 legs, 0 crashes, 43 checks, 0 declared boundaries.**
+Under ASan+UBSan (both runtimes proved linked by symbol: 39 `__asan_*`, 15 `__ubsan_*`) **2/18 with 32
+`heap-use-after-free` reports -> 18/18 with 0 reports and 0 runtime errors.** The un-sanitized count
+is 3 and the sanitized one 2 because **leg H1 survives without a sanitizer** — the freed vtable
+pointer happened to still dispatch — while ASan names the same use-after-free. That is the shape of
+this defect: undefined behaviour that sometimes looks like success.
+
+| Dimension | Result |
+|---|---|
+| Sample count 1 | 18/18 legs; B1/B2/C1/G1/G2/H1/I1/J1/K1/M1/N1/P1 all exact |
+| MSAA (applied 4x) | D1a resolve-before-release byte-exact; D1b released-while-bound safe, next target exact |
+| Mipmap | E1a level 0 and level 1 byte-exact after the unbind; E1b released-while-bound safe |
+| Cube | F1: cube destroyed with face 3 bound; a second cube then renders and reads back all 6 faces exactly |
+| MRT | L1: slot 0 destroyed mid-binding; survivor's level 0 AND level 1 exact, mip chain regenerated |
+| Next target | B2/D1b/E1b: produced, read back and sampled onto the backbuffer, all byte-exact |
+| Backbuffer | B1/C1a-e/F1/G1/G2/H1/I1/K1/L1/M1/N1/P1: exact after every transition |
+| Object-address reuse | M1's trace reuses ONE backend-object heap address **9 times** across 121 targets |
+| GL-handle reuse | all 121 of M1's targets receive GL framebuffer name **1**; I1's replacement gets fbo=1 color=3, the dead one's exact names |
+| Repeated destruction | M1: 120 destroy-while-bound rounds, 120 detaches, then a final target and the backbuffer both exact |
+| Device/context teardown | J1: transition one instruction before teardown, plus a live target handed to it — normal exit |
+| Exception unwinding | K1: throw with a bound target, destructor runs during the unwind, backbuffer exact after |
+
+**Cardinality: exactly one event added, and it is the detach.** Leg B1 pre-fix vs post-fix is
+identical except `seq=6 rt2d.detach` appearing and `cur2d` at `seq=7` reading `0` instead of the dead
+address — 1 create, 1 bind, 1 destroy, 0 unbinds (nothing to finalize), 0 resolves, 0 mip
+generations on both sides. On legs A1 and A2, the two orderings that pass pre-fix, the whole trace is
+**BYTE-IDENTICAL** with addresses normalised: 3 creates, 3 binds, 3 unbinds, 3 destroys, 10
+transitions in, 10 out, and **zero detaches**, because nothing was bound at death. No extra Present,
+frame, wait, readback, CPU copy, framebuffer, texture, renderbuffer or `glBindFramebuffer` call. Per
+device the fix adds one small heap record; per target, one `weak_ptr`.
+
+**Leak A/B byte-identical**: `100956 bytes leaked in 449 allocations` pre- and post-fix on legs A1 and
+A2 — and the **same 100956/449 on leg M1**, which creates and destroys 121 targets, 120 of them while
+bound. So nothing accumulates per target or per detach. The residue's stacks are entirely
+`libGLX_mesa.so` (Mesa's own exit residue); no CNA frame appears in the leak report.
+
+**GL validation clean**, measured at the transition that would raise it rather than summarised:
+`CNA_EASYGL_TARGET_TRACE` now drains `glGetError()` per event, and **917 traced transitions across the
+eight heaviest legs all report `glerr=none`** — no invalid framebuffer operation, no deleted-name use,
+no incomplete framebuffer, nothing during destruction.
+
+### False-positive tests found and strengthened
+
+**One fixture named this scenario and detoured around it.**
+`examples/easygl_bound_resource_dispose_test.cpp:98-105` tested `Dispose()` while bound (the refusal)
+and then wrote `dev.SetRenderTarget(nullptr);   // unbind before leaving scope`, so the destructor
+never ran bound. Sections 6-8 now cover all three binding shapes released by their DESTRUCTOR while
+bound, with a public-state oracle plus a complete fresh bind cycle afterwards, and section 7 adds the
+CUBE's own dispose-while-bound refusal, which nothing tested before. `check()` now flushes, because
+the pre-fix outcome is a signal and buffered output dies with the process. **A/B: pre-fix it prints
+exactly its original 10 checks, all PASS, then SIGSEGVs on the first new one; post-fix 17/17.**
+
+**An audit of the other 33 EasyGL render-target fixtures found NONE that exercises the case.** Every
+one routes its render-target work through a helper that owns a complete bind cycle — `ProduceInto`,
+`RenderFace`, `MarkFace`, `Render`, `BlitAndScan`, `ProduceFirstOp`, all ending in
+`SetRenderTarget(nullptr)`/`SetRenderTargets({})` — or keeps its targets in class-member lifetime, so
+the release is unconditionally separated from the last bind by a transition. Ranked near-misses:
+`easygl_bound_resource_dispose_test.cpp` (above); `deferred_source_lifetime_test.cpp:650`, which
+destroys an object while a target is bound but the *wrong* object (the sampled source, not the bound
+destination); `rendertargetcube_getdata_contract_test.cpp:839`, which asserts dispose-while-bound is
+*rejected*; `rendertarget_depthstencil_usage_test.cpp:1202-1203`, where `Dispose()` is literally the
+next statement after the unbind; and `easygl_spritebatch_rendertarget_size_test.cpp:191`, which never
+unbinds `rtB` explicitly and is saved only because `BlitAndScan`'s own first statement does.
+Three secondary reasons it survived: readback helpers that begin by unbinding acted as invisible
+saviours; the two disposal-shaped fixtures assert "does not crash"/"throws" rather than pixels or
+state; and no pre-existing fixture had process isolation, so even an accidental encounter with this
+SIGSEGV would have been an opaque whole-binary crash instead of a localized failing leg.
+
+### Cross-backend controls — only EasyGL production changed
+
+| Backend | Legs | Checks | Declared | Crashes |
+|---|---|---|---|---|
+| EASYGL | 18/18 | 43 | 0 | 0 |
+| VULKAN | 18/18 | 42 | 1 | 0 |
+| SOFTWARE | 18/18 | 37 | 3 | 0 |
+| BGFX | 18/18 | 38 | 5 | 0 |
+| WEBGPU | 18/18 | 36 | 2 | 0 |
+| SDL_GPU | 18/18 | 21 | 22 (no backbuffer readback) | 0 |
+| HEADLESS | 18/18 | 5 | 35 (non-rasterizing) | 0 |
+
+Every other backend already honoured the contract. **Vulkan's REMED-GFX-166 and WebGPU's
+REMED-GFX-167 lifetime fixtures stay green and neither backend's production was touched**;
+`deferred_source_lifetime_test.cpp` and `rendertarget_effect_source_test.cpp` both pass on EasyGL,
+clean under ASan+UBSan.
+
+Running the controls exposed capability gaps the first draft *asserted* instead of declaring. Three
+CONTROL sub-checks are now capability-gated — never the destroy-while-bound halves, and never on
+EasyGL, which measures all of them (0 declared boundaries there):
+`kMsaaResolveReadable` false on BGFX (a resolved MSAA target read back `(0,0,0,0)` against a flat
+`(70,145,210,255)` clear); `kRenderTargetMipReadable` false on BGFX (level 1 all-zero);
+`kMrtSlotMipReadable` false on BGFX and VULKAN. WebGPU needs no entry because it *refuses*
+`mipMap=true` with a `runtime_error` naming plan_webgpu.md WEBGPU-53/54, which the legs catch and
+declare at run time — silence is not a declaration, which is why the measured-zero cases need one.
+
+### Regression gates
+
+`ctest -R '^EasyGL'` **270/272**, 1 skipped (`EasyGL_GraphicsDeviceManager_Vsync`). Both failures are
+**A/B-proven pre-existing**, byte-identical against the pre-fix backend: `EasyGL_DeviceValidation`
+(`SetVertexBuffers(16) does not throw`) and `EasyGL_GraphicsDevice_ReferenceStencil`
+(`centre=(0,255,0), expected BACKGROUND`). Neither touches render-target binding.
+Green and preserved: `EasyGL_RenderTarget2D_Readback`/`_DepthBuffer`/`_MipComplete`/`_MsaaResolve`,
+`EasyGL_RenderTargetCube_SampleAfterUnbind`/`_DepthFormat`/`_PluralBinding`/`_Usage`/`_MsaaFace`/`_GetDataContract`,
+`EasyGL_MRT_TwoAttachments`, `EasyGL_RT_Roundtrip`, `EasyGL_RenderTargetUsage`,
+`EasyGL_RenderTarget_ViewportScissorReset`, `EasyGL_RenderTarget_SamplingOrientation` (GFX-147),
+`EasyGL_RenderTarget_ProducerConsumer`, `EasyGL_RenderTarget_BackbufferConsumer`,
+`EasyGL_RenderTarget_FirstUse`, `EasyGL_RenderTarget_PassBoundary`,
+`EasyGL_RenderTarget_DepthStencilUsage`, `EasyGL_DeferredSourceLifetime`,
+`EasyGL_RenderTarget_EffectSource`, `EasyGL_SpriteBatch_RenderTargetSize`, `EasyGL_DisposedResource`,
+`EasyGL_DoubleDispose`, `EasyGL_DeviceDisposeOrder`. **All fourteen backend configurations build the
+CNA library incrementally** (EASYGL, VULKAN, WEBGPU, SDL_GPU, SOFTWARE, BGFX, HEADLESS,
+SDL_RENDERER, CANVAS, ASCII, DX3, D3D9, D3D11, D3D12).
+
+### Independent findings
+
+- **VULKAN returns all-zero for mip level 1 of a render target bound as part of an MRT set**, while
+  the same target's mip chain regenerates correctly when bound alone (leg E1a passes, leg L1's level-1
+  check measured 0/8 with `got (0,0,0,0)` against a flat `(215,60,125,255)` clear). Declared via
+  `kMrtSlotMipReadable`, not fixed here.
+- **BGFX cannot read back a resolved MSAA render target or any render target's mip level 1** — both
+  measured all-zero against flat clears. Kept separate from this task exactly as the neighbouring
+  MSAA/mip fixtures already keep bgfx's readback gaps.
+- **`examples/easygl_rendertargetcube_properties_test.cpp:21-26` carries a stale comment** claiming
+  `RenderTargetCube::Dispose(bool)` has "NO 'still bound' guard" and that
+  `SetRenderTarget(RenderTargetCube*, CubeMapFace)` "never records the binding in
+  `currentRenderTargets_`". Both are false today — the guard is at
+  `RenderTargetCube.cpp:76-83` and the singular cube overload routes through `SetRenderTargets`, which
+  does record it (REMED-GFX-142). New section 7 of `easygl_bound_resource_dispose_test.cpp` asserts
+  the refusal. Comment not corrected here; recorded so it is not trusted.
+
+### Commits
+
+- `87006715 test(Task REMED-GFX-168): reproduce the EasyGL bound-target lifetime fault`
+- `b2823e56 fix(Task REMED-GFX-168): give EasyGL's current-target binding its own lifetime`
+- `014c4799 test(Task REMED-GFX-168): close the destructor blind spot and run the cross-backend controls`
+- `docs(remediation): record GFX-168 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
