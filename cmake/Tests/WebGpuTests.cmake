@@ -510,6 +510,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_DeferredSourceLifetime COMMAND cna_test_webgpu_deferred_source_lifetime
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-168 cross-backend control: destroying a RenderTarget2D that is STILL the bound
+    # render target must never make the next SetRenderTarget transition unsafe, and must leave the
+    # next target and the backbuffer exactly correct. The defect was EasyGL-local -- it remembered
+    # the bound destination as a raw IRenderTargetBackend* and the next transition called
+    # UnbindAsRenderTarget() on it, so a scoped target leaving scope while bound made that
+    # transition a virtual call through freed storage. This run is what establishes that WEBGPU
+    # already honoured the contract rather than being made to; each leg runs in its own process so
+    # a SIGSEGV is an attributable result instead of a lost shard.
+    cna_webgpu_test(cna_test_webgpu_bound_target_lifetime
+        examples/bound_target_lifetime_test.cpp)
+    cna_register_backend_test(NAME WebGPU_BoundTargetLifetime COMMAND cna_test_webgpu_bound_target_lifetime
+        TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

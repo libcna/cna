@@ -103,6 +103,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_DeferredSourceLifetime COMMAND cna_test_headless_deferred_source_lifetime
         TIMEOUT 300 LABELS "Headless")
 
+    # REMED-GFX-168 cross-backend control: destroying a RenderTarget2D that is STILL the bound
+    # render target must never make the next SetRenderTarget transition unsafe, and must leave the
+    # next target and the backbuffer exactly correct. The defect was EasyGL-local -- it remembered
+    # the bound destination as a raw IRenderTargetBackend* and the next transition called
+    # UnbindAsRenderTarget() on it, so a scoped target leaving scope while bound made that
+    # transition a virtual call through freed storage. This run is what establishes that HEADLESS
+    # already honoured the contract rather than being made to; each leg runs in its own process so
+    # a SIGSEGV is an attributable result instead of a lost shard.
+    cna_headless_test(cna_test_headless_bound_target_lifetime
+        examples/bound_target_lifetime_test.cpp)
+    cna_register_backend_test(NAME Headless_BoundTargetLifetime COMMAND cna_test_headless_bound_target_lifetime
+        TIMEOUT 600 LABELS "Headless")
+
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

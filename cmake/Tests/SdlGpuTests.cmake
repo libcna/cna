@@ -349,6 +349,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_DeferredSourceLifetime COMMAND cna_test_sdlgpu_deferred_source_lifetime
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-168 cross-backend control: destroying a RenderTarget2D that is STILL the bound
+    # render target must never make the next SetRenderTarget transition unsafe, and must leave the
+    # next target and the backbuffer exactly correct. The defect was EasyGL-local -- it remembered
+    # the bound destination as a raw IRenderTargetBackend* and the next transition called
+    # UnbindAsRenderTarget() on it, so a scoped target leaving scope while bound made that
+    # transition a virtual call through freed storage. This run is what establishes that SDL_GPU
+    # already honoured the contract rather than being made to; each leg runs in its own process so
+    # a SIGSEGV is an attributable result instead of a lost shard.
+    cna_sdlgpu_test(cna_test_sdlgpu_bound_target_lifetime
+        examples/bound_target_lifetime_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_BoundTargetLifetime COMMAND cna_test_sdlgpu_bound_target_lifetime
+        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with
