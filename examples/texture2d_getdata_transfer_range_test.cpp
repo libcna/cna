@@ -75,6 +75,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -117,50 +118,79 @@ namespace
         Unsupported,  ///< It must throw System::NotSupportedException and touch nothing.
     };
 
+    /**
+     * @brief Whether this backend can store a mip level above 0 at all.
+     *
+     * Declared, not probed, for the same reason as RtContract: three backends document that their
+     * 2D texture API has no mip chain (SDL_Renderer, the ASCII backend that wraps it, and DX3's
+     * IDirectDrawSurface), and Canvas the same. On those, `SetData(level=1, ...)` must raise that
+     * documented rejection -- which this file ASSERTS rather than stepping around, so a backend
+     * that later gains mip storage fails here and forces this declaration to be updated.
+     */
+    enum class MipUpload
+    {
+        Supported,
+        Unsupported,
+    };
+
 #if defined(CNA_BACKEND_HEADLESS)
     // Headless performs no rasterization at all, so a render target's colour attachment has no
     // content it could honestly return (REMED-GFX-127 / REMED-GFX-162).
     constexpr RtContract kRtContract = RtContract::Unsupported;
     constexpr const char* kBackendName = "HEADLESS";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_SOFTWARE)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "SOFTWARE";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "EASYGL";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_BGFX)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "BGFX";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_VULKAN)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "VULKAN";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_WEBGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "WEBGPU";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_SDL_GPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "SDL_GPU";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "SDL_RENDERER";
+    constexpr MipUpload kMipUpload = MipUpload::Unsupported;
 #elif defined(CNA_BACKEND_ASCII)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "ASCII";
+    constexpr MipUpload kMipUpload = MipUpload::Unsupported;
 #elif defined(CNA_BACKEND_DX3)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "DX3";
+    constexpr MipUpload kMipUpload = MipUpload::Unsupported;
 #elif defined(CNA_BACKEND_D3D9)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "D3D9";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_D3D11)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "D3D11";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_D3D12)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "D3D12";
+    constexpr MipUpload kMipUpload = MipUpload::Supported;
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "CANVAS";
+    constexpr MipUpload kMipUpload = MipUpload::Unsupported;
 #else
 #error "REMED-GFX-149: this backend has no declared Texture2D::GetData render-target contract."
 #endif
@@ -745,23 +775,55 @@ class Texture2DGetDataTransferRangeTest : public Game
 
         // R12: mip level 1 uses ITS OWN dimensions, not level 0's. 13x7 -> 6x3 = 18 elements, so a
         //      level-0-sized capacity requirement (91) would wrongly reject this legal call and a
-        //      level-0-sized region would wrongly demand 91 elements of output.
+        //      level-0-sized region would wrongly demand 91 elements of output. A separate
+        //      MIPMAPPED texture is used: uploading a level a non-mipmapped resource does not have
+        //      is rejected by the backends that validate it (WebGPU, bgfx) and is not what this
+        //      check is about.
         {
+            Texture2D mipTex(dev, kTexW, kTexH, true, SurfaceFormat::Color);
+            mipTex.SetData(0, nullptr, pattern.data(), 0, kTexN);
+
             const int mw = kTexW >> 1, mh = kTexH >> 1;   // 6 x 3
             std::vector<Color> mip;
             mip.reserve(static_cast<std::size_t>(mw) * mh);
             for (int y = 0; y < mh; ++y)
                 for (int x = 0; x < mw; ++x) mip.push_back(MipPixel(x, y));
-            tex.SetData(1, nullptr, mip.data(), 0, static_cast<int>(mip.size()));
+
+            const Outcome upload = Attempt([&] {
+                mipTex.SetData(1, nullptr, mip.data(), 0, static_cast<int>(mip.size()));
+            });
+            if (kMipUpload == MipUpload::Unsupported)
+            {
+                // Pinned, not skipped: this backend's 2D texture API documents that it has no mip
+                // chain, so the level-1 upload must raise that rejection. If it ever succeeds, this
+                // check fails and the declaration above has to be revisited.
+                check(upload.threw,
+                      "R12 this backend has no mip storage and rejects a level-1 upload" +
+                          (upload.threw ? " (" + upload.what + ")"
+                                        : std::string(" -- but it SUCCEEDED")));
+                return;
+            }
+            checkSucceeded(upload, "R12 level-1 upload succeeds on a mipmapped texture");
+            if (upload.threw) return;
 
             auto got = GuardedBuffer(kPrefix + mip.size() + kSuffix);
             const Outcome o = Attempt([&] {
-                tex.GetData(1, nullptr, got.data(), kPrefix, static_cast<int>(mip.size()));
+                mipTex.GetData(1, nullptr, got.data(), kPrefix, static_cast<int>(mip.size()));
             });
             checkSucceeded(o, "R12 mip level 1 read at startIndex 5 succeeds");
             if (!o.threw)
                 CheckRange(got, kPrefix, mip,
                            "R12 level 1 requires 18 elements (6x3), not level 0's 91");
+
+            // R13: one element short of THAT level is rejected -- the capacity rule follows the
+            //      mip's own dimensions, not level 0's.
+            auto small = GuardedBuffer(kPrefix + mip.size() + kSuffix);
+            checkThrew(Attempt([&] {
+                           mipTex.GetData(1, nullptr, small.data(), kPrefix,
+                                          static_cast<int>(mip.size()) - 1);
+                       }), "out_of_range",
+                       "R13 elementCount one short of level 1's 18 elements is rejected");
+            CheckUntouched(small, "R13 rejected mip request touched nothing");
         }
     }
 
@@ -974,8 +1036,10 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         ResetState(dev);
 
-        std::printf("backend=%s declaredRenderTargetReadback=%s texture=%dx%d renderTarget=%dx%d\n",
+        std::printf("backend=%s declaredRenderTargetReadback=%s declaredMipUpload=%s "
+                    "texture=%dx%d renderTarget=%dx%d\n",
                     kBackendName, kRtContract == RtContract::Exact ? "exact" : "unsupported",
+                    kMipUpload == MipUpload::Supported ? "supported" : "unsupported",
                     kTexW, kTexH, kRtW, kRtH);
 
         SectionT(dev);
