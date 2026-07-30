@@ -109,6 +109,28 @@ namespace CNA::Internal::Backends::Software
         [[nodiscard]] virtual const std::vector<std::uint8_t>& ColorPixels() const = 0;
     };
 
+    /**
+     * @brief REMED-GFX-150: one resolved XNA SamplerState for one texture slot.
+     *
+     * Holds the raw XNA enum ordinals `IGraphicsBackend::ApplySamplerState` already carries, so the
+     * rasterizer's sampler reads exactly what the public `SamplerState` said and nothing is lost in
+     * translation. Pre-fix `SoftwareGraphicsBackend::ApplySamplerState` named none of its parameters
+     * and `SoftwareSpriteBatchBackend`'s equivalents were dead stores, so every textured fragment
+     * was filtered LinearClamp whatever the game selected.
+     *
+     * The defaults are Linear/Clamp/Clamp, which is what an unconfigured slot behaved as before this
+     * struct existed -- a slot that no `ApplySamplerState` call has reached is therefore unchanged.
+     */
+    struct SoftwareSamplerState
+    {
+        /** @brief Raw Microsoft::Xna::Framework::Graphics::TextureFilter ordinal (0 = Linear). */
+        int filter = 0;
+        /** @brief Raw TextureAddressMode ordinal for U (0 = Wrap, 1 = Clamp, 2 = Mirror). */
+        int addressU = 1;
+        /** @brief Raw TextureAddressMode ordinal for V (0 = Wrap, 1 = Clamp, 2 = Mirror). */
+        int addressV = 1;
+    };
+
     class SoftwareTextureBackend : public ITextureBackend, public SoftwareColorSurface
     {
     public:
@@ -327,6 +349,13 @@ namespace CNA::Internal::Backends::Software
 
         [[nodiscard]] bool IsBegun() const { return begun_; }
 
+        /// REMED-GFX-150: the sampler `SpriteBatch::Begin` resolved for this batch (FNA defaults a
+        /// null argument to SamplerState.LinearClamp and always re-applies the result, so this is
+        /// re-established on every Begin and cannot leak from a previous batch). Pre-fix these three
+        /// fields were written here and read nowhere, so the whole SamplerState argument was inert.
+        [[nodiscard]] SoftwareSamplerState GetSamplerState() const
+        { return SoftwareSamplerState{textureFilter_, addressU_, addressV_}; }
+
     private:
         SoftwareGraphicsBackend& owner_;
         bool begun_ = false;
@@ -510,7 +539,24 @@ namespace CNA::Internal::Backends::Software
         /// enable it without re-setting the rectangle.
         void GetActiveScissor(int& x, int& y, int& w, int& h) const;
 
+        /// REMED-GFX-150: the SamplerState most recently applied to @p slot. `GraphicsDevice`
+        /// re-applies every slot before each 3D draw, so slot 0 (texture0) and slot 1
+        /// (DualTextureEffect's overlay) always describe the draw being issued. An out-of-range slot
+        /// returns the default Linear/Clamp state rather than throwing, because this is read on the
+        /// raster path rather than at the public API boundary where the slot is already validated.
+        [[nodiscard]] SoftwareSamplerState GetSamplerState(int slot) const
+        {
+            if (slot < 0 || slot >= kMaxSamplerSlots) return SoftwareSamplerState{};
+            return samplerSlots_[static_cast<std::size_t>(slot)];
+        }
+
     private:
+        /// XNA exposes 16 texture sampler slots; ApplySamplerState validates against this.
+        static constexpr int kMaxSamplerSlots = 16;
+        /// REMED-GFX-150: the per-slot SamplerState the rasterizer's sampler consults. Previously
+        /// ApplySamplerState stored nothing at all.
+        SoftwareSamplerState samplerSlots_[kMaxSamplerSlots]{};
+
         /// REMED-GFX-079: the active viewport as raster parameters for the 3D draw path --
         /// (x,y,w,h) from GetActiveViewport() plus the MinDepth/MaxDepth depth range (defaulting to
         /// [0,1] before any custom viewport is set, matching GetActiveViewport's full-framebuffer

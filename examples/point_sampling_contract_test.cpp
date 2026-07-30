@@ -86,6 +86,10 @@
 //   U  3D textured primitive                    the device SamplerStates[0] path, not SpriteBatch
 //   V  3D wrap                                  UVs beyond [0,1] on the 3D path
 //   W  custom viewport                          point selection is unaffected by viewport placement
+//   X  the device default sampler                XNA's SamplerStateCollection defaults every slot to
+//                                                LinearWrap, so a full-texture quad's far edge blends
+//                                                with the WRAPPED texel -- this is what makes the
+//                                                address mode observable without any explicit sampler
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -763,6 +767,7 @@ protected:
         RunU_3DPath(dev);
         RunV_3DWrap(dev);
         RunW_CustomViewport(dev);
+        RunX_DefaultSamplerIsLinearWrap(dev);
 
         std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
         result_ = (passCount_ == totalCount_) ? 0 : 1;
@@ -1426,6 +1431,36 @@ private:
         g.viewportX = 5;
         g.viewportY = 3;
         ExactLeg(dev, "W1 point selection under a custom viewport origin", p8x4_, t8x4_, 32, 16, g);
+    }
+
+    // X -----------------------------------------------------------------------------------------
+    void RunX_DefaultSamplerIsLinearWrap(GraphicsDevice& dev)
+    {
+        // XNA's SamplerStateCollection defaults every slot to SamplerState.LinearWrap, so a draw
+        // that sets no sampler at all still has an address mode -- and at the far edge of a
+        // full-texture quad the linear filter's upper neighbour WRAPS round to texel 0 instead of
+        // being clamped to the last texel. Software returned the clamped answer for both modes,
+        // which is why a fixture that leaves SamplerState implicit could assert the pure edge texel
+        // and pass. Measured here as a public differential, not asserted from the enum's name.
+        RenderTarget2D rtDefault(dev, 16, 16, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                                 RenderTargetUsage::DiscardContents);
+        RenderTarget2D rtClamp(dev, 16, 16, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                               RenderTargetUsage::DiscardContents);
+        const std::vector<Color> wrapped = Render3DQuad(dev, rtDefault, 16, 16, t2x2_, 1.0f, 1.0f,
+            MakeSampler(TextureFilter::Linear, TextureAddressMode::Wrap, TextureAddressMode::Wrap));
+        const std::vector<Color> clamped = Render3DQuad(dev, rtClamp, 16, 16, t2x2_, 1.0f, 1.0f,
+            MakeSampler(TextureFilter::Linear, TextureAddressMode::Clamp, TextureAddressMode::Clamp));
+
+        const Color& farWrapped = wrapped[15u * 16u + 15u];
+        const Color& farClamped = clamped[15u * 16u + 15u];
+        const Color last = p2x2_.At(1, 1);
+        check(SameColor(farClamped, last),
+              "X1: under LinearClamp the far corner collapses onto the last texel " + Str(last) +
+              " -- actual " + Str(farClamped));
+        check(!SameColor(farWrapped, last),
+              "X2: under LinearWrap the SAME corner blends with the wrapped texel instead of "
+              "clamping -- expected something other than " + Str(last) + ", actual " +
+              Str(farWrapped));
     }
 
 public:

@@ -293,49 +293,145 @@ namespace CNA::Internal::Backends::Software
             int minX = 0, minY = 0, maxX = -1, maxY = -1;
         };
 
-        /// Bilinear texture sample (SOFTWARE-80), clamp-to-edge at the boundaries -- matches this
-        /// backend's own existing "texture address modes not honored, UVs are simply clamped"
-        /// simplification (docs/software-backend.md) rather than adding real Wrap/Mirror support.
-        /// At the very edge of the texture, clamping collapses both interpolation endpoints to the
-        /// same texel, so this degrades cleanly to the old nearest-neighbor result right at the
-        /// boundary rather than blending with a wrapped-around texel.
+        /// REMED-GFX-150: the largest magnitude a texel index may reach before the float->int
+        /// conversion below stops being representable. A coordinate beyond this is saturated in
+        /// FLOAT space first, so the conversion itself is always in range: an out-of-range
+        /// float->int cast is undefined behaviour, which the UBSan build's -fsanitize=float-cast-
+        /// overflow traps. Well inside int range, so the wrap/mirror arithmetic on the result
+        /// (which needs 2*index) cannot overflow either.
+        constexpr long long kTexelIndexLimit = 1 << 24;
+
+        /// REMED-GFX-150: floor(value) as a texel index, saturating instead of invoking undefined
+        /// behaviour. A NaN coordinate lands on the low limit (the `!(f > -limit)` test is false for
+        /// NaN), so a non-finite texture coordinate produces a defined, addressable texel rather
+        /// than an unpredictable index -- the same "deterministic rather than clever" stance the
+        /// rest of this backend's validation takes.
+        long long FloorToTexelIndex(float value)
+        {
+            const float f = std::floor(value);
+            if (!(f > -static_cast<float>(kTexelIndexLimit))) return -kTexelIndexLimit;
+            if (f >= static_cast<float>(kTexelIndexLimit)) return kTexelIndexLimit;
+            return static_cast<long long>(f);
+        }
+
+        /// REMED-GFX-150: XNA TextureAddressMode applied to an already-floored INTEGER texel index.
+        /// The mode transforms the index, not a normalized coordinate -- Clamp reaches the first and
+        /// last texel and blends with nothing, Wrap tiles at every integer junction, Mirror tiles and
+        /// flips at every integer junction (period 2*size). @p mode is the raw XNA ordinal
+        /// (0 = Wrap, 1 = Clamp, 2 = Mirror); anything else is treated as Clamp.
+        int AddressTexel(long long i, int size, int mode)
+        {
+            const long long n = size;
+            switch (mode)
+            {
+            case 0:
+            {
+                long long m = i % n;
+                if (m < 0) m += n;
+                return static_cast<int>(m);
+            }
+            case 2:
+            {
+                const long long period = 2 * n;
+                long long m = i % period;
+                if (m < 0) m += period;
+                return static_cast<int>(m < n ? m : period - 1 - m);
+            }
+            default:
+                return static_cast<int>(std::clamp<long long>(i, 0, n - 1));
+            }
+        }
+
+        /// REMED-GFX-150: whether the MAGNIFICATION half of an XNA TextureFilter is Point.
+        /// Ordinals: 0 Linear, 1 Point, 2 Anisotropic, 3 LinearMipPoint, 4 PointMipLinear,
+        /// 5 MinLinearMagPointMipLinear, 6 MinLinearMagPointMipPoint,
+        /// 7 MinPointMagLinearMipLinear, 8 MinPointMagLinearMipPoint.
+        constexpr bool FilterMagnifiesWithPoint(int filter)
+        {
+            return filter == 1 || filter == 4 || filter == 5 || filter == 6;
+        }
+
+        /// REMED-GFX-150: whether the MINIFICATION half of an XNA TextureFilter is Point.
+        constexpr bool FilterMinifiesWithPoint(int filter)
+        {
+            return filter == 1 || filter == 4 || filter == 7 || filter == 8;
+        }
+
+        /// REMED-GFX-150: the one authoritative texture sample for this backend. Separates, in
+        /// order: filter selection (magnification vs minification half of the XNA filter), texel
+        /// addressing, address-mode transformation, and format decode. Reads exactly one texel for
+        /// a point sample and exactly four for a linear one -- no allocation, no scratch buffer, no
+        /// repacking of the source.
+        ///
+        /// Point selects `AddressMode(floor(u * width))`. NOT `u * width - 0.5`: that half-texel
+        /// shift converts a position into the LINEAR path's lower neighbour index, and applying it
+        /// to a point sample is exactly the GFX-150 defect (it makes the selected texel change
+        /// half a texel early, and the pre-fix code then blended across the boundary as well).
+        /// A coordinate exactly on a texel boundary selects the higher texel, matching the
+        /// half-open [i, i+1) coverage the floor implies.
+        ///
+        /// Linear keeps the established construction: the neighbour pair is derived from the RAW
+        /// (pre-address) indices so the two endpoints cannot collapse onto the same texel through a
+        /// premature clamp -- clamping x0 first and computing x1 from the already-clamped value
+        /// shifts x1 to the wrong texel at the texture edge (a real bug Software_Effects' own
+        /// corner-sampling check caught). Under Clamp this is byte-identical to the pre-GFX-150
+        /// behaviour; under Wrap/Mirror the neighbour now comes from the tiled/reflected side
+        /// instead of being clamped, which is what makes LinearWrap differ from LinearClamp at all.
         ///
         /// REMED-GFX-124: takes the SoftwareColorSurface capability rather than the concrete
         /// SoftwareTextureBackend, so a finished RenderTarget2D samples through this exact path --
-        /// same filtering, same clamping, same sampler semantics as any other Software texture.
-        void SampleBilinear(const SoftwareColorSurface& texture, float u, float v,
+        /// same filtering, same addressing, same sampler semantics as any other Software texture.
+        ///
+        /// MIP BOUNDARY: SoftwareColorSurface exposes exactly one level, so this always samples
+        /// level 0 and @p magnify chooses a FILTER, never a level. Mip selection is outside this
+        /// backend's declared capability and is not introduced here.
+        void SampleTexture(const SoftwareColorSurface& texture, const SoftwareSamplerState& sampler,
+                           bool magnify, float u, float v,
                            float& r, float& g, float& b, float& a)
         {
             const int texW = std::max(1, texture.ColorWidth());
             const int texH = std::max(1, texture.ColorHeight());
             const auto& pixels = texture.ColorPixels();
 
-            const float tx = u * static_cast<float>(texW) - 0.5f;
-            const float ty = v * static_cast<float>(texH) - 0.5f;
-            const int x0raw = static_cast<int>(std::floor(tx));
-            const int y0raw = static_cast<int>(std::floor(ty));
-            // Clamp x0/x1 (and y0/y1) independently from the RAW (pre-clamp) indices -- clamping
-            // x0 first and then computing x1 = clamp(x0+1, ...) from the already-clamped x0 would
-            // shift x1 to the wrong texel just outside the valid range (a real bug caught by
-            // Software_Effects' own corner-sampling check: it produced a visible blend with the
-            // neighboring texel right at the texture edge instead of correctly collapsing to a
-            // single texel there).
-            const int x0 = std::clamp(x0raw, 0, texW - 1);
-            const int y0 = std::clamp(y0raw, 0, texH - 1);
-            const int x1 = std::clamp(x0raw + 1, 0, texW - 1);
-            const int y1 = std::clamp(y0raw + 1, 0, texH - 1);
-            const float fx = std::clamp(tx - std::floor(tx), 0.0f, 1.0f);
-            const float fy = std::clamp(ty - std::floor(ty), 0.0f, 1.0f);
-
-            const auto sample = [&](int px, int py, int channel) -> float {
+            const auto fetch = [&](int px, int py, int channel) -> float {
                 const std::size_t idx = (static_cast<std::size_t>(py) * static_cast<std::size_t>(texW) +
                                         static_cast<std::size_t>(px)) * 4u + static_cast<std::size_t>(channel);
                 return pixels[idx] / 255.0f;
             };
 
+            const bool point = magnify ? FilterMagnifiesWithPoint(sampler.filter)
+                                       : FilterMinifiesWithPoint(sampler.filter);
+            if (point)
+            {
+                const int x = AddressTexel(FloorToTexelIndex(u * static_cast<float>(texW)),
+                                           texW, sampler.addressU);
+                const int y = AddressTexel(FloorToTexelIndex(v * static_cast<float>(texH)),
+                                           texH, sampler.addressV);
+                r = fetch(x, y, 0);
+                g = fetch(x, y, 1);
+                b = fetch(x, y, 2);
+                a = fetch(x, y, 3);
+                return;
+            }
+
+            const float tx = u * static_cast<float>(texW) - 0.5f;
+            const float ty = v * static_cast<float>(texH) - 0.5f;
+            const long long x0raw = FloorToTexelIndex(tx);
+            const long long y0raw = FloorToTexelIndex(ty);
+            const int x0 = AddressTexel(x0raw, texW, sampler.addressU);
+            const int y0 = AddressTexel(y0raw, texH, sampler.addressV);
+            const int x1 = AddressTexel(x0raw + 1, texW, sampler.addressU);
+            const int y1 = AddressTexel(y0raw + 1, texH, sampler.addressV);
+            // The `!(0 <= f <= 1)` form rejects NaN too, so a non-finite coordinate collapses onto
+            // the x0/y0 endpoint instead of leaving an uninitialized-looking weight.
+            float fx = tx - std::floor(tx);
+            float fy = ty - std::floor(ty);
+            if (!(fx >= 0.0f && fx <= 1.0f)) fx = 0.0f;
+            if (!(fy >= 0.0f && fy <= 1.0f)) fy = 0.0f;
+
             const auto bilerp = [&](int channel) -> float {
-                const float top = sample(x0, y0, channel) * (1.0f - fx) + sample(x1, y0, channel) * fx;
-                const float bottom = sample(x0, y1, channel) * (1.0f - fx) + sample(x1, y1, channel) * fx;
+                const float top = fetch(x0, y0, channel) * (1.0f - fx) + fetch(x1, y0, channel) * fx;
+                const float bottom = fetch(x0, y1, channel) * (1.0f - fx) + fetch(x1, y1, channel) * fx;
                 return top * (1.0f - fy) + bottom * fy;
             };
 
@@ -343,6 +439,47 @@ namespace CNA::Internal::Backends::Software
             g = bilerp(1);
             b = bilerp(2);
             a = bilerp(3);
+        }
+
+        /// REMED-GFX-150: whether this triangle MAGNIFIES the given texture (a destination pixel
+        /// covers at most one texel) or minifies it.
+        ///
+        /// XNA's TextureFilter names a SEPARATE minification and magnification filter for ordinals
+        /// 5..8 (MinLinearMagPoint*, MinPointMagLinear*); the other five use one filter for both, so
+        /// this classification is ignored for them and cannot perturb Point or Linear. It selects a
+        /// FILTER, never a mip level -- SoftwareColorSurface stores exactly one level.
+        ///
+        /// The rate is the standard rho = max(|d(s,t)/dx|, |d(s,t)/dy|) in texels per pixel,
+        /// evaluated ONCE per triangle from its three vertices: exact for the affine SpriteBatch
+        /// quads (invW == 1 throughout), and a per-triangle estimate for perspective 3D geometry,
+        /// where the true rate varies across the triangle. RasterVertex stores u,v premultiplied by
+        /// invW, so they are un-premultiplied here first. A degenerate triangle reports magnification
+        /// (its rate is undefined and it covers no pixels worth minifying).
+        bool TriangleMagnifies(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                               int texW, int texH)
+        {
+            const float area2 = (v1.x - v0.x) * (v2.y - v0.y) - (v2.x - v0.x) * (v1.y - v0.y);
+            if (!(std::abs(area2) > 1e-12f)) return true;
+
+            const float w0 = (v0.invW != 0.0f) ? v0.invW : 1.0f;
+            const float w1 = (v1.invW != 0.0f) ? v1.invW : 1.0f;
+            const float w2 = (v2.invW != 0.0f) ? v2.invW : 1.0f;
+            const float s0 = v0.u / w0 * static_cast<float>(texW);
+            const float s1 = v1.u / w1 * static_cast<float>(texW);
+            const float s2 = v2.u / w2 * static_cast<float>(texW);
+            const float t0 = v0.v / w0 * static_cast<float>(texH);
+            const float t1 = v1.v / w1 * static_cast<float>(texH);
+            const float t2 = v2.v / w2 * static_cast<float>(texH);
+
+            const float dsdx = ((s1 - s0) * (v2.y - v0.y) - (s2 - s0) * (v1.y - v0.y)) / area2;
+            const float dsdy = ((s2 - s0) * (v1.x - v0.x) - (s1 - s0) * (v2.x - v0.x)) / area2;
+            const float dtdx = ((t1 - t0) * (v2.y - v0.y) - (t2 - t0) * (v1.y - v0.y)) / area2;
+            const float dtdy = ((t2 - t0) * (v1.x - v0.x) - (t1 - t0) * (v2.x - v0.x)) / area2;
+
+            const float rhoX = std::sqrt(dsdx * dsdx + dtdx * dtdx);
+            const float rhoY = std::sqrt(dsdy * dsdy + dtdy * dtdy);
+            const float rho = std::max(rhoX, rhoY);
+            return !(rho > 1.0f);   // false for NaN as well, which is the safer half here
         }
 
         /// SOFTWARE-82: applies a column-major 4x4 matrix (GpuDrawParams::worldColMajor's own
@@ -813,6 +950,13 @@ namespace CNA::Internal::Backends::Software
             RasterDepthState depthState; // REMED-GFX-030: per-draw test/write/function snapshot
             int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
             unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
+            // REMED-GFX-150: the SamplerState of each bound texture slot, resolved once per draw so
+            // no fragment can consult a later live state, plus this triangle's magnification
+            // classification for each (only XNA filters 5..8 read it).
+            SoftwareSamplerState sampler0;
+            SoftwareSamplerState sampler1;
+            bool magnify0;
+            bool magnify1;
         };
 
         /// REMED-GFX-082: writes one already-interpolated shaded fragment -- the whole texture/diffuse/
@@ -853,9 +997,9 @@ namespace CNA::Internal::Backends::Software
                 // genuine 2-UV vertex format; established precedent already set by this codebase's own
                 // Vulkan dual_texture3d shaders).
                 float t0r, t0g, t0b, t0a;
-                SampleBilinear(*ctx.texture0, u, v, t0r, t0g, t0b, t0a);
+                SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, u, v, t0r, t0g, t0b, t0a);
                 float t1r, t1g, t1b, t1a;
-                SampleBilinear(*ctx.texture1, u, v, t1r, t1g, t1b, t1a);
+                SampleTexture(*ctx.texture1, ctx.sampler1, ctx.magnify1, u, v, t1r, t1g, t1b, t1a);
                 r *= (t0r * 2.0f) * t1r;
                 g *= (t0g * 2.0f) * t1g;
                 b *= (t0b * 2.0f) * t1b;
@@ -864,7 +1008,7 @@ namespace CNA::Internal::Backends::Software
             else if (ctx.params.textureEnabled && ctx.texture0 != nullptr)
             {
                 float texR, texG, texB, texA;
-                SampleBilinear(*ctx.texture0, u, v, texR, texG, texB, texA);
+                SampleTexture(*ctx.texture0, ctx.sampler0, ctx.magnify0, u, v, texR, texG, texB, texA);
                 r *= texR;
                 g *= texG;
                 b *= texB;
@@ -968,6 +1112,8 @@ namespace CNA::Internal::Backends::Software
                                      const GpuDrawParams& params, const RasterClipRect& clip,
                                      const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
                                      int colorWriteMask, unsigned int multiSampleMask,
+                                     const SoftwareSamplerState& sampler0,
+                                     const SoftwareSamplerState& sampler1,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             // REMED-GFX-124: the cast target is the colour-storage capability, not a concrete
@@ -979,8 +1125,20 @@ namespace CNA::Internal::Backends::Software
             const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
             const bool useEnvMap = params.envMapping && envMap != nullptr;
             const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
+            // REMED-GFX-150: classify magnification once per triangle per bound texture. Only XNA
+            // filters 5..8 distinguish the two halves, so this is inert for Point, Linear and
+            // Anisotropic; it is computed only when a texture is actually sampled.
+            const bool magnify0 = (texture0 != nullptr)
+                ? TriangleMagnifies(v0, v1, v2, std::max(1, texture0->ColorWidth()),
+                                    std::max(1, texture0->ColorHeight()))
+                : true;
+            const bool magnify1 = (texture1 != nullptr)
+                ? TriangleMagnifies(v0, v1, v2, std::max(1, texture1->ColorWidth()),
+                                    std::max(1, texture1->ColorHeight()))
+                : true;
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
-                                    needUV, blendEnabled, depthState, colorWriteMask, multiSampleMask};
+                                    needUV, blendEnabled, depthState, colorWriteMask, multiSampleMask,
+                                    sampler0, sampler1, magnify0, magnify1};
 
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
@@ -1653,12 +1811,20 @@ namespace CNA::Internal::Backends::Software
         // A quad is flat (constant layerDepth -> zero depth slope), so only the constant term applies.
         const float depthBias = owner_.GetDepthBias();
         const float slopeScaleDepthBias = owner_.GetSlopeScaleDepthBias();
+        // REMED-GFX-150: the sprite quad samples through the SamplerState SpriteBatch.Begin
+        // resolved for THIS batch, not the device's 3D slot state -- SpriteBatch has its own sampler
+        // channel (SetSamplerFilter/SetSamplerAddressMode), exactly as it does on every GPU backend.
+        // Begin always re-applies it, so it cannot leak in from a previous batch, and passing it
+        // here rather than through the device slots means a sprite batch cannot leak it out either.
+        const SoftwareSamplerState spriteSampler = GetSamplerState();
         RasterizeTriangleShaded(fb, depthState, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
-                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(), wire, kEdgeAll);
+                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
+                                spriteSampler, spriteSampler, wire, kEdgeAll);
         RasterizeTriangleShaded(fb, depthState, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
-                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(), wire, kEdgeAll);
+                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
+                                spriteSampler, spriteSampler, wire, kEdgeAll);
     }
 
     // ---- SoftwareGraphicsBackend ----
@@ -1858,10 +2024,19 @@ namespace CNA::Internal::Backends::Software
         slopeScaleDepthBias_ = slopeScaleDepthBias;
     }
 
-    void SoftwareGraphicsBackend::ApplySamplerState(int slot, int, int, int, int)
+    // REMED-GFX-150: store the SamplerState so the rasterizer's sampler can honor it. Previously
+    // every parameter but `slot` was unnamed and discarded, so TextureFilter and TextureAddressMode
+    // never reached a single textured fragment and every draw filtered LinearClamp. maxAnisotropy is
+    // still not consumed: this backend has no anisotropic filter, and TextureFilter::Anisotropic
+    // already resolves to Linear through the same min/mag table the other ordinals use.
+    void SoftwareGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int)
     {
-        if (slot < 0 || slot >= 16)
+        if (slot < 0 || slot >= kMaxSamplerSlots)
             throw std::runtime_error("SoftwareGraphicsBackend::ApplySamplerState: slot must be 0..15");
+        SoftwareSamplerState& s = samplerSlots_[static_cast<std::size_t>(slot)];
+        s.filter = filter;
+        s.addressU = addressU;
+        s.addressV = addressV;
     }
 
     // REMED-GFX-080: store the ScissorRectangle so the raster paths can intersect it into their
@@ -2236,11 +2411,13 @@ namespace CNA::Internal::Backends::Software
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
-                                    clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
+                                    clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
+                                    GetSamplerState(0), GetSamplerState(1), wire, mask0);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
-                                        clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
+                                        clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
+                                        GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -2335,11 +2512,13 @@ namespace CNA::Internal::Backends::Software
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
-                                    clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
+                                    clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
+                                    GetSamplerState(0), GetSamplerState(1), wire, mask0);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
-                                        clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
+                                        clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
+                                        GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 }

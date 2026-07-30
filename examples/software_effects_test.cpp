@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -53,6 +54,13 @@ namespace
     }
 
     bool Close(int a, int b, int tolerance) { return std::abs(a - b) <= tolerance; }
+
+    /// REMED-GFX-150: point sampling returns a STORED texel, so its probes are byte-exact rather
+    /// than tolerant -- a tolerance is exactly what let a blended value pass for a selected one.
+    bool Exactly(const Color& c, int r, int g, int b)
+    {
+        return c.getRProperty() == r && c.getGProperty() == g && c.getBProperty() == b;
+    }
 }
 
 class SoftwareEffectsTest : public Game
@@ -85,6 +93,14 @@ protected:
                 0, 0, 255, 255,    255, 255, 255, 255, // row 1: Blue, White
             };
             Texture2D checker = Texture2D::CreateFromPixels(dev, 2, 2, checkerPixels);
+            // REMED-GFX-150: this check is titled "nearest-neighbor texture sampling", so it must
+            // SELECT nearest-neighbor sampling. It used to leave SamplerState implicit, which means
+            // the device default -- SamplerState.LinearWrap -- and passed only because the backend
+            // discarded the filter and the address mode alike. Two of the three probes below are
+            // additionally in the texture's corner cells, where clamping collapses both bilinear
+            // endpoints onto one texel, so the original pair could not have seen the defect even
+            // with an explicit sampler.
+            dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
 
             const VertexPositionTexture verts[6] = {
                 { Vector3(-1.0f,  1.0f, 0.5f), Vector2(0.0f, 0.0f) }, // TL
@@ -107,11 +123,32 @@ protected:
 
             const Color nearTopLeft = ReadPixel(dev, 2, 2);
             const Color nearBottomRight = ReadPixel(dev, 61, 61);
-            Check(Close(nearTopLeft.getRProperty(), 255, 10) && Close(nearTopLeft.getGProperty(), 0, 10) &&
-                  Close(nearTopLeft.getBProperty(), 0, 10) &&
-                  Close(nearBottomRight.getRProperty(), 255, 10) && Close(nearBottomRight.getGProperty(), 255, 10) &&
-                  Close(nearBottomRight.getBProperty(), 255, 10),
+            Check(Exactly(nearTopLeft, 255, 0, 0) && Exactly(nearBottomRight, 255, 255, 255),
                   "textured quad samples the correct texel near opposite corners (top-left=Red, bottom-right=White)");
+
+            // REMED-GFX-150: the probe that can actually fail. Pixel (31,31) is the last pixel of
+            // the texture's top-left cell, so point sampling owes exactly Red -- while bilinear
+            // filtering there is a near-even blend of all four texels, which is what this backend
+            // used to return whatever SamplerState was selected. (2,2) and (61,61) above sit where
+            // clamping collapses the interpolation, so they agree either way.
+            const Color interior = ReadPixel(dev, 31, 31);
+            Check(Exactly(interior, 255, 0, 0),
+                  "PointClamp selects ONE texel away from the clamped corners: (31,31) is Red, not a "
+                  "blend of the four checker texels");
+
+            // The differential, so "Red" above cannot be satisfied by a backend that ignores the
+            // sampler and happens to clamp: with LinearClamp the SAME pixel must NOT be pure Red.
+            dev.getSamplerStatesProperty()[0] = SamplerState::LinearClamp;
+            fx.Apply();
+            dev.Clear(Color::Black, 1.0f);
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+            const Color interiorLinear = ReadPixel(dev, 31, 31);
+            Check(!Exactly(interiorLinear, 255, 0, 0),
+                  "LinearClamp still interpolates at that same pixel, so the check above is measuring "
+                  "the filter rather than a coincidence");
+            dev.getSamplerStatesProperty()[0] = SamplerState::LinearWrap;
         }
 
         // Check B: DiffuseColor modulates the sampled texture color.
@@ -212,8 +249,10 @@ protected:
                   "SpriteBatch::Draw() renders a solid-color texture at the exact requested screen position");
         }
 
-        std::printf("=== %d/%d PASS ===\n", g_passCount, 5);
-        result_ = (g_passCount == 5) ? 0 : 1;
+        // REMED-GFX-150 added two checks to Check A: the interior point probe that can
+        // actually fail, and its LinearClamp differential.
+        std::printf("=== %d/%d PASS ===\n", g_passCount, 7);
+        result_ = (g_passCount == 7) ? 0 : 1;
         Exit();
     }
 
