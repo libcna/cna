@@ -20791,7 +20791,9 @@ Only WebGPU and SDL_GPU production changed; every other backend runs the new fix
 | BGFX | **70/70** | |
 | HEADLESS | **1/1** | asserts the REMED-GFX-127 rejection; it rasterizes nothing |
 | EASYGL | **50/70** | **REMED-GFX-174**, new — see below. Not fixed: EasyGL production is out of scope |
-| D3D9 / D3D11 / D3D12 | registered, not run this session | Wine/mingw lanes were not exercised; see the thermal note |
+| D3D11 | **70/70** | Wine on `:99` (never `:0`), mingw cross-build clean |
+| D3D9 | **68/68** | Wine on `:99`. The two missing checks are `DualTextureEffect`, which this backend declines with the pre-existing plan_dx9.md D9-82d layout message; **REMED-GFX-171's half-pixel offset does not trip any leg here** and remains open and untouched |
+| D3D12 | cross-built only | 6.8 MB `.exe` produced, zero errors; runtime unavailable for the pre-existing DX-100 reason |
 
 Full backend shards, after the fix:
 
