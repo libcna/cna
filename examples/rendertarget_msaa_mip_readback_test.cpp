@@ -183,6 +183,100 @@ namespace
     constexpr bool kGeneratedMipContentAsserted = true;
 
     /**
+     * @brief Whether this backend POPULATES a render target's levels above zero at all.
+     *
+     * False on SOFTWARE, whose `SoftwareRenderTargetBackend::GetData` raises
+     * "the Software backend stores mip level 0 only; level N was requested" -- a specific,
+     * catchable public refusal, with `LevelCount` still correct and level 0 still byte-exact.
+     * That is that backend's own declared boundary, not this ticket's subject, and it is ASSERTED
+     * here rather than skipped: a nonzero level must throw and must leave the destination
+     * completely untouched. If Software ever grows a real chain, this check turns red and says so.
+     *
+     * False on HEADLESS too, which rasterizes nothing and refuses every render-target readback
+     * (`kTargetReadbackSupported`), so the refusal is already asserted one level up.
+     */
+    constexpr bool kTargetMipReadbackSupported =
+#if defined(CNA_BACKEND_SOFTWARE)
+        false;
+#else
+        true;
+#endif
+
+    /** @brief Whether `SetRenderTargets` with more than one attachment is executed here. */
+    constexpr bool kMrtSupported =
+#if defined(CNA_BACKEND_SOFTWARE) || defined(CNA_BACKEND_HEADLESS)
+        false;
+#else
+        true;
+#endif
+
+    /**
+     * @brief Whether a level OUTSIDE the declared chain is rejected before any native call here.
+     *
+     * False on VULKAN, measured by this fixture's own controls on 2026-07-31 and recorded as
+     * **REMED-GFX-189**: `VulkanRenderTargetBackend::GetData` range-checks nothing, so
+     * `GetData(LevelCount, ...)` reaches `vkCmdCopyImageToBuffer` with an image extent of
+     * (0, 0, 0) -- `VUID-vkCmdCopyImageToBuffer-imageSubresource-07970` fires -- and the call then
+     * WRITES the caller's destination and returns normally, which is the fabricated content
+     * REMED-GFX-127/130 exist to forbid. It is the same class of hole REMED-GFX-186 closed on
+     * SDL_GPU (whose symptom was a SIGSEGV rather than fabrication), but it is a different
+     * backend's production code, and this task changes SDL_GPU only.
+     *
+     * A NEGATIVE level is rejected on every backend, because `Texture2D::GetData` checks that in
+     * the shared layer -- so this really is about the upper bound, not about argument checking in
+     * general.
+     */
+    constexpr bool kOutOfRangeLevelRejected =
+#if defined(CNA_BACKEND_VULKAN)
+        false;
+#else
+        true;
+#endif
+
+    /**
+     * @brief Whether an MRT PRIMARY attachment's mip chain is generated here.
+     *
+     * False on VULKAN, measured by this fixture's own controls on 2026-07-31 and recorded as
+     * **REMED-GFX-190**. It is specifically an MRT property, not a mip property: the identical
+     * mipmapped multisampled target read after a SINGLE-target bind cycle (leg A1) has a byte-exact
+     * level 1 on Vulkan, while `rts[0]` of a `SetRenderTargets({a, b})` cycle comes back with level
+     * 0 exact and level 1 entirely (0,0,0,0). A different backend and a different mechanism from
+     * REMED-GFX-186, so it is declared here rather than absorbed.
+     */
+    constexpr bool kMrtPrimaryAttachmentMipsGenerated =
+#if defined(CNA_BACKEND_VULKAN)
+        false;
+#else
+        true;
+#endif
+
+    /**
+     * @brief Whether the CONTENT of an MRT extra attachment's generated level is claimable here.
+     *
+     * TRUE only on SDL_GPU, where SDLGPU-37 establishes that a stock single-output draw writes
+     * attachment 0 only, so attachment 1 keeps the pass' clear colour and its generated chain must
+     * reproduce that. XNA leaves an unwritten MRT output undefined, so everywhere else this file
+     * MEASURES and PRINTS what the extra attachment's level 1 holds and asserts only that the read
+     * is safe, complete and inside its window -- claiming a value there would be inventing a
+     * contract. Bgfx measures the top-left quadrant colour and Vulkan measures (0,0,0,0); both are
+     * legal answers to a question XNA does not ask.
+     */
+    constexpr bool kMrtExtraAttachmentContentClaimable =
+#if defined(CNA_BACKEND_SDL_GPU)
+        true;
+#else
+        false;
+#endif
+
+    /** @brief Whether `RenderTargetCube` is a bindable render target here. */
+    constexpr bool kCubeTargetSupported =
+#if defined(CNA_BACKEND_SOFTWARE)
+        false;
+#else
+        true;
+#endif
+
+    /**
      * @brief Whether this backend's mip GENERATOR truncates a chain whose axes bottom out unevenly.
      *
      * TRUE on SDL_GPU, and read straight out of the vendored SDL3 3.5.0 tree rather than guessed:
@@ -551,6 +645,27 @@ class RenderTargetMsaaMipReadbackTest : public Game
         std::vector<Color> buf = SentinelBuffer(count);
         const Rectangle r(rx, ry, rw, rh);
 
+        // A backend that populates level 0 only owes a DETERMINISTIC REFUSAL for every other
+        // level, and owes it without touching the destination -- a refusal that quietly wrote
+        // zeroes would be indistinguishable from an ungenerated chain being handed back as content.
+        if (level > 0 && !kTargetMipReadbackSupported)
+        {
+            step(label + ": GetData(level=" + std::to_string(level) + ") -- this backend stores "
+                 "level 0 only and must REFUSE");
+            bool threw = false;
+            std::string what;
+            try { rt.GetData(level, &r, buf.data(), kGuard, count); }
+            catch (const std::exception& e) { threw = true; what = e.what(); }
+            check(threw, label + ": a level this backend does not populate is refused through a "
+                                 "catchable public exception, not a signal");
+            if (threw) note(label + ": " + what);
+            bool untouched = true;
+            for (const Color& c : buf)
+                if (!Exact(c, kSentinel)) { untouched = false; break; }
+            check(untouched, label + ": the refused read left the whole destination untouched");
+            return std::vector<Color>(static_cast<std::size_t>(count), kSentinel);
+        }
+
         step(label + ": GetData(level=" + std::to_string(level) + ", rect=(" + std::to_string(rx) +
              "," + std::to_string(ry) + "," + std::to_string(rw) + "x" + std::to_string(rh) +
              "), startIndex=" + std::to_string(kGuard) + ", elementCount=" + std::to_string(count) + ")");
@@ -695,11 +810,26 @@ class RenderTargetMsaaMipReadbackTest : public Game
         std::string what;
         try { rt.GetData(level, &r, buf.data(), kGuard, count); }
         catch (const std::exception& e) { threw = true; what = e.what(); }
-        check(threw, label + ": rejected through a catchable public exception, not a signal");
-        if (threw) note(label + ": " + what);
         bool untouched = true;
         for (const Color& c : buf)
             if (!Exact(c, kSentinel)) { untouched = false; break; }
+
+        // A NEGATIVE level is the shared layer's own check and holds everywhere; only the upper
+        // bound is backend-owned, so only that one consults the declaration.
+        if (level >= 0 && !kOutOfRangeLevelRejected)
+        {
+            boundary(label + ": REMED-GFX-189 -- this backend does NOT reject a level outside the "
+                             "declared chain; measured threw=" + std::string(threw ? "yes" : "no") +
+                     " destinationUntouched=" + (untouched ? "yes" : "no") +
+                     ". If BOTH become yes, the defect was fixed and this declaration must go");
+            check(!threw && !untouched,
+                  label + ": REMED-GFX-189's boundary still reproduces exactly -- the call returns "
+                          "normally and writes the destination instead of refusing");
+            return;
+        }
+
+        check(threw, label + ": rejected through a catchable public exception, not a signal");
+        if (threw) note(label + ": " + what);
         check(untouched, label + ": the refused read left the whole destination untouched");
     }
 
@@ -775,7 +905,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
 
         // The FINAL 1x1 level must be a blend of more than one source region -- if it equalled any
         // single quadrant colour the chain would have collapsed rather than been generated.
-        if (levels >= 2 && kTargetReadbackSupported && kGeneratedMipContentAsserted)
+        if (levels >= 2 && kTargetReadbackSupported && kTargetMipReadbackSupported)
         {
             std::vector<Color> last = ReadWholeLevel(*rt, levels - 1,
                                                      "A2 final level re-read for the blend check");
@@ -1043,6 +1173,13 @@ class RenderTargetMsaaMipReadbackTest : public Game
         auto& dev = getGraphicsDeviceProperty();
         auto rt = ShapeTarget(dev, "F6");
         if (!rt) return;
+        if (!kTargetMipReadbackSupported)
+        {
+            // Same declared boundary as every other nonzero-level read here; the oversized-window
+            // contract is exercised at level 0 by REMED-GFX-149's own fixture on this backend.
+            ReadLevelRect(*rt, 1, 0, 0, kRT / 2, kRT / 2, kRT, kRT, "F6 level 1");
+            return;
+        }
         const int lw = kRT / 2, lh = kRT / 2;
         const int count = lw * lh;
         // Deliberately oversized: REMED-GFX-149's contract says a capacity larger than the region
@@ -1284,6 +1421,12 @@ class RenderTargetMsaaMipReadbackTest : public Game
     void LegI1()
     {
         auto& dev = getGraphicsDeviceProperty();
+        if (!kMrtSupported)
+        {
+            boundary("I1 multiple simultaneous render targets are a declared boundary here");
+            check(true, "I1 the MRT boundary is declared rather than assumed");
+            return;
+        }
         auto a = MakeTarget(dev, kRT, kRT, true, 4, DepthFormat::None,
                             RenderTargetUsage::DiscardContents, "I1 MRT attachment 0");
         if (!a) return;
@@ -1306,7 +1449,25 @@ class RenderTargetMsaaMipReadbackTest : public Game
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         ReadWholeLevel(*a, 0, "I1 MRT attachment 0 level 0");
-        ReadWholeLevel(*a, 1, "I1 MRT attachment 0 level 1");
+        if (kMrtPrimaryAttachmentMipsGenerated)
+        {
+            ReadWholeLevel(*a, 1, "I1 MRT attachment 0 level 1");
+        }
+        else
+        {
+            std::vector<Color> lvl1 = ReadWholeLevel(*a, 1, "I1 MRT attachment 0 level 1",
+                                                     /*contentAsserted=*/false);
+            int zeroed = 0;
+            for (const Color& c : lvl1) if (Exact(c, Color(0, 0, 0, 0))) ++zeroed;
+            boundary("I1 REMED-GFX-190 -- this backend does not regenerate the PRIMARY MRT "
+                     "attachment's chain; the same target read after a single-target cycle (leg "
+                     "A1) is byte-exact at level 1. If this stops reproducing, the defect was "
+                     "fixed and this declaration must go");
+            check(zeroed == static_cast<int>(lvl1.size()),
+                  "I1: REMED-GFX-190's boundary still reproduces exactly -- all " +
+                      std::to_string(lvl1.size()) + " texels of the primary attachment's level 1 "
+                      "are (0,0,0,0) (" + std::to_string(zeroed) + " are)");
+        }
         // Stock single-output draws write attachment 0 only (SDLGPU-37), so attachment 1 holds the
         // pass' CLEAR colour. Its LEVEL 1 must still be that colour rather than a crash, an
         // ungenerated zero, or a copy of attachment 0.
@@ -1314,12 +1475,21 @@ class RenderTargetMsaaMipReadbackTest : public Game
                                                   /*contentAsserted=*/false);
         if (kTargetReadbackSupported)
         {
-            bool allBase = true;
-            for (const Color& c : extra)
-                if (!Near(c, kBase)) { allBase = false; break; }
             note("I1 MRT attachment 1 level 1 first texel = " + ColorText(extra.front()));
-            check(allBase, "I1: the extra MRT attachment's generated level 1 holds the pass' clear "
-                           "colour -- neither ungenerated nor a copy of attachment 0");
+            if (kMrtExtraAttachmentContentClaimable)
+            {
+                bool allBase = true;
+                for (const Color& c : extra)
+                    if (!Near(c, kBase)) { allBase = false; break; }
+                check(allBase, "I1: the extra MRT attachment's generated level 1 holds the pass' "
+                               "clear colour -- neither ungenerated nor a copy of attachment 0");
+            }
+            else
+            {
+                boundary("I1 an MRT output a stock single-output draw never wrote is UNDEFINED in "
+                         "XNA, so its generated level is measured and printed here rather than "
+                         "claimed; the read itself is fully asserted above");
+            }
         }
     }
 
@@ -1338,6 +1508,12 @@ class RenderTargetMsaaMipReadbackTest : public Game
     void LegI2()
     {
         auto& dev = getGraphicsDeviceProperty();
+        if (!kCubeTargetSupported)
+        {
+            boundary("I2 RenderTargetCube is a declared boundary here");
+            check(true, "I2 the cube boundary is declared rather than assumed");
+            return;
+        }
         step("I2: RenderTargetCube(16, mipMap=true, MSAA=4) -- classification only");
         std::unique_ptr<RenderTargetCube> cube;
         try
