@@ -5630,6 +5630,30 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         state_->owner = &owner;
 
+        // REMED-GFX-176: a zero or negative extent has to be refused HERE, before SDL is asked for
+        // a texture, or createInfo.width/height wrap into an enormous Uint32 and the failure is
+        // reported as an out-of-memory device error rather than as the invalid request it is.
+        if (width_ <= 0 || height_ <= 0)
+            throw std::invalid_argument(
+                "CNA SDL_GPU: Texture2D dimensions must be positive (got " +
+                std::to_string(width_) + "x" + std::to_string(height_) + ")");
+
+        // The declared chain, from the ONE authority on it: ImageData::mipLevels, which
+        // Texture2D's own constructor fills from CalculateMipLevels(w, h) for mipMap=true and
+        // leaves at 1 otherwise. This class used to ignore the field entirely and hardcode 1, so
+        // NO Texture2D on this backend ever had a second level to select between.
+        const int maxLevels = CalculateMipLevels(width_, height_);
+        const int requestedLevels = std::max(1, data.mipLevels);
+        // Never silently capped: a request beyond what these dimensions can mathematically halve
+        // down to is a caller error, and quietly shortening the chain would make the texture
+        // sample correctly while reporting a LevelCount the resource does not have.
+        if (requestedLevels > maxLevels)
+            throw std::invalid_argument(
+                "CNA SDL_GPU: Texture2D requested " + std::to_string(requestedLevels) +
+                " mip levels but " + std::to_string(width_) + "x" + std::to_string(height_) +
+                " has at most " + std::to_string(maxLevels));
+        levelCount_ = requestedLevels;
+
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_2D;
         createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -5637,9 +5661,8 @@ namespace CNA::Internal::Backends::SdlGpu
         createInfo.width = static_cast<Uint32>(width_);
         createInfo.height = static_cast<Uint32>(height_);
         createInfo.layer_count_or_depth = 1;
-        createInfo.num_levels = 1;
+        createInfo.num_levels = static_cast<Uint32>(levelCount_);
         createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        levelCount_ = static_cast<int>(createInfo.num_levels);
 
         state_->texture = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
         if (state_->texture == nullptr)
@@ -5652,26 +5675,76 @@ namespace CNA::Internal::Backends::SdlGpu
                          "[cna-sdlgpu-texture] id=%d created %dx%d format=R8G8B8A8_UNORM "
                          "usage=SAMPLER requestedLevels=%d maxLevels=%d nativeLevels=%u "
                          "texture=%p\n",
-                         traceId_, width_, height_, std::max(1, data.mipLevels),
-                         CalculateMipLevels(width_, height_),
+                         traceId_, width_, height_, requestedLevels, maxLevels,
                          static_cast<unsigned>(createInfo.num_levels),
                          static_cast<void*>(state_->texture));
             std::fflush(stderr);
         }
 
+        // Only level 0 is written here, and only with what the caller already supplied. The
+        // remaining declared levels are ALLOCATED, never generated -- SDL_GenerateMipmapsForGPU-
+        // Texture is deliberately not called (XNA/FNA give Texture2D no implicit regeneration, and
+        // REMED-GFX-175's contract makes level content the caller's).
         UpdatePixels(data.pixels.data(), width_ * 4);
         // A throwing UpdatePixels no longer needs its own cleanup: state_ is already constructed,
         // so unwinding destroys it and its destructor releases the texture through the same
         // deferred path every other exit uses.
     }
 
-    SdlGpuTextureBackend::~SdlGpuTextureBackend() = default;
+    SdlGpuTextureBackend::~SdlGpuTextureBackend()
+    {
+        if (TextureTraceEnabled() && traceId_ != 0)
+        {
+            std::fprintf(stderr, "[cna-sdlgpu-texture] id=%d destroyed levels=%d texture=%p\n",
+                         traceId_, levelCount_, static_cast<void*>(state_->texture));
+            std::fflush(stderr);
+        }
+    }
 
     void SdlGpuTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
     {
+        UploadLevel(0, rgba, width_, height_, stride);
+    }
+
+    void SdlGpuTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
+    {
+        // Same convention as VulkanTextureBackend::UpdatePixelsLevel: this interface method
+        // returns void, so an out-of-range level cannot be reported and must not be guessed at
+        // either -- reaching SDL_UploadToGPUTexture with a nonexistent subresource is exactly the
+        // class of failure REMED-GFX-135 removed from the Texture3D path.
+        if (rgba == nullptr || level < 0 || level >= levelCount_)
+        {
+            if (TextureTraceEnabled() && traceId_ != 0)
+            {
+                std::fprintf(stderr,
+                             "[cna-sdlgpu-texture] id=%d level=%d IGNORED reason=%s levels=%d\n",
+                             traceId_, level, rgba == nullptr ? "null-source" : "level-out-of-range",
+                             levelCount_);
+                std::fflush(stderr);
+            }
+            return;
+        }
+        UploadLevel(level, rgba, levelW, levelH, levelW * 4);
+    }
+
+    void SdlGpuTextureBackend::UploadLevel(int level, const uint8_t* rgba, int levelW, int levelH,
+                                            int stride)
+    {
+        // The destination extent is the LEVEL's own size, never the resource's. Uploading
+        // width_ x height_ into level 1 is not a slightly-too-large copy -- SDL rejects it, and
+        // before REMED-GFX-176 there was no other level to get it wrong for.
+        const int expectedW = std::max(1, width_ >> level);
+        const int expectedH = std::max(1, height_ >> level);
+        if (levelW != expectedW || levelH != expectedH)
+            throw std::invalid_argument(
+                "CNA SDL_GPU: Texture2D level " + std::to_string(level) + " of a " +
+                std::to_string(width_) + "x" + std::to_string(height_) + " texture is " +
+                std::to_string(expectedW) + "x" + std::to_string(expectedH) + ", not " +
+                std::to_string(levelW) + "x" + std::to_string(levelH));
+
         SDL_GPUDevice* device = owner_->Device();
-        const Uint32 rowBytes = static_cast<Uint32>(width_) * 4;
-        const Uint32 sizeBytes = rowBytes * static_cast<Uint32>(height_);
+        const Uint32 rowBytes = static_cast<Uint32>(levelW) * 4;
+        const Uint32 sizeBytes = rowBytes * static_cast<Uint32>(levelH);
 
         SDL_GPUTransferBufferCreateInfo transferInfo{};
         transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -5693,7 +5766,7 @@ namespace CNA::Internal::Backends::SdlGpu
         else
         {
             auto* dst = static_cast<uint8_t*>(mapped);
-            for (int y = 0; y < height_; ++y)
+            for (int y = 0; y < levelH; ++y)
                 std::memcpy(dst + static_cast<std::size_t>(y) * rowBytes,
                             rgba + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride), rowBytes);
         }
@@ -5708,14 +5781,23 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
         SDL_GPUTextureTransferInfo source{};
         source.transfer_buffer = transferBuffer;
-        source.pixels_per_row = static_cast<Uint32>(width_);
-        source.rows_per_layer = static_cast<Uint32>(height_);
+        source.pixels_per_row = static_cast<Uint32>(levelW);
+        source.rows_per_layer = static_cast<Uint32>(levelH);
         SDL_GPUTextureRegion destination{};
         destination.texture = state_->texture;
-        destination.w = static_cast<Uint32>(width_);
-        destination.h = static_cast<Uint32>(height_);
+        destination.mip_level = static_cast<Uint32>(level);
+        destination.w = static_cast<Uint32>(levelW);
+        destination.h = static_cast<Uint32>(levelH);
         destination.d = 1;
-        SDL_UploadToGPUTexture(copyPass, &source, &destination, true);
+        // cycle: a ONE-level texture keeps the original cycle=true, where "swap to a fresh
+        // resource rather than stall on an in-flight read" is free because the whole resource is
+        // being replaced anyway. A CHAIN must not cycle: cycling discards every level this upload
+        // does not write, so level 0 followed by level 1 would leave level 0 orphaned on an
+        // abandoned resource. That is not a hypothetical -- it is the exact failure SDLGPU-40
+        // measured on the cube path and REMED-GFX-135 on the volume path, and both landed on
+        // cycle=false for the same reason.
+        const bool cycle = levelCount_ == 1;
+        SDL_UploadToGPUTexture(copyPass, &source, &destination, cycle);
         SDL_EndGPUCopyPass(copyPass);
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
@@ -5727,14 +5809,15 @@ namespace CNA::Internal::Backends::SdlGpu
         if (TextureTraceEnabled() && traceId_ != 0)
         {
             std::fprintf(stderr,
-                         "[cna-sdlgpu-texture] id=%d level=0 levelDims=%dx%d mip_level=%u "
+                         "[cna-sdlgpu-texture] id=%d level=%d levelDims=%dx%d mip_level=%u "
                          "region=(0,0,%ux%u) transferBytes=%u rowPitch=%u pixelsPerRow=%u "
-                         "srcStride=%d cycle=yes submit=ok\n",
-                         traceId_, width_, height_,
+                         "srcStride=%d cycle=%s submit=ok\n",
+                         traceId_, level, levelW, levelH,
                          static_cast<unsigned>(destination.mip_level),
                          static_cast<unsigned>(destination.w), static_cast<unsigned>(destination.h),
                          static_cast<unsigned>(sizeBytes), static_cast<unsigned>(rowBytes),
-                         static_cast<unsigned>(source.pixels_per_row), stride);
+                         static_cast<unsigned>(source.pixels_per_row), stride,
+                         cycle ? "yes" : "no");
             std::fflush(stderr);
         }
     }

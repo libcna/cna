@@ -147,7 +147,17 @@ namespace CNA::Internal::Backends::SdlGpu
         ~SdlGpuSampledTextureState();
     };
 
-    /** @brief `SDL_gpu`-backed `Texture2D`. Plain 2D, `SAMPLER` usage only (no mip chain yet). */
+    /**
+     * @brief `SDL_gpu`-backed `Texture2D`. Plain 2D, `SAMPLER` usage only, with its declared chain.
+     *
+     * REMED-GFX-176: one native `SDL_GPUTexture` holding **every level `ImageData::mipLevels`
+     * declares**, not the single level this class used to hardcode. Allocation is all construction
+     * does: a level's content arrives only through `UpdatePixels` (level 0) or `UpdatePixelsLevel`
+     * (any level), exactly as the caller supplies it. Nothing here derives, resamples or generates
+     * a level, so a `mipMap=true` texture whose upper levels were never written keeps them as the
+     * undefined-but-allocated storage the API promised rather than acquiring invented content.
+     * A `mipMap=false` texture is a one-level resource and its upload path is unchanged.
+     */
     class SdlGpuTextureBackend final : public ITextureBackend
     {
     public:
@@ -161,6 +171,10 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
+        /// REMED-GFX-176: uploads exactly @p level, sized by that level's own dimensions. An
+        /// out-of-range level or a null source is ignored, matching VulkanTextureBackend's
+        /// established convention for this void-returning interface method.
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
         /** @brief Returns the underlying `SDL_GPUTexture`. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
@@ -178,6 +192,10 @@ namespace CNA::Internal::Backends::SdlGpu
         NOXNA [[nodiscard]] SdlGpuSampledTextureEXT Sampled() const { return {state_->texture, state_}; }
 
     private:
+        /// The one upload path both public entry points share (REMED-GFX-176). @p stride is the
+        /// source row pitch in bytes; the destination region is always the whole of @p level.
+        void UploadLevel(int level, const uint8_t* rgba, int levelW, int levelH, int stride);
+
         SdlGpuGraphicsBackend* owner_ = nullptr;
         // The actual GPU handle lives in this shared_ptr-owned struct, NOT directly here -- see
         // SdlGpuSampledTextureState's own doc comment for why.
