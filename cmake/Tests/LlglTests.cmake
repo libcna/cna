@@ -157,6 +157,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-26 MRT follow-up: RenderTarget2D-slots-only, SpriteBatch/custom-ShaderEffect-only first
+    # cut -- see LlglMRTBinding's own doc comment in LlglGraphicsBackend.hpp for the scope
+    # boundary. RenderTarget2D (unlike RenderTargetCube) works on both modules, so this gets an
+    # _OpenGL variant below too.
+    cna_llgl_test(cna_test_llgl_mrt examples/llgl_mrt_test.cpp)
+    cna_register_backend_test(NAME Llgl_MRT COMMAND cna_test_llgl_mrt
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-17: the same two binaries, pinned to the OpenGL module instead of the default
     # (Vulkan-first) preference. Running only the default preference is what let the OpenGL module
     # clear correctly and draw nothing for as long as it did -- a module nothing exercises is a
@@ -219,6 +228,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_backend_test(NAME Llgl_SkinnedEffect_TwoBoneBlend_OpenGL COMMAND cna_test_llgl_skinnedeffect_twobone_blend
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_MRT_OpenGL COMMAND cna_test_llgl_mrt
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 endif()

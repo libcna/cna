@@ -47,10 +47,12 @@ module**:
   "EnvironmentMapEffect" below;
 * **`SkinnedEffect`**: GPU vertex skinning, up to 4 bone weight/index pairs, its own dedicated
   vertex/fragment shader pair and pipeline layout, plus a separate 72-bone transform buffer. See
-  "SkinnedEffect" below.
+  "SkinnedEffect" below;
+* **multiple render targets (MRT)**: 2-4 `RenderTarget2D` slots bound simultaneously, written by a
+  custom multi-output `ShaderEffect` drawn through `SpriteBatch`. See "Render targets" below for
+  the scope boundary (`RenderTarget2D` slots only, no 3D draws while one is bound).
 
-**Not implemented:** `PbrEffect`,
-multiple render targets (MRT), and MSAA/mip-mapped render targets.
+**Not implemented:** `PbrEffect` and MSAA/mip-mapped render targets.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -195,11 +197,11 @@ one shared `TextureCube` colour texture (6 array layers) plus one shared depth/s
 (matching FNA's own `RenderTargetCube`, one depth buffer for the whole cube), 6
 `LLGL::RenderTarget`s built once at construction, each attaching a different `arrayLayer` of the
 shared colour texture. A new `LlglBoundRenderTarget` common interface lets the backend's "what's
-currently bound" state point at either a plain `RenderTarget2D` or one cube face without any of the
-queue/replay code needing to know which -- the per-distinct-target render-pass grouping described
-below already keys purely off `LLGL::RenderTarget*` pointer identity, so 6 distinct per-face
-pointers just work. Multiple simultaneous render targets (MRT) and MSAA/mip-mapped render targets
-are not implemented and fail by name.
+currently bound" state point at either a plain `RenderTarget2D`, one cube face, or (see below) an
+MRT bind, without any of the queue/replay code needing to know which -- the per-distinct-target
+render-pass grouping described below already keys purely off `LLGL::RenderTarget*` pointer
+identity, so this generalizes with no changes needed there. MSAA/mip-mapped render targets are not
+implemented and fail by name.
 
 Two implementation choices are worth knowing if you are debugging a render-target frame:
 
@@ -236,6 +238,38 @@ that accepts an `ITextureCubeBackend`) resolves through a new `ResolveSampledTex
 mirroring `ResolveSampledTexture()`'s own dual `LlglTextureBackend`/`LlglRenderTargetBackend`
 resolution — a hard `dynamic_cast<const LlglTextureCubeBackend*>` alone would have silently failed
 to sample a rendered cube face.
+
+### Multiple render targets (MRT)
+
+`GraphicsDevice.SetRenderTargets` accepts 2-4 `RenderTarget2D` slots bound simultaneously, scoped
+to a deliberately narrower first cut than this project's other MRT-capable backends:
+
+* **`RenderTarget2D` slots only.** Mixing a `RenderTargetCube` face into a multi-target set is
+  refused by name rather than attempted.
+* **Written only by a custom `ShaderEffect` drawn through `SpriteBatch`.** A 3D colour-only draw
+  (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`) while an MRT set is bound throws by name too --
+  no stock effect family in this backend declares more than one fragment output, and real XNA MRT
+  is only meaningfully useful through a custom `layout(location=N) out`-per-slot fragment shader
+  anyway.
+* **No per-slot `ColorWriteChannels1..3`.** The blend state's write mask (slot 0's own) is applied
+  identically to every active attachment; a documented simplification, not a silent gap.
+
+A new `LlglMRTBinding` combines the N bound targets' own colour textures (borrowed -- still owned
+and released by the `RenderTarget2D` backends that created them, never duplicated or double-freed
+here) plus a fresh, anonymous depth/stencil attachment (matching `CreateRenderTarget2D`'s own
+single-target depth attachment, rather than trying to share or preserve any one slot's own depth
+buffer) into ONE `LLGL::RenderTarget`. Unlike `RenderTarget2D`/`RenderTargetCube`, an MRT bind has
+no owning XNA-visible object -- `SetRenderTargets` just names N already-existing targets as slots
+-- so `LlglMRTBinding` is owned by the backend itself, replaced (and the previous one
+deferred-released, exactly like a destroyed `RenderTarget2D` is) on every subsequent
+`SetRenderTargets()`/`SetRenderTarget2D()` call rather than by RAII on a game-visible object.
+
+Pipeline creation needed two changes to become MRT-aware: `GetPrimaryRenderPassEXT()` now returns
+the CURRENTLY bound target's own render pass (a real, pre-existing `LLGL::RenderTarget::GetRenderPass()`
+accessor) instead of always the swap chain's, since a multi-attachment bind's render pass genuinely
+differs by attachment count; and both the sprite and custom-effect pipeline caches key on and build
+against the active colour-attachment count, so a pipeline cached while 2 targets were bound is never
+reused while 3 are.
 
 ## Occlusion queries
 
@@ -437,8 +471,13 @@ adapted with only the class name/comment changed) from the Vulkan backend's own 
 "SkinnedEffect" above. `Llgl_RenderTargetCube` covers 6 independent per-face draw/`GetData()` round
 trips plus sampling the result through `EnvironmentMapEffect`; like the `EnvironmentMapEffect` test
 it has no `_OpenGL` twin, for the same `hasCubeTextures` reason.
+`Llgl_MRT` covers a real 2-output custom `ShaderEffect` writing two DIFFERENT values to two
+simultaneously bound `RenderTarget2D` slots from the SAME draw call, a 3D colour-only draw throwing
+while the MRT set is bound, back-buffer isolation, and that an ordinary single-target draw still
+works correctly once the MRT bind ends; unlike `RenderTargetCube`, plain `RenderTarget2D` slots
+work on both modules, so it has an `_OpenGL` twin.
 Every other test is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty-six
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty-eight
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
@@ -461,9 +500,7 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | `OcclusionQuery` | yes | Real `LLGL::QueryHeap`-backed queries — see "Occlusion queries" above for how `IsComplete()`/`PixelCount()` behave on this backend. |
 | `CustomEffects` | yes | Real `ShaderEffect`, scoped to `SpriteBatch` draws — see "Custom effects" above. |
 | `Texture3D` | yes | Real `LLGL::TextureType::Texture3D` storage — `CreateTexture3D`/box-region `SetData`/`GetData`. Nothing samples a volume texture from a 3D shader yet. |
-| `MultipleRenderTargets` | no | Not implemented — see `plan_llgl.md` phase LLGL-26. |
+| `MultipleRenderTargets` | yes | 2-4 `RenderTarget2D` slots, written by a custom `ShaderEffect` drawn through `SpriteBatch` — see "Multiple render targets (MRT)" above for the scope boundary. |
 
 There is no standalone `SupportsCapability` flag for single-target `RenderTarget2D` support (XNA
-has none either) — `CreateRenderTarget2D` returning a real backend instead of null is the signal,
-and `SetRenderTargets` accepts exactly one `RenderTarget2D` slot, matching `MultipleRenderTargets`
-above being false.
+has none either) — `CreateRenderTarget2D` returning a real backend instead of null is the signal.

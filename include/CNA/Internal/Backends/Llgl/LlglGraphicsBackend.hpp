@@ -382,6 +382,11 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] virtual int GetHeight() const = 0;
         /** @brief Returns this target's own fixed pixel-to-clip-space sprite projection buffer. */
         [[nodiscard]] virtual LLGL::Buffer* GetSpriteProjectionBuffer() const = 0;
+        /** @brief Returns how many simultaneous colour attachments this target has (1 for a plain
+         *  `RenderTarget2D`/cube face, >1 for a multi-render-target bind -- see
+         *  `LlglMRTBinding`). Pipeline creation needs this to build a matching `LLGL::RenderPass`
+         *  and the right number of `blend.targets[]` entries. */
+        [[nodiscard]] virtual int GetColorAttachmentCount() const { return 1; }
     };
 
     /**
@@ -626,6 +631,65 @@ namespace CNA::Internal::Backends::Llgl
     };
 
     /**
+     * @brief A multiple-render-target (MRT) bind, combining N independently-owned
+     * `RenderTarget2D`s into ONE `LLGL::RenderTarget` for the duration of the bind. NOXNA.
+     *
+     * Unlike `RenderTarget2D`/`RenderTargetCube`, which each own a real, explicit XNA-level C++
+     * object (`RenderTarget2D`/`RenderTargetCube`) with its own construction/destruction lifetime,
+     * an MRT bind has no owning XNA object at all -- `GraphicsDevice.SetRenderTargets(const
+     * std::vector<RenderTargetBinding>&)` just names N ALREADY-EXISTING render targets as slots.
+     * `LlglMRTBinding` is therefore owned by `LlglGraphicsBackend` itself
+     * (`currentMrtBinding_`), replaced (and the old one deferred-released, exactly like a
+     * destroyed `RenderTarget2D` is) on every subsequent `SetRenderTargets()`/`SetRenderTarget2D()`
+     * call, not by RAII on a game-visible object.
+     *
+     * `renderTarget_` is the only thing this class actually owns -- its N colour attachments are
+     * BORROWED `LLGL::Texture*`s from the N bound `RenderTarget2D`s' own backends (still owned and
+     * released by THEM, not duplicated or double-released here), and its depth/stencil attachment
+     * is a fresh ANONYMOUS one LLGL allocates and owns internally as part of `renderTarget_`
+     * itself -- exactly like `CreateRenderTarget2D`'s own single-target depth attachment -- rather
+     * than trying to share any one slot's own depth buffer. This means depth content is not
+     * preserved from a target's own prior individual (non-MRT) binds, matching this backend's
+     * already-established `RenderTargetUsage.PreserveContents`-is-not-honoured-across-binds
+     * scope (see `CreateRenderTarget2D`'s own doc comment) rather than inventing a new one.
+     *
+     * `spriteProjectionBuffer_` is BORROWED from slot 0 too (every slot shares the same
+     * width/height by the time `GraphicsDevice::SetRenderTargets` validates them, so slot 0's
+     * projection is correct for all of them) -- no new buffer is created.
+     *
+     * Scoped to `RenderTarget2D` slots only in this first cut: mixing `RenderTargetCube` faces
+     * into an MRT set is refused by name (`SetRenderTargets`), and 3D (`DrawPrimitivesEx`/
+     * `DrawIndexedPrimitivesEx`) draws while an MRT set is bound are refused by name too
+     * (`QueuePrimitives`) -- real XNA MRT is meaningfully useful/testable only through a custom
+     * `ShaderEffect` with multiple `layout(location=N) out` fragment outputs drawn via
+     * `SpriteBatch`, which is the one path this first cut supports.
+     */
+    class LlglMRTBinding final : public LlglBoundRenderTarget
+    {
+    public:
+        LlglMRTBinding(LLGL::RenderTarget* renderTarget, int width, int height,
+                      int colorAttachmentCount, LLGL::Buffer* spriteProjectionBuffer)
+            : renderTarget_(renderTarget), width_(width), height_(height)
+            , colorAttachmentCount_(colorAttachmentCount)
+            , spriteProjectionBuffer_(spriteProjectionBuffer)
+        {
+        }
+
+        [[nodiscard]] LLGL::RenderTarget* GetLlglRenderTarget() const override { return renderTarget_; }
+        [[nodiscard]] int GetWidth() const override { return width_; }
+        [[nodiscard]] int GetHeight() const override { return height_; }
+        [[nodiscard]] LLGL::Buffer* GetSpriteProjectionBuffer() const override { return spriteProjectionBuffer_; }
+        [[nodiscard]] int GetColorAttachmentCount() const override { return colorAttachmentCount_; }
+
+    private:
+        LLGL::RenderTarget* renderTarget_          = nullptr;
+        int                 width_                 = 0;
+        int                 height_                = 0;
+        int                 colorAttachmentCount_  = 1;
+        LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
+    };
+
+    /**
      * @brief An occlusion query living in LLGL. NOXNA.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::OcclusionQuery`. `Begin()`/`End()` record
@@ -782,7 +846,8 @@ namespace CNA::Internal::Backends::Llgl
         /** @brief Returns the compiled fragment shader, or null before a successful CompileProgram(). */
         [[nodiscard]] LLGL::Shader* GetFragmentShader() const { return fragmentShader_; }
         /** @brief Returns (creating if needed) the pipeline for the given blend/scissor state. */
-        [[nodiscard]] LLGL::PipelineState* AcquirePipeline(std::uint64_t blendKey, bool scissorEnabled);
+        [[nodiscard]] LLGL::PipelineState* AcquirePipeline(std::uint64_t blendKey, bool scissorEnabled,
+                                                             int colorAttachmentCount = 1);
         /** @brief Returns this effect's current 32-float uniform staging block (see this class's
          *  own doc comment for the byte layout); `[0]`/`[1]` (vpSize) are overwritten by the
          *  caller just before queuing, every other field reflects the last `SetUniformX()` call. */
@@ -1206,13 +1271,14 @@ namespace CNA::Internal::Backends::Llgl
         /**
          * @brief Binds a set of render targets.
          *
-         * Accepts either the "restore the back buffer" request, exactly one `RenderTarget2D`
-         * slot, or exactly one `RenderTargetCube` face; multiple simultaneous render targets are
-         * not implemented yet and fail loudly rather than silently drawing to the window.
+         * Accepts the "restore the back buffer" request, exactly one `RenderTarget2D` slot,
+         * exactly one `RenderTargetCube` face, or 2-4 `RenderTarget2D` slots (a real MRT bind --
+         * see `SetMultipleRenderTargetsEXT()`/`LlglMRTBinding`). Mixing a `RenderTargetCube` face
+         * into a multi-target set is not implemented yet and fails loudly by name.
          *
          * @param renderTargets Ordered target descriptors, or null.
          * @param count         Number of descriptors; 0 restores the back buffer.
-         * @throws std::runtime_error If more than one target is supplied.
+         * @throws std::runtime_error If a multi-target set includes a `RenderTargetCube` face.
          */
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
@@ -1547,12 +1613,28 @@ namespace CNA::Internal::Backends::Llgl
          *  shader modules and pipelines with. */
         [[nodiscard]] LLGL::RenderSystem* GetRenderSystemEXT() const { return renderer_.get(); }
 
-        /** @brief Returns the render pass every pipeline in this backend is built against (the
-         *  swap chain's own) -- see `plan_llgl.md` LLGL-26 on why a render-target pass is
-         *  compatible with it too. Null before the swap chain exists. */
+        /** @brief Returns the render pass a pipeline for the CURRENTLY bound target should be
+         *  built against -- the bound target's own render pass if one is bound (a plain
+         *  `RenderTarget2D`, a `RenderTargetCube` face, or an MRT bind), the swap chain's own
+         *  otherwise. A single-colour-attachment target's render pass and the swap chain's are
+         *  compatible (see `plan_llgl.md` LLGL-26), so either was interchangeable here before
+         *  MRT existed; a multi-attachment bind's render pass genuinely differs (a different
+         *  attachment COUNT, not just a different concrete object) and needs its own. Null before
+         *  the swap chain exists. */
         [[nodiscard]] const LLGL::RenderPass* GetPrimaryRenderPassEXT() const
         {
+            if (currentRenderTargetBackend_ != nullptr)
+                return currentRenderTargetBackend_->GetLlglRenderTarget()->GetRenderPass();
             return swapChain_ != nullptr ? swapChain_->GetRenderPass() : nullptr;
+        }
+
+        /** @brief Returns how many simultaneous colour attachments the currently bound target has
+         *  (1 when nothing is bound, or a plain `RenderTarget2D`/cube face is; >1 during an MRT
+         *  bind). Pipeline creation folds this into its cache key and its blend-target count. */
+        [[nodiscard]] int GetActiveColorAttachmentCountEXT() const
+        {
+            return currentRenderTargetBackend_ != nullptr
+                ? currentRenderTargetBackend_->GetColorAttachmentCount() : 1;
         }
 
         /** @brief Returns the loaded module's rendering capabilities, for `LlglEffectBackend` to
@@ -1574,9 +1656,13 @@ namespace CNA::Internal::Backends::Llgl
          * @param pipelineDesc  Descriptor to fill; `vertexShader`/`fragmentShader`/`pipelineLayout`/
          *                      `renderPass`/`primitiveTopology` are the caller's own responsibility.
          * @param scissorEnabled Whether the current scissor rectangle applies to this draw.
+         * @param colorAttachmentCount Number of `blend.targets[]` entries to fill, all identically
+         *                      (this backend has no independent per-MRT-slot `ColorWriteChannels1..3`
+         *                      support yet -- every attachment gets slot 0's own blend state).
+         *                      Defaults to 1, the pre-MRT behaviour.
          */
         void FillCurrentBlendAndRasterStateEXT(LLGL::GraphicsPipelineDescriptor& pipelineDesc,
-                                               bool scissorEnabled) const;
+                                               bool scissorEnabled, int colorAttachmentCount = 1) const;
 
         /** @brief Marks @p effect as the one `SpriteBatch` draws through. Called by
          *  `LlglEffectBackend::Bind()`; not part of the shared backend interface. */
@@ -1787,8 +1873,19 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] PresentationRect GetActiveDrawRect() const;
         [[nodiscard]] bool IsOpaqueBlendState() const;
         [[nodiscard]] bool UsesConstantBlendFactorState() const;
-        [[nodiscard]] std::uint64_t MakeBlendPipelineKey(bool scissorEnabled) const;
+        [[nodiscard]] std::uint64_t MakeBlendPipelineKey(bool scissorEnabled,
+                                                         int colorAttachmentCount = 1) const;
         LLGL::PipelineState* AcquireSpritePipeline(bool scissorEnabled);
+        /// Combines N independently-owned RenderTarget2D's colour attachments (plus a fresh
+        /// anonymous depth attachment) into ONE LLGL::RenderTarget for an MRT bind -- see
+        /// LlglMRTBinding's own doc comment for the full architecture and its scope boundaries
+        /// (RenderTarget2D slots only, no RenderTargetCube faces).
+        void SetMultipleRenderTargetsEXT(const RenderTargetBindingDescriptor* renderTargets, int count);
+        /// Deferred-releases the current MRT bind's combined LLGL::RenderTarget (if any) and
+        /// clears currentMrtBinding_ -- called before EVERY SetRenderTarget2D()/SetRenderTargets()
+        /// switches currentRenderTargetBackend_ to something else, and from the destructor, so
+        /// exactly one MRT bind is ever "live" and it is always properly torn down.
+        void ReleaseCurrentMrtBindingEXT();
         LLGL::Sampler* AcquireSampler(int filter, int addressU, int addressV, int maxAnisotropy);
         void QueueClear(long flags, const float color[4], float depth, std::uint32_t stencil);
         void UploadFrameResources();
@@ -1953,12 +2050,18 @@ namespace CNA::Internal::Backends::Llgl
         int   depthCompareFunction_ = 3;  // CompareFunction::LessEqual, the XNA default
         bool  stencilRequested_  = false;
 
-        /// Non-owning; null means "draw to the swap chain". Points at either a plain
-        /// LlglRenderTargetBackend (set by SetRenderTarget2D()) or one face of an
+        /// Non-owning; null means "draw to the swap chain". Points at a plain
+        /// LlglRenderTargetBackend (set by SetRenderTarget2D()), one face of an
         /// LlglRenderTargetCubeBackend (an LlglRenderTargetCubeFaceBinding, set by SetRenderTargets()
-        /// for a cube-face descriptor) -- consulted when each Clear/sprite/primitive command is
-        /// QUEUED (not at bind time -- this backend defers every draw to Present()).
+        /// for a cube-face descriptor), or currentMrtBinding_.get() (set by
+        /// SetMultipleRenderTargetsEXT() for a count>1 descriptor) -- consulted when each
+        /// Clear/sprite/primitive command is QUEUED (not at bind time -- this backend defers
+        /// every draw to Present()).
         LlglBoundRenderTarget* currentRenderTargetBackend_ = nullptr;
+        /// Owning, unlike currentRenderTargetBackend_ itself: an MRT bind has no XNA-level C++
+        /// object of its own (see LlglMRTBinding's doc comment), so THIS backend owns its
+        /// lifetime instead. Non-null only while an MRT set (count>1) is the active target.
+        std::unique_ptr<LlglMRTBinding> currentMrtBinding_;
         int   cullMode_ = 2;
         int   fillMode_ = 0;
     };

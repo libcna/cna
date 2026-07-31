@@ -1134,7 +1134,8 @@ namespace CNA::Internal::Backends::Llgl
         uniformStaging_[24] = static_cast<float>(value);
     }
 
-    LLGL::PipelineState* LlglEffectBackend::AcquirePipeline(std::uint64_t blendKey, bool scissorEnabled)
+    LLGL::PipelineState* LlglEffectBackend::AcquirePipeline(std::uint64_t blendKey, bool scissorEnabled,
+                                                             int colorAttachmentCount)
     {
         const auto cached = pipelineCache_.find(blendKey);
         if (cached != pipelineCache_.end())
@@ -1147,7 +1148,7 @@ namespace CNA::Internal::Backends::Llgl
         pipelineDesc.pipelineLayout = owner_.AcquireCustomEffectLayoutEXT();
         pipelineDesc.renderPass = owner_.GetPrimaryRenderPassEXT();
         pipelineDesc.primitiveTopology = LLGL::PrimitiveTopology::TriangleList;
-        owner_.FillCurrentBlendAndRasterStateEXT(pipelineDesc, scissorEnabled);
+        owner_.FillCurrentBlendAndRasterStateEXT(pipelineDesc, scissorEnabled, colorAttachmentCount);
 
         LLGL::PipelineState* pipeline = owner_.GetRenderSystemEXT()->CreatePipelineState(pipelineDesc);
         if (pipeline == nullptr)
@@ -1560,6 +1561,11 @@ namespace CNA::Internal::Backends::Llgl
 
         if (!renderer_)
             return;
+
+        // Any still-live MRT bind's combined LLGL::RenderTarget must be released too -- ordinarily
+        // torn down by a later SetRenderTarget2D()/SetRenderTargets() call, which never happens if
+        // the game disposes its GraphicsDevice while one is still bound.
+        ReleaseCurrentMrtBindingEXT();
 
         // Drains pendingBufferReleases_/pendingRenderTargetReleases_/pendingTextureReleases_/
         // pendingQueryHeapReleases_ -- a RenderTarget2D/OcclusionQuery destroyed mid-frame defers
@@ -2640,6 +2646,18 @@ namespace CNA::Internal::Backends::Llgl
         if (primitiveCount <= 0)
             return;
 
+        // Real XNA MRT is meaningfully useful/testable only through a custom ShaderEffect with
+        // multiple layout(location=N) out fragment outputs drawn via SpriteBatch -- see
+        // LlglMRTBinding's own doc comment. A 3D colour-only draw's fixed single-output fragment
+        // shader has nothing to write to slots 1..N-1, so it is refused by name here rather than
+        // silently leaving them undefined.
+        if (currentRenderTargetBackend_ != nullptr && currentRenderTargetBackend_->GetColorAttachmentCount() > 1)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: 3D drawing is not supported while multiple "
+                "render targets are bound; draw through a custom ShaderEffect via SpriteBatch instead");
+        }
+
         if (vertexBuffer.GetLlglBuffer() == nullptr || vertexBuffer.GetVertexCount() <= 0)
             throw std::runtime_error(std::string(kBackendName) + " backend: the vertex buffer holds no data");
 
@@ -2850,10 +2868,14 @@ namespace CNA::Internal::Backends::Llgl
         backbufferCacheValid_ = false;
     }
 
-    std::uint64_t LlglGraphicsBackend::MakeBlendPipelineKey(bool scissorEnabled) const
+    std::uint64_t LlglGraphicsBackend::MakeBlendPipelineKey(bool scissorEnabled,
+                                                             int colorAttachmentCount) const
     {
         // Packs every field the sprite pipeline is built from, so a cache hit really is the same
-        // pipeline: four blend factors, two blend functions, the colour write mask, and scissor.
+        // pipeline: four blend factors, two blend functions, the colour write mask, scissor, and
+        // (MRT) how many colour attachments the pipeline's render pass declares -- a pipeline built
+        // for a single-target bind is not interchangeable with one built for a multi-target bind
+        // even when every other field matches, since the two need different-shaped render passes.
         std::uint64_t key = 0;
         key = key * 16u + static_cast<std::uint64_t>(colorSrcBlend_ & 0xF);
         key = key * 16u + static_cast<std::uint64_t>(colorDstBlend_ & 0xF);
@@ -2863,11 +2885,13 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 8u + static_cast<std::uint64_t>(alphaBlendFunc_ & 0x7);
         key = key * 16u + static_cast<std::uint64_t>(colorWriteChannels_ & 0xF);
         key = key * 2u + (scissorEnabled ? 1u : 0u);
+        key = key * 8u + static_cast<std::uint64_t>(colorAttachmentCount & 0x7);
         return key;
     }
 
     void LlglGraphicsBackend::FillCurrentBlendAndRasterStateEXT(
-        LLGL::GraphicsPipelineDescriptor& pipelineDesc, bool scissorEnabled) const
+        LLGL::GraphicsPipelineDescriptor& pipelineDesc, bool scissorEnabled,
+        int colorAttachmentCount) const
     {
         pipelineDesc.depth.testEnabled = false;
         pipelineDesc.depth.writeEnabled = false;
@@ -2881,19 +2905,28 @@ namespace CNA::Internal::Backends::Llgl
         // unconditionally would make every draw depend on a call that the overwhelming majority of
         // blend states have no use for.
         pipelineDesc.blend.blendFactorDynamic = UsesConstantBlendFactorState();
-        pipelineDesc.blend.targets[0].blendEnabled = !IsOpaqueBlendState();
-        pipelineDesc.blend.targets[0].srcColor = MapBlendFactor(colorSrcBlend_);
-        pipelineDesc.blend.targets[0].dstColor = MapBlendFactor(colorDstBlend_);
-        pipelineDesc.blend.targets[0].colorArithmetic = MapBlendFunction(colorBlendFunc_);
-        pipelineDesc.blend.targets[0].srcAlpha = MapBlendFactor(alphaSrcBlend_);
-        pipelineDesc.blend.targets[0].dstAlpha = MapBlendFactor(alphaDstBlend_);
-        pipelineDesc.blend.targets[0].alphaArithmetic = MapBlendFunction(alphaBlendFunc_);
-        pipelineDesc.blend.targets[0].colorMask = MapColorWriteMask(colorWriteChannels_);
+        // MRT (LLGL-26 follow-up): every attachment gets slot 0's own blend state -- this backend
+        // has no independent per-MRT-slot ColorWriteChannels1..3 support yet (a real, documented
+        // scope boundary, not an oversight). colorAttachmentCount is 1 outside an MRT bind, so this
+        // loop is a single iteration identical to the pre-MRT code for every existing caller.
+        const int clampedCount = std::max(1, std::min(colorAttachmentCount, 4));
+        for (int slot = 0; slot < clampedCount; ++slot)
+        {
+            pipelineDesc.blend.targets[slot].blendEnabled = !IsOpaqueBlendState();
+            pipelineDesc.blend.targets[slot].srcColor = MapBlendFactor(colorSrcBlend_);
+            pipelineDesc.blend.targets[slot].dstColor = MapBlendFactor(colorDstBlend_);
+            pipelineDesc.blend.targets[slot].colorArithmetic = MapBlendFunction(colorBlendFunc_);
+            pipelineDesc.blend.targets[slot].srcAlpha = MapBlendFactor(alphaSrcBlend_);
+            pipelineDesc.blend.targets[slot].dstAlpha = MapBlendFactor(alphaDstBlend_);
+            pipelineDesc.blend.targets[slot].alphaArithmetic = MapBlendFunction(alphaBlendFunc_);
+            pipelineDesc.blend.targets[slot].colorMask = MapColorWriteMask(colorWriteChannels_);
+        }
     }
 
     LLGL::PipelineState* LlglGraphicsBackend::AcquireSpritePipeline(bool scissorEnabled)
     {
-        const std::uint64_t key = MakeBlendPipelineKey(scissorEnabled);
+        const int colorAttachmentCount = GetActiveColorAttachmentCountEXT();
+        const std::uint64_t key = MakeBlendPipelineKey(scissorEnabled, colorAttachmentCount);
         const auto cached = pipelineCache_.find(key);
         if (cached != pipelineCache_.end())
             return cached->second;
@@ -2903,9 +2936,9 @@ namespace CNA::Internal::Backends::Llgl
         pipelineDesc.vertexShader = spriteVertexShader_;
         pipelineDesc.fragmentShader = spriteFragmentShader_;
         pipelineDesc.pipelineLayout = spriteLayout_;
-        pipelineDesc.renderPass = swapChain_->GetRenderPass();
+        pipelineDesc.renderPass = GetPrimaryRenderPassEXT();
         pipelineDesc.primitiveTopology = LLGL::PrimitiveTopology::TriangleList;
-        FillCurrentBlendAndRasterStateEXT(pipelineDesc, scissorEnabled);
+        FillCurrentBlendAndRasterStateEXT(pipelineDesc, scissorEnabled, colorAttachmentCount);
 
         LLGL::PipelineState* pipeline = renderer_->CreatePipelineState(pipelineDesc);
         if (pipeline == nullptr)
@@ -3523,8 +3556,10 @@ namespace CNA::Internal::Backends::Llgl
             // A custom effect's own uniform buffer entirely replaces the stock projection buffer
             // (RT-specific or the frame-global one) at resource index 0 -- see
             // AcquireCustomEffectLayoutEXT's doc comment for why the binding SHAPE is identical.
+            const int colorAttachmentCount = GetActiveColorAttachmentCountEXT();
             command.pipeline = currentCustomEffect_->AcquirePipeline(
-                MakeBlendPipelineKey(scissorEnabled), scissorEnabled);
+                MakeBlendPipelineKey(scissorEnabled, colorAttachmentCount), scissorEnabled,
+                colorAttachmentCount);
             command.hasCustomEffectUniform = true;
             command.customEffectUniformIndex =
                 static_cast<std::uint32_t>(customEffectUniformData_.size() / kCustomEffectUniformFloats);
@@ -4495,6 +4530,8 @@ namespace CNA::Internal::Backends::Llgl
 
     void LlglGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
+        ReleaseCurrentMrtBindingEXT();
+
         if (rt == nullptr)
         {
             currentRenderTargetBackend_ = nullptr;
@@ -4519,16 +4556,19 @@ namespace CNA::Internal::Backends::Llgl
             return;
         }
 
-        // MRT is a real, still-open gap (LLGL-26 scope): every cached pipeline declares exactly one
-        // colour attachment, so a second simultaneous target has nothing to write to.
         if (count > 1)
-            NotYetImplemented(kBackendName, "multiple simultaneous render targets");
+        {
+            SetMultipleRenderTargetsEXT(renderTargets, count);
+            return;
+        }
 
         if (renderTargets[0].IsRenderTarget2D())
         {
             SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
             return;
         }
+
+        ReleaseCurrentMrtBindingEXT();
 
         auto* cubeBackend = dynamic_cast<LlglRenderTargetCubeBackend*>(renderTargets[0].GetRenderTargetCube());
         if (cubeBackend == nullptr)
@@ -4544,6 +4584,89 @@ namespace CNA::Internal::Backends::Llgl
                 " is out of range");
         }
         currentRenderTargetBackend_ = cubeBackend->GetFaceBinding(face);
+    }
+
+    void LlglGraphicsBackend::ReleaseCurrentMrtBindingEXT()
+    {
+        if (currentMrtBinding_ == nullptr)
+            return;
+
+        // colorTexture/depthTexture are both null here: the N colour attachments are borrowed from
+        // the bound RenderTarget2D backends (still owned and released by them, see LlglMRTBinding's
+        // own doc comment) and the depth/stencil attachment is anonymous, owned internally by
+        // renderTarget_ itself -- only the combined LLGL::RenderTarget is this binding's own to
+        // release, exactly like CreateRenderTarget2D's own anonymous-depth case.
+        ScheduleRenderTargetReleaseEXT(currentMrtBinding_->GetLlglRenderTarget(), nullptr, nullptr, nullptr);
+        if (currentRenderTargetBackend_ == currentMrtBinding_.get())
+            currentRenderTargetBackend_ = nullptr;
+        currentMrtBinding_.reset();
+    }
+
+    void LlglGraphicsBackend::SetMultipleRenderTargetsEXT(const RenderTargetBindingDescriptor* renderTargets,
+                                                           int count)
+    {
+        // XNA's own MAX_RENDERTARGET_BINDINGS; RenderTargetDescriptor::colorAttachments[] itself
+        // holds LLGL_MAX_NUM_COLOR_ATTACHMENTS (8) slots, comfortably more.
+        constexpr int kMaxColorAttachments = 4;
+        if (count < 2 || count > kMaxColorAttachments)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: multiple render targets need 2-4 slots, got " +
+                std::to_string(count));
+        }
+
+        std::array<LlglRenderTargetBackend*, kMaxColorAttachments> slots{};
+        for (int i = 0; i < count; ++i)
+        {
+            // Scoped to RenderTarget2D slots only in this first cut -- see LlglMRTBinding's own doc
+            // comment for why mixing in a RenderTargetCube face is refused by name instead of
+            // silently degrading.
+            if (!renderTargets[i].IsRenderTarget2D())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: multiple render targets support "
+                    "RenderTarget2D slots only, not a RenderTargetCube face");
+            }
+            auto* target = dynamic_cast<LlglRenderTargetBackend*>(renderTargets[i].GetRenderTarget2D());
+            if (target == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: SetRenderTargets was given a target from "
+                    "another backend");
+            }
+            slots[static_cast<std::size_t>(i)] = target;
+        }
+
+        // Dimensions, applied sample count and duplicate-subresource checks already happened at the
+        // shared GraphicsDevice::SetRenderTargets layer before this backend was ever called -- slot
+        // 0's own width/height/projection buffer are correct for every slot.
+        const int width = slots[0]->GetWidth();
+        const int height = slots[0]->GetHeight();
+
+        LLGL::RenderTargetDescriptor targetDesc;
+        targetDesc.resolution = {static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
+        for (int i = 0; i < count; ++i)
+        {
+            targetDesc.colorAttachments[static_cast<std::size_t>(i)] =
+                LLGL::AttachmentDescriptor{slots[static_cast<std::size_t>(i)]->GetLlglColorTexture()};
+        }
+        // Fresh, anonymous depth attachment -- LLGL allocates and owns it internally as part of
+        // renderTarget_, exactly like CreateRenderTarget2D's own single-target depth attachment,
+        // rather than trying to share/preserve any one slot's own depth buffer (see LlglMRTBinding's
+        // doc comment on why).
+        targetDesc.depthStencilAttachment = LLGL::AttachmentDescriptor{swapChain_->GetDepthStencilFormat()};
+
+        LLGL::RenderTarget* renderTarget = renderer_->CreateRenderTarget(targetDesc);
+        if (renderTarget == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: multiple-render-target creation failed");
+        }
+
+        ReleaseCurrentMrtBindingEXT();
+        currentMrtBinding_ = std::make_unique<LlglMRTBinding>(
+            renderTarget, width, height, count, slots[0]->GetSpriteProjectionBuffer());
+        currentRenderTargetBackend_ = currentMrtBinding_.get();
     }
 
     void LlglGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -4786,10 +4909,11 @@ namespace CNA::Internal::Backends::Llgl
             case CNA::GraphicsCapability::Texture3D:
                 return true;
 
-            // Everything below is still unimplemented. Reporting false is what lets a caller ask
-            // instead of discovering the gap through an exception.
+            // LLGL-26 MRT follow-up: real 2-4 slot RenderTarget2D binds drawn through SpriteBatch/a
+            // custom ShaderEffect -- see LlglMRTBinding's own doc comment for the scope boundary
+            // (RenderTarget2D slots only, no 3D colour-only draws while one is bound).
             case CNA::GraphicsCapability::MultipleRenderTargets:
-                return false;
+                return true;
         }
         return false;
     }
