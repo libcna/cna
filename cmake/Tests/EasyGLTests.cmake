@@ -1667,6 +1667,19 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_texture_filter_ordinal
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-173 cross-backend control: EnvironmentMapEffect samples TWO independent
+    # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
+    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
+    # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
+    # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
+    # does with the same public state.
+        cna_easygl_test(cna_test_easygl_envmap_cube_sampler
+            examples/envmap_cube_sampler_contract_test.cpp)
+        cna_register_backend_test(NAME EasyGL_EnvMapCubeSamplerContract
+            COMMAND cna_test_easygl_envmap_cube_sampler
+            TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-174: a TextureFilter ordinal names four INDEPENDENT components, and EasyGL wrote
         # GL_TEXTURE_MAX_ANISOTROPY only when the ordinal was Anisotropic. Its per-slot GL sampler
         # object is mutated in place and reused, so that write could only ever raise the value and it

@@ -520,6 +520,21 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_TextureFilterOrdinalContract COMMAND cna_test_webgpu_texture_filter_ordinal
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-173 cross-backend control: EnvironmentMapEffect samples TWO independent
+    # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
+    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
+    # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
+    # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
+    # does with the same public state.
+    # REMED-GFX-172 is the declared boundary here: WebGPU's EnvironmentMap3D bind group has ONE
+    # sampler entry for two texture views, so SamplerStates[1] is inexpressible for the cube. This
+    # registration measures that boundary rather than hiding it, and WebGPU production is unchanged.
+    cna_webgpu_test(cna_test_webgpu_envmap_cube_sampler
+        examples/envmap_cube_sampler_contract_test.cpp)
+    cna_register_backend_test(NAME WebGPU_EnvMapCubeSamplerContract COMMAND cna_test_webgpu_envmap_cube_sampler
+        TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
     # EasyGL mapped ordinals 0 and 1 onto a GL filter with no mipmap term and Software had no
     # mip pipeline at all; this fixture measures what every other backend does with a chain

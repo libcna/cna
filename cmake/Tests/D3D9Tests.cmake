@@ -329,6 +329,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         COMMAND ${_d3d9_texture_filter_ordinal_cmd}
         TIMEOUT 300 LABELS "D3D9")
 
+    # REMED-GFX-173 cross-backend control: EnvironmentMapEffect samples TWO independent
+    # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
+    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
+    # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
+    # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
+    # does with the same public state.
+    cna_d3d9_test(cna_test_d3d9_envmap_cube_sampler
+                   examples/envmap_cube_sampler_contract_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_envmap_cube_sampler_cmd cna_test_d3d9_envmap_cube_sampler)
+    cna_register_backend_test(NAME D3D9_EnvMapCubeSamplerContract
+        COMMAND ${_d3d9_envmap_cube_sampler_cmd}
+        TIMEOUT 600 LABELS "D3D9")
+
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
     cna_d3d9_test(cna_test_d3d9_texture_filter_mip_contract
                    examples/texture_filter_mip_contract_test.cpp)

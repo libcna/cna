@@ -64,6 +64,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # on every textured stock family; the other backends run it as controls.
     cna_d3d12_test(cna_test_d3d12_texture_filter_ordinal examples/texture_filter_ordinal_contract_test.cpp)
 
+    # REMED-GFX-173 cross-backend control: EnvironmentMapEffect samples TWO independent
+    # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
+    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
+    # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
+    # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
+    # does with the same public state.
+    cna_d3d12_test(cna_test_d3d12_envmap_cube_sampler examples/envmap_cube_sampler_contract_test.cpp)
+
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
     cna_d3d12_test(cna_test_d3d12_texture_filter_mip_contract examples/texture_filter_mip_contract_test.cpp)
 

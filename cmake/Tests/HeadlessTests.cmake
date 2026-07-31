@@ -102,6 +102,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_TextureFilterOrdinalContract COMMAND cna_test_headless_texture_filter_ordinal
         TIMEOUT 300 LABELS "Headless")
 
+    # REMED-GFX-173 cross-backend control: EnvironmentMapEffect samples TWO independent
+    # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
+    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
+    # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
+    # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
+    # does with the same public state.
+    cna_headless_test(cna_test_headless_envmap_cube_sampler
+        examples/envmap_cube_sampler_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_EnvMapCubeSamplerContract COMMAND cna_test_headless_envmap_cube_sampler
+        TIMEOUT 600 LABELS "Headless")
+
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
     # EasyGL mapped ordinals 0 and 1 onto a GL filter with no mipmap term and Software had no
     # mip pipeline at all; this fixture measures what every other backend does with a chain

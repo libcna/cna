@@ -440,6 +440,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_texture_filter_ordinal
         TIMEOUT 300 LABELS "Software")
 
+    # REMED-GFX-173 cross-backend control: EnvironmentMapEffect samples TWO independent
+    # resources -- the ordinary 2D texture through GraphicsDevice.SamplerStates[0] and the
+    # reflection cube through SamplerStates[1]. SDL_GPU bound a literal LinearClamp for the cube
+    # and captured only slot 0, so slot 1 could not reach replay at all. This fixture makes the
+    # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
+    # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
+    # does with the same public state.
+    cna_software_test(cna_test_software_envmap_cube_sampler
+                      examples/envmap_cube_sampler_contract_test.cpp)
+    cna_register_backend_test(NAME Software_EnvMapCubeSamplerContract
+        COMMAND cna_test_software_envmap_cube_sampler
+        TIMEOUT 900 LABELS "Software")
+
     # REMED-GFX-174 control: Software is the GFX-150-corrected reference implementation, so it says
     # what the order-sensitive sampler-component contract owes independently of any GL behaviour.
     cna_software_test(cna_test_software_sampler_component_isolation
