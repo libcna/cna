@@ -43,7 +43,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 29;
+    constexpr int kExpectedChecks = 32;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -125,19 +125,31 @@ namespace
         return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
     });
 
-    /// 1 when the #cna-dom-root surface's clip-path is `inset(top right bottom left)` with those
-    /// four values (in px). Compares parsed numbers rather than the raw string: the CSSOM
-    /// normalizes `inset(0px 0px 0px 0px)` down to the shorthand `inset(0px)` when all four
-    /// values are equal, so an exact-string comparison would be asserting the serializer's own
-    /// formatting choice rather than the geometry.
+    /// plan_html_dom.md HTMLDOM-94: 1 when a region exists for the exact rectangle `(x,y,w,h)` (a
+    /// rectangle that currently covers the whole surface never gets a real region -- it collapses
+    /// to the default, unclipped one -- so this always returns 0 for one of those).
+    EM_JS(int, JsRegionExists, (int x, int y, int w, int h), {
+        const regions = Module['cnaDomRegions'];
+        if (!regions) return 0;
+        const key = x + ',' + y + ',' + w + ',' + h;
+        return regions[key] ? 1 : 0;
+    });
+
+    /// 1 when the region for rectangle `(x,y,w,h)` exists and its container's clip-path is
+    /// `inset(top right bottom left)` with those four values (in px). Compares parsed numbers
+    /// rather than the raw string: the CSSOM normalizes `inset(0px 0px 0px 0px)` down to the
+    /// shorthand `inset(0px)` when all four values are equal, so an exact-string comparison would
+    /// be asserting the serializer's own formatting choice rather than the geometry.
     // Deliberately no regular expression: a backslash inside an EM_JS body does not survive the
     // preprocessor's stringification of that body (see JsClearColorMatches's own comment, above,
     // for the bug this caused once already in this same file) -- parsed with plain
     // indexOf/substring/split instead.
-    EM_JS(int, JsRootClipPathInsetIs, (int top, int right, int bottom, int left), {
-        const root = document.getElementById('cna-dom-root');
-        if (!root) return 0;
-        const cp = root.style.clipPath;
+    EM_JS(int, JsRegionClipPathInsetIs, (int x, int y, int w, int h,
+                                         int top, int right, int bottom, int left), {
+        const regions = Module['cnaDomRegions'];
+        const region = regions ? regions[x + ',' + y + ',' + w + ',' + h] : null;
+        if (!region) return 0;
+        const cp = region.container.style.clipPath;
         const open = cp.indexOf('inset(');
         const close = cp.indexOf(')');
         if (open !== 0 || close < 0) return 0;
@@ -152,6 +164,17 @@ namespace
         else if (nums.length === 4) { t = nums[0]; r = nums[1]; b = nums[2]; l = nums[3]; }
         else { return 0; }
         return (t === top && r === right && b === bottom && l === left) ? 1 : 0;
+    });
+
+    /// Number of currently-visible sprites inside the region for rectangle `(x,y,w,h)`, or -1 if
+    /// that region does not exist.
+    EM_JS(int, JsRegionVisibleSpriteCount, (int x, int y, int w, int h), {
+        const regions = Module['cnaDomRegions'];
+        const region = regions ? regions[x + ',' + y + ',' + w + ',' + h] : null;
+        if (!region) return -1;
+        let n = 0;
+        for (const el of region.container.children) if (el.style.display !== 'none') ++n;
+        return n;
     });
 
     /// 1 when sprite `i`'s `background-repeat` is `'repeat'` (TextureAddressMode::Wrap tiling).
@@ -178,7 +201,9 @@ namespace
     int JsSpriteOpacity255(int) { return -1; }
     int JsCanvasHidden() { return 0; }
     int JsSpriteBackgroundRepeat(int) { return 0; }
-    int JsRootClipPathInsetIs(int, int, int, int) { return 0; }
+    int JsRegionExists(int, int, int, int) { return 0; }
+    int JsRegionClipPathInsetIs(int, int, int, int, int, int, int, int) { return 0; }
+    int JsRegionVisibleSpriteCount(int, int, int, int) { return -1; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -427,29 +452,62 @@ protected:
                   "the render-target Wrap path tiles the source texture exactly, pixel-for-pixel");
         }
 
-        // plan_html_dom.md HTMLDOM-80: SetScissorRect, implemented as clip-path: inset() on
-        // #cna-dom-root (design decision 13) -- verified the same way every other CSS-property
-        // mapping in this file is (checking the computed value against a hand-derived expected
-        // string), consistent with how transform/backgroundRepeat/mixBlendMode are already
-        // checked above, rather than a pixel screenshot: the browser's own clip-path rendering is
-        // standard engine behaviour this project doesn't re-verify anywhere else either.
+        // plan_html_dom.md HTMLDOM-80/94: SetScissorRect, implemented as a real clip-path on a
+        // dedicated DOM region per distinct scissor rect (design decision 13, revised by HTMLDOM-94)
+        // -- verified the same way every other CSS-property mapping in this file is (checking the
+        // computed value against a hand-derived expected string), consistent with how
+        // transform/backgroundRepeat/mixBlendMode are already checked above, rather than a pixel
+        // screenshot: the browser's own clip-path rendering is standard engine behaviour this
+        // project doesn't re-verify anywhere else either.
+        //
+        // Each scissor rect below is set, then immediately consumed by drawing one sprite in its own
+        // Begin/End batch -- a region is only created when a batch actually flushes under that rect
+        // (HTMLDOM-94), so checking the clip-path right after SetScissorRect with nothing drawn in
+        // between (the OLD, pre-HTMLDOM-94 test shape) would find nothing.
         if (frame_ == 7)
         {
             // Backbuffer is 64x64 (see the constructor below). A rect fully inside it:
             // top=10, left=10, right=64-(10+20)=34, bottom=64-(10+30)=24.
             dev.setScissorRectangleProperty(Rectangle(10, 10, 20, 30));
-            check(JsRootClipPathInsetIs(10, 34, 24, 10) == 1,
-                  "HTMLDOM-80a: a scissor rect inside the surface maps to the exact inset() values");
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
+            spriteBatch_->End();
+            check(JsRegionClipPathInsetIs(10, 10, 20, 30, 10, 34, 24, 10) == 1,
+                  "HTMLDOM-80a: a scissor rect inside the surface creates a region with the exact "
+                  "inset() values");
+            check(JsRegionVisibleSpriteCount(10, 10, 20, 30) == 1,
+                  "HTMLDOM-80a: the sprite drawn under that scissor rect lives inside its own region");
 
-            // Resetting to the full backbuffer must produce an all-zero (no-op) inset.
+            // Resetting to the full backbuffer must collapse to the default, unclipped region
+            // (#cna-dom-root itself) rather than allocating a real (no-op) clipped container.
             dev.setScissorRectangleProperty(Rectangle(0, 0, 64, 64));
-            check(JsRootClipPathInsetIs(0, 0, 0, 0) == 1,
-                  "HTMLDOM-80b: a scissor rect matching the full surface clips nothing");
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(40, 0), Color::White);
+            spriteBatch_->End();
+            check(JsRegionExists(0, 0, 64, 64) == 0,
+                  "HTMLDOM-80b: a scissor rect matching the full surface collapses to the default "
+                  "region instead of allocating a real clipped container");
+
+            // The money check for HTMLDOM-94: the FIRST region (10,10,20,30) must be completely
+            // unaffected by the SECOND batch's later, different scissor rect -- exactly the defect a
+            // single shared #cna-dom-root clip-path had before this task (the LATEST scissor rect
+            // would retroactively reclip every sprite already on screen, no matter which rect was
+            // active when each one was actually drawn).
+            check(JsRegionClipPathInsetIs(10, 10, 20, 30, 10, 34, 24, 10) == 1,
+                  "HTMLDOM-94: an earlier batch's region keeps its own clip after a LATER batch "
+                  "changes the scissor rect to something else -- no retroactive reclipping across "
+                  "batches");
+            check(JsRegionVisibleSpriteCount(10, 10, 20, 30) == 1,
+                  "HTMLDOM-94: the earlier batch's sprite is still exactly where it was, still "
+                  "clipped to its own rect, unaffected by the later batch");
 
             // A rect extending past the surface's own bounds: right/bottom insets would go
             // negative from the raw formula and must clamp to 0 rather than expand outward.
             dev.setScissorRectangleProperty(Rectangle(50, 50, 30, 30));
-            check(JsRootClipPathInsetIs(50, 0, 0, 50) == 1,
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(50, 50), Color::White);
+            spriteBatch_->End();
+            check(JsRegionClipPathInsetIs(50, 50, 30, 30, 50, 0, 0, 50) == 1,
                   "HTMLDOM-80c: a scissor rect extending past the surface clamps its far insets "
                   "to 0 instead of producing a negative (expanding) inset()");
 
@@ -490,26 +548,34 @@ protected:
             backend.SetVirtualResolution(0, 0);
 
             // Surface is currently still 64x64 (SetVirtualResolution alone doesn't resize anything;
-            // it only changes how future geometry is computed).
+            // it only changes how future geometry is computed). Draw one sprite under this rect so a
+            // region for it actually gets created (HTMLDOM-94: SetScissorRect alone only records
+            // the rect -- a region only exists once a batch flushes under it).
             backend.SetScissorRect(5, 5, 10, 10);
-            check(JsRootClipPathInsetIs(5, 49, 49, 5) == 1,
-                  "HTMLDOM-93a: scissor rect set against the current (pre-resize) 64x64 surface");
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(5, 5), Color::White);
+            spriteBatch_->End();
+            check(JsRegionClipPathInsetIs(5, 5, 10, 10, 5, 49, 49, 5) == 1,
+                  "HTMLDOM-93a: a region created against the current (pre-resize) 64x64 surface "
+                  "gets the expected insets");
 
             // Resize the real SDL window, then call the backend's own Present() directly -- that is
-            // what notices the logical size changed and re-derives the clip-path (HtmlDomState's
-            // CNA_HtmlDom_UpdateSurface). Not dev.Present(): see the note above for why that would
-            // hide what this test is checking behind GraphicsDevice's own separate reset.
+            // what notices the logical size changed and re-derives every region's clip-path
+            // (HtmlDomState's CNA_HtmlDom_UpdateSurface). Not dev.Present(): see the note above for
+            // why that would hide what this test is checking behind GraphicsDevice's own separate
+            // reset.
             SDL_SetWindowSize(backend.GetWindowInternal(), 128, 128);
             backend.Present();
 
-            // Without CNA_HtmlDom_UpdateSurface re-deriving the clip on resize, this would still
-            // read back the OLD (5,49,49,5) insets computed against the pre-resize 64x64 surface,
-            // even though #cna-dom-root's own box is now 128x128 -- silently clipping the wrong
-            // fraction of the resized surface instead of the same logical (5,5,10,10) rectangle.
-            check(JsRootClipPathInsetIs(5, 113, 113, 5) == 1,
-                  "HTMLDOM-93b: HtmlDomGraphicsBackend automatically re-derives the scissor clip "
-                  "against the new 128x128 surface after a resize, with no GraphicsDevice.Reset() "
-                  "and no scissor reapplication by the caller");
+            // Without CNA_HtmlDom_UpdateSurface re-deriving every region's clip on resize, this
+            // region would still carry the OLD (5,49,49,5) insets computed against the pre-resize
+            // 64x64 surface, even though the surface itself is now 128x128 -- silently clipping the
+            // wrong fraction of the resized surface instead of the same logical (5,5,10,10)
+            // rectangle.
+            check(JsRegionClipPathInsetIs(5, 5, 10, 10, 5, 113, 113, 5) == 1,
+                  "HTMLDOM-93b: an existing region's clip is automatically re-derived against the "
+                  "new 128x128 surface after a resize, with no GraphicsDevice.Reset() and no "
+                  "scissor reapplication by the caller");
 
             backend.SetScissorRect(0, 0, 128, 128);
 

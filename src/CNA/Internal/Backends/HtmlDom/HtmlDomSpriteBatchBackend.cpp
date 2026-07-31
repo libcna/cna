@@ -23,14 +23,21 @@
 // rebuilding the elements, would give up exactly that. Nothing here ever READS layout (no
 // getBoundingClientRect, no offsetWidth), so no forced synchronous reflow is possible either.
 //
-// Sprite n of a frame always lands on pool element n, and elements are appended to the container in
-// pool order, so document order equals draw order -- painter's-algorithm ordering with no z-index
-// bookkeeping at all.
+// Sprite n of THIS BATCH always lands on pool element n of the region THIS BATCH resolves to (see
+// HTMLDOM-94 below), and elements are appended to that region's container in pool order, so
+// document order within one region equals draw order within the batches that landed there --
+// painter's-algorithm ordering with no z-index bookkeeping at all, for sprites that share a region.
+// Sprites in DIFFERENT regions are painted in the order their regions were first created, which is
+// NOT necessarily interleaved draw order across regions -- an accepted, documented boundary of
+// scissor-rect-scoped clipping correctness (HTMLDOM-94), not a regression: before HTMLDOM-94 there
+// was no way to keep two different scissor rects from clipping each other's sprites at all.
 //
 // With a render target bound there is no DOM to write to (a <div> cannot render into an off-screen
 // surface), so the very same command array is replayed into that target's Canvas2D context instead
 // (design decision 10). The transform stack below is the exact CSS transform list, in the same
-// order, so both paths place a sprite identically.
+// order, so both paths place a sprite identically. The bound-render-target path does not consult
+// the scissor rect at all -- that was already true before HTMLDOM-94 and is unchanged by it; scissor
+// clipping here is a DOM-backbuffer-only concept.
 EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                                        double m0, double m1, double m2, double m3, double m4, double m5,
                                        int hasMatrix), {
@@ -87,8 +94,17 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
 
     const root = Module['cnaDomRoot'];
     if (!root) { console.error('[CNA] HTML_DOM: flush before the DOM surface existed'); return; }
-    const pool = Module['cnaDomPool'];
-    let used = Module['cnaDomUsed'];
+    // plan_html_dom.md HTMLDOM-94: this flush is one whole SpriteBatch Begin/End batch, so the
+    // scissor rect current RIGHT NOW (whatever the game's last SetScissorRect call recorded) is the
+    // one that applies to every sprite in it -- matching real XNA/FNA SpriteBatch Deferred-mode
+    // semantics, where ScissorRectangle is read by the GPU once the batch's draw calls are actually
+    // issued at End(), not captured per original Draw() call. cnaDomGetRegion resolves that rect to
+    // the DOM container (and its own independent sprite pool) this whole batch's sprites belong in,
+    // so a LATER batch's different scissor rect can never reach back and reclip these sprites.
+    const region = Module['cnaDomGetRegion'](Module['cnaDomScissorRect']);
+    const container = region.container;
+    const pool = region.pool;
+    let used = region.used;
 
     for (let i = 0; i < count; ++i) {
         const o = base + i * stride;
@@ -109,7 +125,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                                'background-repeat:no-repeat;will-change:transform;pointer-events:none;';
             el.__cnaState = { w: -1, h: -1, url: null, bp: null, rep: null, ir: null,
                               mb: null, tf: null, op: -1, hidden: false };
-            root.appendChild(el);
+            container.appendChild(el);
             pool[used] = el;
         }
         const st = el.__cnaState;
@@ -156,7 +172,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         if (st.hidden) { style.display = ""; st.hidden = false; }
         ++used;
     }
-    Module['cnaDomUsed'] = used;
+    region.used = used;
 });
 #endif
 

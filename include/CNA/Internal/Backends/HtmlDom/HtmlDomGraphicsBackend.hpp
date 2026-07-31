@@ -122,17 +122,26 @@ namespace CNA::Internal::Backends::HtmlDom
          * @brief Clips subsequent rendering to the given rectangle, in logical game pixels.
          *
          * plan_html_dom.md HTMLDOM-80 / design decision 13: implemented as a real CSS
-         * `clip-path: inset()` on the DOM surface, applied unconditionally -- the same
-         * `RasterizerState.ScissorTestEnable`-independent behaviour `SDL_RENDERER` has (it never
-         * overrides `ApplyRasterizerState` either). Scoped as whole-surface, current-value
-         * clipping: it clips everything currently on screen, not only sprites drawn while this
-         * particular rectangle was active earlier in the same frame -- true per-draw-call
-         * scissoring is out of scope for this backend's flat, pooled sprite architecture.
+         * `clip-path: inset()`, applied regardless of `RasterizerState.ScissorTestEnable` -- the
+         * same behaviour `SDL_RENDERER` has (it never overrides `ApplyRasterizerState` either).
          *
-         * The rectangle is remembered in logical coordinates and automatically re-applied against
-         * the surface's current logical size whenever that size changes (e.g. a window resize with
-         * no `GraphicsDevice.Reset()`), so the clip stays correct without the caller needing to
-         * reissue it purely because the surface was resized (HTMLDOM-93).
+         * This call itself only records the rectangle; it does not touch the DOM. The recorded
+         * rectangle is consumed once per `SpriteBatch` Begin/End batch, when that batch's sprites
+         * are flushed, and resolved to a dedicated clipped DOM container for that exact rectangle
+         * (HTMLDOM-94) -- so a later call to this method with a different rectangle does not
+         * retroactively reclip sprites an earlier batch already flushed under this one. Scoped
+         * honestly at BATCH granularity, matching this backend's one-flush-per-Begin/End
+         * architecture: a `SpriteSortMode::Immediate` game that calls this between individual
+         * `Draw()` calls inside one still-open `Begin()`/`End()` pair will not see finer-grained
+         * clipping than "whatever this method last recorded when that batch's `End()` ran" -- the
+         * same rule real XNA/FNA `SpriteBatch` itself applies to `GraphicsDevice` state read at
+         * flush time in `Deferred` mode.
+         *
+         * The rectangle is remembered in logical coordinates and every active region's clip is
+         * automatically re-derived against the surface's current logical size whenever that size
+         * changes (e.g. a window resize with no `GraphicsDevice.Reset()`), so clips stay correct
+         * without any caller needing to reissue them purely because the surface was resized
+         * (HTMLDOM-93).
          *
          * @param x Left edge of the clip rectangle, in logical pixels.
          * @param y Top edge of the clip rectangle, in logical pixels.

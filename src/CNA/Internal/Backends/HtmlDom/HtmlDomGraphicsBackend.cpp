@@ -35,28 +35,89 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     (canvas.parentNode || document.body).insertBefore(root, canvas.nextSibling);
     canvas.style.visibility = 'hidden';
     Module['cnaDomRoot'] = root;
-    Module['cnaDomPool'] = [];
-    Module['cnaDomUsed'] = 0;
-    Module['cnaDomHighWater'] = 0;
     Module['cnaDomBoundCtx'] = null;
     Module['cnaDomClearColor'] = null;
     Module['cnaDomScissorRect'] = null;
-    // Shared by CNA_HtmlDom_SetScissorRect and CNA_HtmlDom_UpdateSurface (below): computes
-    // clip-path insets from Module['cnaDomScissorRect'] (stored in LOGICAL pixel coordinates)
-    // against the CURRENT Module['cnaDomLogicalW'/'H']. Calling it again from UpdateSurface after a
-    // resize re-derives the clip against the new size instead of leaving stale absolute-px insets
-    // applied to a box that has since changed size (plan_html_dom.md HTMLDOM-93).
-    Module['cnaDomApplyScissorClip'] = function () {
-        const r = Module['cnaDomRoot'];
-        const rect = Module['cnaDomScissorRect'];
-        if (!r || !rect) return;
+    Module['cnaDomMaxRegions'] = 16;
+    // plan_html_dom.md HTMLDOM-94: sprites are grouped into per-scissor-rect DOM containers
+    // ("regions") instead of one flat pool directly under #cna-dom-root, so a scissor rect active
+    // for one SpriteBatch Begin/End batch cannot retroactively clip sprites a DIFFERENT batch drew
+    // earlier in the same frame under a different rect (or vice versa) -- see
+    // HtmlDomSpriteBatchBackend.cpp's CNA_HtmlDom_FlushSprites, the only place a region is chosen,
+    // for the batch-granularity rationale. 'full' is the default, zero-clip region every sprite
+    // uses until a game actually narrows the scissor rect below the current surface size; its
+    // container IS #cna-dom-root itself and its pool IS the same flat pool this backend always
+    // had, so the overwhelmingly common no-scissor case costs nothing beyond what it always did.
+    Module['cnaDomRegions'] = { 'full': { container: root, pool: [], used: 0, highWater: 0, rect: null } };
+    Module['cnaDomRegionOrder'] = [];
+
+    // Sets a region's own clip-path from its stored rect against the CURRENT logical size. Called
+    // once when a region is created and again for every region whenever the surface's logical size
+    // changes (CNA_HtmlDom_UpdateSurface, below), so a resize re-derives every active clip instead
+    // of leaving stale insets applied to boxes that have since changed size (HTMLDOM-93).
+    Module['cnaDomApplyRegionClip'] = function (region) {
+        if (!region.rect) { region.container.style.clipPath = ""; return; }
         const logicalW = Module['cnaDomLogicalW'] || 0;
         const logicalH = Module['cnaDomLogicalH'] || 0;
+        const rect = region.rect;
         const top = Math.max(0, rect.y);
         const left = Math.max(0, rect.x);
         const right = Math.max(0, logicalW - (rect.x + rect.w));
         const bottom = Math.max(0, logicalH - (rect.y + rect.h));
-        r.style.clipPath = 'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
+        region.container.style.clipPath =
+            'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
+    };
+
+    // Moves `key` to the most-recently-used end of the eviction order. The default 'full' region
+    // is never tracked here -- it is never evicted.
+    Module['cnaDomTouchRegion'] = function (key) {
+        if (key === 'full') return;
+        const order = Module['cnaDomRegionOrder'];
+        const idx = order.indexOf(key);
+        if (idx >= 0) { order.splice(idx, 1); order.push(key); }
+    };
+
+    // Returns the region that should own sprites drawn under the given scissor rect (an {x,y,w,h}
+    // object in logical pixels, or null/undefined for "no scissor rect has been set"). A rect that
+    // currently covers the whole surface -- checked fresh against Module['cnaDomLogicalW'/'H']
+    // every call, so this stays correct across resizes with no special-casing -- collapses to the
+    // SAME default 'full' region as no rect at all, so resetting ScissorRectangle to the full
+    // backbuffer (what GraphicsDevice.UpdateViewportFromWindow does on every resize, and what most
+    // games do explicitly) always lands back on the zero-cost path rather than accumulating a
+    // pointless no-op-clip container.
+    Module['cnaDomGetRegion'] = function (rect) {
+        const regions = Module['cnaDomRegions'];
+        const logicalW = Module['cnaDomLogicalW'] || 0;
+        const logicalH = Module['cnaDomLogicalH'] || 0;
+        const isFull = !rect || (rect.x <= 0 && rect.y <= 0 &&
+                                  rect.x + rect.w >= logicalW && rect.y + rect.h >= logicalH);
+        if (isFull) return regions['full'];
+
+        const key = rect.x + ',' + rect.y + ',' + rect.w + ',' + rect.h;
+        let region = regions[key];
+        if (region) { Module['cnaDomTouchRegion'](key); return region; }
+
+        // LRU-evict the least-recently-used non-default region at capacity -- bounds a
+        // pathological game that cycles through many distinct scissor rects, mirroring the texture
+        // variant cache's own cap.
+        const order = Module['cnaDomRegionOrder'];
+        while (order.length >= Module['cnaDomMaxRegions']) {
+            const evictKey = order.shift();
+            const evictRegion = regions[evictKey];
+            if (evictRegion && evictRegion.container.parentNode) {
+                evictRegion.container.parentNode.removeChild(evictRegion.container);
+            }
+            delete regions[evictKey];
+        }
+
+        const container = document.createElement('div');
+        container.style.cssText = 'position:absolute;left:0;top:0;';
+        Module['cnaDomRoot'].appendChild(container);
+        region = { container: container, pool: [], used: 0, highWater: 0, rect: rect };
+        regions[key] = region;
+        order.push(key);
+        Module['cnaDomApplyRegionClip'](region);
+        return region;
     };
 });
 
@@ -67,9 +128,8 @@ EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
                    (typeof document === 'undefined' ? null : document.querySelector('canvas'));
     if (canvas) canvas.style.visibility = "";
     Module['cnaDomRoot'] = null;
-    Module['cnaDomPool'] = null;
-    Module['cnaDomUsed'] = 0;
-    Module['cnaDomHighWater'] = 0;
+    Module['cnaDomRegions'] = null;
+    Module['cnaDomRegionOrder'] = null;
     Module['cnaDomScissorRect'] = null;
 });
 
@@ -111,29 +171,43 @@ EM_JS(void, CNA_HtmlDom_Clear, (double r, double g, double b, double a), {
         root.style.backgroundColor = css;
         Module['cnaDomClearColor'] = css;
     }
-    const pool = Module['cnaDomPool'];
-    const used = Module['cnaDomUsed'];
-    for (let i = 0; i < used; ++i) {
-        const el = pool[i];
-        if (el && !el.__cnaState.hidden) { el.style.display = 'none'; el.__cnaState.hidden = true; }
+    // Every region's pool is cleared, not just the default one -- a sprite drawn under a narrower
+    // scissor rect earlier this frame must disappear on Clear() exactly like one drawn unclipped.
+    const regions = Module['cnaDomRegions'];
+    for (const key in regions) {
+        const region = regions[key];
+        const pool = region.pool;
+        const used = region.used;
+        for (let i = 0; i < used; ++i) {
+            const el = pool[i];
+            if (el && !el.__cnaState.hidden) { el.style.display = 'none'; el.__cnaState.hidden = true; }
+        }
+        region.used = 0;
     }
-    Module['cnaDomUsed'] = 0;
 });
 
 // plan_html_dom.md HTMLDOM-12: ends the frame by hiding the pool elements this frame did not use --
 // and only those, tracked by a high-water mark, so a steady frame count touches nothing. There is
 // no buffer to swap: the browser compositor presents the DOM on its next paint tick.
+//
+// HTMLDOM-94: done per region, the same way Clear() above is -- each region tracks its own
+// used/highWater independently, since a region's sprite count varies frame to frame just like the
+// default pool's always could.
 EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
-    const pool = Module['cnaDomPool'];
-    if (!pool) return;
-    const used = Module['cnaDomUsed'];
-    const high = Module['cnaDomHighWater'];
-    for (let i = used; i < high; ++i) {
-        const el = pool[i];
-        if (el && !el.__cnaState.hidden) { el.style.display = 'none'; el.__cnaState.hidden = true; }
+    const regions = Module['cnaDomRegions'];
+    if (!regions) return;
+    for (const key in regions) {
+        const region = regions[key];
+        const pool = region.pool;
+        const used = region.used;
+        const high = region.highWater;
+        for (let i = used; i < high; ++i) {
+            const el = pool[i];
+            if (el && !el.__cnaState.hidden) { el.style.display = 'none'; el.__cnaState.hidden = true; }
+        }
+        region.highWater = used;
+        region.used = 0;
     }
-    Module['cnaDomHighWater'] = used;
-    Module['cnaDomUsed'] = 0;
 });
 
 // Sizes the surface and applies the logical→physical scale. Called only when the geometry actually
@@ -157,38 +231,41 @@ EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH, int physW, i
         root.style.left = canvas.offsetLeft + 'px';
         root.style.top = canvas.offsetTop + 'px';
     }
-    // HTMLDOM-93: the logical size just changed (that is the only reason this function runs at
-    // all -- Present() only calls it when geometry differs from last frame). Re-derive any
-    // currently-active scissor clip against the new size rather than leaving it applied at insets
+    // HTMLDOM-93/94: the logical size just changed (that is the only reason this function runs at
+    // all -- Present() only calls it when geometry differs from last frame). Re-derive EVERY
+    // region's clip-path against the new size rather than leaving any of them applied at insets
     // computed for the old one.
-    if (Module['cnaDomScissorRect']) Module['cnaDomApplyScissorClip']();
+    const regions = Module['cnaDomRegions'];
+    for (const key in regions) Module['cnaDomApplyRegionClip'](regions[key]);
 });
 
-// plan_html_dom.md HTMLDOM-80 / design decision 13: real scissor clipping via `clip-path: inset()`
-// on #cna-dom-root itself. Exact, with no transform-inverse maths needed: root carries no
-// rotation (only the uniform logical->physical scale() CNA_HtmlDom_UpdateSurface applies), so
-// clip-path's own pre-transform local coordinate space already coincides with the same logical-
-// pixel space every sprite's destX/destY is expressed in -- the scissor rect can be turned into
-// inset() distances directly, with no per-sprite transform to invert.
+// plan_html_dom.md HTMLDOM-80 / design decision 13: real scissor clipping via `clip-path: inset()`.
+// Exact, with no transform-inverse maths needed: region containers carry no rotation (only the
+// uniform logical->physical scale() CNA_HtmlDom_UpdateSurface applies to #cna-dom-root, which every
+// region container inherits), so clip-path's own pre-transform local coordinate space already
+// coincides with the same logical-pixel space every sprite's destX/destY is expressed in -- the
+// scissor rect can be turned into inset() distances directly, with no per-sprite transform to
+// invert.
 //
-// Applied UNCONDITIONALLY, the same way SdlGraphicsBackend::SetScissorRect behaves: SDL_Renderer
-// never overrides ApplyRasterizerState at all, so its own SDL_SetRenderClipRect call is never
-// gated on RasterizerState.ScissorTestEnable either -- confirmed by reading SdlGraphicsBackend.cpp
-// before matching its behaviour here, not assumed.
+// HTMLDOM-94: this function ONLY records the current rect now -- it does not touch the DOM at all.
+// The rect it records is consumed once per SpriteBatch Begin/End batch, at CNA_HtmlDom_FlushSprites
+// (HtmlDomSpriteBatchBackend.cpp), which is what actually resolves it to a region and therefore a
+// clip. That is a real behaviour change from the single whole-surface clip-path this function used
+// to apply directly to #cna-dom-root: sprites already flushed into a region under an EARLIER rect
+// keep that region's own clip-path even after this function is called again with a DIFFERENT rect,
+// instead of every sprite currently on screen being retroactively reclipped to whatever rect is
+// "current" by the time the frame is inspected. Scoped honestly at BATCH granularity, matching this
+// backend's one-flush-per-Begin/End architecture -- not literally per individual Draw() call within
+// the same still-open batch (SpriteSortMode::Immediate games that change ScissorRectangle between
+// individual Draw() calls inside one Begin/End won't see finer-grained clipping than that).
 //
-// Scoped honestly as WHOLE-SURFACE, CURRENT-VALUE clipping: it clips everything currently in
-// #cna-dom-root, not only the sprites drawn while a narrower scissor rect was active earlier in
-// the same frame -- true per-draw-call scissoring would need the flat sprite pool restructured
-// into nested per-region containers, out of scope here. Insets are clamped to >= 0 so a rect that
-// (rarely) extends past the surface's own bounds produces a no-op-on-that-edge clip rather than an
-// inset() that expands outward instead of clipping inward.
+// Applied regardless of RasterizerState.ScissorTestEnable, the same way SdlGraphicsBackend::
+// SetScissorRect behaves: SDL_Renderer never overrides ApplyRasterizerState at all, so its own
+// SDL_SetRenderClipRect call is never gated on ScissorTestEnable either -- confirmed by reading
+// SdlGraphicsBackend.cpp before matching its behaviour here, not assumed.
 EM_JS(void, CNA_HtmlDom_SetScissorRect, (int x, int y, int w, int h), {
     if (!Module['cnaDomRoot']) return;
-    // Stored in logical pixel coordinates (not translated to insets here) so
-    // CNA_HtmlDom_UpdateSurface can re-derive the clip-path against a NEW logical size after a
-    // resize, instead of the previously-applied insets silently going stale (HTMLDOM-93).
     Module['cnaDomScissorRect'] = { x: x, y: y, w: w, h: h };
-    Module['cnaDomApplyScissorClip']();
 });
 
 // Reads back the currently bound render target. Returns 0 when nothing is bound -- the DOM
