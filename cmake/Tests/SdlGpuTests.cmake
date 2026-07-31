@@ -344,6 +344,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_Texture2DMipStorage COMMAND cna_test_sdlgpu_texture2d_mip_storage
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-173: EnvironmentMapEffect samples TWO independent resources -- the ordinary 2D
+    # texture through GraphicsDevice.SamplerStates[0] and the reflection cube through
+    # SamplerStates[1]. SdlGpuGraphicsBackend::IssueEnvMapDraw bound a literal LinearClamp for the
+    # cube and QueueEnvMapDraw captured only slot 0, so EnvMapDrawCommand had no field in which
+    # slot 1 could reach replay. This fixture makes the two slots independently observable --
+    # EnvironmentMapAmount 1 makes the cube the ONLY contributor and 0 makes the 2D texture the
+    # only one -- so a hardcoded sampler shows up as interpolated colours that exist in no stored
+    # texel. SDL_GPU is where the defect lives; the other backends run it as controls.
+    cna_sdlgpu_test(cna_test_sdlgpu_envmap_cube_sampler
+        examples/envmap_cube_sampler_contract_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_EnvMapCubeSamplerContract COMMAND cna_test_sdlgpu_envmap_cube_sampler
+        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-177 cross-backend control: descriptor/binding bookkeeping must be a function of what
     # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
     # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
