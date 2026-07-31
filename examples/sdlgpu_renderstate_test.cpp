@@ -24,10 +24,20 @@
 //   regardless) -- proves CullMode is no longer hardcoded to None.
 // Check E -- RasterizerState.FillMode: the same triangle drawn Solid (centre pixel filled) vs
 //   WireFrame (centre pixel must stay background -- wireframe never rasterizes a triangle's
-//   interior) -- proves FillMode is no longer hardcoded to Solid.
+//   interior) -- proves FillMode is no longer hardcoded to Solid. REMED-GFX-180 added the two
+//   positive halves: WireFrame must still light SOME pixels (its edges), and far fewer than Solid
+//   does, so a draw that was dropped entirely can no longer satisfy the centre-is-background half.
 // Check F -- RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle: a full-screen
 //   draw with a left-half scissor rect must only affect the left half, leaving the right half as
 //   background -- proves SetScissorRect/ApplyScissorForRef genuinely clip.
+//
+// REMED-GFX-180 (fixture defect, not a backend one): Check E's triangle buffer holds THREE
+// vertices and used to be drawn through a helper that hardcoded two primitives -- a request for six.
+// REMED-GFX-113's range guard rejected it, the rejection unwound past RunFillModeChecks' unbind, and
+// the frame then ended with a render target still bound, which Game::EndDraw's Present rightly
+// refuses. Nothing caught that refusal, so the process aborted and its whole check log died in an
+// unflushed stdout buffer. The primitive count is now named at every call site, every print is
+// flushed, and a group that throws still unbinds so a failure stays a legible FAIL.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -59,6 +69,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -68,6 +79,8 @@ namespace
 {
     constexpr int kRTSize = 32;
     constexpr int kTotalFrames = 120;
+    /// 16 as originally written, plus REMED-GFX-180's two positive WireFrame checks.
+    constexpr int kTotalChecks = 18;
 
     bool CloseTo(int a, int b, int tol) { return std::abs(a - b) <= tol; }
     bool Matches(const Color& c, const Color& expected, int tol = 10)
@@ -119,10 +132,19 @@ class SdlGpuRenderStateTest : public Game
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
+    /// The message of the exception RunAllGuarded last caught, empty when the run was clean.
+    std::string lastFailure_;
+    /// The first failure seen in frames 2..120, so a later frame's exception is a FAIL, not an abort.
+    std::string laterFrameFailure_;
 
+    // REMED-GFX-180: flushed on every line. stdout is block-buffered to a pipe, so when this fixture
+    // still ended in std::terminate its entire check log was discarded with the buffer -- and the
+    // resulting empty output was read as "no check was ever reached", which was false. A test whose
+    // diagnostics can be lost by the very failure they describe is not diagnosable.
     void Check(bool ok, const char* label)
     {
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+        std::fflush(stdout);
         if (ok) ++passCount_;
     }
 
@@ -145,7 +167,15 @@ class SdlGpuRenderStateTest : public Game
         return vb;
     }
 
-    void DrawFullQuad(GraphicsDevice& dev, VertexBuffer& vb)
+    // REMED-GFX-180: the primitive count is a PARAMETER, and every caller states it. It used to be a
+    // hardcoded 2 inside a helper called DrawFullQuad, which RunFillModeChecks then handed a
+    // THREE-vertex triangle buffer -- a request for six vertices out of three. REMED-GFX-113's range
+    // guard in GraphicsDevice::DrawPrimitives rightly rejects that, the rejection unwound past
+    // RunFillModeChecks' own SetRenderTarget(nullptr), and the frame then ended with a target still
+    // bound, which Game::EndDraw's Present rightly refuses. Both guards are correct; the request was
+    // not. Naming the count at the call site is what keeps the helper's name and its geometry from
+    // drifting apart again.
+    void DrawGeometry(GraphicsDevice& dev, VertexBuffer& vb, int primitiveCount)
     {
         BasicEffect fx(dev);
         fx.VertexColorEnabled = true;
@@ -154,9 +184,15 @@ class SdlGpuRenderStateTest : public Game
         fx.setProjectionProperty(Matrix::getIdentityProperty());
         fx.Apply();
         dev.SetVertexBuffer(&vb);
-        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, primitiveCount);
         dev.SetVertexBuffer(nullptr);
     }
+
+    /** @brief The two-triangle quads MakeFullQuad builds. */
+    void DrawFullQuad(GraphicsDevice& dev, VertexBuffer& vb) { DrawGeometry(dev, vb, 2); }
+
+    /** @brief The single-triangle buffer Check E's FillMode differential uses. */
+    void DrawTriangle(GraphicsDevice& dev, VertexBuffer& vb) { DrawGeometry(dev, vb, 1); }
 
     // Check A/B: BlendState.
     void RunBlendChecks(GraphicsDevice& dev)
@@ -308,6 +344,7 @@ class SdlGpuRenderStateTest : public Game
 
     // Check E: RasterizerState.FillMode (Solid vs WireFrame) on the SAME triangle, whose
     // centroid sits exactly at (0,0) -- render target centre -- regardless of NDC Y orientation.
+    // The buffer holds exactly ONE triangle and is drawn as exactly one primitive; see DrawGeometry.
     void RunFillModeChecks(GraphicsDevice& dev)
     {
         RasterizerState rsSolid;
@@ -318,16 +355,36 @@ class SdlGpuRenderStateTest : public Game
         dev.SetRenderTarget(rtFillSolid_.get());
         dev.Clear(Color::Magenta);
         dev.setRasterizerStateProperty(rsSolid);
-        DrawFullQuad(dev, *fillTriangleGreenVb_);
+        DrawTriangle(dev, *fillTriangleGreenVb_);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         dev.SetRenderTarget(rtFillWire_.get());
         dev.Clear(Color::Magenta);
         dev.setRasterizerStateProperty(rsWire);
-        DrawFullQuad(dev, *fillTriangleGreenVb_);
+        DrawTriangle(dev, *fillTriangleGreenVb_);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         dev.setRasterizerStateProperty(RasterizerState());
+    }
+
+    // REMED-GFX-180: how many pixels of the whole target the draw coloured Green.
+    //
+    // Check E's WireFrame half asserts an ABSENCE -- the triangle's centre must stay background --
+    // and an absence alone is satisfied just as well by a draw that never happened. Its Solid half
+    // cannot cover that gap because it runs under a DIFFERENT RasterizerState, so nothing in the pair
+    // distinguished "the interior was not filled" from "nothing was rasterized". Counting the lit
+    // pixels turns the WireFrame half into a positive measurement without depending on which exact
+    // pixels a driver's line rasterizer picks: the edges must light SOMETHING, and far less than the
+    // filled interior does.
+    static int CountGreenPixels(RenderTarget2D& rt)
+    {
+        std::vector<Color> pixels(static_cast<std::size_t>(kRTSize) * kRTSize, Color(0, 0, 0, 0));
+        const Rectangle whole(0, 0, kRTSize, kRTSize);
+        rt.GetData(0, &whole, pixels.data(), 0, static_cast<int>(pixels.size()));
+        int lit = 0;
+        for (const Color& c : pixels)
+            if (Matches(c, Color::Green)) ++lit;
+        return lit;
     }
 
     // Check F: RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle. Since
@@ -376,6 +433,37 @@ class SdlGpuRenderStateTest : public Game
         RunCullChecks(dev);
         RunFillModeChecks(dev);
         RunScissorCheck(dev);
+    }
+
+    /**
+     * @brief Runs every check group, and guarantees the frame does not end with a target bound.
+     *
+     * REMED-GFX-180: each group binds a render target and unbinds it at its own end, so a group that
+     * throws part-way skips its unbind. Returning from Draw in that state is exactly what
+     * `Game::EndDraw` -> `GraphicsDevice::Present` refuses -- correctly, per FNA -- and with nothing
+     * catching that refusal the process died by SIGABRT, replacing a legible failed check with a
+     * silent abort. Unbinding here keeps a failure a FAIL. It does NOT weaken anything: the exception
+     * is still reported, with its message, by the caller.
+     *
+     * @return the exception message, or an empty string when every group completed.
+     */
+    std::string RunAllGuarded(GraphicsDevice& dev)
+    {
+        lastFailure_.clear();
+        try
+        {
+            RunAll(dev);
+        }
+        catch (const std::exception& e)
+        {
+            lastFailure_ = e.what();
+        }
+        catch (...)
+        {
+            lastFailure_ = "(non-std exception)";
+        }
+        try { dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr)); } catch (...) {}
+        return lastFailure_;
     }
 
 protected:
@@ -455,20 +543,10 @@ protected:
 
         if (frame_ == 1)
         {
-            bool threw = false;
-            const char* stage = "start";
-            try
-            {
-                stage = "RunAll";
-                RunAll(dev);
+            if (RunAllGuarded(dev).empty())
                 Check(true, "all RenderState checks render with no exception");
-            }
-            catch (const std::exception& e)
-            {
-                threw = true;
-                Check(false, (std::string("threw during ") + stage + ": " + e.what()).c_str());
-            }
-            (void)threw;
+            else
+                Check(false, ("threw during RunAll: " + lastFailure_).c_str());
 
             // XNA's Color::Green is (0,128,0), not lime (0,255,0) -- Additive's colour add over a
             // Red background lands on (255,128,0), not (255,255,0).
@@ -515,6 +593,17 @@ protected:
             Check(Matches(gotFillWire, Color::Magenta),
                   ("Check E: FillMode.WireFrame -> triangle centre NOT filled: got=" + ColorStr(gotFillWire)).c_str());
 
+            // The absence above is only half the statement; a draw that never happened satisfies it
+            // too. These two make the WireFrame half positive.
+            const int solidLit = CountGreenPixels(*rtFillSolid_);
+            const int wireLit = CountGreenPixels(*rtFillWire_);
+            Check(wireLit > 0,
+                  ("Check E: FillMode.WireFrame still rasterized the triangle's EDGES (a dropped draw "
+                   "would leave zero): lit=" + std::to_string(wireLit)).c_str());
+            Check(solidLit > 0 && wireLit * 2 < solidLit,
+                  ("Check E: WireFrame lights far fewer pixels than Solid (edges vs interior): wire="
+                   + std::to_string(wireLit) + " solid=" + std::to_string(solidLit)).c_str());
+
             Check(Matches(scissorLeft_, Color::Green),
                   ("Check F: scissored left half -> Green: got=" + ColorStr(scissorLeft_)).c_str());
             Check(Matches(scissorRight_, Color::Blue),
@@ -522,14 +611,24 @@ protected:
         }
         else
         {
-            RunAll(dev);
+            const std::string failure = RunAllGuarded(dev);
+            if (!failure.empty() && laterFrameFailure_.empty())
+                laterFrameFailure_ = "frame " + std::to_string(frame_) + ": " + failure;
         }
 
         if (frame_ == kTotalFrames)
         {
-            Check(true, "120 frames of all RenderState checks render with no exception");
-            std::printf("=== %d/16 PASS ===\n", passCount_);
-            result_ = (passCount_ == 16) ? 0 : 1;
+            // REMED-GFX-180: this used to be an unconditional Check(true). Frames 2..120 ran RunAll
+            // outside any handler, so the only way they could "fail" was by unwinding out of Draw --
+            // which ends the process rather than the check. Now a later frame's exception is a
+            // recorded FAIL naming the frame it happened in.
+            Check(laterFrameFailure_.empty(),
+                  (laterFrameFailure_.empty()
+                       ? std::string("120 frames of all RenderState checks render with no exception")
+                       : "a later frame threw -- " + laterFrameFailure_).c_str());
+            std::printf("=== %d/%d PASS ===\n", passCount_, kTotalChecks);
+            std::fflush(stdout);
+            result_ = (passCount_ == kTotalChecks) ? 0 : 1;
             Exit();
         }
     }
