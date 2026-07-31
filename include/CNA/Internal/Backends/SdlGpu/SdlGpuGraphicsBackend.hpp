@@ -386,6 +386,11 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuGraphicsBackend* owner_ = nullptr;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
+        // REMED-GFX-186: what SDL really allocated on colorTexture, so GetData can refuse a level
+        // with no storage instead of handing SDL a mip index the resource does not own. Mirrors
+        // SdlGpuRenderTargetCubeBackend's own levelCount_, which is why the cube route answered
+        // this question with a deterministic refusal while its 2D sibling segfaulted.
+        int levelCount_ = 1;
         // The actual GPU texture handles + clear-pending state live in this shared_ptr-owned
         // struct, NOT directly here -- see SdlGpuRenderTarget2DState's own doc comment for why.
         std::shared_ptr<SdlGpuRenderTarget2DState> state_;

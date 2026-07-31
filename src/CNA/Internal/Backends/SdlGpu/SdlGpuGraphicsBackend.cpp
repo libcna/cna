@@ -352,6 +352,22 @@ namespace CNA::Internal::Backends::SdlGpu
             return ++next;
         }
 
+        /**
+         * REMED-GFX-186: `CNA_SDLGPU_TRACE_TARGET_READBACK=1` prints, for every render-target
+         * `GetData`, exactly which native resource was selected and what was asked of it.
+         *
+         * The defect this exists for was a SIGSEGV inside `VULKAN_DownloadFromTexture`, reached
+         * with an `SDL_GPUTextureRegion.mip_level` that the chosen texture did not own. Nothing
+         * in the public call, the handles or SDL's own debug mode said so -- the only way to see
+         * it is to print the requested level beside the level count the resource was really
+         * created with, which is what this line does.
+         */
+        [[nodiscard]] bool TargetReadbackTraceEnabled()
+        {
+            static const bool enabled = std::getenv("CNA_SDLGPU_TRACE_TARGET_READBACK") != nullptr;
+            return enabled;
+        }
+
         // REMED-GFX-170: XNA's SamplerState.MaxAnisotropy default. ISpriteBatchBackend carries the
         // filter ordinal and the two address modes and nothing else, so a sprite cannot express a
         // non-default anisotropy on ANY backend.
@@ -6254,9 +6270,22 @@ namespace CNA::Internal::Backends::SdlGpu
         const SDL_GPUSampleCount sampleCount = ClampSampleCount(device, kFormat, multiSampleCount);
         multiSampleCount_ = SampleCountToInt(sampleCount);
         state_->sampleCount = sampleCount;
-        // MSAA and mip generation are mutually exclusive on the same attachment, same rationale
-        // SdlGpuRenderTargetCubeBackend's own MSAA support already established.
-        mipMap_ = mipMap && multiSampleCount_ == 0;
+        // REMED-GFX-186: mipMap and multiSampleCount are INDEPENDENT, and they always were --
+        // they are properties of two DIFFERENT resources. The mip chain lives on the
+        // single-sample colorTexture below; the multisample attachment created further down is a
+        // separate COLOR_TARGET-only texture with num_levels = 1 that never owns a mip level at
+        // all. Suppressing mipMap here left the public LevelCount (which XNA derives from mipMap
+        // alone) describing five levels of a native resource that had one, and GetData then handed
+        // SDL a mip index the texture did not own.
+        //
+        // This is exactly what FNA does: RenderTarget2D forwards mipMap to its Texture2D base
+        // regardless of preferredMultiSampleCount, and FNA3D's own SDL_GPU driver allocates the
+        // full levelCount on the single-sample texture while SDLGPU_GenColorRenderbuffer creates
+        // the multisample attachment with one level. The two jobs are then ordered by
+        // FNA3D_ResolveTarget at unbind -- resolve into level 0, then regenerate the chain from it
+        // -- which is precisely what RenderToTarget already does here (the render pass' own
+        // resolve_texture store action, then SDL_GenerateMipmapsForGPUTexture after the pass ends).
+        mipMap_ = mipMap;
         state_->mipMap = mipMap_;
 
         SDL_GPUTextureCreateInfo colorInfo{};
@@ -6267,6 +6296,8 @@ namespace CNA::Internal::Backends::SdlGpu
         colorInfo.height = static_cast<Uint32>(height);
         colorInfo.layer_count_or_depth = 1;
         colorInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
+        // REMED-GFX-186: what SDL really allocated, so GetData can refuse a level with no storage.
+        levelCount_ = static_cast<int>(colorInfo.num_levels);
         colorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;  // the sampleable texture itself is always single-sample
 
         state_->colorTexture = SDL_CreateGPUTexture(device, &colorInfo);
@@ -6374,6 +6405,20 @@ namespace CNA::Internal::Backends::SdlGpu
         // REMED-GFX-127: nothing was written, so this must not be reported as a completed readback.
         if (w <= 0 || h <= 0)
             return false;
+        // REMED-GFX-186: a level this resource does not own must be refused HERE, before any
+        // native call. SDL_DownloadFromGPUTexture does not validate mip_level even with the
+        // device's debug mode enabled -- its Vulkan driver indexes its own per-subresource array
+        // with the value and dereferences the result, which was measured as a SIGSEGV (READ at
+        // 0x40, the null page) inside VULKAN_DownloadFromTexture, on the caller's own thread. The
+        // sibling routes learned this already: SdlGpuRenderTargetCubeBackend (REMED-GFX-134),
+        // SdlGpuTexture3DBackend and SdlGpuTextureCubeBackend (REMED-GFX-135) all range-check the
+        // level against what SDL really allocated; this one never did, which is why an
+        // out-of-range level was a signal here and a public exception everywhere else.
+        if (level < 0 || level >= levelCount_)
+            throw std::out_of_range(
+                "CNA SDL_GPU: RenderTarget2D::GetData: mip level " + std::to_string(level) +
+                " does not exist (this target has " + std::to_string(levelCount_) +
+                (levelCount_ == 1 ? " level)" : " levels)"));
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
         if (static_cast<Uint32>(dataLength) < sizeBytes)
             throw std::out_of_range("CNA SDL_GPU: RenderTarget2D::GetData: dataLength too small for the requested region");
@@ -6398,7 +6443,9 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         // Always downloads from the single-sample, sampleable colorTexture -- already
-        // resolved-into by the time any frame's pass has run, even when this target is MSAA.
+        // resolved-into by the time any frame's pass has run, even when this target is MSAA, and
+        // (REMED-GFX-186) the only resource that owns this target's mip chain at all. The
+        // multisample attachment is created with num_levels = 1 and is never a legal source here.
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
         SDL_GPUTextureRegion region{};
         region.texture = state_->colorTexture;
@@ -6412,6 +6459,26 @@ namespace CNA::Internal::Backends::SdlGpu
         dest.transfer_buffer = transferBuffer;
         dest.pixels_per_row = static_cast<Uint32>(w);
         dest.rows_per_layer = static_cast<Uint32>(h);
+        if (TargetReadbackTraceEnabled())
+        {
+            std::fprintf(stderr,
+                         "[cna-sdlgpu-target-readback] target=%dx%d appliedSamples=%d mipMap=%d "
+                         "nativeLevels=%d requestedLevel=%d levelDims=%dx%d msaaTex=%p "
+                         "resolvedTex=%p source=%s region=(%u,%u %ux%u) mip_level=%u layer=%u d=%u "
+                         "pixels_per_row=%u rows_per_layer=%u transferBytes=%u\n",
+                         state_->width, state_->height, multiSampleCount_, mipMap_ ? 1 : 0,
+                         levelCount_, level,
+                         std::max(1, state_->width >> level), std::max(1, state_->height >> level),
+                         static_cast<void*>(state_->msaaTexture),
+                         static_cast<void*>(state_->colorTexture),
+                         region.texture == state_->colorTexture ? "resolved" : "OTHER",
+                         region.x, region.y, region.w, region.h,
+                         static_cast<unsigned>(region.mip_level),
+                         static_cast<unsigned>(region.layer), static_cast<unsigned>(region.d),
+                         dest.pixels_per_row, dest.rows_per_layer,
+                         static_cast<unsigned>(sizeBytes));
+            std::fflush(stderr);
+        }
         SDL_DownloadFromGPUTexture(copyPass, &region, &dest);
         SDL_EndGPUCopyPass(copyPass);
 
