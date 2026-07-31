@@ -337,4 +337,26 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "SOKOL")
     # supplies the window and, via SDL_GL_CreateContext, the GL context sokol_gfx renders into
     # (design decision 1: CNA keeps owning the window and the game loop, so sokol_app is not used).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_sokol_headers)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
+    # cmake/ThirdPartyLLGL.cmake configured LLGL as a STATIC library, so the renderer modules
+    # (LLGL_OpenGL/LLGL_Vulkan/LLGL_Null) are separate archives that LLGL's static module registry
+    # resolves by name at runtime -- they are not transitive dependencies of the core LLGL target
+    # and must all reach the final link. CNA_LLGL_LIBRARIES is that complete list, published by
+    # cna_configure_llgl(). PUBLIC (not PRIVATE) because every test/example executable links the
+    # backend target directly and needs the same archives on its own link line.
+    #
+    # The core archive and its modules genuinely reference each other -- LLGL's static module
+    # registry calls into LLGL_OpenGL/LLGL_Vulkan/LLGL_Null, and those call back into the core --
+    # and CMake orders the modules ahead of the core, so a single left-to-right pass leaves the
+    # registry's calls unresolved (found empirically: "undefined reference to
+    # LLGL::ModuleOpenGL::AllocRenderSystem" from StaticModuleInterface.cpp). A link group makes
+    # the linker rescan the set until it converges -- the same mechanism the per-backend test
+    # macros already use for the CNA/backend cycle.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+        target_link_libraries(${BACKEND_TARGET} PUBLIC
+            -Wl,--start-group ${CNA_LLGL_LIBRARIES} -Wl,--end-group)
+    else()
+        target_link_libraries(${BACKEND_TARGET} PUBLIC ${CNA_LLGL_LIBRARIES})
+    endif()
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 endif()

@@ -27,6 +27,13 @@
 #include "CNA/Internal/Backends/Diligent/DiligentDeviceSelection.hpp"
 #endif
 
+// plan_llgl.md: only the renderer-selection header, deliberately not the backend header -- the
+// window flags below need the runtime module choice, and this header is free of LLGL (and
+// therefore of Xlib) includes.
+#ifdef CNA_BACKEND_LLGL
+#include "CNA/Internal/Backends/Llgl/LlglRendererSelection.hpp"
+#endif
+
 // plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
 // ceiling, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
 // convention exactly. Distinct from MAX_RENDERTARGET_BINDINGS below (XNA's own general 4-target
@@ -212,6 +219,20 @@ namespace Microsoft::Xna::Framework::Graphics
 
             default:
                 break;
+            }
+#endif
+
+#ifdef CNA_BACKEND_LLGL
+            // LLGL picks its renderer module at runtime, so the window flag has to follow that
+            // decision rather than the compile-time backend choice. Only the OpenGL module needs
+            // one: it creates a GL context on this very window, which therefore has to have been
+            // created with a visual that can carry one. LLGL's Vulkan module builds its surface
+            // from the native window handle alone and needs no SDL flag at all -- which is just as
+            // well, since SDL refuses to create a window that is both.
+            if (CNA::Internal::Backends::Llgl::Detail::RendererModuleNeedsOpenGLWindow(
+                    CNA::Internal::Backends::Llgl::Detail::ResolveRendererModule()))
+            {
+                windowFlags |= SDL_WINDOW_OPENGL;
             }
 #endif
 

@@ -6,7 +6,10 @@ Task 451 (Phase 51), extended 2026-07-14 with a `D3D11` column (`../plan_dx.md`,
 (`../plan_dx9.md`, `D9-130`) 2026-07-15, once each backend's feature set was broad enough for a
 meaningful row-by-row comparison. The experimental WebGPU backend is intentionally tracked
 separately in [`webgpu-backend.md`](webgpu-backend.md) and `../plan_webgpu.md` until its feature
-surface is broad enough for meaningful parity columns.
+surface is broad enough for meaningful parity columns. The experimental LLGL backend
+([`llgl-backend.md`](llgl-backend.md), `../plan_llgl.md`) is tracked separately for the same
+reason — its verified surface is a 2D baseline on one of its two renderer modules, which would be
+almost entirely ⬜ as a column here.
 
 **A `D3D11`/`D3D12` cell means "verified through Wine+DXVK/vkd3d-proton on this dev machine's real
 GPU," not "verified on real Windows hardware"** — see `docs/d3d11-backend.md`/`docs/d3d12-backend.md`'s

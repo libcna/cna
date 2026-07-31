@@ -79,6 +79,18 @@ namespace CNA::Examples
         // pass a non-zero tolerance only for scenarios that are known to legitimately vary.
         // Prints a "[PASS]"/"[FAIL]" line naming label, and marks the overall result as failed
         // if this check does not match. Returns true if this specific check passed.
+        // Records a non-pixel precondition -- e.g. "the texture this test draws was actually
+        // created" -- in the same PASS/FAIL stream as the pixel checks, so a test whose setup
+        // failed reports that instead of silently checking pixels no draw ever produced.
+        // Returns the condition, so a caller can bail out of RunTest() when it is false.
+        bool ExpectTrue(const char* label, bool condition)
+        {
+            std::printf("[%s] %s\n", condition ? "PASS" : "FAIL", label);
+            if (!condition)
+                result_ = 1;
+            return condition;
+        }
+
         bool ExpectPixel(const char* label,
                           const Microsoft::Xna::Framework::Rectangle& region,
                           const Microsoft::Xna::Framework::Color& expectedColor,

@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "System/NotSupportedException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -163,7 +164,11 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8) || defined(CNA_BACKEND_GDI)
+#if defined(CNA_BACKEND_LLGL)
+    // plan_llgl.md LLGL-26: no render targets at all yet, so this fails before the backend's
+    // multi-target limit. This branch is removed by the historical LLGL-26 implementation.
+    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+#elif defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8) || defined(CNA_BACKEND_GDI)
     // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
@@ -213,9 +218,9 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_BACKEND_STUB)
-    // Same Stub contract as the four-target case above: no render-target support of any kind, so
-    // even a single binding is refused deterministically rather than silently accepted.
+#if defined(CNA_BACKEND_STUB) || defined(CNA_BACKEND_LLGL)
+    // Stub and the initial LLGL baseline support no render targets, so even a single binding is
+    // refused deterministically. The LLGL arm is removed by the historical LLGL-26 implementation.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
