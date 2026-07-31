@@ -1818,6 +1818,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_MsaaFirstReadback COMMAND cna_test_easygl_msaa_first_readback
             TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-186 cross-backend control: the same PUBLIC generated-mip readback contract on this
+        # backend. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
+        # identical fixture here is what makes that claim falsifiable rather than asserted.
+        cna_easygl_test(cna_test_easygl_msaa_mip_readback
+            examples/rendertarget_msaa_mip_readback_test.cpp)
+        cna_register_backend_test(NAME EasyGL_MsaaMipReadback COMMAND cna_test_easygl_msaa_mip_readback
+            TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-165 cross-backend control: EasyGL already honoured the authoritative-dimension
         # GetBackBufferData contract; this run establishes that the shared fix left it byte-unchanged.
         cna_easygl_test(cna_test_easygl_backbuffer_readback_dimension

@@ -494,6 +494,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
         examples/rendertarget_msaa_first_readback_test.cpp)
     cna_register_backend_test(NAME SdlGpu_MsaaFirstReadback COMMAND cna_test_sdlgpu_msaa_first_readback
         TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-186: reading a NONZERO MIP LEVEL of a mipmapped MULTISAMPLED RenderTarget2D.
+    # Level 0 of the same target read back exactly while GetData(1, ...) died by SIGSEGV, so this
+    # is the mip-level route, not the resolve (REMED-GFX-154) and not the transfer window
+    # (REMED-GFX-149). Every leg runs in its own process because that signal is uncatchable.
+    cna_sdlgpu_test(cna_test_sdlgpu_msaa_mip_readback
+        examples/rendertarget_msaa_mip_readback_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_MsaaMipReadback COMMAND cna_test_sdlgpu_msaa_mip_readback
+        TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with

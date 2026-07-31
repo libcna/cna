@@ -1355,6 +1355,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             examples/rendertarget_msaa_first_readback_test.cpp)
         cna_register_backend_test(NAME Vulkan_MsaaFirstReadback COMMAND cna_test_vulkan_msaa_first_readback
             TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-186 cross-backend control: the same PUBLIC generated-mip readback contract on this
+        # backend. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
+        # identical fixture here is what makes that claim falsifiable rather than asserted.
+        cna_vulkan_test(cna_test_vulkan_msaa_mip_readback
+            examples/rendertarget_msaa_mip_readback_test.cpp)
+        cna_register_backend_test(NAME Vulkan_MsaaMipReadback COMMAND cna_test_vulkan_msaa_mip_readback
+            TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # REMED-GFX-165 cross-backend control: Vulkan already honoured the authoritative-dimension
         # GetBackBufferData contract (its swapchain extent equals the backbuffer); this run establishes
         # that the shared fix left it byte-unchanged and that only WebGPU/SDL_GPU production changed.

@@ -223,6 +223,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
         examples/rendertarget_msaa_first_readback_test.cpp)
     cna_register_backend_test(NAME Headless_MsaaFirstReadback COMMAND cna_test_headless_msaa_first_readback
         TIMEOUT 900 LABELS "Headless")
+
+    # REMED-GFX-186 cross-backend control: the same PUBLIC generated-mip readback contract on this
+    # backend. The SIGSEGV was SDL_GPU-only and only SDL_GPU production changed; running the
+    # identical fixture here is what makes that claim falsifiable rather than asserted.
+    cna_headless_test(cna_test_headless_msaa_mip_readback
+        examples/rendertarget_msaa_mip_readback_test.cpp)
+    cna_register_backend_test(NAME Headless_MsaaMipReadback COMMAND cna_test_headless_msaa_mip_readback
+        TIMEOUT 1200 LABELS "Headless")
     # REMED-GFX-165 cross-backend control: Headless does not rasterize, so the pixel oracle is a
     # declared boundary; the run still exercises the shared dimension/rectangle-validation path.
     cna_headless_test(cna_test_headless_backbuffer_readback_dimension
