@@ -200,6 +200,12 @@ include(cmake/Tests/CanvasTests.cmake)
 # (scripts/run-htmldom-browser-test.sh, headless Chromium via Playwright).
 include(cmake/Tests/HtmlDomTests.cmake)
 
+# plan_html_dom.md Phase D10: cross-backend sprite benchmark, built for whichever Emscripten
+# backend is currently selected (not tied to one CNA_GRAPHICS_BACKEND value) -- see the file's
+# own header comment for why a HTML_DOM-vs-CANVAS-vs-EASYGL comparison needs three separate
+# configures rather than one.
+include(cmake/Tests/CrossBackendBenchmark.cmake)
+
 # plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_d3d11_test/
 # cna_d3d12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
 # new scripts/run-wine-dxvk9.sh (D9-5), not the shared run-wine-dxvk.sh (cold-start Sec.4).

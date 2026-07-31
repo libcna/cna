@@ -157,8 +157,24 @@ frame (a new cached variant per distinct colour, LRU-capped at 256); render-targ
 layers cost more memory than a single canvas would.
 
 Rule of thumb: this backend rewards static sprite sheets and moving sprites, and punishes dynamic
-pixel data. Not independently benchmarked against `CANVAS`/`EASYGL` in the same harness (out of
-scope so far) — the number above is an absolute figure on this machine, not a comparative claim.
+pixel data.
+
+**Comparative benchmark** (`examples/graphics_backend_benchmark.cpp`, HTMLDOM-92): the identical
+500-sprite/frame workload above, built and run under all three Emscripten-capable backends from
+three separate `emcmake` configures and measured in the same headless-Chromium harness:
+
+| Backend | ms/frame | fps-equivalent |
+|---|---|---|
+| `HTML_DOM` | 3.7 – 4.3 | ~233 – 270 |
+| `EASYGL` (WebGL2) | 4.66 | ~215 |
+| `CANVAS` (Canvas2D) | 27.6 – 29.1 | ~34 – 36 |
+
+`HTML_DOM` is on par with (in this run, marginally faster than) `EASYGL` and roughly 6–7× faster
+than `CANVAS` for this specific workload. Honest caveat: this container has no real GPU — `EASYGL`'s
+number is software-rasterized (SwiftShader via ANGLE); a real hardware WebGL2 context would very
+likely widen `EASYGL`'s advantage over both 2D backends. Read this as "DOM compositing beats
+Canvas2D redraw by a wide margin, and is competitive with software-rasterized WebGL2," not as
+evidence that `HTML_DOM` outperforms real hardware-accelerated WebGL2.
 
 ---
 
