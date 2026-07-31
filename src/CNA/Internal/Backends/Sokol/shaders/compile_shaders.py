@@ -33,7 +33,7 @@ HERE = Path(__file__).resolve().parent
 OUTPUT = HERE / "sokol_shaders.hpp"
 
 # One entry per @program-bearing source file in this directory.
-SOURCES = ["sprite.glsl"]
+SOURCES = ["sprite.glsl", "colored3d.glsl"]
 
 # glsl410 = SOKOL_GLCORE, glsl300es = SOKOL_GLES3, hlsl5 = SOKOL_D3D11,
 # metal_macos = SOKOL_METAL, wgsl = SOKOL_WGPU. spirv_vk (SOKOL_VULKAN) is deliberately
@@ -71,6 +71,11 @@ def generate(shdc: str) -> str:
             if index > 0:
                 # Only the first chunk keeps #pragma once; the rest are appended verbatim.
                 text = text.replace("#pragma once\n", "", 1)
+            # sokol-shdc's output has no trailing newline, so without this the next chunk's
+            # leading `/*` lands inside the previous one's final `//` comment and silently
+            # swallows a whole declaration block.
+            if not text.endswith("\n"):
+                text += "\n"
             chunks.append(text)
     return "".join(chunks)
 

@@ -152,6 +152,78 @@ namespace CNA::Internal::Backends::Sokol
             }
         }
 
+        sg_primitive_type ToPrimitiveType(PrimitiveType primitive)
+        {
+            switch (primitive)
+            {
+                case PrimitiveType::TriangleList:  return SG_PRIMITIVETYPE_TRIANGLES;
+                case PrimitiveType::TriangleStrip: return SG_PRIMITIVETYPE_TRIANGLE_STRIP;
+                case PrimitiveType::LineList:      return SG_PRIMITIVETYPE_LINES;
+                case PrimitiveType::LineStrip:     return SG_PRIMITIVETYPE_LINE_STRIP;
+                case PrimitiveType::PointListEXT:  return SG_PRIMITIVETYPE_POINTS;
+            }
+            return SG_PRIMITIVETYPE_TRIANGLES;
+        }
+
+        /// XNA counts primitives; every graphics API below counts the vertices/indices they use.
+        int ElementCountForPrimitives(PrimitiveType primitive, int primitiveCount)
+        {
+            switch (primitive)
+            {
+                case PrimitiveType::TriangleList:  return primitiveCount * 3;
+                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+                case PrimitiveType::LineList:      return primitiveCount * 2;
+                case PrimitiveType::LineStrip:     return primitiveCount + 1;
+                case PrimitiveType::PointListEXT:  return primitiveCount;
+            }
+            return primitiveCount * 3;
+        }
+
+        /// Maps an XNA CullMode onto sokol's, given that the pipeline below pins
+        /// face_winding to SG_FACEWINDING_CW.
+        ///
+        /// XNA rasterizes with a top-left origin and Y growing downwards, and CNA's projection
+        /// matrices preserve that, so a triangle wound clockwise on screen in XNA is also wound
+        /// clockwise in clip space here -- which is exactly what SG_FACEWINDING_CW calls the front
+        /// face. XNA's CullCounterClockwiseFace therefore removes sokol's BACK faces.
+        ///
+        /// Getting this backwards is invisible in a smoke test and catastrophic in a real scene:
+        /// the first version of this function had the two swapped, and every triangle in the 3D
+        /// test rendered as background until Sokol_3D's own culling check caught it.
+        sg_cull_mode ToCullMode(int cullMode)
+        {
+            switch (cullMode)
+            {
+                case 1:  return SG_CULLMODE_FRONT;  // CullMode::CullClockwiseFace
+                case 2:  return SG_CULLMODE_BACK;   // CullMode::CullCounterClockwiseFace
+                case 0:                             // CullMode::None
+                default: return SG_CULLMODE_NONE;
+            }
+        }
+
+        /// Translates a VertexElementFormat ordinal. Returns SG_VERTEXFORMAT_INVALID for the
+        /// formats sokol_gfx has no equivalent for, so the caller refuses rather than substituting
+        /// a differently-sized attribute and silently misreading the whole vertex.
+        sg_vertex_format ToVertexFormat(Microsoft::Xna::Framework::Graphics::VertexElementFormat format)
+        {
+            switch (format)
+            {
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::Single:           return SG_VERTEXFORMAT_FLOAT;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector2:          return SG_VERTEXFORMAT_FLOAT2;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector3:          return SG_VERTEXFORMAT_FLOAT3;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4:          return SG_VERTEXFORMAT_FLOAT4;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::Color:            return SG_VERTEXFORMAT_UBYTE4N;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::Byte4:            return SG_VERTEXFORMAT_UBYTE4;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::Short2:           return SG_VERTEXFORMAT_SHORT2;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::Short4:           return SG_VERTEXFORMAT_SHORT4;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::NormalizedShort2: return SG_VERTEXFORMAT_SHORT2N;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::NormalizedShort4: return SG_VERTEXFORMAT_SHORT4N;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::HalfVector2:      return SG_VERTEXFORMAT_HALF2;
+                case Microsoft::Xna::Framework::Graphics::VertexElementFormat::HalfVector4:      return SG_VERTEXFORMAT_HALF4;
+            }
+            return SG_VERTEXFORMAT_INVALID;
+        }
+
         sg_buffer MakeBufferHandle(std::uint32_t id) { sg_buffer handle; handle.id = id; return handle; }
         sg_image MakeImageHandle(std::uint32_t id) { sg_image handle; handle.id = id; return handle; }
         sg_view MakeViewHandle(std::uint32_t id) { sg_view handle; handle.id = id; return handle; }
@@ -370,10 +442,8 @@ namespace CNA::Internal::Backends::Sokol
 
     void SokolVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
-        // Recorded, not acted on. The 3D draw path that would consume it is not implemented on
-        // this backend yet (plan_sokol.md Phase SOKOL-5); storing it here means the layout is
-        // already available when that phase lands, and makes the decision explicit rather than
-        // an accidental discard.
+        // Consumed by DrawColored3D, which builds its pipeline's vertex layout from the real
+        // element offsets rather than inferring one from the byte stride.
         declaration_ = vertexDeclaration;
         hasDeclaration_ = true;
     }
@@ -625,6 +695,57 @@ namespace CNA::Internal::Backends::Sokol
         return hash;
     }
 
+    bool SokolGraphicsBackend::Pipeline3DKey::operator==(const Pipeline3DKey& other) const
+    {
+        return colorSrcBlend == other.colorSrcBlend
+            && alphaSrcBlend == other.alphaSrcBlend
+            && colorDstBlend == other.colorDstBlend
+            && alphaDstBlend == other.alphaDstBlend
+            && colorBlendFunc == other.colorBlendFunc
+            && alphaBlendFunc == other.alphaBlendFunc
+            && colorWriteChannels == other.colorWriteChannels
+            && blendEnabled == other.blendEnabled
+            && depthTestEnabled == other.depthTestEnabled
+            && depthWriteEnabled == other.depthWriteEnabled
+            && depthFunc == other.depthFunc
+            && cullMode == other.cullMode
+            && primitiveType == other.primitiveType
+            && indexType == other.indexType
+            && stride == other.stride
+            && positionOffset == other.positionOffset
+            && positionFormat == other.positionFormat
+            && colorOffset == other.colorOffset
+            && colorFormat == other.colorFormat;
+    }
+
+    std::size_t SokolGraphicsBackend::Pipeline3DKeyHash::operator()(const Pipeline3DKey& key) const
+    {
+        std::size_t hash = 1469598103934665603ull;
+        auto mix = [&hash](std::size_t value) {
+            hash ^= value + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2);
+        };
+        mix(static_cast<std::size_t>(key.colorSrcBlend));
+        mix(static_cast<std::size_t>(key.alphaSrcBlend));
+        mix(static_cast<std::size_t>(key.colorDstBlend));
+        mix(static_cast<std::size_t>(key.alphaDstBlend));
+        mix(static_cast<std::size_t>(key.colorBlendFunc));
+        mix(static_cast<std::size_t>(key.alphaBlendFunc));
+        mix(static_cast<std::size_t>(key.colorWriteChannels));
+        mix(static_cast<std::size_t>(key.blendEnabled));
+        mix(static_cast<std::size_t>(key.depthTestEnabled));
+        mix(static_cast<std::size_t>(key.depthWriteEnabled));
+        mix(static_cast<std::size_t>(key.depthFunc));
+        mix(static_cast<std::size_t>(key.cullMode));
+        mix(static_cast<std::size_t>(key.primitiveType));
+        mix(static_cast<std::size_t>(key.indexType));
+        mix(static_cast<std::size_t>(key.stride));
+        mix(static_cast<std::size_t>(key.positionOffset));
+        mix(static_cast<std::size_t>(key.positionFormat));
+        mix(static_cast<std::size_t>(key.colorOffset + 1));
+        mix(static_cast<std::size_t>(key.colorFormat));
+        return hash;
+    }
+
     bool SokolGraphicsBackend::SamplerKey::operator==(const SamplerKey& other) const
     {
         return filter == other.filter && addressU == other.addressU
@@ -800,6 +921,10 @@ namespace CNA::Internal::Backends::Sokol
         spriteIndexBufferId_ = sg_make_buffer(&indexDesc).id;
         if (sg_query_buffer_state(MakeBufferHandle(spriteIndexBufferId_)) != SG_RESOURCESTATE_VALID)
             throw std::runtime_error("Sokol backend: sprite index buffer creation failed");
+
+        colored3dShaderId_ = sg_make_shader(cna_colored3d_shader_desc(sg_query_backend())).id;
+        if (sg_query_shader_state(MakeShaderHandle(colored3dShaderId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: colored-3D shader creation failed");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1166,11 +1291,16 @@ namespace CNA::Internal::Backends::Sokol
         scissorEnabled_ = scissorTestEnable;
         if (!scissorTestEnable && passActive_) ApplyPendingViewportAndScissor();
 
-        // cullMode/fillMode/depthBias only affect the 3D pipeline this backend does not build yet;
-        // SpriteBatch always draws unculled, solid, unbiased quads. Accepted and recorded as a gap
-        // in docs/sokol-backend.md rather than throwing, since GraphicsDevice applies a
-        // RasterizerState on every frame regardless of whether anything 3D is drawn.
-        (void)cullMode; (void)fillMode; (void)depthBias; (void)slopeScaleDepthBias;
+        // cullMode reaches the colored-3D pipeline key (SOKOL-20); the sprite pipeline is always
+        // unculled, matching what XNA's own SpriteBatch does.
+        cullMode_ = cullMode;
+        fillMode_ = fillMode;
+
+        // fillMode/depthBias are still accepted and ignored: sokol_gfx exposes no polygon fill
+        // mode at all (WireFrame is a documented gap), and depth bias belongs with the lit 3D
+        // pipeline that has not landed. Recorded in docs/sokol-backend.md rather than throwing,
+        // since GraphicsDevice applies a RasterizerState every frame regardless of what is drawn.
+        (void)depthBias; (void)slopeScaleDepthBias;
     }
 
     void SokolGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
@@ -1448,6 +1578,190 @@ namespace CNA::Internal::Backends::Sokol
 #endif
     }
 
+    std::uint32_t SokolGraphicsBackend::GetColored3DPipeline(const Pipeline3DKey& key)
+    {
+        if (const auto found = pipeline3dCache_.find(key); found != pipeline3dCache_.end())
+            return found->second;
+
+        sg_pipeline_desc desc = {};
+        desc.shader = MakeShaderHandle(colored3dShaderId_);
+        desc.layout.buffers[0].stride = key.stride;
+        desc.layout.attrs[ATTR_cna_colored3d_position].format =
+            static_cast<sg_vertex_format>(key.positionFormat);
+        desc.layout.attrs[ATTR_cna_colored3d_position].offset = key.positionOffset;
+        if (key.colorOffset >= 0)
+        {
+            desc.layout.attrs[ATTR_cna_colored3d_color0].format =
+                static_cast<sg_vertex_format>(key.colorFormat);
+            desc.layout.attrs[ATTR_cna_colored3d_color0].offset = key.colorOffset;
+        }
+        // When the declaration carries no Color element the slot is left INVALID, which sokol_gfx
+        // permits because the remaining attribute slots stay continuous. The shader still reads
+        // color0, but flags.x is 0 for that case, so the unbound attribute is multiplied out.
+
+        desc.index_type = static_cast<sg_index_type>(key.indexType);
+        desc.primitive_type = static_cast<sg_primitive_type>(key.primitiveType);
+        desc.cull_mode = ToCullMode(key.cullMode);
+        // Pinned rather than left to sokol's default, so ToCullMode's mapping is anchored to a
+        // stated convention instead of to whatever upstream happens to default to.
+        desc.face_winding = SG_FACEWINDING_CW;
+        desc.sample_count = sampleCount_;
+        desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+        desc.depth.compare = key.depthTestEnabled ? ToCompareFunc(key.depthFunc) : SG_COMPAREFUNC_ALWAYS;
+        desc.depth.write_enabled = key.depthTestEnabled && key.depthWriteEnabled;
+        desc.color_count = 1;
+        desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+        desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
+        desc.colors[0].blend.enabled = key.blendEnabled;
+        desc.colors[0].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
+        desc.colors[0].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
+        desc.colors[0].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
+        desc.colors[0].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
+        desc.colors[0].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
+        desc.colors[0].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        desc.blend_color.r = blendFactor_[0];
+        desc.blend_color.g = blendFactor_[1];
+        desc.blend_color.b = blendFactor_[2];
+        desc.blend_color.a = blendFactor_[3];
+        desc.label = "cna_colored3d_pipeline";
+
+        const std::uint32_t pipelineId = sg_make_pipeline(&desc).id;
+        if (sg_query_pipeline_state(MakePipelineHandle(pipelineId)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: colored-3D pipeline creation failed");
+
+        pipeline3dCache_.emplace(key, pipelineId);
+        return pipelineId;
+    }
+
+    void SokolGraphicsBackend::DrawColored3D(const IVertexBufferBackend& vbIn,
+                                             const IIndexBufferBackend* ibIn,
+                                             const Matrix& world,
+                                             const Matrix& view,
+                                             const Matrix& projection,
+                                             PrimitiveType primitive,
+                                             int primitiveCount,
+                                             const GpuDrawParams& params)
+    {
+        if (primitiveCount <= 0) return;
+
+        // Everything this backend cannot shade yet is refused here rather than rendered as an
+        // untextured, unlit approximation that would look plausible and be wrong.
+        if (params.textureEnabled || params.lightingEnabled || params.dualTexture
+            || params.envMapping || params.skinned || params.pbr)
+        {
+            NotYetImplemented(kBackendName,
+                "textured/lit/dual-texture/environment-mapped/skinned/PBR 3D draws "
+                "(only vertex-coloured geometry is implemented)");
+        }
+        if (params.customEffectBackend != nullptr)
+            NotYetImplemented(kBackendName, "custom ShaderEffect draws");
+        if (params.instanceCount > 1)
+            NotYetImplemented(kBackendName, "instanced draws");
+
+        const auto& vb = static_cast<const SokolVertexBufferBackend&>(vbIn);
+        if (vb.GetBufferIdEXT() == 0 || vb.GetVertexCount() <= 0) return;
+
+        const VertexDeclaration* declaration = vb.GetDeclarationEXT();
+        if (declaration == nullptr)
+        {
+            NotYetImplemented(kBackendName,
+                "a 3D draw from a VertexBuffer with no VertexDeclaration");
+        }
+
+        // Resolved before the pipeline key is built: the index width is part of the pipeline.
+        const SokolIndexBufferBackend* ib = nullptr;
+        if (ibIn != nullptr)
+        {
+            ib = static_cast<const SokolIndexBufferBackend*>(ibIn);
+            if (ib->GetBufferIdEXT() == 0 || ib->GetIndexCount() <= 0) return;
+        }
+
+        Pipeline3DKey key{};
+        key.colorSrcBlend = blendColorSrc_;
+        key.alphaSrcBlend = blendAlphaSrc_;
+        key.colorDstBlend = blendColorDst_;
+        key.alphaDstBlend = blendAlphaDst_;
+        key.colorBlendFunc = blendColorFunc_;
+        key.alphaBlendFunc = blendAlphaFunc_;
+        key.colorWriteChannels = colorWriteChannels_;
+        key.blendEnabled = blendEnabled_;
+        key.depthTestEnabled = depthTestEnabled_;
+        key.depthWriteEnabled = depthWriteEnabled_;
+        key.depthFunc = depthFunc_;
+        key.cullMode = cullMode_;
+        key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
+        key.indexType = static_cast<int>(
+            ib == nullptr ? SG_INDEXTYPE_NONE
+                          : (ib->IsThirtyTwoBit() ? SG_INDEXTYPE_UINT32 : SG_INDEXTYPE_UINT16));
+        key.stride = declaration->getVertexStrideProperty();
+        key.positionOffset = -1;
+        key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
+        key.colorOffset = -1;
+        key.colorFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
+
+        for (const VertexElement& element : declaration->GetVertexElements())
+        {
+            const sg_vertex_format format = ToVertexFormat(element.getVertexElementFormatProperty());
+            if (format == SG_VERTEXFORMAT_INVALID) continue;
+            // Only usage index 0 participates: the colored-3D program declares exactly one
+            // position and one colour input, so a second set would have nowhere to go.
+            if (element.getUsageIndexProperty() != 0) continue;
+
+            if (element.getVertexElementUsageProperty() == Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position
+                && key.positionOffset < 0)
+            {
+                key.positionOffset = element.getOffsetProperty();
+                key.positionFormat = static_cast<int>(format);
+            }
+            else if (element.getVertexElementUsageProperty() == Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color
+                     && key.colorOffset < 0)
+            {
+                key.colorOffset = element.getOffsetProperty();
+                key.colorFormat = static_cast<int>(format);
+            }
+        }
+
+        if (key.positionOffset < 0 || key.stride <= 0)
+        {
+            NotYetImplemented(kBackendName,
+                "a 3D draw from a VertexDeclaration with no usable Position element");
+        }
+
+        BeginPassIfNeeded();
+
+        const Matrix worldViewProjection = world * view * projection;
+        cna_colored3d_vs_params_t uniforms{};
+        worldViewProjection.ToColumnMajor(uniforms.mvp);
+        uniforms.diffuse[0] = params.diffuseColor[0];
+        uniforms.diffuse[1] = params.diffuseColor[1];
+        uniforms.diffuse[2] = params.diffuseColor[2];
+        uniforms.diffuse[3] = params.diffuseColor[3];
+        // A declaration without a Color element cannot supply vertex colours no matter what the
+        // effect asked for, so the flag is the conjunction of "wanted" and "available".
+        uniforms.flags[0] = (params.vertexColorEnabled && key.colorOffset >= 0) ? 1.0f : 0.0f;
+
+        sg_apply_pipeline(MakePipelineHandle(GetColored3DPipeline(key)));
+
+        sg_bindings bindings = {};
+        bindings.vertex_buffers[0] = MakeBufferHandle(vb.GetBufferIdEXT());
+        // baseVertex is folded into the buffer offset rather than passed to sg_draw_ex, so the
+        // same code path serves both the indexed and non-indexed shapes.
+        bindings.vertex_buffer_offsets[0] = params.baseVertex * key.stride;
+
+        if (ib != nullptr)
+            bindings.index_buffer = MakeBufferHandle(ib->GetBufferIdEXT());
+        sg_apply_bindings(&bindings);
+
+        sg_range uniformRange{};
+        uniformRange.ptr = &uniforms;
+        uniformRange.size = sizeof(uniforms);
+        sg_apply_uniforms(UB_cna_colored3d_vs_params, &uniformRange);
+
+        const int elementCount = ElementCountForPrimitives(primitive, primitiveCount);
+        const int baseElement = (ib != nullptr) ? params.startIndex : params.vertexStart;
+        sg_draw(baseElement, elementCount, 1);
+    }
+
     void SokolGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                                      const Matrix& world,
                                                      const Matrix& view,
@@ -1455,8 +1769,11 @@ namespace CNA::Internal::Backends::Sokol
                                                      PrimitiveType primitive,
                                                      int primitiveCount)
     {
-        (void)vb; (void)world; (void)view; (void)projection; (void)primitive; (void)primitiveCount;
-        NotYetImplemented(kBackendName, "the 3D draw path (DrawColoredPrimitives)");
+        // This entry point carries no effect state, so it means "render the raw vertex colours":
+        // a white diffuse and vertex colouring on, matching what the other backends do here.
+        GpuDrawParams params{};
+        params.vertexColorEnabled = true;
+        DrawColored3D(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
     }
 
     void SokolGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
@@ -1467,9 +1784,32 @@ namespace CNA::Internal::Backends::Sokol
                                                             PrimitiveType primitive,
                                                             int primitiveCount)
     {
-        (void)vb; (void)ib; (void)world; (void)view; (void)projection;
-        (void)primitive; (void)primitiveCount;
-        NotYetImplemented(kBackendName, "the 3D draw path (DrawIndexedColoredPrimitives)");
+        GpuDrawParams params{};
+        params.vertexColorEnabled = true;
+        DrawColored3D(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+    }
+
+    void SokolGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                                                const Matrix& world,
+                                                const Matrix& view,
+                                                const Matrix& projection,
+                                                PrimitiveType primitive,
+                                                int primitiveCount,
+                                                const GpuDrawParams& params)
+    {
+        DrawColored3D(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+    }
+
+    void SokolGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb,
+                                                       const IIndexBufferBackend& ib,
+                                                       const Matrix& world,
+                                                       const Matrix& view,
+                                                       const Matrix& projection,
+                                                       PrimitiveType primitive,
+                                                       int primitiveCount,
+                                                       const GpuDrawParams& params)
+    {
+        DrawColored3D(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
     bool SokolGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
@@ -1488,9 +1828,13 @@ namespace CNA::Internal::Backends::Sokol
             // TextureFilter::Anisotropic is selected.
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return true;
-            // The 2D baseline's boundary. Each of these needs a phase that is not implemented yet
-            // -- see plan_sokol.md; every one of them fails loudly rather than silently no-opping.
+            // Real as of SOKOL-20: vertex/index buffers, depth-tested draws and the colored-3D
+            // pipeline all exist. Texturing and lighting do not, and those draws throw -- but this
+            // capability asks whether the 3D pipeline exists at all, and it now does.
             case CNA::GraphicsCapability::ThreeD:
+                return true;
+            // The remaining boundary. Each needs a phase that is not implemented yet -- see
+            // plan_sokol.md; every one fails loudly rather than silently no-opping.
             case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::WireFrame:
             case CNA::GraphicsCapability::OcclusionQuery:

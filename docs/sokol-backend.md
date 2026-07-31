@@ -6,8 +6,8 @@ WebGPU. CNA keeps ownership of the SDL window and the game loop; this backend cr
 context inside it (`sokol_app` is deliberately unused). The implementation plan, task list and
 design rationale live in [`../plan_sokol.md`](../plan_sokol.md).
 
-**This backend is an experimental 2D baseline.** It is not comparable to EasyGL/Vulkan/D3D11 and
-must not be described as having XNA 3D parity. Everything outside the boundary below fails loudly —
+**This backend is experimental.** It covers 2D in full and vertex-coloured 3D geometry; it is not
+comparable to EasyGL/Vulkan/D3D11 and must not be described as having XNA 3D parity. Everything outside the boundary below fails loudly —
 either a `std::runtime_error` naming the missing capability, or a `System::NotSupportedException`
 raised by the shared layer because the backend creates no resource — never a silent no-op.
 
@@ -44,27 +44,35 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `VertexBuffer` / `IndexBuffer` (16- and 32-bit) upload and count round-trip | ✅ | `Sokol_Smoke` check E |
 | Viewport and scissor rectangles | ✅ | Wired to `sg_apply_viewport` / `sg_apply_scissor_rect` |
 | Back-buffer MSAA | ✅ | Negotiated with the GL context; reports the driver's *granted* count |
+| Vertex-coloured 3D geometry (`DrawPrimitives`/`DrawIndexedPrimitives`, all five `PrimitiveType` values, 16- and 32-bit indices) | ✅ | `Sokol_3D` checks A, B |
+| `BasicEffect.DiffuseColor` and `VertexColorEnabled` | ✅ | `Sokol_3D` checks C, D — a real per-channel multiply |
+| Depth testing and depth writes (`DepthStencilState.DepthBufferEnable`/`WriteEnable`/`Function`) | ✅ | `Sokol_3D` check E — a real occlusion proof, both with and without the test |
+| Face culling (`RasterizerState.CullMode`) | ✅ | `Sokol_3D` check G — a clockwise triangle survives and a counter-clockwise one vanishes |
+| Arbitrary vertex layouts via `VertexDeclaration` (Position + Color, usage index 0) | ✅ | The 3D pipeline is keyed on the real declaration, not on a fixed stride |
 | Virtual resolution / presentation scaling / window↔logical transforms | ✅ | Same geometry as EasyGL's `FixedHeightDynamicWidth` |
 
 ## What does not work yet
 
 | Feature | Behaviour today | Tracked as |
 |---|---|---|
-| 3D draw calls (`DrawPrimitives`, `DrawIndexedPrimitives`, `Model` rendering) | throws `"Sokol backend: the 3D draw path … not yet implemented"` | `SOKOL-20`/`SOKOL-21` |
-| `BasicEffect` and the rest of the stock effect family | unreachable — no 3D draw path | `SOKOL-21` |
+| Textured, lit, dual-texture, environment-mapped, skinned or PBR 3D shading | throws, naming the unsupported combination | `SOKOL-21` |
+| Instanced draws | throws | `SOKOL-21` |
+| Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |
 | `RenderTarget2D`, `RenderTargetCube`, MRT | `SetRenderTargets` with any target throws; `CreateRenderTarget2D` returns null, so the shared layer raises `NotSupportedException` | `SOKOL-25`/`SOKOL-26` |
 | `TextureCube`, `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` | `SOKOL-27` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `OcclusionQuery` | `CreateOcclusionQuery` returns null — sokol_gfx exposes no query API at all | `SOKOL-29` |
-| `RasterizerState` cull mode, fill mode, depth bias | accepted and ignored; only the 3D pipeline would use them, and `SpriteBatch` always draws unculled solid quads | `SOKOL-23` |
+| `RasterizerState` fill mode and depth bias | accepted and ignored — sokol_gfx exposes no polygon fill mode, and depth bias belongs with the lit pipeline. Cull mode *is* honoured | `SOKOL-23` |
 | Stencil test operations | `ApplyDepthStencilState` records the depth half only; stencil is not in the pipeline key | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
 | `Viewport.MinDepth` / `MaxDepth` | ignored — `sg_apply_viewport` carries no depth range | `SOKOL-21` |
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
 
 `GraphicsDevice::SupportsCapability()` reports this boundary, so a game can query ahead of time
-instead of catching. `MultiSampleAntiAliasing` reads `true` for the **back buffer only** — there are
-no render targets on this backend to multisample.
+instead of catching. Two entries need reading carefully: `MultiSampleAntiAliasing` is `true` for the
+**back buffer only** (there are no render targets here to multisample), and `ThreeD` is `true`
+because the 3D pipeline genuinely exists — it does not promise that every stock effect shades
+correctly, which the table above is the authority on.
 
 ## Known limitations inside the supported set
 
@@ -79,10 +87,14 @@ no render targets on this backend to multisample.
   every upload does. Correct in all cases, but it allocates; `SOKOL-24` covers improving it.
 - **Back-buffer read-back is GL-only** (`glReadPixels`). sokol_gfx has no read-back API, so any
   other `CNA_SOKOL_API` refuses `ReadBackbuffer` instead of returning fabricated pixels.
+- **Every distinct vertex layout, topology and render state combination creates a pipeline
+  object.** sokol_gfx bakes all of them into the pipeline, including the index type, so the cache
+  is keyed on the full set. A scene that cycles through many combinations grows the cache; nothing
+  evicts from it for the lifetime of the device.
 
 ## Verification status
 
-Both CTest entries run under Xvfb with Mesa's **llvmpipe software GL** on this dev machine — a real
+All three CTest entries run under Xvfb with Mesa's **llvmpipe software GL** on this dev machine — a real
 GL 4.1 driver and real rendering, but not discrete-GPU hardware. `SOKOL-30` tracks running them
 against a real GPU.
 
@@ -94,6 +106,7 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 |---|---|---|
 | `Sokol_Smoke` | 13 | all pass |
 | `Sokol_2D` | 15, every one a real pixel read-back | all pass |
+| `Sokol_3D` | 10, nine of them real pixel read-backs | all pass |
 
 The full `CnaTests` suite also runs under this backend. Note that the shared suite gates several
 capability-dependent expectations on an explicit list of backend macros (`kCubeStorageSupported`

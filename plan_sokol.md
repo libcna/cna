@@ -16,10 +16,19 @@
 > and a 90-degree rotation. Verified on this dev machine under Xvfb with Mesa's llvmpipe software
 > GL — a real GL 4.1 driver, but not discrete-GPU hardware (see `SOKOL-30`).
 >
-> **The 3D pipeline, render targets, cube/volume textures, custom effects and occlusion queries
-> are not implemented** and fail loudly rather than silently no-opping. Do not describe this
-> backend as having EasyGL/Vulkan-level parity. See `docs/sokol-backend.md` for the capability
-> boundary and the complete list of known gaps.
+> **Update (2026-07-31, later the same day): Phase 4's first task `SOKOL-20` has landed** -- real
+> vertex-coloured 3D geometry through `VertexBuffer`/`IndexBuffer`/`BasicEffect`/`DrawPrimitives`,
+> with depth testing and face culling both driven by the real `DepthStencilState`/`RasterizerState`.
+> `Sokol_3D` (10/10) verifies every result against read-back pixels, including a depth-occlusion
+> proof and a culling proof. Two real bugs were caught by that test and fixed: the cull-mode
+> mapping was inverted against sokol's `SG_FACEWINDING_CW` default (every triangle rendered as
+> background), and a UINT16-index pipeline cannot serve a non-indexed draw, so the index type is
+> now part of the pipeline key. `GraphicsCapability::ThreeD` now reports true.
+>
+> **Still not implemented: textured/lit/skinned/PBR 3D shading, render targets, cube/volume
+> textures, custom effects and occlusion queries** -- all fail loudly rather than silently
+> no-opping. Do not describe this backend as having EasyGL/Vulkan-level parity. See
+> `docs/sokol-backend.md` for the capability boundary and the complete list of known gaps.
 
 ---
 
@@ -143,14 +152,14 @@ That makes it valuable to CNA in two specific ways:
 | SOKOL-18 | `SokolVertexBufferBackend`/`SokolIndexBufferBackend` (16- and 32-bit) | ✅ | See design decision 6 |
 | SOKOL-19 | `docs/sokol-backend.md` capability boundary | ✅ | |
 
-### Phase 4 — 3D pipeline (not started)
+### Phase 4 — 3D pipeline (SOKOL-20 landed)
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
-| SOKOL-20 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` + a colored-3D shader | ⬜ | Currently throws via `NotYetImplemented` |
+| SOKOL-20 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` + a colored-3D shader | ✅ | `Sokol_3D` 10/10, incl. depth-occlusion and culling proofs |
 | SOKOL-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: `BasicEffect` variants (textured, lit, fog) | ⬜ | Needs the stride-dispatched pipeline cache every other backend has |
-| SOKOL-22 | Honour `SetVertexDeclaration()` for genuinely custom vertex layouts | ⬜ | Declaration is already recorded, just unused |
-| SOKOL-23 | Full `ApplyRasterizerState` (cull, fill, depth bias) and stencil in the pipeline key | ⬜ | Accepted-and-ignored today; documented as such |
+| SOKOL-22 | Honour every `SetVertexDeclaration()` element, not just Position/Color usage index 0 | 🟨 | The colored-3D pipeline is keyed on the real declaration; other usages still ignored |
+| SOKOL-23 | Full `ApplyRasterizerState` (fill mode, depth bias) and stencil in the pipeline key | ⬜ | Cull mode landed with `SOKOL-20`; fill/bias/stencil still accepted-and-ignored |
 | SOKOL-24 | Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ⬜ | Measure once a 3D path exists to measure with |
 
 ### Phase 5 — Render targets and remaining resources (not started)

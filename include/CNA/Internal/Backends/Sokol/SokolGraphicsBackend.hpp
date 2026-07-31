@@ -178,8 +178,9 @@ namespace CNA::Internal::Backends::Sokol
         /**
          * @brief Records the caller's full vertex declaration.
          *
-         * Stored rather than acted on: this backend has no 3D draw path yet, so nothing consumes
-         * the declaration. It is kept so the layout is already available when that path lands.
+         * The colored-3D draw path keys its pipeline on this declaration's real stride and element
+         * offsets, so a genuinely custom layout is bound correctly rather than being matched
+         * against a fixed set of recognised byte strides.
          *
          * @param vertexDeclaration Full declaration, including stride and elements.
          */
@@ -196,6 +197,15 @@ namespace CNA::Internal::Backends::Sokol
          * @return Stride in bytes, or 0 if nothing has been uploaded.
          */
         NOXNA [[nodiscard]] std::size_t GetStrideEXT() const { return stride_; }
+
+        /**
+         * @brief Returns the vertex declaration recorded by SetVertexDeclaration(). NOXNA.
+         * @return The declaration, or null when the owning VertexBuffer supplied none.
+         */
+        NOXNA [[nodiscard]] const VertexDeclaration* GetDeclarationEXT() const
+        {
+            return hasDeclaration_ ? &declaration_ : nullptr;
+        }
 
         /**
          * @brief Returns the raw sokol_gfx buffer handle id. NOXNA.
@@ -707,7 +717,7 @@ namespace CNA::Internal::Backends::Sokol
         void SetDepthWriteEnabled(bool enabled) override;
 
         /**
-         * @brief Not implemented on this backend; throws.
+         * @brief Draws vertex-coloured primitives with the built-in colored-3D program.
          * @param vb             Vertex buffer to read from.
          * @param world          World matrix.
          * @param view           View matrix.
@@ -723,7 +733,7 @@ namespace CNA::Internal::Backends::Sokol
                                    int primitiveCount) override;
 
         /**
-         * @brief Not implemented on this backend; throws.
+         * @brief Indexed counterpart of DrawColoredPrimitives().
          * @param vb             Vertex buffer to read from.
          * @param ib             Index buffer to read from.
          * @param world          World matrix.
@@ -739,6 +749,49 @@ namespace CNA::Internal::Backends::Sokol
                                           const Matrix& projection,
                                           PrimitiveType primitive,
                                           int primitiveCount) override;
+
+        /**
+         * @brief Effect-aware non-indexed draw.
+         *
+         * Only the untextured, unlit path is implemented; any effect requesting texturing,
+         * lighting, dual texturing, environment mapping, skinning or PBR throws rather than
+         * quietly rendering an unshaded approximation of it.
+         *
+         * @param vb             Vertex buffer to read from.
+         * @param world          World matrix.
+         * @param view           View matrix.
+         * @param projection     Projection matrix.
+         * @param primitive      Primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @param params         Per-draw effect parameters.
+         */
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world,
+                              const Matrix& view,
+                              const Matrix& projection,
+                              PrimitiveType primitive,
+                              int primitiveCount,
+                              const GpuDrawParams& params) override;
+
+        /**
+         * @brief Indexed counterpart of DrawPrimitivesEx(); same capability boundary.
+         * @param vb             Vertex buffer to read from.
+         * @param ib             Index buffer to read from.
+         * @param world          World matrix.
+         * @param view           View matrix.
+         * @param projection     Projection matrix.
+         * @param primitive      Primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @param params         Per-draw effect parameters.
+         */
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb,
+                                     const IIndexBufferBackend& ib,
+                                     const Matrix& world,
+                                     const Matrix& view,
+                                     const Matrix& projection,
+                                     PrimitiveType primitive,
+                                     int primitiveCount,
+                                     const GpuDrawParams& params) override;
 
         /**
          * @brief Reports which features this backend's current baseline actually supports.
@@ -822,6 +875,47 @@ namespace CNA::Internal::Backends::Sokol
             std::size_t operator()(const PipelineKey& key) const;
         };
 
+        /**
+         * @brief Identity of a colored-3D pipeline: the shared render state plus the exact vertex
+         * layout and topology it was built for.
+         *
+         * The layout has to be part of the key because sokol_gfx bakes it into the pipeline
+         * object, unlike the sprite path where every draw shares one fixed vertex format.
+         */
+        struct Pipeline3DKey
+        {
+            int colorSrcBlend;
+            int alphaSrcBlend;
+            int colorDstBlend;
+            int alphaDstBlend;
+            int colorBlendFunc;
+            int alphaBlendFunc;
+            int colorWriteChannels;
+            bool blendEnabled;
+            bool depthTestEnabled;
+            bool depthWriteEnabled;
+            int depthFunc;
+            int cullMode;
+            int primitiveType;
+            /// Raw sg_index_type: sokol_gfx bakes the index type into the pipeline, and rejects
+            /// both an indexed pipeline used without an index buffer and a width mismatch, so
+            /// non-indexed / 16-bit / 32-bit draws each need their own pipeline object.
+            int indexType;
+            int stride;
+            int positionOffset;
+            int positionFormat;
+            /// Byte offset of the Color element, or -1 when the declaration has none.
+            int colorOffset;
+            int colorFormat;
+
+            bool operator==(const Pipeline3DKey& other) const;
+        };
+
+        struct Pipeline3DKeyHash
+        {
+            std::size_t operator()(const Pipeline3DKey& key) const;
+        };
+
         struct SamplerKey
         {
             int filter;
@@ -845,6 +939,15 @@ namespace CNA::Internal::Backends::Sokol
         void QueueClear(bool color, float r, float g, float b, float a,
                         bool depth, float depthValue,
                         bool stencil, int stencilValue);
+        void DrawColored3D(const IVertexBufferBackend& vb,
+                           const IIndexBufferBackend* ib,
+                           const Matrix& world,
+                           const Matrix& view,
+                           const Matrix& projection,
+                           PrimitiveType primitive,
+                           int primitiveCount,
+                           const GpuDrawParams& params);
+        [[nodiscard]] std::uint32_t GetColored3DPipeline(const Pipeline3DKey& key);
         [[nodiscard]] std::uint32_t GetSpritePipeline();
         [[nodiscard]] std::uint32_t GetSampler(int filter, int addressU, int addressV,
                                                int maxAnisotropy);
@@ -888,10 +991,15 @@ namespace CNA::Internal::Backends::Sokol
         bool viewportSet_ = false;
         int viewportRect_[4] = {0, 0, 0, 0};
 
+        int cullMode_ = 0;         // CullMode::None
+        int fillMode_ = 0;         // FillMode::Solid
+
         std::uint32_t spriteShaderId_ = 0;
         std::uint32_t spriteVertexBufferId_ = 0;
         std::uint32_t spriteIndexBufferId_ = 0;
+        std::uint32_t colored3dShaderId_ = 0;
         std::unordered_map<PipelineKey, std::uint32_t, PipelineKeyHash> pipelineCache_;
+        std::unordered_map<Pipeline3DKey, std::uint32_t, Pipeline3DKeyHash> pipeline3dCache_;
         std::unordered_map<SamplerKey, std::uint32_t, SamplerKeyHash> samplerCache_;
     };
 }

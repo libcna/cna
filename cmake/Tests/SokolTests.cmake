@@ -33,4 +33,11 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
     cna_register_backend_test(NAME Sokol_2D COMMAND cna_test_sokol_2d
         TIMEOUT 120 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-20: vertex-coloured 3D geometry through the public VertexBuffer/
+    # BasicEffect/DrawPrimitives API, including a real depth-occlusion proof.
+    cna_sokol_test(cna_test_sokol_3d examples/sokol_3d_test.cpp)
+    cna_register_backend_test(NAME Sokol_3D COMMAND cna_test_sokol_3d
+        TIMEOUT 120 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

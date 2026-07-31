@@ -11,8 +11,8 @@
 //   GetIndexCount() reports exactly what was uploaded, for both 16- and 32-bit indices.
 // Check F -- Clear(Target|DepthBuffer|Stencil) followed by GetBackBufferData() returns the exact
 //   clear colour, so the pass/clear path genuinely reached the GPU.
-// Check G -- the unimplemented 3D draw path throws rather than silently drawing nothing.
-// Check H -- SupportsCapability() reports this baseline's documented boundary.
+// Check G -- binding a RenderTarget2D throws rather than silently rendering nowhere.
+// Check H -- SupportsCapability() reports this backend's documented boundary.
 // Check I -- 60 frames of Clear() + the automatic end-of-frame Present() complete with no
 //   exception.
 //
@@ -26,6 +26,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
@@ -93,22 +95,23 @@ class SokolSmokeTest : public Game
         check(indexBuffer32.getIndexCountProperty() == 6,
               "IndexBuffer::SetData() round-trips its 32-bit index count");
 
-        // The 3D path is deliberately unimplemented on this baseline. It must fail loudly: a
-        // silent no-op would let a 3D game report success while rendering nothing at all. The
-        // vertex buffer is bound first so the throw can only come from the missing draw path, not
-        // from a missing binding.
-        device.SetVertexBuffer(&vertexBuffer);
+        // Render targets remain unimplemented on this backend, and must fail loudly: a silent
+        // no-op would let a game render an entire off-screen pass into nothing and report success.
+        // (The 3D draw path is implemented as of SOKOL-20 -- its own boundary, the lit/textured
+        // variants, is asserted by Sokol_3D where a real scene can prove it.)
+        RenderTarget2D renderTarget(device, 4, 4);
+        const std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&renderTarget) };
         bool threw = false;
         try
         {
-            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+            device.SetRenderTargets(bindings);
         }
         catch (const std::exception&)
         {
             threw = true;
         }
-        device.SetVertexBuffer(nullptr);
-        check(threw, "the unimplemented 3D draw path throws instead of silently drawing nothing");
+        device.SetRenderTargets({});
+        check(threw, "binding a RenderTarget2D throws instead of silently rendering nowhere");
     }
 
     void CheckCapabilities(SokolGraphicsBackend& backend)
@@ -116,12 +119,13 @@ class SokolSmokeTest : public Game
         using CNA::GraphicsCapability;
         const bool boundaryHolds =
             backend.SupportsCapability(GraphicsCapability::DepthStencilBuffer)
-            && !backend.SupportsCapability(GraphicsCapability::ThreeD)
+            // Real as of SOKOL-20 -- vertex/index buffers and depth-tested colored draws exist.
+            && backend.SupportsCapability(GraphicsCapability::ThreeD)
             && !backend.SupportsCapability(GraphicsCapability::MultipleRenderTargets)
             && !backend.SupportsCapability(GraphicsCapability::CustomEffects)
             && !backend.SupportsCapability(GraphicsCapability::Texture3D)
             && !backend.SupportsCapability(GraphicsCapability::OcclusionQuery);
-        check(boundaryHolds, "SupportsCapability() reports the documented 2D baseline boundary");
+        check(boundaryHolds, "SupportsCapability() reports the documented capability boundary");
     }
 
 protected:
