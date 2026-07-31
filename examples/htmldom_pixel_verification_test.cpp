@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -40,7 +41,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 8;
+    constexpr int kExpectedChecks = 11;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -79,6 +80,8 @@ class HtmlDomPixelVerificationTest : public Game
     std::unique_ptr<RenderTarget2D> fontRt_;
     std::unique_ptr<Texture2D> fontAtlas_;
     std::unique_ptr<SpriteFont> font_;
+    std::unique_ptr<RenderTarget2D> rtA_;
+    std::unique_ptr<RenderTarget2D> rtB_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -146,6 +149,8 @@ protected:
         spriteBatch_ = std::make_unique<SpriteBatch>(getGraphicsDeviceProperty());
         rt_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 2, 2);
         fontRt_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 20, 20);
+        rtA_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 4, 4);
+        rtB_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 20, 20);
 
         // plan_html_dom.md HTMLDOM-88: an 8x4 atlas holding two 4x4 glyphs. 'A' is split
         // left-half-red/right-half-blue so a horizontal flip is visually unambiguous (the two
@@ -418,7 +423,101 @@ protected:
                   "SpriteEffects::FlipHorizontally correctly (red/blue relative order reverses)");
         }
 
+        // plan_html_dom.md HTMLDOM-82: Begin(transformMatrix=...) has real code (design decision
+        // 5's matrix -> CSS matrix()/ctx.transform() mapping) but zero numeric verification --
+        // the existing GTest only checks it doesn't throw, and the smoke test only checks the CSS
+        // matrix(...) string is present, never that a NON-identity matrix actually moves a sprite.
+        // A pure translation is deliberately chosen over a rotation: it exercises the matrix's
+        // M41/M42 -> CSS e/f mapping unambiguously, with no sign-convention risk the way a
+        // rotation matrix would carry (getting XNA's own rotation-matrix layout wrong by hand
+        // would produce a wrong TEST, not a wrong implementation -- not a risk worth taking here).
+        // Drawn into a bound render target, so this also exercises transformMatrix on the
+        // Canvas2D `targetCtx` branch specifically, a separate code path from the DOM branch the
+        // smoke test's CSS-string check covers.
         if (frame_ == 9)
+        {
+            Texture2D tex = Make1x1(dev, 255, 200, 0, 255);
+            const auto pixels = ReadBackWholeTarget(*fontRt_, 20, 20, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr,
+                                    nullptr, nullptr, nullptr,
+                                    Matrix::CreateTranslation(6.0f, 8.0f, 0.0f));
+                spriteBatch_->Draw(tex, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+                spriteBatch_->End();
+            });
+            const Color atOrigin = pixels[0];
+            const Color atTranslated = pixels[static_cast<std::size_t>(8) * 20 + 6];
+            std::printf("       transformMatrix(translate): origin(0,0)=(%d,%d,%d,%d) "
+                        "translated(6,8)=(%d,%d,%d,%d)\n",
+                        atOrigin.getRProperty(), atOrigin.getGProperty(), atOrigin.getBProperty(),
+                        atOrigin.getAProperty(), atTranslated.getRProperty(),
+                        atTranslated.getGProperty(), atTranslated.getBProperty(),
+                        atTranslated.getAProperty());
+            check(atOrigin.getAProperty() < 50 &&
+                  atTranslated.getRProperty() > 200 && atTranslated.getGProperty() > 150 &&
+                  atTranslated.getBProperty() < 50,
+                  "HTMLDOM-82a: a non-identity (translation) transformMatrix actually moves the "
+                  "sprite to the matrix-predicted position, not left at its untransformed one");
+        }
+
+        // plan_html_dom.md HTMLDOM-82: a scale transformMatrix, the same "unambiguous, no sign
+        // convention risk" reasoning as the translation check above. A 1x1 sprite under a
+        // uniform 2x scale matrix must render as a 2x2 block, not a 1x1 one -- (1,1) falls
+        // inside the scaled extent but outside the unscaled one, so it alone distinguishes
+        // "matrix scale applied" from "matrix silently ignored".
+        if (frame_ == 10)
+        {
+            Texture2D tex = Make1x1(dev, 0, 200, 255, 255);
+            const auto pixels = ReadBackWholeTarget(*fontRt_, 20, 20, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr,
+                                    nullptr, nullptr, nullptr, Matrix::CreateScale(2.0f));
+                spriteBatch_->Draw(tex, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+                spriteBatch_->End();
+            });
+            const Color inside = pixels[static_cast<std::size_t>(1) * 20 + 1];
+            const Color outside = pixels[static_cast<std::size_t>(3) * 20 + 3];
+            std::printf("       transformMatrix(scale): inside(1,1)=(%d,%d,%d,%d) "
+                        "outside(3,3)=(%d,%d,%d,%d)\n",
+                        inside.getRProperty(), inside.getGProperty(), inside.getBProperty(),
+                        inside.getAProperty(), outside.getRProperty(), outside.getGProperty(),
+                        outside.getBProperty(), outside.getAProperty());
+            check(inside.getBProperty() > 200 && inside.getGProperty() > 150 &&
+                  outside.getAProperty() < 50,
+                  "HTMLDOM-82b: a non-identity (scale) transformMatrix scales the sprite's "
+                  "rendered footprint, not just its reported destinationRectangle");
+        }
+
+        // plan_html_dom.md HTMLDOM-83: render-target-as-Draw()-source, demonstrated visually in
+        // htmldom_visual_demo.cpp but never asserted pixel-exact. Draw a distinct colour into
+        // rtA_, unbind it, then Draw() rtA_ itself -- an ordinary RenderTarget2D : Texture2D --
+        // as the source texture for a sprite rendered into rtB_. Proves the data-URL
+        // regenerated-from-a-dirty-flag path (design decision 10) actually round-trips real
+        // content, not just that the call sequence doesn't throw.
+        if (frame_ == 11)
+        {
+            dev.SetRenderTarget(rtA_.get());
+            dev.Clear(Color(255, 90, 20, 255));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            const auto pixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                spriteBatch_->Begin();
+                spriteBatch_->Draw(*rtA_, Rectangle(2, 2, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const Color sampled = pixels[static_cast<std::size_t>(4) * 20 + 4];
+            const Color outside = pixels[static_cast<std::size_t>(15) * 20 + 15];
+            std::printf("       RT-as-source: sampled(4,4)=(%d,%d,%d,%d) outside(15,15)=(%d,%d,%d,%d)\n",
+                        sampled.getRProperty(), sampled.getGProperty(), sampled.getBProperty(),
+                        sampled.getAProperty(), outside.getRProperty(), outside.getGProperty(),
+                        outside.getBProperty(), outside.getAProperty());
+            check(CloseEnough(sampled.getRProperty(), 255, 1) &&
+                  CloseEnough(sampled.getGProperty(), 90, 1) &&
+                  CloseEnough(sampled.getBProperty(), 20, 1) &&
+                  sampled.getAProperty() == 255 && outside.getAProperty() < 50,
+                  "HTMLDOM-83: a RenderTarget2D drawn into, then used as an ordinary Draw() "
+                  "source texture, round-trips its real content exactly");
+        }
+
+        if (frame_ == 12)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
