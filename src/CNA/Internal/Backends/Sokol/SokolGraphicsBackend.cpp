@@ -622,6 +622,137 @@ namespace CNA::Internal::Backends::Sokol
     }
 
     // ---------------------------------------------------------------------------------------
+    // SokolRenderTargetCubeBackend
+    // ---------------------------------------------------------------------------------------
+
+    SokolRenderTargetCubeBackend::SokolRenderTargetCubeBackend(int size, bool hasDepthStencil)
+        : size_(size)
+    {
+        if (size <= 0)
+            throw std::runtime_error("Sokol backend: cube render target size must be positive");
+
+        sg_image_desc colorDesc = {};
+        colorDesc.type = SG_IMAGETYPE_CUBE;
+        colorDesc.usage.color_attachment = true;
+        colorDesc.width = size_;
+        colorDesc.height = size_;
+        colorDesc.num_mipmaps = 1;
+        colorDesc.sample_count = 1;
+        colorDesc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        colorDesc.label = "cna_render_target_cube_color";
+        imageId_ = sg_make_image(&colorDesc).id;
+        if (sg_query_image_state(MakeImageHandle(imageId_)) != SG_RESOURCESTATE_VALID)
+        {
+            imageId_ = 0;
+            throw std::runtime_error(
+                "Sokol backend: sg_make_image failed for a RenderTargetCube's colour image");
+        }
+
+        for (int face = 0; face < 6; ++face)
+        {
+            sg_view_desc attachmentDesc = {};
+            attachmentDesc.color_attachment.image = MakeImageHandle(imageId_);
+            attachmentDesc.color_attachment.slice = face;
+            attachmentDesc.label = "cna_render_target_cube_color_attachment_view";
+            const std::uint32_t viewId = sg_make_view(&attachmentDesc).id;
+            if (sg_query_view_state(MakeViewHandle(viewId)) != SG_RESOURCESTATE_VALID)
+            {
+                if (viewId != 0) sg_destroy_view(MakeViewHandle(viewId));
+                for (int destroyed = 0; destroyed < face; ++destroyed)
+                    sg_destroy_view(MakeViewHandle(colorAttachmentViewIds_[static_cast<std::size_t>(destroyed)]));
+                sg_destroy_image(MakeImageHandle(imageId_));
+                imageId_ = 0;
+                throw std::runtime_error(
+                    "Sokol backend: sg_make_view (colour attachment) failed for a RenderTargetCube face");
+            }
+            colorAttachmentViewIds_[static_cast<std::size_t>(face)] = viewId;
+        }
+
+        sg_view_desc textureDesc = {};
+        textureDesc.texture.image = MakeImageHandle(imageId_);
+        textureDesc.label = "cna_render_target_cube_texture_view";
+        textureViewId_ = sg_make_view(&textureDesc).id;
+        if (sg_query_view_state(MakeViewHandle(textureViewId_)) != SG_RESOURCESTATE_VALID)
+        {
+            textureViewId_ = 0;
+            for (std::uint32_t viewId : colorAttachmentViewIds_)
+                sg_destroy_view(MakeViewHandle(viewId));
+            sg_destroy_image(MakeImageHandle(imageId_));
+            imageId_ = 0;
+            throw std::runtime_error(
+                "Sokol backend: sg_make_view (texture) failed for a RenderTargetCube");
+        }
+
+        if (!hasDepthStencil) return;
+
+        // ONE plain 2D depth-stencil image, shared by all six faces -- see this class's own doc
+        // comment for why that matches FNA3D's cube render-target convention.
+        sg_image_desc depthDesc = {};
+        depthDesc.type = SG_IMAGETYPE_2D;
+        depthDesc.usage.depth_stencil_attachment = true;
+        depthDesc.width = size_;
+        depthDesc.height = size_;
+        depthDesc.num_mipmaps = 1;
+        depthDesc.sample_count = 1;
+        depthDesc.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+        depthDesc.label = "cna_render_target_cube_depth_stencil";
+        depthStencilImageId_ = sg_make_image(&depthDesc).id;
+        if (sg_query_image_state(MakeImageHandle(depthStencilImageId_)) != SG_RESOURCESTATE_VALID)
+        {
+            depthStencilImageId_ = 0;
+            sg_destroy_view(MakeViewHandle(textureViewId_));
+            textureViewId_ = 0;
+            for (std::uint32_t viewId : colorAttachmentViewIds_)
+                sg_destroy_view(MakeViewHandle(viewId));
+            sg_destroy_image(MakeImageHandle(imageId_));
+            imageId_ = 0;
+            throw std::runtime_error(
+                "Sokol backend: sg_make_image failed for a RenderTargetCube's depth-stencil image");
+        }
+
+        sg_view_desc depthAttachmentDesc = {};
+        depthAttachmentDesc.depth_stencil_attachment.image = MakeImageHandle(depthStencilImageId_);
+        depthAttachmentDesc.label = "cna_render_target_cube_depth_stencil_attachment_view";
+        depthStencilAttachmentViewId_ = sg_make_view(&depthAttachmentDesc).id;
+        if (sg_query_view_state(MakeViewHandle(depthStencilAttachmentViewId_)) != SG_RESOURCESTATE_VALID)
+        {
+            depthStencilAttachmentViewId_ = 0;
+            sg_destroy_image(MakeImageHandle(depthStencilImageId_));
+            depthStencilImageId_ = 0;
+            sg_destroy_view(MakeViewHandle(textureViewId_));
+            textureViewId_ = 0;
+            for (std::uint32_t viewId : colorAttachmentViewIds_)
+                sg_destroy_view(MakeViewHandle(viewId));
+            sg_destroy_image(MakeImageHandle(imageId_));
+            imageId_ = 0;
+            throw std::runtime_error(
+                "Sokol backend: sg_make_view (depth-stencil attachment) failed for a RenderTargetCube");
+        }
+    }
+
+    SokolRenderTargetCubeBackend::~SokolRenderTargetCubeBackend()
+    {
+        if (depthStencilAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(depthStencilAttachmentViewId_));
+        if (depthStencilImageId_ != 0) sg_destroy_image(MakeImageHandle(depthStencilImageId_));
+        if (textureViewId_ != 0) sg_destroy_view(MakeViewHandle(textureViewId_));
+        for (std::uint32_t viewId : colorAttachmentViewIds_)
+            if (viewId != 0) sg_destroy_view(MakeViewHandle(viewId));
+        if (imageId_ != 0) sg_destroy_image(MakeImageHandle(imageId_));
+    }
+
+    int SokolRenderTargetCubeBackend::GetSize() const { return size_; }
+
+    void SokolRenderTargetCubeBackend::BindAsRenderTargetFace(int /*face*/) {}
+
+    void SokolRenderTargetCubeBackend::UnbindAsRenderTarget() {}
+
+    bool SokolRenderTargetCubeBackend::HasRealDepthBuffer(bool depthFormatWasRequested) const
+    {
+        (void)depthFormatWasRequested;
+        return depthStencilAttachmentViewId_ != 0;
+    }
+
+    // ---------------------------------------------------------------------------------------
     // SokolVertexBufferBackend
     // ---------------------------------------------------------------------------------------
 
@@ -1262,8 +1393,24 @@ namespace CNA::Internal::Backends::Sokol
         pass.action.colors[0].clear_value.b = pendingClear_[2];
         pass.action.colors[0].clear_value.a = pendingClear_[3];
 
-        const bool hasDepthStencil = currentRenderTarget_ == nullptr
-            || currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
+        // Resolved once here: which colour/depth-stencil attachment views the active target (a
+        // RenderTarget2D, a RenderTargetCube face, or -- when both are null -- the swapchain)
+        // actually has, so every branch below reads from one place instead of re-deriving it.
+        std::uint32_t colorAttachmentViewId = 0;
+        std::uint32_t depthStencilAttachmentViewId = 0;
+        if (currentRenderTargetCube_ != nullptr)
+        {
+            colorAttachmentViewId =
+                currentRenderTargetCube_->GetColorAttachmentViewIdEXT(currentRenderTargetCubeFace_);
+            depthStencilAttachmentViewId = currentRenderTargetCube_->GetDepthStencilAttachmentViewIdEXT();
+        }
+        else if (currentRenderTarget_ != nullptr)
+        {
+            colorAttachmentViewId = currentRenderTarget_->GetColorAttachmentViewIdEXT();
+            depthStencilAttachmentViewId = currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT();
+        }
+        const bool boundToCustomTarget = currentRenderTarget_ != nullptr || currentRenderTargetCube_ != nullptr;
+        const bool hasDepthStencil = !boundToCustomTarget || depthStencilAttachmentViewId != 0;
         if (hasDepthStencil)
         {
             pass.action.depth.load_action = pendingClearDepth_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
@@ -1279,7 +1426,7 @@ namespace CNA::Internal::Backends::Sokol
         // an unset view -- a Clear(DepthBuffer) queued while such a target is bound has nothing to
         // act on, matching real XNA's own no-op-if-no-depth-buffer behaviour.
 
-        if (currentRenderTarget_ == nullptr)
+        if (!boundToCustomTarget)
         {
             int physicalWidth = 0;
             int physicalHeight = 0;
@@ -1295,14 +1442,11 @@ namespace CNA::Internal::Backends::Sokol
         }
         else
         {
-            pass.attachments.colors[0] =
-                MakeViewHandle(currentRenderTarget_->GetColorAttachmentViewIdEXT());
+            pass.attachments.colors[0] = MakeViewHandle(colorAttachmentViewId);
             if (hasDepthStencil)
-            {
-                pass.attachments.depth_stencil =
-                    MakeViewHandle(currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT());
-            }
-            pass.label = "cna_render_target_pass";
+                pass.attachments.depth_stencil = MakeViewHandle(depthStencilAttachmentViewId);
+            pass.label = currentRenderTargetCube_ != nullptr
+                ? "cna_render_target_cube_pass" : "cna_render_target_pass";
         }
 
         sg_begin_pass(&pass);
@@ -1326,7 +1470,7 @@ namespace CNA::Internal::Backends::Sokol
     {
         if (!passActive_) return;
 
-        if (currentRenderTarget_ != nullptr)
+        if (currentRenderTarget_ != nullptr || currentRenderTargetCube_ != nullptr)
         {
             // A render target's pixel space IS logical space -- no window letterbox scaling
             // applies to it at all (GraphicsDevice::ResetViewportAndScissorForRenderTarget already
@@ -1397,6 +1541,12 @@ namespace CNA::Internal::Backends::Sokol
 
     void SokolGraphicsBackend::GetCurrentTargetSizeEXT(int& width, int& height) const
     {
+        if (currentRenderTargetCube_ != nullptr)
+        {
+            width = currentRenderTargetCube_->GetSize();
+            height = currentRenderTargetCube_->GetSize();
+            return;
+        }
         if (currentRenderTarget_ != nullptr)
         {
             width = currentRenderTarget_->GetWidth();
@@ -1404,6 +1554,15 @@ namespace CNA::Internal::Backends::Sokol
             return;
         }
         GetPhysicalSizeEXT(width, height);
+    }
+
+    bool SokolGraphicsBackend::CurrentPassHasDepthStencilAttachmentEXT() const
+    {
+        if (currentRenderTargetCube_ != nullptr)
+            return currentRenderTargetCube_->GetDepthStencilAttachmentViewIdEXT() != 0;
+        if (currentRenderTarget_ != nullptr)
+            return currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
+        return true;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1603,19 +1762,47 @@ namespace CNA::Internal::Backends::Sokol
         return std::make_unique<SokolRenderTargetBackend>(w, h, depthFormat != 0);
     }
 
+    std::unique_ptr<IRenderTargetCubeBackend> SokolGraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        // See CreateRenderTarget2D's identical reasoning for preserveContents/multiSampleCount.
+        (void)preserveContents;
+        if (mipMap)
+            NotYetImplemented(kBackendName, "a mipmapped RenderTargetCube");
+        (void)multiSampleCount;
+
+        return std::make_unique<SokolRenderTargetCubeBackend>(size, depthFormat != 0);
+    }
+
     // ---------------------------------------------------------------------------------------
     // SokolGraphicsBackend -- state
     // ---------------------------------------------------------------------------------------
 
     void SokolGraphicsBackend::BindSingleRenderTarget2D(SokolRenderTargetBackend* rt)
     {
-        if (currentRenderTarget_ == rt) return;
+        if (currentRenderTarget_ == rt && currentRenderTargetCube_ == nullptr) return;
         EndPassIfActive();
         currentRenderTarget_ = rt;
+        currentRenderTargetCube_ = nullptr;
         // Any pending Clear* from before this bind belongs to whatever was previously active
         // (the back buffer, or a different target); GraphicsDevice always issues its own
         // DiscardContents Clear() AFTER this call returns (see GraphicsDevice::SetRenderTarget(s)'s
         // own sequencing), so nothing here should carry a stale pending clear into the new target.
+        pendingClearColor_ = false;
+        pendingClearDepth_ = false;
+        pendingClearStencil_ = false;
+    }
+
+    void SokolGraphicsBackend::BindRenderTargetCubeFace(SokolRenderTargetCubeBackend* rt, int face)
+    {
+        if (currentRenderTargetCube_ == rt && currentRenderTargetCubeFace_ == face
+            && currentRenderTarget_ == nullptr)
+            return;
+        EndPassIfActive();
+        currentRenderTarget_ = nullptr;
+        currentRenderTargetCube_ = rt;
+        currentRenderTargetCubeFace_ = face;
+        // See BindSingleRenderTarget2D's identical comment.
         pendingClearColor_ = false;
         pendingClearDepth_ = false;
         pendingClearStencil_ = false;
@@ -1636,8 +1823,13 @@ namespace CNA::Internal::Backends::Sokol
         }
         if (count > 1)
             NotYetImplemented(kBackendName, "multiple render targets (MRT)");
-        if (!renderTargets[0].IsRenderTarget2D())
-            NotYetImplemented(kBackendName, "RenderTargetCube");
+        if (renderTargets[0].IsRenderTargetCubeFace())
+        {
+            BindRenderTargetCubeFace(
+                static_cast<SokolRenderTargetCubeBackend*>(renderTargets[0].GetRenderTargetCube()),
+                renderTargets[0].GetCubeFace());
+            return;
+        }
 
         BindSingleRenderTarget2D(
             static_cast<SokolRenderTargetBackend*>(renderTargets[0].GetRenderTarget2D()));
@@ -1779,12 +1971,9 @@ namespace CNA::Internal::Backends::Sokol
 
     std::uint32_t SokolGraphicsBackend::GetSpritePipeline()
     {
-        // See BeginPassIfNeeded's identical computation: whether the CURRENTLY ACTIVE pass (the
-        // swapchain, or a bound render target) has a real depth-stencil attachment at all. Needed
-        // here too, not just for the 3D pipelines -- a SpriteBatch draw into a depth-less render
-        // target hits the exact same sokol_gfx pipeline/pass pixel-format mismatch otherwise.
-        const bool hasDepthAttachment = currentRenderTarget_ == nullptr
-            || currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
+        // Needed here too, not just for the 3D pipelines -- a SpriteBatch draw into a depth-less
+        // render target hits the exact same sokol_gfx pipeline/pass pixel-format mismatch otherwise.
+        const bool hasDepthAttachment = CurrentPassHasDepthStencilAttachmentEXT();
 
         const PipelineKey key{
             blendColorSrc_, blendAlphaSrc_, blendColorDst_, blendAlphaDst_,
@@ -1911,7 +2100,7 @@ namespace CNA::Internal::Backends::Sokol
         // GraphicsDevice::ResetViewportAndScissorForRenderTarget already reset to the bound
         // target's own pixel size on bind -- so this needs the TARGET's size, not the window's
         // letterboxed logical size, whenever a render target is active.
-        if (currentRenderTarget_ != nullptr)
+        if (currentRenderTarget_ != nullptr || currentRenderTargetCube_ != nullptr)
             GetCurrentTargetSizeEXT(logicalWidth, logicalHeight);
         else
             GetLogicalSizeEXT(logicalWidth, logicalHeight);
@@ -1967,10 +2156,10 @@ namespace CNA::Internal::Backends::Sokol
         // implementation reads whatever pass is active, which would be the wrong surface while a
         // target is bound. Refusing loudly beats returning the wrong pixels silently; matching the
         // real semantic (temporarily unbinding, reading, then rebinding) is plan_sokol.md SOKOL-25b.
-        if (currentRenderTarget_ != nullptr)
+        if (currentRenderTarget_ != nullptr || currentRenderTargetCube_ != nullptr)
         {
             NotYetImplemented(kBackendName,
-                "GetBackBufferData while a RenderTarget2D is bound");
+                "GetBackBufferData while a RenderTarget2D or RenderTargetCube face is bound");
         }
 
         // BeginPassIfNeeded() first, for the same reason Present() does it: a Clear() only records
@@ -2239,11 +2428,7 @@ namespace CNA::Internal::Backends::Sokol
         key.depthWriteEnabled = depthWriteEnabled_;
         key.depthFunc = depthFunc_;
         key.cullMode = cullMode_;
-        // See GetSpritePipeline's identical computation: the currently active pass (swapchain or
-        // bound render target) may have no depth-stencil attachment at all, and sokol_gfx bakes
-        // the attachment's pixel format into the pipeline itself.
-        key.hasDepthAttachment = currentRenderTarget_ == nullptr
-            || currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
+        key.hasDepthAttachment = CurrentPassHasDepthStencilAttachmentEXT();
         key.stencilEnabled = stencilEnabled_;
         key.stencilFunc = stencilFunc_;
         key.stencilPass = stencilPass_;

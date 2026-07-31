@@ -243,16 +243,17 @@ namespace
     constexpr Contract kContract{"D3D12", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_SOKOL)
-    // plan_sokol.md SOKOL-25: RenderTarget2D only (no RenderTargetCube, SOKOL-26); GetData() is
-    // not implemented on either a plain Texture2D-shadow-backed target or a rendered one (this
-    // backend's own docs/sokol-backend.md), so readback=Unsupported skips every readback-driven
-    // check here (RunMsaaCycles's own skip guard: `readback != Exact || !msaaTargetReadback`) --
-    // this file's real value for SOKOL comes from its non-readback checks (pass segmentation,
-    // sprite viewport/scissor locality). Each public bind/unbind cycle is genuinely its own sokol
-    // pass (BeginPassIfNeeded/EndPassIfActive), and an explicit Clear() -- on a preserving target
-    // or after a draw in the same cycle -- always closes the active pass so the next one starts
-    // with a real clear load action, matching FNA's own command-ordered semantics exactly.
-    constexpr Contract kContract{"SOKOL", true, Support::Unsupported, false, Support::Unsupported,
+    // plan_sokol.md SOKOL-25/26: both RenderTarget2D and RenderTargetCube can be created and
+    // bound; GetData() is not implemented on either (this backend's own docs/sokol-backend.md),
+    // so readback/cubeReadback=Unsupported skips every readback-driven check here (RunMsaaCycles's
+    // own skip guard: `readback != Exact || !msaaTargetReadback`) -- this file's real value for
+    // SOKOL comes from its non-readback checks (pass segmentation, sprite viewport/scissor
+    // locality, and now the cube-face bind cycle itself). Each public bind/unbind cycle is
+    // genuinely its own sokol pass (BeginPassIfNeeded/EndPassIfActive), and an explicit Clear() --
+    // on a preserving target or after a draw in the same cycle -- always closes the active pass so
+    // the next one starts with a real clear load action, matching FNA's own command-ordered
+    // semantics exactly.
+    constexpr Contract kContract{"SOKOL", true, Support::Unsupported, true, Support::Unsupported,
                                  true, true, false, true, true, true, false, false};
 #else
 #error "REMED-GFX-140: this backend has no declared render-target pass-boundary contract."

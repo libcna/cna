@@ -251,6 +251,96 @@ namespace CNA::Internal::Backends::Sokol
     };
 
     /**
+     * @brief Backend handle for a RenderTargetCube: a real sokol_gfx CUBE image plus one
+     * colour-attachment view per face and a single shared depth-stencil attachment.
+     *
+     * plan_sokol.md SOKOL-26. The depth-stencil buffer is genuinely ONE resource shared by all six
+     * faces (matching FNA3D's own cube render-target convention -- see
+     * rendertarget_depthstencil_usage_test.cpp's U2 check), not per-face: it is a plain 2D
+     * depth-stencil image, reused as the pass's depth attachment regardless of which face is
+     * currently the colour attachment.
+     */
+    class SokolRenderTargetCubeBackend : public IRenderTargetCubeBackend
+    {
+    public:
+        /**
+         * @brief Creates the six colour-attachment views (and optional shared depth-stencil
+         * attachment) for a cube render target.
+         * @param size            Edge length of each face in pixels.
+         * @param hasDepthStencil True to also allocate a shared depth-stencil attachment.
+         */
+        SokolRenderTargetCubeBackend(int size, bool hasDepthStencil);
+
+        /** @brief Destroys every sokol_gfx view and image owned by this target. */
+        ~SokolRenderTargetCubeBackend() override;
+
+        SokolRenderTargetCubeBackend(const SokolRenderTargetCubeBackend&) = delete;
+        SokolRenderTargetCubeBackend& operator=(const SokolRenderTargetCubeBackend&) = delete;
+
+        /**
+         * @brief Returns the edge length of each face in pixels.
+         * @return Face edge length.
+         */
+        [[nodiscard]] int GetSize() const override;
+
+        /** @brief Bind is driven entirely by SokolGraphicsBackend's own bound-target tracking;
+         *         this override exists only to satisfy the pure-virtual interface. */
+        void BindAsRenderTargetFace(int face) override;
+
+        /** @brief Unbind is driven entirely by SokolGraphicsBackend's own bound-target tracking;
+         *         this override exists only to satisfy the pure-virtual interface. */
+        void UnbindAsRenderTarget() override;
+
+        /**
+         * @brief Returns whether this target actually allocated a depth-stencil attachment.
+         * @param depthFormatWasRequested Unused: this backend allocates one iff it was asked to.
+         * @return True if a depth-stencil attachment exists.
+         */
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
+
+        /**
+         * @brief Returns the raw sokol_gfx cube image handle id. NOXNA.
+         * @return sg_image id, or 0 when creation failed.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetImageIdEXT() const { return imageId_; }
+
+        /**
+         * @brief Returns the raw sokol_gfx colour-attachment view handle id for one face. NOXNA.
+         * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @return sg_view id, or 0 when creation failed or @p face is out of range.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetColorAttachmentViewIdEXT(int face) const
+        {
+            return (face >= 0 && face < 6) ? colorAttachmentViewIds_[static_cast<std::size_t>(face)] : 0;
+        }
+
+        /**
+         * @brief Returns the raw sokol_gfx texture-view handle id, used to sample the whole cube.
+         * NOXNA.
+         * @return sg_view id, or 0 when creation failed.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetTextureViewIdEXT() const { return textureViewId_; }
+
+        /**
+         * @brief Returns the raw sokol_gfx depth-stencil-attachment view handle id, shared by every
+         * face. NOXNA.
+         * @return sg_view id, or 0 when this target has no depth-stencil attachment.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetDepthStencilAttachmentViewIdEXT() const
+        {
+            return depthStencilAttachmentViewId_;
+        }
+
+    private:
+        int size_ = 0;
+        std::uint32_t imageId_ = 0;
+        std::array<std::uint32_t, 6> colorAttachmentViewIds_{};
+        std::uint32_t textureViewId_ = 0;
+        std::uint32_t depthStencilImageId_ = 0;
+        std::uint32_t depthStencilAttachmentViewId_ = 0;
+    };
+
+    /**
      * @brief Backend handle for a cube texture: pure CPU-side RGBA8 storage, no sokol_gfx image.
      *
      * plan_sokol.md SOKOL-27. Nothing on this backend samples a cube texture yet -- dual-texture,
@@ -807,14 +897,35 @@ namespace CNA::Internal::Backends::Sokol
             int multiSampleCount) override;
 
         /**
+         * @brief Creates a single, non-multisampled, non-mipmapped cube render target.
+         *
+         * @param size             Edge length of each face in pixels.
+         * @param depthFormat      Raw DepthFormat ordinal; None (0) allocates no depth-stencil
+         *                         attachment, any other value allocates a combined one, shared by
+         *                         all six faces (plan_sokol.md SOKOL-26 -- see
+         *                         SokolRenderTargetCubeBackend's own doc comment).
+         * @param preserveContents Unused, for the same reason CreateRenderTarget2D's identically
+         *                         named parameter is: a real sokol_gfx image naturally preserves
+         *                         its content across binds.
+         * @param mipMap           Must be false; a mipmapped cube render target is not implemented
+         *                         yet.
+         * @param multiSampleCount Silently clamped to 1 (no MSAA) -- not implemented yet, matching
+         *                         CreateRenderTarget2D's own convention.
+         * @return The new cube render target backend.
+         */
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount) override;
+
+        /**
          * @brief Activates a single render target, or restores the back buffer.
          * @param rt The target to activate, or null to restore the back buffer.
          */
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         /**
-         * @brief Binds a render-target set. Only a single RenderTarget2D (or the back buffer --
-         * null / count 0) is supported; RenderTargetCube and MRT are not implemented yet.
+         * @brief Binds a render-target set. A single RenderTarget2D, a single RenderTargetCube
+         * face, or the back buffer (null / count 0) is supported; MRT is not implemented yet.
          * @param renderTargets Ordered attachment descriptors, or null for the back buffer.
          * @param count         Number of attachments; 0 restores the back buffer.
          */
@@ -1237,10 +1348,18 @@ namespace CNA::Internal::Backends::Sokol
         /// convenience and the vector-based SetRenderTargets) reach the backend through genuinely
         /// different IGraphicsBackend virtuals, so there is no single call site to put this in.
         void BindSingleRenderTarget2D(SokolRenderTargetBackend* rt);
+        /// Cube-face counterpart of BindSingleRenderTarget2D -- mutually exclusive with it, so each
+        /// clears the other's tracking field.
+        void BindRenderTargetCubeFace(SokolRenderTargetCubeBackend* rt, int face);
         /// Returns the size (in pixels) of whatever is currently the draw/clear target: the bound
         /// render target when one is active, otherwise the window's physical size. RT pixel space
         /// has no logical/physical distinction (no letterboxing), unlike the back buffer.
         void GetCurrentTargetSizeEXT(int& width, int& height) const;
+        /// Whether the currently active pass (swapchain, RenderTarget2D or RenderTargetCube face)
+        /// has a real depth-stencil attachment. Shared by BeginPassIfNeeded, GetSpritePipeline and
+        /// DrawColored3D's Pipeline3DKey construction -- sokol_gfx bakes the attachment's pixel
+        /// format into every pipeline, so all three need the identical answer.
+        [[nodiscard]] bool CurrentPassHasDepthStencilAttachmentEXT() const;
 
         SDL_Window* window_ = nullptr;
         void* glContext_ = nullptr;
@@ -1256,6 +1375,13 @@ namespace CNA::Internal::Backends::Sokol
         /// outlives its binding is unbound the same way GraphicsDevice::Dispose() unbinds anything
         /// else, by the caller issuing SetRenderTarget(nullptr)/SetRenderTargets({}) first.
         SokolRenderTargetBackend* currentRenderTarget_ = nullptr;
+        /// The active cube-face render target, or null. Mutually exclusive with
+        /// currentRenderTarget_ -- BindSingleRenderTarget2D and BindRenderTargetCubeFace each
+        /// clear the other. Not owned, same lifetime contract as currentRenderTarget_.
+        SokolRenderTargetCubeBackend* currentRenderTargetCube_ = nullptr;
+        /// Which face of currentRenderTargetCube_ is the active colour attachment. Meaningless
+        /// while currentRenderTargetCube_ is null.
+        int currentRenderTargetCubeFace_ = 0;
         /// Pending pass action for the next BeginPassIfNeeded(), reset to "load" after each use so
         /// only an explicit Clear* call ever discards existing content.
         bool pendingClearColor_ = false;

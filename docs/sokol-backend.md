@@ -59,6 +59,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | A brand-new `RenderTarget2D` usable immediately, no warm-up frame | ✅ | `Sokol_RenderTarget_FirstUse` |
 | `TextureCube` storage (`SetData`/`GetData`, every declared mip level, all 6 faces) | ✅ | `CnaTests`' `TextureCubeTest` suite (49 tests), plus the XNB `TextureCubeReader` and CNJ cube content-loading tests |
 | Stencil test operations for 3D draws (`DepthStencilState.StencilEnable`/`StencilFunction`/`StencilPass`/`StencilFail`/`StencilDepthBufferFail`, masks, reference, two-sided mode) | ✅ | Wired into `Pipeline3DKey`/`Get3DPipeline`; `SpriteBatch` never requests stencil (matches XNA) |
+| `RenderTargetCube` bind/draw/unbind, one face at a time, with per-face colour isolation and a shared depth-stencil buffer | ✅ | `Sokol_RenderTarget_PassBoundary` (C1/C2), `Sokol_RenderTarget_DepthStencilUsage` (U1-U4), plus the cube legs in `Sokol_RenderTarget_FirstUse`/`BackbufferConsumer` |
 
 ## What does not work yet
 
@@ -72,7 +73,10 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTarget2D::GetData` (direct CPU readback) | throws `System::NotSupportedException` — `SokolRenderTargetBackend` does not override `ITextureBackend::GetData`, so it inherits the base class's `return false` default. Sampling the target as a texture, or reading the backbuffer after drawing it there, both work. | `SOKOL-26` |
 | `RenderTarget2D` mip-mapped (`mipMap=true`) | `CreateRenderTarget2D` throws `NotYetImplemented` | `SOKOL-26` |
 | `RenderTarget2D` MSAA | `multiSampleCount` is silently clamped to 1 (`GetMultiSampleCount()` reports the real, clamped value — the same convention every other backend uses for this parameter) | `SOKOL-26` |
-| `RenderTargetCube`, MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented`/`NotSupportedException`; `CreateRenderTargetCube` returns null, so the shared layer raises `NotSupportedException` | `SOKOL-26` |
+| `RenderTargetCube::GetData` (direct CPU readback) | throws `System::NotSupportedException`, same boundary as `RenderTarget2D::GetData` | `SOKOL-26` |
+| `RenderTargetCube` mip-mapped or MSAA | mip-mapped throws `NotYetImplemented`; `multiSampleCount` silently clamped to 1, same convention as `RenderTarget2D` | `SOKOL-26` |
+| MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented` | `SOKOL-26` |
+| Render-target MSAA resolve | not implemented (`multiSampleCount` is clamped, never resolved) | `SOKOL-26` |
 | `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` (Software leaves this unimplemented too) | `SOKOL-27` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `OcclusionQuery` | `CreateOcclusionQuery` returns null — sokol_gfx exposes no query API at all | `SOKOL-29` |
@@ -105,6 +109,11 @@ correctly, which the table above is the authority on.
   `EnvironmentMapEffect`'s 3D draw path throws `NotYetImplemented` -- so a real `sg_image` would be
   a resource with no consumer. `SetData`/`GetData` round-trip exactly; a future `EnvironmentMapEffect`
   implementation is what would add the matching `sg_image`/view.
+- **`RenderTargetCube`, unlike the plain `TextureCube` above, DOES allocate a real `sg_image`** --
+  it exists specifically to be rendered into, so the resource has a genuine consumer even before
+  any shader samples it back. Its depth-stencil buffer is a single 2D image shared by all six
+  faces (matching FNA3D's own convention), not six separate per-face buffers, so a depth/stencil
+  test on one face is gated by whatever an earlier bind of a *different* face last wrote there.
 - **Every distinct vertex layout, topology and render state combination creates a pipeline
   object.** sokol_gfx bakes all of them into the pipeline, including the index type, so the cache
   is keyed on the full set. A scene that cycles through many combinations grows the cache; nothing
@@ -134,11 +143,11 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_Lit3D` | 10, every one a real pixel read-back | all pass |
 | `Sokol_RenderTarget_ViewportScissorReset` | 6 | all pass |
 | `Sokol_RenderTarget2D_Depth` | 1, a real depth-occlusion proof inside a render target | all pass |
-| `Sokol_RenderTarget_DepthStencilUsage` | 29 | all pass |
-| `Sokol_RenderTarget_PassBoundary` | 28 | all pass |
+| `Sokol_RenderTarget_DepthStencilUsage` | 29, incl. 4 cube legs (U1-U4) | all pass |
+| `Sokol_RenderTarget_PassBoundary` | 30, incl. 4 cube legs (C1/C2) | all pass |
 | `Sokol_RenderTarget_ProducerConsumer` | 27 | all pass |
-| `Sokol_RenderTarget_BackbufferConsumer` | 3 real, the rest honestly INFO-skipped (no direct `RenderTarget2D::GetData`) | all pass |
-| `Sokol_RenderTarget_FirstUse` | 15 | all pass |
+| `Sokol_RenderTarget_BackbufferConsumer` | 3 real, the rest honestly INFO-skipped (no direct `RenderTarget2D`/`RenderTargetCube::GetData`) | all pass |
+| `Sokol_RenderTarget_FirstUse` | 16, incl. a cube leg (N) | all pass |
 | `Sokol_RenderTarget_SamplingOrientation` | 29 | all pass |
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
