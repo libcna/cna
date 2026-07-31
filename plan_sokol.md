@@ -173,7 +173,7 @@ That makes it valuable to CNA in two specific ways:
 | SOKOL-20 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` + a colored-3D shader | ✅ | `Sokol_3D` 10/10, incl. depth-occlusion and culling proofs |
 | SOKOL-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: `BasicEffect` variants (textured, lit, fog) | ✅ | `Sokol_Lit3D` 10/10; dual-texture/env-map/skinned/PBR still throw |
 | SOKOL-22 | Honour every `SetVertexDeclaration()` element, not just Position/Color usage index 0 | 🟨 | The colored-3D pipeline is keyed on the real declaration; other usages still ignored |
-| SOKOL-23 | Full `ApplyRasterizerState` (fill mode, depth bias) and stencil in the pipeline key | ⬜ | Cull mode landed with `SOKOL-20`; fill/bias/stencil still accepted-and-ignored |
+| SOKOL-23 | Full `ApplyRasterizerState` (fill mode, depth bias) and stencil in the pipeline key | 🟨 | Stencil done: `ApplyDepthStencilState` wires the real stencil state (front/back ops, compare, read/write masks, reference) into `Pipeline3DKey`/`Get3DPipeline` -- `sg_stencil_state.ref` is baked into the pipeline object itself (sokol_gfx has no dynamic stencil-ref call, unlike most APIs), so it is part of the key too. Only `Get3DPipeline` reads it; the sprite pipeline still never requests stencil (XNA's SpriteBatch always runs with it disabled). Cull mode landed with `SOKOL-20`; fill mode/depth bias still accepted-and-ignored (`SOKOL-23` remainder) |
 | SOKOL-24 | Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ⬜ | Measure once a 3D path exists to measure with |
 
 ### Phase 5 — Render targets and remaining resources (SOKOL-25 landed, SOKOL-27 partial)

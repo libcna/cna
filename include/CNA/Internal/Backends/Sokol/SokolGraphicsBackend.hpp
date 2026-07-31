@@ -1144,6 +1144,29 @@ namespace CNA::Internal::Backends::Sokol
             /// pipeline and rejects SG_PIXELFORMAT_DEPTH_STENCIL against a pass with none, so this
             /// has to be part of the key, not just depthTestEnabled/depthWriteEnabled.
             bool hasDepthAttachment;
+            /// Whether the currently active pass has a real depth-stencil attachment -- see
+            /// hasDepthAttachment's own comment. sokol_gfx bakes `desc.stencil` into the pipeline
+            /// too, and rejects a stencil-enabled pipeline against a pass with no attachment at
+            /// all, so stencil is only ever requested when this (and hasDepthAttachment, which is
+            /// identical in practice -- both ask about the same one attachment) both hold.
+            bool stencilEnabled;
+            int stencilFunc;
+            int stencilPass;
+            int stencilFail;
+            int stencilDepthFail;
+            /// Front-face values when twoSidedStencilMode is false; CounterClockwiseStencil* below
+            /// are only meaningful when it is true.
+            int ccwStencilFunc;
+            int ccwStencilPass;
+            int ccwStencilFail;
+            int ccwStencilDepthFail;
+            bool twoSidedStencilMode;
+            /// sokol_gfx's sg_stencil_state.read_mask/write_mask/ref are uint8_t and baked into the
+            /// pipeline object (unlike most APIs' dynamic stencil reference), so all three are part
+            /// of this key.
+            int stencilMask;
+            int stencilWriteMask;
+            int referenceStencil;
             int cullMode;
             int primitiveType;
             /// Raw sg_index_type: sokol_gfx bakes the index type into the pipeline, and rejects
@@ -1256,6 +1279,19 @@ namespace CNA::Internal::Backends::Sokol
         bool depthWriteEnabled_ = true;
         int depthFunc_ = 3;       // CompareFunction::LessEqual
         int referenceStencil_ = 0;
+
+        bool stencilEnabled_ = false;
+        int stencilFunc_ = 0;         // CompareFunction::Always
+        int stencilPass_ = 0;         // StencilOperation::Keep
+        int stencilFail_ = 0;         // StencilOperation::Keep
+        int stencilDepthFail_ = 0;    // StencilOperation::Keep
+        int ccwStencilFunc_ = 0;      // CompareFunction::Always
+        int ccwStencilPass_ = 0;      // StencilOperation::Keep
+        int ccwStencilFail_ = 0;      // StencilOperation::Keep
+        int ccwStencilDepthFail_ = 0; // StencilOperation::Keep
+        bool twoSidedStencilMode_ = false;
+        int stencilMask_ = 0x7FFFFFFF;      // DepthStencilState.Default; truncated to 0xFF on use
+        int stencilWriteMask_ = 0x7FFFFFFF; // ditto
 
         bool scissorEnabled_ = false;
         int scissorRect_[4] = {0, 0, 0, 0};

@@ -102,6 +102,22 @@ namespace CNA::Internal::Backends::Sokol
             }
         }
 
+        sg_stencil_op ToStencilOp(int stencilOperation)
+        {
+            switch (stencilOperation)
+            {
+                case 0:  return SG_STENCILOP_KEEP;        // StencilOperation::Keep
+                case 1:  return SG_STENCILOP_ZERO;        // Zero
+                case 2:  return SG_STENCILOP_REPLACE;     // Replace
+                case 3:  return SG_STENCILOP_INCR_WRAP;   // Increment
+                case 4:  return SG_STENCILOP_DECR_WRAP;   // Decrement
+                case 5:  return SG_STENCILOP_INCR_CLAMP;  // IncrementSaturation
+                case 6:  return SG_STENCILOP_DECR_CLAMP;  // DecrementSaturation
+                case 7:  return SG_STENCILOP_INVERT;      // Invert
+                default: return SG_STENCILOP_KEEP;
+            }
+        }
+
         sg_color_mask ToColorMask(int colorWriteChannels)
         {
             // XNA's ColorWriteChannels bit layout (bit0=R, bit1=G, bit2=B, bit3=A) is identical to
@@ -926,6 +942,19 @@ namespace CNA::Internal::Backends::Sokol
             && depthWriteEnabled == other.depthWriteEnabled
             && depthFunc == other.depthFunc
             && hasDepthAttachment == other.hasDepthAttachment
+            && stencilEnabled == other.stencilEnabled
+            && stencilFunc == other.stencilFunc
+            && stencilPass == other.stencilPass
+            && stencilFail == other.stencilFail
+            && stencilDepthFail == other.stencilDepthFail
+            && ccwStencilFunc == other.ccwStencilFunc
+            && ccwStencilPass == other.ccwStencilPass
+            && ccwStencilFail == other.ccwStencilFail
+            && ccwStencilDepthFail == other.ccwStencilDepthFail
+            && twoSidedStencilMode == other.twoSidedStencilMode
+            && stencilMask == other.stencilMask
+            && stencilWriteMask == other.stencilWriteMask
+            && referenceStencil == other.referenceStencil
             && cullMode == other.cullMode
             && primitiveType == other.primitiveType
             && indexType == other.indexType
@@ -959,6 +988,19 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.depthWriteEnabled));
         mix(static_cast<std::size_t>(key.depthFunc));
         mix(static_cast<std::size_t>(key.hasDepthAttachment));
+        mix(static_cast<std::size_t>(key.stencilEnabled));
+        mix(static_cast<std::size_t>(key.stencilFunc));
+        mix(static_cast<std::size_t>(key.stencilPass));
+        mix(static_cast<std::size_t>(key.stencilFail));
+        mix(static_cast<std::size_t>(key.stencilDepthFail));
+        mix(static_cast<std::size_t>(key.ccwStencilFunc));
+        mix(static_cast<std::size_t>(key.ccwStencilPass));
+        mix(static_cast<std::size_t>(key.ccwStencilFail));
+        mix(static_cast<std::size_t>(key.ccwStencilDepthFail));
+        mix(static_cast<std::size_t>(key.twoSidedStencilMode));
+        mix(static_cast<std::size_t>(key.stencilMask));
+        mix(static_cast<std::size_t>(key.stencilWriteMask));
+        mix(static_cast<std::size_t>(key.referenceStencil));
         mix(static_cast<std::size_t>(key.cullMode));
         mix(static_cast<std::size_t>(key.primitiveType));
         mix(static_cast<std::size_t>(key.indexType));
@@ -1642,14 +1684,21 @@ namespace CNA::Internal::Backends::Sokol
         depthFunc_ = depthFunc;
         referenceStencil_ = referenceStencil;
 
-        // Stencil is deliberately not wired into the pipeline key yet: this backend's only draw
-        // path is SpriteBatch, which XNA always runs with stencil disabled, so keying pipelines on
-        // sixteen more stencil fields would multiply the cache without any draw able to exercise
-        // it. It lands with the 3D path (plan_sokol.md Phase SOKOL-5).
-        (void)stencilEnable; (void)stencilFunc; (void)stencilPass; (void)stencilFail;
-        (void)stencilDepthFail; (void)stencilMask; (void)stencilWriteMask;
-        (void)twoSidedStencilMode; (void)ccwStencilFunc; (void)ccwStencilPass;
-        (void)ccwStencilFail; (void)ccwStencilDepthFail;
+        // Wired into Pipeline3DKey (plan_sokol.md SOKOL-23): the 3D pipeline is the only draw path
+        // that ever requests stencil (XNA's SpriteBatch always runs with it disabled), so only
+        // DrawColored3D's key construction reads these -- GetSpritePipeline never does.
+        stencilEnabled_ = stencilEnable;
+        stencilFunc_ = stencilFunc;
+        stencilPass_ = stencilPass;
+        stencilFail_ = stencilFail;
+        stencilDepthFail_ = stencilDepthFail;
+        stencilMask_ = stencilMask;
+        stencilWriteMask_ = stencilWriteMask;
+        twoSidedStencilMode_ = twoSidedStencilMode;
+        ccwStencilFunc_ = ccwStencilFunc;
+        ccwStencilPass_ = ccwStencilPass;
+        ccwStencilFail_ = ccwStencilFail;
+        ccwStencilDepthFail_ = ccwStencilDepthFail;
     }
 
     void SokolGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
@@ -2064,14 +2113,36 @@ namespace CNA::Internal::Backends::Sokol
             desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
             desc.depth.compare = key.depthTestEnabled ? ToCompareFunc(key.depthFunc) : SG_COMPAREFUNC_ALWAYS;
             desc.depth.write_enabled = key.depthTestEnabled && key.depthWriteEnabled;
+
+            // CreateRenderTarget2D always allocates the combined SG_PIXELFORMAT_DEPTH_STENCIL
+            // format regardless of the requested DepthFormat (docs/sokol-backend.md), so a real
+            // stencil plane exists whenever hasDepthAttachment does -- there is no depth-only case
+            // to distinguish here, unlike D3D/Vulkan backends that honour DepthFormat precisely.
+            desc.stencil.enabled = key.stencilEnabled;
+            if (key.stencilEnabled)
+            {
+                const sg_stencil_face_state front{
+                    ToCompareFunc(key.stencilFunc), ToStencilOp(key.stencilFail),
+                    ToStencilOp(key.stencilDepthFail), ToStencilOp(key.stencilPass)};
+                desc.stencil.front = front;
+                desc.stencil.back = key.twoSidedStencilMode
+                    ? sg_stencil_face_state{ToCompareFunc(key.ccwStencilFunc), ToStencilOp(key.ccwStencilFail),
+                                            ToStencilOp(key.ccwStencilDepthFail), ToStencilOp(key.ccwStencilPass)}
+                    : front;
+                desc.stencil.read_mask = static_cast<std::uint8_t>(key.stencilMask & 0xFF);
+                desc.stencil.write_mask = static_cast<std::uint8_t>(key.stencilWriteMask & 0xFF);
+                desc.stencil.ref = static_cast<std::uint8_t>(key.referenceStencil & 0xFF);
+            }
         }
         else
         {
             // See GetSpritePipeline's identical branch: sokol_gfx requires compare=ALWAYS and
-            // write_enabled=false whenever the pipeline's own depth.pixel_format is NONE.
+            // write_enabled=false whenever the pipeline's own depth.pixel_format is NONE. No real
+            // stencil plane exists there either (see the comment above), so stencil stays disabled.
             desc.depth.pixel_format = SG_PIXELFORMAT_NONE;
             desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
             desc.depth.write_enabled = false;
+            desc.stencil.enabled = false;
         }
         desc.color_count = 1;
         desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
@@ -2173,6 +2244,19 @@ namespace CNA::Internal::Backends::Sokol
         // the attachment's pixel format into the pipeline itself.
         key.hasDepthAttachment = currentRenderTarget_ == nullptr
             || currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
+        key.stencilEnabled = stencilEnabled_;
+        key.stencilFunc = stencilFunc_;
+        key.stencilPass = stencilPass_;
+        key.stencilFail = stencilFail_;
+        key.stencilDepthFail = stencilDepthFail_;
+        key.ccwStencilFunc = ccwStencilFunc_;
+        key.ccwStencilPass = ccwStencilPass_;
+        key.ccwStencilFail = ccwStencilFail_;
+        key.ccwStencilDepthFail = ccwStencilDepthFail_;
+        key.twoSidedStencilMode = twoSidedStencilMode_;
+        key.stencilMask = stencilMask_;
+        key.stencilWriteMask = stencilWriteMask_;
+        key.referenceStencil = referenceStencil_;
         key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
         key.indexType = static_cast<int>(
             ib == nullptr ? SG_INDEXTYPE_NONE

@@ -58,6 +58,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Sampling a `RenderTarget2D` as a texture, including a never-read-back target the same frame it was produced | ✅ | `Sokol_RenderTarget_ProducerConsumer`, `Sokol_RenderTarget_BackbufferConsumer`, `Sokol_RenderTarget_SamplingOrientation` — SpriteBatch and BasicEffect/AlphaTestEffect textured 3D alike, top-left logical orientation preserved |
 | A brand-new `RenderTarget2D` usable immediately, no warm-up frame | ✅ | `Sokol_RenderTarget_FirstUse` |
 | `TextureCube` storage (`SetData`/`GetData`, every declared mip level, all 6 faces) | ✅ | `CnaTests`' `TextureCubeTest` suite (49 tests), plus the XNB `TextureCubeReader` and CNJ cube content-loading tests |
+| Stencil test operations for 3D draws (`DepthStencilState.StencilEnable`/`StencilFunction`/`StencilPass`/`StencilFail`/`StencilDepthBufferFail`, masks, reference, two-sided mode) | ✅ | Wired into `Pipeline3DKey`/`Get3DPipeline`; `SpriteBatch` never requests stencil (matches XNA) |
 
 ## What does not work yet
 
@@ -76,7 +77,6 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `OcclusionQuery` | `CreateOcclusionQuery` returns null — sokol_gfx exposes no query API at all | `SOKOL-29` |
 | `RasterizerState` fill mode and depth bias | accepted and ignored — sokol_gfx exposes no polygon fill mode, and depth bias is not yet wired into any pipeline. Cull mode *is* honoured | `SOKOL-23` |
-| Stencil test operations | `ApplyDepthStencilState` records the depth half only; stencil is not in the pipeline key | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
 | `Viewport.MinDepth` / `MaxDepth` | ignored — `sg_apply_viewport` carries no depth range | `SOKOL-21` |
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
@@ -109,6 +109,12 @@ correctly, which the table above is the authority on.
   object.** sokol_gfx bakes all of them into the pipeline, including the index type, so the cache
   is keyed on the full set. A scene that cycles through many combinations grows the cache; nothing
   evicts from it for the lifetime of the device.
+- **The stencil reference value is baked into the pipeline object, not applied dynamically.**
+  Unlike most graphics APIs (and unlike XNA's own `GraphicsDevice.ReferenceStencil`, a per-draw
+  value), sokol_gfx's `sg_stencil_state.ref` is part of `sg_pipeline_desc` and has no separate
+  "set the current stencil ref" call. `Pipeline3DKey` includes it, so a scene that changes
+  `ReferenceStencil` between otherwise-identical stencil-testing draws creates one pipeline per
+  distinct value rather than reusing one.
 
 ## Verification status
 
