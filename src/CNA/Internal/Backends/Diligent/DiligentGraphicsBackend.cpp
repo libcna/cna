@@ -458,6 +458,73 @@ void main(in PSInput psIn, out PSOutput psOut)
 }
 )";
 
+        /// The bone palette lives in its own constant buffer: 72 matrices is 4.5 KB, far too much
+        /// to append to the per-draw block every non-skinned draw also uploads.
+        constexpr const char* kBonesHlsl = R"(
+cbuffer Bones
+{
+    row_major float4x4 g_Bones[72];
+};
+
+/// FNA's Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2 or 4) weight/index pairs.
+float4x4 ComputeSkinMatrix(float4 weights, uint4 indices, float weightsPerVertex)
+{
+    float4x4 skin = g_Bones[indices.x] * weights.x;
+    if (weightsPerVertex >= 2.0)
+        skin += g_Bones[indices.y] * weights.y;
+    if (weightsPerVertex >= 4.0)
+        skin += g_Bones[indices.z] * weights.z + g_Bones[indices.w] * weights.w;
+    return skin;
+}
+
+/// Inverse transpose of a 3x3, written out because HLSL has no inverse(). FNA composes the
+/// bone-skin 3x3 with this outer world normal matrix, so a rotated or non-uniformly scaled
+/// skinned model is lit correctly rather than as if World were identity.
+float3x3 InverseTranspose3x3(float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float determinant = dot(m[0], c0);
+    float invDeterminant = (abs(determinant) > 1e-8) ? (1.0 / determinant) : 0.0;
+    return float3x3(c0 * invDeterminant, c1 * invDeterminant, c2 * invDeterminant);
+}
+)";
+
+        constexpr const char* kSkinnedVertexHlsl = R"(
+struct VSInput
+{
+    float3 Pos          : ATTRIB0;
+    float3 Normal       : ATTRIB1;
+    float2 UV           : ATTRIB2;
+    float4 BlendWeights : ATTRIB3;
+    uint4  BlendIndices : ATTRIB4;
+};
+
+struct PSInput
+{
+    float4 Pos      : SV_POSITION;
+    float2 UV       : TEX_COORD;
+    float3 WorldPos : WORLD_POS;
+    float3 Normal   : NORMAL;
+    float  FogKeep  : FOG_KEEP;
+};
+
+void main(in VSInput vsIn, out PSInput psIn)
+{
+    float4x4 skin = ComputeSkinMatrix(vsIn.BlendWeights, vsIn.BlendIndices, g_Flags.w);
+    float4 skinnedPos = mul(float4(vsIn.Pos, 1.0), skin);
+
+    psIn.Pos      = mul(skinnedPos, g_WorldViewProj);
+    psIn.WorldPos = mul(skinnedPos, g_World).xyz;
+
+    float3 skinnedNormal = mul(vsIn.Normal, (float3x3)skin);
+    psIn.Normal   = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)g_World)));
+    psIn.UV       = vsIn.UV;
+    psIn.FogKeep  = ComputeFogKeep(skinnedPos.xyz);
+}
+)";
+
         [[nodiscard]] Dg::BLEND_FACTOR ToBlendFactor(int xnaBlend)
         {
             switch (xnaBlend)
@@ -1026,8 +1093,14 @@ void main(in PSInput psIn, out PSOutput psOut)
     DiligentRenderTargetBackend::~DiligentRenderTargetBackend()
     {
         // A target destroyed while still bound must not leave the context pointing at freed views.
-        if (owner_.currentRenderTarget_ == this)
-            owner_.SetRenderTarget2D(nullptr);
+        for (const DiligentRenderTargetBackend* bound : owner_.currentRenderTargets_)
+        {
+            if (bound == this)
+            {
+                owner_.SetRenderTarget2D(nullptr);
+                break;
+            }
+        }
     }
 
     Dg::TEXTURE_FORMAT DiligentRenderTargetBackend::GetColorFormat() const
@@ -1456,7 +1529,8 @@ void main(in PSInput psIn, out PSOutput psOut)
                blendFuncs == other.blendFuncs && writeMask == other.writeMask &&
                depth == other.depth && stencilFront == other.stencilFront &&
                stencilBack == other.stencilBack && stencilMasks == other.stencilMasks &&
-               raster == other.raster && targetFormats == other.targetFormats;
+               raster == other.raster && targetFormats == other.targetFormats &&
+               extraTargetFormats == other.extraTargetFormats;
     }
 
     std::size_t DiligentGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const noexcept
@@ -1464,7 +1538,8 @@ void main(in PSInput psIn, out PSOutput psOut)
         std::size_t hash = static_cast<std::size_t>(key.variant);
         const std::uint32_t fields[] = {key.topology, key.blend, key.blendFuncs, key.writeMask,
                                         key.depth, key.stencilFront, key.stencilBack,
-                                        key.stencilMasks, key.raster, key.targetFormats};
+                                        key.stencilMasks, key.raster, key.targetFormats,
+                                        key.extraTargetFormats};
         for (const std::uint32_t field : fields)
             hash = hash * 1099511628211ull ^ static_cast<std::size_t>(field);
         return hash;
@@ -1497,7 +1572,7 @@ void main(in PSInput psIn, out PSOutput psOut)
         // The alpha-blended, depth-tested defaults every other CNA backend starts from.
         state_.blend = PackBytes(4, 5, 4, 5);
         state_.blendFuncs = PackBytes(0, 0, 1, 0);
-        state_.writeMask = 15;
+        state_.writeMask = 0xFFFF;
         state_.depth = PackBytes(1, 1, 3, 0);
         state_.stencilMasks = PackBytes(0xFF, 0xFF, 0, 0);
         state_.raster = PackBytes(0, 0, 0, 0);
@@ -1676,6 +1751,26 @@ void main(in PSInput psIn, out PSOutput psOut)
         device_->CreateBuffer(desc, nullptr, &constantBuffer_);
         if (!constantBuffer_)
             throw std::runtime_error("CNA Diligent: constant buffer creation failed");
+
+        Dg::BufferDesc boneDesc;
+        boneDesc.Name = "CNA bone transforms";
+        boneDesc.Size = sizeof(GpuDrawParams{}.boneTransforms);
+        boneDesc.BindFlags = Dg::BIND_UNIFORM_BUFFER;
+        boneDesc.Usage = Dg::USAGE_DYNAMIC;
+        boneDesc.CPUAccessFlags = Dg::CPU_ACCESS_WRITE;
+        device_->CreateBuffer(boneDesc, nullptr, &boneBuffer_);
+        if (!boneBuffer_)
+            throw std::runtime_error("CNA Diligent: bone buffer creation failed");
+    }
+
+    void DiligentGraphicsBackend::UploadBoneTransforms(const GpuDrawParams& params)
+    {
+        void* mapped = nullptr;
+        context_->MapBuffer(boneBuffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
+        if (mapped == nullptr)
+            throw std::runtime_error("CNA Diligent: bone buffer could not be mapped");
+        std::memcpy(mapped, params.boneTransforms, sizeof(params.boneTransforms));
+        context_->UnmapBuffer(boneBuffer_, Dg::MAP_WRITE);
     }
 
     void DiligentGraphicsBackend::CreateFallbackTexture()
@@ -1724,27 +1819,38 @@ void main(in PSInput psIn, out PSOutput psOut)
     {
         if (renderTargetsBound_)
             return;
-        Dg::ITextureView* renderTarget = currentRenderTarget_ != nullptr
-                                             ? currentRenderTarget_->GetRenderTargetView()
-                                             : swapChain_->GetCurrentBackBufferRTV();
-        Dg::ITextureView* depthStencil = currentRenderTarget_ != nullptr
-                                             ? currentRenderTarget_->GetDepthStencilView()
-                                             : swapChain_->GetDepthBufferDSV();
-        context_->SetRenderTargets(1, &renderTarget, depthStencil,
-                                   Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+        if (currentRenderTargets_.empty())
+        {
+            Dg::ITextureView* backBuffer = swapChain_->GetCurrentBackBufferRTV();
+            context_->SetRenderTargets(1, &backBuffer, swapChain_->GetDepthBufferDSV(),
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        }
+        else
+        {
+            // Slot order is the caller's binding order; the depth-stencil buffer always comes from
+            // slot 0, which is also the target whose size drives the viewport.
+            std::vector<Dg::ITextureView*> views;
+            views.reserve(currentRenderTargets_.size());
+            for (DiligentRenderTargetBackend* target : currentRenderTargets_)
+                views.push_back(target->GetRenderTargetView());
+            context_->SetRenderTargets(static_cast<Dg::Uint32>(views.size()), views.data(),
+                                       currentRenderTargets_.front()->GetDepthStencilView(),
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        }
         renderTargetsBound_ = true;
         ApplyViewportAndScissor();
     }
 
     Dg::ITextureView* DiligentGraphicsBackend::GetCurrentRenderTargetView() const
     {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetRenderTargetView()
+        return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetRenderTargetView()
                                                : swapChain_->GetCurrentBackBufferRTV();
     }
 
     Dg::ITextureView* DiligentGraphicsBackend::GetCurrentDepthStencilView() const
     {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetDepthStencilView()
+        return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetDepthStencilView()
                                                : swapChain_->GetDepthBufferDSV();
     }
 
@@ -1791,12 +1897,12 @@ void main(in PSInput psIn, out PSOutput psOut)
 
     void DiligentGraphicsBackend::ApplyViewportAndScissor()
     {
-        if (currentRenderTarget_ != nullptr)
+        if (PrimaryRenderTarget() != nullptr)
         {
             // A render target has no window to letterbox into: its own pixels are the coordinate
             // space, so the presentation-mode scaling that applies to the back buffer must not.
-            const auto targetWidth = static_cast<Dg::Uint32>(currentRenderTarget_->GetWidth());
-            const auto targetHeight = static_cast<Dg::Uint32>(currentRenderTarget_->GetHeight());
+            const auto targetWidth = static_cast<Dg::Uint32>(PrimaryRenderTarget()->GetWidth());
+            const auto targetHeight = static_cast<Dg::Uint32>(PrimaryRenderTarget()->GetHeight());
 
             Dg::Viewport targetViewport;
             targetViewport.TopLeftX = customViewport_ ? static_cast<float>(viewportRect_[0]) : 0.0f;
@@ -1866,8 +1972,16 @@ void main(in PSInput psIn, out PSOutput psOut)
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
         const float clearColor[] = {r, g, b, a};
-        context_->ClearRenderTarget(GetCurrentRenderTargetView(), clearColor,
-                                    Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        if (currentRenderTargets_.empty())
+        {
+            context_->ClearRenderTarget(swapChain_->GetCurrentBackBufferRTV(), clearColor,
+                                        Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            return;
+        }
+        // XNA clears every bound target, not only slot 0.
+        for (DiligentRenderTargetBackend* target : currentRenderTargets_)
+            context_->ClearRenderTarget(target->GetRenderTargetView(), clearColor,
+                                        Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     }
 
     void DiligentGraphicsBackend::ClearDepth(float depth)
@@ -2019,10 +2133,18 @@ void main(in PSInput psIn, out PSOutput psOut)
     void DiligentGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         auto* target = static_cast<DiligentRenderTargetBackend*>(rt);
-        if (target == currentRenderTarget_)
+        if (currentRenderTargets_.size() == (target != nullptr ? 1u : 0u) &&
+            (target == nullptr || currentRenderTargets_[0] == target))
             return;
-        currentRenderTarget_ = target;
+        currentRenderTargets_.clear();
+        if (target != nullptr)
+            currentRenderTargets_.push_back(target);
         renderTargetsBound_ = false;
+    }
+
+    DiligentRenderTargetBackend* DiligentGraphicsBackend::PrimaryRenderTarget() const
+    {
+        return currentRenderTargets_.empty() ? nullptr : currentRenderTargets_.front();
     }
 
     std::unique_ptr<IVertexBufferBackend> DiligentGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
@@ -2042,13 +2164,13 @@ void main(in PSInput psIn, out PSOutput psOut)
 
     Dg::TEXTURE_FORMAT DiligentGraphicsBackend::CurrentColorFormat() const
     {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetColorFormat()
+        return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetColorFormat()
                                                : swapChain_->GetDesc().ColorBufferFormat;
     }
 
     Dg::TEXTURE_FORMAT DiligentGraphicsBackend::CurrentDepthStencilFormat() const
     {
-        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetDepthStencilFormat()
+        return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetDepthStencilFormat()
                                                : swapChain_->GetDesc().DepthBufferFormat;
     }
 
@@ -2165,12 +2287,16 @@ void main(in PSInput psIn, out PSOutput psOut)
                 throw std::runtime_error(
                     "CNA Diligent: cube-map render targets are not implemented yet on this backend");
         }
-        if (count > 1)
-            throw std::runtime_error(
-                "CNA Diligent: multiple simultaneous render targets are not implemented yet on "
-                "this backend");
-
-        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        currentRenderTargets_.clear();
+        for (int i = 0; i < count; ++i)
+        {
+            auto* target = static_cast<DiligentRenderTargetBackend*>(renderTargets[i].GetRenderTarget2D());
+            if (target == nullptr)
+                throw std::runtime_error(
+                    "CNA Diligent: a render-target slot holds a target this backend never created");
+            currentRenderTargets_.push_back(target);
+        }
+        renderTargetsBound_ = false;
         EnsureRenderTargetsBound();
     }
 
@@ -2186,8 +2312,9 @@ void main(in PSInput psIn, out PSOutput psOut)
                 return deviceType_ != DiligentDeviceType::OpenGL;
             case CNA::GraphicsCapability::Texture3D:
                 return true;
-            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
             case CNA::GraphicsCapability::MultipleRenderTargets:
+                return true;
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
             case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::CustomEffects:
                 return false;
@@ -2204,9 +2331,17 @@ void main(in PSInput psIn, out PSOutput psOut)
                                     alphaSrcBlend == 0 && alphaDstBlend == 1);
         state_.blend = PackBytes(colorSrcBlend, colorDstBlend, alphaSrcBlend, alphaDstBlend);
         state_.blendFuncs = PackBytes(colorBlendFunc, alphaBlendFunc, blendEnabled ? 1 : 0, 0);
-        // Only slot 0 is meaningful: this backend renders to a single target, and MultiSampleMask
-        // has nothing to mask on a single-sampled back buffer.
-        state_.writeMask = static_cast<std::uint32_t>(writeState.colorWriteChannels[0] & 0xF);
+        // All four slot masks are carried into the pipeline state (DILIGENT-24 made slots 1..3
+        // bindable), but only slot 0's is observable today: every built-in shader here declares a
+        // single SV_TARGET, so slots 1..3 receive clears and no fragments until a multi-output
+        // custom ShaderEffect exists (DILIGENT-42). MultiSampleMask stays inert regardless -- the
+        // back buffer and every render target here are single-sampled.
+        state_.writeMask = 0;
+        for (int slot = 0; slot < 4; ++slot)
+        {
+            state_.writeMask |= static_cast<std::uint32_t>(writeState.colorWriteChannels[slot] & 0xF)
+                                << (slot * 4);
+        }
     }
 
     void DiligentGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -2340,6 +2475,16 @@ void main(in PSInput psIn, out PSOutput psOut)
         key.topology = static_cast<std::uint32_t>(ToTopology(primitive));
         key.targetFormats = static_cast<std::uint32_t>(CurrentColorFormat()) |
                             (static_cast<std::uint32_t>(CurrentDepthStencilFormat()) << 16);
+
+        const auto targetCount = static_cast<std::uint32_t>(
+            std::max<std::size_t>(1, currentRenderTargets_.size()));
+        std::uint32_t extra = targetCount << 24;
+        for (std::size_t slot = 1; slot < currentRenderTargets_.size() && slot < 4; ++slot)
+        {
+            extra |= static_cast<std::uint32_t>(currentRenderTargets_[slot]->GetColorFormat())
+                     << ((slot - 1) * 8);
+        }
+        key.extraTargetFormats = extra;
         return key;
     }
 
@@ -2355,6 +2500,7 @@ void main(in PSInput psIn, out PSOutput psOut)
         bool usesTexture = false;
         bool usesSecondTexture = false;
         bool usesEnvironmentMap = false;
+        bool usesBones = false;
 
         switch (key.variant)
         {
@@ -2426,6 +2572,21 @@ void main(in PSInput psIn, out PSOutput psOut)
                 usesTexture = true;
                 usesSecondTexture = true;
                 break;
+            case ShaderVariant::Skinned3D:
+                vertexSource = kSkinnedVertexHlsl;
+                pixelSource = kLitPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{3, 0, 4, Dg::VT_FLOAT32, Dg::False},
+                    // Bone indices are indices, not a normalized colour: they must reach the
+                    // shader as the integers they are.
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_UINT8, Dg::False},
+                };
+                usesTexture = true;
+                usesBones = true;
+                break;
             case ShaderVariant::EnvironmentMap3D:
                 vertexSource = kLitVertexHlsl;
                 pixelSource = kEnvironmentMapPixelHlsl;
@@ -2439,7 +2600,8 @@ void main(in PSInput psIn, out PSOutput psOut)
                 break;
         }
 
-        const std::string vertexHlsl = std::string(kConstantsHlsl) + vertexSource;
+        const std::string vertexHlsl =
+            std::string(kConstantsHlsl) + (usesBones ? kBonesHlsl : "") + vertexSource;
         const std::string pixelHlsl = std::string(kConstantsHlsl) + kPixelHelpersHlsl + pixelSource;
 
         Dg::ShaderCreateInfo shaderCI;
@@ -2470,27 +2632,40 @@ void main(in PSInput psIn, out PSOutput psOut)
         psoCI.PSODesc.PipelineType = Dg::PIPELINE_TYPE_GRAPHICS;
 
         auto& graphicsPipeline = psoCI.GraphicsPipeline;
-        graphicsPipeline.NumRenderTargets = 1;
+        const auto targetCount = std::clamp<Dg::Uint8>(
+            static_cast<Dg::Uint8>((key.extraTargetFormats >> 24) & 0xFF), 1, 4);
+        graphicsPipeline.NumRenderTargets = targetCount;
         graphicsPipeline.RTVFormats[0] = static_cast<Dg::TEXTURE_FORMAT>(key.targetFormats & 0xFFFF);
+        for (Dg::Uint8 slot = 1; slot < targetCount; ++slot)
+        {
+            graphicsPipeline.RTVFormats[slot] = static_cast<Dg::TEXTURE_FORMAT>(
+                (key.extraTargetFormats >> ((slot - 1) * 8)) & 0xFF);
+        }
         graphicsPipeline.DSVFormat = static_cast<Dg::TEXTURE_FORMAT>((key.targetFormats >> 16) & 0xFFFF);
         graphicsPipeline.PrimitiveTopology = static_cast<Dg::PRIMITIVE_TOPOLOGY>(key.topology);
         graphicsPipeline.InputLayout.LayoutElements = layout.data();
         graphicsPipeline.InputLayout.NumElements = static_cast<Dg::Uint32>(layout.size());
 
-        auto& blend = graphicsPipeline.BlendDesc.RenderTargets[0];
-        blend.BlendEnable = ((key.blendFuncs >> 16) & 0xFF) != 0 ? Dg::True : Dg::False;
-        blend.SrcBlend = ToBlendFactor(static_cast<int>(key.blend & 0xFF));
-        blend.DestBlend = ToBlendFactor(static_cast<int>((key.blend >> 8) & 0xFF));
-        blend.SrcBlendAlpha = ToBlendFactor(static_cast<int>((key.blend >> 16) & 0xFF));
-        blend.DestBlendAlpha = ToBlendFactor(static_cast<int>((key.blend >> 24) & 0xFF));
-        blend.BlendOp = ToBlendOperation(static_cast<int>(key.blendFuncs & 0xFF));
-        blend.BlendOpAlpha = ToBlendOperation(static_cast<int>((key.blendFuncs >> 8) & 0xFF));
-        auto colorMask = Dg::COLOR_MASK_NONE;
-        if (ColorWriteHasRed(static_cast<int>(key.writeMask)))   colorMask |= Dg::COLOR_MASK_RED;
-        if (ColorWriteHasGreen(static_cast<int>(key.writeMask))) colorMask |= Dg::COLOR_MASK_GREEN;
-        if (ColorWriteHasBlue(static_cast<int>(key.writeMask)))  colorMask |= Dg::COLOR_MASK_BLUE;
-        if (ColorWriteHasAlpha(static_cast<int>(key.writeMask))) colorMask |= Dg::COLOR_MASK_ALPHA;
-        blend.RenderTargetWriteMask = colorMask;
+        graphicsPipeline.BlendDesc.IndependentBlendEnable = targetCount > 1 ? Dg::True : Dg::False;
+        for (Dg::Uint8 slot = 0; slot < targetCount; ++slot)
+        {
+            auto& blend = graphicsPipeline.BlendDesc.RenderTargets[slot];
+            blend.BlendEnable = ((key.blendFuncs >> 16) & 0xFF) != 0 ? Dg::True : Dg::False;
+            blend.SrcBlend = ToBlendFactor(static_cast<int>(key.blend & 0xFF));
+            blend.DestBlend = ToBlendFactor(static_cast<int>((key.blend >> 8) & 0xFF));
+            blend.SrcBlendAlpha = ToBlendFactor(static_cast<int>((key.blend >> 16) & 0xFF));
+            blend.DestBlendAlpha = ToBlendFactor(static_cast<int>((key.blend >> 24) & 0xFF));
+            blend.BlendOp = ToBlendOperation(static_cast<int>(key.blendFuncs & 0xFF));
+            blend.BlendOpAlpha = ToBlendOperation(static_cast<int>((key.blendFuncs >> 8) & 0xFF));
+
+            const int slotMask = static_cast<int>((key.writeMask >> (slot * 4)) & 0xF);
+            auto colorMask = Dg::COLOR_MASK_NONE;
+            if (ColorWriteHasRed(slotMask))   colorMask |= Dg::COLOR_MASK_RED;
+            if (ColorWriteHasGreen(slotMask)) colorMask |= Dg::COLOR_MASK_GREEN;
+            if (ColorWriteHasBlue(slotMask))  colorMask |= Dg::COLOR_MASK_BLUE;
+            if (ColorWriteHasAlpha(slotMask)) colorMask |= Dg::COLOR_MASK_ALPHA;
+            blend.RenderTargetWriteMask = colorMask;
+        }
 
         auto& depthStencil = graphicsPipeline.DepthStencilDesc;
         depthStencil.DepthEnable = (key.depth & 0xFF) != 0 ? Dg::True : Dg::False;
@@ -2559,6 +2734,8 @@ void main(in PSInput psIn, out PSOutput psOut)
         {
             if (auto* variable = cached.pipeline->GetStaticVariableByName(stage, "Constants"))
                 variable->Set(constantBuffer_);
+            if (auto* variable = cached.pipeline->GetStaticVariableByName(stage, "Bones"))
+                variable->Set(boneBuffer_);
         }
 
         cached.pipeline->CreateShaderResourceBinding(&cached.binding, true);
@@ -2696,10 +2873,10 @@ void main(in PSInput psIn, out PSOutput psOut)
         // differently-sized target.
         float surfaceWidth;
         float surfaceHeight;
-        if (currentRenderTarget_ != nullptr)
+        if (PrimaryRenderTarget() != nullptr)
         {
-            surfaceWidth = static_cast<float>(currentRenderTarget_->GetWidth());
-            surfaceHeight = static_cast<float>(currentRenderTarget_->GetHeight());
+            surfaceWidth = static_cast<float>(PrimaryRenderTarget()->GetWidth());
+            surfaceHeight = static_cast<float>(PrimaryRenderTarget()->GetHeight());
         }
         else
         {
@@ -2810,8 +2987,7 @@ void main(in PSInput psIn, out PSOutput psOut)
             // available variant instead would silently produce a different image, so the draw is
             // refused until the matching phase of plan_diligent.md lands.
             const char* unsupported = nullptr;
-            if (params->skinned)                     unsupported = "SkinnedEffect";
-            else if (params->pbr)                    unsupported = "PbrEffect";
+            if (params->pbr)                         unsupported = "PbrEffect";
             else if (params->customEffectBackend)    unsupported = "custom ShaderEffect programs";
             else if (params->instanceCount > 1)      unsupported = "hardware instancing";
             if (unsupported != nullptr)
@@ -2836,6 +3012,7 @@ void main(in PSInput psIn, out PSOutput psOut)
                 variant = (params != nullptr && params->envMapping) ? ShaderVariant::EnvironmentMap3D
                                                                     : ShaderVariant::LitTextured3D;
                 break;
+            case 52: variant = ShaderVariant::Skinned3D; break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
@@ -2843,6 +3020,9 @@ void main(in PSInput psIn, out PSOutput psOut)
         if (dualTexture && stride != 20 && stride != 24)
             throw std::runtime_error(
                 "CNA Diligent: DualTextureEffect needs a textured vertex layout (stride 20 or 24)");
+        if (params != nullptr && params->skinned && stride != 52)
+            throw std::runtime_error(
+                "CNA Diligent: SkinnedEffect needs a skinned vertex layout (stride 52)");
         if (params != nullptr && params->envMapping && stride != 32)
             throw std::runtime_error(
                 "CNA Diligent: EnvironmentMapEffect needs a position/normal/UV vertex layout "
@@ -2903,12 +3083,15 @@ void main(in PSInput psIn, out PSOutput psOut)
             constants.flags[0] = params->textureEnabled && texture != nullptr ? 1.0f : 0.0f;
             constants.flags[1] = params->vertexColorEnabled ? 1.0f : 0.0f;
             constants.flags[2] = params->lightingEnabled ? 1.0f : 0.0f;
+            constants.flags[3] = static_cast<float>(params->weightsPerVertex);
         }
         else
         {
             constants.flags[1] = 1.0f;
         }
         UploadConstants(constants);
+        if (variant == ShaderVariant::Skinned3D && params != nullptr)
+            UploadBoneTransforms(*params);
 
         CachedPipeline& pipeline = GetOrCreatePipeline(MakePipelineKey(variant, primitive));
         if (pipeline.textureVariable != nullptr)

@@ -52,7 +52,7 @@ Practical consequences that shaped this plan:
 | Namespace alias | `Dg = ::Diligent` — the CNA namespace is itself named `Diligent`, so unqualified `Diligent::X` inside it would resolve to the CNA namespace and fail |
 | Third-party pin | DiligentCore `v2.5.6`, via `FetchContent` in `cmake/ThirdPartyDiligent.cmake` |
 | Task prefix | `DILIGENT-` |
-| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap` |
+| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT` |
 
 ---
 
@@ -134,12 +134,15 @@ Deliberately refused (each throws, naming itself):
 - `AlphaTestEffect`'s per-pixel discard and `BasicEffect`'s fog (`DILIGENT-31`/`DILIGENT-32`), on
   every 3D shader variant.
 - `DualTextureEffect` and `EnvironmentMapEffect` (`DILIGENT-33`/`DILIGENT-34`).
+- `SkinnedEffect` at stride 52 (`DILIGENT-35`).
+- Several simultaneous render targets (`DILIGENT-24`): all bound slots are attached and cleared,
+  though only slot 0 receives fragments from CNA's single-output built-in shaders.
 
 Deliberately refused (each throws, naming itself):
 
-- Cube-map render targets, MRT (2..4 slots), occlusion queries, custom `ShaderEffect` programs,
-  hardware instancing, `SkinnedEffect`, `PbrEffect`, MSAA. `SupportsCapability()` reports each of
-  these honestly.
+- Cube-map render targets, occlusion queries, custom `ShaderEffect` programs, hardware instancing,
+  `PbrEffect`, MSAA, and `SkinnedEffect`'s stride-56 vertex-colour variant.
+  `SupportsCapability()` reports each of these honestly.
 
 ---
 
@@ -160,7 +163,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-9` | HLSL shader set + pipeline cache | ✅ | Five variants; key covers topology and the full blend/depth-stencil/rasterizer state |
 | `DILIGENT-10` | `SpriteBatch` | ✅ | Batches flush on texture/sampler/transform change and at `End()` |
 | `DILIGENT-11` | 3D stride dispatch 16/20/24/32 + `BasicEffect` lighting | ✅ | |
-| `DILIGENT-12` | Render state family (`ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/`ApplySamplerState`) | ✅ | MRT slots 1..3 write masks and `MultiSampleMask` have no effect: single target, single sample |
+| `DILIGENT-12` | Render state family (`ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/`ApplySamplerState`) | ✅ | Slots 1..3 write masks are carried since `DILIGENT-24`, but are only observable once a multi-output shader exists; `MultiSampleMask` has no effect at all (single-sampled everywhere) |
 | `DILIGENT-13` | `ReadBackbuffer` | ✅ | |
 | `DILIGENT-14` | Honest `SupportsCapability()` + loud refusals for the unimplemented set | ✅ | Design decision 7 |
 | `DILIGENT-15` | `Diligent_DeviceSelection` unit tests (no GPU required) | ✅ | Runs in the normal `CnaTests` suite |
@@ -175,7 +178,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-21` | `RenderTarget2D` `GetData` readback and `PreserveContents` semantics | ✅ | Readback reuses `ReadTextureRegion`. Diligent's immediate context binds without a load operation, so contents always survive a bind cycle — which satisfies `PreserveContents` and is a legal superset of `DiscardContents` |
 | `DILIGENT-22` | `RenderTargetCube` + per-face binding | ⬜ | `DILIGENT-23` (its dependency) is done |
 | `DILIGENT-23` | `TextureCube` (`CreateTextureCube`, `SetData`/`GetData` per face) | ✅ | Six array slices of one `RESOURCE_DIM_TEX_CUBE`; full mip chain. Verified by the shared `TextureCubeTests`/`CnjCapabilityMatrixTests`/XNB cube fixtures, which now run for real on this backend instead of asserting the refusal |
-| `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ⬜ | Refused explicitly rather than binding slot 0 and dropping the rest. Unblocks the per-slot colour write masks `DILIGENT-12` currently ignores |
+| `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ✅ | All bound slots are attached and cleared, and the pipeline key carries every slot's format plus the per-slot colour write masks. Only slot 0 receives *fragments* today: every built-in shader declares one `SV_TARGET`, so slots 1..3 stay clear-only until `DILIGENT-42` |
 | `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | ⬜ | `ApplyMultiSampleCount()` currently reports 1 |
 | `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | 🟨 | Implemented: a mipped target is created with `MISC_TEXTURE_FLAG_GENERATE_MIPS` and regenerates on unbind, at the same point FNA3D does. No pixel test asserts the generated levels yet |
 
@@ -188,7 +191,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-32` | Fog for the `BasicEffect` family (`GpuDrawParams::fogVector`) | ✅ | The vertex stage computes FNA's `keep = 1 - saturate(dot(objectPos, fogVector))`, the pixel stage blends RGB toward `FogColor`. Verified fogged vs. fog-disabled on the same geometry |
 | `DILIGENT-33` | `DualTextureEffect` | ✅ | Two shader variants (stride 20 and 24) sharing one two-sampler pixel shader; the first layer is doubled before the modulate, as XNA does. Both layers share one UV set, matching every other CNA backend. Verified by `Diligent_DualTextureEnvMap` |
 | `DILIGENT-34` | `EnvironmentMapEffect` | ✅ | Reuses the lit vertex stage and adds a `TextureCube` sampler: reflection vector, flat or Fresnel-weighted blend factor, and the env-map specular term. Verified at amount 1 and amount 0 on the same geometry. Not byte-compared against FNA's `PSEnvMap` |
-| `DILIGENT-35` | `SkinnedEffect` (72-bone palette) | ⬜ | Diligent has no push-constant size cap of SDL_GPU's kind; a uniform buffer is enough |
+| `DILIGENT-35` | `SkinnedEffect` (72-bone palette, stride 52) | ✅ | The palette lives in its own uniform buffer (4.5 KB is too much for the per-draw block); FNA's `WeightsPerVertex` truncation and the bone-skin ∘ world normal matrix are both honoured. Verified by `Diligent_Skinned`, including a trap bone the second weight pair must never reach. The stride-56 vertex-colour variant is not implemented |
 | `DILIGENT-36` | `PbrEffect`/`SkinnedPbrEffect` | ⬜ | |
 | `DILIGENT-37` | Per-vertex lighting variant (`PreferPerPixelLighting == false`) | ⬜ | Same tracked cross-backend divergence as everywhere except D3D9 |
 

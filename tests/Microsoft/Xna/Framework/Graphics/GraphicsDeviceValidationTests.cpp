@@ -163,7 +163,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8) || defined(CNA_BACKEND_DILIGENT)
+#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8)
     // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
@@ -177,10 +177,8 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.
-    // plan_diligent.md DILIGENT-20/DILIGENT-24: Diligent renders into one target at a
-    // time here, so binding four throws for the same reason -- MRT is not implemented
-    // yet, and binding slot 0 while silently dropping the rest would render a scene
-    // that only looks right.
+    // Diligent left this list at plan_diligent.md DILIGENT-24: it is now real-MRT-capable
+    // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
 #elif defined(CNA_BACKEND_STUB)
     // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsBackend's nullptr

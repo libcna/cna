@@ -1092,6 +1092,7 @@ namespace CNA::Internal::Backends::Diligent
             DualTexture3D,      ///< stride 20: position + UV, two modulated texture layers
             DualTextureColored3D, ///< stride 24: position + packed colour + UV, two layers
             EnvironmentMap3D,   ///< stride 32: lit surface plus a cube-map reflection
+            Skinned3D,          ///< stride 52: lit surface skinned by a 72-bone palette
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */
@@ -1107,11 +1108,14 @@ namespace CNA::Internal::Backends::Diligent
             std::uint32_t stencilBack = 0;
             std::uint32_t stencilMasks = 0;
             std::uint32_t raster = 0;
-            /// Colour and depth-stencil formats of the bound target. A pipeline state is only
-            /// valid for the formats it was created against, and a render target's formats are
-            /// not necessarily the swap chain's -- the surface may hand out BGRA while every CNA
-            /// render target is RGBA.
+            /// Colour format of slot 0 in the low half, depth-stencil format in the high half. A
+            /// pipeline state is only valid for the formats it was created against, and a render
+            /// target's formats are not necessarily the swap chain's -- the surface may hand out
+            /// BGRA while every CNA render target is RGBA.
             std::uint32_t targetFormats = 0;
+            /// Formats of MRT slots 1..3, one byte each (every Diligent texture format ordinal
+            /// fits), plus the bound target count in the top byte.
+            std::uint32_t extraTargetFormats = 0;
 
             bool operator==(const PipelineKey& other) const noexcept;
         };
@@ -1167,6 +1171,7 @@ namespace CNA::Internal::Backends::Diligent
         bool TryCreateDevice(DiligentDeviceType type, int multiSampleCount);
         void CreateConstantBuffer();
         void CreateFallbackTexture();
+        void UploadBoneTransforms(const GpuDrawParams& params);
         void SyncSwapChainSize();
         void EnsureRenderTargetsBound();
         void ApplyViewportAndScissor();
@@ -1189,6 +1194,7 @@ namespace CNA::Internal::Backends::Diligent
                              const Matrix* transform, int filter, int addressU, int addressV);
         [[nodiscard]] Dg::ITextureView* GetBackBufferTextureView() const;
         [[nodiscard]] Dg::ITextureView* GetCurrentRenderTargetView() const;
+        [[nodiscard]] DiligentRenderTargetBackend* PrimaryRenderTarget() const;
         [[nodiscard]] Dg::ITextureView* GetCurrentDepthStencilView() const;
         [[nodiscard]] Dg::TEXTURE_FORMAT CurrentColorFormat() const;
         [[nodiscard]] Dg::TEXTURE_FORMAT CurrentDepthStencilFormat() const;
@@ -1200,6 +1206,9 @@ namespace CNA::Internal::Backends::Diligent
         Dg::RefCntAutoPtr<Dg::ISwapChain> swapChain_;
         Dg::RefCntAutoPtr<Dg::IEngineFactory> engineFactory_;
         Dg::RefCntAutoPtr<Dg::IBuffer> constantBuffer_;
+        /// SkinnedEffect's 72-matrix bone palette. Its own buffer: at 4.5 KB it would dominate the
+        /// per-draw constant block every non-skinned draw uploads too.
+        Dg::RefCntAutoPtr<Dg::IBuffer> boneBuffer_;
         /// 1x1 opaque white, bound whenever a textured vertex layout is drawn with texturing
         /// switched off. The shader ignores it (`g_Flags.x` is 0), but a pipeline that declares a
         /// texture variable still has to have one bound.
@@ -1232,6 +1241,7 @@ namespace CNA::Internal::Backends::Diligent
         float viewportDepth_[2] = {0.0f, 1.0f};
 
         bool renderTargetsBound_ = false;
-        DiligentRenderTargetBackend* currentRenderTarget_ = nullptr;
+        /// Every bound render target, slot-aligned. Empty means the back buffer.
+        std::vector<DiligentRenderTargetBackend*> currentRenderTargets_;
     };
 }

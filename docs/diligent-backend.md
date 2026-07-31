@@ -99,8 +99,10 @@ Implemented:
 - `RenderTarget2D` — off-screen colour with an optional real depth-stencil buffer, `GetData`
   readback, sampling the unbound target as a texture, and mip regeneration on unbind.
 - `AlphaTestEffect`'s per-pixel discard and `BasicEffect`'s fog, on every 3D shader variant.
-- `DualTextureEffect` (two modulated layers) and `EnvironmentMapEffect` (cube-map reflection, flat
-  or Fresnel-weighted).
+- `DualTextureEffect` (two modulated layers), `EnvironmentMapEffect` (cube-map reflection, flat or
+  Fresnel-weighted) and `SkinnedEffect` (72-bone palette, stride 52).
+- Several simultaneous render targets: all bound slots are attached and cleared. Only slot 0
+  receives fragments, because every built-in shader here declares a single output.
 - `BlendState`, `DepthStencilState`, `RasterizerState` and slot-0 `SamplerState`, all folded into
   the pipeline-state cache key.
 - `ReadBackbuffer` / `GraphicsDevice.GetBackBufferData`.
@@ -110,10 +112,10 @@ Not implemented — each **throws with its own name** rather than rendering an a
 
 | Feature | Tracked as |
 | --- | --- |
-| `RenderTargetCube`, MRT (2..4 simultaneous targets) | `DILIGENT-22`, `DILIGENT-24` |
+| `RenderTargetCube` | `DILIGENT-22` |
 | MSAA (back buffer and render targets) | `DILIGENT-25` |
 | Sampling a volume texture from a shader | `DILIGENT-42` |
-| `SkinnedEffect`, `PbrEffect` | `DILIGENT-35`, `DILIGENT-36` |
+| `PbrEffect`, `SkinnedEffect`'s stride-56 vertex-colour variant | `DILIGENT-36`, `DILIGENT-35` |
 | `OcclusionQuery` | `DILIGENT-41` |
 | Custom `ShaderEffect` programs | `DILIGENT-42` |
 | Hardware instancing | `DILIGENT-43` |
@@ -144,7 +146,8 @@ ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-fai
 ```
 
 `Diligent_2D` (6 checks), `Diligent_3D` (5 checks), `Diligent_RenderTarget` (5 checks) and
-`Diligent_AlphaTestFog` (4 checks) and `Diligent_DualTextureEnvMap` (4 checks) are the
+`Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned` and `Diligent_MRT`
+(4 checks each) are the
 real-device pixel proofs: they clear, draw `SpriteBatch` quads and 3D primitives on the back buffer
 and into an off-screen target, and assert on pixels read back through
 `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData`. Both pass against a real Vulkan device. On a machine with no
