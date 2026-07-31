@@ -527,12 +527,25 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # two slots independently observable (EnvironmentMapAmount 1 leaves the cube the only
     # contributor, 0 leaves the 2D texture the only one) and measures what every other backend
     # does with the same public state.
-    # REMED-GFX-172 is the declared boundary here: WebGPU's EnvironmentMap3D bind group has ONE
-    # sampler entry for two texture views, so SamplerStates[1] is inexpressible for the cube. This
-    # registration measures that boundary rather than hiding it, and WebGPU production is unchanged.
+    # REMED-GFX-172 fixed WebGPU's half of this: its EnvironmentMap3D bind group had ONE sampler
+    # entry for two texture views, so SamplerStates[1] was inexpressible for the cube and slot 1
+    # silently inherited slot 0's sampler. Both the WGSL and the layout now carry a second sampler.
     cna_webgpu_test(cna_test_webgpu_envmap_cube_sampler
         examples/envmap_cube_sampler_contract_test.cpp)
     cna_register_backend_test(NAME WebGPU_EnvMapCubeSamplerContract COMMAND cna_test_webgpu_envmap_cube_sampler
+        TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-172: DualTextureEffect's own half of the same defect. FNA's DualTextureEffect.fx
+    # declares DECLARE_TEXTURE(Texture, 0) and DECLARE_TEXTURE(Texture2, 1), so the two layers have
+    # INDEPENDENT public sampler slots. WebGPU's dual_texture3d.wgsl declared one `texSampler` and
+    # sampled both layers through it, its bind-group layout had one sampler entry for two views, and
+    # DualTextureDrawCommand carried one sampler-state group filled from slotSamplers_[0]. This
+    # fixture observes BOTH layers in the same image -- slot 0's texture varies along X only, slot
+    # 1's along Y only, and the shader's product is separable -- so "changing one sampler affects
+    # only its own resource" is measured rather than inferred. The other backends run it as controls.
+    cna_webgpu_test(cna_test_webgpu_dualtexture_slot_sampler
+        examples/dualtexture_slot_sampler_contract_test.cpp)
+    cna_register_backend_test(NAME WebGPU_DualTextureSlotSamplerContract COMMAND cna_test_webgpu_dualtexture_slot_sampler
         TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.

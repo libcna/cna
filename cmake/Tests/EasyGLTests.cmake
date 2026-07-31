@@ -1680,6 +1680,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             COMMAND cna_test_easygl_envmap_cube_sampler
             TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-172 cross-backend control: DualTextureEffect's two layers have INDEPENDENT public
+    # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
+    # DECLARE_TEXTURE(Texture2, 1). WebGPU declared ONE WGSL sampler for both texture views, so
+    # SamplerStates[1] was inexpressible and slot 1 inherited slot 0's. This fixture observes both
+    # layers in the SAME image -- slot 0's texture varies along X only, slot 1's along Y only, and
+    # the shader's product is separable -- so independence is measured, not inferred.
+        cna_easygl_test(cna_test_easygl_dualtexture_slot_sampler
+            examples/dualtexture_slot_sampler_contract_test.cpp)
+        cna_register_backend_test(NAME EasyGL_DualTextureSlotSamplerContract
+            COMMAND cna_test_easygl_dualtexture_slot_sampler
+            TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-174: a TextureFilter ordinal names four INDEPENDENT components, and EasyGL wrote
         # GL_TEXTURE_MAX_ANISOTROPY only when the ordinal was Anisotropic. Its per-slot GL sampler
         # object is mutated in place and reused, so that write could only ever raise the value and it

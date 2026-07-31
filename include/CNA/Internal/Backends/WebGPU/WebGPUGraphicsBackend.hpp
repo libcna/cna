@@ -1185,6 +1185,12 @@ namespace CNA::Internal::Backends::WebGPU
             /// draw (REMED-GFX-102); 3D draws read the pass-level one, which before this change
             /// they were guaranteed because they always ran first.
             bool blendConstantIsPassDefault = true;
+            /// REMED-GFX-172, trace only: the public enqueue position of the draw currently being
+            /// issued. Carried here rather than added to every Issue* signature, and read by
+            /// nothing but the multi-texture sampler trace.
+            std::uint32_t publicOrder = 0;
+            /// REMED-GFX-172, trace only: that draw's position within the replayed segment.
+            std::size_t replayPosition = 0;
         };
 
         /**
@@ -2011,10 +2017,22 @@ namespace CNA::Internal::Backends::WebGPU
             WebGPUScissorSnapshot scissor{};
             WebGPUSampledTextureEXT texture0;
             WebGPUSampledTextureEXT texture1;
+            ///@{ REMED-GFX-172: `DualTextureEffect.Texture`'s own GraphicsDevice.SamplerStates[0].
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
+            ///@}
+            ///@{ REMED-GFX-172: `DualTextureEffect.Texture2`'s own GraphicsDevice.SamplerStates[1],
+            /// captured by value at the public draw call for the same reason slot 0 is -- FNA's
+            /// DualTextureEffect.fx declares `DECLARE_TEXTURE(Texture, 0)` and
+            /// `DECLARE_TEXTURE(Texture2, 1)`, so the two layers have independent public sampler
+            /// slots and a later ApplySamplerState must not reach an already-queued draw.
+            int texture1Filter = 0;
+            int texture1AddressU = 1;
+            int texture1AddressV = 1;
+            int texture1MaxAnisotropy = 4;
+            ///@}
             bool hasVertexColor = false;   ///< stride 24 vs stride 20
         };
         void CreateDualTextureResources();
@@ -2102,10 +2120,22 @@ namespace CNA::Internal::Backends::WebGPU
             /// concrete class) bound as EnvironmentMapEffect.EnvironmentMap resolves correctly too
             /// -- see IWebGPUCubeSamplable's own doc comment.
             WebGPUSampledTextureEXT envMap;
+            ///@{ REMED-GFX-172: the base 2D texture's own GraphicsDevice.SamplerStates[0].
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
+            ///@}
+            ///@{ REMED-GFX-172: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
+            /// by value at the public draw call. FNA's EnvironmentMapEffect.fx declares
+            /// `DECLARE_TEXTURE(Texture, 0)` and `DECLARE_CUBEMAP(EnvironmentMap, 1)`, so the cube
+            /// has its own public sampler slot; the same field names SDL_GPU's own
+            /// EnvMapDrawCommand uses since REMED-GFX-173.
+            int envMapFilter = 0;
+            int envMapAddressU = 1;
+            int envMapAddressV = 1;
+            int envMapMaxAnisotropy = 4;
+            ///@}
         };
         void CreateEnvMapResources();
         void DestroyEnvMapResources();

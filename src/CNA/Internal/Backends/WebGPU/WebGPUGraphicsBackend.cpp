@@ -374,6 +374,86 @@ namespace CNA::Internal::Backends::WebGPU
             return enabled;
         }
 
+        /// REMED-GFX-172: the multi-texture families' own binding trace. Separate from
+        /// SamplerTraceEnabled() above because that one reports the public->native translation of
+        /// ONE sampler state (REMED-GFX-170's question) and this one reports which native sampler
+        /// each SAMPLED RESOURCE of a two-texture draw was actually bound with -- the question a
+        /// shared sampler makes unanswerable from filter ordinals alone.
+        [[nodiscard]] bool MultiTextureSamplerTraceEnabled()
+        {
+            static const bool enabled = std::getenv("CNA_WEBGPU_MULTITEX_SAMPLER_TRACE") != nullptr;
+            return enabled;
+        }
+
+        /**
+         * @brief Emits one row of the REMED-GFX-172 multi-texture sampler binding trace.
+         *
+         * Reports, for a single two-texture draw, both sampled resources' view identities, both
+         * CAPTURED public sampler states, both NATIVE sampler handles, the layout/pipeline-layout
+         * identities the bind group was built against, and the bind group itself, alongside the
+         * draw's public enqueue position and its replay position. A row whose two native sampler
+         * handles are equal while its two captured states differ IS the defect, readable directly
+         * rather than inferred from pixels.
+         *
+         * @param family        Draw family name, e.g. "DualTexture3D".
+         * @param publicOrder   The draw's position in the public call stream.
+         * @param replayPos     The draw's position within the replayed segment.
+         * @param view0         Native texture view bound for public sampler slot 0.
+         * @param view1         Native texture view bound for public sampler slot 1.
+         * @param filter0       Captured slot-0 TextureFilter ordinal.
+         * @param addrU0        Captured slot-0 AddressU.
+         * @param addrV0        Captured slot-0 AddressV.
+         * @param aniso0        Captured slot-0 MaxAnisotropy.
+         * @param filter1       Captured slot-1 TextureFilter ordinal.
+         * @param addrU1        Captured slot-1 AddressU.
+         * @param addrV1        Captured slot-1 AddressV.
+         * @param aniso1        Captured slot-1 MaxAnisotropy.
+         * @param bound0        Native sampler actually BOUND for slot 0's resource.
+         * @param bound1        Native sampler actually BOUND for slot 1's resource.
+         * @param slot1Resolved The native sampler slot 1's own captured description resolves to.
+         *                      Equal to @p bound1 exactly when slot 1 is honoured; a row where it
+         *                      differs is a draw whose second resource is filtered by a sampler its
+         *                      public slot never asked for.
+         * @param layout        The group-1 bind group layout.
+         * @param pipeLayout    The pipeline layout the draw's pipeline was built from.
+         * @param bindGroup     The bind group created for this draw.
+         * @param entryCount    Number of entries written into that bind group.
+         */
+        void TraceMultiTextureBinding(const char* family, std::uint32_t publicOrder,
+                                      std::size_t replayPos,
+                                      WGPUTextureView view0, WGPUTextureView view1,
+                                      int filter0, int addrU0, int addrV0, int aniso0,
+                                      int filter1, int addrU1, int addrV1, int aniso1,
+                                      WGPUSampler bound0, WGPUSampler bound1,
+                                      WGPUSampler slot1Resolved,
+                                      WGPUBindGroupLayout layout, WGPUPipelineLayout pipeLayout,
+                                      WGPUBindGroup bindGroup, std::size_t entryCount)
+        {
+            // The bind group is built fresh for every draw and released with the frame, so there is
+            // no bind-group cache and therefore no cache key: `bgcache=none` records that measured
+            // absence explicitly instead of implying one exists.
+            const bool statesDiffer = filter0 != filter1 || addrU0 != addrU1 ||
+                                      addrV0 != addrV1 || aniso0 != aniso1;
+            std::fprintf(stderr,
+                         "[cna-wgpu-multitex] family=%s publicOrder=%u replayPos=%zu "
+                         "view0=%p view1=%p "
+                         "captured0={filter=%d(%s) addrU=%d addrV=%d aniso=%d} "
+                         "captured1={filter=%d(%s) addrU=%d addrV=%d aniso=%d} statesDiffer=%s "
+                         "bound0=%p bound1=%p slot1Resolved=%p sharedSampler=%s slotMismatch=%s "
+                         "layout=%p pipeLayout=%p bgcache=none bindGroup=%p entries=%zu\n",
+                         family, publicOrder, replayPos,
+                         static_cast<void*>(view0), static_cast<void*>(view1),
+                         filter0, TextureFilterName(filter0), addrU0, addrV0, aniso0,
+                         filter1, TextureFilterName(filter1), addrU1, addrV1, aniso1,
+                         statesDiffer ? "YES" : "no",
+                         static_cast<void*>(bound0), static_cast<void*>(bound1),
+                         static_cast<void*>(slot1Resolved),
+                         (bound0 == bound1) ? "YES" : "no",
+                         (bound1 == slot1Resolved) ? "no" : "YES",
+                         static_cast<void*>(layout), static_cast<void*>(pipeLayout),
+                         static_cast<void*>(bindGroup), entryCount);
+        }
+
         // REMED-GFX-170: XNA's SamplerState.MaxAnisotropy default. ISpriteBatchBackend carries the
         // filter ordinal and the two address modes and nothing else, so a sprite cannot express a
         // non-default anisotropy on ANY backend; this is the value SpriteBatch's own
@@ -4539,6 +4619,11 @@ struct VertexOutput {
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
+        // REMED-GFX-172: and the reflection cube's own slot, captured here for the same reason.
+        command.envMapFilter = slotSamplers_[1].filter;
+        command.envMapAddressU = slotSamplers_[1].addressU;
+        command.envMapAddressV = slotSamplers_[1].addressV;
+        command.envMapMaxAnisotropy = slotSamplers_[1].maxAnisotropy;
 
         const Matrix mvp = world * view * projection;
         FillEnvMapTransform(command.transformUniforms, mvp, world);
@@ -4633,6 +4718,23 @@ struct VertexOutput {
         texBindDescriptor.entryCount = texEntries.size();
         texBindDescriptor.entries = texEntries.data();
         WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+        if (MultiTextureSamplerTraceEnabled())
+        {
+            // Resolved inside the trace guard: nothing binds it yet, so enabling the trace cannot
+            // change which native samplers production creates.
+            WGPUSampler traceSampler1 = GetOrCreateSlotSampler(
+                command.envMapFilter, command.envMapAddressU, command.envMapAddressV,
+                command.envMapMaxAnisotropy, "EnvironmentMap3D/slot1");
+            TraceMultiTextureBinding("EnvironmentMap3D", state.publicOrder, state.replayPosition,
+                                     texView, cubeView,
+                                     command.textureFilter, command.addressU, command.addressV,
+                                     command.maxAnisotropy,
+                                     command.envMapFilter, command.envMapAddressU,
+                                     command.envMapAddressV, command.envMapMaxAnisotropy,
+                                     sampler, sampler, traceSampler1, envMapTextureBindGroupLayout_,
+                                     envMapPipelineLayout_, texBindGroup, texEntries.size());
+        }
 
         WGPURenderPipeline pipe = GetOrCreatePipelineEnvMap3D(
                                                               command.topology,
@@ -5736,6 +5838,9 @@ struct VSOut {
                              destination, issued, entry.order, DrawFamilyName(entry.family),
                              entry.index);
             }
+            // REMED-GFX-172, trace only: both positions the multi-texture sampler trace reports.
+            state.publicOrder = entry.order;
+            state.replayPosition = issued;
             ++issued;
             switch (entry.family)
             {
@@ -7793,6 +7898,24 @@ struct VSOut {
         texBindDescriptor.entries = texEntries.data();
         WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
+        if (MultiTextureSamplerTraceEnabled())
+        {
+            // The slot-1 sampler is resolved HERE, inside the trace guard, precisely because
+            // nothing binds it yet -- so enabling the trace cannot change which native samplers
+            // production creates.
+            WGPUSampler traceSampler1 = GetOrCreateSlotSampler(
+                command.texture1Filter, command.texture1AddressU, command.texture1AddressV,
+                command.texture1MaxAnisotropy, "DualTexture3D/slot1");
+            TraceMultiTextureBinding("DualTexture3D", state.publicOrder, state.replayPosition,
+                                     command.texture0.View(), command.texture1.View(),
+                                     command.textureFilter, command.addressU, command.addressV,
+                                     command.maxAnisotropy,
+                                     command.texture1Filter, command.texture1AddressU,
+                                     command.texture1AddressV, command.texture1MaxAnisotropy,
+                                     sampler, sampler, traceSampler1, dualTextureBindGroupLayout_,
+                                     dualTexturePipelineLayout_, texBindGroup, texEntries.size());
+        }
+
         WGPURenderPipeline pipe = GetOrCreatePipelineDualTexture3D(command.hasVertexColor ? 24 : 20,
                                                                    command.topology,
                                                                    RequiredStripIndexFormat(command),
@@ -7880,6 +8003,12 @@ struct VSOut {
         command.addressV = slotSamplers_[0].addressV;
         command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.texture1 = ResolveSamplable(params.texture1);
+        // REMED-GFX-172: and the SECOND layer's own slot, captured here for the same reason. Both
+        // descriptions travel with the command, so replay never reads live sampler state.
+        command.texture1Filter = slotSamplers_[1].filter;
+        command.texture1AddressU = slotSamplers_[1].addressU;
+        command.texture1AddressV = slotSamplers_[1].addressV;
+        command.texture1MaxAnisotropy = slotSamplers_[1].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
 

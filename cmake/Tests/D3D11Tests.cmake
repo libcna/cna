@@ -240,6 +240,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${_d3d11_envmap_cube_sampler_cmd}
         TIMEOUT 600 LABELS "D3D11")
 
+    # REMED-GFX-172 cross-backend control: DualTextureEffect's two layers have INDEPENDENT public
+    # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
+    # DECLARE_TEXTURE(Texture2, 1). WebGPU declared ONE WGSL sampler for both texture views, so
+    # SamplerStates[1] was inexpressible and slot 1 inherited slot 0's. This fixture observes both
+    # layers in the SAME image -- slot 0's texture varies along X only, slot 1's along Y only.
+    cna_d3d11_test(cna_test_d3d11_dualtexture_slot_sampler
+                   examples/dualtexture_slot_sampler_contract_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_dualtexture_slot_sampler_cmd cna_test_d3d11_dualtexture_slot_sampler)
+    cna_register_backend_test(NAME D3D11_DualTextureSlotSamplerContract
+        COMMAND ${_d3d11_dualtexture_slot_sampler_cmd}
+        TIMEOUT 600 LABELS "D3D11")
+
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
     cna_d3d11_test(cna_test_d3d11_texture_filter_mip_contract
                    examples/texture_filter_mip_contract_test.cpp)

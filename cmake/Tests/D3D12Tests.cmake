@@ -73,6 +73,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # does with the same public state.
     cna_d3d12_test(cna_test_d3d12_envmap_cube_sampler examples/envmap_cube_sampler_contract_test.cpp)
 
+    # REMED-GFX-172 cross-backend control: DualTextureEffect's two layers have INDEPENDENT public
+    # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
+    # DECLARE_TEXTURE(Texture2, 1). Cross-built only; the D3D12 runtime is unavailable here for the
+    # pre-existing DX-100 reason.
+    cna_d3d12_test(cna_test_d3d12_dualtexture_slot_sampler examples/dualtexture_slot_sampler_contract_test.cpp)
+
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
     cna_d3d12_test(cna_test_d3d12_texture_filter_mip_contract examples/texture_filter_mip_contract_test.cpp)
 

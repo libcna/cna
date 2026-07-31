@@ -343,6 +343,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         COMMAND ${_d3d9_envmap_cube_sampler_cmd}
         TIMEOUT 600 LABELS "D3D9")
 
+    # REMED-GFX-172 cross-backend control: DualTextureEffect's two layers have INDEPENDENT public
+    # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
+    # DECLARE_TEXTURE(Texture2, 1). D3D9 declares stride 20 with vertexColor=false unsupported for
+    # DualTextureEffect (plan_dx9.md D9-82d), so the fixture reports its own honest skip there.
+    cna_d3d9_test(cna_test_d3d9_dualtexture_slot_sampler
+                   examples/dualtexture_slot_sampler_contract_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_dualtexture_slot_sampler_cmd cna_test_d3d9_dualtexture_slot_sampler)
+    cna_register_backend_test(NAME D3D9_DualTextureSlotSamplerContract
+        COMMAND ${_d3d9_dualtexture_slot_sampler_cmd}
+        TIMEOUT 600 LABELS "D3D9")
+
     # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
     cna_d3d9_test(cna_test_d3d9_texture_filter_mip_contract
                    examples/texture_filter_mip_contract_test.cpp)
