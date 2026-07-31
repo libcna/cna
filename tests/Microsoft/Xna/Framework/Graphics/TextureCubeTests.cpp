@@ -70,9 +70,12 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // backend with no cube storage they used to pass for a call that discarded the data. Storage
 // support and readback support are the same set (a backend either owns cube pixels or it does
 // not), so one constant drives both.
+//
+// plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores every declared mip level's six faces in a
+// real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
+// Software), even though nothing on this backend samples a cube texture as a GPU resource yet.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || \
-    defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOKOL)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else

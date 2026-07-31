@@ -4,6 +4,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "../Common/IGraphicsBackend.hpp"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -247,6 +248,78 @@ namespace CNA::Internal::Backends::Sokol
         std::uint32_t colorTextureViewId_ = 0;
         std::uint32_t depthStencilImageId_ = 0;
         std::uint32_t depthStencilAttachmentViewId_ = 0;
+    };
+
+    /**
+     * @brief Backend handle for a cube texture: pure CPU-side RGBA8 storage, no sokol_gfx image.
+     *
+     * plan_sokol.md SOKOL-27. Nothing on this backend samples a cube texture yet -- dual-texture,
+     * environment-mapped, skinned and PBR 3D draws all throw `NotYetImplemented` in
+     * `DrawColored3D`, and there is no cube shader variant -- so allocating a real `sg_image` here
+     * would be a GPU resource with no consumer. `Texture2D`/`RenderTarget2D` create real images
+     * because SpriteBatch and the 3D paths genuinely sample them; this class stores exactly the six
+     * faces' pixels `SetData()`/`GetData()` need and nothing more, mirroring the Software backend's
+     * own `SoftwareTextureCubeBackend`.
+     */
+    class SokolTextureCubeBackend : public ITextureCubeBackend
+    {
+    public:
+        /**
+         * @brief Allocates zeroed RGBA8 storage for all six faces of every mip level.
+         * @param size   Edge length of one cube face at mip 0, in texels.
+         * @param mipMap Allocate the full mip chain down to 1x1 as well as level 0.
+         */
+        SokolTextureCubeBackend(int size, bool mipMap);
+
+        /**
+         * @brief Copies one face's RGBA8 sub-rectangle into this backend's CPU storage.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to write.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Source pixels, tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes.
+         * @return True if the whole region was stored; false for an out-of-range level or face, an
+         *         out-of-bounds rectangle, or a source buffer too small for the region.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Reads one face's stored RGBA8 sub-rectangle back from this backend's CPU shadow.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes.
+         * @return True if the whole region was written; false for an out-of-range level or face, or
+         *         an out-of-bounds rectangle.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /**
+         * @brief Returns the edge length of mip level 0 in texels. NOXNA.
+         * @return Cube face edge length.
+         */
+        NOXNA [[nodiscard]] int GetSizeEXT() const { return size_; }
+
+    private:
+        /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mip
+        /// dimension helper.
+        [[nodiscard]] int LevelDim(int level) const;
+
+        int size_ = 0;
+        int levelCount_ = 1;
+        /// levels_[level][face] -- one tightly packed RGBA8 buffer per face per allocated mip level.
+        std::vector<std::array<std::vector<std::uint8_t>, 6>> levels_;
     };
 
     /**
@@ -658,6 +731,21 @@ namespace CNA::Internal::Backends::Sokol
          * @return The new texture backend.
          */
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+
+        /**
+         * @brief Creates a CPU-storage-only cube texture (plan_sokol.md SOKOL-27).
+         *
+         * No real GPU resource is allocated: nothing on this backend samples a cube texture yet
+         * (dual-texture/environment-map/skinned/PBR 3D draws all throw), so `SokolTextureCubeBackend`
+         * only stores the six faces' pixels `SetData()`/`GetData()` need.
+         *
+         * @param size         Edge length of one cube face at mip 0, in texels.
+         * @param mipMap       Allocate the full mip chain down to 1x1 as well as level 0.
+         * @param surfaceFormat Unused -- this backend always stores RGBA8, matching CreateTexture.
+         * @return The new cube texture backend.
+         */
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
 
         /**
          * @brief Creates a sokol_gfx-backed SpriteBatch.

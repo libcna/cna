@@ -407,6 +407,84 @@ namespace CNA::Internal::Backends::Sokol
     }
 
     // ---------------------------------------------------------------------------------------
+    // SokolTextureCubeBackend
+    // ---------------------------------------------------------------------------------------
+
+    namespace
+    {
+        int CalculateCubeMipLevels(int size)
+        {
+            int levels = 1;
+            int s = size;
+            while (s > 1) { s = std::max(1, s / 2); ++levels; }
+            return levels;
+        }
+    }
+
+    int SokolTextureCubeBackend::LevelDim(int level) const
+    {
+        return std::max(1, size_ >> level);
+    }
+
+    SokolTextureCubeBackend::SokolTextureCubeBackend(int size, bool mipMap)
+        : size_(size)
+        , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
+    {
+        levels_.resize(static_cast<std::size_t>(levelCount_));
+        for (int level = 0; level < levelCount_; ++level)
+        {
+            const int dim = LevelDim(level);
+            const std::size_t faceBytes = static_cast<std::size_t>(dim) * static_cast<std::size_t>(dim) * 4u;
+            for (auto& face : levels_[static_cast<std::size_t>(level)])
+                face.assign(faceBytes, 0u);
+        }
+    }
+
+    bool SokolTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                          const void* data, int dataLength)
+    {
+        if (data == nullptr || face < 0 || face > 5) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int dim = LevelDim(level);
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > dim || y + h > dim) return false;
+        if (dataLength < w * h * 4) return false;
+
+        const auto* src = static_cast<const std::uint8_t*>(data);
+        std::vector<std::uint8_t>& pixels =
+            levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t dstOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(dim) +
+                                          static_cast<std::size_t>(x)) * 4u;
+            std::memcpy(pixels.data() + dstOffset, src + static_cast<std::size_t>(row) * rowBytes, rowBytes);
+        }
+        return true;
+    }
+
+    bool SokolTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                          void* data, int dataLength) const
+    {
+        if (data == nullptr || face < 0 || face > 5) return false;
+        if (level < 0 || level >= levelCount_) return false;
+        const int dim = LevelDim(level);
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > dim || y + h > dim) return false;
+        if (dataLength < w * h * 4) return false;
+
+        auto* dst = static_cast<std::uint8_t*>(data);
+        const std::vector<std::uint8_t>& pixels =
+            levels_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)];
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t srcOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(dim) +
+                                          static_cast<std::size_t>(x)) * 4u;
+            std::memcpy(dst + static_cast<std::size_t>(row) * rowBytes, pixels.data() + srcOffset, rowBytes);
+        }
+        return true;
+    }
+
+    // ---------------------------------------------------------------------------------------
     // SokolRenderTargetBackend
     // ---------------------------------------------------------------------------------------
 
@@ -1434,6 +1512,13 @@ namespace CNA::Internal::Backends::Sokol
     std::unique_ptr<ITextureBackend> SokolGraphicsBackend::CreateTexture(const ImageData& data)
     {
         return std::make_unique<SokolTextureBackend>(data);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> SokolGraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
+    {
+        (void)surfaceFormat;  // always stored as RGBA8, matching CreateTexture
+        return std::make_unique<SokolTextureCubeBackend>(size, mipMap);
     }
 
     std::unique_ptr<ISpriteBatchBackend> SokolGraphicsBackend::CreateSpriteBatch()

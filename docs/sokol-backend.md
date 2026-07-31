@@ -57,6 +57,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTarget2D` bind/draw/sample (`SetRenderTarget`/`SetRenderTargets`, real colour + optional depth-stencil attachment, viewport/scissor reset on bind/unbind) | ✅ | `Sokol_RenderTarget_ViewportScissorReset`, `Sokol_RenderTarget2D_Depth`, `Sokol_RenderTarget_DepthStencilUsage`, `Sokol_RenderTarget_PassBoundary` |
 | Sampling a `RenderTarget2D` as a texture, including a never-read-back target the same frame it was produced | ✅ | `Sokol_RenderTarget_ProducerConsumer`, `Sokol_RenderTarget_BackbufferConsumer`, `Sokol_RenderTarget_SamplingOrientation` — SpriteBatch and BasicEffect/AlphaTestEffect textured 3D alike, top-left logical orientation preserved |
 | A brand-new `RenderTarget2D` usable immediately, no warm-up frame | ✅ | `Sokol_RenderTarget_FirstUse` |
+| `TextureCube` storage (`SetData`/`GetData`, every declared mip level, all 6 faces) | ✅ | `CnaTests`' `TextureCubeTest` suite (49 tests), plus the XNB `TextureCubeReader` and CNJ cube content-loading tests |
 
 ## What does not work yet
 
@@ -71,7 +72,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTarget2D` mip-mapped (`mipMap=true`) | `CreateRenderTarget2D` throws `NotYetImplemented` | `SOKOL-26` |
 | `RenderTarget2D` MSAA | `multiSampleCount` is silently clamped to 1 (`GetMultiSampleCount()` reports the real, clamped value — the same convention every other backend uses for this parameter) | `SOKOL-26` |
 | `RenderTargetCube`, MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented`/`NotSupportedException`; `CreateRenderTargetCube` returns null, so the shared layer raises `NotSupportedException` | `SOKOL-26` |
-| `TextureCube`, `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` | `SOKOL-27` |
+| `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` (Software leaves this unimplemented too) | `SOKOL-27` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `OcclusionQuery` | `CreateOcclusionQuery` returns null — sokol_gfx exposes no query API at all | `SOKOL-29` |
 | `RasterizerState` fill mode and depth bias | accepted and ignored — sokol_gfx exposes no polygon fill mode, and depth bias is not yet wired into any pipeline. Cull mode *is* honoured | `SOKOL-23` |
@@ -99,6 +100,11 @@ correctly, which the table above is the authority on.
   every upload does. Correct in all cases, but it allocates; `SOKOL-24` covers improving it.
 - **Back-buffer read-back is GL-only** (`glReadPixels`). sokol_gfx has no read-back API, so any
   other `CNA_SOKOL_API` refuses `ReadBackbuffer` instead of returning fabricated pixels.
+- **`TextureCube` allocates no GPU resource at all** (`SokolTextureCubeBackend` is CPU storage
+  only). Nothing on this backend samples a cube map yet -- there is no cube shader variant, and
+  `EnvironmentMapEffect`'s 3D draw path throws `NotYetImplemented` -- so a real `sg_image` would be
+  a resource with no consumer. `SetData`/`GetData` round-trip exactly; a future `EnvironmentMapEffect`
+  implementation is what would add the matching `sg_image`/view.
 - **Every distinct vertex layout, topology and render state combination creates a pipeline
   object.** sokol_gfx bakes all of them into the pipeline, including the index type, so the cache
   is keyed on the full set. A scene that cycles through many combinations grows the cache; nothing

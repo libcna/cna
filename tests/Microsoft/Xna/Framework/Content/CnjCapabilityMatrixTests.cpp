@@ -196,9 +196,10 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 // TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
 // deterministically instead of accepting the data and discarding it. Same constant and same
 // reviewed backend set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
+// plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores real cube pixels (see
+// tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || \
-    defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOKOL)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
 constexpr bool kCubeStorageSupported = false;
 #else
 constexpr bool kCubeStorageSupported = true;

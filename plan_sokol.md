@@ -176,13 +176,13 @@ That makes it valuable to CNA in two specific ways:
 | SOKOL-23 | Full `ApplyRasterizerState` (fill mode, depth bias) and stencil in the pipeline key | ⬜ | Cull mode landed with `SOKOL-20`; fill/bias/stencil still accepted-and-ignored |
 | SOKOL-24 | Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ⬜ | Measure once a 3D path exists to measure with |
 
-### Phase 5 — Render targets and remaining resources (not started)
+### Phase 5 — Render targets and remaining resources (SOKOL-25 landed, SOKOL-27 partial)
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
 | SOKOL-25 | `RenderTarget2D` via `sg_view` colour/depth-stencil attachments | ✅ | `SetRenderTarget2D`/`SetRenderTargets` bind a real colour(+depth-stencil) attachment pass; `GetData()` on a RenderTarget2D is not implemented (throws `NotSupportedException`, matching the base `IGraphicsBackend::GetData` default) — sampling a render target as a texture (SpriteBatch and 3D alike) and `GetBackBufferData()` while none is bound both work. 8 shared cross-backend oracles registered and passing: `Sokol_RenderTarget_ViewportScissorReset`, `Sokol_RenderTarget2D_Depth`, `Sokol_RenderTarget_DepthStencilUsage`, `Sokol_RenderTarget_PassBoundary`, `Sokol_RenderTarget_ProducerConsumer`, `Sokol_RenderTarget_BackbufferConsumer`, `Sokol_RenderTarget_FirstUse`, `Sokol_RenderTarget_SamplingOrientation`. `multiSampleCount` is silently clamped to 1 (codebase convention); `mipMap=true` throws `NotYetImplemented`. |
 | SOKOL-26 | `RenderTargetCube`, MRT, render-target MSAA resolve | ⬜ | |
-| SOKOL-27 | `TextureCube` and `Texture3D` | ⬜ | `CreateTextureCube`/`CreateTexture3D` return null today |
+| SOKOL-27 | `TextureCube` and `Texture3D` | 🟨 | `TextureCube` done: `SokolTextureCubeBackend` is a pure CPU-shadow store (no `sg_image` — nothing on this backend samples a cube yet), with real per-mip-level, per-face `SetData`/`GetData` round-trips. `CnaTests`' `TextureCubeTest` suite (49 tests) plus the XNB/CNJ cube content-loading tests all flipped from the "no cube storage" group to the "supported" group and pass. `Texture3D` still returns null (`CreateTexture3D` unimplemented) — Software (a fully-fledged CPU rasterizer) also leaves it unimplemented, so this is a real, tracked backend gap rather than a SOKOL-specific shortcut. |
 | SOKOL-28 | Custom `ShaderEffect` — needs a runtime GLSL path or a shdc-at-build-time contract | ⬜ | `CreateEffectBackend` returns null today |
 | SOKOL-29 | Occlusion queries | ⬜ | sokol_gfx exposes no query API; needs raw GL or a sokol upstream change |
 
