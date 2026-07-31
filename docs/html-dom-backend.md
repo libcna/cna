@@ -10,9 +10,9 @@ acceptance criteria*; 🟨 code exists but has not met those criteria; ⬜ not i
 
 **What ✅ means here.** Unlike the `CANVAS` backend's own document, ✅ on this page is backed by a
 real Emscripten build (emsdk 6.0.5) and, for everything the smoke test covers, by a real run in
-headless Chromium — `scripts/run-htmldom-browser-test.sh` loads the generated page, drives four
-frames, and asserts against the DOM the backend actually produced. Rows marked 🟨 are implemented
-and code-reviewed but not covered by that automated run.
+headless Chromium — `scripts/run-htmldom-browser-test.sh` loads the generated page, drives five
+frames (22 checks total), and asserts against the DOM the backend actually produced. Rows marked
+🟨 are implemented and code-reviewed but not covered by that automated run.
 
 Select it with:
 
@@ -61,7 +61,7 @@ appends a fixed-stride 80-byte command and `End()` hands the array over as a blo
 | `transformMatrix` in `Begin()` | ✅ | A leading CSS `matrix(M11,M12,M21,M22,M41,M42)` per sprite, so two batches with different transforms coexist in one frame. Omitted entirely for Identity. |
 | Custom `Effect` via `Begin(effect)` | ✅ throws-by-design | CSS compositing has no programmable shader stage. |
 | `SpriteSortMode` sequencing | ✅ | Backend-agnostic: sorting happens in shared `SpriteBatch.cpp`, and DOM document order realizes the result. |
-| `SpriteFont` (`DrawString`, kerning, `\n`, flip, rotation) | 🟨 | Needs zero backend-specific code — every glyph funnels through the same `Draw` overload. Not in the automated browser run. |
+| `SpriteFont` (`DrawString`, kerning, `\n`, flip, rotation) | ✅ | Needs zero backend-specific code — every glyph funnels through the same `Draw` overload. Verified in-browser: a `DrawString` glyph lands in the DOM as a real, correctly-sized, PNG-textured element. Kerning/`\n`/flip themselves are shared `SpriteFont`/`SpriteBatch` logic, not re-verified per backend. |
 | Element pooling / recycling across frames | ✅ | Verified in-browser: two sprites then one leaves one visible and two retained. |
 
 ## 2. Texture2D / RenderTarget2D
@@ -95,7 +95,7 @@ appends a fixed-stride 80-byte command and `End()` hands the array over as a blo
 |---|---|---|
 | `TextureFilter` (magnification) | ✅ | `image-rendering: auto` vs `pixelated`, using the same magnification-dominant grouping `SDL_RENDERER` (Task 701) and `CANVAS` (CANVAS-42) use. |
 | `TextureAddressMode::Clamp` | ✅ | Implemented for real: the source rectangle is narrowed into the texture and the sprite's local box shifted to match — not a reliance on implicit out-of-bounds behaviour. |
-| `TextureAddressMode::Wrap` | 🟨 | CSS `background-repeat: repeat` (and a repeating Canvas2D pattern on the render-target path). Only differs from Clamp when the source rectangle leaves the texture. Not in the automated browser run. |
+| `TextureAddressMode::Wrap` | ✅ | CSS `background-repeat: repeat`. Only differs from Clamp when the source rectangle leaves the texture — verified in-browser: an out-of-bounds source rectangle keeps its full (unclamped) element width and gets `background-repeat: repeat`. The render-target path's repeating Canvas2D pattern equivalent is reviewed-only, not separately exercised. |
 | `TextureAddressMode::Mirror` | ✅ throws-by-design | CSS has no mirror-repeat background repetition, and pre-tiling a mirrored copy per draw would defeat the DOM path's purpose. |
 | Mixed per-axis modes, out of bounds | ✅ throws-by-design | Both axes derive from one mode here; a mixed request is rejected rather than silently reduced. |
 
