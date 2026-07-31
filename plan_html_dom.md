@@ -78,7 +78,7 @@ moves sprites triggers no layout and no repaint. `will-change: transform` keeps 
 own compositor layer. Nothing in the draw path ever *reads* layout (no `getBoundingClientRect`), so
 no forced synchronous reflow is possible.
 
-**5. One JS call per batch, not per sprite.** `Draw()` appends a fixed-stride 64-byte POD command
+**5. One JS call per batch, not per sprite.** `Draw()` appends a fixed-stride 80-byte POD command
 into a C++ `std::vector`; `End()` hands the whole array to a single `EM_JS` call that walks it
 through `HEAP32`/`HEAPF32` views. A 2000-sprite frame costs one wasm→JS boundary crossing, not
 2000. This is the single most important performance decision in the backend.
@@ -163,7 +163,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 | HTMLDOM-21 | ✅ | `UpdatePixels` re-uploads and invalidates every cached variant of that texture. |
 | HTMLDOM-22 | ✅ | `UpdatePixelsLevel(level>0)` throws — no mip chain exists here (same boundary as `CANVAS`/`SDL_RENDERER`). |
 | HTMLDOM-23 | ✅ | Variant generation + LRU cache (straight / un-premultiplied / alpha-stripped / tinted), design decision 7. |
-| HTMLDOM-24 | ✅ | `Texture2D::GetData` on a plain texture is served by the shared CPU shadow — no backend work needed. |
+| HTMLDOM-24 | 🟨 | `Texture2D::GetData` on a plain texture is served by the shared CPU shadow — no backend work needed. Not separately exercised by the browser run. |
 
 ### D4 — SpriteBatch
 
@@ -177,7 +177,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 | HTMLDOM-35 | ✅ | `sourceRectangle` → `background-position` + element size; source rects are clamped into the texture. |
 | HTMLDOM-36 | ✅ | `Begin(transformMatrix)` → a CSS `matrix(M11,M12,M21,M22,M41,M42)` on a batch wrapper element, composed under each sprite's own transform. |
 | HTMLDOM-37 | ✅ | `SetCustomEffect(non-null)` throws — no programmable shader stage exists. |
-| HTMLDOM-38 | ✅ | `SpriteFont::DrawString` verified to need no backend-specific code (design decision 12). |
+| HTMLDOM-38 | 🟨 | `SpriteFont::DrawString` needs no backend-specific code (design decision 12) — every glyph funnels through the same `Draw` overload. Reviewed, but not in the automated browser run. |
 
 ### D5 — Blend and sampler state
 
@@ -187,7 +187,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 | HTMLDOM-42 | ✅ | `Opaque` → alpha-stripped variant; `AlphaBlend` → un-premultiplied variant; `NonPremultiplied` → straight; `Additive` → `mix-blend-mode: plus-lighter`. |
 | HTMLDOM-43 | ✅ | Colour tint → cached tinted variant; alpha → `opacity` (free). |
 | HTMLDOM-44 | ✅ | `TextureFilter` → `image-rendering: pixelated` vs `auto`, using the same magnification-dominant grouping `SDL_RENDERER` Task 701 and `CANVAS` CANVAS-42 use. |
-| HTMLDOM-45 | ✅ | `TextureAddressMode`: `Clamp` exact; `Wrap` via CSS background repetition when the source rect exceeds the texture; `Mirror` throws (CSS has no mirror-repeat for backgrounds and a pre-tiled variant would defeat the DOM path's purpose). |
+| HTMLDOM-45 | 🟨 | `Clamp` is exact and unit-tested; `Mirror` and mixed per-axis modes throw (✅, unit-tested). `Wrap` maps to CSS background repetition (and a repeating Canvas2D pattern on the render-target path) but is not covered by the browser run — 🟨 is for that gap. |
 | HTMLDOM-46 | ✅ | `ColorWriteChannels`/`MultiSampleMask` documented as inexpressible in CSS compositing. |
 
 ### D6 — Render targets
@@ -214,10 +214,23 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 |---|---|---|
 | HTMLDOM-70 | ✅ | GTest coverage for every pure-C++ unit: blend mapping, address-mode validation, command encoding, 3D throw surface. |
 | HTMLDOM-71 | ✅ | Real Emscripten build (`emcmake`, emsdk 6.0.5). |
-| HTMLDOM-72 | ✅ | **Real browser pixel verification** — the smoke test runs in headless Chromium via Playwright and the resulting DOM is asserted against expected geometry/styles. This is what `CANVAS` could never do in its own dev loop. |
+| HTMLDOM-72 | ✅ | **Real browser verification** — 17/17 checks pass in headless Chromium via Playwright, asserting against the DOM the backend produced (surface, clear colour, sprite transforms/sizes/opacity/data-URL backgrounds, element recycling, a `RenderTarget2D` readback round-trip, and the backbuffer refusal). This is what `CANVAS` could never do in its own dev loop — and it earned its keep immediately: see the note below. |
 | HTMLDOM-73 | ✅ | `docs/html-dom-backend.md` capability/limitation matrix. |
 
 ---
+
+## What the browser run caught
+
+The first headless-Chromium run reported 3 of 17 checks failing against a backend that was in fact
+producing exactly the right DOM. The cause was in the test's own JS: **a backslash inside an `EM_JS`
+body does not survive the preprocessor's stringification of that body**, so `/(\d+)/g` silently
+became `/(d+)/g` and `/\s+/g` became `/s+/g` — regular expressions that then quietly matched the
+wrong thing instead of failing loudly. (The giveaway: the one transform check whose needle contained
+no letter `s` passed, while `translate` and `scale` both failed.) Every regular expression in the
+test was replaced with `split`/`indexOf` parsing.
+
+Worth knowing project-wide: no `EM_JS` body anywhere in CNA should contain a backslash escape.
+`CANVAS`'s own `EM_JS` bodies happen not to, so nothing else is affected today.
 
 ## Known limitations (honest list)
 
