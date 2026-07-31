@@ -32,7 +32,10 @@ SHADERS = [
     ("Sprite2dVert", "sprite2d.vert.glsl", "sprite2d.gl.vert.glsl", "vert"),
     ("Sprite2dFrag", "sprite2d.frag.glsl", "sprite2d.gl.frag.glsl", "frag"),
     ("Colored3dVert", "colored3d.vert.glsl", "colored3d.gl.vert.glsl", "vert"),
-    ("Colored3dFrag", "colored3d.frag.glsl", "colored3d.gl.frag.glsl", "frag"),
+    ("Textured3dVert", "textured3d.vert.glsl", "textured3d.gl.vert.glsl", "vert"),
+    ("ColoredTextured3dVert", "colored_textured3d.vert.glsl", "colored_textured3d.gl.vert.glsl", "vert"),
+    ("Untextured3dFrag", "untextured3d.frag.glsl", "untextured3d.gl.frag.glsl", "frag"),
+    ("Textured3dFrag", "textured3d.frag.glsl", "textured3d.gl.frag.glsl", "frag"),
 ]
 
 

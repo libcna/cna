@@ -872,15 +872,21 @@ namespace CNA::Internal::Backends::Llgl
 
         void CreateSpritePipelineResources();
         void CreatePrimitivePipelineResources();
-        LLGL::Shader* AcquirePrimitiveVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
+        LLGL::Shader* AcquirePrimitiveVertexShader(const std::vector<LLGL::VertexAttribute>& attributes,
+                                                   bool textured);
         LLGL::PipelineState* AcquirePrimitivePipeline(const LlglVertexBufferBackend& vertexBuffer,
-                                                      PrimitiveType primitive, bool scissorEnabled);
+                                                      PrimitiveType primitive, bool scissorEnabled,
+                                                      bool textured);
         void QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                              const LlglIndexBufferBackend* indexBuffer,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
                              PrimitiveType primitive, int primitiveCount,
-                             int vertexStart, int startIndex, int baseVertex);
+                             int vertexStart, int startIndex, int baseVertex,
+                             const GpuDrawParams* params);
         void RejectUnsupportedDrawParams(const GpuDrawParams& params) const;
+        /// Fills one draw's 128-byte uniform block; see shaders/effect3d_common.glsl.inc.
+        static void FillEffectUniforms(float (&uniforms)[32], const float matrix[16],
+                                       const GpuDrawParams* params);
         void CaptureBackbuffer();
         void ReplayFrameCommands();
         void ReleasePendingBuffers();
@@ -912,7 +918,9 @@ namespace CNA::Internal::Backends::Llgl
         std::size_t                 spriteVertexCapacity_   = 0;
 
         LLGL::PipelineLayout*       primitiveLayout_ = nullptr;
+        LLGL::PipelineLayout*       primitiveTexturedLayout_ = nullptr;
         LLGL::Shader*               primitiveFragmentShader_ = nullptr;
+        LLGL::Shader*               primitiveTexturedFragmentShader_ = nullptr;
 
         std::map<std::uint64_t, LLGL::PipelineState*> pipelineCache_;
         std::map<std::uint64_t, LLGL::Sampler*>       samplerCache_;

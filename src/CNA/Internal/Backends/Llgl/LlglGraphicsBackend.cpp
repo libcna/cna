@@ -31,6 +31,9 @@ namespace CNA::Internal::Backends::Llgl
     {
         constexpr const char* kBackendName = "LLGL";
 
+        /// Floats in the 3D effect uniform block: see shaders/effect3d_common.glsl.inc.
+        constexpr std::size_t kEffectUniformFloats = 32;
+
         /// Floats per sprite vertex: position (2), texture coordinate (2), colour (4).
         constexpr std::size_t kSpriteVertexFloats = 8;
         constexpr std::size_t kSpriteVertexStride = kSpriteVertexFloats * sizeof(float);
@@ -799,8 +802,12 @@ namespace CNA::Internal::Backends::Llgl
 
         if (primitiveFragmentShader_ != nullptr)
             renderer_->Release(*primitiveFragmentShader_);
+        if (primitiveTexturedFragmentShader_ != nullptr)
+            renderer_->Release(*primitiveTexturedFragmentShader_);
         if (primitiveLayout_ != nullptr)
             renderer_->Release(*primitiveLayout_);
+        if (primitiveTexturedLayout_ != nullptr)
+            renderer_->Release(*primitiveTexturedLayout_);
 
         if (spriteVertexBuffer_ != nullptr)
             renderer_->Release(*spriteVertexBuffer_);
@@ -955,53 +962,147 @@ namespace CNA::Internal::Backends::Llgl
     void LlglGraphicsBackend::CreatePrimitivePipelineResources()
     {
         const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
+        const bool useGlsl = SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL);
 
-        LLGL::ShaderDescriptor fragmentDesc;
-        fragmentDesc.type = LLGL::ShaderType::Fragment;
-        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
-        {
-            fragmentDesc.source = Shaders::kColored3dFragGlsl;
-            fragmentDesc.sourceType = LLGL::ShaderSourceType::CodeString;
-        }
-        else
-        {
-            fragmentDesc.source = reinterpret_cast<const char*>(Shaders::kColored3dFragSpv);
-            fragmentDesc.sourceSize = sizeof(Shaders::kColored3dFragSpv);
-            fragmentDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
-            fragmentDesc.entryPoint = "main";
-        }
-
-        primitiveFragmentShader_ = renderer_->CreateShader(fragmentDesc);
-        if (primitiveFragmentShader_ == nullptr)
-            throw std::runtime_error(std::string(kBackendName) + " backend: 3D fragment shader creation failed");
-        if (const LLGL::Report* report = primitiveFragmentShader_->GetReport())
-        {
-            if (report->HasErrors())
+        const auto createFragmentShader = [&](const char* glslSource, const std::uint32_t* spirv,
+                                              std::size_t spirvSize, const char* what) {
+            LLGL::ShaderDescriptor fragmentDesc;
+            fragmentDesc.type = LLGL::ShaderType::Fragment;
+            if (useGlsl)
             {
-                throw std::runtime_error(
-                    std::string(kBackendName) + " backend: 3D fragment shader compilation failed: " +
-                    (report->GetText() != nullptr ? report->GetText() : "no details"));
+                fragmentDesc.source = glslSource;
+                fragmentDesc.sourceType = LLGL::ShaderSourceType::CodeString;
             }
-        }
+            else
+            {
+                fragmentDesc.source = reinterpret_cast<const char*>(spirv);
+                fragmentDesc.sourceSize = spirvSize;
+                fragmentDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
+                fragmentDesc.entryPoint = "main";
+            }
 
+            LLGL::Shader* shader = renderer_->CreateShader(fragmentDesc);
+            if (shader == nullptr)
+                throw std::runtime_error(std::string(kBackendName) + " backend: " + what + " creation failed");
+            if (const LLGL::Report* report = shader->GetReport())
+            {
+                if (report->HasErrors())
+                {
+                    throw std::runtime_error(
+                        std::string(kBackendName) + " backend: " + what + " compilation failed: " +
+                        (report->GetText() != nullptr ? report->GetText() : "no details"));
+                }
+            }
+            return shader;
+        };
+
+        primitiveFragmentShader_ = createFragmentShader(
+            Shaders::kUntextured3dFragGlsl, Shaders::kUntextured3dFragSpv,
+            sizeof(Shaders::kUntextured3dFragSpv), "untextured 3D fragment shader");
+        primitiveTexturedFragmentShader_ = createFragmentShader(
+            Shaders::kTextured3dFragGlsl, Shaders::kTextured3dFragSpv,
+            sizeof(Shaders::kTextured3dFragSpv), "textured 3D fragment shader");
+
+        // Two layouts rather than one with an optionally-unused texture slot: a pipeline whose
+        // layout declares a texture the draw never binds is a validation error on Vulkan, not a
+        // harmless spare binding.
         LLGL::PipelineLayoutDescriptor layoutDesc;
         layoutDesc.bindings =
         {
             LLGL::BindingDescriptor{"Transform", LLGL::ResourceType::Buffer,
-                                    LLGL::BindFlags::ConstantBuffer, LLGL::StageFlags::VertexStage, 1},
+                                    LLGL::BindFlags::ConstantBuffer,
+                                    LLGL::StageFlags::VertexStage | LLGL::StageFlags::FragmentStage, 1},
         };
         primitiveLayout_ = renderer_->CreatePipelineLayout(layoutDesc);
-        if (primitiveLayout_ == nullptr)
+
+        LLGL::PipelineLayoutDescriptor texturedLayoutDesc;
+        texturedLayoutDesc.bindings =
+        {
+            LLGL::BindingDescriptor{"Transform", LLGL::ResourceType::Buffer,
+                                    LLGL::BindFlags::ConstantBuffer,
+                                    LLGL::StageFlags::VertexStage | LLGL::StageFlags::FragmentStage, 1},
+            LLGL::BindingDescriptor{"colorMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 2},
+            LLGL::BindingDescriptor{"samplerState", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 3},
+        };
+        texturedLayoutDesc.combinedTextureSamplers =
+        {
+            LLGL::CombinedTextureSamplerDescriptor{"colorMap", "colorMap", "samplerState", 2}
+        };
+        primitiveTexturedLayout_ = renderer_->CreatePipelineLayout(texturedLayoutDesc);
+
+        if (primitiveLayout_ == nullptr || primitiveTexturedLayout_ == nullptr)
             throw std::runtime_error(std::string(kBackendName) + " backend: 3D pipeline layout creation failed");
     }
 
     LLGL::Shader* LlglGraphicsBackend::AcquirePrimitiveVertexShader(
-        const std::vector<LLGL::VertexAttribute>& attributes)
+        const std::vector<LLGL::VertexAttribute>& attributes, bool textured)
     {
-        const std::uint64_t key = MakeVertexLayoutKey(attributes);
+        const std::uint64_t key = MakeVertexLayoutKey(attributes) * 2u + (textured ? 1u : 0u);
         const auto cached = primitiveVertexShaderCache_.find(key);
         if (cached != primitiveVertexShaderCache_.end())
             return cached->second;
+
+        // Which attributes the layout actually carries decides the shader variant: a shader that
+        // declares an input the buffer does not supply reads undefined data on Vulkan, so the
+        // variant is chosen from the layout rather than from what the effect asked for.
+        bool hasColor = false;
+        bool hasTexCoord = false;
+        for (const LLGL::VertexAttribute& attribute : attributes)
+        {
+            if (attribute.location == 1) hasColor = true;
+            if (attribute.location == 2) hasTexCoord = true;
+        }
+
+        if (textured && !hasTexCoord)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: a textured effect needs a vertex layout with "
+                "texture coordinates, and this one has none");
+        }
+
+        const char* glslSource = nullptr;
+        const std::uint32_t* spirv = nullptr;
+        std::size_t spirvSize = 0;
+        if (textured)
+        {
+            if (hasColor)
+            {
+                glslSource = Shaders::kColoredTextured3dVertGlsl;
+                spirv = Shaders::kColoredTextured3dVertSpv;
+                spirvSize = sizeof(Shaders::kColoredTextured3dVertSpv);
+            }
+            else
+            {
+                glslSource = Shaders::kTextured3dVertGlsl;
+                spirv = Shaders::kTextured3dVertSpv;
+                spirvSize = sizeof(Shaders::kTextured3dVertSpv);
+            }
+        }
+        else if (hasColor)
+        {
+            glslSource = Shaders::kColored3dVertGlsl;
+            spirv = Shaders::kColored3dVertSpv;
+            spirvSize = sizeof(Shaders::kColored3dVertSpv);
+        }
+        else
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: an untextured draw needs vertex colours, and "
+                "this vertex layout has none");
+        }
+
+        // The attribute list handed to the shader is trimmed to what that variant declares: an
+        // untextured draw from a layout that happens to carry texture coordinates must not leave
+        // the pipeline expecting an input its shader never reads.
+        std::vector<LLGL::VertexAttribute> shaderAttributes;
+        for (const LLGL::VertexAttribute& attribute : attributes)
+        {
+            if (attribute.location == 2 && !textured)
+                continue;
+            shaderAttributes.push_back(attribute);
+        }
 
         const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
 
@@ -1009,17 +1110,17 @@ namespace CNA::Internal::Backends::Llgl
         vertexDesc.type = LLGL::ShaderType::Vertex;
         if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
         {
-            vertexDesc.source = Shaders::kColored3dVertGlsl;
+            vertexDesc.source = glslSource;
             vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
         }
         else
         {
-            vertexDesc.source = reinterpret_cast<const char*>(Shaders::kColored3dVertSpv);
-            vertexDesc.sourceSize = sizeof(Shaders::kColored3dVertSpv);
+            vertexDesc.source = reinterpret_cast<const char*>(spirv);
+            vertexDesc.sourceSize = spirvSize;
             vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
             vertexDesc.entryPoint = "main";
         }
-        vertexDesc.vertex.inputAttribs = attributes;
+        vertexDesc.vertex.inputAttribs = shaderAttributes;
 
         LLGL::Shader* shader = renderer_->CreateShader(vertexDesc);
         if (shader == nullptr)
@@ -1039,7 +1140,8 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     LLGL::PipelineState* LlglGraphicsBackend::AcquirePrimitivePipeline(
-        const LlglVertexBufferBackend& vertexBuffer, PrimitiveType primitive, bool scissorEnabled)
+        const LlglVertexBufferBackend& vertexBuffer, PrimitiveType primitive, bool scissorEnabled,
+        bool textured)
     {
         const std::vector<LLGL::VertexAttribute>& attributes = vertexBuffer.GetVertexAttributes();
 
@@ -1051,6 +1153,7 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 4u + static_cast<std::uint64_t>(cullMode_ & 0x3);
         key = key * 2u + static_cast<std::uint64_t>(fillMode_ & 0x1);
         key = key * 2u + (scissorEnabled ? 1u : 0u);
+        key = key * 2u + (textured ? 1u : 0u);
         key = key * 1024u + (MakeBlendPipelineKey(scissorEnabled) & 0x3FFu);
 
         const auto cached = primitivePipelineCache_.find(key);
@@ -1058,10 +1161,11 @@ namespace CNA::Internal::Backends::Llgl
             return cached->second;
 
         LLGL::GraphicsPipelineDescriptor pipelineDesc;
-        pipelineDesc.debugName = "CNA.Colored3D";
-        pipelineDesc.vertexShader = AcquirePrimitiveVertexShader(attributes);
-        pipelineDesc.fragmentShader = primitiveFragmentShader_;
-        pipelineDesc.pipelineLayout = primitiveLayout_;
+        pipelineDesc.debugName = textured ? "CNA.Textured3D" : "CNA.Colored3D";
+        pipelineDesc.vertexShader = AcquirePrimitiveVertexShader(attributes, textured);
+        pipelineDesc.fragmentShader = textured ? primitiveTexturedFragmentShader_
+                                               : primitiveFragmentShader_;
+        pipelineDesc.pipelineLayout = textured ? primitiveTexturedLayout_ : primitiveLayout_;
         pipelineDesc.renderPass = swapChain_->GetRenderPass();
         pipelineDesc.primitiveTopology = MapPrimitiveTopology(primitive);
         pipelineDesc.depth.testEnabled = depthTestEnabled_;
@@ -1113,12 +1217,54 @@ namespace CNA::Internal::Backends::Llgl
         return pipeline;
     }
 
+    void LlglGraphicsBackend::FillEffectUniforms(float (&uniforms)[32], const float matrix[16],
+                                                  const GpuDrawParams* params)
+    {
+        std::memcpy(uniforms, matrix, sizeof(float) * 16);
+
+        // Defaults are the "no effect state at all" values: opaque white, fog off, and an alpha
+        // test that always passes -- the same neutral values the shaders would see from a stock
+        // effect that enables none of these.
+        uniforms[16] = 1.0f; uniforms[17] = 1.0f; uniforms[18] = 1.0f; uniforms[19] = 1.0f;
+        uniforms[20] = 0.0f; uniforms[21] = 0.0f; uniforms[22] = 0.0f; uniforms[23] = 0.0f;
+        uniforms[24] = 0.0f; uniforms[25] = 0.0f; uniforms[26] = 0.0f; uniforms[27] = 0.0f;
+        uniforms[28] = 0.0f; uniforms[29] = 0.0f; uniforms[30] = 1.0f; uniforms[31] = 1.0f;
+
+        if (params == nullptr)
+            return;
+
+        uniforms[16] = params->diffuseColor[0];
+        uniforms[17] = params->diffuseColor[1];
+        uniforms[18] = params->diffuseColor[2];
+        uniforms[19] = params->diffuseColor[3];
+
+        if (params->fogEnabled)
+        {
+            uniforms[20] = params->fogColor[0];
+            uniforms[21] = params->fogColor[1];
+            uniforms[22] = params->fogColor[2];
+            // The alpha channel carries the enable bit, so a disabled fog multiplies the whole
+            // factor by zero in the shader instead of needing a branch.
+            uniforms[23] = 1.0f;
+            uniforms[24] = params->fogVector[0];
+            uniforms[25] = params->fogVector[1];
+            uniforms[26] = params->fogVector[2];
+            uniforms[27] = params->fogVector[3];
+        }
+
+        uniforms[28] = params->alphaTest[0];
+        uniforms[29] = params->alphaTest[1];
+        uniforms[30] = params->alphaTest[2];
+        uniforms[31] = params->alphaTest[3];
+    }
+
     void LlglGraphicsBackend::QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                                                const LlglIndexBufferBackend* indexBuffer,
                                                const Matrix& world, const Matrix& view,
                                                const Matrix& projection,
                                                PrimitiveType primitive, int primitiveCount,
-                                               int vertexStart, int startIndex, int baseVertex)
+                                               int vertexStart, int startIndex, int baseVertex,
+                                               const GpuDrawParams* params)
     {
         if (primitiveCount <= 0)
             return;
@@ -1159,8 +1305,24 @@ namespace CNA::Internal::Backends::Llgl
             }
         }
 
-        const auto transformIndex = static_cast<std::uint32_t>(transformData_.size() / 16);
-        transformData_.insert(transformData_.end(), std::begin(matrix), std::end(matrix));
+        const bool textured = (params != nullptr && params->textureEnabled && params->texture0 != nullptr);
+        const LlglTextureBackend* texture = nullptr;
+        if (textured)
+        {
+            texture = dynamic_cast<const LlglTextureBackend*>(params->texture0);
+            if (texture == nullptr || texture->GetLlglTexture() == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: the effect's texture belongs to another backend");
+            }
+        }
+
+        float uniforms[kEffectUniformFloats] = {};
+        FillEffectUniforms(uniforms, matrix, params);
+
+        const auto transformIndex =
+            static_cast<std::uint32_t>(transformData_.size() / kEffectUniformFloats);
+        transformData_.insert(transformData_.end(), std::begin(uniforms), std::end(uniforms));
 
         std::int32_t scissor[4] = {0, 0, 0, 0};
         const bool scissorEnabled = ComputeEffectiveScissor(scissor);
@@ -1168,7 +1330,13 @@ namespace CNA::Internal::Backends::Llgl
         FrameCommand command;
         command.kind = FrameCommand::Kind::Primitives;
         command.vertexBuffer = vertexBuffer.GetLlglBuffer();
-        command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled);
+        command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured);
+        if (textured)
+        {
+            command.texture = texture->GetLlglTexture();
+            command.sampler = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
+                                             samplerMaxAnisotropy_);
+        }
         command.transformIndex = transformIndex;
         command.vertexCount = static_cast<std::uint32_t>(elementCount);
         command.firstVertex = static_cast<std::uint32_t>(std::max(0, vertexStart));
@@ -1738,11 +1906,11 @@ namespace CNA::Internal::Backends::Llgl
 
         // One constant buffer per 3D draw recorded this frame. The pool only ever grows, so a
         // steady-state frame allocates nothing.
-        const std::size_t transformCount = transformData_.size() / 16;
+        const std::size_t transformCount = transformData_.size() / kEffectUniformFloats;
         while (transformBuffers_.size() < transformCount)
         {
             LLGL::BufferDescriptor transformDesc;
-            transformDesc.size = sizeof(float) * 16;
+            transformDesc.size = sizeof(float) * kEffectUniformFloats;
             transformDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
             LLGL::Buffer* buffer = renderer_->CreateBuffer(transformDesc);
             if (buffer == nullptr)
@@ -1752,7 +1920,8 @@ namespace CNA::Internal::Backends::Llgl
         for (std::size_t index = 0; index < transformCount; ++index)
         {
             renderer_->WriteBuffer(*transformBuffers_[index], 0,
-                                   transformData_.data() + index * 16, sizeof(float) * 16);
+                                   transformData_.data() + index * kEffectUniformFloats,
+                                   sizeof(float) * kEffectUniformFloats);
         }
 
         if (spriteVertexData_.empty())
@@ -1846,6 +2015,11 @@ namespace CNA::Internal::Backends::Llgl
                                                             command.scissor[2], command.scissor[3]});
                     }
                     commands_->SetResource(0, *transformBuffers_[command.transformIndex]);
+                    if (command.texture != nullptr && command.sampler != nullptr)
+                    {
+                        commands_->SetResource(1, *command.texture);
+                        commands_->SetResource(2, *command.sampler);
+                    }
                     commands_->SetVertexBuffer(*command.vertexBuffer);
                     if (command.indexBuffer != nullptr)
                     {
@@ -2218,7 +2392,7 @@ namespace CNA::Internal::Backends::Llgl
         }
 
         QueuePrimitives(*vertexBuffer, nullptr, world, view, projection, primitive, primitiveCount,
-                        0, 0, 0);
+                        0, 0, 0, nullptr);
     }
 
     void LlglGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
@@ -2236,25 +2410,23 @@ namespace CNA::Internal::Backends::Llgl
         }
 
         QueuePrimitives(*vertexBuffer, indexBuffer, world, view, projection, primitive, primitiveCount,
-                        0, 0, 0);
+                        0, 0, 0, nullptr);
     }
 
     void LlglGraphicsBackend::RejectUnsupportedDrawParams(const GpuDrawParams& params) const
     {
-        // The colour-only path can honour exactly one effect configuration: vertex colours, no
-        // texture, no lighting. Everything else has to fail by name rather than quietly render
-        // something that merely looks plausible -- an untextured surface where a texture was asked
-        // for is a wrong answer, not a degraded one.
+        // What this path can honour: vertex colours, a diffuse colour and alpha, one texture, fog,
+        // and the alpha test. Everything else fails by name rather than quietly rendering
+        // something that merely looks plausible -- an unlit surface where lighting was asked for is
+        // a wrong answer, not a degraded one.
         const char* unsupported = nullptr;
-        if (params.textureEnabled || params.texture0 != nullptr) unsupported = "textured effects";
-        else if (params.lightingEnabled)                          unsupported = "lighting";
-        else if (params.dualTexture)                              unsupported = "DualTextureEffect";
-        else if (params.envMapping)                               unsupported = "EnvironmentMapEffect";
-        else if (params.skinned)                                  unsupported = "SkinnedEffect";
-        else if (params.pbr)                                      unsupported = "PbrEffect";
-        else if (params.fogEnabled)                               unsupported = "fog";
-        else if (params.customEffectBackend != nullptr)           unsupported = "custom ShaderEffect";
-        else if (params.instanceCount > 1)                        unsupported = "instanced drawing";
+        if (params.lightingEnabled)                          unsupported = "lighting";
+        else if (params.dualTexture)                         unsupported = "DualTextureEffect";
+        else if (params.envMapping)                          unsupported = "EnvironmentMapEffect";
+        else if (params.skinned)                             unsupported = "SkinnedEffect";
+        else if (params.pbr)                                 unsupported = "PbrEffect";
+        else if (params.customEffectBackend != nullptr)      unsupported = "custom ShaderEffect";
+        else if (params.instanceCount > 1)                   unsupported = "instanced drawing";
 
         if (unsupported != nullptr)
             NotYetImplemented(kBackendName, unsupported);
@@ -2276,7 +2448,7 @@ namespace CNA::Internal::Backends::Llgl
         }
 
         QueuePrimitives(*vertexBuffer, nullptr, world, view, projection, primitive, primitiveCount,
-                        params.vertexStart, 0, 0);
+                        params.vertexStart, 0, 0, &params);
     }
 
     void LlglGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb,
@@ -2301,7 +2473,7 @@ namespace CNA::Internal::Backends::Llgl
         // draw of the wrong range (a defect other backends in this project have had filed against
         // them by name).
         QueuePrimitives(*vertexBuffer, indexBuffer, world, view, projection, primitive, primitiveCount,
-                        0, params.startIndex, params.baseVertex);
+                        0, params.startIndex, params.baseVertex, &params);
     }
 
     bool LlglGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
