@@ -99,7 +99,9 @@ Implemented:
   `GetData`. A cube map is also sampleable, through `EnvironmentMapEffect`; volume textures are
   storage and readback only.
 - `RenderTarget2D` — off-screen colour with an optional real depth-stencil buffer, `GetData`
-  readback, sampling the unbound target as a texture, and mip regeneration on unbind.
+  readback, sampling the unbound target as a texture, mip regeneration on unbind, and its own
+  independent MSAA (a real multisampled colour/depth-stencil texture plus a resolve texture,
+  resolved on unbind).
 - `RenderTargetCube` — six per-face render-target views over one cube texture, a shared
   depth-stencil buffer, `GetData` per face, and sampling back through `EnvironmentMapEffect` the
   same way a plain `TextureCube` does.
@@ -116,13 +118,18 @@ Implemented:
   Mesa's `lavapipe`, this backend's own verification device) it transparently falls back to
   `QUERY_TYPE_BINARY_OCCLUSION` and reports only 0 or 1, the same convention `OcclusionQuery`
   already documents for EasyGL's GLES3.
+- MSAA on the back buffer: a real offscreen multisampled colour (and depth-stencil) texture,
+  resolved into the swap chain's back buffer on `Present()`/`ReadBackbuffer()`. Requested counts
+  are clamped to what the swap chain's colour and depth-stencil formats both actually support
+  (`GetTextureFormatInfoExt()`), matching FNA's own `RenderTarget2D.MultiSampleCount`/backbuffer
+  clamp semantics.
 
 Not implemented — each **throws with its own name** rather than rendering an approximation, and
 `GraphicsDevice.GraphicsCapabilities` reports each honestly:
 
 | Feature | Tracked as |
 | --- | --- |
-| MSAA (back buffer and render targets) | `DILIGENT-25` |
+| MSAA on `RenderTargetCube` | `DILIGENT-25` |
 | Sampling a volume texture from a shader | `DILIGENT-42` |
 | `PbrEffect`, `SkinnedEffect`'s stride-56 vertex-colour variant | `DILIGENT-36`, `DILIGENT-35` |
 | Custom `ShaderEffect` programs | `DILIGENT-42` |
@@ -141,8 +148,12 @@ Not implemented — each **throws with its own name** rather than rendering an a
 - **Direct3D 11/12 are code paths only.** They compile only in a Windows-targeting build and have
   not been run.
 - **Depth-stencil is always `D24_UNORM_S8_UINT`**, regardless of the requested `DepthFormat`.
-- **MRT colour write masks and `BlendState.MultiSampleMask` have no effect** — this backend renders
-  to a single, single-sampled target, so slots 1..3 and the coverage mask have nothing to act on.
+- **MRT colour write masks have no effect on slots 1..3** — every built-in shader here declares a
+  single output, so only slot 0 ever receives fragments regardless of the requested mask.
+  `BlendState.MultiSampleMask` also has no effect: it targets per-sample coverage, which this
+  backend's pipelines don't expose a way to set.
+- **`RenderTargetCube` is never multisampled**, even when the back buffer or a `RenderTarget2D` is —
+  requesting MSAA on one clamps to 1 (`DILIGENT-25`).
 
 ## Tests
 
@@ -153,15 +164,18 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Nine further binaries are the real-device pixel proofs (41 checks total): `Diligent_2D` (6),
+Ten further binaries are the real-device pixel proofs (46 checks total): `Diligent_2D` (6),
 `Diligent_3D` (5), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4),
-`Diligent_MRT` (4) and `Diligent_OcclusionQuery` (4). They clear, draw `SpriteBatch` quads and 3D
-primitives on the back buffer and into off-screen 2D/cube targets, and assert on pixels (or query
-results) read back through `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` /
-`RenderTargetCube.GetData` / `OcclusionQuery`. All 41 pass against a real Vulkan device. On a
-machine with no usable device they exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest
-reports as a skip — reporting a pass with nothing rendered would be dishonest.
+`Diligent_MRT` (4), `Diligent_OcclusionQuery` (4) and `Diligent_MSAA` (5). They clear, draw
+`SpriteBatch` quads and 3D primitives on the back buffer and into off-screen 2D/cube targets, and
+assert on pixels (or query results) read back through `GraphicsDevice.GetBackBufferData` /
+`RenderTarget2D.GetData` / `RenderTargetCube.GetData` / `OcclusionQuery`. `Diligent_MSAA` uses a
+diagonal-edge differential (binary transition with MSAA off vs. genuinely blended pixels with it
+on) rather than a solid-fill check, since a solid fill can't tell "MSAA happened" apart from
+"MSAA was silently ignored". All 46 pass against a real Vulkan device. On a machine with no usable
+device they exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip —
+reporting a pass with nothing rendered would be dishonest.
 
 ```bash
 ctest --test-dir cmake-build-diligent -R Diligent --output-on-failure

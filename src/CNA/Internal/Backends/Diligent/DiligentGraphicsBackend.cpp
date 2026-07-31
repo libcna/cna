@@ -1035,35 +1035,76 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     DiligentRenderTargetBackend::DiligentRenderTargetBackend(DiligentGraphicsBackend& owner,
                                                               int width, int height, int depthFormat,
-                                                              bool preserveContents, bool mipMap)
+                                                              bool preserveContents, bool mipMap,
+                                                              int multiSampleCount)
         : owner_(owner)
         , width_(width)
         , height_(height)
         , mipLevels_(mipMap ? MipLevelCount(width, height) : 1)
+        , appliedMultiSampleCount_(owner_.ClampSampleCount(multiSampleCount))
         , preserveContents_(preserveContents)
     {
         if (width_ <= 0 || height_ <= 0)
             throw std::runtime_error("CNA Diligent: render target dimensions must be positive");
+
+        const bool wantsMsaa = appliedMultiSampleCount_ > 1;
 
         Dg::TextureDesc colorDesc;
         colorDesc.Name = "CNA render target";
         colorDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
         colorDesc.Width = static_cast<Dg::Uint32>(width_);
         colorDesc.Height = static_cast<Dg::Uint32>(height_);
-        colorDesc.MipLevels = static_cast<Dg::Uint32>(mipLevels_);
         colorDesc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
         colorDesc.Usage = Dg::USAGE_DEFAULT;
-        colorDesc.BindFlags = Dg::BIND_RENDER_TARGET | Dg::BIND_SHADER_RESOURCE;
-        if (mipLevels_ > 1)
-            colorDesc.MiscFlags = Dg::MISC_TEXTURE_FLAG_GENERATE_MIPS;
+        colorDesc.BindFlags = Dg::BIND_RENDER_TARGET;
+        if (wantsMsaa)
+        {
+            // A multisampled texture can't have mip levels and this backend's shaders sample a
+            // plain Texture2D, not a Texture2DMS -- resolveTexture_ below carries the mip chain and
+            // BIND_SHADER_RESOURCE instead.
+            colorDesc.MipLevels = 1;
+            colorDesc.SampleCount = static_cast<Dg::Uint32>(appliedMultiSampleCount_);
+        }
+        else
+        {
+            colorDesc.MipLevels = static_cast<Dg::Uint32>(mipLevels_);
+            colorDesc.BindFlags |= Dg::BIND_SHADER_RESOURCE;
+            if (mipLevels_ > 1)
+                colorDesc.MiscFlags = Dg::MISC_TEXTURE_FLAG_GENERATE_MIPS;
+        }
 
         owner_.device_->CreateTexture(colorDesc, nullptr, &colorTexture_);
         if (!colorTexture_)
             throw std::runtime_error("CNA Diligent: render target colour texture creation failed");
 
         rtv_ = colorTexture_->GetDefaultView(Dg::TEXTURE_VIEW_RENDER_TARGET);
-        srv_ = colorTexture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
-        if (rtv_ == nullptr || srv_ == nullptr)
+        if (rtv_ == nullptr)
+            throw std::runtime_error("CNA Diligent: render target is missing a required view");
+
+        if (wantsMsaa)
+        {
+            Dg::TextureDesc resolveDesc;
+            resolveDesc.Name = "CNA render target resolve";
+            resolveDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
+            resolveDesc.Width = static_cast<Dg::Uint32>(width_);
+            resolveDesc.Height = static_cast<Dg::Uint32>(height_);
+            resolveDesc.MipLevels = static_cast<Dg::Uint32>(mipLevels_);
+            resolveDesc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
+            resolveDesc.Usage = Dg::USAGE_DEFAULT;
+            resolveDesc.BindFlags = Dg::BIND_SHADER_RESOURCE;
+            if (mipLevels_ > 1)
+                resolveDesc.MiscFlags = Dg::MISC_TEXTURE_FLAG_GENERATE_MIPS;
+
+            owner_.device_->CreateTexture(resolveDesc, nullptr, &resolveTexture_);
+            if (!resolveTexture_)
+                throw std::runtime_error("CNA Diligent: render target resolve texture creation failed");
+            srv_ = resolveTexture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
+        }
+        else
+        {
+            srv_ = colorTexture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
+        }
+        if (srv_ == nullptr)
             throw std::runtime_error("CNA Diligent: render target is missing a required view");
 
         // DepthFormat::None means the game asked for no depth-stencil storage at all, and
@@ -1078,6 +1119,9 @@ void main(in VSInput vsIn, out PSInput psIn)
             depthDesc.Height = static_cast<Dg::Uint32>(height_);
             depthDesc.MipLevels = 1;
             depthDesc.Format = Dg::TEX_FORMAT_D24_UNORM_S8_UINT;
+            // The depth-stencil buffer must share the colour target's sample count, or Diligent
+            // rejects the pipeline/framebuffer combination as incompatible.
+            depthDesc.SampleCount = static_cast<Dg::Uint32>(appliedMultiSampleCount_);
             depthDesc.Usage = Dg::USAGE_DEFAULT;
             depthDesc.BindFlags = Dg::BIND_DEPTH_STENCIL;
 
@@ -1133,7 +1177,10 @@ void main(in VSInput vsIn, out PSInput psIn)
         subresource.pData = rgba;
         subresource.Stride = static_cast<Dg::Uint64>(stride > 0 ? stride : width_ * 4);
 
-        owner_.context_->UpdateTexture(colorTexture_, 0, 0, box, subresource,
+        // A multisampled texture can't be the destination of UpdateTexture -- write into the
+        // single-sampled resolve texture instead, which is what GetData()/sampling read from too.
+        Dg::ITexture* destination = resolveTexture_ ? resolveTexture_.RawPtr() : colorTexture_.RawPtr();
+        owner_.context_->UpdateTexture(destination, 0, 0, box, subresource,
                                        Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
                                        Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     }
@@ -1147,6 +1194,14 @@ void main(in VSInput vsIn, out PSInput psIn)
         const int levelH = MipLevelExtent(height_, level);
         if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelW || y + h > levelH)
             return false;
+        if (resolveTexture_)
+        {
+            // owner_ is a reference member: its constness is independent of this method's, so
+            // calling its (non-const) resolve helper here needs no const_cast.
+            owner_.ResolveTextureSubresource(colorTexture_, resolveTexture_);
+            return owner_.ReadTextureRegion(resolveTexture_, static_cast<Dg::Uint32>(level), 0, x, y,
+                                            0, w, h, 1, data, dataLength);
+        }
         return owner_.ReadTextureRegion(colorTexture_, static_cast<Dg::Uint32>(level), 0, x, y, 0,
                                         w, h, 1, data, dataLength);
     }
@@ -1158,6 +1213,13 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     void DiligentRenderTargetBackend::UnbindAsRenderTarget()
     {
+        if (resolveTexture_)
+        {
+            // Whatever was just rendered lives only in the multisampled colorTexture_ until this
+            // resolves it -- both GenerateMips() below and every later sample/GetData() read
+            // resolveTexture_, never colorTexture_ directly.
+            owner_.ResolveTextureSubresource(colorTexture_, resolveTexture_);
+        }
         if (mipLevels_ > 1 && srv_ != nullptr)
         {
             // Levels 1..n only exist because level 0 was just rendered, so they are regenerated at
@@ -1165,7 +1227,11 @@ void main(in VSInput vsIn, out PSInput psIn)
             owner_.EnsureRenderTargetsBound();
             owner_.context_->GenerateMips(srv_);
         }
-        owner_.SetRenderTarget2D(nullptr);
+        // Deliberately does NOT call owner_.SetRenderTarget2D(nullptr) here: this method's whole
+        // job is "resolve/regenerate whatever WAS just rendered", called by the owning backend's
+        // own SetRenderTarget2D()/SetRenderTargetCubeFace()/SetRenderTargets() while this target is
+        // still the bound one (so EnsureRenderTargetsBound() above has something real to bind) --
+        // the caller is solely responsible for the actual state swap afterwards.
     }
 
     // ---- DiligentRenderTargetCubeBackend ----
@@ -1289,7 +1355,8 @@ void main(in VSInput vsIn, out PSInput psIn)
             owner_.EnsureRenderTargetsBound();
             owner_.context_->GenerateMips(srv_);
         }
-        owner_.SetRenderTarget2D(nullptr);
+        // See DiligentRenderTargetBackend::UnbindAsRenderTarget()'s identical note: the caller owns
+        // the actual state swap, not this method.
     }
 
     // ---- DiligentVertexBufferBackend ----
@@ -1739,7 +1806,7 @@ void main(in VSInput vsIn, out PSInput psIn)
                depth == other.depth && stencilFront == other.stencilFront &&
                stencilBack == other.stencilBack && stencilMasks == other.stencilMasks &&
                raster == other.raster && targetFormats == other.targetFormats &&
-               extraTargetFormats == other.extraTargetFormats;
+               extraTargetFormats == other.extraTargetFormats && sampleCount == other.sampleCount;
     }
 
     std::size_t DiligentGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const noexcept
@@ -1748,7 +1815,7 @@ void main(in VSInput vsIn, out PSInput psIn)
         const std::uint32_t fields[] = {key.topology, key.blend, key.blendFuncs, key.writeMask,
                                         key.depth, key.stencilFront, key.stencilBack,
                                         key.stencilMasks, key.raster, key.targetFormats,
-                                        key.extraTargetFormats};
+                                        key.extraTargetFormats, key.sampleCount};
         for (const std::uint32_t field : fields)
             hash = hash * 1099511628211ull ^ static_cast<std::size_t>(field);
         return hash;
@@ -1777,6 +1844,14 @@ void main(in VSInput vsIn, out PSInput psIn)
         maxTextureDimension_ = static_cast<int>(device_->GetAdapterInfo().Texture.MaxTexture2DDimension);
         if (maxTextureDimension_ <= 0)
             maxTextureDimension_ = 16384;
+
+        sampleCount_ = ClampSampleCount(args.multiSampleCount);
+        if (sampleCount_ > 1)
+        {
+            RecreateMsaaBackBufferTargets();
+            CNA::Logger::Info(
+                "CNA Diligent: MSAA " + std::to_string(sampleCount_) + "x", CNA::LogCategory::GPU);
+        }
 
         // The alpha-blended, depth-tested defaults every other CNA backend starts from.
         state_.blend = PackBytes(4, 5, 4, 5);
@@ -2008,6 +2083,118 @@ void main(in VSInput vsIn, out PSInput psIn)
             throw std::runtime_error("CNA Diligent: fallback texture has no shader resource view");
     }
 
+    int DiligentGraphicsBackend::GetMultiSampleCount() const
+    {
+        return sampleCount_ > 1 ? sampleCount_ : 0;
+    }
+
+    int DiligentGraphicsBackend::ClampSampleCount(int requested) const
+    {
+        if (requested <= 1 || !device_)
+            return 1;
+
+        const auto& colorInfo = device_->GetTextureFormatInfoExt(swapChain_->GetDesc().ColorBufferFormat);
+        const auto& depthInfo = device_->GetTextureFormatInfoExt(swapChain_->GetDesc().DepthBufferFormat);
+        const Dg::Uint32 supported =
+            static_cast<Dg::Uint32>(colorInfo.SampleCounts) & static_cast<Dg::Uint32>(depthInfo.SampleCounts);
+
+        // Largest supported power-of-two sample count not exceeding the request, matching every
+        // other CNA backend's own MSAA clamp (e.g. VulkanGraphicsBackend's PickSampleCount()).
+        for (const int candidate : {64, 32, 16, 8, 4, 2})
+        {
+            if (candidate <= requested && (supported & static_cast<Dg::Uint32>(candidate)) != 0)
+                return candidate;
+        }
+        return 1;
+    }
+
+    int DiligentGraphicsBackend::CurrentSampleCount() const
+    {
+        if (currentCubeTarget_ != nullptr)
+            return 1; // cube render target MSAA is not implemented yet
+        if (DiligentRenderTargetBackend* rt = PrimaryRenderTarget())
+            return rt->GetDiligentSampleCount();
+        return sampleCount_;
+    }
+
+    void DiligentGraphicsBackend::RecreateMsaaBackBufferTargets()
+    {
+        msaaBackBufferColor_.Release();
+        msaaBackBufferDepth_.Release();
+        msaaBackBufferColorView_ = nullptr;
+        msaaBackBufferDepthView_ = nullptr;
+        if (sampleCount_ <= 1 || physicalWidth_ <= 0 || physicalHeight_ <= 0)
+            return;
+
+        const auto& scDesc = swapChain_->GetDesc();
+
+        Dg::TextureDesc colorDesc;
+        colorDesc.Name = "CNA MSAA back buffer colour";
+        colorDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
+        colorDesc.Width = static_cast<Dg::Uint32>(physicalWidth_);
+        colorDesc.Height = static_cast<Dg::Uint32>(physicalHeight_);
+        colorDesc.MipLevels = 1;
+        colorDesc.Format = scDesc.ColorBufferFormat;
+        colorDesc.SampleCount = static_cast<Dg::Uint32>(sampleCount_);
+        colorDesc.Usage = Dg::USAGE_DEFAULT;
+        colorDesc.BindFlags = Dg::BIND_RENDER_TARGET;
+        device_->CreateTexture(colorDesc, nullptr, &msaaBackBufferColor_);
+        if (!msaaBackBufferColor_)
+            throw std::runtime_error("CNA Diligent: MSAA back buffer colour texture creation failed");
+        msaaBackBufferColorView_ = msaaBackBufferColor_->GetDefaultView(Dg::TEXTURE_VIEW_RENDER_TARGET);
+
+        if (scDesc.DepthBufferFormat != Dg::TEX_FORMAT_UNKNOWN)
+        {
+            Dg::TextureDesc depthDesc;
+            depthDesc.Name = "CNA MSAA back buffer depth-stencil";
+            depthDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
+            depthDesc.Width = static_cast<Dg::Uint32>(physicalWidth_);
+            depthDesc.Height = static_cast<Dg::Uint32>(physicalHeight_);
+            depthDesc.MipLevels = 1;
+            depthDesc.Format = scDesc.DepthBufferFormat;
+            depthDesc.SampleCount = static_cast<Dg::Uint32>(sampleCount_);
+            depthDesc.Usage = Dg::USAGE_DEFAULT;
+            depthDesc.BindFlags = Dg::BIND_DEPTH_STENCIL;
+            device_->CreateTexture(depthDesc, nullptr, &msaaBackBufferDepth_);
+            if (!msaaBackBufferDepth_)
+                throw std::runtime_error("CNA Diligent: MSAA back buffer depth texture creation failed");
+            msaaBackBufferDepthView_ = msaaBackBufferDepth_->GetDefaultView(Dg::TEXTURE_VIEW_DEPTH_STENCIL);
+        }
+        renderTargetsBound_ = false;
+    }
+
+    void DiligentGraphicsBackend::ResolveTextureSubresource(Dg::ITexture* src, Dg::ITexture* dst)
+    {
+        Dg::ResolveTextureSubresourceAttribs attribs;
+        attribs.SrcTextureTransitionMode = Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
+        attribs.DstTextureTransitionMode = Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
+        context_->ResolveTextureSubresource(src, dst, attribs);
+    }
+
+    void DiligentGraphicsBackend::ResolveMsaaBackBufferIfNeeded()
+    {
+        if (sampleCount_ <= 1 || !msaaBackBufferColor_)
+            return;
+        Dg::ITextureView* backBufferView = swapChain_->GetCurrentBackBufferRTV();
+        if (backBufferView == nullptr)
+            return;
+        ResolveTextureSubresource(msaaBackBufferColor_, backBufferView->GetTexture());
+    }
+
+    int DiligentGraphicsBackend::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        const int clamped = ClampSampleCount(requestedMultiSampleCount);
+        if (clamped != sampleCount_)
+        {
+            sampleCount_ = clamped;
+            RecreateMsaaBackBufferTargets();
+            CNA::Logger::Info(
+                "CNA Diligent: back buffer MultiSampleCount reset to " + std::to_string(sampleCount_) + "x",
+                CNA::LogCategory::GPU);
+        }
+        return GetMultiSampleCount();
+    }
+
     void DiligentGraphicsBackend::SyncSwapChainSize()
     {
         int width = 0;
@@ -2021,6 +2208,9 @@ void main(in VSInput vsIn, out PSInput psIn)
         physicalWidth_ = width;
         physicalHeight_ = height;
         swapChain_->Resize(static_cast<Dg::Uint32>(width), static_cast<Dg::Uint32>(height));
+        // The offscreen MSAA back buffer is sized to match; a resize invalidates it exactly the
+        // same way it invalidates the swap chain's own images.
+        RecreateMsaaBackBufferTargets();
         renderTargetsBound_ = false;
     }
 
@@ -2037,9 +2227,17 @@ void main(in VSInput vsIn, out PSInput psIn)
         }
         else if (currentRenderTargets_.empty())
         {
-            Dg::ITextureView* backBuffer = swapChain_->GetCurrentBackBufferRTV();
-            context_->SetRenderTargets(1, &backBuffer, swapChain_->GetDepthBufferDSV(),
-                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            if (sampleCount_ > 1 && msaaBackBufferColorView_ != nullptr)
+            {
+                context_->SetRenderTargets(1, &msaaBackBufferColorView_, msaaBackBufferDepthView_,
+                                           Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            }
+            else
+            {
+                Dg::ITextureView* backBuffer = swapChain_->GetCurrentBackBufferRTV();
+                context_->SetRenderTargets(1, &backBuffer, swapChain_->GetDepthBufferDSV(),
+                                           Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            }
         }
         else
         {
@@ -2061,16 +2259,22 @@ void main(in VSInput vsIn, out PSInput psIn)
     {
         if (currentCubeTarget_ != nullptr)
             return currentCubeTarget_->GetFaceRenderTargetView(currentCubeFace_);
-        return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetRenderTargetView()
-                                               : swapChain_->GetCurrentBackBufferRTV();
+        if (PrimaryRenderTarget() != nullptr)
+            return PrimaryRenderTarget()->GetRenderTargetView();
+        if (sampleCount_ > 1 && msaaBackBufferColorView_ != nullptr)
+            return msaaBackBufferColorView_;
+        return swapChain_->GetCurrentBackBufferRTV();
     }
 
     Dg::ITextureView* DiligentGraphicsBackend::GetCurrentDepthStencilView() const
     {
         if (currentCubeTarget_ != nullptr)
             return currentCubeTarget_->GetDepthStencilView();
-        return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetDepthStencilView()
-                                               : swapChain_->GetDepthBufferDSV();
+        if (PrimaryRenderTarget() != nullptr)
+            return PrimaryRenderTarget()->GetDepthStencilView();
+        if (sampleCount_ > 1 && msaaBackBufferColorView_ != nullptr)
+            return msaaBackBufferDepthView_;
+        return swapChain_->GetDepthBufferDSV();
     }
 
     DiligentGraphicsBackend::LogicalViewport DiligentGraphicsBackend::ComputeLogicalViewport() const
@@ -2203,7 +2407,10 @@ void main(in VSInput vsIn, out PSInput psIn)
         }
         if (currentRenderTargets_.empty())
         {
-            context_->ClearRenderTarget(swapChain_->GetCurrentBackBufferRTV(), clearColor,
+            Dg::ITextureView* target = (sampleCount_ > 1 && msaaBackBufferColorView_ != nullptr)
+                                           ? msaaBackBufferColorView_
+                                           : swapChain_->GetCurrentBackBufferRTV();
+            context_->ClearRenderTarget(target, clearColor,
                                         Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
             return;
         }
@@ -2265,6 +2472,7 @@ void main(in VSInput vsIn, out PSInput psIn)
     void DiligentGraphicsBackend::Present()
     {
         SyncSwapChainSize();
+        ResolveMsaaBackBufferIfNeeded();
         swapChain_->Present(static_cast<Dg::Uint32>(std::max(0, swapInterval_)));
         renderTargetsBound_ = false;
     }
@@ -2345,18 +2553,12 @@ void main(in VSInput vsIn, out PSInput psIn)
     std::unique_ptr<IRenderTargetBackend> DiligentGraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        if (multiSampleCount > 1)
-        {
-            // Clamped, not refused: FNA's own semantics are that RenderTarget2D.MultiSampleCount
-            // reports the device-clamped value, and GetMultiSampleCount() below answers 0 so the
-            // caller can see what it really got (DILIGENT-25).
-            CNA::Logger::Warn(
-                "CNA Diligent: multisampled render targets are not implemented; creating a "
-                "single-sampled target instead",
-                CNA::LogCategory::GPU);
-        }
+        // DiligentRenderTargetBackend's own constructor clamps this to what the device actually
+        // supports (DILIGENT-25) and IRenderTargetBackend::GetMultiSampleCount() reports the real
+        // applied value, matching FNA's own RenderTarget2D.MultiSampleCount semantics.
         return std::make_unique<DiligentRenderTargetBackend>(*this, w, h, depthFormat,
-                                                             preserveContents, mipMap);
+                                                             preserveContents, mipMap,
+                                                             multiSampleCount);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> DiligentGraphicsBackend::CreateRenderTargetCube(
@@ -2379,6 +2581,19 @@ void main(in VSInput vsIn, out PSInput psIn)
         if (currentCubeTarget_ == nullptr && currentRenderTargets_.size() == (target != nullptr ? 1u : 0u) &&
             (target == nullptr || currentRenderTargets_[0] == target))
             return;
+
+        // Resolve/regenerate mips for whatever WAS bound before switching away from it -- must
+        // happen while it is still the active render target (EnsureRenderTargetsBound() inside
+        // UnbindAsRenderTarget() reads currentCubeTarget_/currentRenderTargets_, still unchanged
+        // here) and before this method's own state below replaces them.
+        if (currentCubeTarget_ != nullptr)
+            currentCubeTarget_->UnbindAsRenderTarget();
+        for (DiligentRenderTargetBackend* previous : currentRenderTargets_)
+        {
+            if (previous != target)
+                previous->UnbindAsRenderTarget();
+        }
+
         currentCubeTarget_ = nullptr;
         currentCubeFace_ = -1;
         currentRenderTargets_.clear();
@@ -2397,6 +2612,16 @@ void main(in VSInput vsIn, out PSInput psIn)
         }
         if (currentCubeTarget_ == target && currentCubeFace_ == face)
             return;
+
+        // Only a genuine cube-object switch resolves/mip-regenerates -- switching faces on the
+        // SAME cube does not, since GenerateMips() covers the whole cube resource (all faces) from
+        // its base level, not just the face that was just drawn into, so regenerating on every
+        // face switch would be redundant work repeated up to five extra times per frame.
+        if (currentCubeTarget_ != nullptr && currentCubeTarget_ != target)
+            currentCubeTarget_->UnbindAsRenderTarget();
+        for (DiligentRenderTargetBackend* previous : currentRenderTargets_)
+            previous->UnbindAsRenderTarget();
+
         currentRenderTargets_.clear();
         currentCubeTarget_ = target;
         currentCubeFace_ = face;
@@ -2448,6 +2673,10 @@ void main(in VSInput vsIn, out PSInput psIn)
     {
         if (pixels == nullptr || w <= 0 || h <= 0)
             throw std::runtime_error("CNA Diligent: ReadBackbuffer requires a positive region");
+
+        // A read can happen mid-frame, before Present() would otherwise resolve the MSAA target --
+        // GetBackBufferData() must see what was actually drawn either way.
+        ResolveMsaaBackBufferIfNeeded();
 
         Dg::ITextureView* backBufferView = GetBackBufferTextureView();
         if (backBufferView == nullptr)
@@ -2559,6 +2788,13 @@ void main(in VSInput vsIn, out PSInput psIn)
                     "CNA Diligent: mixing a cube-map face into a multi-target set is not "
                     "implemented on this backend");
         }
+        // Resolve/regenerate mips for whatever WAS bound before this reconfiguration -- see
+        // SetRenderTarget2D()'s identical note.
+        if (currentCubeTarget_ != nullptr)
+            currentCubeTarget_->UnbindAsRenderTarget();
+        for (DiligentRenderTargetBackend* previous : currentRenderTargets_)
+            previous->UnbindAsRenderTarget();
+
         currentRenderTargets_.clear();
         currentCubeTarget_ = nullptr;
         currentCubeFace_ = -1;
@@ -2591,6 +2827,7 @@ void main(in VSInput vsIn, out PSInput psIn)
             case CNA::GraphicsCapability::OcclusionQuery:
                 return true;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+                return true;
             case CNA::GraphicsCapability::CustomEffects:
                 return false;
         }
@@ -2765,6 +3002,7 @@ void main(in VSInput vsIn, out PSInput psIn)
                      << ((slot - 1) * 8);
         }
         key.extraTargetFormats = extra;
+        key.sampleCount = static_cast<std::uint32_t>(CurrentSampleCount());
         return key;
     }
 
@@ -2922,6 +3160,9 @@ void main(in VSInput vsIn, out PSInput psIn)
                 (key.extraTargetFormats >> ((slot - 1) * 8)) & 0xFF);
         }
         graphicsPipeline.DSVFormat = static_cast<Dg::TEXTURE_FORMAT>((key.targetFormats >> 16) & 0xFFFF);
+        // Must match the sample count of whatever framebuffer this pipeline is ever bound against,
+        // or Vulkan rejects it as incompatible with the render pass -- see PipelineKey::sampleCount.
+        graphicsPipeline.SmplDesc.Count = static_cast<Dg::Uint8>(std::max<std::uint32_t>(1, key.sampleCount));
         graphicsPipeline.PrimitiveTopology = static_cast<Dg::PRIMITIVE_TOPOLOGY>(key.topology);
         graphicsPipeline.InputLayout.LayoutElements = layout.data();
         graphicsPipeline.InputLayout.NumElements = static_cast<Dg::Uint32>(layout.size());

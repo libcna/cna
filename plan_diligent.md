@@ -4,10 +4,11 @@
 > top of it.** What that means concretely is in the "What the baseline actually does" section below
 > — read it before assuming parity with Vulkan/EasyGL/SDL_GPU, which this backend does **not** have.
 > `RenderTarget2D`/`RenderTargetCube`, `AlphaTestEffect`, `DualTextureEffect`,
-> `EnvironmentMapEffect`, `SkinnedEffect` (stride 52), several simultaneous render targets and
-> `OcclusionQuery` are all implemented and verified on a real (software) Vulkan device.
-> Volume-texture sampling, MSAA, custom `ShaderEffect` programs, instancing and `PbrEffect` are
-> **not** implemented, and each one *refuses loudly* rather than rendering a near-miss.
+> `EnvironmentMapEffect`, `SkinnedEffect` (stride 52), several simultaneous render targets,
+> `OcclusionQuery` and MSAA (back buffer and `RenderTarget2D`, device-probed clamping) are all
+> implemented and verified on a real (software) Vulkan device. Volume-texture sampling, MSAA on
+> `RenderTargetCube`, custom `ShaderEffect` programs, instancing and `PbrEffect` are **not**
+> implemented, and each one *refuses loudly* rather than rendering a near-miss.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -143,11 +144,18 @@ Implemented and exercised:
   `QUERY_TYPE_OCCLUSION` to `QUERY_TYPE_BINARY_OCCLUSION` (0/1, matching EasyGL's GLES3 convention)
   on a device without the `occlusionQueryPrecise` feature — which includes `lavapipe`, this
   backend's own verification device.
+- MSAA (`DILIGENT-25`) on the back buffer and `RenderTarget2D`: a real offscreen multisampled
+  colour (and depth-stencil) texture, resolved into the swap chain's back buffer on `Present()`/
+  `ReadBackbuffer()`, or into a `RenderTarget2D`'s own single-sampled resolve texture on unbind.
+  Device-probed and clamped via `GetTextureFormatInfoExt()`, exactly like every other capability
+  this backend reports honestly rather than silently ignores. `RenderTargetCube` MSAA is not
+  implemented.
 
 Deliberately refused (each throws, naming itself):
 
-- Custom `ShaderEffect` programs, hardware instancing, `PbrEffect`, MSAA, and `SkinnedEffect`'s
-  stride-56 vertex-colour variant. `SupportsCapability()` reports each of these honestly.
+- Custom `ShaderEffect` programs, hardware instancing, `PbrEffect`, `RenderTargetCube` MSAA, and
+  `SkinnedEffect`'s stride-56 vertex-colour variant. `SupportsCapability()` reports each of these
+  honestly.
 
 ---
 
@@ -184,8 +192,8 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-22` | `RenderTargetCube` + per-face binding | ✅ | Six per-face `RENDER_TARGET` views over one `RESOURCE_DIM_TEX_CUBE` texture, a shared depth-stencil buffer (only one face is ever the active draw target at a time), and a `DiligentSampledTexture` conformance shared with plain `TextureCube` so `EnvironmentMapEffect` accepts either. Verified by `Diligent_RenderTargetCube`, including sampling the render target back through a real `EnvironmentMapEffect` reflection |
 | `DILIGENT-23` | `TextureCube` (`CreateTextureCube`, `SetData`/`GetData` per face) | ✅ | Six array slices of one `RESOURCE_DIM_TEX_CUBE`; full mip chain. Verified by the shared `TextureCubeTests`/`CnjCapabilityMatrixTests`/XNB cube fixtures, which now run for real on this backend instead of asserting the refusal |
 | `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ✅ | All bound slots are attached and cleared, and the pipeline key carries every slot's format plus the per-slot colour write masks. Only slot 0 receives *fragments* today: every built-in shader declares one `SV_TARGET`, so slots 1..3 stay clear-only until `DILIGENT-42` |
-| `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | ⬜ | `ApplyMultiSampleCount()` currently reports 1 |
-| `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | 🟨 | Implemented: a mipped target is created with `MISC_TEXTURE_FLAG_GENERATE_MIPS` and regenerates on unbind, at the same point FNA3D does. No pixel test asserts the generated levels yet |
+| `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | ✅ | Real offscreen-then-resolve MSAA for the back buffer (`Present()`/`ReadBackbuffer()` resolve) and `RenderTarget2D` (its own independent multisampled texture + resolve texture, resolved on unbind), both clamped via `GetTextureFormatInfoExt()`'s per-format `SampleCounts` bitmask. `RenderTargetCube` MSAA is not implemented (still clamped to 1). Verified by `Diligent_MSAA`'s diagonal-edge differential (see "Verification status"). Found and fixed a real, separate, pre-existing bug while wiring this up -- see this row's own "Verification status" note |
+| `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | 🟨 | Implemented, but `DILIGENT-25`'s work discovered it had never actually been reachable -- `DiligentGraphicsBackend::SetRenderTarget2D()`/`SetRenderTargetCubeFace()`/`SetRenderTargets()` never called the outgoing target's `UnbindAsRenderTarget()` at all (fixed alongside `DILIGENT-25`, see that row). Mip regeneration itself is real now, but still has no dedicated pixel test asserting the generated levels' content |
 
 ### Phase `DILIGENT-3` — remaining effect families
 
@@ -225,23 +233,39 @@ use:
 2. **Runs without a GPU** — `Diligent_DeviceSelection` exercises the device-preference and override
    parsing with no device created at all. ✅
 3. **Real device pixels** — a real Diligent device renders and a test asserts on read-back pixels.
-   ✅ **reached, on a software device**: all 9 `Diligent_*` CTest binaries (41 pixel checks total —
+   ✅ **reached, on a software device**: all 10 `Diligent_*` CTest binaries (46 checks total —
    `Diligent_2D` 6, `Diligent_3D` 5, `Diligent_RenderTarget` 5, `Diligent_RenderTargetCube` 4,
    `Diligent_AlphaTestFog` 4, `Diligent_DualTextureEnvMap` 4, `Diligent_Skinned` 4, `Diligent_MRT` 4,
-   `Diligent_OcclusionQuery` 4) run against a genuine Vulkan device provided by Mesa's `lavapipe` ICD
-   under Xvfb. These are real
+   `Diligent_OcclusionQuery` 4, `Diligent_MSAA` 5) run against a genuine Vulkan device provided by
+   Mesa's `lavapipe` ICD under Xvfb. These are real
    draws through the real Vulkan engine — real pipelines, real HLSL→SPIR-V compilation, real depth
    testing — read back through `GraphicsDevice.GetBackBufferData`/`RenderTarget[Cube].GetData`, not
    stubs. Several real defects were found this way and fixed, spanning both the backend and its own
-   tests — see each `DILIGENT-*` task's own row for detail. The most instructive: `Diligent_
-   RenderTargetCube`'s `EnvironmentMapEffect` check initially read back solid black and cost a long
-   investigation (resource-state tracing, view-descriptor dumps, raw-sample shader hacks) before the
-   actual cause turned out to be in the *test*, not the backend — `SpriteBatch` leaves its own
-   `RasterizerState` bound after `End()` (XNA semantics), silently culling the very geometry the next
-   check tried to draw. The fix was a one-line `RasterizerState::CullNone` reset, already a documented
-   pattern from `Diligent_RenderTarget`'s identical gotcha; the lesson generalized here is to check a
-   test's own state hygiene before suspecting the backend, especially once low-level backend signals
-   (content, resource state, view descriptors) have all confirmed correct.
+   tests — see each `DILIGENT-*` task's own row for detail. Two are the most instructive:
+   - `Diligent_RenderTargetCube`'s `EnvironmentMapEffect` check initially read back solid black and
+     cost a long investigation (resource-state tracing, view-descriptor dumps, raw-sample shader
+     hacks) before the actual cause turned out to be in the *test*, not the backend — `SpriteBatch`
+     leaves its own `RasterizerState` bound after `End()` (XNA semantics), silently culling the very
+     geometry the next check tried to draw. The fix was a one-line `RasterizerState::CullNone` reset,
+     already a documented pattern from `Diligent_RenderTarget`'s identical gotcha; the lesson
+     generalized here is to check a test's own state hygiene before suspecting the backend,
+     especially once low-level backend signals (content, resource state, view descriptors) have all
+     confirmed correct.
+   - `Diligent_MSAA`'s `RenderTarget2D` check initially showed a correctly multisampled and resolved
+     texture with zero anti-aliasing in the sampled result. Root cause was a genuine, separate,
+     pre-existing bug, not anything about MSAA itself: `DiligentGraphicsBackend::SetRenderTarget2D()`/
+     `SetRenderTargetCubeFace()`/`SetRenderTargets()` never called the outgoing target's
+     `UnbindAsRenderTarget()` at all — `GraphicsDevice::SetRenderTarget()` calls the backend's
+     `SetRenderTarget2D()` directly and was never routed through the interface's own
+     `UnbindAsRenderTarget()`, unlike every other CNA backend (EasyGL, D3D11/12, SdlGpu, Vulkan),
+     which all call it themselves from their own bind-switching method. This meant
+     `DILIGENT-26`'s mip regeneration had *also* never actually fired since it was implemented,
+     silently — exactly the gap that row's own "no pixel test asserts the generated levels" caveat
+     was covering for. Fixed by having `SetRenderTarget2D()`/`SetRenderTargetCubeFace()`/
+     `SetRenderTargets()` call the outgoing target's `UnbindAsRenderTarget()` themselves before
+     swapping state, and by removing the recursive `SetRenderTarget2D(nullptr)` call
+     `UnbindAsRenderTarget()` used to make at its own end (which is what had silently made it
+     unsafe to call from the backend's own bind-switching methods in the first place).
 4. **Real hardware GPU pixels** — ⬜ **not reached**. `lavapipe` is a CPU rasterizer; it exercises
    the API and the shaders but not a vendor driver. Anything driver-dependent (real MSAA sample
    counts, anisotropy, present modes, GL's swap-chain origin) stays unproven. Do **not** add a
@@ -251,9 +275,10 @@ use:
 ### Cross-backend test suite
 
 `CnaTests` under `CNA_GRAPHICS_BACKEND=DILIGENT`: **5692 passed, 7 skipped, 1 failed**. The total
-held steady through `DILIGENT-41`: closing it removed one more stale guard from
-`GraphicsDeviceCapabilityTests.cpp` (`SupportsOcclusionQuery`, previously `EXPECT_FALSE` on this
-backend) rather than adding a new one. The single failure is `XnbContainerFuzzTest.
+held steady through `DILIGENT-41` and `DILIGENT-25`: each closed one more stale guard in
+`GraphicsDeviceCapabilityTests.cpp` (`SupportsOcclusionQuery` then implicitly
+`MultiSampleAntiAliasing`, both previously `false`/`EXPECT_FALSE` on this backend) rather than
+adding a new one. The single failure is `XnbContainerFuzzTest.
 MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, which fails identically on the `HEADLESS`
 backend (verified in the same session) — a pre-existing gap in that test's accepted-exception list
 (`System::ArgumentException` from `VertexBuffer::SetData`'s declaration/stride validation is not

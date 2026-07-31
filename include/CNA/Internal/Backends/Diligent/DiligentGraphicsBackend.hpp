@@ -329,9 +329,17 @@ namespace CNA::Internal::Backends::Diligent
          *                         satisfies both `PreserveContents` and `DiscardContents`.
          * @param mipMap           Whether to allocate a mip chain, regenerated when the target is
          *                         unbound.
+         * @param multiSampleCount Requested MSAA sample count; clamped to what the colour and
+         *                         depth-stencil formats both support (`DILIGENT-25`), see
+         *                         `DiligentGraphicsBackend::ClampSampleCount()`. A clamped result
+         *                         above 1 allocates a real multisampled colour (and depth-stencil)
+         *                         texture plus a single-sampled resolve texture that
+         *                         `UnbindAsRenderTarget()`/`GetData()` resolve into before either
+         *                         samples or reads this target.
          */
         DiligentRenderTargetBackend(DiligentGraphicsBackend& owner, int width, int height,
-                                    int depthFormat, bool preserveContents, bool mipMap);
+                                    int depthFormat, bool preserveContents, bool mipMap,
+                                    int multiSampleCount);
 
         /** @brief Releases the GPU textures. */
         ~DiligentRenderTargetBackend() override;
@@ -358,6 +366,9 @@ namespace CNA::Internal::Backends::Diligent
         /**
          * @brief Reads rendered pixels back to the CPU.
          *
+         * When this target is multisampled, resolves the multisampled colour texture into the
+         * single-sampled resolve texture first, so a read always sees fully resolved samples.
+         *
          * @param level      Mip level to read.
          * @param x          Left edge of the region, in pixels.
          * @param y          Top edge of the region, in pixels.
@@ -373,11 +384,20 @@ namespace CNA::Internal::Backends::Diligent
         /** @brief Makes subsequent draws render into this target. */
         void BindAsRenderTarget() override;
 
-        /** @brief Restores the back buffer and regenerates this target's mip chain if it has one. */
+        /**
+         * @brief Restores the back buffer, resolves a multisampled target and regenerates this
+         * target's mip chain if it has one.
+         */
         void UnbindAsRenderTarget() override;
 
-        /** @brief Returns 0: this backend allocates no multisampled targets yet (`DILIGENT-25`). */
-        [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+        /** @brief Returns the real applied MSAA sample count, or 0 when this target is single-sampled. */
+        [[nodiscard]] int GetMultiSampleCount() const override
+        {
+            return appliedMultiSampleCount_ > 1 ? appliedMultiSampleCount_ : 0;
+        }
+
+        /** @brief NOXNA. Returns the Diligent-native sample count (always >= 1, unlike `GetMultiSampleCount()`). */
+        NOXNA [[nodiscard]] int GetDiligentSampleCount() const { return appliedMultiSampleCount_; }
 
         /**
          * @brief Reports whether this target really has depth-stencil storage.
@@ -402,12 +422,18 @@ namespace CNA::Internal::Backends::Diligent
         DiligentGraphicsBackend& owner_;
         Dg::RefCntAutoPtr<Dg::ITexture> colorTexture_;
         Dg::RefCntAutoPtr<Dg::ITexture> depthTexture_;
+        /// Single-sampled resolve target, allocated only when `appliedMultiSampleCount_ > 1`. `srv_`
+        /// and mip regeneration both read from this texture, never from the multisampled
+        /// `colorTexture_` directly -- Diligent's built-in shaders here sample a plain `Texture2D`,
+        /// not a `Texture2DMS`.
+        Dg::RefCntAutoPtr<Dg::ITexture> resolveTexture_;
         Dg::ITextureView* rtv_ = nullptr;
         Dg::ITextureView* dsv_ = nullptr;
         Dg::ITextureView* srv_ = nullptr;
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+        int appliedMultiSampleCount_ = 1;
         bool preserveContents_ = false;
     };
 
@@ -793,10 +819,11 @@ namespace CNA::Internal::Backends::Diligent
      *
      * The implemented surface is the 2D/3D baseline described in `plan_diligent.md`: swap chain
      * setup, the clear/present family, `Texture2D`, vertex/index buffers, `SpriteBatch`, the
-     * untextured/textured/lit 3D draw paths, back-buffer readback, occlusion queries, and the
-     * blend/depth-stencil/rasterizer/sampler state family. Everything outside it — MSAA, custom
-     * `ShaderEffect` programs, instancing, and the `Pbr` effect variant — reports itself as
-     * unsupported rather than silently rendering something else.
+     * untextured/textured/lit 3D draw paths, back-buffer readback, occlusion queries, MSAA (back
+     * buffer and `RenderTarget2D`), and the blend/depth-stencil/rasterizer/sampler state family.
+     * Everything outside it — custom `ShaderEffect` programs, instancing, `RenderTargetCube` MSAA,
+     * and the `Pbr` effect variant — reports itself as unsupported rather than silently rendering
+     * something else.
      */
     class DiligentGraphicsBackend final : public IGraphicsBackend
     {
@@ -858,8 +885,18 @@ namespace CNA::Internal::Backends::Diligent
          */
         void SetSwapInterval(int interval) override;
 
-        /** @brief Returns the back buffer's multisample count; always 1 (MSAA is a later phase). */
-        [[nodiscard]] int GetMultiSampleCount() const override { return 1; }
+        /** @brief Returns the back buffer's real applied MSAA sample count, or 0 when single-sampled. */
+        [[nodiscard]] int GetMultiSampleCount() const override;
+
+        /**
+         * @brief Reconfigures the back buffer's MSAA sample count in place.
+         *
+         * @param requestedMultiSampleCount Requested sample count; clamped to what the swap
+         *                                  chain's colour and depth-stencil formats both support
+         *                                  (`DILIGENT-25`).
+         * @return The real applied sample count (0 = no MSAA), matching `GetMultiSampleCount()`.
+         */
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
 
         /**
          * @brief Converts physical window coordinates to logical game coordinates.
@@ -932,9 +969,10 @@ namespace CNA::Internal::Backends::Diligent
          * @param depthFormat      Raw XNA `DepthFormat` ordinal.
          * @param preserveContents Whether previous colour must survive a bind cycle.
          * @param mipMap           Whether to allocate a mip chain.
-         * @param multiSampleCount Requested MSAA sample count; clamped to 1 (none) here, and
-         *                         `IRenderTargetBackend::GetMultiSampleCount()` reports the real
-         *                         applied value of 0 rather than the request (`DILIGENT-25`).
+         * @param multiSampleCount Requested MSAA sample count; clamped to what the colour and
+         *                         depth-stencil formats both support, and
+         *                         `IRenderTargetBackend::GetMultiSampleCount()` reports that real
+         *                         applied value rather than the raw request (`DILIGENT-25`).
          * @return The new render target backend.
          */
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
@@ -1293,6 +1331,11 @@ namespace CNA::Internal::Backends::Diligent
             /// Formats of MRT slots 1..3, one byte each (every Diligent texture format ordinal
             /// fits), plus the bound target count in the top byte.
             std::uint32_t extraTargetFormats = 0;
+            /// The currently bound target's real (Diligent-native, always >= 1) MSAA sample count.
+            /// A pipeline's `SmplDesc.Count` must match the sample count of whatever it draws into,
+            /// or Vulkan rejects it as incompatible with the render pass -- the same class of bug
+            /// `targetFormats` was added to fix (`DILIGENT-24`'s note on this struct).
+            std::uint32_t sampleCount = 1;
 
             bool operator==(const PipelineKey& other) const noexcept;
         };
@@ -1375,6 +1418,28 @@ namespace CNA::Internal::Backends::Diligent
         [[nodiscard]] Dg::ITextureView* GetCurrentDepthStencilView() const;
         [[nodiscard]] Dg::TEXTURE_FORMAT CurrentColorFormat() const;
         [[nodiscard]] Dg::TEXTURE_FORMAT CurrentDepthStencilFormat() const;
+        /// NOXNA. Picks the largest sample count <= @p requested that the swap chain's colour AND
+        /// depth-stencil formats both report support for via `GetTextureFormatInfoExt()`; 1 (no
+        /// MSAA) if @p requested is <= 1 or the device supports nothing higher. Shared by the back
+        /// buffer (`ApplyMultiSampleCount()`/the constructor) and every `DiligentRenderTargetBackend`.
+        [[nodiscard]] int ClampSampleCount(int requested) const;
+        /// NOXNA. The sample count a pipeline drawing into whatever is currently bound must be
+        /// created with: 1 for a cube-target face (no cube MSAA yet), a render target's own applied
+        /// count, or the back buffer's `sampleCount_`.
+        [[nodiscard]] int CurrentSampleCount() const;
+        /// NOXNA. (Re)allocates `msaaBackBufferColor_`/`msaaBackBufferDepth_` to the current physical
+        /// size when `sampleCount_ > 1`, or releases them when it is not. Called after the sample
+        /// count changes (`ApplyMultiSampleCount()`) and after every swap chain resize
+        /// (`SyncSwapChainSize()`), since both invalidate a texture sized to the old dimensions.
+        void RecreateMsaaBackBufferTargets();
+        /// NOXNA. Resolves `msaaBackBufferColor_` into the swap chain's current back buffer texture
+        /// when `sampleCount_ > 1`; a no-op otherwise. Shared by `Present()` (so the presented image
+        /// is resolved) and `ReadBackbuffer()` (so a mid-frame readback is too).
+        void ResolveMsaaBackBufferIfNeeded();
+        /// NOXNA. Resolves mip level 0, array slice 0 of a multisampled @p src into a single-sampled
+        /// @p dst of the same dimensions and format. Shared by `ResolveMsaaBackBufferIfNeeded()` and
+        /// every `DiligentRenderTargetBackend` with a `resolveTexture_`.
+        void ResolveTextureSubresource(Dg::ITexture* src, Dg::ITexture* dst);
 
         SDL_Window* window_ = nullptr;
         DiligentDeviceType deviceType_ = DiligentDeviceType::Vulkan;
@@ -1382,6 +1447,17 @@ namespace CNA::Internal::Backends::Diligent
         Dg::RefCntAutoPtr<Dg::IDeviceContext> context_;
         Dg::RefCntAutoPtr<Dg::ISwapChain> swapChain_;
         Dg::RefCntAutoPtr<Dg::IEngineFactory> engineFactory_;
+        /// Diligent-native back buffer MSAA sample count; always >= 1, 1 meaning no MSAA. The swap
+        /// chain itself is never multisampled (no native graphics API allows that) -- when this is
+        /// > 1, `msaaBackBufferColor_`/`msaaBackBufferDepth_` are the real draw target and every
+        /// `Present()`/`ReadBackbuffer()` resolves them into the swap chain's actual back buffer
+        /// first, exactly the same offscreen-then-resolve shape every other CNA backend's back
+        /// buffer MSAA uses.
+        int sampleCount_ = 1;
+        Dg::RefCntAutoPtr<Dg::ITexture> msaaBackBufferColor_;
+        Dg::RefCntAutoPtr<Dg::ITexture> msaaBackBufferDepth_;
+        Dg::ITextureView* msaaBackBufferColorView_ = nullptr;
+        Dg::ITextureView* msaaBackBufferDepthView_ = nullptr;
         Dg::RefCntAutoPtr<Dg::IBuffer> constantBuffer_;
         /// SkinnedEffect's 72-matrix bone palette. Its own buffer: at 4.5 KB it would dominate the
         /// per-draw constant block every non-skinned draw uploads too.
