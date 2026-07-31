@@ -1452,6 +1452,9 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::Shader*               primitiveFragmentShader_ = nullptr;
         LLGL::Shader*               primitiveTexturedFragmentShader_ = nullptr;
         LLGL::Shader*               primitiveLitFragmentShader_ = nullptr;
+        /// LLGL-31: lit, untextured 3D draws -- reuses primitiveLayout_ (no texture/sampler
+        /// bindings), never primitiveTexturedLayout_.
+        LLGL::Shader*               primitiveLitUntexturedFragmentShader_ = nullptr;
 
         /// Shared by every `LlglEffectBackend` (LLGL-27); built lazily by
         /// AcquireCustomEffectLayoutEXT() on the first `ShaderEffect` any game constructs. Unlike

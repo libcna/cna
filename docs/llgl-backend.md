@@ -24,8 +24,9 @@ module**:
   and fill mode;
 * **`BasicEffect` with one texture**, `DiffuseColor`, `Alpha`, vertex-colour modulation, fog,
   and **per-pixel directional lighting** (ambient, up to three lights, specular, `EmissiveColor`),
-  plus **`AlphaTestEffect`**. Lighting currently requires a texture to also be bound -- a lit,
-  untextured draw is refused by name rather than silently dropping the light;
+  textured or untextured, plus **`AlphaTestEffect`**. Lighting still requires vertex colours when
+  no texture is bound -- a lit, untextured, colourless draw is refused by name rather than silently
+  dropping the light;
 * **`RenderTarget2D`**: draw into it (both `SpriteBatch` and the 3D path), unbind back to the
   swap chain, sample it back onto the screen, and `GetData()` straight off the colour attachment.
   See "Render targets" below for what this does and does not cover;
@@ -120,8 +121,10 @@ src/CNA/Internal/Backends/Llgl/shaders/
   colored_textured3d.vert.glsl                       (plus lit_*.vert.glsl for lighting,
   lit_textured3d.vert.glsl                            and a .gl. flavour of each)
   lit_colored_textured3d.vert.glsl
+  lit_colored3d.vert.glsl                            lit, untextured-but-coloured (LLGL-31)
   untextured3d.frag.glsl  textured3d.frag.glsl      3D fragment shaders (alpha test + fog)
   lit_textured3d.frag.glsl                           (+ the lighting equation, .gl. too)
+  lit_untextured3d.frag.glsl                         lit, untextured-but-coloured (LLGL-31)
   effect3d_common.glsl.inc                           the uniform block they all share
   compile_shaders.py                                regenerates llgl_shaders.hpp
   llgl_shaders.hpp                                  generated; do not edit
@@ -248,8 +251,9 @@ clear and present. `Llgl_2D` asserts real pixels read back from the GPU: quadran
 `Llgl_Presentation` covers the five presentation policies, `Llgl_3D` covers the 3D draw path
 (vertex colours, depth ordering, indexed draws, cull mode, wireframe), `Llgl_BasicEffect` covers
 textures, tinting, alpha, fog and the alpha test, `Llgl_Lighting` covers ambient/directional/
-specular/emissive lighting, and `Llgl_RenderTarget` covers drawing into a `RenderTarget2D`,
-unbinding back to the swap chain, sampling the target back onto the screen, and `GetData()`.
+specular/emissive lighting both with and without a texture bound, and `Llgl_RenderTarget` covers
+drawing into a `RenderTarget2D`, unbinding back to the swap chain, sampling the target back onto
+the screen, and `GetData()`.
 `Llgl_OcclusionQuery` covers a fully visible quad, a fully occluded one (real depth test), and two
 draws inside one `Begin()`/`End()` summing their contributions. `Llgl_ShaderEffect` covers a
 custom GLSL shader genuinely tinting a sprite by its own uniform, against a stock-shader control
@@ -273,7 +277,7 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | `DepthStencilBuffer` | yes | The swap chain really has both attachments and all seven clear paths work. |
 | `MultiSampleAntiAliasing` | yes | Forwarded to the swap chain; not yet pixel-verified (`LLGL-22`). |
 | `AnisotropicFiltering` | device-dependent | From LLGL's reported `limits.maxAnisotropy`. |
-| `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog, the alpha test, and per-pixel lighting (textured draws only); the remaining stock effects are not implemented. |
+| `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog, the alpha test, and per-pixel lighting (textured or untextured-with-vertex-colours); the remaining stock effects are not implemented. |
 | `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |
 | `OcclusionQuery` | yes | Real `LLGL::QueryHeap`-backed queries — see "Occlusion queries" above for how `IsComplete()`/`PixelCount()` behave on this backend. |
 | `CustomEffects` | yes | Real `ShaderEffect`, scoped to `SpriteBatch` draws — see "Custom effects" above. |

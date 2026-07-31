@@ -1283,6 +1283,8 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveTexturedFragmentShader_);
         if (primitiveLitFragmentShader_ != nullptr)
             renderer_->Release(*primitiveLitFragmentShader_);
+        if (primitiveLitUntexturedFragmentShader_ != nullptr)
+            renderer_->Release(*primitiveLitUntexturedFragmentShader_);
         if (primitiveLayout_ != nullptr)
             renderer_->Release(*primitiveLayout_);
         if (primitiveTexturedLayout_ != nullptr)
@@ -1484,6 +1486,9 @@ namespace CNA::Internal::Backends::Llgl
         primitiveLitFragmentShader_ = createFragmentShader(
             Shaders::kLitTextured3dFragGlsl, Shaders::kLitTextured3dFragSpv,
             sizeof(Shaders::kLitTextured3dFragSpv), "lit textured 3D fragment shader");
+        primitiveLitUntexturedFragmentShader_ = createFragmentShader(
+            Shaders::kLitUntextured3dFragGlsl, Shaders::kLitUntextured3dFragSpv,
+            sizeof(Shaders::kLitUntextured3dFragSpv), "lit untextured 3D fragment shader");
 
         // Two layouts rather than one with an optionally-unused texture slot: a pipeline whose
         // layout declares a texture the draw never binds is a validation error on Vulkan, not a
@@ -1556,12 +1561,8 @@ namespace CNA::Internal::Backends::Llgl
         const char* glslSource = nullptr;
         const std::uint32_t* spirv = nullptr;
         std::size_t spirvSize = 0;
-        if (lit)
+        if (lit && textured)
         {
-            // Bounded scope (LLGL-25): lighting is only implemented for the textured path, which
-            // covers the overwhelming majority of real usage (lit models with a diffuse map).
-            // Lighting without a texture is a distinct, still-open gap, refused by name rather
-            // than silently rendering unlit or with a fabricated white texture.
             if (hasColor)
             {
                 glslSource = Shaders::kLitColoredTextured3dVertGlsl;
@@ -1574,6 +1575,15 @@ namespace CNA::Internal::Backends::Llgl
                 spirv = Shaders::kLitTextured3dVertSpv;
                 spirvSize = sizeof(Shaders::kLitTextured3dVertSpv);
             }
+        }
+        else if (lit && hasColor)
+        {
+            // LLGL-31: lit, untextured. Requires vertex colours for the same reason the unlit
+            // untextured path below does -- there is no fabricated-white-texture fallback here
+            // either, just a shader variant with no colorMap binding at all.
+            glslSource = Shaders::kLitColored3dVertGlsl;
+            spirv = Shaders::kLitColored3dVertSpv;
+            spirvSize = sizeof(Shaders::kLitColored3dVertSpv);
         }
         else if (textured)
         {
@@ -1677,12 +1687,13 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::GraphicsPipelineDescriptor pipelineDesc;
         pipelineDesc.debugName = lit ? "CNA.Lit3D" : (textured ? "CNA.Textured3D" : "CNA.Colored3D");
         pipelineDesc.vertexShader = AcquirePrimitiveVertexShader(attributes, textured, lit);
-        pipelineDesc.fragmentShader = lit ? primitiveLitFragmentShader_
+        pipelineDesc.fragmentShader = lit && textured ? primitiveLitFragmentShader_
+                                    : lit ? primitiveLitUntexturedFragmentShader_
                                     : textured ? primitiveTexturedFragmentShader_
                                     : primitiveFragmentShader_;
-        // A lit draw is always textured in this backend's current scope, so it reuses the
-        // textured pipeline layout (Transform + colorMap + samplerState) rather than needing one
-        // of its own.
+        // Layout selection follows `textured` alone (LLGL-31): a lit-untextured draw's shader
+        // declares no colorMap/samplerState binding, so it reuses primitiveLayout_ exactly like
+        // the unlit-untextured path does, not primitiveTexturedLayout_.
         pipelineDesc.pipelineLayout = textured ? primitiveTexturedLayout_ : primitiveLayout_;
         pipelineDesc.renderPass = swapChain_->GetRenderPass();
         pipelineDesc.primitiveTopology = MapPrimitiveTopology(primitive);
@@ -1867,13 +1878,9 @@ namespace CNA::Internal::Backends::Llgl
 
         const bool textured = (params != nullptr && params->textureEnabled && params->texture0 != nullptr);
         const bool lit = (params != nullptr && params->lightingEnabled);
-        if (lit && !textured)
-        {
-            // Bounded scope (LLGL-25): lighting is only implemented for the textured path. A lit,
-            // untextured draw is a real, still-open gap -- refused by name rather than silently
-            // dropping the light or fabricating a texture.
-            NotYetImplemented(kBackendName, "lighting without a texture");
-        }
+        // LLGL-31: lighting without a texture is real now, provided the vertex layout carries
+        // colours -- AcquirePrimitiveVertexShader() throws its own clear error otherwise, the same
+        // way the unlit untextured path already does.
 
         ResolvedSampledTexture resolvedTexture;
         if (textured)

@@ -13,8 +13,10 @@
 // Check E -- EmissiveColor is added on top and is visible even with light and ambient both off.
 // Check F -- a specular highlight appears where the reflection direction points at the camera, and
 //   is small/dim off that point (SpecularColor/SpecularPower actually reaching the shader).
-// Check G -- lighting without a texture is refused by name (a real, documented gap) rather than
-//   silently rendering unlit or losing the light.
+// Check G -- lighting without a texture, but WITH vertex colours, lights the surface for real
+//   (LLGL-31) -- no fabricated white texture, a genuine untextured-but-lit shader variant.
+// Check H -- lighting without a texture AND without vertex colours is still refused by name (the
+//   one combination that remains a real, documented gap).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -33,6 +35,10 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 
@@ -69,6 +75,54 @@ namespace
             vertex(60.0f, 200.0f, 0.0f, 1.0f),
             vertex(260.0f, 40.0f, 1.0f, 0.0f),
             vertex(260.0f, 200.0f, 1.0f, 1.0f),
+        };
+    }
+
+    // No stock XNA vertex type combines Position, Normal, and Color -- Check G needs exactly that
+    // to exercise the lit-untextured shader variant (LLGL-31), so this test declares its own,
+    // matching the offsetof/VertexElement pattern VertexPositionColor.cpp itself uses. The colour
+    // is stored as raw r,g,b,a bytes rather than an actual Color object: Color implements
+    // IPackedVectorT (virtual methods), so a Color member carries a vtable pointer ahead of its
+    // 4-byte packed value -- embedding it directly and describing it to the GPU as a 4-byte
+    // RGBA8UNorm attribute would read the vtable pointer's bytes, not the colour.
+    struct VertexPositionNormalColor
+    {
+        Vector3 Position;
+        Vector3 Normal;
+        std::uint8_t R, G, B, A;
+
+        VertexPositionNormalColor(const Vector3& position, const Vector3& normal, const Color& color)
+            : Position(position), Normal(normal),
+              R(color.getRProperty()), G(color.getGProperty()),
+              B(color.getBProperty()), A(color.getAProperty())
+        {
+        }
+
+        static const VertexDeclaration& getVertexDeclarationStatic()
+        {
+            static const VertexDeclaration decl(
+                static_cast<int>(sizeof(VertexPositionNormalColor)),
+                {
+                    VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                    VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                    VertexElement(24, VertexElementFormat::Color,   VertexElementUsage::Color, 0),
+                });
+            return decl;
+        }
+    };
+
+    // Same facing quad as MakeFacingQuad(), but carrying vertex colours instead of texture
+    // coordinates -- geometry and lighting setup mirror Check A exactly, so the pixel expectation
+    // can too.
+    std::vector<VertexPositionNormalColor> MakeFacingColoredQuad(const Color& color)
+    {
+        const Vector3 normal(0.0f, 0.0f, 1.0f);
+        const auto vertex = [&normal, &color](float x, float y) {
+            return VertexPositionNormalColor(Vector3(x, y, -0.5f), normal, color);
+        };
+        return {
+            vertex(60.0f, 40.0f),   vertex(260.0f, 40.0f),  vertex(60.0f, 200.0f),
+            vertex(60.0f, 200.0f),  vertex(260.0f, 40.0f),  vertex(260.0f, 200.0f),
         };
     }
 }
@@ -242,18 +296,53 @@ public:
             light0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
         }
 
-        // --- Check G: lighting without a texture is refused ---------------------------------------
+        // --- Check G: lighting without a texture, with vertex colours, lights for real (LLGL-31) --
+        {
+            effect.setTextureEnabledProperty(false);
+            effect.setTextureProperty(nullptr);
+            effect.VertexColorEnabled = true;
+
+            const std::vector<VertexPositionNormalColor> coloredQuad =
+                MakeFacingColoredQuad(Color::White);
+            VertexBuffer buffer(device, VertexPositionNormalColor::getVertexDeclarationStatic(),
+                                static_cast<int>(coloredQuad.size()), BufferUsage::None);
+            buffer.SetDataRaw(coloredQuad.data(), static_cast<int>(coloredQuad.size()),
+                              static_cast<int>(sizeof(VertexPositionNormalColor)));
+            device.SetVertexBuffer(&buffer);
+
+            device.Clear(kClear);
+            effect.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            ExpectPixel("a lit, untextured-but-coloured surface lights for real (LLGL-31)",
+                        Rectangle(160, 120, 1, 1), Color(255, 255, 255, 255), /*tolerance=*/10);
+
+            // A non-white vertex colour still tints the lit result, the same way DiffuseColor does
+            // for the textured path in Check D.
+            const std::vector<VertexPositionNormalColor> tintedQuad =
+                MakeFacingColoredQuad(Color(255, 0, 0, 255));
+            VertexBuffer tintedBuffer(device, VertexPositionNormalColor::getVertexDeclarationStatic(),
+                                      static_cast<int>(tintedQuad.size()), BufferUsage::None);
+            tintedBuffer.SetDataRaw(tintedQuad.data(), static_cast<int>(tintedQuad.size()),
+                                    static_cast<int>(sizeof(VertexPositionNormalColor)));
+            device.SetVertexBuffer(&tintedBuffer);
+
+            device.Clear(kClear);
+            effect.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            ExpectPixel("a red vertex colour tints the lit untextured surface", Rectangle(160, 120, 1, 1),
+                        Color(255, 0, 0, 255), /*tolerance=*/10);
+
+            effect.VertexColorEnabled = false;
+        }
+
+        // --- Check H: lighting without a texture AND without vertex colours is still refused ------
         {
             effect.setTextureEnabledProperty(false);
             effect.setTextureProperty(nullptr);
 
-            const std::vector<VertexPositionColor> untexturedQuad{
-                VertexPositionColor(Vector3(60.0f, 40.0f, -0.5f), Color::White),
-                VertexPositionColor(Vector3(260.0f, 40.0f, -0.5f), Color::White),
-                VertexPositionColor(Vector3(60.0f, 200.0f, -0.5f), Color::White),
-            };
-            VertexBuffer buffer(device, VertexPositionColor::getVertexDeclarationStatic(), 3,
-                                BufferUsage::None);
+            const std::vector<VertexPositionNormalTexture> untexturedQuad = MakeFacingQuad();
+            VertexBuffer buffer(device, VertexPositionNormalTexture::getVertexDeclarationStatic(),
+                                static_cast<int>(untexturedQuad.size()), BufferUsage::None);
             buffer.SetData(untexturedQuad.data(), static_cast<int>(untexturedQuad.size()));
             device.SetVertexBuffer(&buffer);
 
@@ -261,13 +350,15 @@ public:
             try
             {
                 effect.Apply();
-                device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+                device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             }
             catch (const std::exception&)
             {
                 refused = true;
             }
-            ExpectTrue("lighting without a texture is refused rather than silently mishandled", refused);
+            ExpectTrue("lighting without a texture or vertex colours is refused rather than "
+                       "silently mishandled",
+                       refused);
         }
     }
 };
