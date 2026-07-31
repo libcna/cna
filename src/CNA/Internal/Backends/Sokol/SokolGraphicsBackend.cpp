@@ -875,6 +875,91 @@ namespace CNA::Internal::Backends::Sokol
     bool SokolIndexBufferBackend::IsThirtyTwoBit() const { return thirtyTwoBit_; }
 
     // ---------------------------------------------------------------------------------------
+    // SokolOcclusionQueryBackend
+    // ---------------------------------------------------------------------------------------
+
+    SokolOcclusionQueryBackend::SokolOcclusionQueryBackend()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        GLuint id = 0;
+        glGenQueries(1, &id);
+        queryId_ = id;
+#endif
+    }
+
+    SokolOcclusionQueryBackend::~SokolOcclusionQueryBackend()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (queryId_ != 0)
+        {
+            const GLuint id = queryId_;
+            glDeleteQueries(1, &id);
+        }
+#endif
+    }
+
+    void SokolOcclusionQueryBackend::Begin()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        // See this method's own header doc: a repeated Begin() with no intervening End() must not
+        // reach glBeginQuery a second time, or GL raises GL_INVALID_OPERATION that stays pending
+        // until sokol_gfx's own next GL call trips over it.
+        if (queryId_ == 0 || active_) return;
+        active_ = true;
+        // SOKOL_GLCORE is desktop GL, which reports the real sample count (GL_SAMPLES_PASSED);
+        // GLES3 has no such query at all, only the any-samples boolean EasyGL's own GLES3 target
+        // uses -- matching that here keeps this branch meaningful if SOKOL_GLES3 is ever the
+        // active configure-time API (docs/sokol-backend.md: only GLCORE is implemented/verified).
+    #if defined(SOKOL_GLCORE)
+        glBeginQuery(GL_SAMPLES_PASSED, queryId_);
+    #else
+        glBeginQuery(GL_ANY_SAMPLES_PASSED, queryId_);
+    #endif
+#endif
+    }
+
+    void SokolOcclusionQueryBackend::End()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        // See Begin()'s own comment: an End() with no active Begin() must not reach glEndQuery.
+        if (queryId_ == 0 || !active_) return;
+        active_ = false;
+        hasResult_ = true;
+    #if defined(SOKOL_GLCORE)
+        glEndQuery(GL_SAMPLES_PASSED);
+    #else
+        glEndQuery(GL_ANY_SAMPLES_PASSED);
+    #endif
+#endif
+    }
+
+    bool SokolOcclusionQueryBackend::IsComplete() const
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        // See hasResult_'s own comment: glGetQueryObject* errors on a query that was never
+        // started, or is still active, so neither case ever reaches GL at all here.
+        if (queryId_ == 0 || active_ || !hasResult_) return false;
+        GLuint available = 0;
+        glGetQueryObjectuiv(queryId_, GL_QUERY_RESULT_AVAILABLE, &available);
+        return available != 0;
+#else
+        return false;
+#endif
+    }
+
+    int SokolOcclusionQueryBackend::PixelCount() const
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (!IsComplete()) return 0;
+        GLuint result = 0;
+        glGetQueryObjectuiv(queryId_, GL_QUERY_RESULT, &result);
+        return static_cast<int>(result);
+#else
+        return 0;
+#endif
+    }
+
+    // ---------------------------------------------------------------------------------------
     // SokolSpriteBatchBackend
     // ---------------------------------------------------------------------------------------
 
@@ -1722,6 +1807,15 @@ namespace CNA::Internal::Backends::Sokol
         return std::make_unique<SokolTextureCubeBackend>(size, mipMap);
     }
 
+    std::unique_ptr<IOcclusionQueryBackend> SokolGraphicsBackend::CreateOcclusionQuery()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        return std::make_unique<SokolOcclusionQueryBackend>();
+#else
+        return nullptr;
+#endif
+    }
+
     std::unique_ptr<ISpriteBatchBackend> SokolGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<SokolSpriteBatchBackend>(*this);
@@ -2455,7 +2549,15 @@ namespace CNA::Internal::Backends::Sokol
         key.normalOffset = -1;
         key.normalFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
 
-        if (declaration != nullptr)
+        // VertexBuffer's own NOXNA-tagged auto-detect constructor (VertexBuffer(device, count),
+        // used by GraphicsDevice::SetVertexBuffer callers who never pass an explicit
+        // VertexDeclaration) stores a default-constructed, ELEMENT-LESS VertexDeclaration --
+        // UploadValidatedData still calls SetVertexDeclaration with it before every real upload
+        // (GFX-043), so this backend sees hasDeclaration()==true with nothing usable inside. That
+        // is indistinguishable from "no declaration at all" for this method's purposes, and falls
+        // into the identical stride-based fallback below rather than failing "no usable Position
+        // element" on a buffer that plainly has one -- just not described via VertexDeclaration.
+        if (declaration != nullptr && !declaration->GetVertexElements().empty())
         {
             key.stride = declaration->getVertexStrideProperty();
             using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
@@ -2493,13 +2595,14 @@ namespace CNA::Internal::Backends::Sokol
         }
         else
         {
-            // GraphicsDevice's typed, no-explicit-declaration DrawUserPrimitives()/
-            // DrawUserIndexedPrimitives() overloads (VertexPositionColor, VertexPositionTexture,
-            // VertexPositionColorTexture, VertexPositionNormalTexture -- and their *Colored
-            // convenience wrappers) each pack into one of CNA::Internal::Graphics's four fixed,
-            // shared GPU vertex streams and never call SetVertexDeclaration on the temp buffer:
-            // there is no per-call declaration to read, only the upload stride, which uniquely
-            // identifies which of the four built-in layouts this is.
+            // Reached with no declaration at all (GraphicsDevice's typed, no-explicit-declaration
+            // DrawUserPrimitives()/DrawUserIndexedPrimitives() overloads for VertexPositionColor,
+            // VertexPositionTexture, VertexPositionColorTexture and VertexPositionNormalTexture --
+            // and their *Colored convenience wrappers -- never call SetVertexDeclaration on the
+            // temp buffer at all) OR with an element-less one (VertexBuffer's NOXNA auto-detect
+            // constructor, see the comment above). Either way there is no usable per-call
+            // declaration to read, only the upload stride, which uniquely identifies which of the
+            // four built-in layouts this is.
             switch (vb.GetStrideEXT())
             {
                 case 16:  // PositionColorStream: float3 position @0, ubyte4n color @12.
@@ -2825,11 +2928,15 @@ namespace CNA::Internal::Backends::Sokol
             // capability asks whether the 3D pipeline exists at all, and it now does.
             case CNA::GraphicsCapability::ThreeD:
                 return true;
+            // Real as of SOKOL-29, GL-only: a raw glBeginQuery/glEndQuery GL_SAMPLES_PASSED query,
+            // since sokol_gfx exposes no query API of its own. False on any other CNA_SOKOL_API,
+            // the same GL-only boundary ReadBackbuffer already declares.
+            case CNA::GraphicsCapability::OcclusionQuery:
+                return CNA_SOKOL_HAS_GL_READBACK != 0;
             // The remaining boundary. Each needs a phase that is not implemented yet -- see
             // plan_sokol.md; every one fails loudly rather than silently no-opping.
             case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::WireFrame:
-            case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::CustomEffects:
             case CNA::GraphicsCapability::Texture3D:
                 return false;

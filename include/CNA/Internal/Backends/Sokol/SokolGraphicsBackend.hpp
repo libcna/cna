@@ -676,6 +676,73 @@ namespace CNA::Internal::Backends::Sokol
     };
 
     /**
+     * @brief Backend handle for an occlusion query, implemented with a raw GL query object.
+     *
+     * plan_sokol.md SOKOL-29. sokol_gfx exposes no query API of its own, but on this backend's
+     * target platform (SOKOL_GLCORE) sokol renders through an ordinary GL context this class can
+     * issue raw `glBeginQuery`/`glEndQuery` calls against directly -- a query records whatever the
+     * GL context rasterizes between them regardless of which layer (sokol_gfx or this class) issued
+     * the draw calls. Restricted to the GL APIs the same way `ReadBackbuffer` is:
+     * `SokolGraphicsBackend::CreateOcclusionQuery` returns null on any other `CNA_SOKOL_API`.
+     */
+    class SokolOcclusionQueryBackend : public IOcclusionQueryBackend
+    {
+    public:
+        /** @brief Allocates the underlying GL query object. */
+        SokolOcclusionQueryBackend();
+
+        /** @brief Destroys the GL query object. */
+        ~SokolOcclusionQueryBackend() override;
+
+        SokolOcclusionQueryBackend(const SokolOcclusionQueryBackend&) = delete;
+        SokolOcclusionQueryBackend& operator=(const SokolOcclusionQueryBackend&) = delete;
+
+        /**
+         * @brief Starts recording samples that pass the depth/stencil test for subsequent draws.
+         *
+         * FNA's own OcclusionQuery.Begin()/End() are pure one-line forwards to FNA3D with no call-
+         * sequence validation at all (plan_sokol.md SOKOL-29's own audit), so a repeated Begin()
+         * with no intervening End() must not throw here either -- but raw GL, unlike FNA3D's
+         * drivers, raises GL_INVALID_OPERATION for exactly that (double Begin, or End with no
+         * active Begin), and an unconsumed GL error left pending trips sokol_gfx's own internal
+         * `glGetError()==0` assertions the next time IT touches GL, at a completely unrelated call
+         * site. `active_` tracks the real GL query state so this class only ever issues a
+         * glBeginQuery/glEndQuery pair GL itself considers legal, silently absorbing everything
+         * else -- matching FNA's "no exception" contract without corrupting sokol's error state.
+         */
+        void Begin() override;
+
+        /** @brief Stops recording; the result becomes available some time after this call. See
+         *         Begin()'s own comment for why an unmatched End() is silently absorbed. */
+        void End() override;
+
+        /**
+         * @brief Returns whether the GPU has finished processing this query.
+         * @return True once `PixelCount()` can be read without stalling the pipeline.
+         */
+        [[nodiscard]] bool IsComplete() const override;
+
+        /**
+         * @brief Returns the number of samples that passed the depth/stencil test.
+         * @return The sample count once complete; 0 while still pending (matching the codebase's
+         *         other GL query backend, EasyGL's).
+         */
+        [[nodiscard]] int PixelCount() const override;
+
+    private:
+        std::uint32_t queryId_ = 0;
+        /// Whether a glBeginQuery for this object is currently outstanding (no matching
+        /// glEndQuery yet) -- see Begin()'s own comment for why this exists.
+        bool active_ = false;
+        /// Whether at least one Begin()/End() cycle has completed. A fresh query object has no
+        /// GL_QUERY_RESULT_AVAILABLE state at all -- GL raises GL_INVALID_OPERATION for
+        /// glGetQueryObject* on a query that was never started OR is still active, and real XNA
+        /// code (and this file's own IsComplete()/PixelCount() callers) legitimately asks before
+        /// the first End() -- so IsComplete()/PixelCount() only ever query GL once this is true.
+        bool hasResult_ = false;
+    };
+
+    /**
      * @brief CNA graphics backend implemented on sokol_gfx (https://github.com/floooh/sokol).
      *
      * CNA keeps ownership of the SDL window and the game loop; this class creates only the GPU
@@ -836,6 +903,12 @@ namespace CNA::Internal::Backends::Sokol
          */
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
             int size, bool mipMap, int surfaceFormat) override;
+
+        /**
+         * @brief Creates a raw-GL occlusion query (plan_sokol.md SOKOL-29).
+         * @return The new occlusion query backend, or null on a non-GL `CNA_SOKOL_API`.
+         */
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
         /**
          * @brief Creates a sokol_gfx-backed SpriteBatch.

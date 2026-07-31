@@ -105,4 +105,30 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_rendertarget_sampling_orientation
         TIMEOUT 60 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-29: a real raw-GL GL_SAMPLES_PASSED occlusion query. Shared,
+    # backend-agnostic oracle (already registered for EasyGL/Bgfx) reused here rather than
+    # duplicated -- Begin/End/IsComplete/PixelCount plus the invalid-call-sequence and
+    # dispose-while-active safety checks.
+    cna_sokol_test(cna_test_sokol_occlusion_query examples/occlusion_query_test.cpp)
+    cna_register_backend_test(NAME Sokol_OcclusionQuery_Cycle COMMAND cna_test_sokol_occlusion_query
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 445's own pixel/query correctness proof (real BasicEffect + VertexBuffer/IndexBuffer
+    # geometry, no CNA_BACKEND_* conditionals despite its "EasyGL" filename) -- reused here since
+    # SOKOL now has both real 3D draws and a real occlusion query.
+    cna_sokol_test(cna_test_sokol_occlusion_query_visible_quad
+                    examples/easygl_occlusion_query_visible_quad_test.cpp)
+    cna_register_backend_test(NAME Sokol_OcclusionQuery_VisibleQuad
+        COMMAND cna_test_sokol_occlusion_query_visible_quad
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sokol_test(cna_test_sokol_occlusion_query_occluded_quad
+                    examples/easygl_occlusion_query_occluded_quad_test.cpp)
+    cna_register_backend_test(NAME Sokol_OcclusionQuery_OccludedQuad
+        COMMAND cna_test_sokol_occlusion_query_occluded_quad
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

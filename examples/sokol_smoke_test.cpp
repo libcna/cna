@@ -126,7 +126,9 @@ class SokolSmokeTest : public Game
             && !backend.SupportsCapability(GraphicsCapability::MultipleRenderTargets)
             && !backend.SupportsCapability(GraphicsCapability::CustomEffects)
             && !backend.SupportsCapability(GraphicsCapability::Texture3D)
-            && !backend.SupportsCapability(GraphicsCapability::OcclusionQuery);
+            // Real as of SOKOL-29 -- a raw GL_SAMPLES_PASSED query, GL-only (matches
+            // ReadBackbuffer's own GL-only boundary; see SokolOcclusionQueryBackend).
+            && backend.SupportsCapability(GraphicsCapability::OcclusionQuery);
         check(boundaryHolds, "SupportsCapability() reports the documented capability boundary");
     }
 

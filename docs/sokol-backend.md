@@ -60,6 +60,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `TextureCube` storage (`SetData`/`GetData`, every declared mip level, all 6 faces) | ✅ | `CnaTests`' `TextureCubeTest` suite (49 tests), plus the XNB `TextureCubeReader` and CNJ cube content-loading tests |
 | Stencil test operations for 3D draws (`DepthStencilState.StencilEnable`/`StencilFunction`/`StencilPass`/`StencilFail`/`StencilDepthBufferFail`, masks, reference, two-sided mode) | ✅ | Wired into `Pipeline3DKey`/`Get3DPipeline`; `SpriteBatch` never requests stencil (matches XNA) |
 | `RenderTargetCube` bind/draw/unbind, one face at a time, with per-face colour isolation and a shared depth-stencil buffer | ✅ | `Sokol_RenderTarget_PassBoundary` (C1/C2), `Sokol_RenderTarget_DepthStencilUsage` (U1-U4), plus the cube legs in `Sokol_RenderTarget_FirstUse`/`BackbufferConsumer` |
+| `OcclusionQuery` (real `GL_SAMPLES_PASSED` sample count, GL-only) | ✅ | `Sokol_OcclusionQuery_Cycle`, `Sokol_OcclusionQuery_VisibleQuad`, `Sokol_OcclusionQuery_OccludedQuad` |
 
 ## What does not work yet
 
@@ -79,7 +80,6 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Render-target MSAA resolve | not implemented (`multiSampleCount` is clamped, never resolved) | `SOKOL-26` |
 | `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` (Software leaves this unimplemented too) | `SOKOL-27` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
-| `OcclusionQuery` | `CreateOcclusionQuery` returns null — sokol_gfx exposes no query API at all | `SOKOL-29` |
 | `RasterizerState` fill mode and depth bias | accepted and ignored — sokol_gfx exposes no polygon fill mode, and depth bias is not yet wired into any pipeline. Cull mode *is* honoured | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
 | `Viewport.MinDepth` / `MaxDepth` | ignored — `sg_apply_viewport` carries no depth range | `SOKOL-21` |
@@ -118,6 +118,14 @@ correctly, which the table above is the authority on.
   object.** sokol_gfx bakes all of them into the pipeline, including the index type, so the cache
   is keyed on the full set. A scene that cycles through many combinations grows the cache; nothing
   evicts from it for the lifetime of the device.
+- **Any raw GL call this backend makes outside sokol_gfx (occlusion queries, `ReadBackbuffer`'s
+  `glReadPixels`) must never leave a GL error pending.** sokol_gfx's own GL backend asserts
+  `glGetError() == 0` after routine internal calls, so an error this code sets and never consumes
+  surfaces later as a hard abort at a completely unrelated call site (measured: `glBeginQuery`
+  called twice with no intervening `glEndQuery` set `GL_INVALID_OPERATION` that stayed pending
+  until `sg_shutdown()` destroyed the first tracked buffer, minutes of wall-clock and dozens of
+  unrelated GL calls later). `SokolOcclusionQueryBackend` guards every raw call this way -- see its
+  own `Begin()`/`hasResult_` doc comments.
 - **The stencil reference value is baked into the pipeline object, not applied dynamically.**
   Unlike most graphics APIs (and unlike XNA's own `GraphicsDevice.ReferenceStencil`, a per-draw
   value), sokol_gfx's `sg_stencil_state.ref` is part of `sg_pipeline_desc` and has no separate
@@ -149,6 +157,9 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_RenderTarget_BackbufferConsumer` | 3 real, the rest honestly INFO-skipped (no direct `RenderTarget2D`/`RenderTargetCube::GetData`) | all pass |
 | `Sokol_RenderTarget_FirstUse` | 16, incl. a cube leg (N) | all pass |
 | `Sokol_RenderTarget_SamplingOrientation` | 29 | all pass |
+| `Sokol_OcclusionQuery_Cycle` | Begin/End/IsComplete/PixelCount plus every invalid-call-sequence and dispose-while-active case | all pass |
+| `Sokol_OcclusionQuery_VisibleQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
+| `Sokol_OcclusionQuery_OccludedQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
 Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. Most of their
