@@ -533,6 +533,52 @@ void main(in VSInput vsIn, out PSInput psIn)
 }
 )";
 
+        /// Hardware instancing (DILIGENT-43): only Position is read from the per-vertex stream
+        /// (slot 0); the per-instance stream (slot 1) supplies one 4x4 world matrix as four
+        /// consecutive float4 rows. Deliberately minimal -- flat g_DiffuseColor output, no texture,
+        /// no lighting, no fog -- matching every other CNA backend's own hardware-instancing
+        /// baseline (see e.g. src/CNA/Internal/Backends/D3DCommon/shaders/instanced3d.vert.hlsl).
+        /// g_WorldViewProj is repurposed to hold View*Projection here (there is no single shared
+        /// World matrix to fold in, unlike every other variant's constant of the same name) --
+        /// DrawInstancedPrimitivesEx() uploads it that way.
+        constexpr const char* kInstancedVertexHlsl = R"(
+struct VSInput
+{
+    float3 Pos      : ATTRIB0;
+    float4 InstRow0 : ATTRIB1;
+    float4 InstRow1 : ATTRIB2;
+    float4 InstRow2 : ATTRIB3;
+    float4 InstRow3 : ATTRIB4;
+};
+
+struct PSInput
+{
+    float4 Pos   : SV_POSITION;
+    float4 Color : COLOR0;
+};
+
+void main(in VSInput vsIn, out PSInput psIn)
+{
+    float4x4 world = float4x4(vsIn.InstRow0, vsIn.InstRow1, vsIn.InstRow2, vsIn.InstRow3);
+    float4 worldPos = mul(float4(vsIn.Pos, 1.0), world);
+    psIn.Pos   = mul(worldPos, g_WorldViewProj);
+    psIn.Color = g_DiffuseColor;
+}
+)";
+
+        constexpr const char* kInstancedPixelHlsl = R"(
+struct PSInput
+{
+    float4 Pos   : SV_POSITION;
+    float4 Color : COLOR0;
+};
+
+float4 main(in PSInput psIn) : SV_Target
+{
+    return psIn.Color;
+}
+)";
+
         [[nodiscard]] Dg::BLEND_FACTOR ToBlendFactor(int xnaBlend)
         {
             switch (xnaBlend)
@@ -3169,6 +3215,29 @@ void main(in VSInput vsIn, out PSInput psIn)
                 usesTexture = true;
                 usesEnvironmentMap = true;
                 break;
+            case ShaderVariant::Instanced3D:
+                vertexSource = kInstancedVertexHlsl;
+                pixelSource = kInstancedPixelHlsl;
+                layout = {
+                    // Slot 0: per-vertex Position only, out of a real VertexPositionColor stream
+                    // (stride 16 -- Position's own 12 bytes plus 4 bytes of packed colour this
+                    // shader never reads). The stride must be given explicitly: LAYOUT_ELEMENT_AUTO_STRIDE
+                    // would compute it from the elements actually DECLARED here (12 bytes, Position
+                    // alone), not the buffer's real per-vertex size, corrupting every vertex fetch
+                    // after the first by reading 4 bytes short each step.
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET, 16},
+                    // Slot 1: one 4x4 world matrix per instance, as four consecutive float4 rows,
+                    // advancing once per instance rather than once per vertex.
+                    Dg::LayoutElement{1, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
+                                      Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                    Dg::LayoutElement{2, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
+                                      Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                    Dg::LayoutElement{3, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
+                                      Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                    Dg::LayoutElement{4, 1, 4, Dg::VT_FLOAT32, Dg::False, Dg::LAYOUT_ELEMENT_AUTO_OFFSET,
+                                      Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
+                };
+                break;
         }
 
         const std::string vertexHlsl =
@@ -3544,6 +3613,72 @@ void main(in VSInput vsIn, out PSInput psIn)
                                                            const GpuDrawParams& params)
     {
         DrawInternal(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
+    }
+
+    void DiligentGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
+                                                             const IIndexBufferBackend& ib,
+                                                             const Matrix& /*world*/, const Matrix& view,
+                                                             const Matrix& projection,
+                                                             PrimitiveType primitive, int primitiveCount,
+                                                             int instanceCount,
+                                                             const GpuDrawParams& params)
+    {
+        if (primitiveCount <= 0 || instanceCount <= 0)
+            return;
+
+        const auto* vertexBuffer = dynamic_cast<const DiligentVertexBufferBackend*>(&vb);
+        if (vertexBuffer == nullptr || vertexBuffer->GetBuffer() == nullptr)
+            throw std::runtime_error(
+                "CNA Diligent: instanced draw with a foreign or empty vertex buffer");
+        const auto* indexBuffer = dynamic_cast<const DiligentIndexBufferBackend*>(&ib);
+        if (indexBuffer == nullptr || indexBuffer->GetBuffer() == nullptr)
+            throw std::runtime_error(
+                "CNA Diligent: instanced draw with a foreign or empty index buffer");
+        const auto* instanceBuffer =
+            dynamic_cast<const DiligentVertexBufferBackend*>(params.instanceVb);
+        if (instanceBuffer == nullptr || instanceBuffer->GetBuffer() == nullptr)
+            throw std::runtime_error(
+                "CNA Diligent: instanced draw requires a real per-instance vertex buffer");
+
+        SyncSwapChainSize();
+        EnsureRenderTargetsBound();
+
+        // No single shared World matrix exists here -- each instance supplies its own -- so
+        // g_WorldViewProj is repurposed to hold just View*Projection, matching
+        // kInstancedVertexHlsl's own doc comment.
+        ShaderConstants constants{};
+        MatrixToFloats(view * projection, constants.worldViewProj);
+        for (int component = 0; component < 4; ++component)
+            constants.diffuseColor[component] = params.diffuseColor[component];
+        constants.alphaTest[2] = 1.0f;
+        constants.alphaTest[3] = 1.0f;
+        UploadConstants(constants);
+
+        CachedPipeline& pipeline =
+            GetOrCreatePipeline(MakePipelineKey(ShaderVariant::Instanced3D, primitive));
+
+        context_->SetPipelineState(pipeline.pipeline);
+        context_->SetStencilRef(static_cast<Dg::Uint32>(referenceStencil_));
+        context_->SetBlendFactors(blendFactor_);
+        context_->CommitShaderResources(pipeline.binding, Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+        const Dg::Uint64 offsets[] = {0, 0};
+        Dg::IBuffer* vertexBuffers[] = {vertexBuffer->GetBuffer(), instanceBuffer->GetBuffer()};
+        context_->SetVertexBuffers(0, 2, vertexBuffers, offsets,
+                                   Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
+                                   Dg::SET_VERTEX_BUFFERS_FLAG_RESET);
+        context_->SetIndexBuffer(indexBuffer->GetBuffer(), 0,
+                                 Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+        Dg::DrawIndexedAttribs drawAttribs;
+        drawAttribs.NumIndices =
+            static_cast<Dg::Uint32>(VertexCountForPrimitives(primitive, primitiveCount));
+        drawAttribs.IndexType = indexBuffer->IsThirtyTwoBit() ? Dg::VT_UINT32 : Dg::VT_UINT16;
+        drawAttribs.Flags = Dg::DRAW_FLAG_VERIFY_ALL;
+        drawAttribs.NumInstances = static_cast<Dg::Uint32>(instanceCount);
+        drawAttribs.FirstIndexLocation = static_cast<Dg::Uint32>(std::max(0, params.startIndex));
+        drawAttribs.BaseVertex = static_cast<Dg::Uint32>(std::max(0, params.baseVertex));
+        context_->DrawIndexed(drawAttribs);
     }
 
     void DiligentGraphicsBackend::DrawInternal(const IVertexBufferBackend& vb,

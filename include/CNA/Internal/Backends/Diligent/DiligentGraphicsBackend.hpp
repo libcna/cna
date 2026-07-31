@@ -1297,6 +1297,29 @@ namespace CNA::Internal::Backends::Diligent
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
+        /**
+         * @brief Hardware-instanced indexed draw: `params.instanceVb` supplies one 4x4 world matrix
+         * per instance (four consecutive `float4` rows, stride 64), bound at vertex input slot 1
+         * with a per-instance step rate, alongside @p vb's per-vertex data at slot 0. Only `Position`
+         * is read from @p vb; the pixel stage outputs `params.diffuseColor` flat, with no texture or
+         * lighting, matching every other CNA backend's own minimal hardware-instancing baseline.
+         *
+         * @param vb             Per-vertex buffer; only its `Position` is consumed.
+         * @param ib             Index buffer shared by every instance.
+         * @param world          Unused: instancing supplies a world matrix per instance instead.
+         * @param view           View matrix.
+         * @param projection     Projection matrix.
+         * @param primitive      Primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount  Number of instances to draw.
+         * @param params         Per-draw parameters; `instanceVb` must be non-null.
+         * @throws std::runtime_error If `params.instanceVb` is null or foreign to this backend.
+         */
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                       const GpuDrawParams& params) override;
+
         /** @brief NOXNA. Returns the device type this backend actually created. */
         NOXNA [[nodiscard]] DiligentDeviceType GetDeviceType() const { return deviceType_; }
 
@@ -1313,6 +1336,7 @@ namespace CNA::Internal::Backends::Diligent
             DualTextureColored3D, ///< stride 24: position + packed colour + UV, two layers
             EnvironmentMap3D,   ///< stride 32: lit surface plus a cube-map reflection
             Skinned3D,          ///< stride 52: lit surface skinned by a 72-bone palette
+            Instanced3D,        ///< position-only vertex + a per-instance world matrix, flat colour
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */

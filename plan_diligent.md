@@ -5,10 +5,11 @@
 > — read it before assuming parity with Vulkan/EasyGL/SDL_GPU, which this backend does **not** have.
 > `RenderTarget2D`/`RenderTargetCube`, `AlphaTestEffect`, `DualTextureEffect`,
 > `EnvironmentMapEffect`, `SkinnedEffect` (stride 52), several simultaneous render targets,
-> `OcclusionQuery` and MSAA (back buffer and `RenderTarget2D`, device-probed clamping) are all
-> implemented and verified on a real (software) Vulkan device. Volume-texture sampling, MSAA on
-> `RenderTargetCube`, custom `ShaderEffect` programs, instancing and `PbrEffect` are **not**
-> implemented, and each one *refuses loudly* rather than rendering a near-miss.
+> `OcclusionQuery`, MSAA (back buffer and `RenderTarget2D`, device-probed clamping) and hardware
+> instancing (`DrawInstancedPrimitivesEx`) are all implemented and verified on a real (software)
+> Vulkan device. Volume-texture sampling, MSAA on `RenderTargetCube`, custom `ShaderEffect`
+> programs and `PbrEffect` are **not** implemented, and each one *refuses loudly* rather than
+> rendering a near-miss.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -55,7 +56,7 @@ Practical consequences that shaped this plan:
 | Namespace alias | `Dg = ::Diligent` — the CNA namespace is itself named `Diligent`, so unqualified `Diligent::X` inside it would resolve to the CNA namespace and fail |
 | Third-party pin | DiligentCore `v2.5.6`, via `FetchContent` in `cmake/ThirdPartyDiligent.cmake` |
 | Task prefix | `DILIGENT-` |
-| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT`, `Diligent_OcclusionQuery` |
+| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT`, `Diligent_OcclusionQuery`, `Diligent_MSAA`, `Diligent_Instanced` |
 
 ---
 
@@ -150,12 +151,17 @@ Implemented and exercised:
   Device-probed and clamped via `GetTextureFormatInfoExt()`, exactly like every other capability
   this backend reports honestly rather than silently ignores. `RenderTargetCube` MSAA is not
   implemented.
+- Hardware instancing (`DILIGENT-43`, `DrawInstancedPrimitivesEx`): a per-instance vertex buffer
+  bound at slot 1 with `INPUT_ELEMENT_FREQUENCY_PER_INSTANCE`/step rate 1 supplies one 4x4 world
+  matrix (four consecutive `float4` rows) per instance, alongside the per-vertex `Position`-only
+  stream at slot 0. Deliberately minimal, matching every other CNA backend's own baseline: no
+  texture, no lighting, flat `g_DiffuseColor` output. `g_WorldViewProj` is repurposed to hold just
+  `View * Projection` since there is no single shared `World` to fold in.
 
 Deliberately refused (each throws, naming itself):
 
-- Custom `ShaderEffect` programs, hardware instancing, `PbrEffect`, `RenderTargetCube` MSAA, and
-  `SkinnedEffect`'s stride-56 vertex-colour variant. `SupportsCapability()` reports each of these
-  honestly.
+- Custom `ShaderEffect` programs, `PbrEffect`, `RenderTargetCube` MSAA, and `SkinnedEffect`'s
+  stride-56 vertex-colour variant. `SupportsCapability()` reports each of these honestly.
 
 ---
 
@@ -215,7 +221,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-40` | `Texture3D` | ✅ | `RESOURCE_DIM_TEX_3D`, sub-box upload and readback. Verified by the shared `Texture3D*` tests |
 | `DILIGENT-41` | `OcclusionQuery` | ✅ | `DiligentOcclusionQueryBackend` uses Diligent's `IQuery`. `QUERY_TYPE_OCCLUSION` needs the `occlusionQueryPrecise` device feature, which lavapipe (this backend's only verification device) does not expose; the backend transparently falls back to `QUERY_TYPE_BINARY_OCCLUSION` (0/1, the same convention EasyGL already uses for GLES3) when it is unavailable. `End()` flushes the immediate context so a result doesn't require waiting for a frame boundary. Verified by `Diligent_OcclusionQuery`: an unbegun query, an empty Begin/End span, a fully-visible quad and a fully depth-occluded quad |
 | `DILIGENT-42` | Custom `ShaderEffect` (`CreateEffectBackend`) | ⬜ | Diligent compiles HLSL at runtime on every device type, so unlike SDL_GPU no extra compiler dependency is needed — but CNA's `ShaderEffect` contract is GLSL-shaped; resolve that first |
-| `DILIGENT-43` | Hardware instancing (`DrawInstancedPrimitivesEx`) | ⬜ | |
+| `DILIGENT-43` | Hardware instancing (`DrawInstancedPrimitivesEx`) | ✅ | New `ShaderVariant::Instanced3D`: per-vertex `Position`-only stream at slot 0 (explicit `Stride=16` -- `LAYOUT_ELEMENT_AUTO_STRIDE` would compute it from only the elements declared in that slot, 12 bytes, not the real `VertexPositionColor` buffer's 16, corrupting every vertex fetch after the first), per-instance world-matrix stream (four `float4` rows) at slot 1 with `INPUT_ELEMENT_FREQUENCY_PER_INSTANCE`. `g_WorldViewProj` repurposed to hold just `View * Projection` since instancing has no single shared `World`. Verified by `Diligent_Instanced`: three instances at distinct translations each read back the quad's colour at their own position, with the untouched background between them staying the clear colour. The long dead end before the real fix: with CPU-side data (VP matrix, all 3 instance matrices) and draw-call parameters (`NumIndices`/`NumInstances`/buffer counts) all confirmed correct via GPU staging-buffer readback, and a full-row pixel scan confirming *zero* fragments rendered anywhere (not even the untranslated centre instance with an identity world matrix), the actual bug turned out to be in the **test file**, not the backend: it uploaded its quad via `VertexBuffer::SetDataRaw(quadVertices, 4, sizeof(VertexPositionColor))`, but `sizeof(VertexPositionColor)` is not the GPU stream's byte layout -- `Color` inherits a polymorphic `IPackedVector` base, so the C++ struct carries a vtable pointer `SetDataRaw` copied verbatim, silently uploading garbage-interleaved data at the wrong stride. Fixed by using the typed `VertexBuffer::SetData(const VertexPositionColor*, int)` overload instead, which packs into the real 16-byte (float3 + packed uint32 colour) stream every 3D shader variant here already expects. Confirmed by literally swapping the known-good `Colored3D` pipeline into `DrawInstancedPrimitivesEx`'s own call sequence -- it *still* rendered nothing until the test's upload was fixed, isolating the bug away from the backend entirely |
 | `DILIGENT-44` | `SetDataOptions` streaming hints (`Discard`/`NoOverwrite`) | ⬜ | Currently ignored via the interface's own default |
 | `DILIGENT-45` | `vertexStart`/`startIndex`/`baseVertex` sub-range coverage tests | 🟨 | Forwarded to Diligent already; untested |
 | `DILIGENT-46` | Debug markers (`SetStringMarkerEXT` → `IDeviceContext::InsertDebugLabel`) | ⬜ | |
@@ -233,11 +239,11 @@ use:
 2. **Runs without a GPU** — `Diligent_DeviceSelection` exercises the device-preference and override
    parsing with no device created at all. ✅
 3. **Real device pixels** — a real Diligent device renders and a test asserts on read-back pixels.
-   ✅ **reached, on a software device**: all 10 `Diligent_*` CTest binaries (46 checks total —
+   ✅ **reached, on a software device**: all 11 `Diligent_*` CTest binaries (50 checks total —
    `Diligent_2D` 6, `Diligent_3D` 5, `Diligent_RenderTarget` 5, `Diligent_RenderTargetCube` 4,
    `Diligent_AlphaTestFog` 4, `Diligent_DualTextureEnvMap` 4, `Diligent_Skinned` 4, `Diligent_MRT` 4,
-   `Diligent_OcclusionQuery` 4, `Diligent_MSAA` 5) run against a genuine Vulkan device provided by
-   Mesa's `lavapipe` ICD under Xvfb. These are real
+   `Diligent_OcclusionQuery` 4, `Diligent_MSAA` 5, `Diligent_Instanced` 4) run against a genuine
+   Vulkan device provided by Mesa's `lavapipe` ICD under Xvfb. These are real
    draws through the real Vulkan engine — real pipelines, real HLSL→SPIR-V compilation, real depth
    testing — read back through `GraphicsDevice.GetBackBufferData`/`RenderTarget[Cube].GetData`, not
    stubs. Several real defects were found this way and fixed, spanning both the backend and its own

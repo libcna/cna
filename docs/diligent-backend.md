@@ -3,10 +3,11 @@
 ## Status
 
 The Diligent Engine backend is CNA's newest graphics backend and is **experimental**. Its
-implemented surface covers the 2D/3D baseline plus render targets (2D and cube), occlusion queries
-and most stock effects, described in `plan_diligent.md` Phases `DILIGENT-1` through `4`; it is
-**not** at parity with the Vulkan, EasyGL, SDL_GPU or bgfx backends (MSAA, custom `ShaderEffect`
-and instancing are still unimplemented). Read
+implemented surface covers the 2D/3D baseline plus render targets (2D and cube), occlusion queries,
+MSAA, hardware instancing and most stock effects, described in `plan_diligent.md` Phases
+`DILIGENT-1` through `4`; it is **not** at parity with the Vulkan, EasyGL, SDL_GPU or bgfx backends
+(custom `ShaderEffect` programs, `PbrEffect` and `RenderTargetCube` MSAA are still unimplemented).
+Read
 ["What works / what does not"](#what-works--what-does-not) before using it for anything real.
 
 Select it with:
@@ -134,6 +135,11 @@ Implemented:
   are clamped to what the swap chain's colour and depth-stencil formats both actually support
   (`GetTextureFormatInfoExt()`), matching FNA's own `RenderTarget2D.MultiSampleCount`/backbuffer
   clamp semantics.
+- Hardware instancing (`DrawInstancedPrimitivesEx`): a per-instance vertex buffer supplies one 4x4
+  world matrix per instance (four consecutive `float4` rows) at vertex input slot 1 with a
+  per-instance step rate, alongside the per-vertex `Position`-only stream at slot 0. Deliberately
+  minimal, matching every other CNA backend's own instancing baseline: no texture, no lighting,
+  flat diffuse colour output.
 
 Not implemented — each **throws with its own name** rather than rendering an approximation, and
 `GraphicsDevice.GraphicsCapabilities` reports each honestly:
@@ -144,7 +150,6 @@ Not implemented — each **throws with its own name** rather than rendering an a
 | Sampling a volume texture from a shader | `DILIGENT-42` |
 | `PbrEffect`, `SkinnedEffect`'s stride-56 vertex-colour variant | `DILIGENT-36`, `DILIGENT-35` |
 | Custom `ShaderEffect` programs | `DILIGENT-42` |
-| Hardware instancing | `DILIGENT-43` |
 
 ## Known limitations
 
@@ -180,18 +185,21 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Ten further binaries are the real-device pixel proofs (46 checks total): `Diligent_2D` (6),
+Eleven further binaries are the real-device pixel proofs (50 checks total): `Diligent_2D` (6),
 `Diligent_3D` (5), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4),
-`Diligent_MRT` (4), `Diligent_OcclusionQuery` (4) and `Diligent_MSAA` (5). They clear, draw
-`SpriteBatch` quads and 3D primitives on the back buffer and into off-screen 2D/cube targets, and
-assert on pixels (or query results) read back through `GraphicsDevice.GetBackBufferData` /
-`RenderTarget2D.GetData` / `RenderTargetCube.GetData` / `OcclusionQuery`. `Diligent_MSAA` uses a
-diagonal-edge differential (binary transition with MSAA off vs. genuinely blended pixels with it
-on) rather than a solid-fill check, since a solid fill can't tell "MSAA happened" apart from
-"MSAA was silently ignored". All 46 pass against a real Vulkan device. On a machine with no usable
-device they exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip —
-reporting a pass with nothing rendered would be dishonest.
+`Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5) and `Diligent_Instanced` (4).
+They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and into off-screen
+2D/cube targets, and assert on pixels (or query results) read back through
+`GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData` /
+`OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential (binary transition with MSAA
+off vs. genuinely blended pixels with it on) rather than a solid-fill check, since a solid fill
+can't tell "MSAA happened" apart from "MSAA was silently ignored". `Diligent_Instanced` draws
+three instances of one quad at distinct per-instance translations from a single
+`DrawInstancedPrimitives` call and asserts each instance's own position reads back the quad's
+colour while the untouched background between them stays the clear colour. All 50 pass against a
+real Vulkan device. On a machine with no usable device they exit 77 and print `[SKIP] CNA Diligent
+smoke`, which CTest reports as a skip — reporting a pass with nothing rendered would be dishonest.
 
 ```bash
 ctest --test-dir cmake-build-diligent -R Diligent --output-on-failure

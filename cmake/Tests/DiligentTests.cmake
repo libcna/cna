@@ -94,4 +94,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
         TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
+
+    # plan_diligent.md DILIGENT-43: hardware instancing (DrawInstancedPrimitivesEx).
+    cna_diligent_test(cna_test_diligent_instanced examples/diligent_instanced_test.cpp)
+    cna_register_backend_test(NAME Diligent_Instanced COMMAND cna_test_diligent_instanced
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
 endif()
