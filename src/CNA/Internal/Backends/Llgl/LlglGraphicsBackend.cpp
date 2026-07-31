@@ -436,7 +436,8 @@ namespace CNA::Internal::Backends::Llgl
                                                       LLGL::Texture* colorTexture,
                                                       LLGL::Texture* depthTexture,
                                                       int width, int height, bool hasRealDepthBuffer,
-                                                      LLGL::Buffer* spriteProjectionBuffer)
+                                                      LLGL::Buffer* spriteProjectionBuffer,
+                                                      LlglGraphicsBackend* owner)
         : renderSystem_(renderSystem)
         , renderTarget_(renderTarget)
         , colorTexture_(colorTexture)
@@ -445,6 +446,7 @@ namespace CNA::Internal::Backends::Llgl
         , height_(height)
         , hasRealDepthBuffer_(hasRealDepthBuffer)
         , spriteProjectionBuffer_(spriteProjectionBuffer)
+        , owner_(owner)
     {
         if (renderSystem_ == nullptr || renderTarget_ == nullptr || colorTexture_ == nullptr ||
             spriteProjectionBuffer_ == nullptr)
@@ -457,6 +459,17 @@ namespace CNA::Internal::Backends::Llgl
     {
         if (renderSystem_ == nullptr)
             return;
+
+        // Deferred, like LlglVertexBufferBackend/LlglIndexBufferBackend: a RenderTarget2D that
+        // goes out of scope before Present() is a perfectly normal pattern (create it, draw into
+        // it, sample it, let it die, all within one Draw()), and frameCommands_/FrameCommandBucket
+        // may still reference it by raw pointer at that point.
+        if (owner_ != nullptr)
+        {
+            owner_->ScheduleRenderTargetReleaseEXT(renderTarget_, colorTexture_, depthTexture_,
+                                                    spriteProjectionBuffer_);
+            return;
+        }
 
         if (renderTarget_ != nullptr)
             renderSystem_->Release(*renderTarget_);
@@ -484,6 +497,13 @@ namespace CNA::Internal::Backends::Llgl
         const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
             return false;
+
+        // This target's content comes only from draws recorded into the owning backend's
+        // frameCommands_ -- unlike a plain Texture2D, which arrives through an immediate
+        // WriteTexture. Reading the colour attachment before those are submitted would see
+        // whatever the GPU allocator happened to leave there, not what was actually drawn.
+        if (owner_ != nullptr)
+            owner_->FlushPendingFrameEXT();
 
         LLGL::TextureRegion region;
         region.subresource.baseMipLevel = 0;
@@ -2188,12 +2208,49 @@ namespace CNA::Internal::Backends::Llgl
         pendingBufferReleases_.push_back(buffer);
     }
 
+    void LlglGraphicsBackend::ScheduleRenderTargetReleaseEXT(LLGL::RenderTarget* renderTarget,
+                                                              LLGL::Texture* colorTexture,
+                                                              LLGL::Texture* depthTexture,
+                                                              LLGL::Buffer* spriteProjectionBuffer)
+    {
+        // Nothing recorded refers to it, so there is nothing to wait for -- same reasoning as
+        // ScheduleBufferReleaseEXT.
+        const bool deferred = !frameCommands_.empty();
+
+        if (renderTarget != nullptr)
+        {
+            if (deferred) pendingRenderTargetReleases_.push_back(renderTarget);
+            else renderer_->Release(*renderTarget);
+        }
+        // depthTexture is null whenever the depth/stencil attachment was created anonymously (the
+        // current CreateRenderTarget2D path always does this) -- see LlglRenderTargetBackend's
+        // destructor comment.
+        if (depthTexture != nullptr)
+        {
+            if (deferred) pendingTextureReleases_.push_back(depthTexture);
+            else renderer_->Release(*depthTexture);
+        }
+        if (colorTexture != nullptr)
+        {
+            if (deferred) pendingTextureReleases_.push_back(colorTexture);
+            else renderer_->Release(*colorTexture);
+        }
+        if (spriteProjectionBuffer != nullptr)
+        {
+            if (deferred) pendingBufferReleases_.push_back(spriteProjectionBuffer);
+            else renderer_->Release(*spriteProjectionBuffer);
+        }
+    }
+
     void LlglGraphicsBackend::ReleasePendingBuffers()
     {
-        if (pendingBufferReleases_.empty())
+        if (pendingBufferReleases_.empty() && pendingRenderTargetReleases_.empty() &&
+            pendingTextureReleases_.empty())
+        {
             return;
+        }
 
-        // The submitted frame may still be reading these buffers. Waiting only happens on the
+        // The submitted frame may still be reading these resources. Waiting only happens on the
         // frames where a resource actually died, which is not a hot path.
         queue_->WaitIdle();
         for (LLGL::Buffer* buffer : pendingBufferReleases_)
@@ -2202,6 +2259,37 @@ namespace CNA::Internal::Backends::Llgl
                 renderer_->Release(*buffer);
         }
         pendingBufferReleases_.clear();
+
+        // Render targets before their own textures -- same order LlglRenderTargetBackend's own
+        // destructor uses.
+        for (LLGL::RenderTarget* target : pendingRenderTargetReleases_)
+        {
+            if (target != nullptr)
+                renderer_->Release(*target);
+        }
+        pendingRenderTargetReleases_.clear();
+        for (LLGL::Texture* texture : pendingTextureReleases_)
+        {
+            if (texture != nullptr)
+                renderer_->Release(*texture);
+        }
+        pendingTextureReleases_.clear();
+    }
+
+    void LlglGraphicsBackend::FlushPendingFrameEXT()
+    {
+        if (frameCommands_.empty())
+            return;
+
+        UploadFrameResources();
+        RecordAndSubmitFrame();
+        queue_->WaitIdle();
+        ReleasePendingBuffers();
+
+        frameCommands_.clear();
+        spriteVertexData_.clear();
+        transformData_.clear();
+        frameSubmitted_ = true;
     }
 
     std::vector<LlglGraphicsBackend::FrameCommandBucket> LlglGraphicsBackend::GroupFrameCommandsByTargetEXT() const
@@ -2611,7 +2699,7 @@ namespace CNA::Internal::Backends::Llgl
 
         return std::make_unique<LlglRenderTargetBackend>(renderer_.get(), renderTarget, colorTexture,
                                                           nullptr, w, h, hasRealDepthBuffer,
-                                                          spriteProjectionBuffer);
+                                                          spriteProjectionBuffer, this);
     }
 
     void LlglGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)

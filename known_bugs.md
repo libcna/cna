@@ -94,3 +94,45 @@ buffer whenever it is set.
 **Tracked as:** `plan_llgl.md` task `LLGL-26`.
 
 ---
+
+## LLGL backend: destroying a `RenderTarget2D` before `Present()` segfaulted — FIXED 2026-07-31
+
+**Symptom:** a `RenderTarget2D` created, drawn into, and released — all within one `Draw()` call,
+with no other reason to touch the render target afterwards — segfaulted inside
+`RecordAndSubmitFrame` the next time the frame was actually submitted, dereferencing
+`bucket.target->GetResolution()` on a pointer to an already-freed `LLGL::RenderTarget`.
+
+**Cause:** `LlglRenderTargetBackend`'s destructor released its `LLGL::RenderTarget` and textures
+immediately, but this backend defers every draw into `frameCommands_`/`FrameCommandBucket` and
+only actually replays them at `Present()`/`ReadBackbuffer()` time. A `RenderTarget2D` going out of
+scope before that point is a perfectly ordinary pattern (XNA allows it, and nothing about drawing
+into a scratch render target implies keeping it alive past the `Draw()` that used it) — the exact
+same class of bug already fixed for `VertexBuffer`/`IndexBuffer` earlier in this backend's work.
+
+**Fix:** `LlglRenderTargetBackend` now takes an owning `LlglGraphicsBackend*` and its destructor
+calls `ScheduleRenderTargetReleaseEXT()` instead of releasing immediately — deferring the release
+of the render target, its colour texture and its own sprite projection buffer until the frame that
+may still reference them has actually been submitted, exactly like `ScheduleBufferReleaseEXT`
+already does for GPU buffers.
+
+**Tracked as:** `plan_llgl.md` task `LLGL-26`.
+
+---
+
+## LLGL backend: `RenderTarget2D::GetData()` read stale/undefined pixels — FIXED 2026-07-31
+
+**Symptom:** calling `GetData()` on a `RenderTarget2D` immediately after drawing into it — with no
+intervening back-buffer read to force a flush — returned `(0,0,0,0)` instead of what was drawn.
+
+**Cause:** `LlglRenderTargetBackend::GetData()` read the colour attachment straight off the GPU
+texture via `RenderSystem::ReadTexture()`. Unlike a plain `Texture2D` (populated by an immediate
+`WriteTexture()`), a render target's content only exists once its queued `frameCommands_` have
+actually been recorded and submitted — which normally happens at `Present()` or
+`ReadBackbuffer()`/`CaptureBackbuffer()`, neither of which a direct `GetData()` call triggers.
+
+**Fix:** added `LlglGraphicsBackend::FlushPendingFrameEXT()` -- submits and waits for any queued
+frame commands without presenting -- and `LlglRenderTargetBackend::GetData()` calls it first.
+
+**Tracked as:** `plan_llgl.md` task `LLGL-26`.
+
+---

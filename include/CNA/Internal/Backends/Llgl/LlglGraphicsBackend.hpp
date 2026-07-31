@@ -284,11 +284,18 @@ namespace CNA::Internal::Backends::Llgl
          *        once here rather than re-uploaded every frame -- see `QueueSpriteEXT`'s use of
          *        it in place of the owning backend's own `spriteProjectionBuffer_` whenever a
          *        sprite is queued while this target is bound.
+         * @param owner Backend whose frame this target may be referenced by; the destructor defers
+         *        releasing the underlying LLGL objects to it (`ScheduleRenderTargetReleaseEXT`)
+         *        rather than releasing them immediately, exactly like
+         *        `LlglVertexBufferBackend`/`LlglIndexBufferBackend` already do for GPU buffers --
+         *        a `RenderTarget2D` that goes out of scope before `Present()` (a perfectly normal
+         *        pattern: create it, draw into it, sample it, let it die, all within one `Draw()`)
+         *        must not free a resource `frameCommands_` still points at.
          */
         LlglRenderTargetBackend(LLGL::RenderSystem* renderSystem, LLGL::RenderTarget* renderTarget,
                                 LLGL::Texture* colorTexture, LLGL::Texture* depthTexture,
                                 int width, int height, bool hasRealDepthBuffer,
-                                LLGL::Buffer* spriteProjectionBuffer);
+                                LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner);
 
         /** @brief Releases the render target and its textures. */
         ~LlglRenderTargetBackend() override;
@@ -350,6 +357,7 @@ namespace CNA::Internal::Backends::Llgl
         int                 height_              = 0;
         bool                hasRealDepthBuffer_  = false;
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
+        LlglGraphicsBackend* owner_               = nullptr;
     };
 
     /**
@@ -936,6 +944,40 @@ namespace CNA::Internal::Backends::Llgl
         void ScheduleBufferReleaseEXT(LLGL::Buffer* buffer);
 
         /**
+         * @brief Defers releasing a `RenderTarget2D`'s LLGL objects, same reasoning as
+         * `ScheduleBufferReleaseEXT`: `LlglRenderTargetBackend`'s destructor calls this instead of
+         * releasing immediately, because a `RenderTarget2D` that goes out of scope before
+         * `Present()` is a perfectly normal pattern (create it, draw into it, sample it, let it
+         * die, all within one `Draw()`) and `frameCommands_`/`FrameCommandBucket` may still
+         * reference the render target by raw pointer.
+         *
+         * @param renderTarget           The framebuffer object, or null.
+         * @param colorTexture           The colour attachment, or null.
+         * @param depthTexture           The depth/stencil attachment, or null (anonymous
+         *                               attachments -- the only kind this backend creates today --
+         *                               have none of their own; LLGL releases that buffer as part
+         *                               of releasing @p renderTarget itself).
+         * @param spriteProjectionBuffer This target's own sprite projection buffer, or null.
+         */
+        void ScheduleRenderTargetReleaseEXT(LLGL::RenderTarget* renderTarget,
+                                            LLGL::Texture* colorTexture,
+                                            LLGL::Texture* depthTexture,
+                                            LLGL::Buffer* spriteProjectionBuffer);
+
+        /**
+         * @brief Submits any queued-but-not-yet-submitted frame commands and waits for them to
+         * finish, without presenting.
+         *
+         * `LlglRenderTargetBackend::GetData()` calls this first: unlike a plain `Texture2D` (whose
+         * content arrives through an immediate `WriteTexture`), a `RenderTarget2D`'s content comes
+         * only from draws recorded into `frameCommands_`, which otherwise stay unsubmitted until
+         * `Present()`/`ReadBackbuffer()` -- reading the colour attachment before that point sees
+         * whatever the GPU allocator happened to leave there, not what was actually drawn. No-op
+         * when there is nothing queued.
+         */
+        void FlushPendingFrameEXT();
+
+        /**
          * @brief Appends one sprite's geometry to the current frame.
          *
          * Called by `LlglSpriteBatchBackend`; not part of the shared backend interface.
@@ -1101,8 +1143,16 @@ namespace CNA::Internal::Backends::Llgl
         std::vector<LLGL::Buffer*>  transformBuffers_;
         std::vector<float>          transformData_;
         /// Buffers whose owning resource has been destroyed, released once the frame that may
-        /// reference them has been submitted. See ScheduleBufferReleaseEXT.
+        /// reference them has been submitted. See ScheduleBufferReleaseEXT. Also holds a
+        /// destroyed RenderTarget2D's own sprite projection buffer (ScheduleRenderTargetReleaseEXT).
         std::vector<LLGL::Buffer*>  pendingBufferReleases_;
+        /// RenderTarget2D framebuffer objects destroyed before the frame that may still reference
+        /// them (by raw pointer, in FrameCommand::target) was submitted. See
+        /// ScheduleRenderTargetReleaseEXT.
+        std::vector<LLGL::RenderTarget*> pendingRenderTargetReleases_;
+        /// A destroyed RenderTarget2D's own colour (and, if ever non-anonymous, depth) textures,
+        /// deferred for the same reason as pendingRenderTargetReleases_.
+        std::vector<LLGL::Texture*> pendingTextureReleases_;
 
         std::vector<float>          spriteVertexData_;
         std::vector<FrameCommand>   frameCommands_;

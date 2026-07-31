@@ -17,17 +17,33 @@
 //   the right corners (proves the colour attachment orientation, not just that something drew).
 // Check G -- RenderTarget2D::GetData() reads the same pixel back directly, without going through
 //   SpriteBatch at all (proves LlglRenderTargetBackend::GetData()).
+// Check H -- the 3D path (BasicEffect + VertexBuffer + depth test) also works while a
+//   RenderTarget2D is bound: a nearer quad drawn first survives a farther one drawn second,
+//   proving the render target's own always-allocated depth/stencil attachment is real and that
+//   the cached 3D pipelines (built against the swap chain's render pass) are genuinely reusable
+//   against a render target's render pass.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include "common/PixelTestGame.hpp"
 
@@ -63,6 +79,24 @@ namespace
             }
         }
         return pixels;
+    }
+
+    // A quad covering the whole 32x32 target at a chosen depth, in one solid colour. Same
+    // right-handed-projection convention as llgl_3d_test.cpp: negative z is nearer the camera.
+    std::vector<VertexPositionColor> MakeDepthQuad(float depth, const Color& color)
+    {
+        const Vector3 topLeft(0.0f, 0.0f, depth);
+        const Vector3 topRight(32.0f, 0.0f, depth);
+        const Vector3 bottomLeft(0.0f, 32.0f, depth);
+        const Vector3 bottomRight(32.0f, 32.0f, depth);
+        return {
+            VertexPositionColor(topLeft, color),
+            VertexPositionColor(topRight, color),
+            VertexPositionColor(bottomLeft, color),
+            VertexPositionColor(bottomLeft, color),
+            VertexPositionColor(topRight, color),
+            VertexPositionColor(bottomRight, color),
+        };
     }
 }
 
@@ -145,6 +179,58 @@ public:
         renderTarget->GetData(0, &topLeftTexel, &direct, 0, 1);
         ExpectTrue("RenderTarget2D::GetData() reads the top-left quadrant back directly (red)",
                    direct == Color(255, 0, 0, 255));
+
+        // --- Check H: the 3D path (BasicEffect + VertexBuffer + depth test) into a render target -
+        std::unique_ptr<RenderTarget2D> depthTarget;
+        try
+        {
+            depthTarget = std::make_unique<RenderTarget2D>(
+                device, 32, 32, false, SurfaceFormat::Color, DepthFormat::Depth24Stencil8);
+        }
+        catch (const std::exception&)
+        {
+            depthTarget.reset();
+        }
+        if (ExpectTrue("RenderTarget2D with Depth24Stencil8 construction succeeds",
+                       depthTarget != nullptr))
+        {
+            BasicEffect effect(device);
+            effect.VertexColorEnabled = true;
+            effect.setTextureEnabledProperty(false);
+            effect.setLightingEnabledProperty(false);
+            effect.setWorldProperty(Matrix::getIdentityProperty());
+            effect.setViewProperty(Matrix::getIdentityProperty());
+            effect.setProjectionProperty(
+                Matrix::CreateOrthographicOffCenter(0.0f, 32.0f, 32.0f, 0.0f, 0.0f, 1.0f));
+
+            device.SetRenderTarget(depthTarget.get());
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+            device.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, Color(0, 0, 0, 255),
+                        1.0f, 0);
+
+            auto drawQuad = [&](float depth, const Color& color) {
+                const std::vector<VertexPositionColor> vertices = MakeDepthQuad(depth, color);
+                VertexBuffer buffer(device, VertexPositionColor::getVertexDeclarationStatic(),
+                                    static_cast<int>(vertices.size()), BufferUsage::None);
+                buffer.SetData(vertices.data(), static_cast<int>(vertices.size()));
+                device.SetVertexBuffer(&buffer);
+                effect.Apply();
+                device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            };
+
+            drawQuad(-0.2f, Color(0, 0, 255, 255));   // near, drawn first
+            drawQuad(-0.8f, Color(255, 0, 0, 255));   // far, drawn second
+
+            device.SetRenderTarget(nullptr);
+            device.setDepthStencilStateProperty(DepthStencilState::Default);
+
+            Color depthResult(0, 0, 0, 0);
+            Rectangle center(16, 16, 1, 1);
+            depthTarget->GetData(0, &center, &depthResult, 0, 1);
+            ExpectTrue(
+                "depth testing in a render target keeps the nearer surface over the farther one",
+                depthResult == Color(0, 0, 255, 255));
+        }
     }
 };
 

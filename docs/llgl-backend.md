@@ -154,7 +154,14 @@ Two implementation choices are worth knowing if you are debugging a render-targe
   pipeline — built once against the swap chain's render pass — be reused as-is for a render-target
   pass, instead of needing a second, render-target-keyed pipeline cache: Vulkan's render-pass-
   compatibility rule only requires matching attachment formats and sample counts, not the same
-  `VkRenderPass` object.
+  `VkRenderPass` object. The 3D path (`BasicEffect`, depth-tested `VertexBuffer` draws) works into
+  a render target too, not just `SpriteBatch` — both share the same reused pipelines.
+
+Destroying a `RenderTarget2D` before `Present()` (create it, draw into it, sample it, let it go out
+of scope, all within one `Draw()`) is safe: like `VertexBuffer`/`IndexBuffer`, the underlying LLGL
+objects are released only once the frame that may still reference them has actually been
+submitted. `RenderTarget2D::GetData()` also forces any of its own still-queued draws to be
+submitted first — its content, unlike a plain `Texture2D`'s, only exists once they are.
 
 ## Tests
 
