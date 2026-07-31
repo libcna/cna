@@ -359,4 +359,29 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         target_link_libraries(${BACKEND_TARGET} PUBLIC ${CNA_LLGL_LIBRARIES})
     endif()
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+
+    # plan_llgl.md LLGL-27: LlglEffectBackend needs a REAL runtime GLSL->SPIR-V compile for
+    # arbitrary user ShaderEffect source when the Vulkan module is selected at runtime (LLGL's own
+    # OpenGL module accepts the same GLSL text directly, no compiler needed there) -- the exact
+    # same problem SDL_GPU's own effect backend already solved above with libshaderc, and the
+    # same find_library()-then-glob-fallback this environment's own libshaderc1-only (no -dev
+    # package) install needs. Duplicated rather than shared with the SDL_GPU branch above: CMake
+    # only evaluates the one matching CNA_GRAPHICS_BACKEND branch, so the SDL_GPU block's variable
+    # is never set here.
+    find_library(CNA_SHADERC_LIBRARY NAMES shaderc_shared shaderc)
+    if(NOT CNA_SHADERC_LIBRARY)
+        file(GLOB CNA_SHADERC_CANDIDATES
+            /usr/lib/*/libshaderc.so*
+            /usr/lib/libshaderc.so*
+            /usr/local/lib/libshaderc.so*
+        )
+        if(CNA_SHADERC_CANDIDATES)
+            list(GET CNA_SHADERC_CANDIDATES 0 CNA_SHADERC_LIBRARY)
+        endif()
+    endif()
+    if(NOT CNA_SHADERC_LIBRARY)
+        message(FATAL_ERROR "CNA: libshaderc not found (required for LLGL's runtime ShaderEffect GLSL compile, LLGL-27) -- install libshaderc1 or libshaderc-dev")
+    endif()
+    message(STATUS "CNA: using libshaderc at ${CNA_SHADERC_LIBRARY}")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE "${CNA_SHADERC_LIBRARY}")
 endif()

@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -37,6 +38,12 @@ namespace CNA::Internal::Backends::Llgl
         /// smaller declared block simply reads a prefix of a larger allocated buffer, which every
         /// graphics API this backend targets allows.
         constexpr std::size_t kEffectUniformFloats = 100;
+
+        /// Floats in a custom ShaderEffect's uniform block (LLGL-27): 32 floats = 128 bytes,
+        /// matching the native Vulkan backend's own VulkanEffectBackend::pushConst_ layout --
+        /// [0..1]=vpSize (written by QueueSpriteEXT itself, not the effect), [2..3]=padding,
+        /// [4..19]=uMatrix, [20..23]=uColor, [24..31]=uFloats (only [24]=uFloat0 is ever written).
+        constexpr std::size_t kCustomEffectUniformFloats = 32;
 
         /// Floats per sprite vertex: position (2), texture coordinate (2), colour (4).
         constexpr std::size_t kSpriteVertexFloats = 8;
@@ -309,6 +316,69 @@ namespace CNA::Internal::Backends::Llgl
         {
             return std::find(caps.shadingLanguages.begin(), caps.shadingLanguages.end(), language) !=
                    caps.shadingLanguages.end();
+        }
+
+        // ---- Runtime GLSL->SPIR-V compile for LlglEffectBackend (LLGL-27) ----
+        // No libshaderc-dev package is available in this environment (see BackendLibraries.cmake's
+        // own find_library fallback comment), so there is no shaderc.h to include -- these
+        // extern "C" prototypes are hand-declared to match the real C ABI exactly, the same
+        // minimal subset this project's SDL_GPU backend already proved correct against the
+        // identical shared library (SdlGpuGraphicsBackend.cpp, SDLGPU-42/43). Opaque handles are
+        // all void*; shaderc_shader_kind/shaderc_optimization_level are plain C enums, passed as
+        // int.
+        extern "C"
+        {
+            void* shaderc_compiler_initialize();
+            void shaderc_compiler_release(void*);
+            void* shaderc_compile_options_initialize();
+            void shaderc_compile_options_release(void*);
+            void shaderc_compile_options_set_optimization_level(void*, int);
+            void* shaderc_compile_into_spv(void* compiler, const char* source_text, std::size_t source_text_size,
+                                          int shader_kind, const char* input_file_name,
+                                          const char* entry_point_name, void* options);
+            int shaderc_result_get_compilation_status(void*);
+            const char* shaderc_result_get_error_message(void*);
+            std::size_t shaderc_result_get_length(void*);
+            const char* shaderc_result_get_bytes(void*);
+            void shaderc_result_release(void*);
+        }
+
+        constexpr int kShadercVertexShader = 0;    // shaderc_glsl_vertex_shader
+        constexpr int kShadercFragmentShader = 1;  // shaderc_glsl_fragment_shader
+        constexpr int kShadercOptPerformance = 2;  // shaderc_optimization_level_performance
+
+        // Compiles @p source (GLSL) to SPIR-V, replacing @p outSpirv on success. Returns true on
+        // success; on failure @p outError holds shaderc's own error message and @p outSpirv is
+        // left untouched.
+        bool CompileGlslToSpirv(const std::string& source, int shaderKind, const char* filename,
+                                std::vector<std::uint8_t>& outSpirv, std::string& outError)
+        {
+            void* compiler = shaderc_compiler_initialize();
+            void* options = shaderc_compile_options_initialize();
+            shaderc_compile_options_set_optimization_level(options, kShadercOptPerformance);
+
+            void* result = shaderc_compile_into_spv(compiler, source.data(), source.size(), shaderKind,
+                                                    filename, "main", options);
+
+            const int status = shaderc_result_get_compilation_status(result);
+            if (status != 0)
+            {
+                const char* err = shaderc_result_get_error_message(result);
+                outError = err != nullptr ? err : "shader compilation failed (no error message)";
+                shaderc_result_release(result);
+                shaderc_compile_options_release(options);
+                shaderc_compiler_release(compiler);
+                return false;
+            }
+
+            const std::size_t length = shaderc_result_get_length(result);
+            const char* bytes = shaderc_result_get_bytes(result);
+            outSpirv.assign(bytes, bytes + length);
+
+            shaderc_result_release(result);
+            shaderc_compile_options_release(options);
+            shaderc_compiler_release(compiler);
+            return true;
         }
     }
 
@@ -602,6 +672,193 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     // -----------------------------------------------------------------------------------------
+    // LlglEffectBackend
+    // -----------------------------------------------------------------------------------------
+
+    LlglEffectBackend::LlglEffectBackend(LlglGraphicsBackend& owner)
+        : owner_(owner)
+    {
+    }
+
+    LlglEffectBackend::~LlglEffectBackend()
+    {
+        owner_.ClearCurrentCustomEffectEXT(this);
+        owner_.ScheduleEffectResourceReleaseEXT(vertexShader_, fragmentShader_, pipelineCache_);
+    }
+
+    bool LlglEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
+    {
+        compileError_.clear();
+        valid_ = false;
+
+        LLGL::RenderSystem* renderSystem = owner_.GetRenderSystemEXT();
+        const LLGL::RenderingCapabilities& caps = owner_.GetRenderingCapsEXT();
+
+        LLGL::ShaderDescriptor vertexDesc;
+        LLGL::ShaderDescriptor fragmentDesc;
+        vertexDesc.type = LLGL::ShaderType::Vertex;
+        fragmentDesc.type = LLGL::ShaderType::Fragment;
+
+        // GLSL is preferred wherever the module offers it, for the same reason the stock sprite
+        // shader selection prefers it (LLGL-17): a modern OpenGL module reports SPIR-V too, but
+        // this project has no reason to run a GLSL->SPIR-V->GL round trip when the module already
+        // accepts the GLSL source directly.
+        std::vector<std::uint8_t> vertSpirv;
+        std::vector<std::uint8_t> fragSpirv;
+        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
+        {
+            vertexDesc.source = vertSrc.c_str();
+            vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+            fragmentDesc.source = fragSrc.c_str();
+            fragmentDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+        }
+        else if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::SPIRV))
+        {
+            std::string shadercError;
+            if (!CompileGlslToSpirv(vertSrc, kShadercVertexShader, "ShaderEffect.vert", vertSpirv, shadercError))
+            {
+                compileError_ = "vertex shader: " + shadercError;
+                return false;
+            }
+            if (!CompileGlslToSpirv(fragSrc, kShadercFragmentShader, "ShaderEffect.frag", fragSpirv, shadercError))
+            {
+                compileError_ = "fragment shader: " + shadercError;
+                return false;
+            }
+
+            vertexDesc.source = reinterpret_cast<const char*>(vertSpirv.data());
+            vertexDesc.sourceSize = vertSpirv.size();
+            vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
+            vertexDesc.entryPoint = "main";
+
+            fragmentDesc.source = reinterpret_cast<const char*>(fragSpirv.data());
+            fragmentDesc.sourceSize = fragSpirv.size();
+            fragmentDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
+            fragmentDesc.entryPoint = "main";
+        }
+        else
+        {
+            compileError_ = "the loaded module accepts neither SPIR-V nor GLSL, and this backend ships no other shader form";
+            return false;
+        }
+
+        // Scoped to the stock sprite vertex layout (position/texCoord/color) -- see this class's
+        // own doc comment for why, matching the native Vulkan backend's own
+        // VulkanEffectBackend::GetOrCreatePipeline precedent.
+        vertexDesc.vertex.inputAttribs = MakeSpriteVertexFormat().attributes;
+
+        vertexShader_ = renderSystem->CreateShader(vertexDesc);
+        fragmentShader_ = renderSystem->CreateShader(fragmentDesc);
+
+        for (LLGL::Shader* shader : {vertexShader_, fragmentShader_})
+        {
+            if (shader == nullptr)
+            {
+                compileError_ = "shader creation failed";
+                return false;
+            }
+            if (const LLGL::Report* report = shader->GetReport())
+            {
+                if (report->HasErrors())
+                {
+                    compileError_ = report->GetText() != nullptr ? report->GetText()
+                                                                  : "shader compilation failed (no details)";
+                    return false;
+                }
+            }
+        }
+
+        valid_ = true;
+        return true;
+    }
+
+    void LlglEffectBackend::Bind()
+    {
+        if (valid_)
+            owner_.SetCurrentCustomEffectEXT(this);
+    }
+
+    void LlglEffectBackend::Unbind()
+    {
+        owner_.ClearCurrentCustomEffectEXT(this);
+    }
+
+    bool LlglEffectBackend::IsValid() const
+    {
+        return valid_;
+    }
+
+    std::string LlglEffectBackend::GetCompileError() const
+    {
+        return compileError_;
+    }
+
+    void LlglEffectBackend::SetUniformMat4(const char* /*name*/, const float* matrix)
+    {
+        std::memcpy(uniformStaging_ + 4, matrix, sizeof(float) * 16);
+    }
+
+    void LlglEffectBackend::SetUniformVec4(const char* /*name*/, float x, float y, float z, float w)
+    {
+        uniformStaging_[20] = x; uniformStaging_[21] = y; uniformStaging_[22] = z; uniformStaging_[23] = w;
+    }
+
+    void LlglEffectBackend::SetUniformVec3(const char* /*name*/, float x, float y, float z)
+    {
+        uniformStaging_[20] = x; uniformStaging_[21] = y; uniformStaging_[22] = z;
+    }
+
+    void LlglEffectBackend::SetUniformVec2(const char* /*name*/, float x, float y)
+    {
+        uniformStaging_[20] = x; uniformStaging_[21] = y;
+    }
+
+    void LlglEffectBackend::SetUniformFloat(const char* /*name*/, float value)
+    {
+        uniformStaging_[24] = value;
+    }
+
+    void LlglEffectBackend::SetUniformInt(const char* /*name*/, int value)
+    {
+        uniformStaging_[24] = static_cast<float>(value);
+    }
+
+    LLGL::PipelineState* LlglEffectBackend::AcquirePipeline(std::uint64_t blendKey, bool scissorEnabled)
+    {
+        const auto cached = pipelineCache_.find(blendKey);
+        if (cached != pipelineCache_.end())
+            return cached->second;
+
+        LLGL::GraphicsPipelineDescriptor pipelineDesc;
+        pipelineDesc.debugName = "CNA.ShaderEffect";
+        pipelineDesc.vertexShader = vertexShader_;
+        pipelineDesc.fragmentShader = fragmentShader_;
+        pipelineDesc.pipelineLayout = owner_.AcquireCustomEffectLayoutEXT();
+        pipelineDesc.renderPass = owner_.GetPrimaryRenderPassEXT();
+        pipelineDesc.primitiveTopology = LLGL::PrimitiveTopology::TriangleList;
+        owner_.FillCurrentBlendAndRasterStateEXT(pipelineDesc, scissorEnabled);
+
+        LLGL::PipelineState* pipeline = owner_.GetRenderSystemEXT()->CreatePipelineState(pipelineDesc);
+        if (pipeline == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: custom effect pipeline creation failed");
+        }
+        if (const LLGL::Report* report = pipeline->GetReport())
+        {
+            if (report->HasErrors())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: custom effect pipeline link failed: " +
+                    (report->GetText() != nullptr ? report->GetText() : "no details"));
+            }
+        }
+
+        pipelineCache_.emplace(blendKey, pipeline);
+        return pipeline;
+    }
+
+    // -----------------------------------------------------------------------------------------
     // LlglVertexBufferBackend
     // -----------------------------------------------------------------------------------------
 
@@ -841,6 +1098,14 @@ namespace CNA::Internal::Backends::Llgl
         addressV_ = addressV;
     }
 
+    void LlglSpriteBatchBackend::SetCustomEffect(Effect* effect)
+    {
+        if (effect != nullptr)
+            effect->Apply();
+        else
+            owner_.SetCurrentCustomEffectEXT(nullptr);
+    }
+
     void LlglSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
     {
         const Rectangle source{0, 0, texture.GetWidth(), texture.GetHeight()};
@@ -952,6 +1217,14 @@ namespace CNA::Internal::Backends::Llgl
         if (!renderer_)
             return;
 
+        // Drains pendingBufferReleases_/pendingRenderTargetReleases_/pendingTextureReleases_/
+        // pendingQueryHeapReleases_ -- a RenderTarget2D/OcclusionQuery destroyed mid-frame defers
+        // its actual release until the frame that may reference it is submitted (see
+        // ScheduleRenderTargetReleaseEXT/ScheduleQueryHeapReleaseEXT), and the backend itself can
+        // be destroyed before that submit ever happens (e.g. the game disposes its GraphicsDevice
+        // without presenting again). Without this, those resources would simply leak.
+        ReleasePendingBuffers();
+
         for (const auto& entry : pipelineCache_)
         {
             if (entry.second != nullptr)
@@ -993,6 +1266,16 @@ namespace CNA::Internal::Backends::Llgl
                 renderer_->Release(*buffer);
         }
         transformBuffers_.clear();
+
+        for (LLGL::Buffer* buffer : customEffectUniformBuffers_)
+        {
+            if (buffer != nullptr)
+                renderer_->Release(*buffer);
+        }
+        customEffectUniformBuffers_.clear();
+
+        if (customEffectLayout_ != nullptr)
+            renderer_->Release(*customEffectLayout_);
 
         if (primitiveFragmentShader_ != nullptr)
             renderer_->Release(*primitiveFragmentShader_);
@@ -1677,20 +1960,9 @@ namespace CNA::Internal::Backends::Llgl
         return key;
     }
 
-    LLGL::PipelineState* LlglGraphicsBackend::AcquireSpritePipeline(bool scissorEnabled)
+    void LlglGraphicsBackend::FillCurrentBlendAndRasterStateEXT(
+        LLGL::GraphicsPipelineDescriptor& pipelineDesc, bool scissorEnabled) const
     {
-        const std::uint64_t key = MakeBlendPipelineKey(scissorEnabled);
-        const auto cached = pipelineCache_.find(key);
-        if (cached != pipelineCache_.end())
-            return cached->second;
-
-        LLGL::GraphicsPipelineDescriptor pipelineDesc;
-        pipelineDesc.debugName = "CNA.Sprite";
-        pipelineDesc.vertexShader = spriteVertexShader_;
-        pipelineDesc.fragmentShader = spriteFragmentShader_;
-        pipelineDesc.pipelineLayout = spriteLayout_;
-        pipelineDesc.renderPass = swapChain_->GetRenderPass();
-        pipelineDesc.primitiveTopology = LLGL::PrimitiveTopology::TriangleList;
         pipelineDesc.depth.testEnabled = false;
         pipelineDesc.depth.writeEnabled = false;
         pipelineDesc.rasterizer.multiSampleEnabled = (swapChain_->GetSamples() > 1);
@@ -1711,6 +1983,23 @@ namespace CNA::Internal::Backends::Llgl
         pipelineDesc.blend.targets[0].dstAlpha = MapBlendFactor(alphaDstBlend_);
         pipelineDesc.blend.targets[0].alphaArithmetic = MapBlendFunction(alphaBlendFunc_);
         pipelineDesc.blend.targets[0].colorMask = MapColorWriteMask(colorWriteChannels_);
+    }
+
+    LLGL::PipelineState* LlglGraphicsBackend::AcquireSpritePipeline(bool scissorEnabled)
+    {
+        const std::uint64_t key = MakeBlendPipelineKey(scissorEnabled);
+        const auto cached = pipelineCache_.find(key);
+        if (cached != pipelineCache_.end())
+            return cached->second;
+
+        LLGL::GraphicsPipelineDescriptor pipelineDesc;
+        pipelineDesc.debugName = "CNA.Sprite";
+        pipelineDesc.vertexShader = spriteVertexShader_;
+        pipelineDesc.fragmentShader = spriteFragmentShader_;
+        pipelineDesc.pipelineLayout = spriteLayout_;
+        pipelineDesc.renderPass = swapChain_->GetRenderPass();
+        pipelineDesc.primitiveTopology = LLGL::PrimitiveTopology::TriangleList;
+        FillCurrentBlendAndRasterStateEXT(pipelineDesc, scissorEnabled);
 
         LLGL::PipelineState* pipeline = renderer_->CreatePipelineState(pipelineDesc);
         if (pipeline == nullptr)
@@ -1979,6 +2268,49 @@ namespace CNA::Internal::Backends::Llgl
         return std::make_unique<LlglOcclusionQueryBackend>(renderer_.get(), queue_, this);
     }
 
+    std::unique_ptr<IEffectBackend> LlglGraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<LlglEffectBackend>(*this);
+        if (!vertSrc.empty() && !fragSrc.empty())
+            backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
+    }
+
+    LLGL::PipelineLayout* LlglGraphicsBackend::AcquireCustomEffectLayoutEXT()
+    {
+        if (customEffectLayout_ != nullptr)
+            return customEffectLayout_;
+
+        // Same three bindings as spriteLayout_ (a custom effect samples the sprite's own texture
+        // at the same slots), except binding 1's constant buffer is readable from BOTH stages: a
+        // custom fragment shader reads pc.uColor from the very same buffer the vertex shader
+        // reads pc.vpSize_pad/pc.uMatrix from, which spriteLayout_'s vertex-only binding does not
+        // allow.
+        LLGL::PipelineLayoutDescriptor layoutDesc;
+        layoutDesc.bindings =
+        {
+            LLGL::BindingDescriptor{"PC", LLGL::ResourceType::Buffer,
+                                    LLGL::BindFlags::ConstantBuffer,
+                                    LLGL::StageFlags::VertexStage | LLGL::StageFlags::FragmentStage, 1},
+            LLGL::BindingDescriptor{"colorMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 2},
+            LLGL::BindingDescriptor{"samplerState", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 3},
+        };
+        layoutDesc.combinedTextureSamplers =
+        {
+            LLGL::CombinedTextureSamplerDescriptor{"colorMap", "colorMap", "samplerState", 2}
+        };
+        customEffectLayout_ = renderer_->CreatePipelineLayout(layoutDesc);
+        if (customEffectLayout_ == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: custom effect pipeline layout creation failed");
+        }
+        return customEffectLayout_;
+    }
+
     void LlglGraphicsBackend::QueueClear(long flags, const float color[4], float depth, std::uint32_t stencil)
     {
         FrameCommand command;
@@ -2206,12 +2538,51 @@ namespace CNA::Internal::Backends::Llgl
         command.target = currentRenderTargetBackend_ != nullptr
             ? currentRenderTargetBackend_->GetLlglRenderTarget()
             : nullptr;
-        command.projectionBuffer = currentRenderTargetBackend_ != nullptr
-            ? currentRenderTargetBackend_->GetSpriteProjectionBuffer()
-            : nullptr;
         command.texture = resolved.texture;
         command.sampler = AcquireSampler(filter, addressU, addressV, samplerMaxAnisotropy_);
-        command.pipeline = AcquireSpritePipeline(scissorEnabled);
+
+        if (currentCustomEffect_ != nullptr)
+        {
+            // A custom effect's own uniform buffer entirely replaces the stock projection buffer
+            // (RT-specific or the frame-global one) at resource index 0 -- see
+            // AcquireCustomEffectLayoutEXT's doc comment for why the binding SHAPE is identical.
+            command.pipeline = currentCustomEffect_->AcquirePipeline(
+                MakeBlendPipelineKey(scissorEnabled), scissorEnabled);
+            command.hasCustomEffectUniform = true;
+            command.customEffectUniformIndex =
+                static_cast<std::uint32_t>(customEffectUniformData_.size() / kCustomEffectUniformFloats);
+            const float* staging = currentCustomEffect_->GetUniformStaging();
+            customEffectUniformData_.insert(customEffectUniformData_.end(),
+                                            staging, staging + kCustomEffectUniformFloats);
+            // vpSize: the PHYSICAL extent spriteVertexData_'s positions above are already baked
+            // into -- the stock shader's own projection (UploadFrameResources) divides by the
+            // real swap-chain resolution, NOT by rect.width/height, which is the LETTERBOXED
+            // destination size under a scaled presentation and can be smaller than the window.
+            // A render target has no letterboxing at all (GetActiveDrawRect's RT branch already
+            // sets rect.width/logicalWidth to the same 1:1 value this uses), so the two agree
+            // there. Not part of the effect's own uniform staging, since it depends on WHERE this
+            // draw lands, not on anything the game's SetUniformX() calls control.
+            float vpWidth = rect.width;
+            float vpHeight = rect.height;
+            if (currentRenderTargetBackend_ == nullptr)
+            {
+                const LLGL::Extent2D resolution = swapChain_->GetResolution();
+                vpWidth = static_cast<float>(resolution.width);
+                vpHeight = static_cast<float>(resolution.height);
+            }
+            const std::size_t base =
+                command.customEffectUniformIndex * kCustomEffectUniformFloats;
+            customEffectUniformData_[base + 0] = vpWidth;
+            customEffectUniformData_[base + 1] = vpHeight;
+        }
+        else
+        {
+            command.pipeline = AcquireSpritePipeline(scissorEnabled);
+            command.projectionBuffer = currentRenderTargetBackend_ != nullptr
+                ? currentRenderTargetBackend_->GetSpriteProjectionBuffer()
+                : nullptr;
+        }
+
         command.firstVertex = firstVertex;
         command.vertexCount = static_cast<std::uint32_t>(kSpriteVerticesPerQuad);
         std::memcpy(command.blendFactor, blendFactor_, sizeof(command.blendFactor));
@@ -2277,6 +2648,32 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->WriteBuffer(*transformBuffers_[index], 0,
                                    transformData_.data() + index * kEffectUniformFloats,
                                    sizeof(float) * kEffectUniformFloats);
+        }
+
+        // One small constant buffer per custom-effect sprite draw this frame -- same reasoning as
+        // transformBuffers_ above: SetUniformX() can legitimately change between two Draw() calls
+        // inside one Begin()/End() block, so a single shared buffer overwritten in place would
+        // leak the LAST draw's values onto every earlier one once the frame is replayed.
+        const std::size_t customEffectUniformCount =
+            customEffectUniformData_.size() / kCustomEffectUniformFloats;
+        while (customEffectUniformBuffers_.size() < customEffectUniformCount)
+        {
+            LLGL::BufferDescriptor uniformDesc;
+            uniformDesc.size = sizeof(float) * kCustomEffectUniformFloats;
+            uniformDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
+            LLGL::Buffer* buffer = renderer_->CreateBuffer(uniformDesc);
+            if (buffer == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: custom effect uniform buffer creation failed");
+            }
+            customEffectUniformBuffers_.push_back(buffer);
+        }
+        for (std::size_t index = 0; index < customEffectUniformCount; ++index)
+        {
+            renderer_->WriteBuffer(*customEffectUniformBuffers_[index], 0,
+                                   customEffectUniformData_.data() + index * kCustomEffectUniformFloats,
+                                   sizeof(float) * kCustomEffectUniformFloats);
         }
 
         if (spriteVertexData_.empty())
@@ -2371,10 +2768,36 @@ namespace CNA::Internal::Backends::Llgl
         pendingQueryHeapReleases_.push_back(queryHeap);
     }
 
+    void LlglGraphicsBackend::ScheduleEffectResourceReleaseEXT(
+        LLGL::Shader* vertexShader, LLGL::Shader* fragmentShader,
+        const std::map<std::uint64_t, LLGL::PipelineState*>& pipelines)
+    {
+        const bool deferred = !frameCommands_.empty();
+
+        for (const auto& entry : pipelines)
+        {
+            if (entry.second == nullptr)
+                continue;
+            if (deferred) pendingPipelineReleases_.push_back(entry.second);
+            else renderer_->Release(*entry.second);
+        }
+        if (vertexShader != nullptr)
+        {
+            if (deferred) pendingShaderReleases_.push_back(vertexShader);
+            else renderer_->Release(*vertexShader);
+        }
+        if (fragmentShader != nullptr)
+        {
+            if (deferred) pendingShaderReleases_.push_back(fragmentShader);
+            else renderer_->Release(*fragmentShader);
+        }
+    }
+
     void LlglGraphicsBackend::ReleasePendingBuffers()
     {
         if (pendingBufferReleases_.empty() && pendingRenderTargetReleases_.empty() &&
-            pendingTextureReleases_.empty() && pendingQueryHeapReleases_.empty())
+            pendingTextureReleases_.empty() && pendingQueryHeapReleases_.empty() &&
+            pendingShaderReleases_.empty() && pendingPipelineReleases_.empty())
         {
             return;
         }
@@ -2409,6 +2832,21 @@ namespace CNA::Internal::Backends::Llgl
                 renderer_->Release(*queryHeap);
         }
         pendingQueryHeapReleases_.clear();
+
+        // Pipelines before their own shader modules -- a pipeline references the shaders it was
+        // built from.
+        for (LLGL::PipelineState* pipeline : pendingPipelineReleases_)
+        {
+            if (pipeline != nullptr)
+                renderer_->Release(*pipeline);
+        }
+        pendingPipelineReleases_.clear();
+        for (LLGL::Shader* shader : pendingShaderReleases_)
+        {
+            if (shader != nullptr)
+                renderer_->Release(*shader);
+        }
+        pendingShaderReleases_.clear();
     }
 
     void LlglGraphicsBackend::FlushPendingFrameEXT()
@@ -2424,6 +2862,7 @@ namespace CNA::Internal::Backends::Llgl
         frameCommands_.clear();
         spriteVertexData_.clear();
         transformData_.clear();
+        customEffectUniformData_.clear();
         frameSubmitted_ = true;
     }
 
@@ -2526,8 +2965,13 @@ namespace CNA::Internal::Backends::Llgl
                         commands_->SetScissor(LLGL::Scissor{command.scissor[0], command.scissor[1],
                                                             command.scissor[2], command.scissor[3]});
                     }
-                    commands_->SetResource(0, command.projectionBuffer != nullptr
-                        ? *command.projectionBuffer : *spriteProjectionBuffer_);
+                    if (command.hasCustomEffectUniform)
+                        commands_->SetResource(0, *customEffectUniformBuffers_[command.customEffectUniformIndex]);
+                    else
+                    {
+                        commands_->SetResource(0, command.projectionBuffer != nullptr
+                            ? *command.projectionBuffer : *spriteProjectionBuffer_);
+                    }
                     commands_->SetResource(1, *command.texture);
                     commands_->SetResource(2, *command.sampler);
                     commands_->SetVertexBuffer(*spriteVertexBuffer_);
@@ -2597,6 +3041,7 @@ namespace CNA::Internal::Backends::Llgl
         frameCommands_.clear();
         spriteVertexData_.clear();
         transformData_.clear();
+        customEffectUniformData_.clear();
         frameSubmitted_ = false;
         backbufferCacheValid_ = false;
     }
@@ -2669,6 +3114,7 @@ namespace CNA::Internal::Backends::Llgl
         frameCommands_.clear();
         spriteVertexData_.clear();
         transformData_.clear();
+        customEffectUniformData_.clear();
         frameSubmitted_ = true;
 
         backbufferCache_.assign(
@@ -3121,10 +3567,14 @@ namespace CNA::Internal::Backends::Llgl
             case CNA::GraphicsCapability::OcclusionQuery:
                 return true;
 
+            // LLGL-27: real ShaderEffect, scoped to SpriteBatch draws (see LlglEffectBackend's
+            // own doc comment).
+            case CNA::GraphicsCapability::CustomEffects:
+                return true;
+
             // Everything below is still unimplemented. Reporting false is what lets a caller ask
             // instead of discovering the gap through an exception.
             case CNA::GraphicsCapability::MultipleRenderTargets:
-            case CNA::GraphicsCapability::CustomEffects:
             case CNA::GraphicsCapability::Texture3D:
                 return false;
         }

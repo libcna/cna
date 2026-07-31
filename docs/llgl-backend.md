@@ -30,11 +30,13 @@ module**:
   swap chain, sample it back onto the screen, and `GetData()` straight off the colour attachment.
   See "Render targets" below for what this does and does not cover;
 * **occlusion queries**: real `LLGL::QueryHeap`-backed `OcclusionQuery`. See "Occlusion queries"
-  below for how `IsComplete()`/`PixelCount()` behave on this backend.
+  below for how `IsComplete()`/`PixelCount()` behave on this backend;
+* **custom `ShaderEffect`s**, scoped to `SpriteBatch` draws. See "Custom effects" below for the
+  runtime compile path and the uniform contract.
 
 **Not implemented:** `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
 `RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, cube and
-volume textures, custom `ShaderEffect`s.
+volume textures.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -72,6 +74,10 @@ is a hard error.
 
 ```bash
 sudo apt-get install -y libgl1-mesa-dev libx11-dev libxrandr-dev libxext-dev libvulkan-dev
+# LLGL-27: runtime GLSL->SPIR-V compile for custom ShaderEffects on the Vulkan module. Only the
+# runtime .so is needed (no -dev package, no headers -- CMake hand-declares the small ABI subset
+# it calls); libshaderc-dev also satisfies the same find_library() if it happens to be installed.
+sudo apt-get install -y libshaderc1
 # to regenerate the shader header (not needed for a normal build):
 sudo apt-get install -y glslang-tools
 ```
@@ -185,6 +191,50 @@ Two things are worth knowing:
   used to avoid a CPU stall. This is a deliberate, documented trade of that performance
   characteristic for a result that is always immediately correct.
 
+## Custom effects
+
+`Microsoft::Xna::Framework::Graphics::ShaderEffect` (`NOXNA`) compiles hand-authored GLSL vertex
+and fragment source and draws through it. It is **scoped to `SpriteBatch` draws only** -- the
+vertex shader is bound to the fixed sprite `position`/`texCoord`/`color` layout, not an arbitrary
+`VertexDeclaration` a 3D draw might use, mirroring the native `VULKAN` backend's own
+`VulkanEffectBackend` scope exactly rather than inventing a new limitation:
+
+```cpp
+ShaderEffect fx(device, vertexGlslSource, fragmentGlslSource);   // always real GLSL text
+fx.SetUniformVec4("uColor", 1.0f, 0.0f, 0.0f, 1.0f);              // name accepted, not consulted
+spriteBatch.Begin(SpriteSortMode::Immediate, BlendState::Opaque, nullptr, nullptr, nullptr, &fx);
+```
+
+Unlike the `VULKAN` backend (which expects the caller to hand it pre-compiled SPIR-V, since it
+names one fixed native API -- see `docs/shader-effect-vs-fx-bytecode.md`), `vertSrc`/`fragSrc` are
+**always real GLSL text** here: this backend picks its module at runtime, so the game has no
+reliable way to know in advance which form to hand over. `CompileProgram()` (via the public
+`ShaderEffect` constructor) hands the GLSL to LLGL directly when the loaded module accepts it
+(OpenGL), or compiles it to SPIR-V first through a real runtime `libshaderc` call when it does not
+(Vulkan) -- the same problem this project's `SDL_GPU` backend already solved the same way.
+
+Named-uniform setters (`SetUniformMat4`/`Vec4`/`Vec3`/`Vec2`/`Float`/`Int`) do **not** do real
+name-based reflection -- LLGL exposes none for a raw GLSL/SPIR-V module, and adding one would need
+a new dependency (SPIRV-Cross or similar). They map onto a fixed 32-float (128-byte) uniform block,
+identical to the native Vulkan backend's own documented `VulkanEffectBackend::pushConst_` layout,
+uploaded to a real constant buffer at binding 1 instead of a Vulkan push constant:
+
+```glsl
+layout(std140, binding = 1) uniform PC {
+    vec4 vpSize_pad;  // xy = viewport/target size in pixels; set automatically, not by the game
+    mat4 uMatrix;     // SetUniformMat4
+    vec4 uColor;      // SetUniformVec4 / Vec3 (leaves w) / Vec2 (leaves z, w)
+    vec4 uFloats;     // uFloats.x only -- SetUniformFloat / Int
+} pc;
+```
+
+`name` is accepted (matching the shared `IEffectBackend` signature every backend implements) but
+not consulted -- matching the same established precedent rather than inventing new semantics.
+`colorMap`/`samplerState` (binding 2/3) sample the sprite's own texture, exactly as the stock
+sprite shader does; there is no way yet to bind a second texture unit to a custom effect on this
+backend. See `examples/llgl_shadereffect_test.cpp` for a complete worked example, including the
+vertex shader's own pixel-to-NDC technique.
+
 ## Tests
 
 ```bash
@@ -201,9 +251,11 @@ textures, tinting, alpha, fog and the alpha test, `Llgl_Lighting` covers ambient
 specular/emissive lighting, and `Llgl_RenderTarget` covers drawing into a `RenderTarget2D`,
 unbinding back to the swap chain, sampling the target back onto the screen, and `GetData()`.
 `Llgl_OcclusionQuery` covers a fully visible quad, a fully occluded one (real depth test), and two
-draws inside one `Begin()`/`End()` summing their contributions.
+draws inside one `Begin()`/`End()` summing their contributions. `Llgl_ShaderEffect` covers a
+custom GLSL shader genuinely tinting a sprite by its own uniform, against a stock-shader control
+case that must not show the tint.
 Every one of them is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All eighteen
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All twenty
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
@@ -224,7 +276,8 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog, the alpha test, and per-pixel lighting (textured draws only); the remaining stock effects are not implemented. |
 | `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |
 | `OcclusionQuery` | yes | Real `LLGL::QueryHeap`-backed queries — see "Occlusion queries" above for how `IsComplete()`/`PixelCount()` behave on this backend. |
-| `MultipleRenderTargets`, `CustomEffects`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |
+| `CustomEffects` | yes | Real `ShaderEffect`, scoped to `SpriteBatch` draws — see "Custom effects" above. |
+| `MultipleRenderTargets`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |
 
 There is no standalone `SupportsCapability` flag for single-target `RenderTarget2D` support (XNA
 has none either) — `CreateRenderTarget2D` returning a real backend instead of null is the signal,

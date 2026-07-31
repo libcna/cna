@@ -427,6 +427,115 @@ namespace CNA::Internal::Backends::Llgl
     };
 
     /**
+     * @brief A custom, hand-authored GLSL shader living in LLGL. NOXNA.
+     *
+     * Backs `Microsoft::Xna::Framework::Graphics::ShaderEffect`. Scoped to `SpriteBatch` draws
+     * only (the same scope the project's native Vulkan backend's own `VulkanEffectBackend`
+     * already established for exactly the same reason: a custom effect's vertex shader is bound
+     * to the fixed `position/texCoord/color` sprite vertex layout, not an arbitrary
+     * `VertexDeclaration` a game's own 3D draw might use).
+     *
+     * `vertSrc`/`fragSrc` are always GLSL source text -- unlike the native Vulkan backend (which
+     * expects the caller to hand it pre-compiled SPIR-V, since it names one fixed native API),
+     * this backend picks its module at runtime, so the game has no reliable way to know in
+     * advance whether it needs to hand over GLSL or SPIR-V. `CompileProgram()` compiles the GLSL
+     * directly when the loaded module accepts it (OpenGL), or through a real runtime
+     * GLSL-\>SPIR-V compile via `libshaderc` when it does not (Vulkan) -- the same problem this
+     * project's `SDL_GPU` backend already solved the same way.
+     *
+     * Named-uniform setters (`SetUniformMat4`/`Vec4`/... ) do not do real name-based reflection --
+     * LLGL exposes none for a raw GLSL/SPIR-V module, and adding one would need a new dependency
+     * (e.g. SPIRV-Cross) -- they map onto the SAME fixed 32-float (128-byte) staging block
+     * `VulkanEffectBackend::pushConst_` already documents and this class's own `.cpp` doc comment
+     * repeats verbatim, uploaded to a real constant buffer instead of a Vulkan push constant.
+     * `name` is accepted (matching the shared `IEffectBackend` signature) but not consulted,
+     * exactly like the existing precedent. A custom shader's own GLSL therefore declares a
+     * `uniform PC { vec4 vpSize_pad; mat4 uMatrix; vec4 uColor; float uFloat0; ... } pc;`-shaped
+     * block at binding 1, matching every other CNA backend that has this same convention.
+     */
+    class LlglEffectBackend final : public IEffectBackend
+    {
+    public:
+        /**
+         * @brief Binds this effect to the backend that will compile and draw it.
+         *
+         * @param owner Backend that owns the render system, the shared custom-effect pipeline
+         *              layout, and the frame this effect's draws are queued into.
+         */
+        explicit LlglEffectBackend(LlglGraphicsBackend& owner);
+
+        /** @brief Releases this effect's shader modules and cached pipelines (deferred if a frame
+         *  may reference them). */
+        ~LlglEffectBackend() override;
+
+        LlglEffectBackend(const LlglEffectBackend&) = delete;
+        LlglEffectBackend& operator=(const LlglEffectBackend&) = delete;
+
+        /**
+         * @brief Compiles the vertex/fragment GLSL source.
+         *
+         * @param vertSrc GLSL vertex shader source (not a file path).
+         * @param fragSrc GLSL fragment shader source (not a file path).
+         * @return True on success; false if compilation failed (see `GetCompileError()`).
+         */
+        bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
+
+        /** @brief Marks this effect as the one `SpriteBatch` draws through until `Unbind()`/a new
+         *  `Bind()`. No-op if `CompileProgram()` did not succeed. */
+        void Bind() override;
+
+        /** @brief Clears this effect as the active one, restoring the stock sprite shader. */
+        void Unbind() override;
+
+        /** @brief Returns whether `CompileProgram()` succeeded. */
+        [[nodiscard]] bool IsValid() const override;
+
+        /** @brief Returns the last compilation error, or empty if none. */
+        [[nodiscard]] std::string GetCompileError() const override;
+
+        /** @brief Sets the 4x4 `uMatrix` uniform (column-major), taking effect for draws queued
+         *  from this call onward. `name` is accepted but not consulted -- see this class's own
+         *  doc comment. */
+        void SetUniformMat4(const char* name, const float* matrix) override;
+        /** @brief Sets the `uColor` uniform's x/y/z/w. `name` is accepted but not consulted. */
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
+        /** @brief Sets the `uColor` uniform's x/y/z, leaving w unchanged. `name` is accepted but
+         *  not consulted. */
+        void SetUniformVec3(const char* name, float x, float y, float z) override;
+        /** @brief Sets the `uColor` uniform's x/y, leaving z/w unchanged. `name` is accepted but
+         *  not consulted. */
+        void SetUniformVec2(const char* name, float x, float y) override;
+        /** @brief Sets the single `uFloat0` uniform. `name` is accepted but not consulted -- see
+         *  this class's own doc comment. */
+        void SetUniformFloat(const char* name, float value) override;
+        /** @brief Sets the single `uFloat0` uniform from an int. `name` is accepted but not
+         *  consulted. */
+        void SetUniformInt(const char* name, int value) override;
+
+        /** @brief Returns the compiled vertex shader, or null before a successful CompileProgram(). */
+        [[nodiscard]] LLGL::Shader* GetVertexShader() const { return vertexShader_; }
+        /** @brief Returns the compiled fragment shader, or null before a successful CompileProgram(). */
+        [[nodiscard]] LLGL::Shader* GetFragmentShader() const { return fragmentShader_; }
+        /** @brief Returns (creating if needed) the pipeline for the given blend/scissor state. */
+        [[nodiscard]] LLGL::PipelineState* AcquirePipeline(std::uint64_t blendKey, bool scissorEnabled);
+        /** @brief Returns this effect's current 32-float uniform staging block (see this class's
+         *  own doc comment for the byte layout); `[0]`/`[1]` (vpSize) are overwritten by the
+         *  caller just before queuing, every other field reflects the last `SetUniformX()` call. */
+        [[nodiscard]] const float* GetUniformStaging() const { return uniformStaging_; }
+
+    private:
+        LlglGraphicsBackend& owner_;
+        LLGL::Shader* vertexShader_   = nullptr;
+        LLGL::Shader* fragmentShader_ = nullptr;
+        std::string compileError_;
+        bool valid_ = false;
+        std::map<std::uint64_t, LLGL::PipelineState*> pipelineCache_;
+        // [0..1]=vpSize (overwritten per draw by the caller), [2..3]=padding,
+        // [4..19]=uMatrix, [20..23]=uColor, [24..31]=uFloats (only [24]=uFloat0 is ever written).
+        float uniformStaging_[32] = {};
+    };
+
+    /**
      * @brief Sprite rendering for `Microsoft::Xna::Framework::Graphics::SpriteBatch`. NOXNA.
      *
      * Each `Draw` turns into six vertices appended to the owning backend's frame, so sprites from
@@ -469,6 +578,19 @@ namespace CNA::Internal::Backends::Llgl
          * @param addressV Raw `TextureAddressMode` ordinal for V.
          */
         void SetSamplerAddressMode(int addressU, int addressV) override;
+
+        /**
+         * @brief Activates (or clears) the custom `ShaderEffect` this block's draws go through.
+         *
+         * Called by `SpriteBatch::Begin()`/`End()` (LLGL-27), not by the game directly. A non-null
+         * @p effect is `Apply()`'d immediately, which -- for a `ShaderEffect` -- binds its
+         * `LlglEffectBackend` (`IEffectBackend::Bind()`) and makes it the one every `Draw()` in
+         * this block resolves through; null restores the stock sprite shader. Mirrors the native
+         * Vulkan backend's own `VulkanSpriteBatchBackend` integration point.
+         *
+         * @param effect Custom effect to apply, or null to restore the stock sprite shader.
+         */
+        void SetCustomEffect(Effect* effect) override;
 
         /**
          * @brief Draws a whole texture at a position, unscaled and untinted.
@@ -780,6 +902,20 @@ namespace CNA::Internal::Backends::Llgl
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
         /**
+         * @brief Creates a custom `ShaderEffect` backend.
+         *
+         * Compiling immediately if both @p vertSrc and @p fragSrc are non-empty, matching the
+         * shared `ShaderEffect` constructor's own convention (see `CreateEffectBackend`'s use in
+         * `ShaderEffect.cpp`).
+         *
+         * @param vertSrc GLSL vertex shader source.
+         * @param fragSrc GLSL fragment shader source.
+         * @return The new effect backend; never null (check `IsEffectValid()` for compile success).
+         */
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
+
+        /**
          * @brief Applies a `BlendState`.
          *
          * @param colorSrcBlend  Raw `Blend` ordinal for the colour source factor.
@@ -1065,6 +1201,82 @@ namespace CNA::Internal::Backends::Llgl
         void QueueQueryEndEXT(LLGL::QueryHeap* queryHeap);
 
         /**
+         * @brief Defers releasing a `ShaderEffect`'s shader modules and cached pipelines, same
+         * reasoning as `ScheduleRenderTargetReleaseEXT`/`ScheduleQueryHeapReleaseEXT`: a
+         * `ShaderEffect` that goes out of scope before `Present()` is a perfectly ordinary
+         * pattern, and `frameCommands_` may still reference one of its cached pipelines by raw
+         * pointer.
+         *
+         * @param vertexShader   The effect's vertex shader, or null.
+         * @param fragmentShader The effect's fragment shader, or null.
+         * @param pipelines      Every pipeline this effect's own cache built; may be empty.
+         */
+        void ScheduleEffectResourceReleaseEXT(LLGL::Shader* vertexShader, LLGL::Shader* fragmentShader,
+                                              const std::map<std::uint64_t, LLGL::PipelineState*>& pipelines);
+
+        /**
+         * @brief Returns (creating the shared layout on first use) the pipeline a custom
+         * `ShaderEffect` draws through for the current blend/scissor state.
+         *
+         * Called by `LlglEffectBackend::AcquirePipeline()`; not part of the shared backend
+         * interface. Every custom effect shares the same `LLGL::PipelineLayout`
+         * (`customEffectLayout_`) -- only the shader modules and cached `LLGL::PipelineState`
+         * differ per effect -- so this only builds the layout once, on the first `ShaderEffect`
+         * any game constructs.
+         *
+         * @return The shared custom-effect pipeline layout; never null.
+         */
+        [[nodiscard]] LLGL::PipelineLayout* AcquireCustomEffectLayoutEXT();
+
+        /** @brief Returns the render system, for `LlglEffectBackend` to create/release its own
+         *  shader modules and pipelines with. */
+        [[nodiscard]] LLGL::RenderSystem* GetRenderSystemEXT() const { return renderer_.get(); }
+
+        /** @brief Returns the render pass every pipeline in this backend is built against (the
+         *  swap chain's own) -- see `plan_llgl.md` LLGL-26 on why a render-target pass is
+         *  compatible with it too. Null before the swap chain exists. */
+        [[nodiscard]] const LLGL::RenderPass* GetPrimaryRenderPassEXT() const
+        {
+            return swapChain_ != nullptr ? swapChain_->GetRenderPass() : nullptr;
+        }
+
+        /** @brief Returns the loaded module's rendering capabilities, for `LlglEffectBackend` to
+         *  decide whether it can hand its GLSL source to LLGL directly or must compile it to
+         *  SPIR-V first. */
+        [[nodiscard]] const LLGL::RenderingCapabilities& GetRenderingCapsEXT() const
+        {
+            return renderer_->GetRenderingCaps();
+        }
+
+        /**
+         * @brief Fills a graphics pipeline descriptor's rasterizer/blend/depth fields from the
+         * CURRENT device state, identically to what the stock sprite pipeline
+         * (`AcquireSpritePipeline`) itself is built from.
+         *
+         * Shared rather than duplicated so a custom effect's pipeline responds to
+         * `ApplyBlendState`/`SetScissorRect` exactly the same way the stock one does.
+         *
+         * @param pipelineDesc  Descriptor to fill; `vertexShader`/`fragmentShader`/`pipelineLayout`/
+         *                      `renderPass`/`primitiveTopology` are the caller's own responsibility.
+         * @param scissorEnabled Whether the current scissor rectangle applies to this draw.
+         */
+        void FillCurrentBlendAndRasterStateEXT(LLGL::GraphicsPipelineDescriptor& pipelineDesc,
+                                               bool scissorEnabled) const;
+
+        /** @brief Marks @p effect as the one `SpriteBatch` draws through. Called by
+         *  `LlglEffectBackend::Bind()`; not part of the shared backend interface. */
+        void SetCurrentCustomEffectEXT(LlglEffectBackend* effect) { currentCustomEffect_ = effect; }
+
+        /** @brief Clears @p effect as the active custom effect, but only if it still is one --
+         *  guards against a stale `Unbind()`/destructor call after a DIFFERENT effect was already
+         *  bound. Called by `LlglEffectBackend::Unbind()`/its destructor. */
+        void ClearCurrentCustomEffectEXT(LlglEffectBackend* effect)
+        {
+            if (currentCustomEffect_ == effect)
+                currentCustomEffect_ = nullptr;
+        }
+
+        /**
          * @brief Submits any queued-but-not-yet-submitted frame commands and waits for them to
          * finish, without presenting.
          *
@@ -1145,6 +1357,14 @@ namespace CNA::Internal::Backends::Llgl
 
             /** @brief QueryBegin/QueryEnd only: the occlusion query heap to begin/end. */
             LLGL::QueryHeap* queryHeap    = nullptr;
+
+            /** @brief Sprite only: true when a custom `ShaderEffect` was bound at queue time, in
+             *  which case `customEffectUniformIndex` (not `projectionBuffer`) names this draw's
+             *  own uniform buffer. */
+            bool             hasCustomEffectUniform = false;
+            /** @brief Sprite only, when `hasCustomEffectUniform`: index into the frame's per-draw
+             *  custom-effect uniform buffer pool. */
+            std::uint32_t    customEffectUniformIndex = 0;
         };
 
         /** @brief The letterboxed destination rectangle of the logical canvas, in window pixels. */
@@ -1233,6 +1453,22 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::Shader*               primitiveTexturedFragmentShader_ = nullptr;
         LLGL::Shader*               primitiveLitFragmentShader_ = nullptr;
 
+        /// Shared by every `LlglEffectBackend` (LLGL-27); built lazily by
+        /// AcquireCustomEffectLayoutEXT() on the first `ShaderEffect` any game constructs. Unlike
+        /// spriteLayout_, binding 1's constant buffer is readable from both stages -- a custom
+        /// fragment shader reads pc.uColor from the very same buffer the vertex shader reads
+        /// pc.vpSize_pad/pc.uMatrix from.
+        LLGL::PipelineLayout*       customEffectLayout_ = nullptr;
+        /// Non-owning; null means "no custom effect bound, use the stock sprite shader". Set by
+        /// LlglEffectBackend::Bind()/Unbind(), consulted when a Sprite command is queued.
+        LlglEffectBackend*          currentCustomEffect_ = nullptr;
+        /// One small constant buffer per custom-effect sprite draw in a frame -- same reasoning as
+        /// transformBuffers_/transformData_: SetUniformX() can legitimately change between two
+        /// Draw() calls inside one Begin()/End() block, so one shared buffer overwritten in place
+        /// would leak the LAST draw's values onto every earlier one once the frame is replayed.
+        std::vector<LLGL::Buffer*>  customEffectUniformBuffers_;
+        std::vector<float>         customEffectUniformData_;
+
         std::map<std::uint64_t, LLGL::PipelineState*> pipelineCache_;
         std::map<std::uint64_t, LLGL::Sampler*>       samplerCache_;
         std::map<std::uint64_t, LLGL::PipelineState*> primitivePipelineCache_;
@@ -1260,6 +1496,10 @@ namespace CNA::Internal::Backends::Llgl
         /// before the frame that may still reference them was submitted. See
         /// ScheduleQueryHeapReleaseEXT.
         std::vector<LLGL::QueryHeap*> pendingQueryHeapReleases_;
+        /// A destroyed ShaderEffect's own shader modules and cached pipelines, deferred for the
+        /// same reason as pendingRenderTargetReleases_. See ScheduleEffectResourceReleaseEXT.
+        std::vector<LLGL::Shader*> pendingShaderReleases_;
+        std::vector<LLGL::PipelineState*> pendingPipelineReleases_;
 
         std::vector<float>          spriteVertexData_;
         std::vector<FrameCommand>   frameCommands_;
