@@ -154,9 +154,21 @@ namespace CNA::Internal::Backends::Sokol
      * when both reference the same sg_image (see the "offscreen rendering" section of
      * sokol_gfx.h's own doc comment).
      *
-     * Scope for this task: a single, non-multisampled, non-mipmapped target. `RenderTargetCube`,
-     * MRT and MSAA render targets are not implemented yet (plan_sokol.md SOKOL-26) and
-     * `CreateRenderTarget2D` refuses them explicitly rather than silently downgrading the request.
+     * plan_sokol.md SOKOL-26: when @p multiSampleCount is greater than 1 (after clamping to the
+     * driver's `GL_MAX_SAMPLES`), this class follows sokol_gfx.h's own documented MSAA offscreen
+     * workflow -- a multisample-only colour image (`usage.color_attachment`, `sample_count > 1`)
+     * that a pass renders into, plus a *separate* single-sample resolve image
+     * (`usage.resolve_attachment`) that sokol_gfx automatically resolves into at `sg_end_pass()`
+     * once the pass names both attachment views. `colorImageId_`/`colorTextureViewId_` always name
+     * the single-sample image (the resolve target when MSAA is active, the only image otherwise),
+     * so sampling this target as a texture is unaffected by whether MSAA is on. A multisampled
+     * depth-stencil image is allocated alongside the multisample colour image when both MSAA and a
+     * depth-stencil attachment are requested -- it is never resolved (nothing here reads a render
+     * target's depth back), matching every other backend's MSAA depth handling.
+     *
+     * Scope for this task: a single, non-mipmapped target. `RenderTargetCube` MSAA and MRT are not
+     * implemented yet (plan_sokol.md SOKOL-26's remaining items) and `CreateRenderTarget2D` refuses
+     * a mipmapped request explicitly rather than silently downgrading it.
      * `GetData()` (reading a rendered target back to the CPU) is not implemented either -- it
      * would need either sokol's opaque per-backend image handle exposed for a raw GL readback (the
      * approach ReadBackbuffer() already uses for the window's own framebuffer) or an injected,
@@ -172,8 +184,11 @@ namespace CNA::Internal::Backends::Sokol
          * @param width       Target width in pixels.
          * @param height      Target height in pixels.
          * @param hasDepthStencil True to also allocate a combined depth-stencil attachment.
+         * @param multiSampleCount Requested MSAA sample count; 0 or 1 means no MSAA. Clamped to the
+         *                         driver's `GL_MAX_SAMPLES` -- see GetMultiSampleCount() for the
+         *                         real, applied value.
          */
-        SokolRenderTargetBackend(int width, int height, bool hasDepthStencil);
+        SokolRenderTargetBackend(int width, int height, bool hasDepthStencil, int multiSampleCount);
 
         /** @brief Destroys every sokol_gfx view and image owned by this target. */
         ~SokolRenderTargetBackend() override;
@@ -215,17 +230,33 @@ namespace CNA::Internal::Backends::Sokol
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
 
         /**
-         * @brief Returns the raw sokol_gfx colour image handle id. NOXNA.
+         * @brief Returns the real, driver-clamped MSAA sample count this target was created with.
+         * @return Sample count greater than 1 when MSAA is active; 0 when it is not.
+         */
+        [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+
+        /**
+         * @brief Returns the raw sokol_gfx colour image handle id -- the single-sample image that
+         * is sampled as a texture (the MSAA resolve target when MSAA is active). NOXNA.
          * @return sg_image id, or 0 when creation failed.
          */
         NOXNA [[nodiscard]] std::uint32_t GetColorImageIdEXT() const { return colorImageId_; }
 
         /**
          * @brief Returns the raw sokol_gfx colour-attachment view handle id, used when this
-         * target is the active render target. NOXNA.
+         * target is the active render target. This names the multisample image's attachment view
+         * when MSAA is active, and the single-sample image's otherwise. NOXNA.
          * @return sg_view id, or 0 when creation failed.
          */
         NOXNA [[nodiscard]] std::uint32_t GetColorAttachmentViewIdEXT() const { return colorAttachmentViewId_; }
+
+        /**
+         * @brief Returns the raw sokol_gfx resolve-attachment view handle id, wired into a pass's
+         * `attachments.resolves[0]` so sokol_gfx resolves the MSAA colour image into the
+         * single-sample image at `sg_end_pass()`. NOXNA.
+         * @return sg_view id, or 0 when this target is not multisampled.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetResolveAttachmentViewIdEXT() const { return resolveAttachmentViewId_; }
 
         /**
          * @brief Returns the raw sokol_gfx texture-view handle id, used to sample this target as
@@ -243,8 +274,13 @@ namespace CNA::Internal::Backends::Sokol
     private:
         int width_ = 0;
         int height_ = 0;
+        int multiSampleCount_ = 0;
         std::uint32_t colorImageId_ = 0;
         std::uint32_t colorAttachmentViewId_ = 0;
+        /// Only allocated when multiSampleCount_ > 0: the multisample-only image colorAttachmentViewId_
+        /// actually attaches to. colorImageId_ is the separate single-sample resolve image in that case.
+        std::uint32_t msaaColorImageId_ = 0;
+        std::uint32_t resolveAttachmentViewId_ = 0;
         std::uint32_t colorTextureViewId_ = 0;
         std::uint32_t depthStencilImageId_ = 0;
         std::uint32_t depthStencilAttachmentViewId_ = 0;
@@ -1367,6 +1403,10 @@ namespace CNA::Internal::Backends::Sokol
             int depthFunc;
             /// See Pipeline3DKey's identical field for why this has to be part of the key.
             bool hasDepthAttachment;
+            /// See Pipeline3DKey's identical field: sokol_gfx requires a pipeline's sample_count to
+            /// match the pass it draws into, and a RenderTarget2D's MSAA count is independent of
+            /// both the swapchain's and every other render target's.
+            int sampleCount;
 
             bool operator==(const PipelineKey& other) const;
         };
@@ -1450,6 +1490,11 @@ namespace CNA::Internal::Backends::Sokol
             /// always produces bit-identical floats here.
             float depthBias;
             float slopeScaleDepthBias;
+            /// The active pass's real sample count (the bound RenderTarget2D's MSAA count if one is
+            /// bound and multisampled, otherwise the swapchain's) -- sokol_gfx bakes sample_count
+            /// into the pipeline object and rejects a mismatch against the pass it draws into
+            /// (plan_sokol.md SOKOL-26).
+            int sampleCount;
             int cullMode;
             int primitiveType;
             /// Raw sg_index_type: sokol_gfx bakes the index type into the pipeline, and rejects
@@ -1532,6 +1577,13 @@ namespace CNA::Internal::Backends::Sokol
         /// DrawColored3D's Pipeline3DKey construction -- sokol_gfx bakes the attachment's pixel
         /// format into every pipeline, so all three need the identical answer.
         [[nodiscard]] bool CurrentPassHasDepthStencilAttachmentEXT() const;
+        /// Returns the real sample count of whatever is currently the draw target: a bound
+        /// RenderTarget2D's own (device-clamped) MultiSampleCount when it is multisampled, 1 when
+        /// it is bound but not, and the swapchain's sampleCount_ otherwise. A RenderTargetCube face
+        /// is never multisampled yet (plan_sokol.md SOKOL-26's remaining item), so it always
+        /// answers 1. Shared by GetSpritePipeline and DrawColored3D's Pipeline3DKey construction,
+        /// mirroring CurrentPassHasDepthStencilAttachmentEXT's rationale.
+        [[nodiscard]] int CurrentPassSampleCountEXT() const;
 
         SDL_Window* window_ = nullptr;
         void* glContext_ = nullptr;

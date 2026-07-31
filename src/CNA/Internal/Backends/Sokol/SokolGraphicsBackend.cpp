@@ -606,22 +606,54 @@ namespace CNA::Internal::Backends::Sokol
     // SokolRenderTargetBackend
     // ---------------------------------------------------------------------------------------
 
-    SokolRenderTargetBackend::SokolRenderTargetBackend(int width, int height, bool hasDepthStencil)
+    SokolRenderTargetBackend::SokolRenderTargetBackend(int width, int height, bool hasDepthStencil,
+                                                        int multiSampleCount)
         : width_(width)
         , height_(height)
     {
         if (width <= 0 || height <= 0)
             throw std::runtime_error("Sokol backend: render target dimensions must be positive");
 
+        // Clamp to the driver's real maximum, mirroring EasyGLGraphicsBackend's identical
+        // GL_MAX_SAMPLES clamp for its own MSAA render targets (plan_sokol.md SOKOL-26):
+        // glRenderbufferStorageMultisample/sg_make_image would otherwise fail outright for a
+        // sample count the driver cannot provide. GetMultiSampleCount() reports this real value,
+        // not the raw request, matching RenderTarget2D.MultiSampleCount's own FNA3D semantics.
+        if (multiSampleCount > 1)
+        {
+#if CNA_SOKOL_HAS_GL_READBACK
+            GLint maxSamples = 0;
+            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+            multiSampleCount_ = maxSamples > 1 ? std::min(multiSampleCount, static_cast<int>(maxSamples))
+                                                : 1;
+#else
+            multiSampleCount_ = 1;
+#endif
+            if (multiSampleCount_ <= 1) multiSampleCount_ = 0;
+        }
+        const bool msaa = multiSampleCount_ > 1;
+
         sg_image_desc colorDesc = {};
         colorDesc.type = SG_IMAGETYPE_2D;
-        colorDesc.usage.color_attachment = true;
         colorDesc.width = width_;
         colorDesc.height = height_;
         colorDesc.num_mipmaps = 1;
-        colorDesc.sample_count = 1;
         colorDesc.pixel_format = SG_PIXELFORMAT_RGBA8;
-        colorDesc.label = "cna_render_target_color";
+        if (msaa)
+        {
+            // sokol_gfx.h's own "offscreen rendering"/MSAA doc comment: colorImageId_ becomes the
+            // single-sample RESOLVE image here (never rendered into directly), while a separate
+            // multisample-only image is what the pass actually attaches for drawing.
+            colorDesc.usage.resolve_attachment = true;
+            colorDesc.sample_count = 1;
+            colorDesc.label = "cna_render_target_color_resolve";
+        }
+        else
+        {
+            colorDesc.usage.color_attachment = true;
+            colorDesc.sample_count = 1;
+            colorDesc.label = "cna_render_target_color";
+        }
         colorImageId_ = sg_make_image(&colorDesc).id;
         if (sg_query_image_state(MakeImageHandle(colorImageId_)) != SG_RESOURCESTATE_VALID)
         {
@@ -629,16 +661,60 @@ namespace CNA::Internal::Backends::Sokol
             throw std::runtime_error("Sokol backend: sg_make_image failed for a RenderTarget2D's colour image");
         }
 
+        if (msaa)
+        {
+            sg_image_desc msaaColorDesc = {};
+            msaaColorDesc.type = SG_IMAGETYPE_2D;
+            msaaColorDesc.usage.color_attachment = true;
+            msaaColorDesc.width = width_;
+            msaaColorDesc.height = height_;
+            msaaColorDesc.num_mipmaps = 1;
+            msaaColorDesc.sample_count = multiSampleCount_;
+            msaaColorDesc.pixel_format = SG_PIXELFORMAT_RGBA8;
+            msaaColorDesc.label = "cna_render_target_color_msaa";
+            msaaColorImageId_ = sg_make_image(&msaaColorDesc).id;
+            if (sg_query_image_state(MakeImageHandle(msaaColorImageId_)) != SG_RESOURCESTATE_VALID)
+            {
+                msaaColorImageId_ = 0;
+                sg_destroy_image(MakeImageHandle(colorImageId_));
+                colorImageId_ = 0;
+                throw std::runtime_error(
+                    "Sokol backend: sg_make_image failed for a RenderTarget2D's MSAA colour image");
+            }
+        }
+
         sg_view_desc colorAttachmentDesc = {};
-        colorAttachmentDesc.color_attachment.image = MakeImageHandle(colorImageId_);
+        colorAttachmentDesc.color_attachment.image = MakeImageHandle(msaa ? msaaColorImageId_ : colorImageId_);
         colorAttachmentDesc.label = "cna_render_target_color_attachment_view";
         colorAttachmentViewId_ = sg_make_view(&colorAttachmentDesc).id;
         if (sg_query_view_state(MakeViewHandle(colorAttachmentViewId_)) != SG_RESOURCESTATE_VALID)
         {
             colorAttachmentViewId_ = 0;
+            if (msaaColorImageId_ != 0) sg_destroy_image(MakeImageHandle(msaaColorImageId_));
+            msaaColorImageId_ = 0;
             sg_destroy_image(MakeImageHandle(colorImageId_));
             colorImageId_ = 0;
             throw std::runtime_error("Sokol backend: sg_make_view (colour attachment) failed for a RenderTarget2D");
+        }
+
+        if (msaa)
+        {
+            sg_view_desc resolveDesc = {};
+            resolveDesc.resolve_attachment.image = MakeImageHandle(colorImageId_);
+            resolveDesc.label = "cna_render_target_resolve_attachment_view";
+            resolveAttachmentViewId_ = sg_make_view(&resolveDesc).id;
+            if (sg_query_view_state(MakeViewHandle(resolveAttachmentViewId_)) != SG_RESOURCESTATE_VALID)
+            {
+                resolveAttachmentViewId_ = 0;
+                sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
+                colorAttachmentViewId_ = 0;
+                sg_destroy_image(MakeImageHandle(msaaColorImageId_));
+                msaaColorImageId_ = 0;
+                sg_destroy_image(MakeImageHandle(colorImageId_));
+                colorImageId_ = 0;
+                throw std::runtime_error(
+                    "Sokol backend: sg_make_view (resolve attachment) failed for a RenderTarget2D");
+            }
         }
 
         sg_view_desc colorTextureDesc = {};
@@ -648,8 +724,12 @@ namespace CNA::Internal::Backends::Sokol
         if (sg_query_view_state(MakeViewHandle(colorTextureViewId_)) != SG_RESOURCESTATE_VALID)
         {
             colorTextureViewId_ = 0;
+            if (resolveAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(resolveAttachmentViewId_));
+            resolveAttachmentViewId_ = 0;
             sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
             colorAttachmentViewId_ = 0;
+            if (msaaColorImageId_ != 0) sg_destroy_image(MakeImageHandle(msaaColorImageId_));
+            msaaColorImageId_ = 0;
             sg_destroy_image(MakeImageHandle(colorImageId_));
             colorImageId_ = 0;
             throw std::runtime_error("Sokol backend: sg_make_view (texture) failed for a RenderTarget2D");
@@ -663,7 +743,10 @@ namespace CNA::Internal::Backends::Sokol
         depthDesc.width = width_;
         depthDesc.height = height_;
         depthDesc.num_mipmaps = 1;
-        depthDesc.sample_count = 1;
+        // A multisampled colour attachment requires a depth-stencil attachment with the identical
+        // sample count in the same pass (sokol_gfx's VALIDATE_BEGINPASS_..._SAMPLECOUNT). It is
+        // never resolved -- nothing here reads a render target's depth-stencil content back.
+        depthDesc.sample_count = msaa ? multiSampleCount_ : 1;
         depthDesc.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
         depthDesc.label = "cna_render_target_depth_stencil";
         depthStencilImageId_ = sg_make_image(&depthDesc).id;
@@ -672,8 +755,12 @@ namespace CNA::Internal::Backends::Sokol
             depthStencilImageId_ = 0;
             sg_destroy_view(MakeViewHandle(colorTextureViewId_));
             colorTextureViewId_ = 0;
+            if (resolveAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(resolveAttachmentViewId_));
+            resolveAttachmentViewId_ = 0;
             sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
             colorAttachmentViewId_ = 0;
+            if (msaaColorImageId_ != 0) sg_destroy_image(MakeImageHandle(msaaColorImageId_));
+            msaaColorImageId_ = 0;
             sg_destroy_image(MakeImageHandle(colorImageId_));
             colorImageId_ = 0;
             throw std::runtime_error("Sokol backend: sg_make_image failed for a RenderTarget2D's depth-stencil image");
@@ -690,8 +777,12 @@ namespace CNA::Internal::Backends::Sokol
             depthStencilImageId_ = 0;
             sg_destroy_view(MakeViewHandle(colorTextureViewId_));
             colorTextureViewId_ = 0;
+            if (resolveAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(resolveAttachmentViewId_));
+            resolveAttachmentViewId_ = 0;
             sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
             colorAttachmentViewId_ = 0;
+            if (msaaColorImageId_ != 0) sg_destroy_image(MakeImageHandle(msaaColorImageId_));
+            msaaColorImageId_ = 0;
             sg_destroy_image(MakeImageHandle(colorImageId_));
             colorImageId_ = 0;
             throw std::runtime_error("Sokol backend: sg_make_view (depth-stencil attachment) failed for a RenderTarget2D");
@@ -703,7 +794,9 @@ namespace CNA::Internal::Backends::Sokol
         if (depthStencilAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(depthStencilAttachmentViewId_));
         if (depthStencilImageId_ != 0) sg_destroy_image(MakeImageHandle(depthStencilImageId_));
         if (colorTextureViewId_ != 0) sg_destroy_view(MakeViewHandle(colorTextureViewId_));
+        if (resolveAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(resolveAttachmentViewId_));
         if (colorAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
+        if (msaaColorImageId_ != 0) sg_destroy_image(MakeImageHandle(msaaColorImageId_));
         if (colorImageId_ != 0) sg_destroy_image(MakeImageHandle(colorImageId_));
     }
 
@@ -1221,7 +1314,8 @@ namespace CNA::Internal::Backends::Sokol
             && depthTestEnabled == other.depthTestEnabled
             && depthWriteEnabled == other.depthWriteEnabled
             && depthFunc == other.depthFunc
-            && hasDepthAttachment == other.hasDepthAttachment;
+            && hasDepthAttachment == other.hasDepthAttachment
+            && sampleCount == other.sampleCount;
     }
 
     std::size_t SokolGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const
@@ -1242,6 +1336,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.depthWriteEnabled));
         mix(static_cast<std::size_t>(key.depthFunc));
         mix(static_cast<std::size_t>(key.hasDepthAttachment));
+        mix(static_cast<std::size_t>(key.sampleCount));
         return hash;
     }
 
@@ -1275,6 +1370,7 @@ namespace CNA::Internal::Backends::Sokol
             && referenceStencil == other.referenceStencil
             && depthBias == other.depthBias
             && slopeScaleDepthBias == other.slopeScaleDepthBias
+            && sampleCount == other.sampleCount
             && cullMode == other.cullMode
             && primitiveType == other.primitiveType
             && indexType == other.indexType
@@ -1323,6 +1419,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.referenceStencil));
         mix(std::hash<float>{}(key.depthBias));
         mix(std::hash<float>{}(key.slopeScaleDepthBias));
+        mix(static_cast<std::size_t>(key.sampleCount));
         mix(static_cast<std::size_t>(key.cullMode));
         mix(static_cast<std::size_t>(key.primitiveType));
         mix(static_cast<std::size_t>(key.indexType));
@@ -1589,6 +1686,7 @@ namespace CNA::Internal::Backends::Sokol
         // actually has, so every branch below reads from one place instead of re-deriving it.
         std::uint32_t colorAttachmentViewId = 0;
         std::uint32_t depthStencilAttachmentViewId = 0;
+        std::uint32_t resolveAttachmentViewId = 0;
         if (currentRenderTargetCube_ != nullptr)
         {
             colorAttachmentViewId =
@@ -1599,6 +1697,7 @@ namespace CNA::Internal::Backends::Sokol
         {
             colorAttachmentViewId = currentRenderTarget_->GetColorAttachmentViewIdEXT();
             depthStencilAttachmentViewId = currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT();
+            resolveAttachmentViewId = currentRenderTarget_->GetResolveAttachmentViewIdEXT();
         }
         const bool boundToCustomTarget = currentRenderTarget_ != nullptr || currentRenderTargetCube_ != nullptr;
         const bool hasDepthStencil = !boundToCustomTarget || depthStencilAttachmentViewId != 0;
@@ -1636,6 +1735,15 @@ namespace CNA::Internal::Backends::Sokol
             pass.attachments.colors[0] = MakeViewHandle(colorAttachmentViewId);
             if (hasDepthStencil)
                 pass.attachments.depth_stencil = MakeViewHandle(depthStencilAttachmentViewId);
+            if (resolveAttachmentViewId != 0)
+            {
+                // sokol_gfx.h's own MSAA doc comment: naming a resolve-attachment view triggers an
+                // automatic resolve at sg_end_pass(), and the MSAA colour image's own content need
+                // not survive past that point -- only the resolved, single-sample image is ever
+                // sampled later (SokolRenderTargetBackend::GetColorTextureViewIdEXT()).
+                pass.attachments.resolves[0] = MakeViewHandle(resolveAttachmentViewId);
+                pass.action.colors[0].store_action = SG_STOREACTION_DONTCARE;
+            }
             pass.label = currentRenderTargetCube_ != nullptr
                 ? "cna_render_target_cube_pass" : "cna_render_target_pass";
         }
@@ -1754,6 +1862,18 @@ namespace CNA::Internal::Backends::Sokol
         if (currentRenderTarget_ != nullptr)
             return currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
         return true;
+    }
+
+    int SokolGraphicsBackend::CurrentPassSampleCountEXT() const
+    {
+        // RenderTargetCube is never multisampled yet (plan_sokol.md SOKOL-26's remaining item).
+        if (currentRenderTargetCube_ != nullptr) return 1;
+        if (currentRenderTarget_ != nullptr)
+        {
+            const int rtSampleCount = currentRenderTarget_->GetMultiSampleCount();
+            return rtSampleCount > 1 ? rtSampleCount : 1;
+        }
+        return sampleCount_;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1957,16 +2077,13 @@ namespace CNA::Internal::Backends::Sokol
         (void)preserveContents;
         if (mipMap)
             NotYetImplemented(kBackendName, "a mipmapped RenderTarget2D");
-        // multiSampleCount is silently clamped to 1 (no MSAA), NOT thrown -- this matches the
-        // established codebase-wide convention every backend follows: IRenderTargetBackend::
-        // GetMultiSampleCount() exists specifically so a caller can observe what was actually
-        // applied (RenderTarget2D.MultiSampleCount reflects the real, device-clamped value, not
-        // the raw request), the same way a real GPU clamps to its own maximum. Unlike a mipmapped
-        // request there is no silent correctness trap here: the request is self-documenting
-        // through that property.
-        (void)multiSampleCount;
+        // multiSampleCount is real as of plan_sokol.md SOKOL-26: SokolRenderTargetBackend clamps it
+        // to the driver's GL_MAX_SAMPLES and allocates the matching MSAA colour (and, when a depth
+        // format was requested, depth-stencil) image plus a resolve target, following sokol_gfx.h's
+        // own documented offscreen-MSAA workflow. GetMultiSampleCount() reports the real, clamped
+        // value, matching every other backend's own convention.
 
-        return std::make_unique<SokolRenderTargetBackend>(w, h, depthFormat != 0);
+        return std::make_unique<SokolRenderTargetBackend>(w, h, depthFormat != 0, multiSampleCount);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> SokolGraphicsBackend::CreateRenderTargetCube(
@@ -2185,11 +2302,15 @@ namespace CNA::Internal::Backends::Sokol
         // Needed here too, not just for the 3D pipelines -- a SpriteBatch draw into a depth-less
         // render target hits the exact same sokol_gfx pipeline/pass pixel-format mismatch otherwise.
         const bool hasDepthAttachment = CurrentPassHasDepthStencilAttachmentEXT();
+        // Likewise: a SpriteBatch draw into a multisampled RenderTarget2D hits the identical
+        // sample_count mismatch the 3D pipelines guard against (plan_sokol.md SOKOL-26).
+        const int sampleCount = CurrentPassSampleCountEXT();
 
         const PipelineKey key{
             blendColorSrc_, blendAlphaSrc_, blendColorDst_, blendAlphaDst_,
             blendColorFunc_, blendAlphaFunc_, colorWriteChannels_,
-            blendEnabled_, depthTestEnabled_, depthWriteEnabled_, depthFunc_, hasDepthAttachment};
+            blendEnabled_, depthTestEnabled_, depthWriteEnabled_, depthFunc_, hasDepthAttachment,
+            sampleCount};
 
         if (const auto found = pipelineCache_.find(key); found != pipelineCache_.end())
             return found->second;
@@ -2206,7 +2327,7 @@ namespace CNA::Internal::Backends::Sokol
         desc.index_type = SG_INDEXTYPE_UINT16;
         desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
         desc.cull_mode = SG_CULLMODE_NONE;
-        desc.sample_count = sampleCount_;
+        desc.sample_count = key.sampleCount;
         if (key.hasDepthAttachment)
         {
             desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
@@ -2507,7 +2628,7 @@ namespace CNA::Internal::Backends::Sokol
         // Pinned rather than left to sokol's default, so ToCullMode's mapping is anchored to a
         // stated convention instead of to whatever upstream happens to default to.
         desc.face_winding = SG_FACEWINDING_CW;
-        desc.sample_count = sampleCount_;
+        desc.sample_count = key.sampleCount;
         if (key.hasDepthAttachment)
         {
             desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
@@ -2645,6 +2766,7 @@ namespace CNA::Internal::Backends::Sokol
         key.depthFunc = depthFunc_;
         key.cullMode = cullMode_;
         key.hasDepthAttachment = CurrentPassHasDepthStencilAttachmentEXT();
+        key.sampleCount = CurrentPassSampleCountEXT();
         key.stencilEnabled = stencilEnabled_;
         key.stencilFunc = stencilFunc_;
         key.stencilPass = stencilPass_;

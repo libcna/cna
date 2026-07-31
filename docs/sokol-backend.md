@@ -63,6 +63,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTargetCube` bind/draw/unbind, one face at a time, with per-face colour isolation and a shared depth-stencil buffer | ✅ | `Sokol_RenderTarget_PassBoundary` (C1/C2), `Sokol_RenderTarget_DepthStencilUsage` (U1-U4), plus the cube legs in `Sokol_RenderTarget_FirstUse`/`BackbufferConsumer` |
 | `OcclusionQuery` (real `GL_SAMPLES_PASSED` sample count, GL-only) | ✅ | `Sokol_OcclusionQuery_Cycle`, `Sokol_OcclusionQuery_VisibleQuad`, `Sokol_OcclusionQuery_OccludedQuad` |
 | `RasterizerState.DepthBias`/`SlopeScaleDepthBias` | ✅ | `Sokol_RasterizerState_DepthBias` -- a real coplanar-redraw proof, both constant and slope-scaled bias |
+| `RenderTarget2D` MSAA + resolve (`MultiSampleCount` > 1) | ✅ | `Sokol_RenderTarget2D_Msaa` -- a real differential anti-aliasing proof (a solid binary edge at `MultiSampleCount=0` vs. genuinely blended pixels at `8`), not just "resolve doesn't corrupt solid colours" |
 
 ## What does not work yet
 
@@ -75,11 +76,9 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |
 | `RenderTarget2D::GetData` (direct CPU readback) | throws `System::NotSupportedException` — `SokolRenderTargetBackend` does not override `ITextureBackend::GetData`, so it inherits the base class's `return false` default. Sampling the target as a texture, or reading the backbuffer after drawing it there, both work. | `SOKOL-26` |
 | `RenderTarget2D` mip-mapped (`mipMap=true`) | `CreateRenderTarget2D` throws `NotYetImplemented` | `SOKOL-26` |
-| `RenderTarget2D` MSAA | `multiSampleCount` is silently clamped to 1 (`GetMultiSampleCount()` reports the real, clamped value — the same convention every other backend uses for this parameter) | `SOKOL-26` |
 | `RenderTargetCube::GetData` (direct CPU readback) | throws `System::NotSupportedException`, same boundary as `RenderTarget2D::GetData` | `SOKOL-26` |
-| `RenderTargetCube` mip-mapped or MSAA | mip-mapped throws `NotYetImplemented`; `multiSampleCount` silently clamped to 1, same convention as `RenderTarget2D` | `SOKOL-26` |
+| `RenderTargetCube` mip-mapped or MSAA | mip-mapped throws `NotYetImplemented`; `multiSampleCount` silently clamped to 1, same convention `RenderTarget2D` used before its own MSAA landed | `SOKOL-26` |
 | MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented` | `SOKOL-26` |
-| Render-target MSAA resolve | not implemented (`multiSampleCount` is clamped, never resolved) | `SOKOL-26` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `RasterizerState.FillMode` (`WireFrame`) | accepted and ignored — sokol_gfx exposes no polygon fill mode at all, unlike EasyGL's CPU-side triangle-to-`GL_LINES` re-expansion at draw time (not implemented here). A permanent, not-just-"not yet" gap | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
@@ -136,6 +135,15 @@ correctly, which the table above is the authority on.
   "set the current stencil ref" call. `Pipeline3DKey` includes it, so a scene that changes
   `ReferenceStencil` between otherwise-identical stencil-testing draws creates one pipeline per
   distinct value rather than reusing one.
+- **A multisampled `RenderTarget2D` allocates a genuinely separate resolve image**, following
+  sokol_gfx.h's own documented offscreen-MSAA workflow: the multisample colour (and, when
+  requested, depth-stencil) image is never sampled directly and its content need not survive past
+  `sg_end_pass()` (`SG_STOREACTION_DONTCARE`); only the single-sample resolve image -- the same
+  image `GetColorImageIdEXT()`/`GetColorTextureViewIdEXT()` always named, MSAA or not -- is what a
+  later pass samples. Every pipeline (sprite and 3D alike) now keys on the *active pass's* real
+  sample count rather than the window's, since sokol_gfx bakes `sample_count` into the pipeline and
+  rejects a mismatch against the pass it draws into -- a target's own MSAA count is independent of
+  the swapchain's.
 
 ## Verification status
 

@@ -139,4 +139,13 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
     cna_register_backend_test(NAME Sokol_RasterizerState_DepthBias COMMAND cna_test_sokol_depth_bias
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-26: RenderTarget2D MSAA + resolve, following sokol_gfx.h's own documented
+    # offscreen-MSAA workflow. Task 337's own differential (MultiSampleCount=0 vs 8) real-AA proof
+    # -- backend-agnostic despite its "EasyGL" filename -- reused here rather than duplicated.
+    cna_sokol_test(cna_test_sokol_rendertarget2d_msaa examples/easygl_rendertarget2d_msaa_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget2D_Msaa
+        COMMAND cna_test_sokol_rendertarget2d_msaa
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

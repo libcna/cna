@@ -125,7 +125,9 @@ class SokolSmokeTest : public Game
             && backend.SupportsCapability(GraphicsCapability::ThreeD)
             && !backend.SupportsCapability(GraphicsCapability::MultipleRenderTargets)
             && !backend.SupportsCapability(GraphicsCapability::CustomEffects)
-            && !backend.SupportsCapability(GraphicsCapability::Texture3D)
+            // Real as of SOKOL-27 -- SokolTexture3DBackend is a CPU-shadow store, same shape as
+            // TextureCube's.
+            && backend.SupportsCapability(GraphicsCapability::Texture3D)
             // Real as of SOKOL-29 -- a raw GL_SAMPLES_PASSED query, GL-only (matches
             // ReadBackbuffer's own GL-only boundary; see SokolOcclusionQueryBackend).
             && backend.SupportsCapability(GraphicsCapability::OcclusionQuery);
