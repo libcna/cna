@@ -2495,7 +2495,7 @@ existing task.
 | REMED-GFX-170 | WebGPU and SDL_GPU reduced the nine-value `TextureFilter` enum to one boolean: `filter = textureFilter == 0 ? LINEAR : NEAREST` for min, mag AND mip alike, plus a cache key of `filter == 0 ? 0 : 1` that aliased all eight non-Linear ordinals onto one native sampler. | LOW | P3 | REMED-GFX-150 cross-backend controls | **DONE 2026-07-30 — WIDENED AND RE-SCOPED: THE EXPRESSION IS SHARED, THE BLAST RADIUS IS NOT. WEBGPU BYPASSED ITS OWN COMPLETE TABLE AT EXACTLY ONE CALL SITE (SPRITEBATCH); SDL_GPU HAS ONE HELPER SERVING TEN CALL SITES ACROSS NINE DRAW FAMILIES AND NEVER SET enable_anisotropy AT ALL. THE CACHE KEY WAS THE SECOND HALF AND WOULD HAVE DEFEATED A DESCRIPTOR-ONLY FIX (16 COLLAPSED PAIRS MEASURED). NEW 70-CHECK ORDINAL FIXTURE: WEBGPU 56/70 -> 70/70, SDL_GPU 41/70 -> 70/70; GFX-150's OWN FIXTURE 143/146 -> 146/146 ON BOTH. THE MAGNIFICATION AND MINIFICATION PARTITIONS OF THE NINE ORDINALS ARE DIFFERENT SETS AND THE SECOND HAD NEVER BEEN MEASURED. 86 -> 13 AND 90 -> 14 NATIVE SAMPLERS, THE MINIMUM. VALIDATION AND SANITIZERS CLEAN, LEAK OUTPUT A/B-PROVEN PRE-EXISTING DRIVER. A PRE-EXISTING WEBGPU slotSamplerCache_ LEAK CLOSED. ONLY WEBGPU AND SDL_GPU PRODUCTION CHANGED. SPAWNED GFX-173; WIDENED GFX-172's SCOPE TO EnvironmentMap3D.** |
 | REMED-GFX-171 | D3D9: the stock 3D path samples about half a destination pixel low — every one of the 19 mismatching pixels sits just past a texel boundary and returns the LOWER texel. The classic D3D9 pixel-centre convention, uncompensated on the 3D path; SpriteBatch is unaffected. | LOW | P3 | REMED-GFX-150 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-150; D3D9 145/146) |
 | REMED-GFX-172 | WebGPU: the DualTexture3D texture bind group has ONE sampler entry for TWO texture views, so `GraphicsDevice.SamplerStates[1]` cannot be expressed and slot 1 inherits slot 0's sampler. Distinct from GFX-170 (SDL_GPU passes the same leg); needs a bind-group-layout and WGSL change. | LOW | P3 | REMED-GFX-169 leg M3 | OPEN (isolated 2026-07-30 during REMED-GFX-169; WEBGPU 64/65) |
-| REMED-GFX-173 | SDL_GPU's `IssueEnvMapDraw` binds a literal LinearClamp sampler for the reflection cube, so `GraphicsDevice.SamplerStates[1]` is ignored for `EnvironmentMapEffect`. Its comment calls this the project-wide convention, which REMED-GFX-169 ended: Vulkan now honours slot 1 for the cube. A state-capture and convention question, not the filter-ordinal translation GFX-170 fixed, and distinct from GFX-172 (SDL_GPU's bind group CAN express it). | LOW | P3 | REMED-GFX-170 sampler trace | OPEN (isolated 2026-07-30 during REMED-GFX-170) |
+| REMED-GFX-173 | SDL_GPU's `IssueEnvMapDraw` binds a literal LinearClamp sampler for the reflection cube, so `GraphicsDevice.SamplerStates[1]` is ignored for `EnvironmentMapEffect`. Its comment calls this the project-wide convention, which REMED-GFX-169 ended: Vulkan now honours slot 1 for the cube. A state-capture and convention question, not the filter-ordinal translation GFX-170 fixed, and distinct from GFX-172 (SDL_GPU's bind group CAN express it). | LOW | P3 | REMED-GFX-170 sampler trace | **DONE 2026-07-31 — THE TICKET IS RIGHT AND NAMES ONLY HALF OF IT. THE CONSTANT WAS THE SECOND MECHANISM; THE FIRST IS THAT `QueueEnvMapDraw` CAPTURED ONLY `samplerSlots_[0]`, SO `EnvMapDrawCommand` HAD NO FIELD IN WHICH SLOT 1 COULD REACH REPLAY — REMOVING THE CONSTANT ALONE WOULD HAVE READ LIVE STATE AND BROKEN THE DEFERRED SNAPSHOT, ADDING THE CAPTURE ALONE WOULD HAVE CHANGED NOTHING. NEW 104-CHECK FIXTURE 62/104 -> 104/104. AMOUNT=1 MAKES THE CUBE THE ONLY CONTRIBUTOR AND AMOUNT=0 THE 2D TEXTURE, SO INDEPENDENCE IS BYTE-IDENTICAL VS BYTE-DIFFERENT AND NOT A TOLERANCE. TRACE: ONE NATIVE CUBE DESCRIPTION ACROSS ALL 86 BINDINGS BEFORE (key=0x04010100), TWELVE AFTER; 178 SAMPLER APPLICATIONS AND 86 QUEUED/86 REPLAYED DRAWS BOTH UNCHANGED; WHOLE CACHE 3 -> 12 NATIVE SAMPLERS, THE MINIMUM. VULKAN AND EASYGL BOTH 104/104 AS INDEPENDENT CORRECT CONTROLS. THREE DIVERGENCES CLASSIFIED, NONE FIXED: BGFX 62/104 (NEW REMED-GFX-181, THE SAME SHAPE VIA A FLAGS-OMITTING `bgfx::setTexture`), SOFTWARE 66/100 (NEW REMED-GFX-182, `SampleCubeMap` TAKES NO SAMPLER STATE), WEBGPU 74/104 (THE DECLARED REMED-GFX-172 BOUNDARY, NOW MEASURED — C1 FAILS, SO SLOT 1 INHERITS SLOT 0). 16 PRE-EXISTING SDL_GPU ENV-MAP FIXTURES WERE ALL BLIND AND NONE ASSERTS ANYTHING FALSE. VALIDATION AND SANITIZERS CLEAN. ONLY SDL_GPU PRODUCTION CHANGED. SPAWNED GFX-181/182.** |
 | REMED-GFX-174 | EasyGL wrote a sampler's anisotropy component only when it was ON, and one long-lived GL sampler object per slot turned that into a LATCH: the first `Anisotropic` draw raised `GL_TEXTURE_MAX_ANISOTROPY` to SamplerState's default 4 and every later Point/Linear draw on that slot kept sampling anisotropically, so no point fetch could return a stored texel again. The record's two "independent components" are one defect: SpriteBatch looked immune only because its legs run before any 3D leg (it passes a hardcoded maxAnisotropy of 1, so it can neither raise nor lower the latch). The record's mipmap-incompleteness component is refuted for ordinary textures (Task 924 already clamps MAX_LEVEL, trace reports complete=1) and REAL for render targets, cube maps and volume textures, where nothing clamped it and a single-level RenderTarget2D sampled under any of the seven mip-chain ordinals rendered solid black. Fixed both; EASYGL 50/70 -> 70/70 and a new 52-check order-sensitive fixture 29/52 -> 52/52. | LOW | P3 | REMED-GFX-170 cross-backend controls | DONE (2026-07-30) |
 | REMED-GFX-175 | A TextureFilter ordinal's MIPMAP component was dropped for `Linear` and `Point` on EasyGL. The contract is settled from FNA's own XNAMin/XNAMag/XNAMip tables and FNA3D's `XNAToGL_MinMipFilter`: Linear(0) is min/mag/mip LINEAR and Point(1) is min/mag/mip POINT, so both are FULL filters and ordinal 0 is the DEFAULT filter. EasyGL mapped them onto plain GL_LINEAR/GL_NEAREST (no mipmap term) while 2..8 were already right, and a declared-but-unwritten chain was mipmap-INCOMPLETE and sampled solid black under every mip-aware ordinal. The ticket's second claim is REFUTED: Software was not dropping a component, it had no mip pipeline at all (UpdatePixelsLevel a documented no-op, no LOD stage), so ALL NINE ordinals sampled level 0 there. Fixed both; new 87-check contract fixture, EASYGL 61/97 -> 87/87 and SOFTWARE 65/97 -> 87/87, with D3D9, D3D11, Vulkan, WebGPU and Bgfx all 87/87 as controls. | LOW | P3 | REMED-GFX-174 leg D4 | DONE (2026-07-30) |
 | REMED-GFX-176 | SDL_GPU: `SdlGpuTextureBackend` hardcoded `num_levels = 1` and had no `UpdatePixelsLevel` override, so a `mipMap=true` Texture2D was a one-level GPU resource and every level written above 0 was silently discarded — measured over 77 textures as `nativeLevels=1` on every one and ZERO level>0 upload commands. A third mechanism was reachable only after fixing those two: the level-0 upload's `cycle=true` orphans every level it does not write, and retaining it measures 41/87 on GFX-175's fixture, BELOW the 55/87 this started from. | LOW | P3 | REMED-GFX-175 cross-backend controls | **DONE 2026-07-31 — NEW 112-CHECK STORAGE/UPLOAD FIXTURE 45/112 -> 112/112 AND GFX-175's OWN FIXTURE 55/87 -> 87/87, JOINING THE EIGHT BACKENDS ALREADY THERE. TEN-ENTRY DIMENSION MATRIX (1x1..16x2, NPOT AND ODD) WITH PUBLIC AND NATIVE LEVEL COUNTS AGREEING ON EVERY ROW; EVERY LEVEL READ BACK BYTE-EXACT. NO MIP GENERATION, NO CPU SHADOW, NO EXTRA FRAME/PRESENT/WAIT/READBACK. 77 TEXTURES CREATED / 77 DESTROYED, ONE UPLOAD PER PUBLIC LEVEL UPLOAD. VULKAN VALIDATION PROVEN LOADED, ZERO VUIDs; ASan+UBSan CLEAN. FIVE CROSS-BACKEND CONTROLS 87/87. Texture2D WAS THE ONLY AFFECTED CLASS — Texture3D/TextureCube/RT2D/RTCube ALREADY CORRECT. ONE FALSE POSITIVE FOUND (R12/R13 PASS ON THE UNFIXED BACKEND). GFX-173 UNTOUCHED. SPAWNED GFX-180.** |
@@ -2503,6 +2503,8 @@ existing task.
 | REMED-GFX-178 | D3D12: `TextureFilter::MinPointMagLinearMipLinear` (ordinal 7) magnifies with POINT. Measured by REMED-GFX-170's ordinal fixture, leg C7: `manufactured colours=0` where its sibling `MinPointMagLinearMipPoint` (ordinal 8) correctly reports 124 on the same geometry, so the two ordinals that share a LINEAR magnification component disagree. Previously UNREACHABLE — pre-REMED-GFX-177 that fixture aborted at check 26 on `SAMPLER descriptor heap exhausted`, so leg C7 had never run on D3D12. Same family as GFX-170/GFX-175 (an ordinal losing one of its three components) but a distinct backend expression, so it is not absorbed. | LOW | P3 | REMED-GFX-177 regression gates | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
 | REMED-GFX-179 | Bgfx: `BgfxGraphicsBackend`'s render-target view-id allocator draws from `[1, kFirstSegmentViewId)` and `kFirstSegmentViewId` is **64**, so **63 concurrently live render targets is a hard ceiling** — REMED-GFX-177's public fixture, leg F, needs 66 and throws `Bgfx: exhausted view ids`. Same SHAPE as the D3D12 defect but not the same mechanism and not the same fix: the free list here already works (leg E's 256 sequential create/destroy cycles pass), what is missing is headroom — bgfx's own `BGFX_CONFIG_MAX_VIEWS` default is 256 and CNA reserves `[64, 255)` for REMED-GFX-065's per-frame viewport-segment views, so the partition, not bgfx, sets the limit. Deliberately NOT fixed under GFX-177, whose boundary forbids changing another backend because its binding model differs. | LOW | P3 | REMED-GFX-177 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
 | REMED-GFX-180 | SDL_GPU: `examples/sdlgpu_renderstate_test.cpp` (`SdlGpu_RenderState`) aborts before its FIRST check with `System::InvalidOperationException: Cannot present while render targets are bound`. Deterministic — 3/3 standalone runs, zero `[PASS]`/`[FAIL]` lines emitted, so nothing in its own try/catch around `RunAll` is ever reached. NOT caused by REMED-GFX-176: it reproduces identically with the pre-GFX-176 backend rebuilt from `249e9f9f`, that session's starting HEAD. The reported exception is a SECONDARY one raised from the present path because a render target was still bound when the frame ended; the primary failure that unwound out of `Draw` without unbinding is masked by it and was deliberately not diagnosed under GFX-176's boundary. | LOW | P3 | REMED-GFX-176 regression gates | OPEN (isolated 2026-07-31 during REMED-GFX-176) |
+| REMED-GFX-181 | Bgfx: `BgfxGraphicsBackend`'s two `EnvironmentMapEffect` submit sites call the FOUR-argument `bgfx::setTexture(1, envMapSampler_, cubeHandle)` and omit `_flags`, so bgfx falls back to the cube texture's own creation flags (`BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP`, linear) and `GraphicsDevice.SamplerStates[1]` never reaches the reflection cube. The base slot one function away does pass `samplerFlags_[0]`. Measured on REMED-GFX-173's fixture at **BGFX 62/104**, byte-identically the failure SET SDL_GPU had before that task: every Point-mode check reports the whole image off-palette and A4 reports differing=0. | LOW | P3 | REMED-GFX-173 cross-backend controls | OPEN (isolated 2026-07-31 during REMED-GFX-173) |
+| REMED-GFX-182 | Software: `SoftwareGraphicsBackend::SampleCubeMap` takes no sampler state at all — it ends in a single clamped `static_cast<int>` texel fetch — so an `EnvironmentMapEffect` reflection cube is ALWAYS point-sampled whatever `GraphicsDevice.SamplerStates[1]` holds. This is the shape REMED-GFX-150 replaced on the 2D path (`SampleTexture`, with explicit filter selection and address transform) and did not reach on the cube path. Measured on REMED-GFX-173's fixture at **SOFTWARE 66/100** (leg L skipped, no RenderTargetCube): every Linear-mode check reports 0 interpolated pixels and 16 distinct colours. NOT slot-0 inheritance — C1 passes with differing=0, which is what separates it from WebGPU's REMED-GFX-172. | LOW | P3 | REMED-GFX-173 cross-backend controls | OPEN (isolated 2026-07-31 during REMED-GFX-173) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -21654,3 +21656,269 @@ untouched.
   unwound out of `Draw` without unbinding is masked by it and was not diagnosed here.
 
 Commits: test `df1d5111`, fix `5ed3b126`, docs (this).
+
+---
+
+## REMED-GFX-173 — SDL_GPU EnvironmentMapEffect cube sampler (2026-07-31)
+
+### The contract, and where it is read from
+
+`EnvironmentMapEffect` samples **two** independently observable resources. The authoritative slot
+mapping was read from source, not taken from the ticket:
+
+* `src/CNA/Internal/Backends/SdlGpu/shaders/env_map3d.frag.glsl` declares
+  `layout(set = 2, binding = 0) uniform sampler2D uTexture` and
+  `layout(set = 2, binding = 1) uniform samplerCube uEnvMap`.
+* `VulkanGraphicsBackend::GetOrCreateEnvMapDescSet`, corrected under REMED-GFX-169, writes
+  `slotSamplers_[0]` into binding 0 and `slotSamplers_[1]` into binding 1.
+
+So **`GraphicsDevice.SamplerStates[0]` filters `EnvironmentMapEffect.Texture` and
+`SamplerStates[1]` filters `EnvironmentMapEffect.EnvironmentMap`.** An unset slot uses the
+documented device default, `SamplerState::LinearWrap`.
+
+### The defect: the ticket is right and names only half of it
+
+**Mechanism 2, the half the ticket names.** `SdlGpuGraphicsBackend::IssueEnvMapDraw` bound
+
+```cpp
+samplerBindings[1].sampler = GetOrCreateSampler(/*textureFilter=*/0, /*addressU=*/1,
+                                                /*addressV=*/1, kSpriteBatchMaxAnisotropy,
+                                                "EnvironmentMap3D/cube");
+```
+
+— a literal LinearClamp — under a comment calling it "this project's other backends' fixed
+reflection-map sampling convention".
+
+**Mechanism 1, which it does not.** `QueueEnvMapDraw` captured only `samplerSlots_[0]`, so
+`EnvMapDrawCommand` had **no field in which slot 1 could reach replay at all**.
+
+Neither half alone is a fix, and that is why both are in one commit. Removing the constant without
+adding the capture makes replay read *live* sampler state and breaks the deferred-snapshot contract
+that legs E and F assert. Adding the capture without touching the binding changes nothing
+observable. The comment was true when it was written and stopped being true under REMED-GFX-169.
+
+### The oracle
+
+The two slots are made **independently observable** rather than one being inferred from the other.
+With `EnvironmentMapAmount = 1`, `FresnelFactor = 0` (which also clears `FresnelEnabled`, so `pow()`
+never sees `0^0` at the quad centre), `EnvironmentMapSpecular = 0`, `DiffuseColor = White`,
+`Alpha = 1` and an all-opaque base texture, the fragment shader's
+`mix(baseColor, envSample.rgb * combinedAlpha, 1.0)` is **exactly** `envSample.rgb` — the base
+texture cannot influence one bit. With `EnvironmentMapAmount = 0` and ambient-only white lighting it
+is exactly `texColor.rgb` — the cube cannot influence one bit. Independence is therefore asserted as
+**byte-identical versus byte-different images**, never as a tolerance.
+
+Exactness comes from a generated palette in which every pair of entries is at least 20 apart in
+L-inf and the midpoint of any two entries is at least 9 from *every* entry. **Both properties are
+checked by the fixture itself (PAL2, PAL3), not assumed.** So "this pixel is a stored texel" and
+"this pixel is an interpolation of two stored texels" are decidable byte-exactly, and a sampler
+replaced by a constant shows up as a Point image full of colours stored in no texel at all.
+
+The geometry keeps the cube magnified and face-stable without touching UVs or shaders. An
+orthographic projection draws a screen-filling quad at `z = 0` while the view matrix places the eye
+at `D = 4/3`, so `reflect(-E, N)` reduces to a direction proportional to `(x, y, D)` — linear in the
+pixel coordinate and always +Z-major for `D > 1`. One 4x4 face therefore magnifies into a 4x4 grid
+of blocks across the target. Tilting the vertex **normal** aims the same sweep at a different face.
+
+### Results
+
+`examples/envmap_cube_sampler_contract_test.cpp`, 104 checks over thirteen legs, A/B-measured by
+narrowly restoring the two production files from `2a02548a`:
+
+| | SDL_GPU |
+|---|---|
+| before | **62/104** (42 failures) |
+| after | **104/104** |
+
+Every pre-fix failure is a Point-mode check reporting the entire 1024-pixel image off-palette, and
+`CNA_SDLGPU_SAMPLER_TRACE` names the cause exactly: **one** distinct native description for the cube
+slot across **all 86** env-map bindings —
+`family=EnvironmentMap3D/cube filter=0(Linear) mag=Linear min=Linear mip=Linear aniso=off/1.0
+addrU=ClampToEdge addrV=ClampToEdge key=0x04010100` — against **three** for the base slot. After the
+fix the cube slot expresses **twelve**, exactly the distinct sampler states the fixture uses.
+
+### Filter ordinals 0..8 on the cube slot
+
+All nine are driven and classified. The magnification partition is the one a one-level cube can
+observe: ordinals **1, 4, 5, 6** magnify by Point and produce byte-exact stored texels; **0, 3, 7, 8**
+magnify linearly and produce colours stored nowhere. Each group additionally agrees **byte-for-byte**
+across its members, which is only possible when the minification and mipmap components really are
+unobservable on a one-level texture. `TextureFilter::Anisotropic(2)` is asserted only for its
+magnification class — its tap pattern is a per-GPU choice, the same boundary REMED-GFX-170 declared.
+The public-to-native translation is REMED-GFX-170's `FillSdlGpuSamplerCreateInfo` and its
+complete-description cache key; **no second table was introduced.**
+
+### Mipmapped cube
+
+`TextureCube` level-aware allocation and upload were **verified, not assumed**:
+`SdlGpuTextureCubeBackend`'s constructor passes `num_levels = CalculateMipLevels(size, size)` and its
+`SetData` writes `destination.mip_level = level` with `cycle=false`. REMED-GFX-176's boundary — that
+`Texture2D` was the only affected class — holds.
+
+A real six-level chain with one **flat marker per (face, level)** isolates the mipmap component:
+inside a level the min filter has nothing to act on, so only the ordinal's mipmap half can change the
+answer. Mip-Point ordinals (1, 3, 6, 8) read stored levels only and reach a level above 0; each
+mip-Linear ordinal (0, 4, 5, 7) differs from the mip-Point answer and produces blends stored at no
+level; a one-level cube minified identically still reads stored level-0 texels; and two aimed faces
+select different markers, so levels are per-face.
+
+**Declared:** the four mip-Linear ordinals are *not* required to agree byte-for-byte. Flat levels make
+min/mag invisible *inside* a face, but a cube is filtered seamlessly *across* face edges where the
+neighbouring face's own flat colour is a different value, so min/mag remain observable at the
+boundary taps. That is a property of cube sampling, not of the sampler under test. Automatic mip
+generation stayed out of scope.
+
+### Address-mode boundary, classified honestly
+
+A cube map is addressed by a direction, so U/V/W address modes are reachable only at face edges and a
+driver with seamless cube filtering may render all three identically — which is exactly what happens
+here: **Clamp vs Wrap and Clamp vs Mirror both differ in 0 pixels.** The fixture therefore asserts
+only that no mode produces an off-palette or border fetch, including a reflection deliberately aimed
+at a face boundary, and **invents no cube address-mode convention**. This is also why the
+cache-distinctness legs vary the *filter* rather than the address mode.
+
+### Cache and binding identity
+
+A new env-gated `CNA_SDLGPU_ENVMAP_TRACE` prints the whole two-slot binding on one line at **both**
+ends of the deferred pipeline — what the public draw call CAPTURED and what replay actually BOUND,
+with both texture identities, both public slot states, both captured states and both native sampler
+handles. `CNA_SDLGPU_SAMPLER_TRACE` reports one binding per line and cannot say which pair belonged
+to the same draw.
+
+Measured over the fixture's 86 env-map draws:
+
+* the **same** cube texture under **12** distinct slot-1 descriptions receives **12** distinct native
+  samplers;
+* **no** native sampler serves two distinct slot-1 descriptions;
+* of the **43** draws whose slot-0 and slot-1 descriptions differ, **none** shares one native sampler.
+
+### Cardinality and performance
+
+| | before | after |
+|---|---|---|
+| sampler applications (all families) | 178 | **178** |
+| env-map bindings, base slot / cube slot | 86 / 86 | **86 / 86** |
+| queued env-map draws / replayed | 86 / 86 | **86 / 86** |
+| native samplers in the whole cache | 3 | **12** |
+| distinct cube-slot cache keys | 1 | **12** |
+| distinct base-slot cache keys | 3 | **3** |
+| cube-slot creations / cache hits | 1 / 85 | **10 / 76** |
+
+Twelve is exactly the number of distinct sampler states the fixture uses — the minimum — so nothing
+is created per draw and the cache is still a cache. No draw, pass, submit, wait, frame or readback
+was added.
+
+### Draw-path coverage
+
+All eight applicable paths, each byte-identical to the `DrawPrimitives` reference under Point and
+interpolating under Linear: `DrawPrimitives`, `DrawIndexedPrimitives` with 16-bit and with 32-bit
+indices, `DrawIndexedPrimitives` with **nonzero `startIndex` and nonzero `baseVertex`** (decoy
+vertices and indices in front, so only honouring both is correct), `DrawUserPrimitives`,
+`DrawUserIndexedPrimitives` 16-bit and 32-bit, and a **dynamic buffer written twice** so the draw
+must read the second write. Ordinary `TextureCube` and `RenderTargetCube` both reach the same binding
+under the same captured sampler; the RenderTargetCube faces are *painted* with a 1:1 textured blit
+rather than cleared flat, so that leg cannot pass with a filter-invisible fill.
+
+### Validation
+
+`VK_LAYER_KHRONOS_validation` **proven inserted** beneath SDL_GPU by the loader trace
+(`Insert instance layer "VK_LAYER_KHRONOS_validation"`), with SDL_GPU debug mode on: **zero VUIDs**
+over the whole 104-check run. No warning was suppressed.
+
+### Sanitizers
+
+Runtimes proven linked (`libasan.so.8`, `libubsan.so.1`). ASan+UBSan **104/104** and UBSan-only
+**104/104**, with **zero AddressSanitizer errors and zero UBSan runtime errors** — no use-after-free,
+no stale sampler or resource pointer, no invalid cache-key access, no binding-index overflow, no
+integer overflow, no uninitialized sampler metadata, no double release. The residual LeakSanitizer
+output is **624 bytes in 6 allocations**, has **zero CNA frames** (every frame is `realloc`/`calloc`
+into an unknown module), and is **byte-identical in the untouched `cna_test_sdlgpu_depth_bias`** — the
+same driver-side residual REMED-GFX-170 and REMED-GFX-176 recorded.
+
+### False-positive audit
+
+**Sixteen pre-existing SDL_GPU-registered fixtures drive `EnvironmentMapEffect`, and all sixteen
+passed on the unfixed backend.** Classified:
+
+* **Eight zero the cube's contribution outright** (`EnvironmentMapAmount = 0`), so no sampler on slot
+  1 can change a pixel: `deferred_scissor_capture_test`, `deferred_viewport_capture_test`,
+  `sdlgpu_effects_fog_test`, `sdlgpu_environmentmapeffect_emissive_test`,
+  `stock_effect_sampler_contract_test` (whose own comment says "The cube contributes nothing, so this
+  leg measures the BASE texture's slot-0 sampler"), `texture_filter_ordinal_contract_test`,
+  `sdlgpu_texture2d_mip_storage_test`, `spritebatch_3d_order_test`.
+* **Seven use a cube that cannot express a filter difference**: `sdlgpu_envmap_test` and
+  `rendertarget_effect_source_test` build `TextureCube(dev, 1, ...)` — a **single texel per face**;
+  `deferred_source_lifetime_test`, `rendertargetcube_plural_binding_test`,
+  `sdlgpu_depthless_cube_spritebatch_compatibility_test` and `sdlgpu_rendertargetcube_test` use
+  flat-cleared `RenderTargetCube` faces; `descriptor_capacity_contract_test` assigns the **same**
+  `MakeSampler()` to slot 0 and slot 1 and asks which *resource* was bound, not which sampler.
+* **One names the family only in prose**: `sdlgpu_samplerstate_test`'s header lists
+  `EnvironmentMapEffect` among the families the old hardcoded sampler affected, but its slot-1 checks
+  drive `DualTextureEffect`.
+
+**None asserts anything false**, so none was changed or weakened — the gap was coverage, and the new
+fixture fills it. Three of them (`deferred_source_lifetime_test`, `rendertarget_effect_source_test`,
+`descriptor_capacity_contract_test`) *do* assign `SamplerStates[1]`, which is the sharpest form of the
+blind spot: the state was set and could not be observed.
+
+### Cross-backend controls
+
+Only SDL_GPU production changed. Every other backend runs the same public fixture.
+
+| Backend | Score | Reading |
+|---|---|---|
+| **VULKAN** | **104/104** | the reference the contract is read from (REMED-GFX-169) |
+| **EASYGL** | **104/104** | a second, independent correct backend |
+| **HEADLESS** | **8/8** | asserts REMED-GFX-127's honest rejection, fabricates nothing |
+| **SDL_GPU** | **104/104** | after this task (62/104 before) |
+| BGFX | 62/104 | **new REMED-GFX-181** |
+| SOFTWARE | 66/100 | **new REMED-GFX-182** (leg L skipped: no RenderTargetCube) |
+| WEBGPU | 74/104 | the **declared REMED-GFX-172 boundary**, now measured |
+
+Two independent backends reaching 104/104 is what shows the fixture pins a *public contract* rather
+than one implementation's behaviour.
+
+**BGFX** fails byte-identically the set SDL_GPU failed, at the same score: every Point-mode check
+reports the whole image off-palette while A4 reports `differing=0`, so the cube is filtered linearly
+whatever slot 1 holds. **SOFTWARE and WEBGPU fail the opposite set** — every Linear-mode check reports
+`0` interpolated pixels and exactly 16 distinct colours, so the cube is always Point — and **leg C1 is
+what separates them**: it passes on Software (`differing=0`, changing slot 0 leaves the cube alone) and
+**fails on WebGPU** (`differing=1024`, changing slot 0 changes the cube), which is the signature of one
+sampler entry serving two texture views. Three different causes behind two symptoms.
+
+D3D9, D3D11 and D3D12 **cross-built clean**. Their Wine runtime controls are reported **unavailable,
+not clean**: under Wine on a bare session-owned Xvfb the binary aborts with
+`SDL_InitSubSystem(SDL_INIT_VIDEO) failed: No displays available`, and `:0` is forbidden this session.
+DirectX runtime testing was optional for this SDL_GPU-local change.
+
+### Regression gates
+
+The SDL_GPU CTest shard is **71/72**. Green: GFX-169's `SdlGpu_StockEffectSamplerContract`, GFX-170's
+`SdlGpu_TextureFilterOrdinalContract`, GFX-175's `SdlGpu_TextureFilterMipContract`, GFX-176's
+`SdlGpu_Texture2DMipStorage`, `SdlGpu_SamplerState`, `SdlGpu_EnvMap`, `SdlGpu_EnvMapEmissive`,
+`SdlGpu_DeferredSourceLifetime` (GFX-152), `SdlGpu_BackbufferReadbackDimension` (GFX-165), and the
+new `SdlGpu_EnvMapCubeSamplerContract`.
+
+The one failure, **`SdlGpu_RenderState`**, is the pre-existing **REMED-GFX-180** — untouched and
+uninvestigated per this session's boundary. It was already the single failure of a 70/71 shard before
+this task.
+
+### Scope kept
+
+`REMED-GFX-180`, `REMED-GFX-178`, `REMED-GFX-179`, `REMED-GFX-171`, `REMED-GFX-172`, `REMED-GFX-153`
+and `REMED-GFX-154` were **not** begun and are unmodified. **WebGPU production is unchanged** even
+though this fixture exposes GFX-172 with pixels for the first time; Bgfx and Software production are
+unchanged even though this task found their defects. No public API, no shader, no `TextureFilter`
+enum value, no bind layout, and `audit/` is untouched.
+
+### New findings
+
+* **REMED-GFX-181** — Bgfx: two `EnvironmentMapEffect` submit sites call the four-argument
+  `bgfx::setTexture(1, envMapSampler_, cubeHandle)` and omit `_flags`, so bgfx falls back to the
+  cube's own creation flags and `SamplerStates[1]` never reaches the reflection cube. The base slot
+  one function away does pass `samplerFlags_[0]`.
+* **REMED-GFX-182** — Software: `SoftwareGraphicsBackend::SampleCubeMap` takes no sampler state at
+  all and ends in a single clamped `static_cast<int>` texel fetch, so the reflection cube is always
+  point-sampled. The shape REMED-GFX-150 replaced on the 2D path and did not reach on the cube path.
+
+Commits: test `c34d0d00`, fix `5d28325d`, controls `35ba3323`, docs (this).
