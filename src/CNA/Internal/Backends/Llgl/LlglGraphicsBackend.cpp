@@ -31,8 +31,12 @@ namespace CNA::Internal::Backends::Llgl
     {
         constexpr const char* kBackendName = "LLGL";
 
-        /// Floats in the 3D effect uniform block: see shaders/effect3d_common.glsl.inc.
-        constexpr std::size_t kEffectUniformFloats = 32;
+        /// Floats in the 3D effect uniform block: see shaders/effect3d_common.glsl.inc. The unlit
+        /// shaders declare only the first 32 (128 bytes); the lit shaders declare the full 100
+        /// (400 bytes) that follow it. One constant-buffer size serves every 3D pipeline -- a
+        /// smaller declared block simply reads a prefix of a larger allocated buffer, which every
+        /// graphics API this backend targets allows.
+        constexpr std::size_t kEffectUniformFloats = 100;
 
         /// Floats per sprite vertex: position (2), texture coordinate (2), colour (4).
         constexpr std::size_t kSpriteVertexFloats = 8;
@@ -804,6 +808,8 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveFragmentShader_);
         if (primitiveTexturedFragmentShader_ != nullptr)
             renderer_->Release(*primitiveTexturedFragmentShader_);
+        if (primitiveLitFragmentShader_ != nullptr)
+            renderer_->Release(*primitiveLitFragmentShader_);
         if (primitiveLayout_ != nullptr)
             renderer_->Release(*primitiveLayout_);
         if (primitiveTexturedLayout_ != nullptr)
@@ -1002,6 +1008,9 @@ namespace CNA::Internal::Backends::Llgl
         primitiveTexturedFragmentShader_ = createFragmentShader(
             Shaders::kTextured3dFragGlsl, Shaders::kTextured3dFragSpv,
             sizeof(Shaders::kTextured3dFragSpv), "textured 3D fragment shader");
+        primitiveLitFragmentShader_ = createFragmentShader(
+            Shaders::kLitTextured3dFragGlsl, Shaders::kLitTextured3dFragSpv,
+            sizeof(Shaders::kLitTextured3dFragSpv), "lit textured 3D fragment shader");
 
         // Two layouts rather than one with an optionally-unused texture slot: a pipeline whose
         // layout declares a texture the draw never binds is a validation error on Vulkan, not a
@@ -1037,9 +1046,10 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     LLGL::Shader* LlglGraphicsBackend::AcquirePrimitiveVertexShader(
-        const std::vector<LLGL::VertexAttribute>& attributes, bool textured)
+        const std::vector<LLGL::VertexAttribute>& attributes, bool textured, bool lit)
     {
-        const std::uint64_t key = MakeVertexLayoutKey(attributes) * 2u + (textured ? 1u : 0u);
+        const std::uint64_t key =
+            (MakeVertexLayoutKey(attributes) * 2u + (textured ? 1u : 0u)) * 2u + (lit ? 1u : 0u);
         const auto cached = primitiveVertexShaderCache_.find(key);
         if (cached != primitiveVertexShaderCache_.end())
             return cached->second;
@@ -1049,10 +1059,12 @@ namespace CNA::Internal::Backends::Llgl
         // variant is chosen from the layout rather than from what the effect asked for.
         bool hasColor = false;
         bool hasTexCoord = false;
+        bool hasNormal = false;
         for (const LLGL::VertexAttribute& attribute : attributes)
         {
             if (attribute.location == 1) hasColor = true;
             if (attribute.location == 2) hasTexCoord = true;
+            if (attribute.location == 3) hasNormal = true;
         }
 
         if (textured && !hasTexCoord)
@@ -1061,11 +1073,36 @@ namespace CNA::Internal::Backends::Llgl
                 std::string(kBackendName) + " backend: a textured effect needs a vertex layout with "
                 "texture coordinates, and this one has none");
         }
+        if (lit && !hasNormal)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: lighting needs a vertex layout with normals, "
+                "and this one has none");
+        }
 
         const char* glslSource = nullptr;
         const std::uint32_t* spirv = nullptr;
         std::size_t spirvSize = 0;
-        if (textured)
+        if (lit)
+        {
+            // Bounded scope (LLGL-25): lighting is only implemented for the textured path, which
+            // covers the overwhelming majority of real usage (lit models with a diffuse map).
+            // Lighting without a texture is a distinct, still-open gap, refused by name rather
+            // than silently rendering unlit or with a fabricated white texture.
+            if (hasColor)
+            {
+                glslSource = Shaders::kLitColoredTextured3dVertGlsl;
+                spirv = Shaders::kLitColoredTextured3dVertSpv;
+                spirvSize = sizeof(Shaders::kLitColoredTextured3dVertSpv);
+            }
+            else
+            {
+                glslSource = Shaders::kLitTextured3dVertGlsl;
+                spirv = Shaders::kLitTextured3dVertSpv;
+                spirvSize = sizeof(Shaders::kLitTextured3dVertSpv);
+            }
+        }
+        else if (textured)
         {
             if (hasColor)
             {
@@ -1093,13 +1130,16 @@ namespace CNA::Internal::Backends::Llgl
                 "this vertex layout has none");
         }
 
-        // The attribute list handed to the shader is trimmed to what that variant declares: an
-        // untextured draw from a layout that happens to carry texture coordinates must not leave
-        // the pipeline expecting an input its shader never reads.
+        // The attribute list handed to the shader is trimmed to what that variant declares: a
+        // draw from a layout that happens to carry attributes the selected shader never reads
+        // (texture coordinates on an untextured draw, a normal on an unlit one) must not leave the
+        // pipeline expecting an input its shader never declares.
         std::vector<LLGL::VertexAttribute> shaderAttributes;
         for (const LLGL::VertexAttribute& attribute : attributes)
         {
             if (attribute.location == 2 && !textured)
+                continue;
+            if (attribute.location == 3 && !lit)
                 continue;
             shaderAttributes.push_back(attribute);
         }
@@ -1141,7 +1181,7 @@ namespace CNA::Internal::Backends::Llgl
 
     LLGL::PipelineState* LlglGraphicsBackend::AcquirePrimitivePipeline(
         const LlglVertexBufferBackend& vertexBuffer, PrimitiveType primitive, bool scissorEnabled,
-        bool textured)
+        bool textured, bool lit)
     {
         const std::vector<LLGL::VertexAttribute>& attributes = vertexBuffer.GetVertexAttributes();
 
@@ -1154,6 +1194,7 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + static_cast<std::uint64_t>(fillMode_ & 0x1);
         key = key * 2u + (scissorEnabled ? 1u : 0u);
         key = key * 2u + (textured ? 1u : 0u);
+        key = key * 2u + (lit ? 1u : 0u);
         key = key * 1024u + (MakeBlendPipelineKey(scissorEnabled) & 0x3FFu);
 
         const auto cached = primitivePipelineCache_.find(key);
@@ -1161,10 +1202,14 @@ namespace CNA::Internal::Backends::Llgl
             return cached->second;
 
         LLGL::GraphicsPipelineDescriptor pipelineDesc;
-        pipelineDesc.debugName = textured ? "CNA.Textured3D" : "CNA.Colored3D";
-        pipelineDesc.vertexShader = AcquirePrimitiveVertexShader(attributes, textured);
-        pipelineDesc.fragmentShader = textured ? primitiveTexturedFragmentShader_
-                                               : primitiveFragmentShader_;
+        pipelineDesc.debugName = lit ? "CNA.Lit3D" : (textured ? "CNA.Textured3D" : "CNA.Colored3D");
+        pipelineDesc.vertexShader = AcquirePrimitiveVertexShader(attributes, textured, lit);
+        pipelineDesc.fragmentShader = lit ? primitiveLitFragmentShader_
+                                    : textured ? primitiveTexturedFragmentShader_
+                                    : primitiveFragmentShader_;
+        // A lit draw is always textured in this backend's current scope, so it reuses the
+        // textured pipeline layout (Transform + colorMap + samplerState) rather than needing one
+        // of its own.
         pipelineDesc.pipelineLayout = textured ? primitiveTexturedLayout_ : primitiveLayout_;
         pipelineDesc.renderPass = swapChain_->GetRenderPass();
         pipelineDesc.primitiveTopology = MapPrimitiveTopology(primitive);
@@ -1217,18 +1262,20 @@ namespace CNA::Internal::Backends::Llgl
         return pipeline;
     }
 
-    void LlglGraphicsBackend::FillEffectUniforms(float (&uniforms)[32], const float matrix[16],
+    void LlglGraphicsBackend::FillEffectUniforms(float (&uniforms)[kEffectUniformFloats],
+                                                  const float matrix[16],
                                                   const GpuDrawParams* params)
     {
+        std::memset(uniforms, 0, sizeof(float) * kEffectUniformFloats);
         std::memcpy(uniforms, matrix, sizeof(float) * 16);
 
-        // Defaults are the "no effect state at all" values: opaque white, fog off, and an alpha
-        // test that always passes -- the same neutral values the shaders would see from a stock
-        // effect that enables none of these.
+        // Defaults for the fields every draw's shader reads, lit or not: opaque white and an
+        // alpha test that always passes -- the same neutral values a stock effect that enables
+        // none of these would produce. Fields only the lit shaders read (index 32 on) are left
+        // zeroed by the memset above; a zeroed light is an XNA-disabled light (matches
+        // DirectionalLight.Enabled's own zeroing), so that default is correct for them too.
         uniforms[16] = 1.0f; uniforms[17] = 1.0f; uniforms[18] = 1.0f; uniforms[19] = 1.0f;
-        uniforms[20] = 0.0f; uniforms[21] = 0.0f; uniforms[22] = 0.0f; uniforms[23] = 0.0f;
-        uniforms[24] = 0.0f; uniforms[25] = 0.0f; uniforms[26] = 0.0f; uniforms[27] = 0.0f;
-        uniforms[28] = 0.0f; uniforms[29] = 0.0f; uniforms[30] = 1.0f; uniforms[31] = 1.0f;
+        uniforms[30] = 1.0f; uniforms[31] = 1.0f;
 
         if (params == nullptr)
             return;
@@ -1256,6 +1303,46 @@ namespace CNA::Internal::Backends::Llgl
         uniforms[29] = params->alphaTest[1];
         uniforms[30] = params->alphaTest[2];
         uniforms[31] = params->alphaTest[3];
+
+        if (!params->lightingEnabled)
+            return;
+
+        // From index 32: worldMatrix (16), ambientColorLighting (4), then light0/1/2's
+        // dir/diffuse/specular (4 each, 36 total), emissiveColor (4), eyePositionWorld (4),
+        // specularColorPower (4) -- see shaders/effect3d_common.glsl.inc for the byte layout this
+        // mirrors field for field.
+        std::memcpy(uniforms + 32, params->worldColMajor, sizeof(float) * 16);
+        uniforms[48] = params->ambientColor[0];
+        uniforms[49] = params->ambientColor[1];
+        uniforms[50] = params->ambientColor[2];
+
+        const float* lightDirs[3]      = {params->light0Dir, params->light1Dir, params->light2Dir};
+        const float* lightDiffuses[3]  = {params->light0Diffuse, params->light1Diffuse, params->light2Diffuse};
+        const float* lightSpeculars[3] = {params->light0Specular, params->light1Specular, params->light2Specular};
+        for (int light = 0; light < 3; ++light)
+        {
+            const std::size_t base = 52 + static_cast<std::size_t>(light) * 12;
+            uniforms[base + 0] = lightDirs[light][0];
+            uniforms[base + 1] = lightDirs[light][1];
+            uniforms[base + 2] = lightDirs[light][2];
+            uniforms[base + 4] = lightDiffuses[light][0];
+            uniforms[base + 5] = lightDiffuses[light][1];
+            uniforms[base + 6] = lightDiffuses[light][2];
+            uniforms[base + 8] = lightSpeculars[light][0];
+            uniforms[base + 9] = lightSpeculars[light][1];
+            uniforms[base + 10] = lightSpeculars[light][2];
+        }
+
+        uniforms[88] = params->emissiveColor[0];
+        uniforms[89] = params->emissiveColor[1];
+        uniforms[90] = params->emissiveColor[2];
+        uniforms[92] = params->eyePositionWorld[0];
+        uniforms[93] = params->eyePositionWorld[1];
+        uniforms[94] = params->eyePositionWorld[2];
+        uniforms[96] = params->specularColor[0];
+        uniforms[97] = params->specularColor[1];
+        uniforms[98] = params->specularColor[2];
+        uniforms[99] = params->specularPower;
     }
 
     void LlglGraphicsBackend::QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
@@ -1306,6 +1393,15 @@ namespace CNA::Internal::Backends::Llgl
         }
 
         const bool textured = (params != nullptr && params->textureEnabled && params->texture0 != nullptr);
+        const bool lit = (params != nullptr && params->lightingEnabled);
+        if (lit && !textured)
+        {
+            // Bounded scope (LLGL-25): lighting is only implemented for the textured path. A lit,
+            // untextured draw is a real, still-open gap -- refused by name rather than silently
+            // dropping the light or fabricating a texture.
+            NotYetImplemented(kBackendName, "lighting without a texture");
+        }
+
         const LlglTextureBackend* texture = nullptr;
         if (textured)
         {
@@ -1330,7 +1426,7 @@ namespace CNA::Internal::Backends::Llgl
         FrameCommand command;
         command.kind = FrameCommand::Kind::Primitives;
         command.vertexBuffer = vertexBuffer.GetLlglBuffer();
-        command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured);
+        command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured, lit);
         if (textured)
         {
             command.texture = texture->GetLlglTexture();
@@ -2420,8 +2516,7 @@ namespace CNA::Internal::Backends::Llgl
         // something that merely looks plausible -- an unlit surface where lighting was asked for is
         // a wrong answer, not a degraded one.
         const char* unsupported = nullptr;
-        if (params.lightingEnabled)                          unsupported = "lighting";
-        else if (params.dualTexture)                         unsupported = "DualTextureEffect";
+        if (params.dualTexture)                              unsupported = "DualTextureEffect";
         else if (params.envMapping)                          unsupported = "EnvironmentMapEffect";
         else if (params.skinned)                             unsupported = "SkinnedEffect";
         else if (params.pbr)                                 unsupported = "PbrEffect";

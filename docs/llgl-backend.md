@@ -22,11 +22,13 @@ module**:
 * the **3D path**: `VertexDeclaration` translation, real vertex and index buffer draws (with
   `vertexStart`, `startIndex` and `baseVertex` honoured), depth test and depth write, cull mode,
   and fill mode;
-* **`BasicEffect` with one texture**, `DiffuseColor`, `Alpha`, vertex-colour modulation and fog,
-  plus **`AlphaTestEffect`**.
+* **`BasicEffect` with one texture**, `DiffuseColor`, `Alpha`, vertex-colour modulation, fog,
+  and **per-pixel directional lighting** (ambient, up to three lights, specular, `EmissiveColor`),
+  plus **`AlphaTestEffect`**. Lighting currently requires a texture to also be bound -- a lit,
+  untextured draw is refused by name rather than silently dropping the light.
 
-**Not implemented:** lighting, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`,
-`PbrEffect`, render targets, cube and volume textures, custom `ShaderEffect`s, occlusion queries.
+**Not implemented:** `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
+render targets, cube and volume textures, custom `ShaderEffect`s, occlusion queries.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -103,8 +105,11 @@ src/CNA/Internal/Backends/Llgl/shaders/
   sprite2d.vert.glsl      sprite2d.frag.glsl        Vulkan flavour, compiled to SPIR-V
   sprite2d.gl.vert.glsl   sprite2d.gl.frag.glsl     OpenGL flavour, embedded as source
   colored3d.vert.glsl     textured3d.vert.glsl      3D vertex shaders, one per vertex layout
-  colored_textured3d.vert.glsl                       (plus a .gl. flavour of each)
+  colored_textured3d.vert.glsl                       (plus lit_*.vert.glsl for lighting,
+  lit_textured3d.vert.glsl                            and a .gl. flavour of each)
+  lit_colored_textured3d.vert.glsl
   untextured3d.frag.glsl  textured3d.frag.glsl      3D fragment shaders (alpha test + fog)
+  lit_textured3d.frag.glsl                           (+ the lighting equation, .gl. too)
   effect3d_common.glsl.inc                           the uniform block they all share
   compile_shaders.py                                regenerates llgl_shaders.hpp
   llgl_shaders.hpp                                  generated; do not edit
@@ -133,11 +138,12 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure
 clear and present. `Llgl_2D` asserts real pixels read back from the GPU: quadrant orientation
 (where a Y-flip mistake shows up immediately), tint multiplication, `SpriteEffects` flipping, and
 `NonPremultiplied` alpha blending. `Llgl_TextureReadback` round-trips texture uploads byte-exactly,
-`Llgl_Presentation` covers the five presentation policies, and `Llgl_3D` covers the colour-only 3D
-path (vertex colours, depth ordering, indexed draws, cull mode, wireframe), and
-`Llgl_BasicEffect` covers textures, tinting, alpha, fog and the alpha test. Every one of them is
-registered a second time pinned to the OpenGL module through `CNA_LLGL_RENDERER`, which also
-exercises the selection path itself. All ten need a display; on a machine without one they report SKIPPED
+`Llgl_Presentation` covers the five presentation policies, `Llgl_3D` covers the 3D draw path
+(vertex colours, depth ordering, indexed draws, cull mode, wireframe), `Llgl_BasicEffect` covers
+textures, tinting, alpha, fog and the alpha test, and `Llgl_Lighting` covers ambient/directional/
+specular/emissive lighting. Every one of them is registered a second time pinned to the OpenGL
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All fourteen
+need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
 ```bash
@@ -154,6 +160,6 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | `DepthStencilBuffer` | yes | The swap chain really has both attachments and all seven clear paths work. |
 | `MultiSampleAntiAliasing` | yes | Forwarded to the swap chain; not yet pixel-verified (`LLGL-22`). |
 | `AnisotropicFiltering` | device-dependent | From LLGL's reported `limits.maxAnisotropy`. |
-| `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog and the alpha test; lighting and the remaining stock effects are not implemented. |
+| `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog, the alpha test, and per-pixel lighting (textured draws only); the remaining stock effects are not implemented. |
 | `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |
 | `MultipleRenderTargets`, `OcclusionQuery`, `CustomEffects`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |

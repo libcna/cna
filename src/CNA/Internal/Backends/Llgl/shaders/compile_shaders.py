@@ -36,6 +36,9 @@ SHADERS = [
     ("ColoredTextured3dVert", "colored_textured3d.vert.glsl", "colored_textured3d.gl.vert.glsl", "vert"),
     ("Untextured3dFrag", "untextured3d.frag.glsl", "untextured3d.gl.frag.glsl", "frag"),
     ("Textured3dFrag", "textured3d.frag.glsl", "textured3d.gl.frag.glsl", "frag"),
+    ("LitTextured3dVert", "lit_textured3d.vert.glsl", "lit_textured3d.gl.vert.glsl", "vert"),
+    ("LitColoredTextured3dVert", "lit_colored_textured3d.vert.glsl", "lit_colored_textured3d.gl.vert.glsl", "vert"),
+    ("LitTextured3dFrag", "lit_textured3d.frag.glsl", "lit_textured3d.gl.frag.glsl", "frag"),
 ]
 
 

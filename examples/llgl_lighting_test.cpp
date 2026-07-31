@@ -1,0 +1,278 @@
+// SPDX-License-Identifier: MS-PL
+// plan_llgl.md LLGL-25: BasicEffect's lit path, asserted against real pixels.
+//
+// A single quad, facing the camera, lit by one directional light. The light direction and the
+// quad's normal make the geometry itself the test: a light pointed straight at the surface is
+// full brightness, a light behind the surface is unlit but for ambient, and turning the light off
+// leaves only ambient plus emissive -- three states no single shading bug reproduces identically.
+//
+// Check A -- a front-facing light fully lit by a white light produces (close to) full brightness.
+// Check B -- AmbientLightColor alone (no directional light) sets a flat, dim, non-zero level.
+// Check C -- a light behind the surface contributes nothing beyond ambient (N·L clamped at zero).
+// Check D -- DiffuseColor still tints the lit result.
+// Check E -- EmissiveColor is added on top and is visible even with light and ambient both off.
+// Check F -- a specular highlight appears where the reflection direction points at the camera, and
+//   is small/dim off that point (SpecularColor/SpecularPower actually reaching the shader).
+// Check G -- lighting without a texture is refused by name (a real, documented gap) rather than
+//   silently rendering unlit or losing the light.
+//
+// Exit code 0 = all checks PASS, 1 = any FAILs.
+
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+
+#include "CNA/Internal/Backends/Llgl/LlglGraphicsBackend.hpp"
+
+#include "common/PixelTestGame.hpp"
+
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+using namespace Microsoft::Xna::Framework;
+using namespace Microsoft::Xna::Framework::Graphics;
+
+namespace
+{
+    constexpr int kWidth = 320;
+    constexpr int kHeight = 240;
+
+    const Color kClear{0, 0, 0, 255};
+
+    // A flat quad facing the camera (+Z normal, matching a right-handed view looking down -Z), at
+    // z = -0.5, filling a big square in the centre of the screen.
+    std::vector<VertexPositionNormalTexture> MakeFacingQuad()
+    {
+        const Vector3 normal(0.0f, 0.0f, 1.0f);
+        const auto vertex = [&normal](float x, float y, float u, float v) {
+            return VertexPositionNormalTexture(Vector3(x, y, -0.5f), normal, Vector2(u, v));
+        };
+        return {
+            vertex(60.0f, 40.0f, 0.0f, 0.0f),
+            vertex(260.0f, 40.0f, 1.0f, 0.0f),
+            vertex(60.0f, 200.0f, 0.0f, 1.0f),
+            vertex(60.0f, 200.0f, 0.0f, 1.0f),
+            vertex(260.0f, 40.0f, 1.0f, 0.0f),
+            vertex(260.0f, 200.0f, 1.0f, 1.0f),
+        };
+    }
+}
+
+class LlglLightingTest : public CNA::Examples::PixelTestGame
+{
+    std::unique_ptr<GraphicsDeviceManager> gdm_;
+    int logicalWidth_ = 0;
+    int logicalHeight_ = 0;
+
+    [[nodiscard]] Matrix LogicalProjection() const
+    {
+        return Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(logicalWidth_), static_cast<float>(logicalHeight_),
+            0.0f, 0.0f, 1.0f);
+    }
+
+    void DrawFacingQuad(GraphicsDevice& device, BasicEffect& effect)
+    {
+        const std::vector<VertexPositionNormalTexture> quad = MakeFacingQuad();
+        VertexBuffer buffer(device, VertexPositionNormalTexture::getVertexDeclarationStatic(),
+                            static_cast<int>(quad.size()), BufferUsage::None);
+        buffer.SetData(quad.data(), static_cast<int>(quad.size()));
+        device.SetVertexBuffer(&buffer);
+        effect.Apply();
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+    }
+
+public:
+    LlglLightingTest()
+    {
+        gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setPreferredBackBufferWidthProperty(kWidth);
+        gdm_->setPreferredBackBufferHeightProperty(kHeight);
+        gdm_->setSynchronizeWithVerticalRetraceProperty(false);
+    }
+
+    void RunTest() override
+    {
+        auto& device = getGraphicsDeviceProperty();
+        auto& backend = static_cast<CNA::Internal::Backends::Llgl::LlglGraphicsBackend&>(
+            device.GetBackend());
+        backend.GetViewportSize(logicalWidth_, logicalHeight_);
+
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        SamplerState pointClamp = SamplerState::PointClamp;
+        device.getSamplerStatesProperty()[0] = pointClamp;
+
+        // A plain white texture: DiffuseColor and the lighting equation are the whole picture,
+        // with no texture pattern to muddy the readings.
+        const std::vector<std::uint8_t> white{255, 255, 255, 255};
+        Texture2D whiteTexture = Texture2D::CreateFromPixels(device, 1, 1, white);
+
+        BasicEffect effect(device);
+        effect.setTextureEnabledProperty(true);
+        effect.setTextureProperty(&whiteTexture);
+        effect.setWorldProperty(Matrix::getIdentityProperty());
+        effect.setViewProperty(Matrix::getIdentityProperty());
+        effect.setProjectionProperty(LogicalProjection());
+        effect.setLightingEnabledProperty(true);
+        effect.setAmbientLightColorProperty(Vector3::Zero);
+        // Eye position for specular is derived from View's inverse translation, not set directly;
+        // View is Identity, so the eye sits at the world origin -- see Check F's own comment for
+        // why that matters there specifically.
+
+        // --- Check A: a front-facing light gives full brightness ---------------------------------
+        auto& light0 = effect.getDirectionalLight0Property();
+        light0.setEnabledProperty(true);
+        light0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));   // points INTO the surface -> lights it
+        light0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        light0.setSpecularColorProperty(Vector3::Zero);
+
+        device.Clear(kClear);
+        DrawFacingQuad(device, effect);
+        ExpectPixel("a light facing the surface gives near-full brightness", Rectangle(160, 120, 1, 1),
+                    Color(255, 255, 255, 255), /*tolerance=*/10);
+
+        // --- Check B: ambient alone, no directional light ----------------------------------------
+        light0.setEnabledProperty(false);
+        effect.setAmbientLightColorProperty(Vector3(0.3f, 0.3f, 0.3f));
+        device.Clear(kClear);
+        DrawFacingQuad(device, effect);
+        ExpectPixel("AmbientLightColor alone gives a flat, dim, non-zero level", Rectangle(160, 120, 1, 1),
+                    Color(77, 77, 77, 255), /*tolerance=*/15);
+
+        // --- Check C: a light behind the surface contributes nothing beyond ambient -------------
+        light0.setEnabledProperty(true);
+        light0.setDirectionProperty(Vector3(0.0f, 0.0f, 1.0f));    // points AWAY from the surface
+        device.Clear(kClear);
+        DrawFacingQuad(device, effect);
+        ExpectPixel("a light behind the surface adds nothing beyond ambient", Rectangle(160, 120, 1, 1),
+                    Color(77, 77, 77, 255), /*tolerance=*/15);
+
+        light0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+        effect.setAmbientLightColorProperty(Vector3::Zero);
+
+        // --- Check D: DiffuseColor tints the lit result -------------------------------------------
+        effect.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+        device.Clear(kClear);
+        DrawFacingQuad(device, effect);
+        ExpectPixel("DiffuseColor tints the lit surface", Rectangle(160, 120, 1, 1),
+                    Color(255, 0, 0, 255), /*tolerance=*/10);
+        effect.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+
+        // --- Check E: EmissiveColor is visible with no light or ambient at all --------------------
+        light0.setEnabledProperty(false);
+        effect.setEmissiveColorProperty(Vector3(0.0f, 0.5f, 0.0f));
+        device.Clear(kClear);
+        DrawFacingQuad(device, effect);
+        ExpectPixel("EmissiveColor shows through with no light and no ambient", Rectangle(160, 120, 1, 1),
+                    Color(0, 128, 0, 255), /*tolerance=*/15);
+        effect.setEmissiveColorProperty(Vector3::Zero);
+        light0.setEnabledProperty(true);
+
+        // --- Check F: specular highlight ----------------------------------------------------------
+        {
+            // Eye position for specular is derived from View's inverse translation (View =
+            // Identity here => eye at world origin), and every OTHER check in this file poses
+            // vertices in raw pixel coordinates -- eyePos - worldPos would then range over
+            // hundreds of units across one quad, which is not a coherent camera and would make
+            // the reflection direction meaningless. This check uses its own small-scale world
+            // space instead: an orthographic projection spanning world x/y in [-1, 1] over the
+            // whole window, and a quad at z = -1 -- eyePos=(0,0,0) is then a physically sensible
+            // camera a unit away from a surface a couple of units across, where the half-vector
+            // geometry the specular term depends on actually means something.
+            effect.setProjectionProperty(
+                Matrix::CreateOrthographicOffCenter(-1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 10.0f));
+
+            const Vector3 normal(0.0f, 0.0f, 1.0f);
+            const auto vertex = [&normal](float x, float y, float u, float v) {
+                return VertexPositionNormalTexture(Vector3(x, y, -1.0f), normal, Vector2(u, v));
+            };
+            const std::vector<VertexPositionNormalTexture> smallQuad{
+                vertex(-1.0f, -1.0f, 0.0f, 0.0f), vertex(1.0f, -1.0f, 1.0f, 0.0f),
+                vertex(-1.0f, 1.0f, 0.0f, 1.0f),  vertex(-1.0f, 1.0f, 0.0f, 1.0f),
+                vertex(1.0f, -1.0f, 1.0f, 0.0f),  vertex(1.0f, 1.0f, 1.0f, 1.0f),
+            };
+
+            light0.setDiffuseColorProperty(Vector3::Zero);
+            light0.setSpecularColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            effect.setSpecularColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+            effect.setSpecularPowerProperty(64.0f);
+
+            // Eye straight ahead and light straight-on: the half-vector equals the surface normal,
+            // so the highlight peaks at the centre and falls off towards the edges.
+            VertexBuffer buffer(device, VertexPositionNormalTexture::getVertexDeclarationStatic(),
+                                static_cast<int>(smallQuad.size()), BufferUsage::None);
+            buffer.SetData(smallQuad.data(), static_cast<int>(smallQuad.size()));
+            device.SetVertexBuffer(&buffer);
+            device.Clear(kClear);
+            effect.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+
+            Color centre(0, 0, 0, 0);
+            Color edge(0, 0, 0, 0);
+            const Rectangle centreRegion(kWidth / 2, kHeight / 2, 1, 1);
+            const Rectangle edgeRegion(kWidth / 2 - kWidth * 4 / 10, kHeight / 2 - kHeight * 4 / 10, 1, 1);
+            device.GetBackBufferData(&centreRegion, &centre, 0, 1);
+            device.GetBackBufferData(&edgeRegion, &edge, 0, 1);
+
+            ExpectTrue("a specular highlight peaks near the reflection direction",
+                       centre.getRProperty() > 60);
+            ExpectTrue("the specular highlight falls off away from the reflection direction",
+                       edge.getRProperty() < centre.getRProperty());
+
+            effect.setProjectionProperty(LogicalProjection());
+
+            effect.setSpecularColorProperty(Vector3::Zero);
+            light0.setSpecularColorProperty(Vector3::Zero);
+            light0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        }
+
+        // --- Check G: lighting without a texture is refused ---------------------------------------
+        {
+            effect.setTextureEnabledProperty(false);
+            effect.setTextureProperty(nullptr);
+
+            const std::vector<VertexPositionColor> untexturedQuad{
+                VertexPositionColor(Vector3(60.0f, 40.0f, -0.5f), Color::White),
+                VertexPositionColor(Vector3(260.0f, 40.0f, -0.5f), Color::White),
+                VertexPositionColor(Vector3(60.0f, 200.0f, -0.5f), Color::White),
+            };
+            VertexBuffer buffer(device, VertexPositionColor::getVertexDeclarationStatic(), 3,
+                                BufferUsage::None);
+            buffer.SetData(untexturedQuad.data(), static_cast<int>(untexturedQuad.size()));
+            device.SetVertexBuffer(&buffer);
+
+            bool refused = false;
+            try
+            {
+                effect.Apply();
+                device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+            }
+            catch (const std::exception&)
+            {
+                refused = true;
+            }
+            ExpectTrue("lighting without a texture is refused rather than silently mishandled", refused);
+        }
+    }
+};
+
+int main()
+{
+    return CNA::Examples::RunPixelTest<LlglLightingTest>();
+}
