@@ -2498,10 +2498,11 @@ existing task.
 | REMED-GFX-173 | SDL_GPU's `IssueEnvMapDraw` binds a literal LinearClamp sampler for the reflection cube, so `GraphicsDevice.SamplerStates[1]` is ignored for `EnvironmentMapEffect`. Its comment calls this the project-wide convention, which REMED-GFX-169 ended: Vulkan now honours slot 1 for the cube. A state-capture and convention question, not the filter-ordinal translation GFX-170 fixed, and distinct from GFX-172 (SDL_GPU's bind group CAN express it). | LOW | P3 | REMED-GFX-170 sampler trace | OPEN (isolated 2026-07-30 during REMED-GFX-170) |
 | REMED-GFX-174 | EasyGL wrote a sampler's anisotropy component only when it was ON, and one long-lived GL sampler object per slot turned that into a LATCH: the first `Anisotropic` draw raised `GL_TEXTURE_MAX_ANISOTROPY` to SamplerState's default 4 and every later Point/Linear draw on that slot kept sampling anisotropically, so no point fetch could return a stored texel again. The record's two "independent components" are one defect: SpriteBatch looked immune only because its legs run before any 3D leg (it passes a hardcoded maxAnisotropy of 1, so it can neither raise nor lower the latch). The record's mipmap-incompleteness component is refuted for ordinary textures (Task 924 already clamps MAX_LEVEL, trace reports complete=1) and REAL for render targets, cube maps and volume textures, where nothing clamped it and a single-level RenderTarget2D sampled under any of the seven mip-chain ordinals rendered solid black. Fixed both; EASYGL 50/70 -> 70/70 and a new 52-check order-sensitive fixture 29/52 -> 52/52. | LOW | P3 | REMED-GFX-170 cross-backend controls | DONE (2026-07-30) |
 | REMED-GFX-175 | A TextureFilter ordinal's MIPMAP component was dropped for `Linear` and `Point` on EasyGL. The contract is settled from FNA's own XNAMin/XNAMag/XNAMip tables and FNA3D's `XNAToGL_MinMipFilter`: Linear(0) is min/mag/mip LINEAR and Point(1) is min/mag/mip POINT, so both are FULL filters and ordinal 0 is the DEFAULT filter. EasyGL mapped them onto plain GL_LINEAR/GL_NEAREST (no mipmap term) while 2..8 were already right, and a declared-but-unwritten chain was mipmap-INCOMPLETE and sampled solid black under every mip-aware ordinal. The ticket's second claim is REFUTED: Software was not dropping a component, it had no mip pipeline at all (UpdatePixelsLevel a documented no-op, no LOD stage), so ALL NINE ordinals sampled level 0 there. Fixed both; new 87-check contract fixture, EASYGL 61/97 -> 87/87 and SOFTWARE 65/97 -> 87/87, with D3D9, D3D11, Vulkan, WebGPU and Bgfx all 87/87 as controls. | LOW | P3 | REMED-GFX-174 leg D4 | DONE (2026-07-30) |
-| REMED-GFX-176 | SDL_GPU: `SdlGpuTextureBackend`'s constructor hardcodes `num_levels = 1` and the class has no `UpdatePixelsLevel` override, so a `mipMap=true` Texture2D is a one-level GPU resource and every level the game writes above 0 is discarded. Consequence: NO TextureFilter ordinal mip-filters — measured 55/87 on REMED-GFX-175's contract fixture, with all nine ordinals sampling level 0 at exact 2x/4x/8x minification. A different defect from GFX-175 (whose EasyGL mechanism spares ordinals 2..8) and the same shape as GFX-175's Software half. The render-target, cube and MSAA paths do pass a real level count, so this is specific to the plain sampled Texture2D route. | LOW | P3 | REMED-GFX-175 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-175) |
+| REMED-GFX-176 | SDL_GPU: `SdlGpuTextureBackend` hardcoded `num_levels = 1` and had no `UpdatePixelsLevel` override, so a `mipMap=true` Texture2D was a one-level GPU resource and every level written above 0 was silently discarded — measured over 77 textures as `nativeLevels=1` on every one and ZERO level>0 upload commands. A third mechanism was reachable only after fixing those two: the level-0 upload's `cycle=true` orphans every level it does not write, and retaining it measures 41/87 on GFX-175's fixture, BELOW the 55/87 this started from. | LOW | P3 | REMED-GFX-175 cross-backend controls | **DONE 2026-07-31 — NEW 112-CHECK STORAGE/UPLOAD FIXTURE 45/112 -> 112/112 AND GFX-175's OWN FIXTURE 55/87 -> 87/87, JOINING THE EIGHT BACKENDS ALREADY THERE. TEN-ENTRY DIMENSION MATRIX (1x1..16x2, NPOT AND ODD) WITH PUBLIC AND NATIVE LEVEL COUNTS AGREEING ON EVERY ROW; EVERY LEVEL READ BACK BYTE-EXACT. NO MIP GENERATION, NO CPU SHADOW, NO EXTRA FRAME/PRESENT/WAIT/READBACK. 77 TEXTURES CREATED / 77 DESTROYED, ONE UPLOAD PER PUBLIC LEVEL UPLOAD. VULKAN VALIDATION PROVEN LOADED, ZERO VUIDs; ASan+UBSan CLEAN. FIVE CROSS-BACKEND CONTROLS 87/87. Texture2D WAS THE ONLY AFFECTED CLASS — Texture3D/TextureCube/RT2D/RTCube ALREADY CORRECT. ONE FALSE POSITIVE FOUND (R12/R13 PASS ON THE UNFIXED BACKEND). GFX-173 UNTOUCHED. SPAWNED GFX-180.** |
 | REMED-GFX-177 | D3D12's four descriptor heaps were monotonic bump cursors with no free list and no growth, and no sampleable-resource class had a destructor, so a slot was consumed for the lifetime of the PROCESS rather than of the resource. The trace names the exact failure: the 65th CBV/SRV/UAV request, made while only 30 resources were alive — 34 of the 64 occupied slots belonged to already-destroyed resources. The SAMPLER heap failed the same way (GFX-170 died at check 26). Fixed by two allocators that reclaim (fence-stamped free lists) and grow bounded — RTV/DSV by appending a block so issued handles never move, CBV/SRV/UAV and SAMPLER by a non-shader-visible staging heap mirrored into the shader-visible one, addressed by stable index. Starting capacities deliberately unchanged. | LOW | P3 | REMED-GFX-175 cross-backend controls | **DONE 2026-07-30 — NEW 29-CHECK PUBLIC FIXTURE 2/15 -> 29/29 ON D3D12, NEW 55-CHECK NATIVE ALLOCATOR FIXTURE 55/55, AND GFX-175's OWN FIXTURE 64-CHECKS-THEN-ABORT -> 87/87. THRESHOLDS 1/2/31/32/63/64/65/66/96/128/256 ALL GREEN; 5435 ALLOCATIONS OVER THE RUN OF WHICH 5177 RECYCLED, PEAK LIVE 258, CAPACITY 512 AFTER 3 DOUBLINGS, 2 HEAP OBJECTS, NO WAIT/IDLE/EXTRA SUBMIT/EXTRA FRAME ADDED. SIX CROSS-BACKEND CONTROLS GREEN, BGFX 28/29 = REMED-GFX-179. ONE FALSE POSITIVE FOUND AND CORRECTED (d3d12_smoke_test CHECK C ASSERTED THE BUMP ALLOCATOR AND FREED NOTHING). SPAWNED GFX-178/179.** |
 | REMED-GFX-178 | D3D12: `TextureFilter::MinPointMagLinearMipLinear` (ordinal 7) magnifies with POINT. Measured by REMED-GFX-170's ordinal fixture, leg C7: `manufactured colours=0` where its sibling `MinPointMagLinearMipPoint` (ordinal 8) correctly reports 124 on the same geometry, so the two ordinals that share a LINEAR magnification component disagree. Previously UNREACHABLE — pre-REMED-GFX-177 that fixture aborted at check 26 on `SAMPLER descriptor heap exhausted`, so leg C7 had never run on D3D12. Same family as GFX-170/GFX-175 (an ordinal losing one of its three components) but a distinct backend expression, so it is not absorbed. | LOW | P3 | REMED-GFX-177 regression gates | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
 | REMED-GFX-179 | Bgfx: `BgfxGraphicsBackend`'s render-target view-id allocator draws from `[1, kFirstSegmentViewId)` and `kFirstSegmentViewId` is **64**, so **63 concurrently live render targets is a hard ceiling** — REMED-GFX-177's public fixture, leg F, needs 66 and throws `Bgfx: exhausted view ids`. Same SHAPE as the D3D12 defect but not the same mechanism and not the same fix: the free list here already works (leg E's 256 sequential create/destroy cycles pass), what is missing is headroom — bgfx's own `BGFX_CONFIG_MAX_VIEWS` default is 256 and CNA reserves `[64, 255)` for REMED-GFX-065's per-frame viewport-segment views, so the partition, not bgfx, sets the limit. Deliberately NOT fixed under GFX-177, whose boundary forbids changing another backend because its binding model differs. | LOW | P3 | REMED-GFX-177 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
+| REMED-GFX-180 | SDL_GPU: `examples/sdlgpu_renderstate_test.cpp` (`SdlGpu_RenderState`) aborts before its FIRST check with `System::InvalidOperationException: Cannot present while render targets are bound`. Deterministic — 3/3 standalone runs, zero `[PASS]`/`[FAIL]` lines emitted, so nothing in its own try/catch around `RunAll` is ever reached. NOT caused by REMED-GFX-176: it reproduces identically with the pre-GFX-176 backend rebuilt from `249e9f9f`, that session's starting HEAD. The reported exception is a SECONDARY one raised from the present path because a render target was still bound when the frame ended; the primary failure that unwound out of `Draw` without unbinding is masked by it and was deliberately not diagnosed under GFX-176's boundary. | LOW | P3 | REMED-GFX-176 regression gates | OPEN (isolated 2026-07-31 during REMED-GFX-176) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -21450,3 +21451,206 @@ requires. `audit/` is untouched.
   live render targets is a hard ceiling.
 
 Commits: test `44d92f02`, fix `81af46f1`, coverage `bb55aecb`, docs (this).
+
+---
+
+## REMED-GFX-176 — SDL_GPU Texture2D mip storage and upload (2026-07-31)
+
+### The symptom, and the two things underneath it
+
+REMED-GFX-175's contract fixture measured **SDL_GPU 55/87**, and the failing set was the tell: **all
+nine ordinals** sampled level 0 at an exact 2x, 4x and 8x minification of a real four-level chain,
+`LinearMipPoint`, `PointMipLinear` and the four `Min*Mag*` ordinals included. A filter fixture can
+only ask which level the sampler chose. On this backend the honest answer was **the only one that
+existed**, and no sampler change could have altered it — REMED-GFX-170 had already made the ordinal
+table complete and correct here, which is why this was ticketed separately rather than absorbed.
+
+**Mechanism 1 — ALLOCATION.** `SdlGpuTextureBackend`'s constructor set `createInfo.num_levels = 1`
+as a literal and never read `ImageData::mipLevels`, the field `Texture2D`'s own constructor fills
+from `CalculateMipLevels(w, h)`. A `mipMap=true` texture reported `LevelCount` 4 to the game and
+owned a one-level GPU resource.
+
+**Mechanism 2 — UPLOAD.** The class declared **no `UpdatePixelsLevel` override at all**, so it
+inherited `ITextureBackend`'s default — an empty body. Every `SetData(level > 0, ...)` was accepted
+by the shared layer, written into its CPU mip buffer, handed down and silently dropped. No error, no
+warning, no pixel.
+
+Both are measured, not inferred, by the new `CNA_SDLGPU_TEXTURE_TRACE`. Over the new fixture's run
+against the unfixed backend: **77 native textures created, `nativeLevels=1` on every single one**
+while `requestedLevels` ran up to 5, and **zero** `level>0` upload commands ever emitted. Post-fix
+the same trace reads `nativeLevels == requestedLevels` on all 77 and **155** level>0 uploads.
+
+**Mechanism 3 — CYCLE, which only became reachable once the first two were fixed, and which the new
+fixture is what found.** The level-0 upload passed `cycle=true` to `SDL_UploadToGPUTexture`, whose
+documented meaning is "swap to a fresh internal resource rather than stall on an in-flight read" —
+and a fresh resource does not carry the levels this upload is not writing. Harmless for a one-level
+texture; silently destructive for a chain. **A/B measured by retaining it:** the storage fixture
+drops to **52/112** and GFX-175's fixture to **41/87 — BELOW the 55/87 this task started from.** A
+fix that allocated the chain and uploaded the levels but kept `cycle=true` would have regressed the
+backend while looking like progress on every storage check. `cycle` is now true only when
+`levelCount_ == 1`, which keeps the ordinary `mipMap=false` path byte-identical, and false for a
+chain — the same conclusion SDLGPU-40 reached on the cube path and REMED-GFX-135 on the volume path,
+both already documented in this file for this exact reason.
+
+This is why allocation and upload landed as **one** commit: allocating a chain while keeping the
+old level-0-only upload leaves levels 1..N undefined and gives the sampler somewhere worse to go
+than the single level it replaced. There is no useful intermediate state to bisect to.
+
+### The fix
+
+Both public entry points now share one `UploadLevel` path whose destination region, `mip_level`,
+transfer size, row pitch and `pixels_per_row` all come from the **level's** dimensions rather than
+the resource's, and which rejects a level whose supplied extent is not the one that level actually
+has. A non-positive extent and a level count beyond what the dimensions can halve down to are both
+rejected **before** `SDL_CreateGPUTexture` rather than surfacing as a device error or a silently
+shortened chain.
+
+**No mip generation was introduced.** `SDL_GenerateMipmapsForGPUTexture` is not called for a
+`Texture2D` — construction allocates the declared levels and nothing but the caller writes them.
+No CPU shadow, extra frame, `Present`, wait, retry or readback was added.
+
+### Level count and dimension matrix
+
+| dimensions | `mipMap=false` | `mipMap=true` levels | level extents |
+|---|---|---|---|
+| 1x1  | 1 | 1 | 1x1 |
+| 2x2  | 1 | 2 | 2x2, 1x1 |
+| 4x4  | 1 | 3 | 4x4, 2x2, 1x1 |
+| 8x8  | 1 | 4 | 8x8, 4x4, 2x2, 1x1 |
+| 8x4  | 1 | 4 | 8x4, 4x2, 2x1, 1x1 |
+| 16x2 | 1 | 5 | 16x2, 8x1, 4x1, 2x1, 1x1 |
+| 3x2  | 1 | 2 | 3x2, 1x1 |
+| 5x3  | 1 | 3 | 5x3, 2x1, 1x1 |
+| 6x6  | 1 | 3 | 6x6, 3x3, 1x1 |
+| 7x5  | 1 | 3 | 7x5, 3x2, 1x1 |
+
+Public `LevelCount` and native `num_levels` now agree on every row, each axis clamps to at least
+one, and every chain's final level is 1x1. No zero-dimensional level is ever created or uploaded.
+
+### Results
+
+**New `examples/sdlgpu_texture2d_mip_storage_test.cpp`, 112 checks over 11 legs: 45/112 -> 112/112.**
+**REMED-GFX-175's own 87-check fixture: 55/87 -> 87/87**, joining the eight backends already there.
+
+Per leg: A allocation over the matrix above plus a declared-but-unwritten chain; B every declared
+level of every power-of-two chain read back **byte-exact** by rendering it at its own size under
+Point, so content, orientation, row pitch and extent are asserted at once with no tolerance; C the
+LOD ladder — Point selects each level exactly, Linear degenerates to one level at integer lambda and
+blends only the two bracketing levels between them; D upload ordering (reverse, forward,
+interleaved-with-rewrites, two concurrent chains, level 0 rewritten after the chain was complete);
+E seven sub-rectangles of level 1 plus `startIndex` as a caller-array offset and four rejected
+regions that leave the level untouched; F upload and sample in the same frame with no `Present`,
+twice; G NPOT/odd/rectangular chains at every scale; H SpriteBatch, all three 3D submission routes,
+and six stock textured families; I lifetime; J rejects and one-level completeness under all nine
+ordinals; K the GetData boundary.
+
+**Point selects exactly one level with no interpolation at every scale tested. Linear is byte-exact
+at integer lambda and bounded to the two adjacent levels between them. All nine ordinals now run
+against a real chain and REMED-GFX-170's table is unchanged.**
+
+### GetData boundary
+
+A plain `Texture2D`'s `GetData` is served by the shared layer's own CPU pixel shadow on **every**
+backend and never reaches `ITextureBackend::GetData`, so it cannot witness GPU storage. It is stated
+as leg K rather than left implied, and rendered sampling — not readback — is the content oracle
+everywhere above. **No CPU shadow was added to make anything here pass.**
+
+### Resource-type boundaries — Texture2D was the only one
+
+Every other SDL_GPU resource class already passed a real level count and already had a level-aware
+upload path, so none shares this root cause and none is absorbed:
+
+| class | `num_levels` before this task | verdict |
+|---|---|---|
+| `Texture2D` | hardcoded `1` | **the defect, fixed here** |
+| `Texture3D` | `mipMap ? CalculateMipLevels : 1` | already correct, untouched |
+| `TextureCube` | `mipMap ? CalculateMipLevels : 1` | already correct, untouched |
+| `RenderTarget2D` | `mipMap ? CalculateMipLevels : 1` | already correct, untouched |
+| `RenderTargetCube` | `mipMap ? CalculateMipLevels : 1` | already correct, untouched |
+| MSAA / depth attachments | `1` | correct — a resolve or depth target has no chain |
+
+Render-target and cube mip **generation** (`SDL_GenerateMipmapsForGPUTexture`) already exists for
+`RenderTarget2D`, its MRT extras, `RenderTargetCube` and `TextureCube`, and correctly does **not**
+exist for `Texture2D`, matching XNA/FNA.
+
+### Cardinality and performance
+
+From `CNA_SDLGPU_TEXTURE_TRACE` over the 112-check run: **77 native textures created, 77 destroyed**
+— one native texture per public texture, none per level, none leaked. **291 upload commands for 291
+public level uploads** (136 at level 0, 155 above it), one each, with no upload command emitted for
+the one out-of-range level the fixture issues. **19 uploads use `cycle=yes`** — exactly the
+one-level textures, whose path is byte-identical to before — and 272 use `cycle=no`. Storage grows
+only by the declared levels; there is no extra submit, fence, wait, pass, frame, `Present` or
+readback, and no texture is recreated per level.
+
+### Validation and sanitizers
+
+**SDL_GPU debug mode** is on in this Debug build (`SDL_CreateGPUDevice(debug_mode=true)`) and
+reported no error on any run. **The Vulkan validation layer beneath it was proven to load, not
+assumed:** `VK_LOADER_DEBUG=layer` shows `Loading layer library
+libVkLayer_khronos_validation.so` and `Insert instance layer "VK_LAYER_KHRONOS_validation"`.
+**Zero VUIDs, zero validation errors and zero validation warnings** across the storage fixture
+(112 checks), GFX-175's fixture (87), GFX-170's ordinal fixture (70) and the sampler-state fixture.
+
+**ASan+UBSan** (runtimes proven linked — `libasan.so.8`, `libubsan.so.1`, 12 `__asan_report` and 14
+`__ubsan_handle` symbols): storage 112/112 and GFX-175 87/87 with **zero ASan errors and zero UBSan
+runtime errors**. **UBSan-only:** the same, 112/112 and 87/87, zero runtime errors. The residual
+leak is **624 bytes in 6 allocations, byte-identical and with zero CNA frames**, and is
+A/B-classified as external: three untouched SDL_GPU fixtures that create no mip chain at all
+(`ordered_clear`, `rt_producer_consumer`, `mrt`) report the same 624 B / 6 allocations. It is a
+fixed per-process driver-init leak, unaffected by this task.
+
+### False-positive test audit
+
+**One found, and it is a blind spot rather than a wrong assertion.** No SDL_GPU test declared this
+backend as lacking mip support, and none asserted the defect as the contract — GFX-176 was hidden by
+*silence*, not by a capability gate. `examples/texture2d_getdata_transfer_range_test.cpp` declares
+SDL_GPU `MipUpload::Supported` and its R12/R13 checks pass on the **unfixed** backend
+(A/B measured: 5 checks, all PASS pre-fix), because the old `UpdatePixelsLevel` was an empty no-op
+that could not throw, so "level-1 upload succeeds" succeeded, and the level-1 read that follows it
+comes from the shared layer's CPU shadow rather than from GPU memory. Its checks are correct for
+what that fixture is for — REMED-GFX-149's transfer-window rule — and it was left unchanged rather
+than rewritten into a rendering fixture across fourteen backends; the new storage fixture's leg B is
+what now covers the destination it could not see.
+
+### Cross-backend controls
+
+GFX-175's fixture, unchanged, run after the fix: **EasyGL 87/87, Software 87/87, Vulkan 87/87,
+WebGPU 87/87, Bgfx 87/87**, Headless skips honestly (exit 77). D3D9, D3D11 and D3D12 runtime
+controls were omitted deliberately — no shared header or shared production changed, so their
+existing 87/87 results stand; all three were **cross-built** clean instead. Every configured backend
+library (ASCII, Canvas, DX3, SDL_Renderer, Headless, EasyGL, Software, Vulkan, WebGPU, Bgfx, D3D9,
+D3D11, D3D12) builds incrementally with no error. The five control builds were **no-ops**, which is
+itself the evidence that nothing outside SDL_GPU was touched.
+
+### Regression gates
+
+The SDL_GPU CTest shard is **70/71**. Green: GFX-170 ordinal contract, GFX-150 point sampling,
+GFX-152 deferred-source and bound-target lifetime, GFX-156 ordered Clear, GFX-165 backbuffer
+readback (first-read, dimension, reject), GFX-143/145 pass segmentation and boundary, GFX-175 mip
+contract, the new storage fixture, and every Texture2D/Texture3D/TextureCube/RenderTarget2D/
+RenderTargetCube/MSAA/stock-effect test.
+
+The one failure, **`SdlGpu_RenderState`**, is **pre-existing and not caused by this task** — it
+aborts identically on `249e9f9f`, this session's starting HEAD, with the unmodified backend rebuilt
+from that commit. Filed as REMED-GFX-180.
+
+### Scope kept
+
+`REMED-GFX-178`, `REMED-GFX-179`, `REMED-GFX-171`, `REMED-GFX-172`, `REMED-GFX-173`,
+`REMED-GFX-153` and `REMED-GFX-154` were **not** begun and are unmodified. **GFX-173's hardcoded
+SDL_GPU cube sampler was deliberately not touched** — `EnvironmentMapEffect` is exercised on its
+ordinary 2D slot only, and that boundary is stated in the fixture itself. No other backend's
+production was modified, no public API or `TextureFilter` enum value changed, and `audit/` is
+untouched.
+
+### New findings
+
+* **REMED-GFX-180** — `SdlGpu_RenderState` aborts before its first check with
+  `System::InvalidOperationException: Cannot present while render targets are bound`. Deterministic
+  (3/3 runs), zero checks execute, and it reproduces on `249e9f9f` with the pre-GFX-176 backend, so
+  it is not caused by this task. The reported exception is a *secondary* one raised from the present
+  path because a render target was still bound when the frame ended; whatever primary failure
+  unwound out of `Draw` without unbinding is masked by it and was not diagnosed here.
+
+Commits: test `df1d5111`, fix `5ed3b126`, docs (this).
