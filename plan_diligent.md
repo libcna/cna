@@ -52,7 +52,7 @@ Practical consequences that shaped this plan:
 | Namespace alias | `Dg = ::Diligent` — the CNA namespace is itself named `Diligent`, so unqualified `Diligent::X` inside it would resolve to the CNA namespace and fail |
 | Third-party pin | DiligentCore `v2.5.6`, via `FetchContent` in `cmake/ThirdPartyDiligent.cmake` |
 | Task prefix | `DILIGENT-` |
-| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D` |
+| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget` |
 
 ---
 
@@ -129,10 +129,14 @@ Implemented and exercised:
 
 Deliberately refused (each throws, naming itself):
 
-- Render targets (`SetRenderTargets` with a non-empty set; `CreateRenderTarget2D`/`Cube` return
-  `nullptr`), occlusion queries, custom `ShaderEffect` programs, hardware instancing, fog,
-  `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
-  MSAA. `SupportsCapability()` reports each of these honestly.
+- `RenderTarget2D` (`DILIGENT-20`/`DILIGENT-21`): off-screen colour, an optional real depth-stencil
+  buffer, `GetData` readback, sampling the unbound target, and mip regeneration on unbind.
+
+Deliberately refused (each throws, naming itself):
+
+- Cube-map render targets, MRT (2..4 slots), occlusion queries, custom `ShaderEffect` programs,
+  hardware instancing, fog, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`,
+  `SkinnedEffect`, `PbrEffect`, MSAA. `SupportsCapability()` reports each of these honestly.
 
 ---
 
@@ -164,13 +168,13 @@ Deliberately refused (each throws, naming itself):
 
 | Task | Description | Status | Notes |
 | --- | --- | --- | --- |
-| `DILIGENT-20` | `RenderTarget2D` (`CreateRenderTarget2D`, `SetRenderTarget2D`, `SetRenderTargets` single slot) | ⬜ | Needs the pipeline cache key to carry target formats, since the PSO's `RTVFormats`/`DSVFormat` stop being the swap chain's |
-| `DILIGENT-21` | `RenderTarget2D` `GetData` readback and `PreserveContents` semantics | ⬜ | |
+| `DILIGENT-20` | `RenderTarget2D` (`CreateRenderTarget2D`, `SetRenderTarget2D`, `SetRenderTargets` single slot) | ✅ | The pipeline cache key now carries the bound target's colour/depth formats, as predicted. Two real defects found while verifying: the key's `operator==`/hash had to learn the new field (a stale pipeline was reused and Vulkan rejected the render pass), and the sprite projection had to span the target rather than the window's logical canvas |
+| `DILIGENT-21` | `RenderTarget2D` `GetData` readback and `PreserveContents` semantics | ✅ | Readback reuses `ReadTextureRegion`. Diligent's immediate context binds without a load operation, so contents always survive a bind cycle — which satisfies `PreserveContents` and is a legal superset of `DiscardContents` |
 | `DILIGENT-22` | `RenderTargetCube` + per-face binding | ⬜ | `DILIGENT-23` (its dependency) is done |
 | `DILIGENT-23` | `TextureCube` (`CreateTextureCube`, `SetData`/`GetData` per face) | ✅ | Six array slices of one `RESOURCE_DIM_TEX_CUBE`; full mip chain. Verified by the shared `TextureCubeTests`/`CnjCapabilityMatrixTests`/XNB cube fixtures, which now run for real on this backend instead of asserting the refusal |
-| `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ⬜ | Unblocks the per-slot colour write masks `DILIGENT-12` currently ignores |
+| `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ⬜ | Refused explicitly rather than binding slot 0 and dropping the rest. Unblocks the per-slot colour write masks `DILIGENT-12` currently ignores |
 | `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | ⬜ | `ApplyMultiSampleCount()` currently reports 1 |
-| `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | ⬜ | Diligent exposes `IDeviceContext::GenerateMips` directly |
+| `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | 🟨 | Implemented: a mipped target is created with `MISC_TEXTURE_FLAG_GENERATE_MIPS` and regenerates on unbind, at the same point FNA3D does. No pixel test asserts the generated levels yet |
 
 ### Phase `DILIGENT-3` — remaining effect families
 

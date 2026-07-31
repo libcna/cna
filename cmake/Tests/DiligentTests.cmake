@@ -34,4 +34,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
         TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
+
+    # plan_diligent.md DILIGENT-20/DILIGENT-21: off-screen rendering, target readback, sampling the
+    # unbound target, and the target's own depth buffer.
+    cna_diligent_test(cna_test_diligent_rendertarget examples/diligent_rendertarget_test.cpp)
+    cna_register_backend_test(NAME Diligent_RenderTarget COMMAND cna_test_diligent_rendertarget
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
 endif()

@@ -16,7 +16,6 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
-#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -164,7 +163,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8)
+#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8) || defined(CNA_BACKEND_DILIGENT)
     // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
@@ -178,6 +177,10 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.
+    // plan_diligent.md DILIGENT-20/DILIGENT-24: Diligent renders into one target at a
+    // time here, so binding four throws for the same reason -- MRT is not implemented
+    // yet, and binding slot 0 while silently dropping the rest would render a scene
+    // that only looks right.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
 #elif defined(CNA_BACKEND_STUB)
     // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsBackend's nullptr
@@ -186,11 +189,6 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // reaching the backend, because RenderTarget2D::GetRenderTargetBackend() is null. Rejecting is
     // the correct behaviour and the reason it is asserted here: a no-op backend must not report
     // false success for a target it cannot honour.
-    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_BACKEND_DILIGENT)
-    // plan_diligent.md DILIGENT-20/DILIGENT-24: the Diligent backend creates no render target at
-    // all yet, so the refusal comes from the shared layer (a RenderTarget2D with no backend), not
-    // from a backend-specific single-target limit like the backends above.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #elif defined(CNA_BACKEND_OPENGLES1)
     // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
@@ -217,11 +215,9 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_BACKEND_STUB) || defined(CNA_BACKEND_DILIGENT)
+#if defined(CNA_BACKEND_STUB)
     // Same Stub contract as the four-target case above: no render-target support of any kind, so
     // even a single binding is refused deterministically rather than silently accepted.
-    // plan_diligent.md DILIGENT-20: no render targets yet, so binding one fails loudly in the
-    // shared layer instead of quietly drawing to the back buffer.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));

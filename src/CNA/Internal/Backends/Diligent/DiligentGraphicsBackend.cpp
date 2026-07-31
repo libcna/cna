@@ -793,6 +793,137 @@ void main(in PSInput psIn, out PSOutput psOut)
                                         w, h, depth, data, dataLength);
     }
 
+    // ---- DiligentRenderTargetBackend ----
+
+    DiligentRenderTargetBackend::DiligentRenderTargetBackend(DiligentGraphicsBackend& owner,
+                                                              int width, int height, int depthFormat,
+                                                              bool preserveContents, bool mipMap)
+        : owner_(owner)
+        , width_(width)
+        , height_(height)
+        , mipLevels_(mipMap ? MipLevelCount(width, height) : 1)
+        , preserveContents_(preserveContents)
+    {
+        if (width_ <= 0 || height_ <= 0)
+            throw std::runtime_error("CNA Diligent: render target dimensions must be positive");
+
+        Dg::TextureDesc colorDesc;
+        colorDesc.Name = "CNA render target";
+        colorDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
+        colorDesc.Width = static_cast<Dg::Uint32>(width_);
+        colorDesc.Height = static_cast<Dg::Uint32>(height_);
+        colorDesc.MipLevels = static_cast<Dg::Uint32>(mipLevels_);
+        colorDesc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
+        colorDesc.Usage = Dg::USAGE_DEFAULT;
+        colorDesc.BindFlags = Dg::BIND_RENDER_TARGET | Dg::BIND_SHADER_RESOURCE;
+        if (mipLevels_ > 1)
+            colorDesc.MiscFlags = Dg::MISC_TEXTURE_FLAG_GENERATE_MIPS;
+
+        owner_.device_->CreateTexture(colorDesc, nullptr, &colorTexture_);
+        if (!colorTexture_)
+            throw std::runtime_error("CNA Diligent: render target colour texture creation failed");
+
+        rtv_ = colorTexture_->GetDefaultView(Dg::TEXTURE_VIEW_RENDER_TARGET);
+        srv_ = colorTexture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
+        if (rtv_ == nullptr || srv_ == nullptr)
+            throw std::runtime_error("CNA Diligent: render target is missing a required view");
+
+        // DepthFormat::None means the game asked for no depth-stencil storage at all, and
+        // HasRealDepthBuffer() below has to be able to say so honestly. Any other value gets the
+        // one combined format this backend uses everywhere (design decision 6).
+        if (depthFormat != 0)
+        {
+            Dg::TextureDesc depthDesc;
+            depthDesc.Name = "CNA render target depth-stencil";
+            depthDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
+            depthDesc.Width = static_cast<Dg::Uint32>(width_);
+            depthDesc.Height = static_cast<Dg::Uint32>(height_);
+            depthDesc.MipLevels = 1;
+            depthDesc.Format = Dg::TEX_FORMAT_D24_UNORM_S8_UINT;
+            depthDesc.Usage = Dg::USAGE_DEFAULT;
+            depthDesc.BindFlags = Dg::BIND_DEPTH_STENCIL;
+
+            owner_.device_->CreateTexture(depthDesc, nullptr, &depthTexture_);
+            if (!depthTexture_)
+                throw std::runtime_error("CNA Diligent: render target depth buffer creation failed");
+            dsv_ = depthTexture_->GetDefaultView(Dg::TEXTURE_VIEW_DEPTH_STENCIL);
+            if (dsv_ == nullptr)
+                throw std::runtime_error("CNA Diligent: render target has no depth-stencil view");
+        }
+    }
+
+    DiligentRenderTargetBackend::~DiligentRenderTargetBackend()
+    {
+        // A target destroyed while still bound must not leave the context pointing at freed views.
+        if (owner_.currentRenderTarget_ == this)
+            owner_.SetRenderTarget2D(nullptr);
+    }
+
+    Dg::TEXTURE_FORMAT DiligentRenderTargetBackend::GetColorFormat() const
+    {
+        return colorTexture_ ? colorTexture_->GetDesc().Format : Dg::TEX_FORMAT_UNKNOWN;
+    }
+
+    Dg::TEXTURE_FORMAT DiligentRenderTargetBackend::GetDepthStencilFormat() const
+    {
+        return depthTexture_ ? depthTexture_->GetDesc().Format : Dg::TEX_FORMAT_UNKNOWN;
+    }
+
+    bool DiligentRenderTargetBackend::HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const
+    {
+        return depthTexture_ != nullptr;
+    }
+
+    void DiligentRenderTargetBackend::UpdatePixels(const std::uint8_t* rgba, int stride)
+    {
+        if (rgba == nullptr)
+            return;
+
+        Dg::Box box;
+        box.MinX = 0;
+        box.MaxX = static_cast<Dg::Uint32>(width_);
+        box.MinY = 0;
+        box.MaxY = static_cast<Dg::Uint32>(height_);
+
+        Dg::TextureSubResData subresource{};
+        subresource.pData = rgba;
+        subresource.Stride = static_cast<Dg::Uint64>(stride > 0 ? stride : width_ * 4);
+
+        owner_.context_->UpdateTexture(colorTexture_, 0, 0, box, subresource,
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    }
+
+    bool DiligentRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                               void* data, int dataLength) const
+    {
+        if (level < 0 || level >= mipLevels_)
+            return false;
+        const int levelW = MipLevelExtent(width_, level);
+        const int levelH = MipLevelExtent(height_, level);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelW || y + h > levelH)
+            return false;
+        return owner_.ReadTextureRegion(colorTexture_, static_cast<Dg::Uint32>(level), 0, x, y, 0,
+                                        w, h, 1, data, dataLength);
+    }
+
+    void DiligentRenderTargetBackend::BindAsRenderTarget()
+    {
+        owner_.SetRenderTarget2D(this);
+    }
+
+    void DiligentRenderTargetBackend::UnbindAsRenderTarget()
+    {
+        if (mipLevels_ > 1 && srv_ != nullptr)
+        {
+            // Levels 1..n only exist because level 0 was just rendered, so they are regenerated at
+            // exactly the point FNA3D regenerates them: when the target stops being the draw target.
+            owner_.EnsureRenderTargetsBound();
+            owner_.context_->GenerateMips(srv_);
+        }
+        owner_.SetRenderTarget2D(nullptr);
+    }
+
     // ---- DiligentVertexBufferBackend ----
 
     DiligentVertexBufferBackend::DiligentVertexBufferBackend(DiligentGraphicsBackend& owner,
@@ -823,15 +954,26 @@ void main(in PSInput psIn, out PSOutput psOut)
             desc.Name = "CNA vertex buffer";
             desc.Size = static_cast<Dg::Uint64>(requiredBytes);
             desc.BindFlags = Dg::BIND_VERTEX_BUFFER;
-            desc.Usage = Dg::USAGE_DEFAULT;
+            // USAGE_DYNAMIC rather than USAGE_DEFAULT + UpdateBuffer: an upload is a transfer
+            // command, and a transfer issued while a render target is bound interrupts the render
+            // pass. Found empirically -- DrawUserPrimitives uploads its vertices immediately before
+            // each draw, and with UpdateBuffer every such draw into a RenderTarget2D rendered
+            // nothing at all, while the same draw to the back buffer worked. A mapped write carries
+            // no transfer command and leaves the pass intact.
+            desc.Usage = Dg::USAGE_DYNAMIC;
+            desc.CPUAccessFlags = Dg::CPU_ACCESS_WRITE;
             owner_.device_->CreateBuffer(desc, nullptr, &buffer_);
             if (!buffer_)
                 throw std::runtime_error("CNA Diligent: vertex buffer creation failed");
             allocatedBytes_ = requiredBytes;
         }
 
-        owner_.context_->UpdateBuffer(buffer_, 0, static_cast<Dg::Uint64>(requiredBytes), data,
-                                      Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        void* mapped = nullptr;
+        owner_.context_->MapBuffer(buffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
+        if (mapped == nullptr)
+            throw std::runtime_error("CNA Diligent: vertex buffer could not be mapped");
+        std::memcpy(mapped, data, requiredBytes);
+        owner_.context_->UnmapBuffer(buffer_, Dg::MAP_WRITE);
     }
 
     void DiligentVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
@@ -886,15 +1028,21 @@ void main(in PSInput psIn, out PSOutput psOut)
             desc.Name = "CNA index buffer";
             desc.Size = static_cast<Dg::Uint64>(requiredBytes);
             desc.BindFlags = Dg::BIND_INDEX_BUFFER;
-            desc.Usage = Dg::USAGE_DEFAULT;
+            // See the vertex buffer's own note for why this is dynamic rather than default.
+            desc.Usage = Dg::USAGE_DYNAMIC;
+            desc.CPUAccessFlags = Dg::CPU_ACCESS_WRITE;
             owner_.device_->CreateBuffer(desc, nullptr, &buffer_);
             if (!buffer_)
                 throw std::runtime_error("CNA Diligent: index buffer creation failed");
             allocatedBytes_ = requiredBytes;
         }
 
-        owner_.context_->UpdateBuffer(buffer_, 0, static_cast<Dg::Uint64>(requiredBytes), data,
-                                      Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        void* mapped = nullptr;
+        owner_.context_->MapBuffer(buffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
+        if (mapped == nullptr)
+            throw std::runtime_error("CNA Diligent: index buffer could not be mapped");
+        std::memcpy(mapped, data, requiredBytes);
+        owner_.context_->UnmapBuffer(buffer_, Dg::MAP_WRITE);
     }
 
     // ---- DiligentSpriteBatchBackend ----
@@ -972,19 +1120,20 @@ void main(in PSInput psIn, out PSOutput psOut)
                                            SpriteEffects effects,
                                            float layerDepth)
     {
-        const auto* diligentTexture = dynamic_cast<const DiligentTextureBackend*>(&texture);
+        const auto* diligentTexture = dynamic_cast<const DiligentSampledTexture*>(&texture);
         if (diligentTexture == nullptr)
             throw std::runtime_error("CNA Diligent: sprite draw with a foreign texture backend");
 
         if (currentTexture_ != nullptr && currentTexture_ != diligentTexture)
             Flush();
         currentTexture_ = diligentTexture;
+        currentTextureSize_ = {texture.GetWidth(), texture.GetHeight()};
 
-        PushQuad(*diligentTexture, destinationRectangle, sourceRectangle, color, rotation, origin,
-                 effects, layerDepth);
+        PushQuad(currentTextureSize_.first, currentTextureSize_.second, destinationRectangle,
+                 sourceRectangle, color, rotation, origin, effects, layerDepth);
     }
 
-    void DiligentSpriteBatchBackend::PushQuad(const DiligentTextureBackend& texture,
+    void DiligentSpriteBatchBackend::PushQuad(int textureWidthPixels, int textureHeightPixels,
                                                const Rectangle& destinationRectangle,
                                                const Rectangle& sourceRectangle,
                                                const Color& color,
@@ -993,8 +1142,8 @@ void main(in PSInput psIn, out PSOutput psOut)
                                                SpriteEffects effects,
                                                float layerDepth)
     {
-        const float textureWidth = static_cast<float>(std::max(1, texture.GetWidth()));
-        const float textureHeight = static_cast<float>(std::max(1, texture.GetHeight()));
+        const float textureWidth = static_cast<float>(std::max(1, textureWidthPixels));
+        const float textureHeight = static_cast<float>(std::max(1, textureHeightPixels));
 
         float u0 = static_cast<float>(sourceRectangle.X) / textureWidth;
         float v0 = static_cast<float>(sourceRectangle.Y) / textureHeight;
@@ -1136,7 +1285,7 @@ void main(in PSInput psIn, out PSOutput psOut)
                blendFuncs == other.blendFuncs && writeMask == other.writeMask &&
                depth == other.depth && stencilFront == other.stencilFront &&
                stencilBack == other.stencilBack && stencilMasks == other.stencilMasks &&
-               raster == other.raster;
+               raster == other.raster && targetFormats == other.targetFormats;
     }
 
     std::size_t DiligentGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const noexcept
@@ -1144,7 +1293,7 @@ void main(in PSInput psIn, out PSOutput psOut)
         std::size_t hash = static_cast<std::size_t>(key.variant);
         const std::uint32_t fields[] = {key.topology, key.blend, key.blendFuncs, key.writeMask,
                                         key.depth, key.stencilFront, key.stencilBack,
-                                        key.stencilMasks, key.raster};
+                                        key.stencilMasks, key.raster, key.targetFormats};
         for (const std::uint32_t field : fields)
             hash = hash * 1099511628211ull ^ static_cast<std::size_t>(field);
         return hash;
@@ -1377,12 +1526,28 @@ void main(in PSInput psIn, out PSOutput psOut)
     {
         if (renderTargetsBound_)
             return;
-        Dg::ITextureView* renderTarget = swapChain_->GetCurrentBackBufferRTV();
-        Dg::ITextureView* depthStencil = swapChain_->GetDepthBufferDSV();
+        Dg::ITextureView* renderTarget = currentRenderTarget_ != nullptr
+                                             ? currentRenderTarget_->GetRenderTargetView()
+                                             : swapChain_->GetCurrentBackBufferRTV();
+        Dg::ITextureView* depthStencil = currentRenderTarget_ != nullptr
+                                             ? currentRenderTarget_->GetDepthStencilView()
+                                             : swapChain_->GetDepthBufferDSV();
         context_->SetRenderTargets(1, &renderTarget, depthStencil,
                                    Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         renderTargetsBound_ = true;
         ApplyViewportAndScissor();
+    }
+
+    Dg::ITextureView* DiligentGraphicsBackend::GetCurrentRenderTargetView() const
+    {
+        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetRenderTargetView()
+                                               : swapChain_->GetCurrentBackBufferRTV();
+    }
+
+    Dg::ITextureView* DiligentGraphicsBackend::GetCurrentDepthStencilView() const
+    {
+        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetDepthStencilView()
+                                               : swapChain_->GetDepthBufferDSV();
     }
 
     DiligentGraphicsBackend::LogicalViewport DiligentGraphicsBackend::ComputeLogicalViewport() const
@@ -1428,6 +1593,36 @@ void main(in PSInput psIn, out PSOutput psOut)
 
     void DiligentGraphicsBackend::ApplyViewportAndScissor()
     {
+        if (currentRenderTarget_ != nullptr)
+        {
+            // A render target has no window to letterbox into: its own pixels are the coordinate
+            // space, so the presentation-mode scaling that applies to the back buffer must not.
+            const auto targetWidth = static_cast<Dg::Uint32>(currentRenderTarget_->GetWidth());
+            const auto targetHeight = static_cast<Dg::Uint32>(currentRenderTarget_->GetHeight());
+
+            Dg::Viewport targetViewport;
+            targetViewport.TopLeftX = customViewport_ ? static_cast<float>(viewportRect_[0]) : 0.0f;
+            targetViewport.TopLeftY = customViewport_ ? static_cast<float>(viewportRect_[1]) : 0.0f;
+            targetViewport.Width = customViewport_ ? static_cast<float>(viewportRect_[2])
+                                                   : static_cast<float>(targetWidth);
+            targetViewport.Height = customViewport_ ? static_cast<float>(viewportRect_[3])
+                                                    : static_cast<float>(targetHeight);
+            targetViewport.MinDepth = customViewport_ ? viewportDepth_[0] : 0.0f;
+            targetViewport.MaxDepth = customViewport_ ? viewportDepth_[1] : 1.0f;
+            context_->SetViewports(1, &targetViewport, targetWidth, targetHeight);
+
+            if (scissorEnabled_)
+            {
+                Dg::Rect scissor;
+                scissor.left = scissorRect_[0];
+                scissor.top = scissorRect_[1];
+                scissor.right = scissorRect_[0] + scissorRect_[2];
+                scissor.bottom = scissorRect_[1] + scissorRect_[3];
+                context_->SetScissorRects(1, &scissor, targetWidth, targetHeight);
+            }
+            return;
+        }
+
         const LogicalViewport logical = ComputeLogicalViewport();
         const float scaleX = logical.logicalWidth > 0.0f ? logical.width / logical.logicalWidth : 1.0f;
         const float scaleY = logical.logicalHeight > 0.0f ? logical.height / logical.logicalHeight : 1.0f;
@@ -1473,7 +1668,7 @@ void main(in PSInput psIn, out PSOutput psOut)
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
         const float clearColor[] = {r, g, b, a};
-        context_->ClearRenderTarget(swapChain_->GetCurrentBackBufferRTV(), clearColor,
+        context_->ClearRenderTarget(GetCurrentRenderTargetView(), clearColor,
                                     Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     }
 
@@ -1481,17 +1676,19 @@ void main(in PSInput psIn, out PSOutput psOut)
     {
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
-        context_->ClearDepthStencil(swapChain_->GetDepthBufferDSV(), Dg::CLEAR_DEPTH_FLAG, depth, 0,
-                                    Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        if (Dg::ITextureView* depthStencil = GetCurrentDepthStencilView())
+            context_->ClearDepthStencil(depthStencil, Dg::CLEAR_DEPTH_FLAG, depth, 0,
+                                        Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     }
 
     void DiligentGraphicsBackend::ClearStencil(int stencil)
     {
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
-        context_->ClearDepthStencil(swapChain_->GetDepthBufferDSV(), Dg::CLEAR_STENCIL_FLAG, 1.0f,
-                                    static_cast<Dg::Uint8>(stencil & 0xFF),
-                                    Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        if (Dg::ITextureView* depthStencil = GetCurrentDepthStencilView())
+            context_->ClearDepthStencil(depthStencil, Dg::CLEAR_STENCIL_FLAG, 1.0f,
+                                        static_cast<Dg::Uint8>(stencil & 0xFF),
+                                        Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     }
 
     void DiligentGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
@@ -1504,10 +1701,11 @@ void main(in PSInput psIn, out PSOutput psOut)
     {
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
-        context_->ClearDepthStencil(swapChain_->GetDepthBufferDSV(),
-                                    Dg::CLEAR_DEPTH_FLAG | Dg::CLEAR_STENCIL_FLAG, depth,
-                                    static_cast<Dg::Uint8>(stencil & 0xFF),
-                                    Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        if (Dg::ITextureView* depthStencil = GetCurrentDepthStencilView())
+            context_->ClearDepthStencil(depthStencil,
+                                        Dg::CLEAR_DEPTH_FLAG | Dg::CLEAR_STENCIL_FLAG, depth,
+                                        static_cast<Dg::Uint8>(stencil & 0xFF),
+                                        Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     }
 
     void DiligentGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
@@ -1603,6 +1801,32 @@ void main(in PSInput psIn, out PSOutput psOut)
         return std::make_unique<DiligentTexture3DBackend>(*this, w, h, depth, mipMap, surfaceFormat);
     }
 
+    std::unique_ptr<IRenderTargetBackend> DiligentGraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        if (multiSampleCount > 1)
+        {
+            // Clamped, not refused: FNA's own semantics are that RenderTarget2D.MultiSampleCount
+            // reports the device-clamped value, and GetMultiSampleCount() below answers 0 so the
+            // caller can see what it really got (DILIGENT-25).
+            CNA::Logger::Warn(
+                "CNA Diligent: multisampled render targets are not implemented; creating a "
+                "single-sampled target instead",
+                CNA::LogCategory::GPU);
+        }
+        return std::make_unique<DiligentRenderTargetBackend>(*this, w, h, depthFormat,
+                                                             preserveContents, mipMap);
+    }
+
+    void DiligentGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        auto* target = static_cast<DiligentRenderTargetBackend*>(rt);
+        if (target == currentRenderTarget_)
+            return;
+        currentRenderTarget_ = target;
+        renderTargetsBound_ = false;
+    }
+
     std::unique_ptr<IVertexBufferBackend> DiligentGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
         return std::make_unique<DiligentVertexBufferBackend>(*this, vertex_capacity);
@@ -1616,6 +1840,18 @@ void main(in PSInput psIn, out PSOutput psOut)
     std::unique_ptr<IIndexBufferBackend> DiligentGraphicsBackend::CreateIndexBuffer32(int index_capacity)
     {
         return std::make_unique<DiligentIndexBufferBackend>(*this, index_capacity, true);
+    }
+
+    Dg::TEXTURE_FORMAT DiligentGraphicsBackend::CurrentColorFormat() const
+    {
+        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetColorFormat()
+                                               : swapChain_->GetDesc().ColorBufferFormat;
+    }
+
+    Dg::TEXTURE_FORMAT DiligentGraphicsBackend::CurrentDepthStencilFormat() const
+    {
+        return currentRenderTarget_ != nullptr ? currentRenderTarget_->GetDepthStencilFormat()
+                                               : swapChain_->GetDesc().DepthBufferFormat;
     }
 
     Dg::ITextureView* DiligentGraphicsBackend::GetBackBufferTextureView() const
@@ -1718,14 +1954,26 @@ void main(in PSInput psIn, out PSOutput psOut)
     {
         if (renderTargets == nullptr || count <= 0)
         {
-            renderTargetsBound_ = false;
+            SetRenderTarget2D(nullptr);
             EnsureRenderTargetsBound();
             return;
         }
-        // Refusing is deliberate: CreateRenderTarget2D/CreateRenderTargetCube return nullptr on this
-        // backend, so any non-empty set here would be a target this backend never created.
-        throw std::runtime_error(
-            "CNA Diligent: render targets are not implemented yet on this backend");
+        // Each refusal below names the one thing this backend cannot do, instead of quietly
+        // binding slot 0 and dropping the rest -- which would render a scene that looks right
+        // until something reads the targets that were never written.
+        for (int i = 0; i < count; ++i)
+        {
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "CNA Diligent: cube-map render targets are not implemented yet on this backend");
+        }
+        if (count > 1)
+            throw std::runtime_error(
+                "CNA Diligent: multiple simultaneous render targets are not implemented yet on "
+                "this backend");
+
+        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        EnsureRenderTargetsBound();
     }
 
     bool DiligentGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
@@ -1892,6 +2140,8 @@ void main(in PSInput psIn, out PSOutput psOut)
         PipelineKey key = state_;
         key.variant = variant;
         key.topology = static_cast<std::uint32_t>(ToTopology(primitive));
+        key.targetFormats = static_cast<std::uint32_t>(CurrentColorFormat()) |
+                            (static_cast<std::uint32_t>(CurrentDepthStencilFormat()) << 16);
         return key;
     }
 
@@ -1989,8 +2239,8 @@ void main(in PSInput psIn, out PSOutput psOut)
 
         auto& graphicsPipeline = psoCI.GraphicsPipeline;
         graphicsPipeline.NumRenderTargets = 1;
-        graphicsPipeline.RTVFormats[0] = swapChain_->GetDesc().ColorBufferFormat;
-        graphicsPipeline.DSVFormat = swapChain_->GetDesc().DepthBufferFormat;
+        graphicsPipeline.RTVFormats[0] = static_cast<Dg::TEXTURE_FORMAT>(key.targetFormats & 0xFFFF);
+        graphicsPipeline.DSVFormat = static_cast<Dg::TEXTURE_FORMAT>((key.targetFormats >> 16) & 0xFFFF);
         graphicsPipeline.PrimitiveTopology = static_cast<Dg::PRIMITIVE_TOPOLOGY>(key.topology);
         graphicsPipeline.InputLayout.LayoutElements = layout.data();
         graphicsPipeline.InputLayout.NumElements = static_cast<Dg::Uint32>(layout.size());
@@ -2182,7 +2432,7 @@ void main(in PSInput psIn, out PSOutput psOut)
 
     void DiligentGraphicsBackend::DrawSpriteQuads(Dg::IBuffer* vertexBuffer, Dg::IBuffer* indexBuffer,
                                                    std::size_t spriteCount,
-                                                   const DiligentTextureBackend& texture,
+                                                   const DiligentSampledTexture& texture,
                                                    const Matrix* transform, int filter,
                                                    int addressU, int addressV)
     {
@@ -2192,10 +2442,25 @@ void main(in PSInput psIn, out PSOutput psOut)
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
 
-        const LogicalViewport logical = ComputeLogicalViewport();
+        // A bound render target is its own coordinate space (XNA sets the viewport to the target's
+        // size when one is bound), so the sprite projection must span the target, not the window's
+        // logical canvas -- otherwise every sprite lands at back-buffer scale inside a
+        // differently-sized target.
+        float surfaceWidth;
+        float surfaceHeight;
+        if (currentRenderTarget_ != nullptr)
+        {
+            surfaceWidth = static_cast<float>(currentRenderTarget_->GetWidth());
+            surfaceHeight = static_cast<float>(currentRenderTarget_->GetHeight());
+        }
+        else
+        {
+            const LogicalViewport logical = ComputeLogicalViewport();
+            surfaceWidth = logical.logicalWidth;
+            surfaceHeight = logical.logicalHeight;
+        }
         Matrix projection = Matrix::CreateOrthographicOffCenter(
-            0.0f, std::max(1.0f, logical.logicalWidth), std::max(1.0f, logical.logicalHeight), 0.0f,
-            0.0f, 1.0f);
+            0.0f, std::max(1.0f, surfaceWidth), std::max(1.0f, surfaceHeight), 0.0f, 0.0f, 1.0f);
         if (transform != nullptr)
             projection = (*transform) * projection;
 
@@ -2370,7 +2635,7 @@ void main(in PSInput psIn, out PSOutput psOut)
         CachedPipeline& pipeline = GetOrCreatePipeline(MakePipelineKey(variant, primitive));
         if (pipeline.textureVariable != nullptr)
         {
-            const auto* diligentTexture = dynamic_cast<const DiligentTextureBackend*>(texture);
+            const auto* diligentTexture = dynamic_cast<const DiligentSampledTexture*>(texture);
             if (diligentTexture == nullptr)
                 throw std::runtime_error(
                     "CNA Diligent: a textured vertex layout was drawn without a texture");

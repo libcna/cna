@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "Common/interface/RefCntAutoPtr.hpp"
@@ -77,9 +78,25 @@ namespace CNA::Internal::Backends::Diligent
     class DiligentGraphicsBackend;
 
     /**
+     * @brief Anything this backend can bind to a sampler slot.
+     *
+     * Both plain textures and render targets are sampleable, but they reach `ITextureBackend`
+     * through different inheritance paths, so the draw paths need one type to ask for a shader
+     * resource view. Without it, `SpriteBatch::Draw(renderTarget, ...)` -- ordinary XNA code --
+     * would have to be refused purely because of how the C++ hierarchy is shaped.
+     */
+    class DiligentSampledTexture
+    {
+    public:
+        virtual ~DiligentSampledTexture() = default;
+        /** @brief Returns the shader resource view used when this resource is sampled. */
+        [[nodiscard]] virtual Dg::ITextureView* GetShaderResourceView() const = 0;
+    };
+
+    /**
      * @brief A texture living in Diligent GPU memory, created from an `ImageData`.
      */
-    class DiligentTextureBackend final : public ITextureBackend
+    class DiligentTextureBackend final : public ITextureBackend, public DiligentSampledTexture
     {
     public:
         /**
@@ -138,7 +155,7 @@ namespace CNA::Internal::Backends::Diligent
                                    void* data, int dataLength) const override;
 
         /** @brief NOXNA. Returns the shader resource view used when this texture is sampled. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const { return srv_; }
+        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
 
     private:
         DiligentGraphicsBackend& owner_;
@@ -285,6 +302,111 @@ namespace CNA::Internal::Backends::Diligent
         int height_ = 0;
         int depth_ = 0;
         int mipLevels_ = 1;
+    };
+
+    /**
+     * @brief An off-screen 2D render target: a colour texture that can be both drawn into and
+     * sampled, plus an optional depth-stencil buffer.
+     */
+    class DiligentRenderTargetBackend final : public IRenderTargetBackend,
+                                              public DiligentSampledTexture
+    {
+    public:
+        /**
+         * @brief Creates the colour texture and, when requested, its depth-stencil buffer.
+         *
+         * @param owner            Backend that owns the render device; must outlive this target.
+         * @param width            Target width in pixels.
+         * @param height           Target height in pixels.
+         * @param depthFormat      Raw XNA `DepthFormat` ordinal; `None` (0) allocates no
+         *                         depth-stencil buffer at all, any other value allocates a
+         *                         combined depth24-stencil8 one.
+         * @param preserveContents Whether the target's previous colour must survive a bind cycle.
+         *                         Accepted and always honoured: Diligent's immediate context binds
+         *                         without a load operation, so contents persist either way, which
+         *                         satisfies both `PreserveContents` and `DiscardContents`.
+         * @param mipMap           Whether to allocate a mip chain, regenerated when the target is
+         *                         unbound.
+         */
+        DiligentRenderTargetBackend(DiligentGraphicsBackend& owner, int width, int height,
+                                    int depthFormat, bool preserveContents, bool mipMap);
+
+        /** @brief Releases the GPU textures. */
+        ~DiligentRenderTargetBackend() override;
+
+        /** @brief Returns the target width in pixels. */
+        [[nodiscard]] int GetWidth() const override { return width_; }
+        /** @brief Returns the target height in pixels. */
+        [[nodiscard]] int GetHeight() const override { return height_; }
+
+        /**
+         * @brief Returns nothing: this backend has no SDL_Texture behind its render targets.
+         * @return Always nullptr.
+         */
+        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
+        /**
+         * @brief Replaces the whole level-0 image of the target's colour texture.
+         *
+         * @param rgba   Source pixels, RGBA8.
+         * @param stride Source row pitch in bytes.
+         */
+        void UpdatePixels(const std::uint8_t* rgba, int stride) override;
+
+        /**
+         * @brief Reads rendered pixels back to the CPU.
+         *
+         * @param level      Mip level to read.
+         * @param x          Left edge of the region, in pixels.
+         * @param y          Top edge of the region, in pixels.
+         * @param w          Width of the region, in pixels.
+         * @param h          Height of the region, in pixels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True if the whole region was written; false if nothing was read back.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /** @brief Makes subsequent draws render into this target. */
+        void BindAsRenderTarget() override;
+
+        /** @brief Restores the back buffer and regenerates this target's mip chain if it has one. */
+        void UnbindAsRenderTarget() override;
+
+        /** @brief Returns 0: this backend allocates no multisampled targets yet (`DILIGENT-25`). */
+        [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+
+        /**
+         * @brief Reports whether this target really has depth-stencil storage.
+         *
+         * @param depthFormatWasRequested Whether a non-`None` `DepthFormat` was requested.
+         * @return True only when a depth-stencil buffer was actually allocated.
+         */
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
+
+        /** @brief NOXNA. Returns the view drawn into when this target is bound. */
+        NOXNA [[nodiscard]] Dg::ITextureView* GetRenderTargetView() const { return rtv_; }
+        /** @brief NOXNA. Returns the depth-stencil view, or nullptr when none was allocated. */
+        NOXNA [[nodiscard]] Dg::ITextureView* GetDepthStencilView() const { return dsv_; }
+        /** @brief NOXNA. Returns the shader resource view used when this target is sampled. */
+        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
+        /** @brief NOXNA. Returns the colour texture's pixel format. */
+        NOXNA [[nodiscard]] Dg::TEXTURE_FORMAT GetColorFormat() const;
+        /** @brief NOXNA. Returns the depth-stencil format, or `TEX_FORMAT_UNKNOWN` when there is none. */
+        NOXNA [[nodiscard]] Dg::TEXTURE_FORMAT GetDepthStencilFormat() const;
+
+    private:
+        DiligentGraphicsBackend& owner_;
+        Dg::RefCntAutoPtr<Dg::ITexture> colorTexture_;
+        Dg::RefCntAutoPtr<Dg::ITexture> depthTexture_;
+        Dg::ITextureView* rtv_ = nullptr;
+        Dg::ITextureView* dsv_ = nullptr;
+        Dg::ITextureView* srv_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int mipLevels_ = 1;
+        bool preserveContents_ = false;
     };
 
     /**
@@ -486,7 +608,7 @@ namespace CNA::Internal::Backends::Diligent
             float r, g, b, a;
         };
 
-        void PushQuad(const DiligentTextureBackend& texture,
+        void PushQuad(int textureWidthPixels, int textureHeightPixels,
                       const Rectangle& destinationRectangle,
                       const Rectangle& sourceRectangle,
                       const Color& color,
@@ -502,7 +624,8 @@ namespace CNA::Internal::Backends::Diligent
         Dg::RefCntAutoPtr<Dg::IBuffer> indexBuffer_;
         std::size_t bufferedSprites_ = 0;
         std::vector<SpriteVertex> vertices_;
-        const DiligentTextureBackend* currentTexture_ = nullptr;
+        const DiligentSampledTexture* currentTexture_ = nullptr;
+        std::pair<int, int> currentTextureSize_{0, 0};
         Matrix transform_;
         bool hasTransform_ = false;
         int filter_ = 0;
@@ -533,6 +656,7 @@ namespace CNA::Internal::Backends::Diligent
         friend class DiligentTextureBackend;
         friend class DiligentTextureCubeBackend;
         friend class DiligentTexture3DBackend;
+        friend class DiligentRenderTargetBackend;
         friend class DiligentVertexBufferBackend;
         friend class DiligentIndexBufferBackend;
         friend class DiligentSpriteBatchBackend;
@@ -650,6 +774,30 @@ namespace CNA::Internal::Backends::Diligent
          */
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
                                                            int surfaceFormat) override;
+
+        /**
+         * @brief Creates an off-screen 2D render target.
+         *
+         * @param w                Target width in pixels.
+         * @param h                Target height in pixels.
+         * @param depthFormat      Raw XNA `DepthFormat` ordinal.
+         * @param preserveContents Whether previous colour must survive a bind cycle.
+         * @param mipMap           Whether to allocate a mip chain.
+         * @param multiSampleCount Requested MSAA sample count; clamped to 1 (none) here, and
+         *                         `IRenderTargetBackend::GetMultiSampleCount()` reports the real
+         *                         applied value of 0 rather than the request (`DILIGENT-25`).
+         * @return The new render target backend.
+         */
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                   bool preserveContents,
+                                                                   bool mipMap,
+                                                                   int multiSampleCount) override;
+
+        /**
+         * @brief Makes subsequent draws render into @p rt, or into the back buffer when null.
+         * @param rt Render target to bind, or nullptr for the back buffer.
+         */
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         /**
          * @brief Reads back a region of the rendered back buffer.
@@ -956,6 +1104,11 @@ namespace CNA::Internal::Backends::Diligent
             std::uint32_t stencilBack = 0;
             std::uint32_t stencilMasks = 0;
             std::uint32_t raster = 0;
+            /// Colour and depth-stencil formats of the bound target. A pipeline state is only
+            /// valid for the formats it was created against, and a render target's formats are
+            /// not necessarily the swap chain's -- the surface may hand out BGRA while every CNA
+            /// render target is RGBA.
+            std::uint32_t targetFormats = 0;
 
             bool operator==(const PipelineKey& other) const noexcept;
         };
@@ -1021,9 +1174,13 @@ namespace CNA::Internal::Backends::Diligent
                           PrimitiveType primitive, int primitiveCount,
                           const GpuDrawParams* params);
         void DrawSpriteQuads(Dg::IBuffer* vertexBuffer, Dg::IBuffer* indexBuffer,
-                             std::size_t spriteCount, const DiligentTextureBackend& texture,
+                             std::size_t spriteCount, const DiligentSampledTexture& texture,
                              const Matrix* transform, int filter, int addressU, int addressV);
         [[nodiscard]] Dg::ITextureView* GetBackBufferTextureView() const;
+        [[nodiscard]] Dg::ITextureView* GetCurrentRenderTargetView() const;
+        [[nodiscard]] Dg::ITextureView* GetCurrentDepthStencilView() const;
+        [[nodiscard]] Dg::TEXTURE_FORMAT CurrentColorFormat() const;
+        [[nodiscard]] Dg::TEXTURE_FORMAT CurrentDepthStencilFormat() const;
 
         SDL_Window* window_ = nullptr;
         DiligentDeviceType deviceType_ = DiligentDeviceType::Vulkan;
@@ -1059,5 +1216,6 @@ namespace CNA::Internal::Backends::Diligent
         float viewportDepth_[2] = {0.0f, 1.0f};
 
         bool renderTargetsBound_ = false;
+        DiligentRenderTargetBackend* currentRenderTarget_ = nullptr;
     };
 }

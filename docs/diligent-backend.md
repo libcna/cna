@@ -95,6 +95,8 @@ Implemented:
   Blinn-Phong specular evaluated per pixel.
 - `TextureCube` and `Texture3D` — creation with a mip chain, per-face / per-sub-box `SetData` and
   `GetData`. Storage and readback only: no built-in shader variant samples them yet.
+- `RenderTarget2D` — off-screen colour with an optional real depth-stencil buffer, `GetData`
+  readback, sampling the unbound target as a texture, and mip regeneration on unbind.
 - `BlendState`, `DepthStencilState`, `RasterizerState` and slot-0 `SamplerState`, all folded into
   the pipeline-state cache key.
 - `ReadBackbuffer` / `GraphicsDevice.GetBackBufferData`.
@@ -104,7 +106,7 @@ Not implemented — each **throws with its own name** rather than rendering an a
 
 | Feature | Tracked as |
 | --- | --- |
-| `RenderTarget2D`, `RenderTargetCube`, MRT | `DILIGENT-20`…`DILIGENT-24` |
+| `RenderTargetCube`, MRT (2..4 simultaneous targets) | `DILIGENT-22`, `DILIGENT-24` |
 | MSAA (back buffer and render targets) | `DILIGENT-25` |
 | Sampling a cube map or volume texture from a shader | `DILIGENT-34`, `DILIGENT-42` |
 | `AlphaTestEffect`, fog | `DILIGENT-31`, `DILIGENT-32` |
@@ -138,9 +140,10 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-`Diligent_2D` (6 checks) and `Diligent_3D` (5 checks) are the real-device pixel proofs: they clear,
-draw `SpriteBatch` quads and 3D primitives, and assert on pixels read back through
-`GraphicsDevice.GetBackBufferData`. Both pass against a real Vulkan device. On a machine with no
+`Diligent_2D` (6 checks), `Diligent_3D` (5 checks) and `Diligent_RenderTarget` (5 checks) are the
+real-device pixel proofs: they clear, draw `SpriteBatch` quads and 3D primitives on the back buffer
+and into an off-screen target, and assert on pixels read back through
+`GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData`. Both pass against a real Vulkan device. On a machine with no
 usable device they exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip —
 reporting a pass with nothing rendered would be dishonest.
 
