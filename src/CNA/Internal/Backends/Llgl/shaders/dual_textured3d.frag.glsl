@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: MS-PL
-// Textured 3D fragment shader, OpenGL flavour.
+// DualTextureEffect fragment shader, Vulkan flavour (SPIR-V).
+//
+// Reuses the plain textured/colored_textured vertex shader as-is (identical vertex-side
+// behaviour -- transform, tint, fog factor, UV passthrough): only this fragment shader and its
+// pipeline layout differ from the single-texture path, because DualTextureEffect samples a SECOND
+// texture through the SAME texture coordinate (no separate UV set), matching FNA's own
+// PSDualTexture: `base = SAMPLE(Texture, uv); base.rgb *= 2; color = base * overlay * tint`, where
+// `overlay = SAMPLE(Texture2, uv)`. There is no alpha test for this effect, matching FNA.
 //
 // The uniform block is the one described in effect3d_common.glsl.inc; every 3D shader here shares
 // it byte for byte, so a change to one must change all of them and FillEffectUniforms together.
-// Attribute locations follow the backend's usage-to-location mapping (position 0, colour 1,
-// texture coordinate 2), which is why a layout without vertex colours simply has no location 1.
 
-#version 450 core
+#version 450
 
 layout(std140, binding = 1) uniform Transform
 {
@@ -22,7 +27,10 @@ layout(std140, binding = 1) uniform Transform
     vec4 vertexColorEnabledPad;
 };
 
-layout(binding = 2) uniform sampler2D colorMap;
+layout(binding = 2) uniform texture2D colorMap;
+layout(binding = 3) uniform sampler samplerState;
+layout(binding = 4) uniform texture2D colorMap2;
+layout(binding = 5) uniform sampler samplerState2;
 
 layout(location = 0) in vec4 vColor;
 layout(location = 1) in vec2 vTexCoord;
@@ -32,15 +40,10 @@ layout(location = 0) out vec4 fragColor;
 
 void main()
 {
-    vec4 color = texture(colorMap, vTexCoord) * vColor;
-
-    // XNA's alpha test: pass when |a - ref| < tolerance for the equal/not-equal comparisons, or
-    // when a < ref otherwise; the two weights encode which side passes. A negative result discards.
-    float alphaTestResult = ((alphaTest.y > 0.0)
-        ? ((abs(color.a - alphaTest.x) < alphaTest.y) ? alphaTest.z : alphaTest.w)
-        : ((color.a < alphaTest.x) ? alphaTest.z : alphaTest.w));
-    if (alphaTestResult < 0.0)
-        discard;
+    vec4 base = texture(sampler2D(colorMap, samplerState), vTexCoord);
+    vec4 overlay = texture(sampler2D(colorMap2, samplerState2), vTexCoord);
+    base.rgb *= 2.0;
+    vec4 color = base * overlay * vColor;
 
     // Fog blends towards the fog colour without touching alpha, matching the stock effects.
     color.rgb = mix(color.rgb, fogColor.rgb, vFogFactor);

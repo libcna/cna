@@ -11,7 +11,10 @@
 //   proves the texture coordinate attribute, the sampler binding and the orientation at once.
 // Check B -- DiffuseColor tints the sampled texel (a red tint over a white texel leaves red).
 // Check C -- Alpha reaches the output: a half-alpha effect over a known background blends.
-// Check D -- vertex colours and the texture multiply together when the layout carries both.
+// Check D -- vertex colours and the texture multiply together when the layout carries both AND
+//   VertexColorEnabled is true; with it false, the same colour-carrying layout must NOT tint the
+//   texel (a real bug found and fixed here: the shader used to multiply unconditionally whenever
+//   the vertex buffer merely carried a colour attribute).
 // Check E -- fog blends towards the fog colour with distance: the far end of a long quad is fogged
 //   and the near end is not.
 // Check F -- AlphaTestEffect discards texels below the reference alpha and keeps those above it.
@@ -199,6 +202,11 @@ public:
         device.setBlendStateProperty(BlendState::Opaque);
 
         // --- Check D: vertex colour multiplies with the texture ---------------------------------
+        // VertexColorEnabled must be explicitly requested for the vertex colour attribute to
+        // apply at all -- a vertex layout that merely CARRIES a colour attribute is not enough
+        // (real XNA semantics; a bug that ignored this property and always multiplied unconditionally
+        // was found and fixed here).
+        effect.VertexColorEnabled = true;
         device.Clear(kClear);
         DrawQuad(device, effect, VertexPositionColorTexture::getVertexDeclarationStatic(),
                  MakeColoredTexturedQuad(40.0f, 40.0f, 200.0f, 200.0f, Color(0, 255, 255, 255)));
@@ -206,6 +214,17 @@ public:
                     Color(0, 255, 255, 255));
         ExpectPixel("vertex colour multiplies the red texel to black", Rectangle(70, 70, 1, 1),
                     Color(0, 0, 0, 255));
+        effect.VertexColorEnabled = false;
+
+        // Same colour-carrying vertex buffer, but with VertexColorEnabled off: the vertex colour
+        // attribute must NOT apply, even though the buffer still carries one.
+        device.Clear(kClear);
+        DrawQuad(device, effect, VertexPositionColorTexture::getVertexDeclarationStatic(),
+                 MakeColoredTexturedQuad(40.0f, 40.0f, 200.0f, 200.0f, Color(0, 255, 255, 255)));
+        ExpectPixel("VertexColorEnabled=false leaves the white texel untinted", Rectangle(170, 170, 1, 1),
+                    Color(255, 255, 255, 255));
+        ExpectPixel("VertexColorEnabled=false leaves the red texel untinted", Rectangle(70, 70, 1, 1),
+                    Color(255, 0, 0, 255));
 
         // --- Check E: fog -----------------------------------------------------------------------
         // A quad stretching away from the camera in view space: with fog from z = 0.2 to z = 0.8,

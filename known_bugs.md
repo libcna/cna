@@ -136,3 +136,37 @@ frame commands without presenting -- and `LlglRenderTargetBackend::GetData()` ca
 **Tracked as:** `plan_llgl.md` task `LLGL-26`.
 
 ---
+
+## LLGL backend: `VertexColorEnabled` was silently ignored for every colour-carrying 3D draw — FIXED 2026-07-31
+
+**Symptom:** any `BasicEffect`/`DualTextureEffect` draw using a vertex layout that carries a colour
+attribute (`VertexPositionColor`, `VertexPositionColorTexture`, ...) had the vertex colour
+multiplied into the tint regardless of `VertexColorEnabled` — setting it `false` had no effect as
+long as the buffer itself happened to carry a colour attribute.
+
+**Cause:** none of the four colour-carrying 3D vertex shaders (`colored3d.vert.glsl`,
+`colored_textured3d.vert.glsl`, `lit_colored3d.vert.glsl`, `lit_colored_textured3d.vert.glsl`)
+ever read `GpuDrawParams::vertexColorEnabled` at all — `FillEffectUniforms()` never wrote it
+anywhere, and every one of these shaders computed `vColor = diffuseColor * color` (or the lit
+equivalent, `vTint`) unconditionally, purely from whether the VERTEX LAYOUT happened to carry a
+colour attribute, never from what the effect actually asked for. Found while implementing
+`DualTextureEffect` (`LLGL-25`): its own `VertexColorEnabled=false` check read back the SAME value
+as the `=true` case. `examples/llgl_basiceffect_test.cpp`'s own pre-existing Check D was silently
+relying on this bug — it drew a `VertexPositionColorTexture` quad and expected the vertex colour to
+apply without ever setting `VertexColorEnabled = true` first.
+
+**Fix:** `FillEffectUniforms()` now writes the flag to `uniforms[32]` for unlit draws (safely
+overwritten by `worldMatrix` for lit ones) and to `uniforms[51]` (`ambientColorLighting.w`, an
+otherwise-unused component) for lit draws. Every colour-carrying vertex shader gates its multiply
+on the flag: `vColor = (vertexColorEnabledPad.x > 0.5) ? diffuseColor * color : diffuseColor;` (or
+`ambientColorLighting.w` for the lit ones). Because OpenGL requires an identically named/laid-out
+uniform block across every shader stage linked into one program, EVERY unlit 3D shader — including
+the ones that never read the new field — had to grow its own `Transform` block declaration from
+128 to 144 bytes to match, or linking failed with `definitions of uniform block 'Transform' do not
+match`. `llgl_basiceffect_test.cpp`'s Check D now explicitly sets `VertexColorEnabled = true` (as
+real XNA usage requires) and gained two new checks proving `VertexColorEnabled = false` genuinely
+leaves a colour-carrying draw untinted.
+
+**Tracked as:** `plan_llgl.md` task `LLGL-25`.
+
+---

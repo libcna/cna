@@ -24,9 +24,9 @@ module**:
   and fill mode;
 * **`BasicEffect` with one texture**, `DiffuseColor`, `Alpha`, vertex-colour modulation, fog,
   and **per-pixel directional lighting** (ambient, up to three lights, specular, `EmissiveColor`),
-  textured or untextured, plus **`AlphaTestEffect`**. Lighting still requires vertex colours when
-  no texture is bound -- a lit, untextured, colourless draw is refused by name rather than silently
-  dropping the light;
+  textured or untextured, plus **`AlphaTestEffect`** and **`DualTextureEffect`**. Lighting still
+  requires vertex colours when no texture is bound -- a lit, untextured, colourless draw is refused
+  by name rather than silently dropping the light;
 * **`RenderTarget2D`**: draw into it (both `SpriteBatch` and the 3D path), unbind back to the
   swap chain, sample it back onto the screen, and `GetData()` straight off the colour attachment.
   See "Render targets" below for what this does and does not cover;
@@ -38,9 +38,10 @@ module**:
   buffer**, construction-time only and module-dependent — see the `MultiSampleAntiAliasing` row in
   "Capability boundary" below.
 
-**Not implemented:** `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
+**Not implemented:** `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
 `RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, cube and
-volume textures.
+volume textures, and `GraphicsDevice.DrawUserPrimitives()`'s typed overloads (a real, pre-existing
+gap independent of any specific effect -- see the `DrawUserPrimitives` note in "Shaders" below).
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -128,6 +129,9 @@ src/CNA/Internal/Backends/Llgl/shaders/
   untextured3d.frag.glsl  textured3d.frag.glsl      3D fragment shaders (alpha test + fog)
   lit_textured3d.frag.glsl                           (+ the lighting equation, .gl. too)
   lit_untextured3d.frag.glsl                         lit, untextured-but-coloured (LLGL-31)
+  dual_textured3d.frag.glsl                          DualTextureEffect (reuses the plain
+                                                       textured/colored_textured vertex shader --
+                                                       no dedicated vertex shader of its own)
   effect3d_common.glsl.inc                           the uniform block they all share
   compile_shaders.py                                regenerates llgl_shaders.hpp
   llgl_shaders.hpp                                  generated; do not edit
@@ -145,6 +149,21 @@ module's name — **and GLSL is preferred wherever a module offers it**. That or
 OpenGL module reports SPIR-V as well (desktop GL ingests it through `GL_ARB_gl_spirv`), but the
 SPIR-V here is compiled for Vulkan's binding model, and GL accepts it far enough to rasterize
 geometry while silently zeroing every other attribute and the uniform block. That was `LLGL-17`.
+
+Every unlit 3D shader (vertex AND fragment) declares the SAME 144-byte `Transform` uniform block,
+even the ones that never read every field in it: OpenGL requires an identically named and laid-out
+uniform block across every stage linked into one program, so a shader that is ever paired with
+another one that reads `vertexColorEnabledPad` (offset 128) must declare that field too, whether or
+not it uses it. The lit shaders don't need a separate field for the same flag -- they reuse
+`ambientColorLighting.w`, since offset 128 becomes `worldMatrix` for them.
+
+`GraphicsDevice.DrawUserPrimitives()`'s typed overloads (`VertexPositionColor`,
+`VertexPositionTexture`, `VertexPositionColorTexture`, `VertexPositionNormalTexture`, ...) all
+throw on this backend: they route through `IGraphicsBackend::CreateVertexBuffer(int)` (count-only,
+no `VertexDeclaration`) and a raw byte `SetData`, so the resulting buffer carries no attribute
+layout the 3D draw path can read. Use the typed `VertexBuffer(device, declaration, count, usage)`
+constructor with an explicit `VertexDeclaration` instead -- every other example and test in this
+directory already does. Tracked as `LLGL-32`.
 
 ## Render targets
 
@@ -268,9 +287,11 @@ antialiased diagonal edge against a hard, unblended one with MSAA off, using two
 `GraphicsDevice` objects constructed directly (MSAA is construction-time only on this backend, so
 neither `Game`'s eagerly-constructed device nor `ApplyChanges()` can reach it) — the sample-count-
 dependent checks report `[SKIP]` on a module that does not apply MSAA to the default framebuffer at
-all (the OpenGL module, on this project's own test environment) rather than failing.
+all (the OpenGL module, on this project's own test environment) rather than failing. `Llgl_DualTexture`
+covers `DualTextureEffect`'s `VertexColorEnabled`-gated tint and proves the two textures sample
+independently (a white base plus a red overlay must read back red, not white).
 Every one of them is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All twenty-four
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All twenty-six
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 

@@ -15,6 +15,9 @@ layout(std140, binding = 1) uniform Transform
     vec4 fogColor;
     vec4 fogVector;
     vec4 alphaTest;
+    // .x > 0.5 when the effect's VertexColorEnabled is true; otherwise the colour attribute below
+    // must NOT multiply into the tint, even though the vertex layout carries one.
+    vec4 vertexColorEnabledPad;
 };
 
 layout(location = 0) in vec3 position;
@@ -33,7 +36,7 @@ out gl_PerVertex
 void main()
 {
     gl_Position = mvpMatrix * vec4(position, 1.0);
-    vColor      = diffuseColor * color;
+    vColor      = (vertexColorEnabledPad.x > 0.5) ? diffuseColor * color : diffuseColor;
     vTexCoord   = texCoord;
     vFogFactor  = clamp(dot(vec4(position, 1.0), fogVector), 0.0, 1.0) * fogColor.a;
 }

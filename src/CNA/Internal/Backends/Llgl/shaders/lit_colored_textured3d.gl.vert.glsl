@@ -12,6 +12,9 @@ layout(std140, binding = 1) uniform Transform
     vec4 fogVector;
     vec4 alphaTest;
     mat4 worldMatrix;
+    // .w > 0.5 when the effect's VertexColorEnabled is true (reuses this vec4's otherwise-unused
+    // fourth component -- ambientColorLighting itself is an RGB colour); otherwise the colour
+    // attribute below must NOT multiply into the tint, even though the vertex layout carries one.
     vec4 ambientColorLighting;
     vec4 light0DirPad;
     vec4 light0DiffusePad;
@@ -46,6 +49,6 @@ void main()
     mat3 normalMatrix = transpose(inverse(mat3(worldMatrix)));
     vNormal     = normalize(normalMatrix * normal);
     vWorldPos   = (worldMatrix * vec4(position, 1.0)).xyz;
-    vTint       = diffuseColor * color;
+    vTint       = (ambientColorLighting.w > 0.5) ? diffuseColor * color : diffuseColor;
     vFogFactor  = clamp(dot(vec4(position, 1.0), fogVector), 0.0, 1.0) * fogColor.a;
 }

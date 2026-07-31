@@ -1285,10 +1285,14 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveLitFragmentShader_);
         if (primitiveLitUntexturedFragmentShader_ != nullptr)
             renderer_->Release(*primitiveLitUntexturedFragmentShader_);
+        if (primitiveDualTextureFragmentShader_ != nullptr)
+            renderer_->Release(*primitiveDualTextureFragmentShader_);
         if (primitiveLayout_ != nullptr)
             renderer_->Release(*primitiveLayout_);
         if (primitiveTexturedLayout_ != nullptr)
             renderer_->Release(*primitiveTexturedLayout_);
+        if (primitiveDualTextureLayout_ != nullptr)
+            renderer_->Release(*primitiveDualTextureLayout_);
 
         if (spriteVertexBuffer_ != nullptr)
             renderer_->Release(*spriteVertexBuffer_);
@@ -1489,6 +1493,9 @@ namespace CNA::Internal::Backends::Llgl
         primitiveLitUntexturedFragmentShader_ = createFragmentShader(
             Shaders::kLitUntextured3dFragGlsl, Shaders::kLitUntextured3dFragSpv,
             sizeof(Shaders::kLitUntextured3dFragSpv), "lit untextured 3D fragment shader");
+        primitiveDualTextureFragmentShader_ = createFragmentShader(
+            Shaders::kDualTextured3dFragGlsl, Shaders::kDualTextured3dFragSpv,
+            sizeof(Shaders::kDualTextured3dFragSpv), "dual-textured 3D fragment shader");
 
         // Two layouts rather than one with an optionally-unused texture slot: a pipeline whose
         // layout declares a texture the draw never binds is a validation error on Vulkan, not a
@@ -1519,7 +1526,33 @@ namespace CNA::Internal::Backends::Llgl
         };
         primitiveTexturedLayout_ = renderer_->CreatePipelineLayout(texturedLayoutDesc);
 
-        if (primitiveLayout_ == nullptr || primitiveTexturedLayout_ == nullptr)
+        // DualTextureEffect: a second, independently bound texture+sampler pair alongside the
+        // first. Reuses the plain textured vertex shader (identical vertex-side behaviour), so
+        // only the fragment shader and this layout differ from primitiveTexturedLayout_.
+        LLGL::PipelineLayoutDescriptor dualTextureLayoutDesc;
+        dualTextureLayoutDesc.bindings =
+        {
+            LLGL::BindingDescriptor{"Transform", LLGL::ResourceType::Buffer,
+                                    LLGL::BindFlags::ConstantBuffer,
+                                    LLGL::StageFlags::VertexStage | LLGL::StageFlags::FragmentStage, 1},
+            LLGL::BindingDescriptor{"colorMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 2},
+            LLGL::BindingDescriptor{"samplerState", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 3},
+            LLGL::BindingDescriptor{"colorMap2", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 4},
+            LLGL::BindingDescriptor{"samplerState2", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 5},
+        };
+        dualTextureLayoutDesc.combinedTextureSamplers =
+        {
+            LLGL::CombinedTextureSamplerDescriptor{"colorMap", "colorMap", "samplerState", 2},
+            LLGL::CombinedTextureSamplerDescriptor{"colorMap2", "colorMap2", "samplerState2", 4},
+        };
+        primitiveDualTextureLayout_ = renderer_->CreatePipelineLayout(dualTextureLayoutDesc);
+
+        if (primitiveLayout_ == nullptr || primitiveTexturedLayout_ == nullptr ||
+            primitiveDualTextureLayout_ == nullptr)
             throw std::runtime_error(std::string(kBackendName) + " backend: 3D pipeline layout creation failed");
     }
 
@@ -1664,7 +1697,7 @@ namespace CNA::Internal::Backends::Llgl
 
     LLGL::PipelineState* LlglGraphicsBackend::AcquirePrimitivePipeline(
         const LlglVertexBufferBackend& vertexBuffer, PrimitiveType primitive, bool scissorEnabled,
-        bool textured, bool lit)
+        bool textured, bool lit, bool dualTexture)
     {
         const std::vector<LLGL::VertexAttribute>& attributes = vertexBuffer.GetVertexAttributes();
 
@@ -1678,6 +1711,7 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + (scissorEnabled ? 1u : 0u);
         key = key * 2u + (textured ? 1u : 0u);
         key = key * 2u + (lit ? 1u : 0u);
+        key = key * 2u + (dualTexture ? 1u : 0u);
         key = key * 1024u + (MakeBlendPipelineKey(scissorEnabled) & 0x3FFu);
 
         const auto cached = primitivePipelineCache_.find(key);
@@ -1685,16 +1719,25 @@ namespace CNA::Internal::Backends::Llgl
             return cached->second;
 
         LLGL::GraphicsPipelineDescriptor pipelineDesc;
-        pipelineDesc.debugName = lit ? "CNA.Lit3D" : (textured ? "CNA.Textured3D" : "CNA.Colored3D");
+        pipelineDesc.debugName = dualTexture ? "CNA.DualTexture3D"
+                                : lit ? "CNA.Lit3D" : (textured ? "CNA.Textured3D" : "CNA.Colored3D");
+        // DualTextureEffect is never lit (GpuDrawParams::lightingEnabled is always false for it),
+        // and its vertex-side behaviour is identical to a plain textured draw -- so the vertex
+        // shader is the SAME one AcquirePrimitiveVertexShader() already selects for `textured`,
+        // and only the fragment shader and pipeline layout differ below.
         pipelineDesc.vertexShader = AcquirePrimitiveVertexShader(attributes, textured, lit);
-        pipelineDesc.fragmentShader = lit && textured ? primitiveLitFragmentShader_
+        pipelineDesc.fragmentShader = dualTexture ? primitiveDualTextureFragmentShader_
+                                    : lit && textured ? primitiveLitFragmentShader_
                                     : lit ? primitiveLitUntexturedFragmentShader_
                                     : textured ? primitiveTexturedFragmentShader_
                                     : primitiveFragmentShader_;
-        // Layout selection follows `textured` alone (LLGL-31): a lit-untextured draw's shader
-        // declares no colorMap/samplerState binding, so it reuses primitiveLayout_ exactly like
-        // the unlit-untextured path does, not primitiveTexturedLayout_.
-        pipelineDesc.pipelineLayout = textured ? primitiveTexturedLayout_ : primitiveLayout_;
+        // Layout selection follows `textured`/`dualTexture` (LLGL-31/DualTextureEffect): a
+        // lit-untextured draw's shader declares no colorMap/samplerState binding, so it reuses
+        // primitiveLayout_ exactly like the unlit-untextured path does, not
+        // primitiveTexturedLayout_; a dual-texture draw needs the layout with BOTH texture/sampler
+        // pairs, not the single-texture one.
+        pipelineDesc.pipelineLayout = dualTexture ? primitiveDualTextureLayout_
+                                     : textured ? primitiveTexturedLayout_ : primitiveLayout_;
         pipelineDesc.renderPass = swapChain_->GetRenderPass();
         pipelineDesc.primitiveTopology = MapPrimitiveTopology(primitive);
         pipelineDesc.depth.testEnabled = depthTestEnabled_;
@@ -1788,6 +1831,16 @@ namespace CNA::Internal::Backends::Llgl
         uniforms[30] = params->alphaTest[2];
         uniforms[31] = params->alphaTest[3];
 
+        // Read by the UNLIT colour-carrying shaders only (colored3d/colored_textured3d/
+        // dual_textured3d's own extended Transform block declares this slot as
+        // vertexColorEnabledPad.x): whether the vertex colour attribute should multiply into the
+        // tint at all, matching BasicEffect/DualTextureEffect's real VertexColorEnabled -- a
+        // vertex layout that happens to CARRY a colour attribute must not have it silently
+        // applied when the effect never asked for it. Safely overwritten by worldMatrix below for
+        // a lit draw; the LIT shaders read the equivalent flag from ambientColorLighting.w
+        // (uniforms[51]) instead, since this slot becomes worldMatrix[0] for them.
+        uniforms[32] = params->vertexColorEnabled ? 1.0f : 0.0f;
+
         if (!params->lightingEnabled)
             return;
 
@@ -1799,6 +1852,7 @@ namespace CNA::Internal::Backends::Llgl
         uniforms[48] = params->ambientColor[0];
         uniforms[49] = params->ambientColor[1];
         uniforms[50] = params->ambientColor[2];
+        uniforms[51] = params->vertexColorEnabled ? 1.0f : 0.0f;
 
         const float* lightDirs[3]      = {params->light0Dir, params->light1Dir, params->light2Dir};
         const float* lightDiffuses[3]  = {params->light0Diffuse, params->light1Diffuse, params->light2Diffuse};
@@ -1881,6 +1935,13 @@ namespace CNA::Internal::Backends::Llgl
         // LLGL-31: lighting without a texture is real now, provided the vertex layout carries
         // colours -- AcquirePrimitiveVertexShader() throws its own clear error otherwise, the same
         // way the unlit untextured path already does.
+        const bool dualTexture = (params != nullptr && params->dualTexture);
+        if (dualTexture && (params->texture0 == nullptr || params->texture1 == nullptr))
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: DualTextureEffect needs both Texture and "
+                "Texture2 bound");
+        }
 
         ResolvedSampledTexture resolvedTexture;
         if (textured)
@@ -1890,6 +1951,18 @@ namespace CNA::Internal::Backends::Llgl
             {
                 throw std::runtime_error(
                     std::string(kBackendName) + " backend: the effect's texture belongs to another backend");
+            }
+        }
+
+        ResolvedSampledTexture resolvedTexture2;
+        if (dualTexture)
+        {
+            resolvedTexture2 = ResolveSampledTexture(*params->texture1);
+            if (resolvedTexture2.texture == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: DualTextureEffect's Texture2 belongs to "
+                    "another backend");
             }
         }
 
@@ -1909,12 +1982,19 @@ namespace CNA::Internal::Backends::Llgl
             ? currentRenderTargetBackend_->GetLlglRenderTarget()
             : nullptr;
         command.vertexBuffer = vertexBuffer.GetLlglBuffer();
-        command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured, lit);
+        command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured,
+                                                     lit, dualTexture);
         if (textured)
         {
             command.texture = resolvedTexture.texture;
             command.sampler = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
                                              samplerMaxAnisotropy_);
+        }
+        if (dualTexture)
+        {
+            command.texture2 = resolvedTexture2.texture;
+            command.sampler2 = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
+                                              samplerMaxAnisotropy_);
         }
         command.transformIndex = transformIndex;
         command.vertexCount = static_cast<std::uint32_t>(elementCount);
@@ -2943,6 +3023,11 @@ namespace CNA::Internal::Backends::Llgl
                         commands_->SetResource(1, *command.texture);
                         commands_->SetResource(2, *command.sampler);
                     }
+                    if (command.texture2 != nullptr && command.sampler2 != nullptr)
+                    {
+                        commands_->SetResource(3, *command.texture2);
+                        commands_->SetResource(4, *command.sampler2);
+                    }
                     commands_->SetVertexBuffer(*command.vertexBuffer);
                     if (command.indexBuffer != nullptr)
                     {
@@ -3486,13 +3571,12 @@ namespace CNA::Internal::Backends::Llgl
 
     void LlglGraphicsBackend::RejectUnsupportedDrawParams(const GpuDrawParams& params) const
     {
-        // What this path can honour: vertex colours, a diffuse colour and alpha, one texture, fog,
-        // and the alpha test. Everything else fails by name rather than quietly rendering
-        // something that merely looks plausible -- an unlit surface where lighting was asked for is
-        // a wrong answer, not a degraded one.
+        // What this path can honour: vertex colours, a diffuse colour and alpha, one or two
+        // textures (DualTextureEffect), fog, and the alpha test. Everything else fails by name
+        // rather than quietly rendering something that merely looks plausible -- an unlit surface
+        // where lighting was asked for is a wrong answer, not a degraded one.
         const char* unsupported = nullptr;
-        if (params.dualTexture)                              unsupported = "DualTextureEffect";
-        else if (params.envMapping)                          unsupported = "EnvironmentMapEffect";
+        if (params.envMapping)                               unsupported = "EnvironmentMapEffect";
         else if (params.skinned)                             unsupported = "SkinnedEffect";
         else if (params.pbr)                                 unsupported = "PbrEffect";
         else if (params.customEffectBackend != nullptr)      unsupported = "custom ShaderEffect";

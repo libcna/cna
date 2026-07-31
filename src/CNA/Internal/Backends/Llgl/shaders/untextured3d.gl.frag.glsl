@@ -15,6 +15,11 @@ layout(std140, binding = 1) uniform Transform
     vec4 fogColor;
     vec4 fogVector;
     vec4 alphaTest;
+    // Unused here, but must stay present so this shader's Transform block byte-matches every
+    // other unlit 3D shader it can be linked with in the same OpenGL program (GL requires an
+    // identically named/laid-out uniform block to match exactly across linked stages) -- see
+    // colored3d.vert.glsl for the field this backs.
+    vec4 vertexColorEnabledPad;
 };
 
 

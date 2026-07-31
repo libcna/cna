@@ -1337,6 +1337,9 @@ namespace CNA::Internal::Backends::Llgl
             LLGL::Buffer*    projectionBuffer = nullptr;
             LLGL::Texture*   texture      = nullptr;
             LLGL::Sampler*   sampler      = nullptr;
+            /** @brief Primitives only, `DualTextureEffect`: the second texture/sampler pair. */
+            LLGL::Texture*   texture2     = nullptr;
+            LLGL::Sampler*   sampler2     = nullptr;
             LLGL::PipelineState* pipeline = nullptr;
             std::uint32_t    firstVertex  = 0;
             std::uint32_t    vertexCount  = 0;
@@ -1384,7 +1387,7 @@ namespace CNA::Internal::Backends::Llgl
                                                    bool textured, bool lit);
         LLGL::PipelineState* AcquirePrimitivePipeline(const LlglVertexBufferBackend& vertexBuffer,
                                                       PrimitiveType primitive, bool scissorEnabled,
-                                                      bool textured, bool lit);
+                                                      bool textured, bool lit, bool dualTexture);
         void QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                              const LlglIndexBufferBackend* indexBuffer,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -1455,6 +1458,12 @@ namespace CNA::Internal::Backends::Llgl
         /// LLGL-31: lit, untextured 3D draws -- reuses primitiveLayout_ (no texture/sampler
         /// bindings), never primitiveTexturedLayout_.
         LLGL::Shader*               primitiveLitUntexturedFragmentShader_ = nullptr;
+        /// `DualTextureEffect` (two independently bound samplers). Reuses the plain textured
+        /// vertex shader as-is (identical vertex-side behaviour to a single-texture draw -- only
+        /// the fragment shader and pipeline layout differ), so there is no dedicated vertex shader
+        /// or `AcquirePrimitiveVertexShader()` branch for it.
+        LLGL::PipelineLayout*       primitiveDualTextureLayout_ = nullptr;
+        LLGL::Shader*               primitiveDualTextureFragmentShader_ = nullptr;
 
         /// Shared by every `LlglEffectBackend` (LLGL-27); built lazily by
         /// AcquireCustomEffectLayoutEXT() on the first `ShaderEffect` any game constructs. Unlike
