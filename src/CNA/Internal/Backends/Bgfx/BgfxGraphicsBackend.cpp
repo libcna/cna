@@ -3717,9 +3717,17 @@ namespace CNA::Internal::Backends::Bgfx
                 // whose layout differs entirely from BgfxTextureCubeBackend's.
                 if (const auto* samplable = dynamic_cast<const IBgfxCubeSamplable*>(params.envMap))
                 {
-                    bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle());
+                    // REMED-GFX-181: the five-argument overload, with the same captured public
+                    // sampler word BindSamplerSlot passes for the base slot one line above. The
+                    // four-argument form defaults `_flags` to UINT32_MAX, which bgfx reads as
+                    // "use this texture's own creation state" -- so GraphicsDevice.SamplerStates[1]
+                    // was translated into samplerFlags_[1] and then discarded here, and every cube
+                    // sampled linear+wrap (an ordinary TextureCube) or linear+clamp (a
+                    // RenderTargetCube) whatever the public state said.
+                    bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle(),
+                                     samplerFlags_[1]);
                     TraceEnvMapBinding("DrawPrimitivesEx", currentViewId_, params.texture0,
-                                       samplerFlags_[0], samplable, UINT32_MAX);
+                                       samplerFlags_[0], samplable, samplerFlags_[1]);
                 }
             }
             SubmitViewProgram(envMap3DProgram_);
@@ -4154,9 +4162,17 @@ namespace CNA::Internal::Backends::Bgfx
                 // whose layout differs entirely from BgfxTextureCubeBackend's.
                 if (const auto* samplable = dynamic_cast<const IBgfxCubeSamplable*>(params.envMap))
                 {
-                    bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle());
+                    // REMED-GFX-181: the five-argument overload, with the same captured public
+                    // sampler word BindSamplerSlot passes for the base slot one line above. The
+                    // four-argument form defaults `_flags` to UINT32_MAX, which bgfx reads as
+                    // "use this texture's own creation state" -- so GraphicsDevice.SamplerStates[1]
+                    // was translated into samplerFlags_[1] and then discarded here, and every cube
+                    // sampled linear+wrap (an ordinary TextureCube) or linear+clamp (a
+                    // RenderTargetCube) whatever the public state said.
+                    bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle(),
+                                     samplerFlags_[1]);
                     TraceEnvMapBinding("DrawIndexedPrimitivesEx", currentViewId_, params.texture0,
-                                       samplerFlags_[0], samplable, UINT32_MAX);
+                                       samplerFlags_[0], samplable, samplerFlags_[1]);
                 }
             }
             SubmitViewProgram(envMap3DProgram_);
