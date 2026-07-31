@@ -451,6 +451,29 @@ void main(in PSInput psIn, out PSOutput psOut)
                    format == Dg::TEX_FORMAT_BGRA8_TYPELESS;
         }
 
+        /// Number of mip levels in a full chain down to 1x1, matching what every CNA backend and
+        /// `Texture2D`/`TextureCube`'s own level count assume.
+        [[nodiscard]] int MipLevelCount(int width, int height)
+        {
+            int levels = 1;
+            int extent = std::max(width, height);
+            while (extent > 1)
+            {
+                extent /= 2;
+                ++levels;
+            }
+            return levels;
+        }
+
+        /// Extent of one axis at @p level, floored at 1 as every graphics API defines it.
+        [[nodiscard]] int MipLevelExtent(int baseExtent, int level)
+        {
+            int extent = baseExtent;
+            for (int i = 0; i < level; ++i)
+                extent = std::max(1, extent / 2);
+            return std::max(1, extent);
+        }
+
         [[nodiscard]] std::uint32_t PackBytes(int a, int b, int c, int d)
         {
             return (static_cast<std::uint32_t>(a & 0xFF)) |
@@ -600,61 +623,174 @@ void main(in PSInput psIn, out PSOutput psOut)
     bool DiligentTextureBackend::GetData(int level, int x, int y, int w, int h,
                                           void* data, int dataLength) const
     {
-        if (data == nullptr || w <= 0 || h <= 0 || level < 0 || level >= mipLevels_)
+        if (level < 0 || level >= mipLevels_)
+            return false;
+        const int levelW = MipLevelExtent(width_, level);
+        const int levelH = MipLevelExtent(height_, level);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelW || y + h > levelH)
+            return false;
+        return owner_.ReadTextureRegion(texture_, static_cast<Dg::Uint32>(level), 0, x, y, 0,
+                                        w, h, 1, data, dataLength);
+    }
+
+    // ---- DiligentTextureCubeBackend ----
+
+    DiligentTextureCubeBackend::DiligentTextureCubeBackend(DiligentGraphicsBackend& owner, int size,
+                                                            bool mipMap, int /*surfaceFormat*/)
+        : owner_(owner)
+        , size_(size)
+        , mipLevels_(mipMap ? MipLevelCount(size, size) : 1)
+    {
+        if (size_ <= 0)
+            throw std::runtime_error("CNA Diligent: cube face size must be positive");
+
+        Dg::TextureDesc desc;
+        desc.Name = "CNA cube texture";
+        desc.Type = Dg::RESOURCE_DIM_TEX_CUBE;
+        desc.Width = static_cast<Dg::Uint32>(size_);
+        desc.Height = static_cast<Dg::Uint32>(size_);
+        desc.ArraySize = 6;
+        desc.MipLevels = static_cast<Dg::Uint32>(mipLevels_);
+        desc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
+        desc.Usage = Dg::USAGE_DEFAULT;
+        desc.BindFlags = Dg::BIND_SHADER_RESOURCE;
+
+        owner_.device_->CreateTexture(desc, nullptr, &texture_);
+        if (!texture_)
+            throw std::runtime_error("CNA Diligent: cube texture creation failed");
+
+        srv_ = texture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
+        if (srv_ == nullptr)
+            throw std::runtime_error("CNA Diligent: cube texture has no shader resource view");
+    }
+
+    DiligentTextureCubeBackend::~DiligentTextureCubeBackend() = default;
+
+    bool DiligentTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                              const void* data, int dataLength)
+    {
+        if (data == nullptr || face < 0 || face >= 6 || level < 0 || level >= mipLevels_ ||
+            w <= 0 || h <= 0)
             return false;
         const std::size_t requiredBytes = static_cast<std::size_t>(w) * h * 4;
         if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
             return false;
-
-        Dg::TextureDesc stagingDesc;
-        stagingDesc.Name = "CNA texture readback";
-        stagingDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
-        stagingDesc.Width = static_cast<Dg::Uint32>(w);
-        stagingDesc.Height = static_cast<Dg::Uint32>(h);
-        stagingDesc.MipLevels = 1;
-        stagingDesc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
-        stagingDesc.Usage = Dg::USAGE_STAGING;
-        stagingDesc.BindFlags = Dg::BIND_NONE;
-        stagingDesc.CPUAccessFlags = Dg::CPU_ACCESS_READ;
-
-        Dg::RefCntAutoPtr<Dg::ITexture> staging;
-        owner_.device_->CreateTexture(stagingDesc, nullptr, &staging);
-        if (!staging)
+        const int levelSize = MipLevelExtent(size_, level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
             return false;
 
-        Dg::Box srcBox;
-        srcBox.MinX = static_cast<Dg::Uint32>(x);
-        srcBox.MaxX = static_cast<Dg::Uint32>(x + w);
-        srcBox.MinY = static_cast<Dg::Uint32>(y);
-        srcBox.MaxY = static_cast<Dg::Uint32>(y + h);
+        Dg::Box box;
+        box.MinX = static_cast<Dg::Uint32>(x);
+        box.MaxX = static_cast<Dg::Uint32>(x + w);
+        box.MinY = static_cast<Dg::Uint32>(y);
+        box.MaxY = static_cast<Dg::Uint32>(y + h);
 
-        Dg::CopyTextureAttribs copyAttribs;
-        copyAttribs.pSrcTexture = texture_;
-        copyAttribs.SrcMipLevel = static_cast<Dg::Uint32>(level);
-        copyAttribs.pSrcBox = &srcBox;
-        copyAttribs.SrcTextureTransitionMode = Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
-        copyAttribs.pDstTexture = staging;
-        copyAttribs.DstTextureTransitionMode = Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
-        owner_.context_->CopyTexture(copyAttribs);
+        Dg::TextureSubResData subresource{};
+        subresource.pData = data;
+        subresource.Stride = static_cast<Dg::Uint64>(w) * 4;
 
-        owner_.context_->WaitForIdle();
-
-        Dg::MappedTextureSubresource mapped{};
-        owner_.context_->MapTextureSubresource(staging, 0, 0, Dg::MAP_READ, Dg::MAP_FLAG_NONE,
-                                               nullptr, mapped);
-        if (mapped.pData == nullptr)
-            return false;
-
-        auto* destination = static_cast<std::uint8_t*>(data);
-        const auto* source = static_cast<const std::uint8_t*>(mapped.pData);
-        for (int row = 0; row < h; ++row)
-        {
-            std::memcpy(destination + static_cast<std::size_t>(row) * w * 4,
-                        source + static_cast<std::size_t>(row) * mapped.Stride,
-                        static_cast<std::size_t>(w) * 4);
-        }
-        owner_.context_->UnmapTextureSubresource(staging, 0, 0);
+        owner_.context_->UpdateTexture(texture_, static_cast<Dg::Uint32>(level),
+                                       static_cast<Dg::Uint32>(face), box, subresource,
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
         return true;
+    }
+
+    bool DiligentTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                              void* data, int dataLength) const
+    {
+        if (face < 0 || face >= 6 || level < 0 || level >= mipLevels_)
+            return false;
+        const int levelSize = MipLevelExtent(size_, level);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelSize || y + h > levelSize)
+            return false;
+        return owner_.ReadTextureRegion(texture_, static_cast<Dg::Uint32>(level),
+                                        static_cast<Dg::Uint32>(face), x, y, 0, w, h, 1,
+                                        data, dataLength);
+    }
+
+    // ---- DiligentTexture3DBackend ----
+
+    DiligentTexture3DBackend::DiligentTexture3DBackend(DiligentGraphicsBackend& owner, int width,
+                                                        int height, int depth, bool mipMap,
+                                                        int /*surfaceFormat*/)
+        : owner_(owner)
+        , width_(width)
+        , height_(height)
+        , depth_(depth)
+        , mipLevels_(mipMap ? MipLevelCount(width, height) : 1)
+    {
+        if (width_ <= 0 || height_ <= 0 || depth_ <= 0)
+            throw std::runtime_error("CNA Diligent: volume texture dimensions must be positive");
+
+        Dg::TextureDesc desc;
+        desc.Name = "CNA volume texture";
+        desc.Type = Dg::RESOURCE_DIM_TEX_3D;
+        desc.Width = static_cast<Dg::Uint32>(width_);
+        desc.Height = static_cast<Dg::Uint32>(height_);
+        desc.Depth = static_cast<Dg::Uint32>(depth_);
+        desc.MipLevels = static_cast<Dg::Uint32>(mipLevels_);
+        desc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
+        desc.Usage = Dg::USAGE_DEFAULT;
+        desc.BindFlags = Dg::BIND_SHADER_RESOURCE;
+
+        owner_.device_->CreateTexture(desc, nullptr, &texture_);
+        if (!texture_)
+            throw std::runtime_error("CNA Diligent: volume texture creation failed");
+
+        srv_ = texture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
+        if (srv_ == nullptr)
+            throw std::runtime_error("CNA Diligent: volume texture has no shader resource view");
+    }
+
+    DiligentTexture3DBackend::~DiligentTexture3DBackend() = default;
+
+    bool DiligentTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                            const void* data, int dataLength)
+    {
+        if (data == nullptr || level < 0 || level >= mipLevels_ || w <= 0 || h <= 0 || depth <= 0)
+            return false;
+        const std::size_t requiredBytes = static_cast<std::size_t>(w) * h * depth * 4;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
+            return false;
+        const int levelW = MipLevelExtent(width_, level);
+        const int levelH = MipLevelExtent(height_, level);
+        const int levelD = MipLevelExtent(depth_, level);
+        if (x < 0 || y < 0 || z < 0 || x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+
+        Dg::Box box;
+        box.MinX = static_cast<Dg::Uint32>(x);
+        box.MaxX = static_cast<Dg::Uint32>(x + w);
+        box.MinY = static_cast<Dg::Uint32>(y);
+        box.MaxY = static_cast<Dg::Uint32>(y + h);
+        box.MinZ = static_cast<Dg::Uint32>(z);
+        box.MaxZ = static_cast<Dg::Uint32>(z + depth);
+
+        Dg::TextureSubResData subresource{};
+        subresource.pData = data;
+        subresource.Stride = static_cast<Dg::Uint64>(w) * 4;
+        subresource.DepthStride = static_cast<Dg::Uint64>(w) * h * 4;
+
+        owner_.context_->UpdateTexture(texture_, static_cast<Dg::Uint32>(level), 0, box, subresource,
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION,
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        return true;
+    }
+
+    bool DiligentTexture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                            void* data, int dataLength) const
+    {
+        if (level < 0 || level >= mipLevels_)
+            return false;
+        const int levelW = MipLevelExtent(width_, level);
+        const int levelH = MipLevelExtent(height_, level);
+        const int levelD = MipLevelExtent(depth_, level);
+        if (x < 0 || y < 0 || z < 0 || w <= 0 || h <= 0 || depth <= 0 ||
+            x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        return owner_.ReadTextureRegion(texture_, static_cast<Dg::Uint32>(level), 0, x, y, z,
+                                        w, h, depth, data, dataLength);
     }
 
     // ---- DiligentVertexBufferBackend ----
@@ -1455,6 +1591,18 @@ void main(in PSInput psIn, out PSOutput psOut)
         return std::make_unique<DiligentSpriteBatchBackend>(*this);
     }
 
+    std::unique_ptr<ITextureCubeBackend> DiligentGraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<DiligentTextureCubeBackend>(*this, size, mipMap, surfaceFormat);
+    }
+
+    std::unique_ptr<ITexture3DBackend> DiligentGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<DiligentTexture3DBackend>(*this, w, h, depth, mipMap, surfaceFormat);
+    }
+
     std::unique_ptr<IVertexBufferBackend> DiligentGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
         return std::make_unique<DiligentVertexBufferBackend>(*this, vertex_capacity);
@@ -1590,11 +1738,12 @@ void main(in PSInput psIn, out PSOutput psOut)
                 return true;
             case CNA::GraphicsCapability::AnisotropicFiltering:
                 return deviceType_ != DiligentDeviceType::OpenGL;
+            case CNA::GraphicsCapability::Texture3D:
+                return true;
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
             case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::CustomEffects:
-            case CNA::GraphicsCapability::Texture3D:
                 return false;
         }
         return false;
@@ -1925,6 +2074,100 @@ void main(in PSInput psIn, out PSOutput psOut)
             cached.textureVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_Texture");
 
         return pipelines_.emplace(key, std::move(cached)).first->second;
+    }
+
+    bool DiligentGraphicsBackend::ReadTextureRegion(Dg::ITexture* texture, Dg::Uint32 mipLevel,
+                                                     Dg::Uint32 arraySlice, int x, int y, int z,
+                                                     int w, int h, int depth,
+                                                     void* data, int dataLength)
+    {
+        if (texture == nullptr || data == nullptr || w <= 0 || h <= 0 || depth <= 0)
+            return false;
+        const std::size_t requiredBytes = static_cast<std::size_t>(w) * h * depth * 4;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
+            return false;
+
+        const Dg::TextureDesc& sourceDesc = texture->GetDesc();
+
+        Dg::TextureDesc stagingDesc;
+        stagingDesc.Name = "CNA texture readback";
+        stagingDesc.Type = depth > 1 ? Dg::RESOURCE_DIM_TEX_3D : Dg::RESOURCE_DIM_TEX_2D;
+        stagingDesc.Width = static_cast<Dg::Uint32>(w);
+        stagingDesc.Height = static_cast<Dg::Uint32>(h);
+        if (depth > 1)
+            stagingDesc.Depth = static_cast<Dg::Uint32>(depth);
+        stagingDesc.MipLevels = 1;
+        stagingDesc.Format = sourceDesc.Format;
+        stagingDesc.Usage = Dg::USAGE_STAGING;
+        stagingDesc.BindFlags = Dg::BIND_NONE;
+        stagingDesc.CPUAccessFlags = Dg::CPU_ACCESS_READ;
+
+        Dg::RefCntAutoPtr<Dg::ITexture> staging;
+        device_->CreateTexture(stagingDesc, nullptr, &staging);
+        if (!staging)
+            return false;
+
+        Dg::Box sourceBox;
+        sourceBox.MinX = static_cast<Dg::Uint32>(x);
+        sourceBox.MaxX = static_cast<Dg::Uint32>(x + w);
+        sourceBox.MinY = static_cast<Dg::Uint32>(y);
+        sourceBox.MaxY = static_cast<Dg::Uint32>(y + h);
+        sourceBox.MinZ = static_cast<Dg::Uint32>(z);
+        sourceBox.MaxZ = static_cast<Dg::Uint32>(z + depth);
+
+        Dg::CopyTextureAttribs copyAttribs;
+        copyAttribs.pSrcTexture = texture;
+        copyAttribs.SrcMipLevel = mipLevel;
+        copyAttribs.SrcSlice = arraySlice;
+        copyAttribs.pSrcBox = &sourceBox;
+        copyAttribs.SrcTextureTransitionMode = Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
+        copyAttribs.pDstTexture = staging;
+        copyAttribs.DstTextureTransitionMode = Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION;
+        context_->CopyTexture(copyAttribs);
+        context_->Flush();
+        context_->WaitForIdle();
+
+        // See ReadBackbuffer for why MAP_FLAG_DO_NOT_WAIT is the correct flag after WaitForIdle().
+        Dg::MappedTextureSubresource mapped{};
+        context_->MapTextureSubresource(staging, 0, 0, Dg::MAP_READ, Dg::MAP_FLAG_DO_NOT_WAIT,
+                                        nullptr, mapped);
+        if (mapped.pData == nullptr)
+            return false;
+
+        const bool blueFirst = IsBlueFirstFormat(sourceDesc.Format);
+        auto* destination = static_cast<std::uint8_t*>(data);
+        const auto* source = static_cast<const std::uint8_t*>(mapped.pData);
+        const std::size_t sliceStride =
+            mapped.DepthStride != 0 ? static_cast<std::size_t>(mapped.DepthStride)
+                                    : static_cast<std::size_t>(mapped.Stride) * h;
+        for (int slice = 0; slice < depth; ++slice)
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const std::uint8_t* sourceRow = source + static_cast<std::size_t>(slice) * sliceStride +
+                                                static_cast<std::size_t>(row) * mapped.Stride;
+                std::uint8_t* destinationRow =
+                    destination + ((static_cast<std::size_t>(slice) * h + row) * w) * 4;
+                if (!blueFirst)
+                {
+                    std::memcpy(destinationRow, sourceRow, static_cast<std::size_t>(w) * 4);
+                    continue;
+                }
+                for (int column = 0; column < w; ++column)
+                {
+                    destinationRow[column * 4 + 0] = sourceRow[column * 4 + 2];
+                    destinationRow[column * 4 + 1] = sourceRow[column * 4 + 1];
+                    destinationRow[column * 4 + 2] = sourceRow[column * 4 + 0];
+                    destinationRow[column * 4 + 3] = sourceRow[column * 4 + 3];
+                }
+            }
+        }
+        context_->UnmapTextureSubresource(staging, 0, 0);
+
+        // A readback flushes and waits, so whatever render targets were bound for the frame are no
+        // longer guaranteed to be current on the context.
+        renderTargetsBound_ = false;
+        return true;
     }
 
     void DiligentGraphicsBackend::UploadConstants(const ShaderConstants& constants)

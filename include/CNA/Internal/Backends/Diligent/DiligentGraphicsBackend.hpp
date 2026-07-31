@@ -150,6 +150,144 @@ namespace CNA::Internal::Backends::Diligent
     };
 
     /**
+     * @brief A cube map living in Diligent GPU memory.
+     *
+     * The six faces are the array slices of one `RESOURCE_DIM_TEX_CUBE` texture, in XNA's own face
+     * order (+X, -X, +Y, -Y, +Z, -Z), which is also Diligent's.
+     */
+    class DiligentTextureCubeBackend final : public ITextureCubeBackend
+    {
+    public:
+        /**
+         * @brief Creates an empty cube map; faces are filled by `SetData`.
+         *
+         * @param owner         Backend that owns the render device; must outlive this texture.
+         * @param size          Edge length of each face, in texels.
+         * @param mipMap        Whether to allocate a full mip chain.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal. Accepted and not honoured: this
+         *                      backend stores every texture as RGBA8, matching what every other
+         *                      CNA backend does with this parameter.
+         */
+        DiligentTextureCubeBackend(DiligentGraphicsBackend& owner, int size, bool mipMap,
+                                   int surfaceFormat);
+
+        /** @brief Releases the GPU texture. */
+        ~DiligentTextureCubeBackend() override;
+
+        /**
+         * @brief Uploads raw RGBA8 pixels into a sub-rectangle of one cube face.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to write.
+         * @param x          Left edge of the region, in texels.
+         * @param y          Top edge of the region, in texels.
+         * @param w          Width of the region, in texels.
+         * @param h          Height of the region, in texels.
+         * @param data       Source pixels, tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True if the whole region was stored; false if nothing was stored.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Reads raw RGBA8 pixels back from a sub-rectangle of one cube face.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the region, in texels.
+         * @param y          Top edge of the region, in texels.
+         * @param w          Width of the region, in texels.
+         * @param h          Height of the region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; exactly w * h * 4.
+         * @return True if the whole region was written; false if nothing was read back.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /** @brief NOXNA. Returns the shader resource view used when this cube map is sampled. */
+        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const { return srv_; }
+
+    private:
+        DiligentGraphicsBackend& owner_;
+        Dg::RefCntAutoPtr<Dg::ITexture> texture_;
+        Dg::ITextureView* srv_ = nullptr;
+        int size_ = 0;
+        int mipLevels_ = 1;
+    };
+
+    /**
+     * @brief A volume texture living in Diligent GPU memory.
+     */
+    class DiligentTexture3DBackend final : public ITexture3DBackend
+    {
+    public:
+        /**
+         * @brief Creates an empty volume texture; voxels are filled by `SetData`.
+         *
+         * @param owner         Backend that owns the render device; must outlive this texture.
+         * @param width         Width in voxels.
+         * @param height        Height in voxels.
+         * @param depth         Depth in voxels.
+         * @param mipMap        Whether to allocate a full mip chain.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal; accepted and not honoured, see
+         *                      `DiligentTextureCubeBackend`'s constructor.
+         */
+        DiligentTexture3DBackend(DiligentGraphicsBackend& owner, int width, int height, int depth,
+                                 bool mipMap, int surfaceFormat);
+
+        /** @brief Releases the GPU texture. */
+        ~DiligentTexture3DBackend() override;
+
+        /**
+         * @brief Uploads raw RGBA8 voxels into a sub-volume of one mip level.
+         *
+         * @param level      Mip level to write.
+         * @param x          Left edge of the box, in voxels.
+         * @param y          Top edge of the box, in voxels.
+         * @param z          Front edge of the box, in voxels.
+         * @param w          Width of the box, in voxels.
+         * @param h          Height of the box, in voxels.
+         * @param depth      Depth of the box, in voxels.
+         * @param data       Source voxels, tightly packed RGBA8, slice by slice, front to back.
+         * @param dataLength Size of @p data in bytes; at least w * h * depth * 4.
+         * @return True if the whole box was stored; false if nothing was stored.
+         */
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Reads raw RGBA8 voxels back from a sub-volume of one mip level.
+         *
+         * @param level      Mip level to read.
+         * @param x          Left edge of the box, in voxels.
+         * @param y          Top edge of the box, in voxels.
+         * @param z          Front edge of the box, in voxels.
+         * @param w          Width of the box, in voxels.
+         * @param h          Height of the box, in voxels.
+         * @param depth      Depth of the box, in voxels.
+         * @param data       Destination for the tightly packed RGBA8 box.
+         * @param dataLength Size of @p data in bytes; exactly w * h * depth * 4.
+         * @return True if the whole box was written; false if nothing was read back.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   void* data, int dataLength) const override;
+
+        /** @brief NOXNA. Returns the shader resource view used when this volume is sampled. */
+        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const { return srv_; }
+
+    private:
+        DiligentGraphicsBackend& owner_;
+        Dg::RefCntAutoPtr<Dg::ITexture> texture_;
+        Dg::ITextureView* srv_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
+        int mipLevels_ = 1;
+    };
+
+    /**
      * @brief A Diligent vertex buffer, re-created whenever a larger upload arrives.
      */
     class DiligentVertexBufferBackend final : public IVertexBufferBackend
@@ -393,6 +531,8 @@ namespace CNA::Internal::Backends::Diligent
     class DiligentGraphicsBackend final : public IGraphicsBackend
     {
         friend class DiligentTextureBackend;
+        friend class DiligentTextureCubeBackend;
+        friend class DiligentTexture3DBackend;
         friend class DiligentVertexBufferBackend;
         friend class DiligentIndexBufferBackend;
         friend class DiligentSpriteBatchBackend;
@@ -486,6 +626,30 @@ namespace CNA::Internal::Backends::Diligent
 
         /** @brief Creates a sprite batch bound to this backend. */
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+
+        /**
+         * @brief Creates an empty cube map.
+         *
+         * @param size          Edge length of each face, in texels.
+         * @param mipMap        Whether to allocate a full mip chain.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal; accepted and not honoured.
+         * @return The new cube texture backend.
+         */
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
+                                                               int surfaceFormat) override;
+
+        /**
+         * @brief Creates an empty volume texture.
+         *
+         * @param w             Width in voxels.
+         * @param h             Height in voxels.
+         * @param depth         Depth in voxels.
+         * @param mipMap        Whether to allocate a full mip chain.
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal; accepted and not honoured.
+         * @return The new volume texture backend.
+         */
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
+                                                           int surfaceFormat) override;
 
         /**
          * @brief Reads back a region of the rendered back buffer.
@@ -848,6 +1012,10 @@ namespace CNA::Internal::Backends::Diligent
         [[nodiscard]] Dg::ISampler* GetOrCreateSampler(int filter, int addressU, int addressV,
                                                        int maxAnisotropy);
         void UploadConstants(const ShaderConstants& constants);
+        [[nodiscard]] bool ReadTextureRegion(Dg::ITexture* texture, Dg::Uint32 mipLevel,
+                                             Dg::Uint32 arraySlice, int x, int y, int z,
+                                             int w, int h, int depth,
+                                             void* data, int dataLength);
         void DrawInternal(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                           const Matrix& world, const Matrix& view, const Matrix& projection,
                           PrimitiveType primitive, int primitiveCount,

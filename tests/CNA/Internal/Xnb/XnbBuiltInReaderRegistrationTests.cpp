@@ -152,11 +152,8 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 // reviewed backend set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
-// plan_diligent.md DILIGENT-23: the Diligent backend owns no cube resource yet either, so it
-// belongs in this same set (see tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp).
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || \
-    defined(CNA_BACKEND_DILIGENT)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
 constexpr bool kCubeStorageSupported = false;
 #else
 constexpr bool kCubeStorageSupported = true;

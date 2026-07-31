@@ -123,12 +123,16 @@ Implemented and exercised:
   all folded into the pipeline cache key.
 - `ReadBackbuffer`, resampling the physical region back to the caller's logical region.
 
+- `TextureCube` and `Texture3D`: creation with a mip chain, per-face / per-sub-box `SetData` and
+  `GetData` (`DILIGENT-23`/`DILIGENT-40`). They are storage and readback only so far — no shader
+  variant samples them yet, so `EnvironmentMapEffect` is still refused.
+
 Deliberately refused (each throws, naming itself):
 
 - Render targets (`SetRenderTargets` with a non-empty set; `CreateRenderTarget2D`/`Cube` return
-  `nullptr`), cube textures, volume textures, occlusion queries, custom `ShaderEffect` programs,
-  hardware instancing, fog, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`,
-  `SkinnedEffect`, `PbrEffect`, MSAA. `SupportsCapability()` reports each of these honestly.
+  `nullptr`), occlusion queries, custom `ShaderEffect` programs, hardware instancing, fog,
+  `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
+  MSAA. `SupportsCapability()` reports each of these honestly.
 
 ---
 
@@ -162,8 +166,8 @@ Deliberately refused (each throws, naming itself):
 | --- | --- | --- | --- |
 | `DILIGENT-20` | `RenderTarget2D` (`CreateRenderTarget2D`, `SetRenderTarget2D`, `SetRenderTargets` single slot) | ⬜ | Needs the pipeline cache key to carry target formats, since the PSO's `RTVFormats`/`DSVFormat` stop being the swap chain's |
 | `DILIGENT-21` | `RenderTarget2D` `GetData` readback and `PreserveContents` semantics | ⬜ | |
-| `DILIGENT-22` | `RenderTargetCube` + per-face binding | ⬜ | Depends on `DILIGENT-23` |
-| `DILIGENT-23` | `TextureCube` (`CreateTextureCube`, `SetData`/`GetData` per face) | ⬜ | |
+| `DILIGENT-22` | `RenderTargetCube` + per-face binding | ⬜ | `DILIGENT-23` (its dependency) is done |
+| `DILIGENT-23` | `TextureCube` (`CreateTextureCube`, `SetData`/`GetData` per face) | ✅ | Six array slices of one `RESOURCE_DIM_TEX_CUBE`; full mip chain. Verified by the shared `TextureCubeTests`/`CnjCapabilityMatrixTests`/XNB cube fixtures, which now run for real on this backend instead of asserting the refusal |
 | `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ⬜ | Unblocks the per-slot colour write masks `DILIGENT-12` currently ignores |
 | `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | ⬜ | `ApplyMultiSampleCount()` currently reports 1 |
 | `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | ⬜ | Diligent exposes `IDeviceContext::GenerateMips` directly |
@@ -176,7 +180,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-31` | `AlphaTestEffect` (per-pixel discard, all four compare modes) | ⬜ | |
 | `DILIGENT-32` | Fog for the `BasicEffect` family (`GpuDrawParams::fogVector`) | ⬜ | |
 | `DILIGENT-33` | `DualTextureEffect` | ⬜ | Needs a second sampler slot in the resource layout |
-| `DILIGENT-34` | `EnvironmentMapEffect` | ⬜ | Depends on `DILIGENT-23` |
+| `DILIGENT-34` | `EnvironmentMapEffect` | ⬜ | `DILIGENT-23` (its dependency) is done; still needs a cube-sampling shader variant |
 | `DILIGENT-35` | `SkinnedEffect` (72-bone palette) | ⬜ | Diligent has no push-constant size cap of SDL_GPU's kind; a uniform buffer is enough |
 | `DILIGENT-36` | `PbrEffect`/`SkinnedPbrEffect` | ⬜ | |
 | `DILIGENT-37` | Per-vertex lighting variant (`PreferPerPixelLighting == false`) | ⬜ | Same tracked cross-backend divergence as everywhere except D3D9 |
@@ -185,7 +189,7 @@ Deliberately refused (each throws, naming itself):
 
 | Task | Description | Status | Notes |
 | --- | --- | --- | --- |
-| `DILIGENT-40` | `Texture3D` | ⬜ | |
+| `DILIGENT-40` | `Texture3D` | ✅ | `RESOURCE_DIM_TEX_3D`, sub-box upload and readback. Verified by the shared `Texture3D*` tests |
 | `DILIGENT-41` | `OcclusionQuery` | ⬜ | Diligent's `IQuery`/`QUERY_TYPE_OCCLUSION` maps directly |
 | `DILIGENT-42` | Custom `ShaderEffect` (`CreateEffectBackend`) | ⬜ | Diligent compiles HLSL at runtime on every device type, so unlike SDL_GPU no extra compiler dependency is needed — but CNA's `ShaderEffect` contract is GLSL-shaped; resolve that first |
 | `DILIGENT-43` | Hardware instancing (`DrawInstancedPrimitivesEx`) | ⬜ | |
@@ -221,13 +225,14 @@ use:
 
 ### Cross-backend test suite
 
-`CnaTests` under `CNA_GRAPHICS_BACKEND=DILIGENT`: **5654 passed, 45 skipped, 1 failed**. The single
+`CnaTests` under `CNA_GRAPHICS_BACKEND=DILIGENT`: **5692 passed, 7 skipped, 1 failed**. The single
 failure is `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, which
 fails identically on the `HEADLESS` backend (verified in the same session) — a pre-existing gap in
 that test's accepted-exception list (`System::ArgumentException` from `VertexBuffer::SetData`'s
 declaration/stride validation is not listed), unrelated to this backend.
 
 Twenty-one further tests failed before this backend declared its boundaries in the shared fixtures
-(cube textures, render targets, custom effects, wireframe capability). Each is now guarded the way
-the repo already guards its narrower backends — a per-backend `#if` naming the `DILIGENT-` task
-that will remove it — rather than by loosening a shared assertion for every backend.
+(cube textures, render targets, custom effects, wireframe capability). Each was guarded the way the
+repo already guards its narrower backends — a per-backend `#if` naming the `DILIGENT-` task that
+removes it — rather than by loosening a shared assertion for every backend. `DILIGENT-23`/
+`DILIGENT-40` have since removed the cube guards again: those tests now run for real here.

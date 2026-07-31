@@ -93,6 +93,8 @@ Implemented:
   sampler filter and address modes.
 - 3D draws for vertex strides 16/20/24/32, including `BasicEffect`'s three directional lights with
   Blinn-Phong specular evaluated per pixel.
+- `TextureCube` and `Texture3D` — creation with a mip chain, per-face / per-sub-box `SetData` and
+  `GetData`. Storage and readback only: no built-in shader variant samples them yet.
 - `BlendState`, `DepthStencilState`, `RasterizerState` and slot-0 `SamplerState`, all folded into
   the pipeline-state cache key.
 - `ReadBackbuffer` / `GraphicsDevice.GetBackBufferData`.
@@ -104,7 +106,7 @@ Not implemented — each **throws with its own name** rather than rendering an a
 | --- | --- |
 | `RenderTarget2D`, `RenderTargetCube`, MRT | `DILIGENT-20`…`DILIGENT-24` |
 | MSAA (back buffer and render targets) | `DILIGENT-25` |
-| `TextureCube`, `Texture3D` | `DILIGENT-23`, `DILIGENT-40` |
+| Sampling a cube map or volume texture from a shader | `DILIGENT-34`, `DILIGENT-42` |
 | `AlphaTestEffect`, fog | `DILIGENT-31`, `DILIGENT-32` |
 | `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` | `DILIGENT-33`…`DILIGENT-36` |
 | `OcclusionQuery` | `DILIGENT-41` |
@@ -156,7 +158,7 @@ cmake -S . -B cmake-build-diligent -DCNA_TEST_DISPLAY=:99
 ctest --test-dir cmake-build-diligent -R Diligent --output-on-failure
 ```
 
-The rest of `CnaTests` passes under this backend (5654 passed, 45 skipped) except for one
+The rest of `CnaTests` passes under this backend (5692 passed, 7 skipped) except for one
 pre-existing failure — `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`
 fails identically on the `HEADLESS` backend and is unrelated to this one.
 
