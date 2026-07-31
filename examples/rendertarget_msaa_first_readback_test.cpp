@@ -176,19 +176,18 @@ namespace
     /**
      * @brief Whether probing mip level 1 of a mipmapped MULTISAMPLED target is survivable here.
      *
-     * False on SDL_GPU, which **SEGFAULTS** on `GetData(1, rect, ...)` of a
-     * `RenderTarget2D(16,16,mipMap=true,MSAA=4)` -- level 0 of the very same target reads back
-     * exactly first. Isolated 2026-07-31 while running REMED-GFX-154's cross-backend controls and
-     * recorded as **REMED-GFX-186**; it is a pre-existing SDL_GPU defect on a different backend and
-     * a different route, so REMED-GFX-154 declares it rather than fixing it. A SIGSEGV cannot be
-     * caught, so leg G1 must not issue that read here -- it says so instead.
+     * TRUE EVERYWHERE, INCLUDING SDL_GPU -- and that is now a measurement rather than a hope.
+     *
+     * This was false on SDL_GPU, which SEGFAULTED on `GetData(1, rect, ...)` of a
+     * `RenderTarget2D(16,16,mipMap=true,MSAA=4)` while level 0 of the very same target read back
+     * exactly. REMED-GFX-154 isolated that, recorded it as **REMED-GFX-186** and declared it here
+     * rather than issuing an uncatchable signal from a fixture scoped to Bgfx production.
+     * REMED-GFX-186 has since fixed it -- SDL_GPU's multisampled target now carries the full
+     * declared mip chain on its resolved single-sample texture, and an out-of-range level is a
+     * catchable public exception -- so the carve-out is gone and leg G1 issues the read on every
+     * backend again.
      */
-    constexpr bool kMsaaMipLevelProbeSafe =
-#if defined(CNA_BACKEND_SDL_GPU)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMsaaMipLevelProbeSafe = true;
 
     /**
      * @brief Whether a render target may be built with a mip chain here.

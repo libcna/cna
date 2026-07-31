@@ -51,6 +51,7 @@
 
 #include "common/PixelTestGame.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -80,6 +81,23 @@ namespace
         rt.GetData(0, &rect, &px, 0, 1);
         return px;
     }
+
+    /// REMED-GFX-186: the same read, at a mip level this target's LevelCount says exists.
+    Color ReadPixelAtLevel(RenderTarget2D& rt, int level, int x, int y)
+    {
+        Color px(0, 0, 0, 0);
+        const Rectangle rect(x, y, 1, 1);
+        rt.GetData(level, &rect, &px, 0, 1);
+        return px;
+    }
+
+    /// Mirrors RenderTarget2D's own CalculateMipLevels -- what LevelCount must report.
+    int ExpectedLevels(int w, int h)
+    {
+        int levels = 1;
+        while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+        return levels;
+    }
 }
 
 class SdlGpuRenderTarget2DMsaaTest : public Game
@@ -88,6 +106,7 @@ class SdlGpuRenderTarget2DMsaaTest : public Game
     std::unique_ptr<SpriteBatch> sb_;
     std::unique_ptr<RenderTarget2D> rtMsaa_;
     std::unique_ptr<RenderTarget2D> rtMsaaDepth_;
+    std::unique_ptr<RenderTarget2D> rtMsaaMip_;   ///< REMED-GFX-186: multisampled AND mipmapped.
     std::unique_ptr<VertexBuffer> quadVb_;
     std::unique_ptr<VertexBuffer> farQuadVb_;
     std::unique_ptr<VertexBuffer> nearQuadVb_;
@@ -135,6 +154,22 @@ class SdlGpuRenderTarget2DMsaaTest : public Game
         dev.SetDepthWriteEnabled(false);
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
+        // REMED-GFX-186: the multisampled AND mipmapped target. Green fills the whole surface, so
+        // every generated level is Green too -- a level that was never generated reads (0,0,0,0)
+        // and a level read from the wrong resource cannot be Green either.
+        dev.SetRenderTarget(rtMsaaMip_.get());
+        dev.Clear(Color::Black);
+        BasicEffect mipFx(dev);
+        mipFx.VertexColorEnabled = true;
+        mipFx.setWorldProperty(Matrix::getIdentityProperty());
+        mipFx.setViewProperty(Matrix::getIdentityProperty());
+        mipFx.setProjectionProperty(Matrix::getIdentityProperty());
+        mipFx.Apply();
+        dev.SetVertexBuffer(quadVb_.get());
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
         const auto& vp = dev.getViewportProperty();
         const int w = vp.getWidthProperty();
         const int h = vp.getHeightProperty();
@@ -157,6 +192,13 @@ protected:
                                                    DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
         rtMsaaDepth_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                                         DepthFormat::Depth24Stencil8, 4, RenderTargetUsage::DiscardContents);
+        // REMED-GFX-186: this file is NAMED for multisampled RenderTarget2D and its own header
+        // advertises "real RenderTarget2D::GetData() pixel readback of the resolved MSAA color"
+        // -- yet every target above is mipMap=false and every read above is level 0, so it could
+        // not fail when a multisampled target silently lost its mip chain and reading level 1
+        // segfaulted. A THIRD target, mipmapped as well as multisampled, closes that blind spot.
+        rtMsaaMip_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, true, SurfaceFormat::Color,
+                                                      DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
 
         const VertexPositionColor quadVerts[6] = {
             { Vector3(-1.0f, -1.0f, 0.0f), Color::Green }, { Vector3(-1.0f, 1.0f, 0.0f), Color::Green }, { Vector3(1.0f, -1.0f, 0.0f), Color::Green },
@@ -216,6 +258,35 @@ protected:
                       "Check E: resolved MSAA depth-tested target shows nearer Green quad, got " +
                       std::to_string(gotDepth.getRProperty()) + "," + std::to_string(gotDepth.getGProperty()) +
                       "," + std::to_string(gotDepth.getBProperty()));
+
+                // Checks F/G/H (REMED-GFX-186): multisampling must not shorten the public chain,
+                // and every level it promises must be readable. Pre-fix, F reported 1 instead of 6
+                // and G killed the process with SIGSEGV inside VULKAN_DownloadFromTexture.
+                stage = "RenderTarget2D LevelCount of a mipmapped MULTISAMPLED target";
+                const int levels = rtMsaaMip_->getLevelCountProperty();
+                Check(levels == ExpectedLevels(kRTSize, kRTSize),
+                      "Check F: a mipMap=true, MSAA=4 target reports LevelCount " +
+                      std::to_string(ExpectedLevels(kRTSize, kRTSize)) + ", got " +
+                      std::to_string(levels));
+
+                stage = "RenderTarget2D::GetData() readback of a GENERATED mip level";
+                const Color gotMip = ReadPixelAtLevel(*rtMsaaMip_, 1, kRTSize / 4, kRTSize / 4);
+                Check(Matches(gotMip, Color::Green),
+                      "Check G: level 1 of the resolved, mipmapped MSAA target reads back Green, got " +
+                      std::to_string(gotMip.getRProperty()) + "," + std::to_string(gotMip.getGProperty()) +
+                      "," + std::to_string(gotMip.getBProperty()));
+
+                stage = "RenderTarget2D::GetData() at a level that does not exist";
+                bool rejected = false;
+                try
+                {
+                    Color scratch(0, 0, 0, 0);
+                    const Rectangle one(0, 0, 1, 1);
+                    rtMsaaMip_->GetData(levels, &one, &scratch, 0, 1);
+                }
+                catch (const std::exception&) { rejected = true; }
+                Check(rejected, "Check H: level == LevelCount is refused through a catchable public "
+                                "exception, never a signal");
             }
             catch (const std::exception& e)
             {
@@ -232,8 +303,9 @@ protected:
         if (frame_ == kTotalFrames)
         {
             Check(true, std::to_string(kTotalFrames) + " frames of MSAA RenderTarget2D render/sample render with no exception");
-            std::printf("=== %d/6 PASS ===\n", passCount_);
-            result_ = (passCount_ == 6) ? 0 : 1;
+            std::printf("=== %d/9 PASS ===\n", passCount_);
+            // REMED-GFX-186 added checks F, G and H.
+            result_ = (passCount_ == 9) ? 0 : 1;
             Exit();
         }
     }

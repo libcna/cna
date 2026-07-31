@@ -84,6 +84,9 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -1268,6 +1271,128 @@ class RenderTargetMsaaMipReadbackTest : public Game
     void LegH8()  { ChainLeg("H8",  8,  4, 0); }
     void LegH9()  { ChainLeg("H9", 13,  7, 0); }
 
+    // ================================================================ Group I: other routes
+
+    /**
+     * @brief I1 -- an MRT member: the SAME helper, so the fix must cover it and this proves it.
+     *
+     * `SetRenderTargets({a, b})` makes `b` a real simultaneous colour attachment of ONE pass, but
+     * `b` is still an ordinary `RenderTarget2D` read through `SdlGpuRenderTargetBackend::GetData`.
+     * Its generated chain is therefore the same route, not a separate one -- which is exactly why
+     * it belongs in this ticket rather than in a new one.
+     */
+    void LegI1()
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        auto a = MakeTarget(dev, kRT, kRT, true, 4, DepthFormat::None,
+                            RenderTargetUsage::DiscardContents, "I1 MRT attachment 0");
+        if (!a) return;
+        auto b = MakeTarget(dev, kRT, kRT, true, 4, DepthFormat::None,
+                            RenderTargetUsage::DiscardContents, "I1 MRT attachment 1");
+        if (!b) return;
+
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+        dev.setDepthStencilStateProperty(DepthStencilState::None);
+        step("I1: SetRenderTargets({a, b}), Clear, three quadrant quads, unbind");
+        std::vector<RenderTargetBinding> bindings;
+        bindings.emplace_back(a.get());
+        bindings.emplace_back(b.get());
+        dev.SetRenderTargets(bindings);
+        dev.Clear(kBase);
+        DrawFlatQuad(dev, kTL, -1.f,  0.f,  0.f,  1.f);
+        DrawFlatQuad(dev, kTR,  0.f,  0.f,  1.f,  1.f);
+        DrawFlatQuad(dev, kBL, -1.f, -1.f,  0.f,  0.f);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        ReadWholeLevel(*a, 0, "I1 MRT attachment 0 level 0");
+        ReadWholeLevel(*a, 1, "I1 MRT attachment 0 level 1");
+        // Stock single-output draws write attachment 0 only (SDLGPU-37), so attachment 1 holds the
+        // pass' CLEAR colour. Its LEVEL 1 must still be that colour rather than a crash, an
+        // ungenerated zero, or a copy of attachment 0.
+        std::vector<Color> extra = ReadWholeLevel(*b, 1, "I1 MRT attachment 1 level 1",
+                                                  /*contentAsserted=*/false);
+        if (kTargetReadbackSupported)
+        {
+            bool allBase = true;
+            for (const Color& c : extra)
+                if (!Near(c, kBase)) { allBase = false; break; }
+            note("I1 MRT attachment 1 level 1 first texel = " + ColorText(extra.front()));
+            check(allBase, "I1: the extra MRT attachment's generated level 1 holds the pass' clear "
+                           "colour -- neither ungenerated nor a copy of attachment 0");
+        }
+    }
+
+    /**
+     * @brief I2 -- a mipmapped MULTISAMPLED RenderTargetCube: a DIFFERENT route, classified here.
+     *
+     * `SdlGpuRenderTargetCubeBackend` has its own `GetData`, its own `levelCount_` and its own
+     * range check, so it never reached the out-of-bounds subresource this ticket is about. It does
+     * carry the same `mipMap_ && multiSampleCount_ == 0` suppression in its constructor, so its
+     * public `LevelCount` can still describe levels its native cube texture does not own -- but
+     * the SYMPTOM is a deterministic refusal, not a signal, and the fix would have to reason about
+     * per-face resolve and the fact that `SDL_GenerateMipmapsForGPUTexture` regenerates all six
+     * faces at once. That is a separate ticket, and this leg exists to PIN what it currently does
+     * instead of leaving the claim unmeasured.
+     */
+    void LegI2()
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        step("I2: RenderTargetCube(16, mipMap=true, MSAA=4) -- classification only");
+        std::unique_ptr<RenderTargetCube> cube;
+        try
+        {
+            cube = std::make_unique<RenderTargetCube>(dev, kRT, true, SurfaceFormat::Color,
+                                                      DepthFormat::None, 4,
+                                                      RenderTargetUsage::DiscardContents);
+        }
+        catch (const std::exception& e)
+        {
+            boundary(std::string("I2 a mipmapped multisampled cube target is refused here: ") + e.what());
+            check(true, "I2: the refusal is a catchable public exception, not an abort");
+            return;
+        }
+        note("I2 cube LevelCount=" + std::to_string(cube->getLevelCountProperty()) +
+             " appliedSamples=" + std::to_string(cube->getMultiSampleCountProperty()));
+
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+        dev.setDepthStencilStateProperty(DepthStencilState::None);
+        dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveX);
+        dev.Clear(kBase);
+        DrawFlatQuad(dev, kTL, -1.f, 0.f, 0.f, 1.f);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        const int count = (kRT / 2) * (kRT / 2);
+        std::vector<Color> buf = SentinelBuffer(count);
+        const Rectangle r(0, 0, kRT / 2, kRT / 2);
+        step("I2: RenderTargetCube::GetData(PositiveX, level=1, ...) -- must never be a signal");
+        bool threw = false;
+        std::string what;
+        try { cube->GetData(CubeMapFace::PositiveX, 1, &r, buf.data(), kGuard, count); }
+        catch (const std::exception& e) { threw = true; what = e.what(); }
+
+        int untouched = 0, zeroed = 0;
+        const Color black(0, 0, 0, 0);
+        for (int i = 0; i < count; ++i)
+        {
+            const Color c = buf[static_cast<std::size_t>(kGuard + i)];
+            if (Exact(c, kSentinel)) ++untouched;
+            if (Exact(c, black)) ++zeroed;
+        }
+        boundary(std::string("I2 mipmapped multisampled CUBE level 1 on this backend: ") +
+                 (threw ? ("REFUSED -- " + what) : "answered") + "; " + std::to_string(untouched) +
+                 "/" + std::to_string(count) + " destination elements untouched, " +
+                 std::to_string(zeroed) + "/" + std::to_string(count) + " exactly (0,0,0,0)");
+        // The ONLY thing this ticket asserts about the cube route: it is deterministic and safe.
+        // Whether it should ANSWER instead of refusing belongs to its own ticket.
+        check(true, "I2: the cube route completed without a signal");
+        check(threw ? untouched == count : untouched == 0,
+              "I2: the cube route either wrote its whole window or wrote nothing at all -- never "
+              "a partially filled destination");
+        GuardsIntact(buf, count, "I2");
+    }
+
     // ================================================================ the runner
 
     template <typename M>
@@ -1344,6 +1469,9 @@ protected:
         runLeg("H8", &RenderTargetMsaaMipReadbackTest::LegH8);
         runLeg("H9", &RenderTargetMsaaMipReadbackTest::LegH9);
 
+        runLeg("I1", &RenderTargetMsaaMipReadbackTest::LegI1);
+        runLeg("I2", &RenderTargetMsaaMipReadbackTest::LegI2);
+
         Finish();
     }
 
@@ -1381,6 +1509,7 @@ namespace
         "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10",
         "G1", "G2", "G3", "G4", "G5",
         "H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9",
+        "I1", "I2",
     };
 
 #if CNA_GFX186_CAN_FORK
