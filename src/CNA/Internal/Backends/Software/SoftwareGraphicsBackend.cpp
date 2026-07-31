@@ -418,6 +418,7 @@ namespace CNA::Internal::Backends::Software
             bool mipPoint = true;
             bool magnify = true;
             bool withinPoint = true;
+            int addressU = 1, addressV = 1;
             int texelX = 0, texelY = 0;
             int fetchCount = 0;
             float sampleR = 0.0f, sampleG = 0.0f, sampleB = 0.0f, sampleA = 0.0f;
@@ -598,10 +599,12 @@ namespace CNA::Internal::Backends::Software
                 g = fetch(x, y, 1);
                 b = fetch(x, y, 2);
                 a = fetch(x, y, 3);
+                // ONE texel, all four channels from it. REMED-GFX-182: counted whenever EITHER trace
+                // is on, so the cube trace's fetch cardinality is measured here rather than inferred.
+                if (g_samplerTrace.enabled || g_cubeTrace.enabled) g_samplerTrace.texelFetches += 1;
                 if (g_samplerTrace.enabled)
                 {
                     ++g_samplerTrace.pointSamples;
-                    g_samplerTrace.texelFetches += 1;   // ONE texel, all four channels from it
                     if (g_samplerTrace.verbose && g_samplerTrace.printed < g_samplerTrace.limit)
                     {
                         ++g_samplerTrace.printed;
@@ -636,10 +639,22 @@ namespace CNA::Internal::Backends::Software
             if (!(fx >= 0.0f && fx <= 1.0f)) fx = 0.0f;
             if (!(fy >= 0.0f && fy <= 1.0f)) fy = 0.0f;
 
+            // REMED-GFX-182: written as nested LERPs (`a + (b-a)*t`) rather than as weighted sums
+            // (`a*(1-t) + b*t`). The two are algebraically identical and cost the same four fetches,
+            // but only this form is EXACT when the taps agree: `a + (a-a)*t` is `a` for every t,
+            // where the weighted sum can land one ULP below it and the framebuffer's truncating
+            // store then writes a byte one lower. Real hardware filters in fixed point and returns
+            // the texel exactly for a uniform footprint; a linear filter over a uniform region must
+            // return that region's value, on the 2D path as much as on the cube path this now
+            // serves (a mip level of a flat cube face is exactly such a region).
             const auto bilerp = [&](int channel) -> float {
-                const float top = fetch(x0, y0, channel) * (1.0f - fx) + fetch(x1, y0, channel) * fx;
-                const float bottom = fetch(x0, y1, channel) * (1.0f - fx) + fetch(x1, y1, channel) * fx;
-                return top * (1.0f - fy) + bottom * fy;
+                const float t00 = fetch(x0, y0, channel);
+                const float t10 = fetch(x1, y0, channel);
+                const float t01 = fetch(x0, y1, channel);
+                const float t11 = fetch(x1, y1, channel);
+                const float top = t00 + (t10 - t00) * fx;
+                const float bottom = t01 + (t11 - t01) * fx;
+                return top + (bottom - top) * fy;
             };
 
             r = bilerp(0);
@@ -647,10 +662,11 @@ namespace CNA::Internal::Backends::Software
             b = bilerp(2);
             a = bilerp(3);
 
+            // Four neighbours, all four channels from each. Counted for either trace, see above.
+            if (g_samplerTrace.enabled || g_cubeTrace.enabled) g_samplerTrace.texelFetches += 4;
             if (g_samplerTrace.enabled)
             {
                 ++g_samplerTrace.linearSamples;
-                g_samplerTrace.texelFetches += 4;   // four neighbours, all four channels from each
                 if (g_samplerTrace.verbose && g_samplerTrace.printed < g_samplerTrace.limit)
                 {
                     ++g_samplerTrace.printed;
@@ -769,21 +785,16 @@ namespace CNA::Internal::Backends::Software
         /// invW, so they are un-premultiplied here first. A degenerate triangle reports a rate of 1
         /// -- magnification, level 0 -- because its rate is undefined and it covers no pixels worth
         /// minifying.
-        float TriangleTexelRate(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
-                                int texW, int texH)
+        /// REMED-GFX-182: the screen-space part of the rate, shared by the 2D and cube paths so
+        /// there is exactly one footprint formula on this backend. @p s0..@p t2 are the source
+        /// coordinates in TEXELS at the triangle's three vertices; how they were obtained -- a UV
+        /// attribute for an ordinary texture, a reflection vector projected onto a cube face for the
+        /// environment map -- is the caller's business and is the only thing that differs.
+        float ScreenSpaceTexelRate(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                                   float s0, float s1, float s2, float t0, float t1, float t2)
         {
             const float area2 = (v1.x - v0.x) * (v2.y - v0.y) - (v2.x - v0.x) * (v1.y - v0.y);
             if (!(std::abs(area2) > 1e-12f)) return 1.0f;
-
-            const float w0 = (v0.invW != 0.0f) ? v0.invW : 1.0f;
-            const float w1 = (v1.invW != 0.0f) ? v1.invW : 1.0f;
-            const float w2 = (v2.invW != 0.0f) ? v2.invW : 1.0f;
-            const float s0 = v0.u / w0 * static_cast<float>(texW);
-            const float s1 = v1.u / w1 * static_cast<float>(texW);
-            const float s2 = v2.u / w2 * static_cast<float>(texW);
-            const float t0 = v0.v / w0 * static_cast<float>(texH);
-            const float t1 = v1.v / w1 * static_cast<float>(texH);
-            const float t2 = v2.v / w2 * static_cast<float>(texH);
 
             const float dsdx = ((s1 - s0) * (v2.y - v0.y) - (s2 - s0) * (v1.y - v0.y)) / area2;
             const float dsdy = ((s2 - s0) * (v1.x - v0.x) - (s1 - s0) * (v2.x - v0.x)) / area2;
@@ -796,6 +807,21 @@ namespace CNA::Internal::Backends::Software
             // The `!(rho > 1)` form rejects NaN too, so a non-finite rate collapses onto
             // magnification/level 0 rather than propagating into a level index.
             return !(rho > 1.0f) ? 1.0f : rho;
+        }
+
+        float TriangleTexelRate(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                                int texW, int texH)
+        {
+            const float w0 = (v0.invW != 0.0f) ? v0.invW : 1.0f;
+            const float w1 = (v1.invW != 0.0f) ? v1.invW : 1.0f;
+            const float w2 = (v2.invW != 0.0f) ? v2.invW : 1.0f;
+            return ScreenSpaceTexelRate(v0, v1, v2,
+                                        v0.u / w0 * static_cast<float>(texW),
+                                        v1.u / w1 * static_cast<float>(texW),
+                                        v2.u / w2 * static_cast<float>(texW),
+                                        v0.v / w0 * static_cast<float>(texH),
+                                        v1.v / w1 * static_cast<float>(texH),
+                                        v2.v / w2 * static_cast<float>(texH));
         }
 
         /// REMED-GFX-175: the level-of-detail a texel rate implies. rho <= 1 is magnification, which
@@ -821,79 +847,245 @@ namespace CNA::Internal::Backends::Software
                 m[2] * v.X + m[6] * v.Y + m[10] * v.Z + m[14] * w);
         }
 
-        /// SOFTWARE-82: standard cube-map face selection (largest-magnitude axis picks the face,
-        /// its sign picks Positive/Negative) and per-face UV projection, matching the classic
-        /// OpenGL/D3D convention. Nearest-neighbor only (no cross-face bilinear filtering at cube
-        /// seams -- a real, deliberate simplification, consistent with this backend's existing
-        /// "correctness over performance/fidelity, simple wins over exhaustive" stance).
-        void SampleCubeMap(const SoftwareTextureCubeBackend& cube, const Vector3& dir,
-                          float& r, float& g, float& b, float& a)
+        /// SOFTWARE-82: this backend's cube-map addressing convention, in ONE place.
+        ///
+        /// Projects @p dir onto the named face using the classic OpenGL/D3D per-face UV formula and
+        /// reports the face-local coordinate in [0,1]. Returns false when @p dir is not in that
+        /// face's hemisphere (the projection would divide by a non-positive major axis), so a caller
+        /// that names the face itself -- REMED-GFX-182's per-triangle LOD estimate -- can reject a
+        /// vertex instead of producing a nonsense coordinate.
+        ///
+        /// REMED-GFX-182 factored this out of SampleCubeMap unchanged: face 0/1 are +X/-X with
+        /// u = -+Z and v = -Y, face 2/3 are +Y/-Y with u = X and v = +-Z, face 4/5 are +Z/-Z with
+        /// u = +-X and v = -Y. The convention itself is settled elsewhere (REMED-GFX-134) and is not
+        /// touched here.
+        bool CubeFaceLocal(const Vector3& dir, int face, float& s, float& t)
+        {
+            float u, v, ma;
+            switch (face)
+            {
+                case 0:  ma =  dir.X; u = -dir.Z; v = -dir.Y; break;   // PositiveX
+                case 1:  ma = -dir.X; u =  dir.Z; v = -dir.Y; break;   // NegativeX
+                case 2:  ma =  dir.Y; u =  dir.X; v =  dir.Z; break;   // PositiveY
+                case 3:  ma = -dir.Y; u =  dir.X; v = -dir.Z; break;   // NegativeY
+                case 4:  ma =  dir.Z; u =  dir.X; v = -dir.Y; break;   // PositiveZ
+                default: ma = -dir.Z; u = -dir.X; v = -dir.Y; break;   // NegativeZ
+            }
+            if (!(ma > 0.0f)) return false;
+            s = std::clamp((u / ma + 1.0f) * 0.5f, 0.0f, 1.0f);
+            t = std::clamp((v / ma + 1.0f) * 0.5f, 0.0f, 1.0f);
+            return true;
+        }
+
+        /// SOFTWARE-82: standard cube-map face selection -- the largest-magnitude axis picks the
+        /// face and its sign picks Positive/Negative -- followed by CubeFaceLocal's per-face
+        /// projection. A degenerate (all-zero) direction has no major axis to select and no
+        /// projection to make, so it resolves to the face centre: deterministic, and inside the
+        /// face, which is the same stance the rest of this backend's validation takes.
+        void SelectCubeFace(const Vector3& dir, int& face, float& s, float& t)
         {
             const float ax = std::abs(dir.X), ay = std::abs(dir.Y), az = std::abs(dir.Z);
-            int face; float u, v, ma;
-            if (ax >= ay && ax >= az)
-            {
-                face = dir.X > 0.0f ? 0 : 1;               // PositiveX : NegativeX
-                u = dir.X > 0.0f ? -dir.Z : dir.Z;
-                v = -dir.Y;
-                ma = ax;
-            }
-            else if (ay >= ax && ay >= az)
-            {
-                face = dir.Y > 0.0f ? 2 : 3;               // PositiveY : NegativeY
-                u = dir.X;
-                v = dir.Y > 0.0f ? dir.Z : -dir.Z;
-                ma = ay;
-            }
-            else
-            {
-                face = dir.Z > 0.0f ? 4 : 5;               // PositiveZ : NegativeZ
-                u = dir.Z > 0.0f ? dir.X : -dir.X;
-                v = -dir.Y;
-                ma = az;
-            }
-            const float s = std::clamp((u / ma + 1.0f) * 0.5f, 0.0f, 1.0f);
-            const float t = std::clamp((v / ma + 1.0f) * 0.5f, 0.0f, 1.0f);
+            if (ax >= ay && ax >= az)      face = dir.X > 0.0f ? 0 : 1;
+            else if (ay >= ax && ay >= az) face = dir.Y > 0.0f ? 2 : 3;
+            else                           face = dir.Z > 0.0f ? 4 : 5;
+            if (!CubeFaceLocal(dir, face, s, t)) { s = 0.5f; t = 0.5f; }
+        }
 
-            const int size = std::max(1, cube.GetSize());
-            const int px = std::clamp(static_cast<int>(s * static_cast<float>(size)), 0, size - 1);
-            const int py = std::clamp(static_cast<int>(t * static_cast<float>(size)), 0, size - 1);
-            const auto& pixels = cube.FacePixels(face);
-            const std::size_t idx = (static_cast<std::size_t>(py) * static_cast<std::size_t>(size) +
-                                    static_cast<std::size_t>(px)) * 4u;
-            r = pixels[idx + 0] / 255.0f;
-            g = pixels[idx + 1] / 255.0f;
-            b = pixels[idx + 2] / 255.0f;
-            a = pixels[idx + 3] / 255.0f;
+        /// REMED-GFX-182: one face of a cube, presented as the colour surface REMED-GFX-124
+        /// introduced, so the authoritative REMED-GFX-150/REMED-GFX-175 sampler filters it.
+        ///
+        /// This is the whole architecture of the fix: the cube path gets no filter code, no ordinal
+        /// table and no address logic of its own -- it selects a face, converts the direction to a
+        /// face-local coordinate, and then hands BOTH to `SampleTexture`, the same function every
+        /// ordinary texture goes through. Min/mag selection, mip level selection, level combination,
+        /// texel addressing and decode are therefore identical for a cube and a Texture2D by
+        /// construction, and cannot drift apart later.
+        ///
+        /// Stack-constructed per cube sample: it owns nothing, copies nothing and allocates nothing;
+        /// the level storage stays the cube's.
+        class CubeFaceSurface final : public SoftwareColorSurface
+        {
+        public:
+            CubeFaceSurface(const SoftwareTextureCubeBackend& cube, int face)
+                : cube_(cube), face_(face) {}
 
-            // REMED-GFX-182: record what this sample actually did. There is no sampler parameter to
-            // record, which IS the finding -- the effective description below is a constant.
+            [[nodiscard]] int ColorWidth() const override { return std::max(1, cube_.GetSize()); }
+            [[nodiscard]] int ColorHeight() const override { return std::max(1, cube_.GetSize()); }
+            [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels() const override
+            { return cube_.FacePixels(face_); }
+
+            [[nodiscard]] int ColorLevelCount() const override { return cube_.FaceLevelCount(face_); }
+            [[nodiscard]] int ColorWidth(int level) const override { return cube_.FaceDim(level); }
+            [[nodiscard]] int ColorHeight(int level) const override { return cube_.FaceDim(level); }
+            [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override
+            { return cube_.FacePixels(face_, level); }
+
+        private:
+            const SoftwareTextureCubeBackend& cube_;
+            int face_;
+        };
+
+        /// REMED-GFX-182: the ADDRESS half of a cube sampler.
+        ///
+        /// A cube map is addressed by a DIRECTION: face selection consumes the direction and the
+        /// face-local coordinate that comes out is already in [0,1], so U/V/W address modes are
+        /// unreachable except exactly at a face edge. Every GPU backend in this project measures
+        /// Clamp, Wrap and Mirror as rendering a cube IDENTICALLY (REMED-GFX-173 and REMED-GFX-181
+        /// both report 0 differing pixels for each pair), because cube filtering is seamless there
+        /// and the modes never apply. This backend does not implement cross-face filtering -- an
+        /// explicit, long-standing simplification -- so the honest match to that measured behaviour
+        /// is to address face-locally with CLAMP, which keeps an edge tap on the face's own last
+        /// texel instead of teleporting it to the opposite edge under Wrap. No cube address-mode
+        /// convention is invented here and none is asserted; the mode the game set is carried in the
+        /// trace so the boundary stays visible.
+        SoftwareSamplerState CubeSamplerFor(const SoftwareSamplerState& slot)
+        {
+            SoftwareSamplerState s = slot;   // the FILTER, all three components, exactly as set
+            s.addressU = 1;                  // Clamp
+            s.addressV = 1;                  // Clamp
+            return s;
+        }
+
+        /// SOFTWARE-82 / REMED-GFX-182: one environment-map cube sample under the public
+        /// `GraphicsDevice.SamplerStates[1]` this draw captured.
+        ///
+        /// The stages are kept strictly separate and in this order, and only stages 3-6 are new:
+        ///   1. select the face from the direction    (SelectCubeFace, unchanged convention)
+        ///   2. convert the direction to face-local u/v (CubeFaceLocal, unchanged formula)
+        ///   3. select the mip level(s) from the MIPMAP component of the filter and @p lambda
+        ///   4. filter within each participating level by the MIN/MAG component
+        ///   5. combine levels where mip-linear applies
+        ///   6. decode
+        /// Stages 3-6 are not implemented here at all: they are `SampleTexture`, reached through a
+        /// CubeFaceSurface view of the selected face.
+        ///
+        /// The pre-fix signature took no sampler and ended in a single clamped
+        /// `static_cast<int>(s * size)` fetch at level 0, so the cube was point-sampled at level 0
+        /// however `SamplerStates[1]` was set. The parameter list now mirrors `SampleTexture`'s
+        /// exactly -- sampler, magnification classification, lambda -- because it does the same job.
+        void SampleCubeMap(const SoftwareTextureCubeBackend& cube, const SoftwareSamplerState& sampler,
+                          bool magnify, float lambda, const Vector3& dir,
+                          float& r, float& g, float& b, float& a)
+        {
+            int face = 0;
+            float s = 0.5f, t = 0.5f;
+            SelectCubeFace(dir, face, s, t);
+
+            const CubeFaceSurface surface(cube, face);
+            const SoftwareSamplerState cubeSampler = CubeSamplerFor(sampler);
+
+            const long long fetchesBefore = g_samplerTrace.texelFetches;
+            SampleTexture(surface, cubeSampler, magnify, lambda, s, t, r, g, b, a);
+
             if (g_cubeTrace.enabled)
             {
+                // Re-derive the level selection for the trace from the SAME helpers the sample just
+                // used, so the reported stages cannot describe a different decision than the one
+                // that produced the pixel.
+                const int levels = std::max(1, surface.ColorLevelCount());
+                const bool mipPoint = FilterSelectsMipWithPoint(cubeSampler.filter);
+                const bool withinPoint = magnify ? FilterMagnifiesWithPoint(cubeSampler.filter)
+                                                 : FilterMinifiesWithPoint(cubeSampler.filter);
+                int lo = 0, hi = 0;
+                float weight = 0.0f;
+                if (levels > 1 && !magnify && lambda > 0.0f)
+                {
+                    const float clamped = std::min(lambda, static_cast<float>(levels - 1));
+                    if (mipPoint)
+                    {
+                        lo = std::clamp(static_cast<int>(std::ceil(clamped + 0.5f)) - 1, 0, levels - 1);
+                        hi = lo;
+                    }
+                    else
+                    {
+                        lo = std::clamp(static_cast<int>(std::floor(clamped)), 0, levels - 1);
+                        weight = clamped - static_cast<float>(lo);
+                        hi = (!(weight > 0.0f) || lo >= levels - 1) ? lo : lo + 1;
+                        if (hi == lo) weight = 0.0f;
+                    }
+                }
+                const int dim = std::max(1, surface.ColorWidth(lo));
+
                 ++g_cubeTrace.cubeSamples;
-                ++g_cubeTrace.cubeLevelSamples;
-                g_cubeTrace.cubeTexelFetches += 1;
+                g_cubeTrace.cubeLevelSamples += (hi == lo) ? 1 : 2;
+                // MEASURED at the fetch site, not derived from the level decision above.
+                g_cubeTrace.cubeTexelFetches += g_samplerTrace.texelFetches - fetchesBefore;
                 g_cubeTrace.capturedKeys.insert(SamplerDescKey(g_cubeTrace.slot1Filter,
                                                                g_cubeTrace.slot1AddrU,
                                                                g_cubeTrace.slot1AddrV));
-                g_cubeTrace.effectiveKeys.insert(SamplerDescKey(1 /*Point*/, 1 /*Clamp*/, 1 /*Clamp*/) |
-                                                 (1u << 24) /*mip Point*/ | (0u << 28) /*level 0*/);
+                g_cubeTrace.effectiveKeys.insert(
+                    SamplerDescKey(withinPoint ? 1 : 0, cubeSampler.addressU, cubeSampler.addressV) |
+                    (static_cast<std::uint32_t>(mipPoint ? 1 : 0) << 24) |
+                    (static_cast<std::uint32_t>(lo & 0x7) << 28));
                 g_cubeTrace.dirX = dir.X; g_cubeTrace.dirY = dir.Y; g_cubeTrace.dirZ = dir.Z;
                 g_cubeTrace.face = face;
                 g_cubeTrace.faceU = s; g_cubeTrace.faceV = t;
-                // The cube's REAL allocated chain against the single level this function can read:
-                // `levels=6 mip=[0,0]` is the mip half of the finding stated as a measurement.
-                g_cubeTrace.levelCount = cube.LevelCount();
-                g_cubeTrace.lambda = 0.0f;
-                g_cubeTrace.lowLevel = 0; g_cubeTrace.highLevel = 0; g_cubeTrace.mipWeight = 0.0f;
-                g_cubeTrace.mipPoint = true;
-                g_cubeTrace.magnify = true;
-                g_cubeTrace.withinPoint = true;
-                g_cubeTrace.texelX = px; g_cubeTrace.texelY = py;
-                g_cubeTrace.fetchCount = 1;
+                g_cubeTrace.levelCount = levels;
+                g_cubeTrace.lambda = lambda;
+                g_cubeTrace.lowLevel = lo; g_cubeTrace.highLevel = hi; g_cubeTrace.mipWeight = weight;
+                g_cubeTrace.mipPoint = mipPoint;
+                g_cubeTrace.magnify = magnify;
+                g_cubeTrace.withinPoint = withinPoint;
+                g_cubeTrace.texelX = std::clamp(static_cast<int>(s * static_cast<float>(dim)), 0, dim - 1);
+                g_cubeTrace.texelY = std::clamp(static_cast<int>(t * static_cast<float>(dim)), 0, dim - 1);
+                g_cubeTrace.fetchCount =
+                    static_cast<int>(g_samplerTrace.texelFetches - fetchesBefore);
+                g_cubeTrace.addressU = cubeSampler.addressU;
+                g_cubeTrace.addressV = cubeSampler.addressV;
                 g_cubeTrace.sampleR = r; g_cubeTrace.sampleG = g;
                 g_cubeTrace.sampleB = b; g_cubeTrace.sampleA = a;
             }
+        }
+
+        /// REMED-GFX-182: this triangle's cube texel rate -- the footprint the MIPMAP component of
+        /// `SamplerStates[1]` turns into a level, resolved ONCE per triangle exactly like the 2D
+        /// rate REMED-GFX-175 established, with no per-fragment derivative work.
+        ///
+        /// The reflection direction is evaluated at the three vertices with the same expression the
+        /// fragment path uses, the face is chosen from their SUM (the triangle's dominant direction,
+        /// so all three project onto one face), and the three face-local coordinates in texels then
+        /// go through the shared ScreenSpaceTexelRate. A vertex that does not lie in the chosen
+        /// face's hemisphere, or a triangle whose normals or eye vector degenerate, reports a rate
+        /// of 1 -- magnification, level 0 -- which is the same "deterministic rather than clever"
+        /// fallback a degenerate 2D triangle already gets.
+        float TriangleCubeTexelRate(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                                    const float* eyeWorld, int faceDim)
+        {
+            const RasterVertex* verts[3] = {&v0, &v1, &v2};
+            Vector3 dirs[3];
+            Vector3 sum(0.0f, 0.0f, 0.0f);
+            for (int k = 0; k < 3; ++k)
+            {
+                const RasterVertex& rv = *verts[k];
+                const float invW = (rv.invW != 0.0f) ? rv.invW : 1.0f;
+                const float wpx = rv.wpx / invW, wpy = rv.wpy / invW, wpz = rv.wpz / invW;
+                float nx = rv.nx / invW, ny = rv.ny / invW, nz = rv.nz / invW;
+                const float nLen = std::sqrt(nx * nx + ny * ny + nz * nz);
+                if (!(nLen > 1e-8f)) return 1.0f;
+                nx /= nLen; ny /= nLen; nz /= nLen;
+
+                float ex = eyeWorld[0] - wpx, ey = eyeWorld[1] - wpy, ez = eyeWorld[2] - wpz;
+                const float eLen = std::sqrt(ex * ex + ey * ey + ez * ez);
+                if (!(eLen > 1e-8f)) return 1.0f;
+                ex /= eLen; ey /= eLen; ez /= eLen;
+
+                const float nDotE = nx * ex + ny * ey + nz * ez;
+                dirs[k] = Vector3(2.0f * nDotE * nx - ex, 2.0f * nDotE * ny - ey, 2.0f * nDotE * nz - ez);
+                sum = Vector3(sum.X + dirs[k].X, sum.Y + dirs[k].Y, sum.Z + dirs[k].Z);
+            }
+
+            int face = 0;
+            float cs = 0.5f, ct = 0.5f;
+            SelectCubeFace(sum, face, cs, ct);
+
+            float s[3], t[3];
+            for (int k = 0; k < 3; ++k)
+                if (!CubeFaceLocal(dirs[k], face, s[k], t[k])) return 1.0f;
+
+            const float dim = static_cast<float>(std::max(1, faceDim));
+            return ScreenSpaceTexelRate(v0, v1, v2,
+                                        s[0] * dim, s[1] * dim, s[2] * dim,
+                                        t[0] * dim, t[1] * dim, t[2] * dim);
         }
 
         /// REMED-GFX-182: one complete cube-sample line, emitted once the effect contribution is
@@ -920,7 +1112,7 @@ namespace CNA::Internal::Backends::Software
                          g_cubeTrace.slot1Filter, AddressName(g_cubeTrace.slot1AddrU),
                          AddressName(g_cubeTrace.slot1AddrV),
                          g_cubeTrace.withinPoint ? "Point" : "Linear",
-                         AddressName(1), AddressName(1),
+                         AddressName(g_cubeTrace.addressU), AddressName(g_cubeTrace.addressV),
                          g_cubeTrace.mipPoint ? "Point" : "Linear",
                          static_cast<double>(g_cubeTrace.dirX), static_cast<double>(g_cubeTrace.dirY),
                          static_cast<double>(g_cubeTrace.dirZ),
@@ -935,9 +1127,11 @@ namespace CNA::Internal::Backends::Software
                          static_cast<int>(g_cubeTrace.sampleG * 255.0f + 0.5f),
                          static_cast<int>(g_cubeTrace.sampleB * 255.0f + 0.5f),
                          static_cast<int>(g_cubeTrace.sampleA * 255.0f + 0.5f),
-                         static_cast<int>(std::clamp(outR, 0.0f, 1.0f) * 255.0f + 0.5f),
-                         static_cast<int>(std::clamp(outG, 0.0f, 1.0f) * 255.0f + 0.5f),
-                         static_cast<int>(std::clamp(outB, 0.0f, 1.0f) * 255.0f + 0.5f));
+                         // Truncated exactly as the framebuffer store below truncates, so the trace
+                         // reports the byte that is really written and not a rounded approximation.
+                         static_cast<int>(std::clamp(outR, 0.0f, 1.0f) * 255.0f),
+                         static_cast<int>(std::clamp(outG, 0.0f, 1.0f) * 255.0f),
+                         static_cast<int>(std::clamp(outB, 0.0f, 1.0f) * 255.0f));
         }
 
         /// SOFTWARE-81: whether a triangle with the given signed screen-space `area` should be
@@ -1362,6 +1556,14 @@ namespace CNA::Internal::Backends::Software
             // resource has a single stored level never consult it.
             float lambda0;
             float lambda1;
+            // REMED-GFX-182: the reflection cube's own magnification classification and
+            // level-of-detail. The SAMPLER is `sampler1` -- the cube and DualTextureEffect's second
+            // texture share slot 1, exactly as they share binding 1 on every GPU backend -- but the
+            // FOOTPRINT cannot be shared: `lambda1` is derived from `texture1`, which an
+            // EnvironmentMapEffect draw does not bind at all, and a cube's footprint comes from the
+            // reflection vector rather than from the UV attribute.
+            bool magnifyCube;
+            float lambdaCube;
         };
 
         /// REMED-GFX-082: writes one already-interpolated shaded fragment -- the whole texture/diffuse/
@@ -1456,7 +1658,10 @@ namespace CNA::Internal::Backends::Software
                 const float nDotE = nx * ex + ny * ey + nz * ez;
                 const Vector3 reflDir(2.0f * nDotE * nx - ex, 2.0f * nDotE * ny - ey, 2.0f * nDotE * nz - ez);
                 float envR, envG, envB, envA;
-                SampleCubeMap(*ctx.envMap, reflDir, envR, envG, envB, envA);
+                // REMED-GFX-182: the cube is filtered by the PUBLIC SamplerStates[1] this draw
+                // captured, through the same sampler every ordinary texture goes through.
+                SampleCubeMap(*ctx.envMap, ctx.sampler1, ctx.magnifyCube, ctx.lambdaCube, reflDir,
+                              envR, envG, envB, envA);
 
                 const float viewAngle = nDotE;
                 const float blendFactor = ctx.params.fresnelEnabled
@@ -1555,10 +1760,17 @@ namespace CNA::Internal::Backends::Software
                 : 1.0f;
             const bool magnify0 = !(rho0 > 1.0f);
             const bool magnify1 = !(rho1 > 1.0f);
+            // REMED-GFX-182: the cube's own footprint, resolved once per triangle from the SAME
+            // reflection expression the fragment path uses and only when a cube is actually bound.
+            const float rhoCube = useEnvMap
+                ? TriangleCubeTexelRate(v0, v1, v2, params.eyePositionWorld,
+                                        std::max(1, envMap->GetSize()))
+                : 1.0f;
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendEnabled, depthState, colorWriteMask, multiSampleMask,
                                     sampler0, sampler1, magnify0, magnify1,
-                                    LodFromTexelRate(rho0), LodFromTexelRate(rho1)};
+                                    LodFromTexelRate(rho0), LodFromTexelRate(rho1),
+                                    !(rhoCube > 1.0f), LodFromTexelRate(rhoCube)};
 
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
@@ -1997,6 +2209,7 @@ namespace CNA::Internal::Backends::Software
         , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
     {
         levels_.resize(static_cast<std::size_t>(levelCount_));
+        supplied_.assign(static_cast<std::size_t>(levelCount_), std::array<bool, 6>{});
         for (int level = 0; level < levelCount_; ++level)
         {
             const int dim = LevelDim(level);
@@ -2004,6 +2217,21 @@ namespace CNA::Internal::Backends::Software
             for (auto& face : levels_[static_cast<std::size_t>(level)])
                 face.assign(faceBytes, 0u);
         }
+    }
+
+    // REMED-GFX-182: level 0 counts as supplied from construction (its storage is what every
+    // pre-mip consumer has always read), so a cube nobody wrote still samples exactly as it did.
+    int SoftwareTextureCubeBackend::FaceLevelCount(int face) const
+    {
+        if (face < 0 || face > 5) return 1;
+        return faceLevels_[static_cast<std::size_t>(face)];
+    }
+
+    const std::vector<std::uint8_t>& SoftwareTextureCubeBackend::FacePixels(int face, int level) const
+    {
+        const int f = (face < 0 || face > 5) ? 0 : face;
+        const int l = (level < 0 || level >= levelCount_) ? 0 : level;
+        return levels_[static_cast<std::size_t>(l)][static_cast<std::size_t>(f)];
     }
 
     bool SoftwareTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
@@ -2030,6 +2258,25 @@ namespace CNA::Internal::Backends::Software
             std::copy(src + static_cast<std::size_t>(row) * rowBytes,
                      src + static_cast<std::size_t>(row) * rowBytes + rowBytes,
                      pixels.begin() + static_cast<std::ptrdiff_t>(dstOffset));
+        }
+
+        // REMED-GFX-182: a level becomes selectable only once the FULL face rectangle at that level
+        // has been written -- a partial upload leaves the rest of the level at the construction
+        // zero-fill, and letting the sampler minify into that would fade a draw into transparent
+        // black nobody supplied. Recounted from level 1 upward per face, exactly as
+        // SoftwareTextureBackend::UpdatePixelsLevel recounts its own chain: a level only counts once
+        // every level below it is present, so a chain written out of order bounds the sampler at the
+        // last contiguous level that really exists instead of exposing a gap.
+        if (x == 0 && y == 0 && w == dim && h == dim)
+        {
+            supplied_[static_cast<std::size_t>(level)][static_cast<std::size_t>(face)] = true;
+            int contiguous = 1;
+            for (int l = 1; l < levelCount_; ++l)
+            {
+                if (!supplied_[static_cast<std::size_t>(l)][static_cast<std::size_t>(face)]) break;
+                ++contiguous;
+            }
+            faceLevels_[static_cast<std::size_t>(face)] = contiguous;
         }
         return true;
     }

@@ -342,10 +342,41 @@ namespace CNA::Internal::Backends::Software
          * @return The allocated level count, always at least 1.
          */
         [[nodiscard]] int LevelCount() const { return levelCount_; }
+        /**
+         * @brief How many mip levels of one face a caller actually SUPPLIED, counting from level 0.
+         *
+         * REMED-GFX-182, and exactly REMED-GFX-175's `ColorLevelCount()` semantics applied per cube
+         * face: storage for the whole declared chain exists from construction (REMED-GFX-135), but
+         * it starts ZEROED, so a chain the game never wrote must not be selectable or a minified
+         * draw would fade into transparent black nobody uploaded. A level counts only once the full
+         * face rectangle at that level has been written and every level below it has too.
+         *
+         * @param face CubeMapFace ordinal 0-5.
+         * @return The number of contiguously supplied levels for that face, always at least 1.
+         */
+        [[nodiscard]] int FaceLevelCount(int face) const;
+        /**
+         * @brief Face edge length in texels at mip level @p level.
+         * @param level Mip level, 0 .. LevelCount()-1.
+         * @return The level's edge length, never below 1.
+         */
+        [[nodiscard]] int FaceDim(int level) const { return LevelDim(level); }
         /// Real RGBA8 pixel storage for one of the 6 faces (CubeMapFace ordinal 0-5) at mip 0,
         /// size*size*4 bytes -- the rasterizer's cube sampler (SOFTWARE-82) reads directly from
-        /// here, and samples level 0 only.
+        /// here.
         [[nodiscard]] const std::vector<std::uint8_t>& FacePixels(int face) const { return levels_[0][face]; }
+        /**
+         * @brief One face's RGBA8 storage at mip level @p level, in the same layout as FacePixels().
+         *
+         * REMED-GFX-182: the cube sampler reads a SELECTED level through this, so the MIPMAP
+         * component of `SamplerStates[1]` reaches the reflection cube. An out-of-range level
+         * resolves to level 0 rather than indexing outside the chain.
+         *
+         * @param face  CubeMapFace ordinal 0-5.
+         * @param level Mip level, 0 .. LevelCount()-1.
+         * @return A reference to that face's own storage at that level -- never a copy.
+         */
+        [[nodiscard]] const std::vector<std::uint8_t>& FacePixels(int face, int level) const;
 
     private:
         /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mipDim().
@@ -355,6 +386,12 @@ namespace CNA::Internal::Backends::Software
         int levelCount_ = 1;
         /// levels_[level][face] -- one tightly packed RGBA8 buffer per face per allocated mip level.
         std::vector<std::array<std::vector<std::uint8_t>, 6>> levels_;
+        /// REMED-GFX-182: supplied_[level][face] -- whether the FULL face rectangle at that level
+        /// has been written. Level 0 of every face counts as supplied from construction, matching
+        /// SoftwareTextureBackend's own `storedLevels_ = 1` starting point.
+        std::vector<std::array<bool, 6>> supplied_;
+        /// Contiguously supplied levels from 0, per face. Always at least 1.
+        std::array<int, 6> faceLevels_{1, 1, 1, 1, 1, 1};
     };
 
     // Cube-map render targets, Texture3D, and hardware occlusion queries remain out of scope for
