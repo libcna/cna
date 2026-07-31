@@ -257,9 +257,12 @@ the screen, and `GetData()`.
 `Llgl_OcclusionQuery` covers a fully visible quad, a fully occluded one (real depth test), and two
 draws inside one `Begin()`/`End()` summing their contributions. `Llgl_ShaderEffect` covers a
 custom GLSL shader genuinely tinting a sprite by its own uniform, against a stock-shader control
-case that must not show the tint.
+case that must not show the tint. `Llgl_Resize` covers a real window resize driven through
+`GraphicsDeviceManager.ApplyChanges()` (growing, shrinking, and a `Letterbox` presentation rect
+recomputing from the resized window), settled with `SDL_SyncWindow()` before each post-resize read
+since `SDL_SetWindowSize()` is not guaranteed synchronous under X11.
 Every one of them is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All twenty
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All twenty-two
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
