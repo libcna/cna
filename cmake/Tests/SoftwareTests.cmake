@@ -453,6 +453,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_envmap_cube_sampler
         TIMEOUT 900 LABELS "Software")
 
+    # REMED-GFX-182: `SoftwareGraphicsBackend::SampleCubeMap` took no sampler state at all, so the
+    # reflection cube was always point-sampled at level 0 however SamplerStates[1] was set -- the
+    # shape REMED-GFX-150 replaced on the ordinary 2D path and did not reach on the cube path. The
+    # fixture above measures "is slot 1 consulted, per ordinal, per draw path, per face, per mip
+    # level"; this one measures what a lost sampler state can ALSO fail -- returning to a previous
+    # sampler, interleaving with an unrelated effect, sweeping either slot with the other fixed, the
+    # magnification partition of the public enum, create/sample/destroy lifetime, a degenerate
+    # reflection direction, and a declared-but-unwritten mip chain.
+    cna_software_test(cna_test_software_envmap_cube_sampler_state
+                      examples/envmap_cube_sampler_state_test.cpp)
+    cna_register_backend_test(NAME Software_EnvMapCubeSamplerState
+        COMMAND cna_test_software_envmap_cube_sampler_state
+        TIMEOUT 900 LABELS "Software")
+
     # REMED-GFX-174 control: Software is the GFX-150-corrected reference implementation, so it says
     # what the order-sensitive sampler-component contract owes independently of any GL behaviour.
     cna_software_test(cna_test_software_sampler_component_isolation

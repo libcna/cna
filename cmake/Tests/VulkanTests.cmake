@@ -1231,6 +1231,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_EnvMapCubeSamplerContract COMMAND cna_test_vulkan_envmap_cube_sampler
             TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-182 cross-backend control: the slot-1 sampler questions the fixture above does
+        # not ask -- returning to a previous sampler, interleaving with an unrelated effect,
+        # sweeping either slot with the other fixed, the magnification partition of the public enum,
+        # create/sample/destroy lifetime and a degenerate reflection direction. The defect is
+        # Software-local; Vulkan is REMED-GFX-169's corrected reference and runs it as a control, so
+        # a divergence names the backend rather than the fixture.
+        cna_vulkan_test(cna_test_vulkan_envmap_cube_sampler_state
+            examples/envmap_cube_sampler_state_test.cpp)
+        cna_register_backend_test(NAME Vulkan_EnvMapCubeSamplerState COMMAND cna_test_vulkan_envmap_cube_sampler_state
+            TIMEOUT 600 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-175 cross-backend control: the MIPMAP component of a TextureFilter ordinal.
         # EasyGL mapped ordinals 0 and 1 onto a GL filter with no mipmap term and Software had no
         # mip pipeline at all; this fixture measures what every other backend does with a chain

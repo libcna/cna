@@ -357,6 +357,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_EnvMapCubeSamplerContract COMMAND cna_test_sdlgpu_envmap_cube_sampler
         TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-182 cross-backend control: the slot-1 sampler questions the fixture above does not
+    # ask -- returning to a previous sampler, interleaving with an unrelated effect, sweeping either
+    # slot with the other fixed, the magnification partition of the public enum, create/sample/
+    # destroy lifetime and a degenerate reflection direction. The defect is Software-local; SDL_GPU
+    # is REMED-GFX-173's own corrected backend and a DEFERRED one, so it is where "a later sampler
+    # change must not reach back into a queued draw" has teeth.
+    cna_sdlgpu_test(cna_test_sdlgpu_envmap_cube_sampler_state
+        examples/envmap_cube_sampler_state_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_EnvMapCubeSamplerState COMMAND cna_test_sdlgpu_envmap_cube_sampler_state
+        TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-177 cross-backend control: descriptor/binding bookkeeping must be a function of what
     # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
     # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
