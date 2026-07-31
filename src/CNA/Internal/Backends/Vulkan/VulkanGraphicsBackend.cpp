@@ -1009,6 +1009,43 @@ namespace CNA::Internal::Backends::Vulkan
                                  callIndex, static_cast<const void*>(this), width_, height_,
                                  levelCount_, level, x, y, w, h, dataLength);
 
+        // REMED-GFX-189: a level this target does not own must be refused HERE, before any native
+        // call. The sibling routes on this very backend already do exactly this --
+        // VulkanTexture3DBackend::GetData, VulkanTextureCubeBackend::GetData and
+        // VulkanRenderTargetCubeBackend::GetData all test `level < 0 || level >= levelCount_` --
+        // and the 2D target was the one route that never learned it.
+        //
+        // Unguarded, the request reached vkCmdCopyImageToBuffer with an out-of-range
+        // imageSubresource.mipLevel, and the shared layer's own `max(1, base >> level)` clamp had
+        // already turned the nonexistent level's dimensions into a plausible 1x1 rectangle, so the
+        // copy was well-formed on every axis except the one that mattered. It then FABRICATED:
+        // the caller got level 0's texel (0,0) back and a `true` return, which is the invented
+        // content REMED-GFX-127/130 exist to forbid. For a large enough level the same call
+        // SIGSEGVs inside the driver instead, uncatchably.
+        //
+        // This is an ARGUMENT error, not a missing capability, so it throws rather than reporting
+        // false -- reporting false would raise System::NotSupportedException through the shared
+        // layer and tell a caller their backend cannot read targets, which is untrue and hides the
+        // real mistake. `std::out_of_range` matches both the shared `Texture2D::GetData`, which
+        // already raises it for the NEGATIVE end of exactly this range, and the sibling SDL_GPU
+        // guard added in REMED-GFX-186.
+        //
+        // Placed ahead of the capability test below deliberately: REMED-GFX-162's precedence has
+        // specific public argument errors answered with their own error before a storage or
+        // capability decision can weaken them into a generic refusal.
+        if (level < 0 || level >= levelCount_)
+        {
+            VkTargetReadbackTraceEXT("rt2d.read.reject call=%llu requestedLevel=%d LevelCount=%d "
+                                     "nativeOps=0 (no subresource, no transition, no staging, no "
+                                     "command buffer, no copy, no submit, no wait, no destination "
+                                     "write)",
+                                     callIndex, level, levelCount_);
+            throw std::out_of_range(
+                "CNA Vulkan: RenderTarget2D::GetData: mip level " + std::to_string(level) +
+                " does not exist (this target has " + std::to_string(levelCount_) +
+                (levelCount_ == 1 ? " level)" : " levels)"));
+        }
+
         // REMED-GFX-127: reporting false here is what makes the shared layer raise the missing
         // capability instead of handing the caller its own zero-initialized scratch buffer.
         if (!owner_ || colorImage_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
