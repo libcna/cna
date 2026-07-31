@@ -1,10 +1,12 @@
 # Diligent Engine Graphics Backend — Implementation Plan
 
-> **Status (2026-07-31): Phase `DILIGENT-1` (the 2D/3D baseline) is implemented.** What that means
-> concretely is in the "What the baseline actually does" section below — read it before assuming
-> parity with Vulkan/EasyGL/SDL_GPU, which this backend does **not** have. Render targets, cube and
-> volume textures, MSAA, occlusion queries, custom `ShaderEffect` programs, instancing, and the
-> `AlphaTest`/`DualTexture`/`EnvironmentMap`/`Skinned`/`Pbr` effect families are all **not**
+> **Status (2026-07-31): Phase `DILIGENT-1` is implemented, and most of Phase `DILIGENT-2`/`3` on
+> top of it.** What that means concretely is in the "What the baseline actually does" section below
+> — read it before assuming parity with Vulkan/EasyGL/SDL_GPU, which this backend does **not** have.
+> `RenderTarget2D`/`RenderTargetCube`, `AlphaTestEffect`, `DualTextureEffect`,
+> `EnvironmentMapEffect`, `SkinnedEffect` (stride 52) and several simultaneous render targets are
+> all implemented and verified on a real (software) Vulkan device. Volume-texture sampling, MSAA,
+> occlusion queries, custom `ShaderEffect` programs, instancing and `PbrEffect` are **not**
 > implemented, and each one *refuses loudly* rather than rendering a near-miss.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
@@ -52,7 +54,7 @@ Practical consequences that shaped this plan:
 | Namespace alias | `Dg = ::Diligent` — the CNA namespace is itself named `Diligent`, so unqualified `Diligent::X` inside it would resolve to the CNA namespace and fail |
 | Third-party pin | DiligentCore `v2.5.6`, via `FetchContent` in `cmake/ThirdPartyDiligent.cmake` |
 | Task prefix | `DILIGENT-` |
-| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT` |
+| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT` |
 
 ---
 
@@ -124,13 +126,13 @@ Implemented and exercised:
 - `ReadBackbuffer`, resampling the physical region back to the caller's logical region.
 
 - `TextureCube` and `Texture3D`: creation with a mip chain, per-face / per-sub-box `SetData` and
-  `GetData` (`DILIGENT-23`/`DILIGENT-40`). They are storage and readback only so far — no shader
-  variant samples them yet, so `EnvironmentMapEffect` is still refused.
-
-Deliberately refused (each throws, naming itself):
-
+  `GetData` (`DILIGENT-23`/`DILIGENT-40`). `TextureCube` is also sampleable, through
+  `EnvironmentMapEffect`; `Texture3D` is storage and readback only.
 - `RenderTarget2D` (`DILIGENT-20`/`DILIGENT-21`): off-screen colour, an optional real depth-stencil
   buffer, `GetData` readback, sampling the unbound target, and mip regeneration on unbind.
+- `RenderTargetCube` (`DILIGENT-22`): six per-face render-target views over one cube texture, a
+  shared depth-stencil buffer, `GetData` per face, and sampling back through `EnvironmentMapEffect`
+  via the same `DiligentSampledTexture` interface a plain `TextureCube` uses.
 - `AlphaTestEffect`'s per-pixel discard and `BasicEffect`'s fog (`DILIGENT-31`/`DILIGENT-32`), on
   every 3D shader variant.
 - `DualTextureEffect` and `EnvironmentMapEffect` (`DILIGENT-33`/`DILIGENT-34`).
@@ -140,9 +142,9 @@ Deliberately refused (each throws, naming itself):
 
 Deliberately refused (each throws, naming itself):
 
-- Cube-map render targets, occlusion queries, custom `ShaderEffect` programs, hardware instancing,
-  `PbrEffect`, MSAA, and `SkinnedEffect`'s stride-56 vertex-colour variant.
-  `SupportsCapability()` reports each of these honestly.
+- Occlusion queries, custom `ShaderEffect` programs, hardware instancing, `PbrEffect`, MSAA, and
+  `SkinnedEffect`'s stride-56 vertex-colour variant. `SupportsCapability()` reports each of these
+  honestly.
 
 ---
 
@@ -167,7 +169,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-13` | `ReadBackbuffer` | ✅ | |
 | `DILIGENT-14` | Honest `SupportsCapability()` + loud refusals for the unimplemented set | ✅ | Design decision 7 |
 | `DILIGENT-15` | `Diligent_DeviceSelection` unit tests (no GPU required) | ✅ | Runs in the normal `CnaTests` suite |
-| `DILIGENT-16` | `Diligent_2D`/`Diligent_3D` CTest binaries | ✅ | `Diligent_2D` 6/6 and `Diligent_3D` 5/5, on a real Vulkan device — Mesa `lavapipe` (software rasterizer) under Xvfb, not hardware. See "Verification status" |
+| `DILIGENT-16` | `Diligent_*` CTest binaries | ✅ | 8 binaries, 37 pixel checks total, all passing on a real Vulkan device — Mesa `lavapipe` (software rasterizer) under Xvfb, not hardware. See "Verification status" |
 | `DILIGENT-17` | `docs/diligent-backend.md` | ✅ | |
 
 ### Phase `DILIGENT-2` — render targets
@@ -176,7 +178,7 @@ Deliberately refused (each throws, naming itself):
 | --- | --- | --- | --- |
 | `DILIGENT-20` | `RenderTarget2D` (`CreateRenderTarget2D`, `SetRenderTarget2D`, `SetRenderTargets` single slot) | ✅ | The pipeline cache key now carries the bound target's colour/depth formats, as predicted. Two real defects found while verifying: the key's `operator==`/hash had to learn the new field (a stale pipeline was reused and Vulkan rejected the render pass), and the sprite projection had to span the target rather than the window's logical canvas |
 | `DILIGENT-21` | `RenderTarget2D` `GetData` readback and `PreserveContents` semantics | ✅ | Readback reuses `ReadTextureRegion`. Diligent's immediate context binds without a load operation, so contents always survive a bind cycle — which satisfies `PreserveContents` and is a legal superset of `DiscardContents` |
-| `DILIGENT-22` | `RenderTargetCube` + per-face binding | ⬜ | `DILIGENT-23` (its dependency) is done |
+| `DILIGENT-22` | `RenderTargetCube` + per-face binding | ✅ | Six per-face `RENDER_TARGET` views over one `RESOURCE_DIM_TEX_CUBE` texture, a shared depth-stencil buffer (only one face is ever the active draw target at a time), and a `DiligentSampledTexture` conformance shared with plain `TextureCube` so `EnvironmentMapEffect` accepts either. Verified by `Diligent_RenderTargetCube`, including sampling the render target back through a real `EnvironmentMapEffect` reflection |
 | `DILIGENT-23` | `TextureCube` (`CreateTextureCube`, `SetData`/`GetData` per face) | ✅ | Six array slices of one `RESOURCE_DIM_TEX_CUBE`; full mip chain. Verified by the shared `TextureCubeTests`/`CnjCapabilityMatrixTests`/XNB cube fixtures, which now run for real on this backend instead of asserting the refusal |
 | `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ✅ | All bound slots are attached and cleared, and the pipeline key carries every slot's format plus the per-slot colour write masks. Only slot 0 receives *fragments* today: every built-in shader declares one `SV_TARGET`, so slots 1..3 stay clear-only until `DILIGENT-42` |
 | `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | ⬜ | `ApplyMultiSampleCount()` currently reports 1 |
@@ -220,13 +222,22 @@ use:
 2. **Runs without a GPU** — `Diligent_DeviceSelection` exercises the device-preference and override
    parsing with no device created at all. ✅
 3. **Real device pixels** — a real Diligent device renders and a test asserts on read-back pixels.
-   ✅ **reached, on a software device**: `Diligent_2D` (6/6) and `Diligent_3D` (5/5) run against a
-   genuine Vulkan device provided by Mesa's `lavapipe` ICD under Xvfb. These are real draws through
-   the real Vulkan engine — real pipelines, real HLSL→SPIR-V compilation, real depth testing — read
-   back through `GraphicsDevice.GetBackBufferData`, not stubs. Two real defects were found this way
-   and fixed: the back buffer's actual format is not necessarily the one CNA requests (Diligent
-   substitutes a supported one, and this surface gave BGRA), and the staging map needed
-   `MAP_FLAG_DO_NOT_WAIT` to pair with the explicit `WaitForIdle()`.
+   ✅ **reached, on a software device**: all 8 `Diligent_*` CTest binaries (37 pixel checks total —
+   `Diligent_2D` 6, `Diligent_3D` 5, `Diligent_RenderTarget` 5, `Diligent_RenderTargetCube` 4,
+   `Diligent_AlphaTestFog` 4, `Diligent_DualTextureEnvMap` 4, `Diligent_Skinned` 4, `Diligent_MRT` 4)
+   run against a genuine Vulkan device provided by Mesa's `lavapipe` ICD under Xvfb. These are real
+   draws through the real Vulkan engine — real pipelines, real HLSL→SPIR-V compilation, real depth
+   testing — read back through `GraphicsDevice.GetBackBufferData`/`RenderTarget[Cube].GetData`, not
+   stubs. Several real defects were found this way and fixed, spanning both the backend and its own
+   tests — see each `DILIGENT-*` task's own row for detail. The most instructive: `Diligent_
+   RenderTargetCube`'s `EnvironmentMapEffect` check initially read back solid black and cost a long
+   investigation (resource-state tracing, view-descriptor dumps, raw-sample shader hacks) before the
+   actual cause turned out to be in the *test*, not the backend — `SpriteBatch` leaves its own
+   `RasterizerState` bound after `End()` (XNA semantics), silently culling the very geometry the next
+   check tried to draw. The fix was a one-line `RasterizerState::CullNone` reset, already a documented
+   pattern from `Diligent_RenderTarget`'s identical gotcha; the lesson generalized here is to check a
+   test's own state hygiene before suspecting the backend, especially once low-level backend signals
+   (content, resource state, view descriptors) have all confirmed correct.
 4. **Real hardware GPU pixels** — ⬜ **not reached**. `lavapipe` is a CPU rasterizer; it exercises
    the API and the shaders but not a vendor driver. Anything driver-dependent (real MSAA sample
    counts, anisotropy, present modes, GL's swap-chain origin) stays unproven. Do **not** add a
@@ -235,14 +246,10 @@ use:
 
 ### Cross-backend test suite
 
-`CnaTests` under `CNA_GRAPHICS_BACKEND=DILIGENT`: **5692 passed, 7 skipped, 1 failed**. The single
-failure is `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, which
-fails identically on the `HEADLESS` backend (verified in the same session) — a pre-existing gap in
-that test's accepted-exception list (`System::ArgumentException` from `VertexBuffer::SetData`'s
-declaration/stride validation is not listed), unrelated to this backend.
-
-Twenty-one further tests failed before this backend declared its boundaries in the shared fixtures
-(cube textures, render targets, custom effects, wireframe capability). Each was guarded the way the
-repo already guards its narrower backends — a per-backend `#if` naming the `DILIGENT-` task that
-removes it — rather than by loosening a shared assertion for every backend. `DILIGENT-23`/
-`DILIGENT-40` have since removed the cube guards again: those tests now run for real here.
+`CnaTests` under `CNA_GRAPHICS_BACKEND=DILIGENT`: **5692 passed, 7 skipped, 1 failed**, unchanged
+since `DILIGENT-23`/`DILIGENT-40` (cube/volume textures) closed the last of the guards this backend
+ever needed in the shared fixtures. The single failure is `XnbContainerFuzzTest.
+MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, which fails identically on the `HEADLESS`
+backend (verified in the same session) — a pre-existing gap in that test's accepted-exception list
+(`System::ArgumentException` from `VertexBuffer::SetData`'s declaration/stride validation is not
+listed), unrelated to this backend.

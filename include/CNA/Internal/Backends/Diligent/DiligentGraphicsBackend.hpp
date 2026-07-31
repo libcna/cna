@@ -172,7 +172,8 @@ namespace CNA::Internal::Backends::Diligent
      * The six faces are the array slices of one `RESOURCE_DIM_TEX_CUBE` texture, in XNA's own face
      * order (+X, -X, +Y, -Y, +Z, -Z), which is also Diligent's.
      */
-    class DiligentTextureCubeBackend final : public ITextureCubeBackend
+    class DiligentTextureCubeBackend final : public ITextureCubeBackend,
+                                             public DiligentSampledTexture
     {
     public:
         /**
@@ -224,7 +225,7 @@ namespace CNA::Internal::Backends::Diligent
                                    void* data, int dataLength) const override;
 
         /** @brief NOXNA. Returns the shader resource view used when this cube map is sampled. */
-        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const { return srv_; }
+        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
 
     private:
         DiligentGraphicsBackend& owner_;
@@ -405,6 +406,101 @@ namespace CNA::Internal::Backends::Diligent
         Dg::ITextureView* srv_ = nullptr;
         int width_ = 0;
         int height_ = 0;
+        int mipLevels_ = 1;
+        bool preserveContents_ = false;
+    };
+
+    /**
+     * @brief A cube-map render target: one `RESOURCE_DIM_TEX_CUBE` colour texture with a
+     * per-face render-target view, plus an optional shared depth-stencil buffer.
+     *
+     * Only one face can be the active draw target at a time, matching every other CNA backend's
+     * `IRenderTargetCubeBackend` contract — the depth-stencil buffer is therefore a single shared
+     * allocation rather than six, since only one face is ever being rendered into at once.
+     */
+    class DiligentRenderTargetCubeBackend final : public IRenderTargetCubeBackend,
+                                                  public DiligentSampledTexture
+    {
+    public:
+        /**
+         * @brief Creates the six-face colour texture and, when requested, a shared depth buffer.
+         *
+         * @param owner            Backend that owns the render device; must outlive this target.
+         * @param size             Edge length of each face, in texels.
+         * @param depthFormat      Raw XNA `DepthFormat` ordinal; `None` (0) allocates no
+         *                         depth-stencil buffer at all.
+         * @param preserveContents Accepted and always honoured, see
+         *                         `DiligentRenderTargetBackend`'s identical parameter.
+         * @param mipMap           Whether to allocate a mip chain, regenerated when a face is
+         *                         unbound.
+         */
+        DiligentRenderTargetCubeBackend(DiligentGraphicsBackend& owner, int size, int depthFormat,
+                                        bool preserveContents, bool mipMap);
+
+        /** @brief Releases the GPU textures. */
+        ~DiligentRenderTargetCubeBackend() override;
+
+        /** @brief Returns the edge length of each face, in texels. */
+        [[nodiscard]] int GetSize() const override { return size_; }
+
+        /**
+         * @brief Makes subsequent draws render into face @p face.
+         * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         */
+        void BindAsRenderTargetFace(int face) override;
+
+        /** @brief Restores the back buffer and regenerates the mip chain if this target has one. */
+        void UnbindAsRenderTarget() override;
+
+        /** @brief Returns 0: this backend allocates no multisampled targets yet (`DILIGENT-25`). */
+        [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+
+        /**
+         * @brief Reports whether this target really has depth-stencil storage.
+         *
+         * @param depthFormatWasRequested Whether a non-`None` `DepthFormat` was requested.
+         * @return True only when a depth-stencil buffer was actually allocated.
+         */
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
+
+        /**
+         * @brief Reads rendered pixels back from one face.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Mip level to read.
+         * @param x          Left edge of the region, in pixels.
+         * @param y          Top edge of the region, in pixels.
+         * @param w          Width of the region, in pixels.
+         * @param h          Height of the region, in pixels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; at least w * h * 4.
+         * @return True if the whole region was written; false if nothing was read back.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /** @brief NOXNA. Returns the render-target view for face @p face (0..5). */
+        NOXNA [[nodiscard]] Dg::ITextureView* GetFaceRenderTargetView(int face) const
+        {
+            return faceRtv_[face].RawPtr();
+        }
+        /** @brief NOXNA. Returns the depth-stencil view, or nullptr when none was allocated. */
+        NOXNA [[nodiscard]] Dg::ITextureView* GetDepthStencilView() const { return dsv_; }
+        /** @brief NOXNA. Returns the shader resource view used when this cube map is sampled. */
+        NOXNA [[nodiscard]] Dg::ITextureView* GetShaderResourceView() const override { return srv_; }
+        /** @brief NOXNA. Returns the colour texture's pixel format. */
+        NOXNA [[nodiscard]] Dg::TEXTURE_FORMAT GetColorFormat() const;
+        /** @brief NOXNA. Returns the depth-stencil format, or `TEX_FORMAT_UNKNOWN` when there is none. */
+        NOXNA [[nodiscard]] Dg::TEXTURE_FORMAT GetDepthStencilFormat() const;
+
+    private:
+        DiligentGraphicsBackend& owner_;
+        Dg::RefCntAutoPtr<Dg::ITexture> colorTexture_;
+        Dg::RefCntAutoPtr<Dg::ITexture> depthTexture_;
+        Dg::RefCntAutoPtr<Dg::ITextureView> faceRtv_[6];
+        Dg::ITextureView* dsv_ = nullptr;
+        Dg::ITextureView* srv_ = nullptr;
+        int size_ = 0;
         int mipLevels_ = 1;
         bool preserveContents_ = false;
     };
@@ -657,6 +753,7 @@ namespace CNA::Internal::Backends::Diligent
         friend class DiligentTextureCubeBackend;
         friend class DiligentTexture3DBackend;
         friend class DiligentRenderTargetBackend;
+        friend class DiligentRenderTargetCubeBackend;
         friend class DiligentVertexBufferBackend;
         friend class DiligentIndexBufferBackend;
         friend class DiligentSpriteBatchBackend;
@@ -798,6 +895,28 @@ namespace CNA::Internal::Backends::Diligent
          * @param rt Render target to bind, or nullptr for the back buffer.
          */
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+
+        /**
+         * @brief Creates a cube-map render target.
+         *
+         * @param size             Edge length of each face, in texels.
+         * @param depthFormat      Raw XNA `DepthFormat` ordinal.
+         * @param preserveContents Whether previous colour must survive a bind cycle.
+         * @param mipMap           Whether to allocate a mip chain.
+         * @param multiSampleCount Requested MSAA sample count; clamped to 1 here, see
+         *                         `CreateRenderTarget2D`'s identical note.
+         * @return The new cube render target backend.
+         */
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount) override;
+
+        /**
+         * @brief Makes subsequent draws render into one face of a cube render target.
+         * @param rt   Cube render target to bind, or nullptr for the back buffer.
+         * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         */
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
 
         /**
          * @brief Reads back a region of the rendered back buffer.
@@ -1241,7 +1360,12 @@ namespace CNA::Internal::Backends::Diligent
         float viewportDepth_[2] = {0.0f, 1.0f};
 
         bool renderTargetsBound_ = false;
-        /// Every bound render target, slot-aligned. Empty means the back buffer.
+        /// Every bound 2D render target, slot-aligned. Empty means the back buffer or a bound
+        /// cube face (mutually exclusive with this: see currentCubeTarget_).
         std::vector<DiligentRenderTargetBackend*> currentRenderTargets_;
+        /// The cube render target currently bound as the draw target, or nullptr. Mutually
+        /// exclusive with a non-empty currentRenderTargets_ -- binding one clears the other.
+        DiligentRenderTargetCubeBackend* currentCubeTarget_ = nullptr;
+        int currentCubeFace_ = -1;
     };
 }

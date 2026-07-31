@@ -55,6 +55,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
 
     # plan_diligent.md DILIGENT-35: the 72-bone palette and FNA's WeightsPerVertex semantics.
     # plan_diligent.md DILIGENT-24: several simultaneous render targets and per-slot write masks.
+    # plan_diligent.md DILIGENT-22: per-face render-into and readback, plus EnvironmentMapEffect
+    # sampling the render target back (the real reason to make a cube render target).
+    cna_diligent_test(cna_test_diligent_rendertargetcube examples/diligent_rendertargetcube_test.cpp)
+    cna_register_backend_test(NAME Diligent_RenderTargetCube COMMAND cna_test_diligent_rendertargetcube
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
+
     cna_diligent_test(cna_test_diligent_mrt examples/diligent_mrt_test.cpp)
     cna_register_backend_test(NAME Diligent_MRT COMMAND cna_test_diligent_mrt
         TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"

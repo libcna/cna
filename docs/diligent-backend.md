@@ -3,8 +3,10 @@
 ## Status
 
 The Diligent Engine backend is CNA's newest graphics backend and is **experimental**. Its
-implemented surface is the 2D/3D baseline described in `plan_diligent.md` Phase `DILIGENT-1`; it is
-**not** at parity with the Vulkan, EasyGL, SDL_GPU or bgfx backends. Read
+implemented surface covers the 2D/3D baseline plus render targets (2D and cube) and most stock
+effects, described in `plan_diligent.md` Phases `DILIGENT-1` through `3`; it is **not** at parity
+with the Vulkan, EasyGL, SDL_GPU or bgfx backends (MSAA, occlusion queries, custom `ShaderEffect`
+and instancing are still unimplemented). Read
 ["What works / what does not"](#what-works--what-does-not) before using it for anything real.
 
 Select it with:
@@ -98,6 +100,9 @@ Implemented:
   storage and readback only.
 - `RenderTarget2D` — off-screen colour with an optional real depth-stencil buffer, `GetData`
   readback, sampling the unbound target as a texture, and mip regeneration on unbind.
+- `RenderTargetCube` — six per-face render-target views over one cube texture, a shared
+  depth-stencil buffer, `GetData` per face, and sampling back through `EnvironmentMapEffect` the
+  same way a plain `TextureCube` does.
 - `AlphaTestEffect`'s per-pixel discard and `BasicEffect`'s fog, on every 3D shader variant.
 - `DualTextureEffect` (two modulated layers), `EnvironmentMapEffect` (cube-map reflection, flat or
   Fresnel-weighted) and `SkinnedEffect` (72-bone palette, stride 52).
@@ -112,7 +117,6 @@ Not implemented — each **throws with its own name** rather than rendering an a
 
 | Feature | Tracked as |
 | --- | --- |
-| `RenderTargetCube` | `DILIGENT-22` |
 | MSAA (back buffer and render targets) | `DILIGENT-25` |
 | Sampling a volume texture from a shader | `DILIGENT-42` |
 | `PbrEffect`, `SkinnedEffect`'s stride-56 vertex-colour variant | `DILIGENT-36`, `DILIGENT-35` |
@@ -145,14 +149,15 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-`Diligent_2D` (6 checks), `Diligent_3D` (5 checks), `Diligent_RenderTarget` (5 checks) and
-`Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned` and `Diligent_MRT`
-(4 checks each) are the
-real-device pixel proofs: they clear, draw `SpriteBatch` quads and 3D primitives on the back buffer
-and into an off-screen target, and assert on pixels read back through
-`GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData`. Both pass against a real Vulkan device. On a machine with no
-usable device they exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip —
-reporting a pass with nothing rendered would be dishonest.
+Eight further binaries are the real-device pixel proofs (37 checks total): `Diligent_2D` (6),
+`Diligent_3D` (5), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
+`Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4) and
+`Diligent_MRT` (4). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
+into off-screen 2D/cube targets, and assert on pixels read back through
+`GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData`. All 37
+pass against a real Vulkan device. On a machine with no usable device they exit 77 and print
+`[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a pass with nothing rendered
+would be dishonest.
 
 ```bash
 ctest --test-dir cmake-build-diligent -R Diligent --output-on-failure

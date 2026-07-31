@@ -1168,6 +1168,130 @@ void main(in VSInput vsIn, out PSInput psIn)
         owner_.SetRenderTarget2D(nullptr);
     }
 
+    // ---- DiligentRenderTargetCubeBackend ----
+
+    DiligentRenderTargetCubeBackend::DiligentRenderTargetCubeBackend(DiligentGraphicsBackend& owner,
+                                                                      int size, int depthFormat,
+                                                                      bool preserveContents,
+                                                                      bool mipMap)
+        : owner_(owner)
+        , size_(size)
+        , mipLevels_(mipMap ? MipLevelCount(size, size) : 1)
+        , preserveContents_(preserveContents)
+    {
+        if (size_ <= 0)
+            throw std::runtime_error("CNA Diligent: cube render target size must be positive");
+
+        Dg::TextureDesc colorDesc;
+        colorDesc.Name = "CNA cube render target";
+        colorDesc.Type = Dg::RESOURCE_DIM_TEX_CUBE;
+        colorDesc.Width = static_cast<Dg::Uint32>(size_);
+        colorDesc.Height = static_cast<Dg::Uint32>(size_);
+        colorDesc.ArraySize = 6;
+        colorDesc.MipLevels = static_cast<Dg::Uint32>(mipLevels_);
+        colorDesc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
+        colorDesc.Usage = Dg::USAGE_DEFAULT;
+        colorDesc.BindFlags = Dg::BIND_RENDER_TARGET | Dg::BIND_SHADER_RESOURCE;
+        if (mipLevels_ > 1)
+            colorDesc.MiscFlags = Dg::MISC_TEXTURE_FLAG_GENERATE_MIPS;
+
+        owner_.device_->CreateTexture(colorDesc, nullptr, &colorTexture_);
+        if (!colorTexture_)
+            throw std::runtime_error("CNA Diligent: cube render target colour texture creation failed");
+
+        srv_ = colorTexture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
+        if (srv_ == nullptr)
+            throw std::runtime_error("CNA Diligent: cube render target is missing a shader resource view");
+
+        // A render-target view of one face of a cube texture: Diligent auto-derives
+        // RESOURCE_DIM_TEX_2D_ARRAY for TEXTURE_VIEW_RENDER_TARGET on a TEX_CUBE resource when
+        // TextureDim is left at its default, so only the array slice needs to be named here.
+        for (int face = 0; face < 6; ++face)
+        {
+            Dg::TextureViewDesc faceViewDesc;
+            faceViewDesc.Name = "CNA cube render target face view";
+            faceViewDesc.ViewType = Dg::TEXTURE_VIEW_RENDER_TARGET;
+            faceViewDesc.FirstArraySlice = static_cast<Dg::Uint32>(face);
+            faceViewDesc.NumArraySlices = 1;
+            faceViewDesc.MostDetailedMip = 0;
+            faceViewDesc.NumMipLevels = 1;
+            colorTexture_->CreateView(faceViewDesc, &faceRtv_[face]);
+            if (faceRtv_[face] == nullptr)
+                throw std::runtime_error("CNA Diligent: cube render target face view creation failed");
+        }
+
+        if (depthFormat != 0)
+        {
+            Dg::TextureDesc depthDesc;
+            depthDesc.Name = "CNA cube render target depth-stencil";
+            depthDesc.Type = Dg::RESOURCE_DIM_TEX_2D;
+            depthDesc.Width = static_cast<Dg::Uint32>(size_);
+            depthDesc.Height = static_cast<Dg::Uint32>(size_);
+            depthDesc.MipLevels = 1;
+            depthDesc.Format = Dg::TEX_FORMAT_D24_UNORM_S8_UINT;
+            depthDesc.Usage = Dg::USAGE_DEFAULT;
+            depthDesc.BindFlags = Dg::BIND_DEPTH_STENCIL;
+
+            owner_.device_->CreateTexture(depthDesc, nullptr, &depthTexture_);
+            if (!depthTexture_)
+                throw std::runtime_error(
+                    "CNA Diligent: cube render target depth buffer creation failed");
+            dsv_ = depthTexture_->GetDefaultView(Dg::TEXTURE_VIEW_DEPTH_STENCIL);
+            if (dsv_ == nullptr)
+                throw std::runtime_error(
+                    "CNA Diligent: cube render target has no depth-stencil view");
+        }
+    }
+
+    DiligentRenderTargetCubeBackend::~DiligentRenderTargetCubeBackend()
+    {
+        if (owner_.currentCubeTarget_ == this)
+            owner_.SetRenderTarget2D(nullptr);
+    }
+
+    Dg::TEXTURE_FORMAT DiligentRenderTargetCubeBackend::GetColorFormat() const
+    {
+        return colorTexture_ ? colorTexture_->GetDesc().Format : Dg::TEX_FORMAT_UNKNOWN;
+    }
+
+    Dg::TEXTURE_FORMAT DiligentRenderTargetCubeBackend::GetDepthStencilFormat() const
+    {
+        return depthTexture_ ? depthTexture_->GetDesc().Format : Dg::TEX_FORMAT_UNKNOWN;
+    }
+
+    bool DiligentRenderTargetCubeBackend::HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const
+    {
+        return depthTexture_ != nullptr;
+    }
+
+    bool DiligentRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                                   void* data, int dataLength) const
+    {
+        if (face < 0 || face >= 6 || level < 0 || level >= mipLevels_)
+            return false;
+        const int levelSize = MipLevelExtent(size_, level);
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelSize || y + h > levelSize)
+            return false;
+        return owner_.ReadTextureRegion(colorTexture_, static_cast<Dg::Uint32>(level),
+                                        static_cast<Dg::Uint32>(face), x, y, 0, w, h, 1,
+                                        data, dataLength);
+    }
+
+    void DiligentRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    {
+        owner_.SetRenderTargetCubeFace(this, face);
+    }
+
+    void DiligentRenderTargetCubeBackend::UnbindAsRenderTarget()
+    {
+        if (mipLevels_ > 1 && srv_ != nullptr)
+        {
+            owner_.EnsureRenderTargetsBound();
+            owner_.context_->GenerateMips(srv_);
+        }
+        owner_.SetRenderTarget2D(nullptr);
+    }
+
     // ---- DiligentVertexBufferBackend ----
 
     DiligentVertexBufferBackend::DiligentVertexBufferBackend(DiligentGraphicsBackend& owner,
@@ -1820,7 +1944,13 @@ void main(in VSInput vsIn, out PSInput psIn)
         if (renderTargetsBound_)
             return;
 
-        if (currentRenderTargets_.empty())
+        if (currentCubeTarget_ != nullptr)
+        {
+            Dg::ITextureView* faceView = currentCubeTarget_->GetFaceRenderTargetView(currentCubeFace_);
+            context_->SetRenderTargets(1, &faceView, currentCubeTarget_->GetDepthStencilView(),
+                                       Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        }
+        else if (currentRenderTargets_.empty())
         {
             Dg::ITextureView* backBuffer = swapChain_->GetCurrentBackBufferRTV();
             context_->SetRenderTargets(1, &backBuffer, swapChain_->GetDepthBufferDSV(),
@@ -1844,12 +1974,16 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     Dg::ITextureView* DiligentGraphicsBackend::GetCurrentRenderTargetView() const
     {
+        if (currentCubeTarget_ != nullptr)
+            return currentCubeTarget_->GetFaceRenderTargetView(currentCubeFace_);
         return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetRenderTargetView()
                                                : swapChain_->GetCurrentBackBufferRTV();
     }
 
     Dg::ITextureView* DiligentGraphicsBackend::GetCurrentDepthStencilView() const
     {
+        if (currentCubeTarget_ != nullptr)
+            return currentCubeTarget_->GetDepthStencilView();
         return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetDepthStencilView()
                                                : swapChain_->GetDepthBufferDSV();
     }
@@ -1897,12 +2031,16 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     void DiligentGraphicsBackend::ApplyViewportAndScissor()
     {
-        if (PrimaryRenderTarget() != nullptr)
+        if (currentCubeTarget_ != nullptr || PrimaryRenderTarget() != nullptr)
         {
             // A render target has no window to letterbox into: its own pixels are the coordinate
             // space, so the presentation-mode scaling that applies to the back buffer must not.
-            const auto targetWidth = static_cast<Dg::Uint32>(PrimaryRenderTarget()->GetWidth());
-            const auto targetHeight = static_cast<Dg::Uint32>(PrimaryRenderTarget()->GetHeight());
+            const auto targetWidth = static_cast<Dg::Uint32>(
+                currentCubeTarget_ != nullptr ? currentCubeTarget_->GetSize()
+                                              : PrimaryRenderTarget()->GetWidth());
+            const auto targetHeight = static_cast<Dg::Uint32>(
+                currentCubeTarget_ != nullptr ? currentCubeTarget_->GetSize()
+                                              : PrimaryRenderTarget()->GetHeight());
 
             Dg::Viewport targetViewport;
             targetViewport.TopLeftX = customViewport_ ? static_cast<float>(viewportRect_[0]) : 0.0f;
@@ -1972,6 +2110,12 @@ void main(in VSInput vsIn, out PSInput psIn)
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
         const float clearColor[] = {r, g, b, a};
+        if (currentCubeTarget_ != nullptr)
+        {
+            context_->ClearRenderTarget(currentCubeTarget_->GetFaceRenderTargetView(currentCubeFace_),
+                                        clearColor, Dg::RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+            return;
+        }
         if (currentRenderTargets_.empty())
         {
             context_->ClearRenderTarget(swapChain_->GetCurrentBackBufferRTV(), clearColor,
@@ -2130,15 +2274,47 @@ void main(in VSInput vsIn, out PSInput psIn)
                                                              preserveContents, mipMap);
     }
 
+    std::unique_ptr<IRenderTargetCubeBackend> DiligentGraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        if (multiSampleCount > 1)
+        {
+            CNA::Logger::Warn(
+                "CNA Diligent: multisampled cube render targets are not implemented; creating a "
+                "single-sampled target instead",
+                CNA::LogCategory::GPU);
+        }
+        return std::make_unique<DiligentRenderTargetCubeBackend>(*this, size, depthFormat,
+                                                                 preserveContents, mipMap);
+    }
+
     void DiligentGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         auto* target = static_cast<DiligentRenderTargetBackend*>(rt);
-        if (currentRenderTargets_.size() == (target != nullptr ? 1u : 0u) &&
+        if (currentCubeTarget_ == nullptr && currentRenderTargets_.size() == (target != nullptr ? 1u : 0u) &&
             (target == nullptr || currentRenderTargets_[0] == target))
             return;
+        currentCubeTarget_ = nullptr;
+        currentCubeFace_ = -1;
         currentRenderTargets_.clear();
         if (target != nullptr)
             currentRenderTargets_.push_back(target);
+        renderTargetsBound_ = false;
+    }
+
+    void DiligentGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+    {
+        auto* target = static_cast<DiligentRenderTargetCubeBackend*>(rt);
+        if (target == nullptr)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (currentCubeTarget_ == target && currentCubeFace_ == face)
+            return;
+        currentRenderTargets_.clear();
+        currentCubeTarget_ = target;
+        currentCubeFace_ = face;
         renderTargetsBound_ = false;
     }
 
@@ -2164,12 +2340,16 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     Dg::TEXTURE_FORMAT DiligentGraphicsBackend::CurrentColorFormat() const
     {
+        if (currentCubeTarget_ != nullptr)
+            return currentCubeTarget_->GetColorFormat();
         return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetColorFormat()
                                                : swapChain_->GetDesc().ColorBufferFormat;
     }
 
     Dg::TEXTURE_FORMAT DiligentGraphicsBackend::CurrentDepthStencilFormat() const
     {
+        if (currentCubeTarget_ != nullptr)
+            return currentCubeTarget_->GetDepthStencilFormat();
         return PrimaryRenderTarget() != nullptr ? PrimaryRenderTarget()->GetDepthStencilFormat()
                                                : swapChain_->GetDesc().DepthBufferFormat;
     }
@@ -2278,6 +2458,12 @@ void main(in VSInput vsIn, out PSInput psIn)
             EnsureRenderTargetsBound();
             return;
         }
+        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
+        {
+            SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(), renderTargets[0].GetCubeFace());
+            EnsureRenderTargetsBound();
+            return;
+        }
         // Each refusal below names the one thing this backend cannot do, instead of quietly
         // binding slot 0 and dropping the rest -- which would render a scene that looks right
         // until something reads the targets that were never written.
@@ -2285,9 +2471,12 @@ void main(in VSInput vsIn, out PSInput psIn)
         {
             if (renderTargets[i].IsRenderTargetCubeFace())
                 throw std::runtime_error(
-                    "CNA Diligent: cube-map render targets are not implemented yet on this backend");
+                    "CNA Diligent: mixing a cube-map face into a multi-target set is not "
+                    "implemented on this backend");
         }
         currentRenderTargets_.clear();
+        currentCubeTarget_ = nullptr;
+        currentCubeFace_ = -1;
         for (int i = 0; i < count; ++i)
         {
             auto* target = static_cast<DiligentRenderTargetBackend*>(renderTargets[i].GetRenderTarget2D());
@@ -2873,7 +3062,12 @@ void main(in VSInput vsIn, out PSInput psIn)
         // differently-sized target.
         float surfaceWidth;
         float surfaceHeight;
-        if (PrimaryRenderTarget() != nullptr)
+        if (currentCubeTarget_ != nullptr)
+        {
+            surfaceWidth = static_cast<float>(currentCubeTarget_->GetSize());
+            surfaceHeight = surfaceWidth;
+        }
+        else if (PrimaryRenderTarget() != nullptr)
         {
             surfaceWidth = static_cast<float>(PrimaryRenderTarget()->GetWidth());
             surfaceHeight = static_cast<float>(PrimaryRenderTarget()->GetHeight());
@@ -3125,7 +3319,10 @@ void main(in VSInput vsIn, out PSInput psIn)
         }
         if (pipeline.envMapVariable != nullptr)
         {
-            const auto* envMap = dynamic_cast<const DiligentTextureCubeBackend*>(
+            // A cube map bound as EnvironmentMapEffect's reflection source can be a plain
+            // TextureCube or a RenderTargetCube (XNA allows both, since the latter derives from
+            // the former) -- DiligentSampledTexture is what both concrete types share.
+            const auto* envMap = dynamic_cast<const DiligentSampledTexture*>(
                 params != nullptr ? params->envMap : nullptr);
             if (envMap == nullptr || envMap->GetShaderResourceView() == nullptr)
                 throw std::runtime_error(
