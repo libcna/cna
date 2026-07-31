@@ -16,9 +16,11 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
@@ -38,7 +40,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 4;
+    constexpr int kExpectedChecks = 8;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -74,6 +76,9 @@ class HtmlDomPixelVerificationTest : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::unique_ptr<SpriteBatch> spriteBatch_;
     std::unique_ptr<RenderTarget2D> rt_;
+    std::unique_ptr<RenderTarget2D> fontRt_;
+    std::unique_ptr<Texture2D> fontAtlas_;
+    std::unique_ptr<SpriteFont> font_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -111,11 +116,68 @@ class HtmlDomPixelVerificationTest : public Game
         return pixels[0];
     }
 
+    // Clears `target` to fully transparent, runs `draw`, unbinds, and returns the whole target's
+    // pixels as a flat row-major (top row first) array -- for tests that need to sample more than
+    // one location (glyph placement, scale extent).
+    template <typename DrawFn>
+    std::vector<Color> ReadBackWholeTarget(RenderTarget2D& target, int w, int h, DrawFn draw)
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        dev.SetRenderTarget(&target);
+        dev.Clear(Color(0, 0, 0, 0));
+        draw();
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        std::vector<Color> pixels(static_cast<std::size_t>(w) * h, Color(0xCD, 0xCD, 0xCD, 0xCD));
+        try
+        {
+            target.GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
+        }
+        catch (const std::exception& e)
+        {
+            std::printf("       GetData threw: %s\n", e.what());
+        }
+        return pixels;
+    }
+
 protected:
     void LoadContent() override
     {
         spriteBatch_ = std::make_unique<SpriteBatch>(getGraphicsDeviceProperty());
         rt_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 2, 2);
+        fontRt_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 20, 20);
+
+        // plan_html_dom.md HTMLDOM-88: an 8x4 atlas holding two 4x4 glyphs. 'A' is split
+        // left-half-red/right-half-blue so a horizontal flip is visually unambiguous (the two
+        // halves swap); 'B' is solid green so it's trivially distinguishable from 'A' at a
+        // glance. Distinct, nonzero kerning on 'A' (rightBearing=2) makes same-line advance a
+        // real, checkable quantity instead of an accidental default.
+        std::vector<std::uint8_t> atlas(8 * 4 * 4, 0);
+        for (int y = 0; y < 4; ++y)
+        {
+            for (int x = 0; x < 2; ++x)
+            {
+                const std::size_t iLeft = (static_cast<std::size_t>(y) * 8 + x) * 4;
+                atlas[iLeft] = 255; atlas[iLeft + 1] = 0; atlas[iLeft + 2] = 0; atlas[iLeft + 3] = 255;
+                const std::size_t iRight = (static_cast<std::size_t>(y) * 8 + x + 2) * 4;
+                atlas[iRight] = 0; atlas[iRight + 1] = 0; atlas[iRight + 2] = 255; atlas[iRight + 3] = 255;
+            }
+            for (int x = 4; x < 8; ++x)
+            {
+                const std::size_t i = (static_cast<std::size_t>(y) * 8 + x) * 4;
+                atlas[i] = 0; atlas[i + 1] = 255; atlas[i + 2] = 0; atlas[i + 3] = 255;
+            }
+        }
+        fontAtlas_ = std::make_unique<Texture2D>(
+            Texture2D::CreateFromPixels(getGraphicsDeviceProperty(), 8, 4, atlas));
+        font_ = std::make_unique<SpriteFont>(
+            *fontAtlas_,
+            std::vector<Rectangle>{Rectangle(0, 0, 4, 4), Rectangle(4, 0, 4, 4)},
+            std::vector<Rectangle>{Rectangle(0, 0, 4, 4), Rectangle(0, 0, 4, 4)},
+            std::vector<charcs>{u'A', u'B'},
+            /*lineSpacing=*/8, /*spacing=*/0.0f,
+            std::vector<Vector3>{Vector3(0.0f, 4.0f, 2.0f), Vector3(0.0f, 4.0f, 0.0f)},
+            std::nullopt);
     }
 
     void Draw(const GameTime&) override
@@ -222,7 +284,141 @@ protected:
                   "a plain overwrite");
         }
 
+        // plan_html_dom.md HTMLDOM-88: DrawString's newline handling -- never tested before. 'A'
+        // (left-half red, right-half blue) then '\n' then 'B' (green), lineSpacing=8, at
+        // position (4,4). Both glyphs have cropping (0,0) and 'A' is first-in-line on both lines
+        // (kern.X's abs() applies the same way), so hand-derived from SpriteBatch::DrawString's
+        // own formula (see plan_html_dom.md's task note): A lands at exactly (4,4), B lands at
+        // exactly (4, 4+8)=(4,12) -- proving \n resets X back to the left margin and advances Y
+        // by lineSpacing, not smearing B onto the same line as A.
         if (frame_ == 5)
+        {
+            const auto pixels = ReadBackWholeTarget(*fontRt_, 20, 20, [&] {
+                spriteBatch_->Begin();
+                spriteBatch_->DrawString(*font_, "A\nB", Vector2(4, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const auto at = [&](int x, int y) { return pixels[static_cast<std::size_t>(y) * 20 + x]; };
+            const Color aLeft = at(5, 5), aRight = at(7, 5), bOnLine2 = at(5, 13);
+            std::printf("       newline: A-left(5,5)=(%d,%d,%d) A-right(7,5)=(%d,%d,%d) "
+                        "B-line2(5,13)=(%d,%d,%d)\n",
+                        aLeft.getRProperty(), aLeft.getGProperty(), aLeft.getBProperty(),
+                        aRight.getRProperty(), aRight.getGProperty(), aRight.getBProperty(),
+                        bOnLine2.getRProperty(), bOnLine2.getGProperty(), bOnLine2.getBProperty());
+            check(aLeft.getRProperty() > 200 && aLeft.getBProperty() < 50 &&
+                  aRight.getBProperty() > 200 && aRight.getRProperty() < 50 &&
+                  bOnLine2.getGProperty() > 200 && bOnLine2.getRProperty() < 50,
+                  "HTMLDOM-88a: DrawString's \\n resets X to the left margin and advances Y by "
+                  "lineSpacing, rather than smearing the next glyph onto the same line");
+        }
+
+        // plan_html_dom.md HTMLDOM-88: same-line multi-glyph kerning advance -- "AB" with 'A's
+        // kerning triple (0, width=4, rightBearing=2). Hand-derived: B's left edge lands at
+        // exactly position.X + glyphWidth(4) + rightBearing(2) = position.X + 6, proving the
+        // kerning-driven advance between two DIFFERENT glyphs in one DrawString call reaches this
+        // backend's Draw() correctly (not silently zeroed or only applied to a single-glyph case).
+        if (frame_ == 6)
+        {
+            const auto pixels = ReadBackWholeTarget(*fontRt_, 20, 20, [&] {
+                spriteBatch_->Begin();
+                spriteBatch_->DrawString(*font_, "AB", Vector2(4, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const auto at = [&](int x, int y) { return pixels[static_cast<std::size_t>(y) * 20 + x]; };
+            const Color aLeft = at(5, 5), justBeforeB = at(9, 5), bGlyph = at(11, 5);
+            std::printf("       kerning: A-left(5,5)=(%d,%d,%d) gap(9,5)=(%d,%d,%d,%d) "
+                        "B(11,5)=(%d,%d,%d)\n",
+                        aLeft.getRProperty(), aLeft.getGProperty(), aLeft.getBProperty(),
+                        justBeforeB.getRProperty(), justBeforeB.getGProperty(),
+                        justBeforeB.getBProperty(), justBeforeB.getAProperty(),
+                        bGlyph.getRProperty(), bGlyph.getGProperty(), bGlyph.getBProperty());
+            check(aLeft.getRProperty() > 200 && aLeft.getBProperty() < 50 &&
+                  justBeforeB.getAProperty() < 50 &&
+                  bGlyph.getGProperty() > 200 && bGlyph.getRProperty() < 50,
+                  "HTMLDOM-88b: same-line kerning advance (glyphWidth+rightBearing) places the "
+                  "next glyph exactly where SpriteFont's kerning triple says, with a real gap "
+                  "in between");
+        }
+
+        // plan_html_dom.md HTMLDOM-88: DrawString's rotation/scale/flip overload -- distinct code
+        // from the 4-arg overload used everywhere else in this project's HTML_DOM tests. scale=2
+        // on the 4x4 'B' glyph must produce an 8x8 rendered glyph, not a 4x4 one: (10,10) is
+        // inside the scaled box but outside the unscaled one, so it alone distinguishes "scale
+        // forwarded correctly" from "scale silently ignored".
+        if (frame_ == 7)
+        {
+            const auto pixels = ReadBackWholeTarget(*fontRt_, 20, 20, [&] {
+                spriteBatch_->Begin();
+                spriteBatch_->DrawString(*font_, "B", Vector2(4, 4), Color::White, 0.0f,
+                                         Vector2::Zero, 2.0f, SpriteEffects::None, 0.0f);
+                spriteBatch_->End();
+            });
+            const auto at = [&](int x, int y) { return pixels[static_cast<std::size_t>(y) * 20 + x]; };
+            const Color insideScaled = at(10, 10), outsideScaled = at(13, 13);
+            std::printf("       scale: inside(10,10)=(%d,%d,%d,%d) outside(13,13)=(%d,%d,%d,%d)\n",
+                        insideScaled.getRProperty(), insideScaled.getGProperty(),
+                        insideScaled.getBProperty(), insideScaled.getAProperty(),
+                        outsideScaled.getRProperty(), outsideScaled.getGProperty(),
+                        outsideScaled.getBProperty(), outsideScaled.getAProperty());
+            check(insideScaled.getGProperty() > 200 && insideScaled.getRProperty() < 50 &&
+                  outsideScaled.getAProperty() < 50,
+                  "HTMLDOM-88c: DrawString's rotation/scale/flip overload forwards scale "
+                  "correctly (4x4 glyph renders as 8x8, not silently ignored)");
+        }
+
+        // plan_html_dom.md HTMLDOM-88: SpriteEffects::FlipHorizontally via the same overload.
+        // DrawString's own flip handling shifts the WHOLE string's anchor by MeasureString(text).X
+        // in addition to the per-glyph mirror Draw() already applies (SpriteBatch::DrawString:
+        // "effects != None" branch) -- so, unlike Draw()'s flip (already unit-tested to keep the
+        // destination footprint fixed and mirror only the content), the glyph's absolute position
+        // is not safe to hand-predict here without re-deriving that shift by hand. Instead this
+        // checks the OBSERVABLE INVARIANT that must hold regardless of where the shifted glyph
+        // lands: red is left-of-blue when unflipped, and right-of-blue when flipped. Scans the
+        // whole target for the two colours' average X rather than sampling fixed coordinates, so
+        // it is robust to the exact position DrawString's flip shift produces.
+        if (frame_ == 8)
+        {
+            const auto scanAverageX = [](const std::vector<Color>& pixels, int w, int h,
+                                         bool wantRed) -> double {
+                double sumX = 0.0; int n = 0;
+                for (int y = 0; y < h; ++y)
+                    for (int x = 0; x < w; ++x)
+                    {
+                        const Color& c = pixels[static_cast<std::size_t>(y) * w + x];
+                        const bool isRed = c.getRProperty() > 200 && c.getBProperty() < 50;
+                        const bool isBlue = c.getBProperty() > 200 && c.getRProperty() < 50;
+                        if ((wantRed && isRed) || (!wantRed && isBlue)) { sumX += x; ++n; }
+                    }
+                return n > 0 ? sumX / n : -1.0;
+            };
+
+            const auto unflipped = ReadBackWholeTarget(*fontRt_, 20, 20, [&] {
+                spriteBatch_->Begin();
+                spriteBatch_->DrawString(*font_, "A", Vector2(4, 4), Color::White, 0.0f,
+                                         Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f);
+                spriteBatch_->End();
+            });
+            const double redXUnflipped = scanAverageX(unflipped, 20, 20, true);
+            const double blueXUnflipped = scanAverageX(unflipped, 20, 20, false);
+
+            const auto flipped = ReadBackWholeTarget(*fontRt_, 20, 20, [&] {
+                spriteBatch_->Begin();
+                spriteBatch_->DrawString(*font_, "A", Vector2(4, 4), Color::White, 0.0f,
+                                         Vector2::Zero, 1.0f, SpriteEffects::FlipHorizontally, 0.0f);
+                spriteBatch_->End();
+            });
+            const double redXFlipped = scanAverageX(flipped, 20, 20, true);
+            const double blueXFlipped = scanAverageX(flipped, 20, 20, false);
+
+            std::printf("       flip: unflipped red.x=%.1f blue.x=%.1f | flipped red.x=%.1f blue.x=%.1f\n",
+                        redXUnflipped, blueXUnflipped, redXFlipped, blueXFlipped);
+            check(redXUnflipped >= 0 && blueXUnflipped >= 0 && redXFlipped >= 0 && blueXFlipped >= 0 &&
+                  redXUnflipped < blueXUnflipped && redXFlipped > blueXFlipped,
+                  "HTMLDOM-88d: DrawString's rotation/scale/flip overload forwards "
+                  "SpriteEffects::FlipHorizontally correctly (red/blue relative order reverses)");
+        }
+
+        if (frame_ == 9)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
