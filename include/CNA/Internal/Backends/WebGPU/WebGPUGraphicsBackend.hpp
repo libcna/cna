@@ -1978,8 +1978,10 @@ namespace CNA::Internal::Backends::WebGPU
         // same UV, `tex1.rgb*=2.0; result=tex1*tex2*tint`, matching
         // VulkanGraphicsBackend's dual_texture3d.{vert,frag}.glsl /
         // dual_texture_colored3d.vert.glsl). Genuinely new bind-group shape (unlike alpha_test3d,
-        // which reused textured3d's layouts unchanged): group 1 needs THREE bindings (one shared
-        // sampler + two textures), so this is the first WebGPU 3D shader family with its own
+        // which reused textured3d's layouts unchanged): group 1 needs FOUR bindings -- one sampler
+        // and one texture per public sampler slot, since REMED-GFX-172 established that Texture and
+        // Texture2 are filtered by SamplerStates[0] and SamplerStates[1] independently -- so this is
+        // the first WebGPU 3D shader family with its own
         // dedicated dualTextureBindGroupLayout_/dualTexturePipelineLayout_ -- group 0 (the primary
         // UBO) is still coloredBindGroupLayout_, reused unchanged (DualTextureEffect has no
         // lighting and no alpha test, so FillExtUniforms()'s existing layout already covers it).
@@ -2053,7 +2055,7 @@ namespace CNA::Internal::Backends::WebGPU
 
         WGPUShaderModule dualTextureShader_ = nullptr;          ///< stride 20 (no vertex colour)
         WGPUShaderModule dualTextureColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
-        WGPUBindGroupLayout dualTextureBindGroupLayout_ = nullptr;  ///< group 1: sampler + texture0 + texture1
+        WGPUBindGroupLayout dualTextureBindGroupLayout_ = nullptr;  ///< group 1: sampler0 + texture0 + texture1 + sampler1
         WGPUPipelineLayout dualTexturePipelineLayout_ = nullptr;    ///< group 0 (UBO, coloredBindGroupLayout_) + group 1
         std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTexturePipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTextureColoredPipelines_;
@@ -2070,9 +2072,10 @@ namespace CNA::Internal::Backends::WebGPU
         // directional lights, envMapSpecular+fresnelFactor/fresnelEnabled, fog, and a
         // CPU-precomputed 3x3 normal matrix packed as 3 vec4f columns -- WGSL has no inverse(),
         // the same reason CreateLitTexturedResources()'s own LitLightParams UBO precomputes one).
-        // Group 1 is a genuinely new 3-binding shape (mirrors dualTextureBindGroupLayout_'s own
-        // 3-binding group 1, swapping the second texture_2d for a texture_cube): one shared
-        // sampler + a 2D base texture + a texture_cube<f32> reflection map. Both textures fall back
+        // Group 1 is a genuinely new 4-binding shape (mirrors dualTextureBindGroupLayout_'s own
+        // 4-binding group 1, swapping the second texture_2d for a texture_cube): a 2D base texture
+        // with SamplerStates[0] and a texture_cube<f32> reflection map with its own independent
+        // SamplerStates[1] (REMED-GFX-172). Both textures fall back
         // to a 1x1 default (white 2D / white cube) when EnvironmentMapEffect leaves that map
         // unbound, matching EnsurePbrDefaultTextures()'s own "map absent" convention. No fog
         // deferral here -- unlike every other WebGPU 3D shader, EnvironmentMapEffect's own fog
@@ -2160,7 +2163,7 @@ namespace CNA::Internal::Backends::WebGPU
 
         WGPUShaderModule envMapShader_ = nullptr;
         WGPUBindGroupLayout envMapBindGroupLayout_ = nullptr;         ///< group 0: Transform UBO (binding 0) + EnvMapParams UBO (binding 1)
-        WGPUBindGroupLayout envMapTextureBindGroupLayout_ = nullptr; ///< group 1: sampler + texture_2d + texture_cube
+        WGPUBindGroupLayout envMapTextureBindGroupLayout_ = nullptr; ///< group 1: sampler0 + texture_2d + texture_cube + sampler1
         WGPUPipelineLayout envMapPipelineLayout_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;

@@ -4045,10 +4045,12 @@ struct VertexOutput {
 
         // Ported from VulkanGraphicsBackend's dual_texture3d.{vert,frag}.glsl. DualTextureEffect
         // has no lighting and no alpha test, so group 0 reuses coloredBindGroupLayout_/the primary
-        // Uniforms layout unchanged. Group 1 is a NEW shape (one shared sampler + two textures,
-        // since DualTextureEffect samples both layers at the same UV with one shared
-        // TextureFilter/AddressMode, matching every other WebGPU 3D shader's own
-        // single-sampler-per-draw simplification).
+        // Uniforms layout unchanged. Group 1 carries FOUR bindings: one sampler and one texture per
+        // public sampler slot. REMED-GFX-172: the two layers do NOT share a TextureFilter/
+        // AddressMode -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
+        // DECLARE_TEXTURE(Texture2, 1), so Texture reads GraphicsDevice.SamplerStates[0] and
+        // Texture2 reads SamplerStates[1]. One WGSL sampler for both textures made slot 1
+        // inexpressible, and slot 1 silently inherited slot 0's.
         static constexpr char shaderSource[] = R"WGSL(
 struct Uniforms {
     mvp: mat4x4f,
@@ -4058,9 +4060,10 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
-@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(0) var tex0Sampler: sampler;
 @group(1) @binding(1) var tex0: texture_2d<f32>;
 @group(1) @binding(2) var tex1: texture_2d<f32>;
+@group(1) @binding(3) var tex1Sampler: sampler;
 
 struct VertexInput {
     @location(0) position: vec3f,
@@ -4077,8 +4080,8 @@ struct VertexOutput {
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    var sample0 = textureSample(tex0, texSampler, input.uv);
-    let sample1 = textureSample(tex1, texSampler, input.uv);
+    var sample0 = textureSample(tex0, tex0Sampler, input.uv);
+    let sample1 = textureSample(tex1, tex1Sampler, input.uv);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
     return sample0 * sample1 * u.diffuseColor;
 }
@@ -4105,9 +4108,10 @@ struct Uniforms {
     light0DiffuseVertexColor: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
-@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(0) var tex0Sampler: sampler;
 @group(1) @binding(1) var tex0: texture_2d<f32>;
 @group(1) @binding(2) var tex1: texture_2d<f32>;
+@group(1) @binding(3) var tex1Sampler: sampler;
 
 struct VertexInput {
     @location(0) position: vec3f,
@@ -4128,8 +4132,8 @@ struct VertexOutput {
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    var sample0 = textureSample(tex0, texSampler, input.uv);
-    let sample1 = textureSample(tex1, texSampler, input.uv);
+    var sample0 = textureSample(tex0, tex0Sampler, input.uv);
+    let sample1 = textureSample(tex1, tex1Sampler, input.uv);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
     return sample0 * sample1 * input.tint;
 }
@@ -4145,7 +4149,10 @@ struct VertexOutput {
         if (dualTextureColoredShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create DualTextureColored3D shader");
 
-        std::array<WGPUBindGroupLayoutEntry, 3> layoutEntries{};
+        // REMED-GFX-172: one sampler binding per public sampler slot. Binding 3 is the second
+        // sampler rather than a renumbering of 1/2, so the two texture views keep the binding
+        // numbers every other WebGPU 3D family uses.
+        std::array<WGPUBindGroupLayoutEntry, 4> layoutEntries{};
         layoutEntries[0].binding = 0;
         layoutEntries[0].visibility = WGPUShaderStage_Fragment;
         layoutEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
@@ -4159,6 +4166,9 @@ struct VertexOutput {
         layoutEntries[2].texture.sampleType = WGPUTextureSampleType_Float;
         layoutEntries[2].texture.viewDimension = WGPUTextureViewDimension_2D;
         layoutEntries[2].texture.multisampled = false;
+        layoutEntries[3].binding = 3;
+        layoutEntries[3].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[3].sampler.type = WGPUSamplerBindingType_Filtering;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
         bindLayoutDescriptor.label = StringView("CNA WebGPU DualTexture3D BindGroupLayout");
         bindLayoutDescriptor.entryCount = layoutEntries.size();
@@ -4349,6 +4359,7 @@ struct EnvMapParams {
 @group(1) @binding(0) var texSampler: sampler;
 @group(1) @binding(1) var tex: texture_2d<f32>;
 @group(1) @binding(2) var envMap: texture_cube<f32>;
+@group(1) @binding(3) var envMapSampler: sampler;
 
 struct VertexInput {
     @location(0) position: vec3f,
@@ -4396,7 +4407,7 @@ struct VertexOutput {
     let baseColor = litRGB * texColor.rgb;
     let combinedAlpha = ep.diffuseColor.a * texColor.a;
     let reflDir = reflect(-e, n);
-    let envSample = textureSample(envMap, texSampler, reflDir);
+    let envSample = textureSample(envMap, envMapSampler, reflDir);
     let viewAngle = dot(e, n);
     let fresnelEnabled = ep.light0DiffuseFresnelEn.w;
     let blendFactor = select(ep.emissiveAmount.w,
@@ -4434,7 +4445,9 @@ struct VertexOutput {
         uboLayoutDescriptor.entries = uboLayoutEntries.data();
         envMapBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &uboLayoutDescriptor);
 
-        std::array<WGPUBindGroupLayoutEntry, 3> texLayoutEntries{};
+        // REMED-GFX-172: one sampler binding per public sampler slot -- binding 0 for the base 2D
+        // texture (SamplerStates[0]) and binding 3 for the reflection cube (SamplerStates[1]).
+        std::array<WGPUBindGroupLayoutEntry, 4> texLayoutEntries{};
         texLayoutEntries[0].binding = 0;
         texLayoutEntries[0].visibility = WGPUShaderStage_Fragment;
         texLayoutEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
@@ -4448,6 +4461,9 @@ struct VertexOutput {
         texLayoutEntries[2].texture.sampleType = WGPUTextureSampleType_Float;
         texLayoutEntries[2].texture.viewDimension = WGPUTextureViewDimension_Cube;
         texLayoutEntries[2].texture.multisampled = false;
+        texLayoutEntries[3].binding = 3;
+        texLayoutEntries[3].visibility = WGPUShaderStage_Fragment;
+        texLayoutEntries[3].sampler.type = WGPUSamplerBindingType_Filtering;
         WGPUBindGroupLayoutDescriptor texLayoutDescriptor{};
         texLayoutDescriptor.label = StringView("CNA WebGPU EnvMap3D Texture BindGroupLayout");
         texLayoutDescriptor.entryCount = texLayoutEntries.size();
@@ -4705,13 +4721,22 @@ struct VertexOutput {
         WGPUTextureView cubeView = command.envMap
             ? command.envMap.View()
             : envMapDefaultWhiteCube_->CubeView();
-        std::array<WGPUBindGroupEntry, 3> texEntries{};
+        // REMED-GFX-172: the reflection cube's own SamplerStates[1], from the description captured
+        // at this draw's public call. The fallback 1x1 white cube is filtered by the same slot --
+        // a missing resource does not change WHICH sampler slot owns that binding.
+        WGPUSampler cubeSampler = GetOrCreateSlotSampler(command.envMapFilter, command.envMapAddressU,
+                                                         command.envMapAddressV,
+                                                         command.envMapMaxAnisotropy,
+                                                         "EnvironmentMap3D/slot1");
+        std::array<WGPUBindGroupEntry, 4> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
         texEntries[1].textureView = texView;
         texEntries[2].binding = 2;
         texEntries[2].textureView = cubeView;
+        texEntries[3].binding = 3;
+        texEntries[3].sampler = cubeSampler;
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU EnvMap3D Texture BindGroup");
         texBindDescriptor.layout = envMapTextureBindGroupLayout_;
@@ -4721,18 +4746,14 @@ struct VertexOutput {
 
         if (MultiTextureSamplerTraceEnabled())
         {
-            // Resolved inside the trace guard: nothing binds it yet, so enabling the trace cannot
-            // change which native samplers production creates.
-            WGPUSampler traceSampler1 = GetOrCreateSlotSampler(
-                command.envMapFilter, command.envMapAddressU, command.envMapAddressV,
-                command.envMapMaxAnisotropy, "EnvironmentMap3D/slot1");
             TraceMultiTextureBinding("EnvironmentMap3D", state.publicOrder, state.replayPosition,
                                      texView, cubeView,
                                      command.textureFilter, command.addressU, command.addressV,
                                      command.maxAnisotropy,
                                      command.envMapFilter, command.envMapAddressU,
                                      command.envMapAddressV, command.envMapMaxAnisotropy,
-                                     sampler, sampler, traceSampler1, envMapTextureBindGroupLayout_,
+                                     sampler, cubeSampler, cubeSampler,
+                                     envMapTextureBindGroupLayout_,
                                      envMapPipelineLayout_, texBindGroup, texEntries.size());
         }
 
@@ -7884,13 +7905,22 @@ struct VSOut {
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.maxAnisotropy,
                                                      "DualTexture3D");
-        std::array<WGPUBindGroupEntry, 3> texEntries{};
+        // REMED-GFX-172: Texture2's own SamplerStates[1], from the description captured at this
+        // draw's public call. Resolved through the same REMED-GFX-170 sampler cache -- an identical
+        // pair of slots is one cache hit, not a second native sampler.
+        WGPUSampler sampler1 = GetOrCreateSlotSampler(command.texture1Filter, command.texture1AddressU,
+                                                      command.texture1AddressV,
+                                                      command.texture1MaxAnisotropy,
+                                                      "DualTexture3D/slot1");
+        std::array<WGPUBindGroupEntry, 4> texEntries{};
         texEntries[0].binding = 0;
         texEntries[0].sampler = sampler;
         texEntries[1].binding = 1;
         texEntries[1].textureView = command.texture0.View();
         texEntries[2].binding = 2;
         texEntries[2].textureView = command.texture1.View();
+        texEntries[3].binding = 3;
+        texEntries[3].sampler = sampler1;
         WGPUBindGroupDescriptor texBindDescriptor{};
         texBindDescriptor.label = StringView("CNA WebGPU DualTexture3D Texture BindGroup");
         texBindDescriptor.layout = dualTextureBindGroupLayout_;
@@ -7900,19 +7930,13 @@ struct VSOut {
 
         if (MultiTextureSamplerTraceEnabled())
         {
-            // The slot-1 sampler is resolved HERE, inside the trace guard, precisely because
-            // nothing binds it yet -- so enabling the trace cannot change which native samplers
-            // production creates.
-            WGPUSampler traceSampler1 = GetOrCreateSlotSampler(
-                command.texture1Filter, command.texture1AddressU, command.texture1AddressV,
-                command.texture1MaxAnisotropy, "DualTexture3D/slot1");
             TraceMultiTextureBinding("DualTexture3D", state.publicOrder, state.replayPosition,
                                      command.texture0.View(), command.texture1.View(),
                                      command.textureFilter, command.addressU, command.addressV,
                                      command.maxAnisotropy,
                                      command.texture1Filter, command.texture1AddressU,
                                      command.texture1AddressV, command.texture1MaxAnisotropy,
-                                     sampler, sampler, traceSampler1, dualTextureBindGroupLayout_,
+                                     sampler, sampler1, sampler1, dualTextureBindGroupLayout_,
                                      dualTexturePipelineLayout_, texBindGroup, texEntries.size());
         }
 
