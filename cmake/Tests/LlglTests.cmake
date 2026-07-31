@@ -166,6 +166,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-25 follow-up: PbrEffect -- adapted from the Vulkan backend's own
+    # examples/vulkan_pbreffect_handderived_test.cpp (itself fully backend-agnostic real public XNA
+    # API + VertexBuffer::SetDataRaw), dropping its SkinnedPbrEffect check (a separate, not-yet-
+    # implemented follow-up on this backend). Plain VertexPositionNormalTangentTexture (stride 48)
+    # works on both modules, so this gets an _OpenGL variant below too.
+    cna_llgl_test(cna_test_llgl_pbreffect_handderived examples/llgl_pbreffect_handderived_test.cpp)
+    cna_register_backend_test(NAME Llgl_PbrEffect_HandDerived COMMAND cna_test_llgl_pbreffect_handderived
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-17: the same two binaries, pinned to the OpenGL module instead of the default
     # (Vulkan-first) preference. Running only the default preference is what let the OpenGL module
     # clear correctly and draw nothing for as long as it did -- a module nothing exercises is a
@@ -231,6 +241,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_backend_test(NAME Llgl_MRT_OpenGL COMMAND cna_test_llgl_mrt
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_PbrEffect_HandDerived_OpenGL COMMAND cna_test_llgl_pbreffect_handderived
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 endif()

@@ -68,6 +68,13 @@ namespace CNA::Internal::Backends::Llgl
         /// uniform block in this backend does not belong sharing one growth/reuse pool with them).
         constexpr std::size_t kSkinnedBoneFloats = 72 * 16;
 
+        /// Floats in PbrEffect's own dedicated uniform block (see shaders/pbr3d.vert.glsl's
+        /// PbrParams for the byte layout): 84 floats = 336 bytes. This effect's field set (base
+        /// colour factor kept independent from alpha, raw AmbientLightColor, metallic/roughness
+        /// factors, no alpha test) doesn't fit the shared 100-float Transform block, and its
+        /// shader pair is never linked with any other shader here.
+        constexpr std::size_t kPbrUniformFloats = 84;
+
         /// Floats per sprite vertex: position (2), texture coordinate (2), colour (4).
         constexpr std::size_t kSpriteVertexFloats = 8;
         constexpr std::size_t kSpriteVertexStride = kSpriteVertexFloats * sizeof(float);
@@ -297,6 +304,9 @@ namespace CNA::Internal::Backends::Llgl
                 // declarations already use.
                 case XnaVertexElementUsage::BlendWeight:       name = "aBoneWeights"; location = 4; return true;
                 case XnaVertexElementUsage::BlendIndices:      name = "aBoneIndices"; location = 5; return true;
+                // PbrEffect (LLGL-26 follow-up): the tangent-space TBN basis pbr3d.vert.glsl's own
+                // attribute declaration reads at this location.
+                case XnaVertexElementUsage::Tangent:           name = "tangent";      location = 6; return true;
                 default: return false;
             }
         }
@@ -1317,6 +1327,16 @@ namespace CNA::Internal::Backends::Llgl
                 addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
                 addAttribute("texCoord", LLGL::Format::RG32Float, 2, 24);
                 break;
+            // PbrEffect (LLGL-26 follow-up): VertexPositionNormalTangentTexture's own byte layout
+            // (float3 pos + float3 normal + float4 tangent + float2 uv) -- matches
+            // examples/llgl_pbreffect_handderived_test.cpp's own PbrGpuVertex, mirroring the
+            // Vulkan backend's own pbr3d.vert.glsl attribute layout.
+            case 48:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
+                break;
             // SkinnedEffect (LLGL-25): VertexPositionNormalTextureSkinned's own GPU-packed stream --
             // float3 pos + float3 normal + float2 uv + float4 blend weights (plain, NOT normalized)
             // + ubyte4 blend indices (a genuine INTEGER attribute -- RGBA8UInt, not RGBA8UNorm --
@@ -1617,6 +1637,13 @@ namespace CNA::Internal::Backends::Llgl
         }
         primitiveSkinnedVertexShaderCache_.clear();
 
+        for (const auto& entry : primitivePbrVertexShaderCache_)
+        {
+            if (entry.second != nullptr)
+                renderer_->Release(*entry.second);
+        }
+        primitivePbrVertexShaderCache_.clear();
+
         for (LLGL::Buffer* buffer : pendingBufferReleases_)
         {
             if (buffer != nullptr)
@@ -1659,6 +1686,18 @@ namespace CNA::Internal::Backends::Llgl
         }
         skinnedBoneBuffers_.clear();
 
+        for (LLGL::Buffer* buffer : pbrUniformBuffers_)
+        {
+            if (buffer != nullptr)
+                renderer_->Release(*buffer);
+        }
+        pbrUniformBuffers_.clear();
+
+        if (defaultWhitePbrTexture_ != nullptr)
+            renderer_->Release(*defaultWhitePbrTexture_);
+        if (defaultFlatNormalPbrTexture_ != nullptr)
+            renderer_->Release(*defaultFlatNormalPbrTexture_);
+
         if (customEffectLayout_ != nullptr)
             renderer_->Release(*customEffectLayout_);
 
@@ -1676,6 +1715,8 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveEnvMapFragmentShader_);
         if (primitiveSkinnedFragmentShader_ != nullptr)
             renderer_->Release(*primitiveSkinnedFragmentShader_);
+        if (primitivePbrFragmentShader_ != nullptr)
+            renderer_->Release(*primitivePbrFragmentShader_);
         if (primitiveLayout_ != nullptr)
             renderer_->Release(*primitiveLayout_);
         if (primitiveTexturedLayout_ != nullptr)
@@ -1686,6 +1727,8 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveEnvMapLayout_);
         if (primitiveSkinnedLayout_ != nullptr)
             renderer_->Release(*primitiveSkinnedLayout_);
+        if (primitivePbrLayout_ != nullptr)
+            renderer_->Release(*primitivePbrLayout_);
 
         if (spriteVertexBuffer_ != nullptr)
             renderer_->Release(*spriteVertexBuffer_);
@@ -1895,6 +1938,9 @@ namespace CNA::Internal::Backends::Llgl
         primitiveSkinnedFragmentShader_ = createFragmentShader(
             Shaders::kSkinned3dFragGlsl, Shaders::kSkinned3dFragSpv,
             sizeof(Shaders::kSkinned3dFragSpv), "skinned 3D fragment shader");
+        primitivePbrFragmentShader_ = createFragmentShader(
+            Shaders::kPbr3dFragGlsl, Shaders::kPbr3dFragSpv,
+            sizeof(Shaders::kPbr3dFragSpv), "PBR 3D fragment shader");
 
         // Two layouts rather than one with an optionally-unused texture slot: a pipeline whose
         // layout declares a texture the draw never binds is a validation error on Vulkan, not a
@@ -1998,9 +2044,53 @@ namespace CNA::Internal::Backends::Llgl
         };
         primitiveSkinnedLayout_ = renderer_->CreatePipelineLayout(skinnedLayoutDesc);
 
+        // PbrEffect: its own dedicated uniform block (PbrParams, see pbr3d.vert.glsl) plus 5
+        // texture/sampler pairs -- base colour, normal map, metallic-roughness map, emissive map,
+        // and occlusion map. Every slot is always bound (a null game-side map resolves to a 1x1
+        // default texture in QueuePrimitives/EnsureDefaultPbrTexturesEXT rather than being left
+        // unbound), so unlike EnvironmentMapEffect there is no "throw if missing" branch for the
+        // 4 optional maps.
+        LLGL::PipelineLayoutDescriptor pbrLayoutDesc;
+        pbrLayoutDesc.bindings =
+        {
+            LLGL::BindingDescriptor{"PbrParams", LLGL::ResourceType::Buffer,
+                                    LLGL::BindFlags::ConstantBuffer,
+                                    LLGL::StageFlags::VertexStage | LLGL::StageFlags::FragmentStage, 1},
+            LLGL::BindingDescriptor{"colorMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 2},
+            LLGL::BindingDescriptor{"samplerState", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 3},
+            LLGL::BindingDescriptor{"normalMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 4},
+            LLGL::BindingDescriptor{"normalMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 5},
+            LLGL::BindingDescriptor{"metallicRoughnessMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 6},
+            LLGL::BindingDescriptor{"metallicRoughnessMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 7},
+            LLGL::BindingDescriptor{"emissiveMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 8},
+            LLGL::BindingDescriptor{"emissiveMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 9},
+            LLGL::BindingDescriptor{"occlusionMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 10},
+            LLGL::BindingDescriptor{"occlusionMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 11},
+        };
+        pbrLayoutDesc.combinedTextureSamplers =
+        {
+            LLGL::CombinedTextureSamplerDescriptor{"colorMap", "colorMap", "samplerState", 2},
+            LLGL::CombinedTextureSamplerDescriptor{"normalMap", "normalMap", "normalMapSampler", 4},
+            LLGL::CombinedTextureSamplerDescriptor{"metallicRoughnessMap", "metallicRoughnessMap",
+                                                   "metallicRoughnessMapSampler", 6},
+            LLGL::CombinedTextureSamplerDescriptor{"emissiveMap", "emissiveMap", "emissiveMapSampler", 8},
+            LLGL::CombinedTextureSamplerDescriptor{"occlusionMap", "occlusionMap", "occlusionMapSampler", 10},
+        };
+        primitivePbrLayout_ = renderer_->CreatePipelineLayout(pbrLayoutDesc);
+
         if (primitiveLayout_ == nullptr || primitiveTexturedLayout_ == nullptr ||
             primitiveDualTextureLayout_ == nullptr || primitiveEnvMapLayout_ == nullptr ||
-            primitiveSkinnedLayout_ == nullptr)
+            primitiveSkinnedLayout_ == nullptr || primitivePbrLayout_ == nullptr)
             throw std::runtime_error(std::string(kBackendName) + " backend: 3D pipeline layout creation failed");
     }
 
@@ -2292,9 +2382,83 @@ namespace CNA::Internal::Backends::Llgl
         return shader;
     }
 
+    LLGL::Shader* LlglGraphicsBackend::AcquirePrimitivePbrVertexShader(
+        const std::vector<LLGL::VertexAttribute>& attributes)
+    {
+        const std::uint64_t key = MakeVertexLayoutKey(attributes);
+        const auto cached = primitivePbrVertexShaderCache_.find(key);
+        if (cached != primitivePbrVertexShaderCache_.end())
+            return cached->second;
+
+        // PbrEffect is always textured and lit (GpuDrawParams::textureEnabled/lightingEnabled are
+        // unconditionally true in PbrEffect::FillGpuDrawParams), so like
+        // AcquirePrimitiveEnvMapVertexShader() there is only one shader variant -- just the vertex
+        // layout (and hence caching) varies.
+        bool hasTexCoord = false;
+        bool hasNormal = false;
+        bool hasTangent = false;
+        for (const LLGL::VertexAttribute& attribute : attributes)
+        {
+            if (attribute.location == 2) hasTexCoord = true;
+            if (attribute.location == 3) hasNormal = true;
+            if (attribute.location == 6) hasTangent = true;
+        }
+        if (!hasTexCoord || !hasNormal || !hasTangent)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: PbrEffect needs a vertex layout with "
+                "texture coordinates, normals, and a tangent, and this one is missing at least one");
+        }
+
+        std::vector<LLGL::VertexAttribute> shaderAttributes;
+        for (const LLGL::VertexAttribute& attribute : attributes)
+        {
+            if (attribute.location == 1) // vertex colour: this shader never reads one
+                continue;
+            shaderAttributes.push_back(attribute);
+        }
+
+        const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
+
+        LLGL::ShaderDescriptor vertexDesc;
+        vertexDesc.type = LLGL::ShaderType::Vertex;
+        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
+        {
+            vertexDesc.source = Shaders::kPbr3dVertGlsl;
+            vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+        }
+        else
+        {
+            vertexDesc.source = reinterpret_cast<const char*>(Shaders::kPbr3dVertSpv);
+            vertexDesc.sourceSize = sizeof(Shaders::kPbr3dVertSpv);
+            vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
+            vertexDesc.entryPoint = "main";
+        }
+        vertexDesc.vertex.inputAttribs = shaderAttributes;
+
+        LLGL::Shader* shader = renderer_->CreateShader(vertexDesc);
+        if (shader == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: PbrEffect vertex shader creation failed");
+        }
+        if (const LLGL::Report* report = shader->GetReport())
+        {
+            if (report->HasErrors())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: PbrEffect vertex shader "
+                    "compilation failed: " + (report->GetText() != nullptr ? report->GetText() : "no details"));
+            }
+        }
+
+        primitivePbrVertexShaderCache_.emplace(key, shader);
+        return shader;
+    }
+
     LLGL::PipelineState* LlglGraphicsBackend::AcquirePrimitivePipeline(
         const LlglVertexBufferBackend& vertexBuffer, PrimitiveType primitive, bool scissorEnabled,
-        bool textured, bool lit, bool dualTexture, bool envMapping, bool skinned)
+        bool textured, bool lit, bool dualTexture, bool envMapping, bool skinned, bool pbr)
     {
         const std::vector<LLGL::VertexAttribute>& attributes = vertexBuffer.GetVertexAttributes();
 
@@ -2311,6 +2475,7 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + (dualTexture ? 1u : 0u);
         key = key * 2u + (envMapping ? 1u : 0u);
         key = key * 2u + (skinned ? 1u : 0u);
+        key = key * 2u + (pbr ? 1u : 0u);
         key = key * 1024u + (MakeBlendPipelineKey(scissorEnabled) & 0x3FFu);
 
         const auto cached = primitivePipelineCache_.find(key);
@@ -2318,36 +2483,42 @@ namespace CNA::Internal::Backends::Llgl
             return cached->second;
 
         LLGL::GraphicsPipelineDescriptor pipelineDesc;
-        pipelineDesc.debugName = skinned ? "CNA.Skinned3D"
+        pipelineDesc.debugName = pbr ? "CNA.Pbr3D"
+                                : skinned ? "CNA.Skinned3D"
                                 : envMapping ? "CNA.EnvMap3D"
                                 : dualTexture ? "CNA.DualTexture3D"
                                 : lit ? "CNA.Lit3D" : (textured ? "CNA.Textured3D" : "CNA.Colored3D");
         // DualTextureEffect is never lit (GpuDrawParams::lightingEnabled is always false for it),
         // and its vertex-side behaviour is identical to a plain textured draw -- so the vertex
         // shader is the SAME one AcquirePrimitiveVertexShader() already selects for `textured`,
-        // and only the fragment shader and pipeline layout differ below. EnvironmentMapEffect and
-        // SkinnedEffect, unlike DualTextureEffect, each need their OWN vertex shader (world-space
-        // normal/eye vector; bone weight/index skinning), so neither goes through
-        // AcquirePrimitiveVertexShader() at all.
-        pipelineDesc.vertexShader = skinned ? AcquirePrimitiveSkinnedVertexShader(attributes)
+        // and only the fragment shader and pipeline layout differ below. EnvironmentMapEffect,
+        // SkinnedEffect and PbrEffect, unlike DualTextureEffect, each need their OWN vertex shader
+        // (world-space normal/eye vector; bone weight/index skinning; tangent-space TBN basis), so
+        // none of them goes through AcquirePrimitiveVertexShader() at all.
+        pipelineDesc.vertexShader = pbr ? AcquirePrimitivePbrVertexShader(attributes)
+                                   : skinned ? AcquirePrimitiveSkinnedVertexShader(attributes)
                                    : envMapping ? AcquirePrimitiveEnvMapVertexShader(attributes)
                                    : AcquirePrimitiveVertexShader(attributes, textured, lit);
-        pipelineDesc.fragmentShader = skinned ? primitiveSkinnedFragmentShader_
+        pipelineDesc.fragmentShader = pbr ? primitivePbrFragmentShader_
+                                    : skinned ? primitiveSkinnedFragmentShader_
                                     : envMapping ? primitiveEnvMapFragmentShader_
                                     : dualTexture ? primitiveDualTextureFragmentShader_
                                     : lit && textured ? primitiveLitFragmentShader_
                                     : lit ? primitiveLitUntexturedFragmentShader_
                                     : textured ? primitiveTexturedFragmentShader_
                                     : primitiveFragmentShader_;
-        // Layout selection follows `textured`/`dualTexture`/`envMapping`/`skinned`
-        // (LLGL-31/DualTextureEffect/EnvironmentMapEffect/SkinnedEffect): a lit-untextured draw's
-        // shader declares no colorMap/samplerState binding, so it reuses primitiveLayout_ exactly
-        // like the unlit-untextured path does, not primitiveTexturedLayout_; a dual-texture draw
-        // needs the layout with BOTH texture/sampler pairs; an env-map draw needs its own
+        // Layout selection follows `textured`/`dualTexture`/`envMapping`/`skinned`/`pbr`
+        // (LLGL-31/DualTextureEffect/EnvironmentMapEffect/SkinnedEffect/PbrEffect): a lit-untextured
+        // draw's shader declares no colorMap/samplerState binding, so it reuses primitiveLayout_
+        // exactly like the unlit-untextured path does, not primitiveTexturedLayout_; a dual-texture
+        // draw needs the layout with BOTH texture/sampler pairs; an env-map draw needs its own
         // dedicated layout (its own uniform block plus a texture/sampler pair AND a cube map
         // texture/sampler pair); a skinned draw needs its own dedicated layout too (its own
-        // parameter uniform block, a separate bone transform block, and a texture/sampler pair).
-        pipelineDesc.pipelineLayout = skinned ? primitiveSkinnedLayout_
+        // parameter uniform block, a separate bone transform block, and a texture/sampler pair); a
+        // PBR draw needs its own dedicated layout with its own uniform block and 5 texture/sampler
+        // pairs (base colour, normal, metallic-roughness, emissive, occlusion).
+        pipelineDesc.pipelineLayout = pbr ? primitivePbrLayout_
+                                     : skinned ? primitiveSkinnedLayout_
                                      : envMapping ? primitiveEnvMapLayout_
                                      : dualTexture ? primitiveDualTextureLayout_
                                      : textured ? primitiveTexturedLayout_ : primitiveLayout_;
@@ -2635,6 +2806,116 @@ namespace CNA::Internal::Backends::Llgl
         }
     }
 
+    void LlglGraphicsBackend::FillPbrUniforms(float (&uniforms)[kPbrUniformFloats],
+                                               const float matrix[16],
+                                               const GpuDrawParams& params)
+    {
+        std::memset(uniforms, 0, sizeof(float) * kPbrUniformFloats);
+        std::memcpy(uniforms, matrix, sizeof(float) * 16);
+        std::memcpy(uniforms + 16, params.worldColMajor, sizeof(float) * 16);
+
+        // Base colour factor and alpha are kept independent (not premultiplied) -- see
+        // PbrEffect::FillGpuDrawParams()'s own comment and pbr3d.frag.glsl.
+        uniforms[32] = params.diffuseColor[0];
+        uniforms[33] = params.diffuseColor[1];
+        uniforms[34] = params.diffuseColor[2];
+        uniforms[35] = params.diffuseColor[3];
+
+        uniforms[36] = params.ambientColor[0];
+        uniforms[37] = params.ambientColor[1];
+        uniforms[38] = params.ambientColor[2];
+
+        uniforms[40] = params.emissiveColor[0];
+        uniforms[41] = params.emissiveColor[1];
+        uniforms[42] = params.emissiveColor[2];
+        uniforms[43] = params.pbrMetallicFactor;
+
+        uniforms[44] = params.pbrRoughnessFactor;
+        uniforms[45] = static_cast<float>(params.weightsPerVertex);
+
+        uniforms[48] = params.light0Dir[0];
+        uniforms[49] = params.light0Dir[1];
+        uniforms[50] = params.light0Dir[2];
+        uniforms[52] = params.light0Diffuse[0];
+        uniforms[53] = params.light0Diffuse[1];
+        uniforms[54] = params.light0Diffuse[2];
+
+        uniforms[56] = params.light1Dir[0];
+        uniforms[57] = params.light1Dir[1];
+        uniforms[58] = params.light1Dir[2];
+        uniforms[60] = params.light1Diffuse[0];
+        uniforms[61] = params.light1Diffuse[1];
+        uniforms[62] = params.light1Diffuse[2];
+
+        uniforms[64] = params.light2Dir[0];
+        uniforms[65] = params.light2Dir[1];
+        uniforms[66] = params.light2Dir[2];
+        uniforms[68] = params.light2Diffuse[0];
+        uniforms[69] = params.light2Diffuse[1];
+        uniforms[70] = params.light2Diffuse[2];
+
+        uniforms[72] = params.eyePositionWorld[0];
+        uniforms[73] = params.eyePositionWorld[1];
+        uniforms[74] = params.eyePositionWorld[2];
+
+        if (params.fogEnabled)
+        {
+            uniforms[76] = params.fogColor[0];
+            uniforms[77] = params.fogColor[1];
+            uniforms[78] = params.fogColor[2];
+            // The alpha channel carries the enable bit, matching FillEffectUniforms's own
+            // fogColor.a convention.
+            uniforms[79] = 1.0f;
+            uniforms[80] = params.fogVector[0];
+            uniforms[81] = params.fogVector[1];
+            uniforms[82] = params.fogVector[2];
+            uniforms[83] = params.fogVector[3];
+        }
+    }
+
+    void LlglGraphicsBackend::EnsureDefaultPbrTexturesEXT()
+    {
+        if (defaultWhitePbrTexture_ != nullptr && defaultFlatNormalPbrTexture_ != nullptr)
+            return;
+
+        const auto createOnePixel = [&](const std::uint8_t rgba[4]) {
+            LLGL::TextureDescriptor textureDesc;
+            textureDesc.type = LLGL::TextureType::Texture2D;
+            textureDesc.bindFlags = LLGL::BindFlags::Sampled;
+            textureDesc.format = LLGL::Format::RGBA8UNorm;
+            textureDesc.extent = {1, 1, 1};
+            textureDesc.mipLevels = 1;
+            textureDesc.miscFlags = 0;
+
+            LLGL::ImageView imageView;
+            imageView.format = LLGL::ImageFormat::RGBA;
+            imageView.dataType = LLGL::DataType::UInt8;
+            imageView.data = rgba;
+            imageView.dataSize = 4;
+
+            LLGL::Texture* texture = renderer_->CreateTexture(textureDesc, &imageView);
+            if (texture == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: PbrEffect default texture creation failed");
+            }
+            return texture;
+        };
+
+        if (defaultWhitePbrTexture_ == nullptr)
+        {
+            const std::uint8_t white[4] = {255, 255, 255, 255};
+            defaultWhitePbrTexture_ = createOnePixel(white);
+        }
+        if (defaultFlatNormalPbrTexture_ == nullptr)
+        {
+            // Decodes (via *2-1 in the fragment shader) to tangent-space (0,0,1) -- an unperturbed
+            // surface normal.
+            const std::uint8_t flatNormal[4] = {128, 128, 255, 255};
+            defaultFlatNormalPbrTexture_ = createOnePixel(flatNormal);
+        }
+    }
+
     void LlglGraphicsBackend::QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                                                const LlglIndexBufferBackend* indexBuffer,
                                                const Matrix& world, const Matrix& view,
@@ -2762,6 +3043,50 @@ namespace CNA::Internal::Backends::Llgl
                 std::string(kBackendName) + " backend: SkinnedEffect needs Texture bound");
         }
 
+        // RejectUnsupportedDrawParams() (called by both DrawPrimitivesEx/DrawIndexedPrimitivesEx
+        // before this is ever reached) already refuses pbr && skinned (SkinnedPbrEffect is not yet
+        // implemented), so skinned is guaranteed false here whenever pbr is true.
+        const bool pbr = (params != nullptr && params->pbr);
+        if (pbr && params->texture0 == nullptr)
+        {
+            // Texture (base colour) is the one PbrEffect map that is not optional -- matches
+            // SkinnedEffect's own precedent above. NormalMap/MetallicRoughnessMap/EmissiveMap/
+            // OcclusionMap genuinely CAN be left null in real XNA usage (see
+            // PbrEffect::FillGpuDrawParams()), so unlike this, they resolve to a 1x1 default
+            // texture below instead of throwing.
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: PbrEffect needs Texture bound");
+        }
+        LLGL::Texture* resolvedPbrNormalMap = nullptr;
+        LLGL::Texture* resolvedPbrMetallicRoughnessMap = nullptr;
+        LLGL::Texture* resolvedPbrEmissiveMap = nullptr;
+        LLGL::Texture* resolvedPbrOcclusionMap = nullptr;
+        if (pbr)
+        {
+            EnsureDefaultPbrTexturesEXT();
+            const auto resolveOrDefault = [&](const ITextureBackend* map, LLGL::Texture* fallback,
+                                              const char* label) {
+                if (map == nullptr)
+                    return fallback;
+                LLGL::Texture* resolved = ResolveSampledTexture(*map).texture;
+                if (resolved == nullptr)
+                {
+                    throw std::runtime_error(
+                        std::string(kBackendName) + " backend: PbrEffect's " + label +
+                        " belongs to another backend");
+                }
+                return resolved;
+            };
+            resolvedPbrNormalMap = resolveOrDefault(params->pbrNormalMap, defaultFlatNormalPbrTexture_,
+                                                    "NormalMap");
+            resolvedPbrMetallicRoughnessMap = resolveOrDefault(
+                params->pbrMetallicRoughnessMap, defaultWhitePbrTexture_, "MetallicRoughnessMap");
+            resolvedPbrEmissiveMap = resolveOrDefault(params->pbrEmissiveMap, defaultWhitePbrTexture_,
+                                                      "EmissiveMap");
+            resolvedPbrOcclusionMap = resolveOrDefault(params->pbrOcclusionMap, defaultWhitePbrTexture_,
+                                                       "OcclusionMap");
+        }
+
         float uniforms[kEffectUniformFloats] = {};
         std::uint32_t transformIndex = 0;
         float envMapUniforms[kEnvMapUniformFloats] = {};
@@ -2770,6 +3095,8 @@ namespace CNA::Internal::Backends::Llgl
         std::uint32_t skinnedUniformIndex = 0;
         float skinnedBones[kSkinnedBoneFloats] = {};
         std::uint32_t skinnedBoneIndex = 0;
+        float pbrUniforms[kPbrUniformFloats] = {};
+        std::uint32_t pbrUniformIndex = 0;
         if (envMapping)
         {
             FillEnvMapUniforms(envMapUniforms, matrix, *params);
@@ -2792,6 +3119,13 @@ namespace CNA::Internal::Backends::Llgl
             skinnedBoneData_.insert(skinnedBoneData_.end(),
                                     std::begin(skinnedBones), std::end(skinnedBones));
         }
+        else if (pbr)
+        {
+            FillPbrUniforms(pbrUniforms, matrix, *params);
+            pbrUniformIndex = static_cast<std::uint32_t>(pbrUniformData_.size() / kPbrUniformFloats);
+            pbrUniformData_.insert(pbrUniformData_.end(),
+                                   std::begin(pbrUniforms), std::end(pbrUniforms));
+        }
         else
         {
             FillEffectUniforms(uniforms, matrix, params);
@@ -2809,7 +3143,7 @@ namespace CNA::Internal::Backends::Llgl
             : nullptr;
         command.vertexBuffer = vertexBuffer.GetLlglBuffer();
         command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured,
-                                                     lit, dualTexture, envMapping, skinned);
+                                                     lit, dualTexture, envMapping, skinned, pbr);
         if (textured)
         {
             command.texture = resolvedTexture.texture;
@@ -2828,12 +3162,21 @@ namespace CNA::Internal::Backends::Llgl
             command.envMapSampler = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
                                                     samplerMaxAnisotropy_);
         }
+        if (pbr)
+        {
+            command.pbrNormalTexture = resolvedPbrNormalMap;
+            command.pbrMetallicRoughnessTexture = resolvedPbrMetallicRoughnessMap;
+            command.pbrEmissiveTexture = resolvedPbrEmissiveMap;
+            command.pbrOcclusionTexture = resolvedPbrOcclusionMap;
+        }
         command.envMapping = envMapping;
         command.transformIndex = transformIndex;
         command.envMapUniformIndex = envMapUniformIndex;
         command.skinned = skinned;
         command.skinnedUniformIndex = skinnedUniformIndex;
         command.skinnedBoneIndex = skinnedBoneIndex;
+        command.pbr = pbr;
+        command.pbrUniformIndex = pbrUniformIndex;
         command.vertexCount = static_cast<std::uint32_t>(elementCount);
         command.firstVertex = static_cast<std::uint32_t>(std::max(0, vertexStart));
         command.firstIndex = static_cast<std::uint32_t>(std::max(0, startIndex));
@@ -3757,6 +4100,30 @@ namespace CNA::Internal::Backends::Llgl
                                    sizeof(float) * kSkinnedBoneFloats);
         }
 
+        // One constant buffer per PbrEffect draw this frame -- same growth/reuse discipline as
+        // envMapUniformBuffers_/skinnedUniformBuffers_ above, own pool because this effect's
+        // uniform block has its own shape/size.
+        const std::size_t pbrUniformCount = pbrUniformData_.size() / kPbrUniformFloats;
+        while (pbrUniformBuffers_.size() < pbrUniformCount)
+        {
+            LLGL::BufferDescriptor pbrDesc;
+            pbrDesc.size = sizeof(float) * kPbrUniformFloats;
+            pbrDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
+            LLGL::Buffer* buffer = renderer_->CreateBuffer(pbrDesc);
+            if (buffer == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: PbrEffect uniform buffer creation failed");
+            }
+            pbrUniformBuffers_.push_back(buffer);
+        }
+        for (std::size_t index = 0; index < pbrUniformCount; ++index)
+        {
+            renderer_->WriteBuffer(*pbrUniformBuffers_[index], 0,
+                                   pbrUniformData_.data() + index * kPbrUniformFloats,
+                                   sizeof(float) * kPbrUniformFloats);
+        }
+
         if (spriteVertexData_.empty())
             return;
 
@@ -3947,6 +4314,7 @@ namespace CNA::Internal::Backends::Llgl
         envMapUniformData_.clear();
         skinnedUniformData_.clear();
         skinnedBoneData_.clear();
+        pbrUniformData_.clear();
         frameSubmitted_ = true;
     }
 
@@ -4005,6 +4373,8 @@ namespace CNA::Internal::Backends::Llgl
                         : command.skinned
                         ? (command.skinnedUniformIndex < skinnedUniformBuffers_.size() &&
                            command.skinnedBoneIndex < skinnedBoneBuffers_.size())
+                        : command.pbr
+                        ? command.pbrUniformIndex < pbrUniformBuffers_.size()
                         : command.transformIndex < transformBuffers_.size();
                     if (command.vertexBuffer == nullptr || command.pipeline == nullptr ||
                         !uniformBufferBound)
@@ -4042,6 +4412,40 @@ namespace CNA::Internal::Backends::Llgl
                         {
                             commands_->SetResource(2, *command.texture);
                             commands_->SetResource(3, *command.sampler);
+                        }
+                    }
+                    else if (command.pbr)
+                    {
+                        commands_->SetResource(0, *pbrUniformBuffers_[command.pbrUniformIndex]);
+                        // All 5 texture units share this backend's single global sampler state
+                        // (ApplySamplerState only ever tracks slot 0) -- the SAME LLGL::Sampler
+                        // object is bound at every one of the 5 sampler slots below, since each
+                        // GLSL sampler2D declaration still needs its own binding even when the
+                        // underlying resource is identical.
+                        if (command.texture != nullptr && command.sampler != nullptr)
+                        {
+                            commands_->SetResource(1, *command.texture);
+                            commands_->SetResource(2, *command.sampler);
+                        }
+                        if (command.pbrNormalTexture != nullptr && command.sampler != nullptr)
+                        {
+                            commands_->SetResource(3, *command.pbrNormalTexture);
+                            commands_->SetResource(4, *command.sampler);
+                        }
+                        if (command.pbrMetallicRoughnessTexture != nullptr && command.sampler != nullptr)
+                        {
+                            commands_->SetResource(5, *command.pbrMetallicRoughnessTexture);
+                            commands_->SetResource(6, *command.sampler);
+                        }
+                        if (command.pbrEmissiveTexture != nullptr && command.sampler != nullptr)
+                        {
+                            commands_->SetResource(7, *command.pbrEmissiveTexture);
+                            commands_->SetResource(8, *command.sampler);
+                        }
+                        if (command.pbrOcclusionTexture != nullptr && command.sampler != nullptr)
+                        {
+                            commands_->SetResource(9, *command.pbrOcclusionTexture);
+                            commands_->SetResource(10, *command.sampler);
                         }
                     }
                     else
@@ -4167,6 +4571,7 @@ namespace CNA::Internal::Backends::Llgl
         envMapUniformData_.clear();
         skinnedUniformData_.clear();
         skinnedBoneData_.clear();
+        pbrUniformData_.clear();
         frameSubmitted_ = false;
         backbufferCacheValid_ = false;
     }
@@ -4243,6 +4648,7 @@ namespace CNA::Internal::Backends::Llgl
         envMapUniformData_.clear();
         skinnedUniformData_.clear();
         skinnedBoneData_.clear();
+        pbrUniformData_.clear();
         frameSubmitted_ = true;
 
         backbufferCache_.assign(
@@ -4815,11 +5221,13 @@ namespace CNA::Internal::Backends::Llgl
     void LlglGraphicsBackend::RejectUnsupportedDrawParams(const GpuDrawParams& params) const
     {
         // What this path can honour: vertex colours, a diffuse colour and alpha, one or two
-        // textures (DualTextureEffect), fog, and the alpha test. Everything else fails by name
-        // rather than quietly rendering something that merely looks plausible -- an unlit surface
-        // where lighting was asked for is a wrong answer, not a degraded one.
+        // textures (DualTextureEffect), fog, the alpha test, and PbrEffect. Everything else fails
+        // by name rather than quietly rendering something that merely looks plausible -- an unlit
+        // surface where lighting was asked for is a wrong answer, not a degraded one.
         const char* unsupported = nullptr;
-        if (params.pbr)                                      unsupported = "PbrEffect";
+        // SkinnedPbrEffect (PbrEffect + skinning combined) is not yet implemented -- plain
+        // PbrEffect (pbr && !skinned) is.
+        if (params.pbr && params.skinned)                     unsupported = "SkinnedPbrEffect";
         else if (params.customEffectBackend != nullptr)      unsupported = "custom ShaderEffect";
         else if (params.instanceCount > 1)                   unsupported = "instanced drawing";
 

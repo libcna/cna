@@ -1776,6 +1776,28 @@ namespace CNA::Internal::Backends::Llgl
             /** @brief Primitives only, when `skinned`: index into the frame's per-draw bone
              *  transform buffer pool (72 `mat4`s each). */
             std::uint32_t    skinnedBoneIndex = 0;
+            /** @brief Primitives only: true when this draw is `PbrEffect`, in which case
+             *  `pbrUniformIndex` (not `transformIndex`) names this draw's own uniform buffer, from
+             *  its own differently-shaped pool. `texture`/`sampler` (set by the generic `textured`
+             *  handling above) carry the base colour map; the 4 fields below carry PbrEffect's
+             *  remaining optional maps, each resolved to a 1x1 default (white, or flat-normal for
+             *  `pbrNormalTexture`) when the game left it null -- see `EnsureDefaultPbrTexturesEXT()`. */
+            bool             pbr          = false;
+            /** @brief Primitives only, when `pbr`: index into the frame's per-draw PbrEffect
+             *  parameter uniform buffer pool. */
+            std::uint32_t    pbrUniformIndex = 0;
+            /** @brief Primitives only, when `pbr`: tangent-space normal map, or the 1x1 default
+             *  flat-normal texture when `PbrEffect::NormalMap` was null. */
+            LLGL::Texture*   pbrNormalTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: glTF-packed (G=roughness, B=metallic)
+             *  metallic-roughness map, or the 1x1 default white texture when null. */
+            LLGL::Texture*   pbrMetallicRoughnessTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: emissive map, or the 1x1 default white texture
+             *  when null. */
+            LLGL::Texture*   pbrEmissiveTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: occlusion map (R channel), or the 1x1 default
+             *  white texture when null. */
+            LLGL::Texture*   pbrOcclusionTexture = nullptr;
             /** @brief Primitives only: first index of an indexed draw; ignored otherwise. */
             std::uint32_t    firstIndex   = 0;
             /** @brief Primitives only: value added to each index before vertex fetch. */
@@ -1816,10 +1838,15 @@ namespace CNA::Internal::Backends::Llgl
         /// needs the two extra bone attributes (`aBoneWeights`/`aBoneIndices`) present -- never
         /// variant-selected like AcquirePrimitiveVertexShader, only the vertex layout varies.
         LLGL::Shader* AcquirePrimitiveSkinnedVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
+        /// PbrEffect's own vertex shader (pbr3d.vert.glsl): needs a `Tangent` vertex element (the
+        /// TBN basis the fragment stage builds for normal mapping) alongside texture coordinates
+        /// and normals -- never variant-selected like AcquirePrimitiveVertexShader, only the
+        /// vertex layout varies.
+        LLGL::Shader* AcquirePrimitivePbrVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
         LLGL::PipelineState* AcquirePrimitivePipeline(const LlglVertexBufferBackend& vertexBuffer,
                                                       PrimitiveType primitive, bool scissorEnabled,
                                                       bool textured, bool lit, bool dualTexture,
-                                                      bool envMapping, bool skinned);
+                                                      bool envMapping, bool skinned, bool pbr);
         void QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                              const LlglIndexBufferBackend* indexBuffer,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -1846,6 +1873,20 @@ namespace CNA::Internal::Backends::Llgl
         /// only `params.boneCount` entries (the rest stay zeroed, matching a disabled/unused bone
         /// slot the shader never indexes into since `boneCount` bounds every real index).
         static void FillSkinnedBoneData(float (&bones)[72 * 16], const GpuDrawParams& params);
+        /// Fills one PbrEffect draw's own 336-byte uniform block (84 floats -- see
+        /// shaders/pbr3d.vert.glsl's PbrParams for the byte layout). `params` is never null here
+        /// (only called when `pbr` is set).
+        static void FillPbrUniforms(float (&uniforms)[84], const float matrix[16],
+                                    const GpuDrawParams& params);
+        /// Creates the 1x1 default white texture and 1x1 default flat-normal texture
+        /// (RGBA (128,128,255,255), decoding to tangent-space (0,0,1)) PbrEffect draws sample
+        /// whenever the game left `MetallicRoughnessMap`/`EmissiveMap`/`OcclusionMap`/`NormalMap`
+        /// null -- real `PbrEffect::FillGpuDrawParams()` can legitimately leave all 4 null (only
+        /// `Texture`/`MetallicFactor`/`RoughnessFactor` are required), and sampling a null texture
+        /// is not an option, unlike this backend's "throw if the REQUIRED texture is missing"
+        /// convention for EnvironmentMapEffect/SkinnedEffect/DualTextureEffect. A no-op once both
+        /// textures already exist.
+        void EnsureDefaultPbrTexturesEXT();
         /**
          * @brief One contiguous render pass worth of frame commands, all sharing the same
          * destination (null means the swap chain).
@@ -1956,6 +1997,25 @@ namespace CNA::Internal::Backends::Llgl
         /// envMapUniformBuffers_ are three separate pools for exactly this reason).
         std::vector<LLGL::Buffer*>  skinnedBoneBuffers_;
         std::vector<float>         skinnedBoneData_;
+
+        /// `PbrEffect`: its own dedicated vertex layout, fragment shader and pipeline layout, like
+        /// `EnvironmentMapEffect`/`SkinnedEffect` above -- the tangent-space TBN basis and 5-texture
+        /// (base colour, normal, metallic-roughness, emissive, occlusion) glTF metallic-roughness
+        /// BRDF are a field set no other vertex/fragment shader here has. See
+        /// AcquirePrimitivePbrVertexShader() and shaders/pbr3d.vert.glsl.
+        LLGL::PipelineLayout*       primitivePbrLayout_ = nullptr;
+        LLGL::Shader*               primitivePbrFragmentShader_ = nullptr;
+        std::map<std::uint64_t, LLGL::Shader*> primitivePbrVertexShaderCache_;
+        /// One small constant buffer per PbrEffect draw in a frame -- same reasoning as
+        /// envMapUniformBuffers_/skinnedUniformBuffers_ above, own pool because this effect's
+        /// uniform block has its own shape/size.
+        std::vector<LLGL::Buffer*>  pbrUniformBuffers_;
+        std::vector<float>         pbrUniformData_;
+        /// Lazily created by EnsureDefaultPbrTexturesEXT() the first time a PbrEffect draw is
+        /// queued with a null optional map; released in the destructor like every other texture
+        /// this backend itself (not a game object) owns.
+        LLGL::Texture*              defaultWhitePbrTexture_ = nullptr;
+        LLGL::Texture*              defaultFlatNormalPbrTexture_ = nullptr;
 
         /// Shared by every `LlglEffectBackend` (LLGL-27); built lazily by
         /// AcquireCustomEffectLayoutEXT() on the first `ShaderEffect` any game constructs. Unlike

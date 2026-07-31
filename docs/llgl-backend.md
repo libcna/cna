@@ -50,11 +50,14 @@ module**:
   "SkinnedEffect" below;
 * **multiple render targets (MRT)**: 2-4 `RenderTarget2D` slots bound simultaneously, written by a
   custom multi-output `ShaderEffect` drawn through `SpriteBatch`. See "Render targets" below for
-  the scope boundary (`RenderTarget2D` slots only, no 3D draws while one is bound).
+  the scope boundary (`RenderTarget2D` slots only, no 3D draws while one is bound);
+* **`PbrEffect`**: the glTF 2.0 metallic-roughness BRDF, 5 texture maps (base colour, normal,
+  metallic-roughness, emissive, occlusion), its own dedicated vertex/fragment shader pair and
+  pipeline layout. See "PbrEffect" below.
 
-**Not implemented:** `PbrEffect` and MSAA/mip-mapped render targets.
-Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
-none of them silently does nothing.
+**Not implemented:** `SkinnedPbrEffect` (`PbrEffect` + skinning combined) and MSAA/mip-mapped
+render targets. Each either reports itself unsupported through
+`GraphicsDevice.SupportsCapability()` or throws — none of them silently does nothing.
 
 Both modules are covered by their own CTests, so neither can break unnoticed because the default
 preference happened to select the other one.
@@ -429,6 +432,58 @@ except D3D9 (`GpuDrawParams::preferPerPixelLighting`'s own documented deviation)
 are not implemented. `SkinnedPbrEffect` (stride 68, `PbrEffect` combined with skinning) is out of
 scope, tracked under `PbrEffect` itself.
 
+## PbrEffect
+
+The glTF 2.0 metallic-roughness BRDF (`PbrEffect`, `NOXNA` -- real XNA predates the PBR content
+pipeline). Like `EnvironmentMapEffect`/`SkinnedEffect`, gets its own dedicated resources rather
+than reusing the shared `Transform` block:
+
+* `primitivePbrLayout_` pipeline layout: an 84-float (336-byte) `PbrParams` uniform buffer at
+  binding 1, then 5 texture/sampler pairs at bindings 2-11 -- base colour, normal map,
+  metallic-roughness map (glTF packing: G=roughness, B=metallic), emissive map, occlusion map;
+* dedicated vertex shader (`AcquirePrimitivePbrVertexShader()`), needing a NEW vertex element this
+  backend never had before: `VertexElementUsage::Tangent` (`MapVertexUsage`'s new case, location
+  6) -- the tangent-space TBN basis the fragment stage builds for normal mapping. A new stride-48
+  (`VertexPositionNormalTangentTexture`) case was added to `ResolveVertexAttributes()`'s
+  declaration-less fallback switch too, mirroring `LLGL-32`'s own stride-inference precedent;
+* one per-draw buffer pool (`pbrUniformBuffers_`/`pbrUniformData_`) for the `PbrParams` block,
+  same growth/reuse discipline as `envMapUniformBuffers_`/`skinnedUniformBuffers_`.
+
+`PbrLight()` (GGX distribution, Smith-Schlick-GGX visibility, Schlick Fresnel -- the glTF 2.0
+spec's own reference BRDF) is transliterated directly from the Vulkan backend's own already-correct
+`pbr3d.frag.glsl`, applying the fog-mix convention fix learned from `EnvironmentMapEffect`'s own
+bug from the start (`mix(rgb, fogColor.rgb, vFogFactor)`, this backend's "how much fog" convention)
+rather than needing to rediscover it. Base colour factor and alpha are kept independent (not
+premultiplied), matching glTF's own `baseColorFactor` convention rather than most other CNA stock
+effects' `DiffuseColor`.
+
+**Unlike `EnvironmentMapEffect`/`SkinnedEffect`'s "throw if the required texture is missing"
+convention, PbrEffect's 4 optional maps resolve to a 1x1 default texture instead of throwing** --
+`EnsureDefaultPbrTexturesEXT()` lazily creates an opaque white texture (used for
+`MetallicRoughnessMap`/`EmissiveMap`/`OcclusionMap` when null) and an RGBA(128,128,255,255) flat
+normal texture (decoding to tangent-space (0,0,1), used for `NormalMap` when null), mirroring the
+Vulkan backend's own `EnsureDefaultWhiteTexture`/`EnsureDefaultFlatNormalTexture` precedent -- real
+`PbrEffect::FillGpuDrawParams()` can legitimately leave all 4 null (only `Texture`/
+`MetallicFactor`/`RoughnessFactor` are required), so throwing would incorrectly reject a valid,
+minimally-configured draw. `Texture` (base colour) is still required and throws by name if missing
+("PbrEffect needs Texture bound"), matching every other stock effect's own precedent. All 5 texture
+units share this backend's one global sampler state (`ApplySamplerState` only ever tracks slot 0)
+-- the SAME `LLGL::Sampler` object is bound at all 5 sampler slots, since each GLSL `sampler2D`
+declaration still needs its own binding even when the underlying resource is identical.
+
+`Llgl_PbrEffect_HandDerived` (+ `_OpenGL`) is adapted from the Vulkan backend's own
+`examples/vulkan_pbreffect_handderived_test.cpp` (itself fully backend-agnostic real public XNA
+API + `VertexBuffer::SetDataRaw`), dropping its `SkinnedPbrEffect` check and drawing into an
+off-screen `RenderTarget2D` read back with `GetData()` instead of the source's own hand-rolled
+`Game` subclass that resizes the whole window -- `PixelTestGame`'s `Game` construction has no
+equivalent hook, and reading a hard-coded small pixel address directly off the (much larger)
+default back buffer sampled a world position over a full unit away from the coordinate origin the
+analytic derivation assumes (found via a debug shader pass outputting `vWorldPos` directly -- a
+test-authoring mistake, not a backend defect).
+
+**`SkinnedPbrEffect` (`PbrEffect` + skinning combined) is a separate, not-yet-implemented
+follow-up** -- `RejectUnsupportedDrawParams` refuses `pbr && skinned` by name.
+
 ## Tests
 
 ```bash
@@ -476,8 +531,12 @@ simultaneously bound `RenderTarget2D` slots from the SAME draw call, a 3D colour
 while the MRT set is bound, back-buffer isolation, and that an ordinary single-target draw still
 works correctly once the MRT bind ends; unlike `RenderTargetCube`, plain `RenderTarget2D` slots
 work on both modules, so it has an `_OpenGL` twin.
+`Llgl_PbrEffect_HandDerived` covers the glTF metallic-roughness BRDF against hand-derived analytic
+values at a fully dot-product-aligned pixel -- full dielectric, fully metallic, and a control case
+proving `MetallicFactor` genuinely changes the result; like `Llgl_MRT`, plain
+`VertexPositionNormalTangentTexture` (stride 48) works on both modules, so it has an `_OpenGL` twin.
 Every other test is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty-eight
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All forty
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
