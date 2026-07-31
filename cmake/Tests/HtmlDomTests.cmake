@@ -27,4 +27,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
     target_link_libraries(cna_htmldom_visual_demo PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
     set_target_properties(cna_htmldom_visual_demo PROPERTIES SUFFIX ".html")
     target_link_options(cna_htmldom_visual_demo PRIVATE -sALLOW_MEMORY_GROWTH=1)
+
+    # plan_html_dom.md Phase D9 (HTMLDOM-84/85/86/87): pixel-exact verification of the tint,
+    # AlphaBlend un-premultiply, Opaque alpha-strip and Additive composite maths against real
+    # rendered/read-back pixels, not just structural checks. Driven by the same
+    # run-htmldom-browser-test.sh / htmldom-browser-test.mjs harness as the smoke test.
+    add_executable(cna_test_htmldom_pixel_verification examples/htmldom_pixel_verification_test.cpp)
+    target_link_libraries(cna_test_htmldom_pixel_verification PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    set_target_properties(cna_test_htmldom_pixel_verification PROPERTIES SUFFIX ".html")
+    target_link_options(cna_test_htmldom_pixel_verification PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sEXIT_RUNTIME=1)
 endif()
