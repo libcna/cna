@@ -1427,6 +1427,13 @@ float4 main(in PSInput psIn) : SV_Target
     void DiligentVertexBufferBackend::SetData(const void* data, int vertexCount,
                                                std::size_t strideInBytes)
     {
+        SetDataWithOptions(data, vertexCount, strideInBytes, SetDataOptions::None);
+    }
+
+    void DiligentVertexBufferBackend::SetDataWithOptions(const void* data, int vertexCount,
+                                                          std::size_t strideInBytes,
+                                                          SetDataOptions options)
+    {
         if (vertexCount < 0)
             throw std::out_of_range("CNA Diligent: vertex count must not be negative");
         stride_ = strideInBytes;
@@ -1457,8 +1464,15 @@ float4 main(in PSInput psIn) : SV_Target
             allocatedBytes_ = requiredBytes;
         }
 
+        // XNA SetDataOptions -> Diligent MAP_FLAGS: Discard = MAP_FLAG_DISCARD (previous contents
+        // undefined, driver may return a fresh region); NoOverwrite = MAP_FLAG_NO_OVERWRITE (caller
+        // promises not to touch any range still in flight); None also maps to MAP_FLAG_DISCARD,
+        // since XNA's own docs only say None *may* stall, never that it must -- this backend simply
+        // never stalls, matching its D3D11 sibling's identical MapTypeFor() choice.
+        const Dg::MAP_FLAGS mapFlags =
+            options == SetDataOptions::NoOverwrite ? Dg::MAP_FLAG_NO_OVERWRITE : Dg::MAP_FLAG_DISCARD;
         void* mapped = nullptr;
-        owner_.context_->MapBuffer(buffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
+        owner_.context_->MapBuffer(buffer_, Dg::MAP_WRITE, mapFlags, mapped);
         if (mapped == nullptr)
             throw std::runtime_error("CNA Diligent: vertex buffer could not be mapped");
         std::memcpy(mapped, data, requiredBytes);
@@ -1500,7 +1514,24 @@ float4 main(in PSInput psIn) : SV_Target
         Upload(data, indexCount, sizeof(std::uint32_t));
     }
 
-    void DiligentIndexBufferBackend::Upload(const void* data, int indexCount, std::size_t elementSize)
+    void DiligentIndexBufferBackend::SetData16WithOptions(const void* data, int indexCount,
+                                                           SetDataOptions options)
+    {
+        if (thirtyTwoBit_)
+            throw std::runtime_error("CNA Diligent: 16-bit upload into a 32-bit index buffer");
+        Upload(data, indexCount, sizeof(std::uint16_t), options);
+    }
+
+    void DiligentIndexBufferBackend::SetData32WithOptions(const void* data, int indexCount,
+                                                           SetDataOptions options)
+    {
+        if (!thirtyTwoBit_)
+            throw std::runtime_error("CNA Diligent: 32-bit upload into a 16-bit index buffer");
+        Upload(data, indexCount, sizeof(std::uint32_t), options);
+    }
+
+    void DiligentIndexBufferBackend::Upload(const void* data, int indexCount, std::size_t elementSize,
+                                            SetDataOptions options)
     {
         if (indexCount < 0)
             throw std::out_of_range("CNA Diligent: index count must not be negative");
@@ -1526,8 +1557,11 @@ float4 main(in PSInput psIn) : SV_Target
             allocatedBytes_ = requiredBytes;
         }
 
+        // See DiligentVertexBufferBackend::SetDataWithOptions()'s identical MAP_FLAGS mapping.
+        const Dg::MAP_FLAGS mapFlags =
+            options == SetDataOptions::NoOverwrite ? Dg::MAP_FLAG_NO_OVERWRITE : Dg::MAP_FLAG_DISCARD;
         void* mapped = nullptr;
-        owner_.context_->MapBuffer(buffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
+        owner_.context_->MapBuffer(buffer_, Dg::MAP_WRITE, mapFlags, mapped);
         if (mapped == nullptr)
             throw std::runtime_error("CNA Diligent: index buffer could not be mapped");
         std::memcpy(mapped, data, requiredBytes);

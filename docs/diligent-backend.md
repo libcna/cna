@@ -143,6 +143,9 @@ Implemented:
 - `SetStringMarkerEXT` — a real `IDeviceContext::InsertDebugLabel()` call, visible to external debug
   tools (RenderDoc, PIX, Vulkan validation layers with debug-utils enabled); has no rendering effect
   of its own.
+- `SetDataOptions` streaming hints on vertex/index buffers: `Discard`/`None` map to
+  `MAP_FLAG_DISCARD`, `NoOverwrite` to `MAP_FLAG_NO_OVERWRITE`, the same mapping this backend's
+  D3D11 sibling uses.
 
 Not implemented — each **throws with its own name** rather than rendering an approximation, and
 `GraphicsDevice.GraphicsCapabilities` reports each honestly:
@@ -188,24 +191,27 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Twelve further binaries are the real-device pixel proofs (56 checks total): `Diligent_2D` (6),
+Thirteen further binaries are the real-device pixel proofs (60 checks total): `Diligent_2D` (6),
 `Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4),
-`Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4) and
-`Diligent_DrawOffset` (5). They clear, draw `SpriteBatch` quads and 3D primitives on the back
-buffer and into off-screen 2D/cube targets, and assert on pixels (or query results) read back
-through `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData`
-/ `OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential (binary transition with MSAA
-off vs. genuinely blended pixels with it on) rather than a solid-fill check, since a solid fill
-can't tell "MSAA happened" apart from "MSAA was silently ignored". `Diligent_Instanced` draws
-three instances of one quad at distinct per-instance translations from a single
-`DrawInstancedPrimitives` call and asserts each instance's own position reads back the quad's
-colour while the untouched background between them stays the clear colour. `Diligent_DrawOffset`
-proves `DrawPrimitives`/`DrawIndexedPrimitives`/`DrawInstancedPrimitivesEx` honor non-zero
-`vertexStart`/`startIndex`/`baseVertex` offsets rather than silently drawing from the start of the
-bound buffer. All 55 pass against a real Vulkan device. On a machine with no usable device they
-exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a pass
-with nothing rendered would be dishonest.
+`Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4),
+`Diligent_DrawOffset` (5) and `Diligent_SetDataOptions` (4). They clear, draw `SpriteBatch` quads
+and 3D primitives on the back buffer and into off-screen 2D/cube targets, and assert on pixels (or
+query results) read back through `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` /
+`RenderTargetCube.GetData` / `OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential
+(binary transition with MSAA off vs. genuinely blended pixels with it on) rather than a solid-fill
+check, since a solid fill can't tell "MSAA happened" apart from "MSAA was silently ignored".
+`Diligent_Instanced` draws three instances of one quad at distinct per-instance translations from a
+single `DrawInstancedPrimitives` call and asserts each instance's own position reads back the
+quad's colour while the untouched background between them stays the clear colour.
+`Diligent_DrawOffset` proves `DrawPrimitives`/`DrawIndexedPrimitives`/`DrawInstancedPrimitivesEx`
+honor non-zero `vertexStart`/`startIndex`/`baseVertex` offsets rather than silently drawing from
+the start of the bound buffer. `Diligent_SetDataOptions` proves a second, differently-coloured
+`SetData(..., NoOverwrite)` upload into an already-`Discard`-uploaded `DynamicVertexBuffer`/
+`DynamicIndexBuffer` genuinely reaches the GPU buffer rather than being dropped or leaving stale
+content. All 60 pass against a real Vulkan device. On a machine with no usable device they exit 77
+and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a pass with
+nothing rendered would be dishonest.
 
 ```bash
 ctest --test-dir cmake-build-diligent -R Diligent --output-on-failure

@@ -564,6 +564,19 @@ namespace CNA::Internal::Backends::Diligent
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
 
         /**
+         * @brief Uploads vertex data with an explicit streaming hint (`SetDataOptions::Discard`
+         * maps the buffer with `MAP_FLAG_DISCARD`, `NoOverwrite` with `MAP_FLAG_NO_OVERWRITE`;
+         * `None` behaves like `Discard`, matching this backend's D3D11 sibling).
+         *
+         * @param data          Packed vertex data.
+         * @param vertexCount   Number of vertices.
+         * @param strideInBytes Size of one vertex in bytes.
+         * @param options       Streaming hint.
+         */
+        void SetDataWithOptions(const void* data, int vertexCount, std::size_t strideInBytes,
+                                SetDataOptions options) override;
+
+        /**
          * @brief Records the caller's full vertex declaration for input-layout selection.
          *
          * @param vertexDeclaration Declaration, including stride and elements in declaration order.
@@ -621,6 +634,26 @@ namespace CNA::Internal::Backends::Diligent
          */
         void SetData32(const void* data, int indexCount) override;
 
+        /**
+         * @brief Uploads 16-bit indices with an explicit streaming hint. See
+         * `DiligentVertexBufferBackend::SetDataWithOptions()` for the flag mapping.
+         *
+         * @param data       Packed 16-bit index data.
+         * @param indexCount Number of indices.
+         * @param options    Streaming hint.
+         */
+        void SetData16WithOptions(const void* data, int indexCount, SetDataOptions options) override;
+
+        /**
+         * @brief Uploads 32-bit indices with an explicit streaming hint. See
+         * `DiligentVertexBufferBackend::SetDataWithOptions()` for the flag mapping.
+         *
+         * @param data       Packed 32-bit index data.
+         * @param indexCount Number of indices.
+         * @param options    Streaming hint.
+         */
+        void SetData32WithOptions(const void* data, int indexCount, SetDataOptions options) override;
+
         /** @brief Returns the number of indices currently stored. */
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
         /** @brief Returns true when this buffer holds 32-bit indices. */
@@ -630,7 +663,8 @@ namespace CNA::Internal::Backends::Diligent
         NOXNA [[nodiscard]] Dg::IBuffer* GetBuffer() const { return buffer_; }
 
     private:
-        void Upload(const void* data, int indexCount, std::size_t elementSize);
+        void Upload(const void* data, int indexCount, std::size_t elementSize,
+                   SetDataOptions options = SetDataOptions::None);
 
         DiligentGraphicsBackend& owner_;
         Dg::RefCntAutoPtr<Dg::IBuffer> buffer_;
