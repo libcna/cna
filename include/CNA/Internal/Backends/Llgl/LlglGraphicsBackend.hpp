@@ -105,6 +105,59 @@ namespace CNA::Internal::Backends::Llgl
     };
 
     /**
+     * @brief A cube texture living in LLGL. NOXNA.
+     *
+     * Backs `Microsoft::Xna::Framework::Graphics::TextureCube`. One `LLGL::TextureType::TextureCube`
+     * resource with 6 array layers, one per face, in the project-wide face order (0=+X, 1=-X, 2=+Y,
+     * 3=-Y, 4=+Z, 5=-Z) -- the same order both LLGL and the underlying Vulkan/GL APIs already use
+     * for a cube-compatible image, so face index maps directly to `baseArrayLayer` with no
+     * remapping. Pixels are always RGBA8, matching `LlglTextureBackend`.
+     */
+    class LlglTextureCubeBackend final : public ITextureCubeBackend
+    {
+    public:
+        /**
+         * @brief Takes ownership of an already-created LLGL cube texture.
+         *
+         * @param renderSystem Render system that created @p texture and will release it.
+         * @param texture      The texture resource; must not be null.
+         * @param size         Width and height in pixels of mip level 0 (cube faces are square).
+         * @param mipLevels    Number of mip levels the texture was created with.
+         */
+        LlglTextureCubeBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* texture,
+                               int size, int mipLevels);
+
+        /** @brief Releases the LLGL texture. */
+        ~LlglTextureCubeBackend() override;
+
+        LlglTextureCubeBackend(const LlglTextureCubeBackend&) = delete;
+        LlglTextureCubeBackend& operator=(const LlglTextureCubeBackend&) = delete;
+
+        /**
+         * @brief Uploads raw RGBA8 pixels into a sub-rectangle of a single cube face.
+         * @return True if the whole region was stored; false if this backend stored nothing.
+         */
+        [[nodiscard]] bool SetData(int face, int level, int x, int y, int w, int h,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Reads back raw RGBA8 pixels from a sub-rectangle of a single cube face.
+         * @return True if the whole region was written; false if this backend read nothing back.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /** @brief Returns the underlying LLGL texture. */
+        [[nodiscard]] LLGL::Texture* GetLlglTexture() const { return texture_; }
+
+    private:
+        LLGL::RenderSystem* renderSystem_ = nullptr;
+        LLGL::Texture*      texture_      = nullptr;
+        int                 size_         = 0;
+        int                 mipLevels_    = 1;
+    };
+
+    /**
      * @brief A vertex buffer living in LLGL. NOXNA.
      *
      * Uploads are real: the data reaches GPU memory and the vertex count round-trips. Drawing from
@@ -802,6 +855,18 @@ namespace CNA::Internal::Backends::Llgl
          * @return The new texture backend.
          */
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+
+        /**
+         * @brief Creates a cube texture, one RGBA8 face per side.
+         *
+         * @param size         Width and height in pixels of each square face.
+         * @param mipMap       Whether to allocate a full mip chain.
+         * @param surfaceFormat Ignored, matching the Vulkan backend -- every texture in this
+         *                      backend is RGBA8.
+         * @return The new cube texture backend.
+         */
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
+                                                                int surfaceFormat) override;
 
         /** @brief Creates a sprite batch bound to this backend. */
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;

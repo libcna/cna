@@ -498,6 +498,85 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     // -----------------------------------------------------------------------------------------
+    // LlglTextureCubeBackend
+    // -----------------------------------------------------------------------------------------
+
+    LlglTextureCubeBackend::LlglTextureCubeBackend(LLGL::RenderSystem* renderSystem,
+                                                    LLGL::Texture* texture, int size, int mipLevels)
+        : renderSystem_(renderSystem)
+        , texture_(texture)
+        , size_(size)
+        , mipLevels_(mipLevels > 0 ? mipLevels : 1)
+    {
+        if (renderSystem_ == nullptr || texture_ == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: cube texture creation failed");
+    }
+
+    LlglTextureCubeBackend::~LlglTextureCubeBackend()
+    {
+        if (renderSystem_ != nullptr && texture_ != nullptr)
+            renderSystem_->Release(*texture_);
+    }
+
+    bool LlglTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                         const void* data, int dataLength)
+    {
+        if (data == nullptr || w <= 0 || h <= 0 || face < 0 || face >= 6 ||
+            level < 0 || level >= mipLevels_)
+            return false;
+
+        const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        LLGL::TextureRegion region;
+        region.subresource.baseArrayLayer = static_cast<std::uint32_t>(face);
+        region.subresource.numArrayLayers = 1;
+        region.subresource.baseMipLevel = static_cast<std::uint32_t>(level);
+        region.subresource.numMipLevels = 1;
+        region.offset = {x, y, 0};
+        region.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
+
+        LLGL::ImageView imageView;
+        imageView.format = LLGL::ImageFormat::RGBA;
+        imageView.dataType = LLGL::DataType::UInt8;
+        imageView.data = data;
+        imageView.dataSize = required;
+
+        renderSystem_->WriteTexture(*texture_, region, imageView);
+        return true;
+    }
+
+    bool LlglTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                         void* data, int dataLength) const
+    {
+        if (data == nullptr || w <= 0 || h <= 0 || face < 0 || face >= 6 ||
+            level < 0 || level >= mipLevels_)
+            return false;
+
+        const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        LLGL::TextureRegion region;
+        region.subresource.baseArrayLayer = static_cast<std::uint32_t>(face);
+        region.subresource.numArrayLayers = 1;
+        region.subresource.baseMipLevel = static_cast<std::uint32_t>(level);
+        region.subresource.numMipLevels = 1;
+        region.offset = {x, y, 0};
+        region.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
+
+        LLGL::MutableImageView imageView;
+        imageView.format = LLGL::ImageFormat::RGBA;
+        imageView.dataType = LLGL::DataType::UInt8;
+        imageView.data = data;
+        imageView.dataSize = required;
+
+        renderSystem_->ReadTexture(*texture_, region, imageView);
+        return true;
+    }
+
+    // -----------------------------------------------------------------------------------------
     // LlglRenderTargetBackend
     // -----------------------------------------------------------------------------------------
 
@@ -2350,6 +2429,38 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::Texture* texture = renderer_->CreateTexture(textureDesc, initialImage);
         return std::make_unique<LlglTextureBackend>(renderer_.get(), texture, data.width, data.height,
                                                     static_cast<int>(textureDesc.mipLevels));
+    }
+
+    std::unique_ptr<ITextureCubeBackend> LlglGraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int /*surfaceFormat*/)
+    {
+        if (size <= 0)
+            throw std::runtime_error(std::string(kBackendName) + " backend: cube texture has no pixels");
+
+        int mipLevels = 1;
+        if (mipMap)
+        {
+            mipLevels = 1;
+            for (int s = size; s > 1; s = std::max(1, s / 2))
+                ++mipLevels;
+        }
+
+        LLGL::TextureDescriptor textureDesc;
+        textureDesc.type = LLGL::TextureType::TextureCube;
+        textureDesc.bindFlags = LLGL::BindFlags::Sampled | LLGL::BindFlags::CopyDst |
+                                LLGL::BindFlags::CopySrc;
+        textureDesc.format = LLGL::Format::RGBA8UNorm;
+        textureDesc.extent = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size), 1};
+        textureDesc.arrayLayers = 6;
+        textureDesc.mipLevels = static_cast<std::uint32_t>(mipLevels);
+        // No GenerateMips: the shared texture layer uploads each level/face it wants to exist,
+        // same reasoning as CreateTexture() above.
+        textureDesc.miscFlags = 0;
+
+        // No initial image -- the shared TextureCube layer always follows construction with its
+        // own SetData() call per face/level, exactly like Texture2D's own typed constructors do.
+        LLGL::Texture* texture = renderer_->CreateTexture(textureDesc, nullptr);
+        return std::make_unique<LlglTextureCubeBackend>(renderer_.get(), texture, size, mipLevels);
     }
 
     std::unique_ptr<ISpriteBatchBackend> LlglGraphicsBackend::CreateSpriteBatch()

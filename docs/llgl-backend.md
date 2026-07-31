@@ -36,11 +36,13 @@ module**:
   runtime compile path and the uniform contract;
 * **a real window resize** through `GraphicsDeviceManager.ApplyChanges()`, and **MSAA on the back
   buffer**, construction-time only and module-dependent — see the `MultiSampleAntiAliasing` row in
-  "Capability boundary" below.
+  "Capability boundary" below;
+* **cube textures** (`TextureCube`): create, upload and read back all 6 faces and every mip level.
+  Not yet sampled from a 3D shader for reflections -- that is `EnvironmentMapEffect`, still open.
 
 **Not implemented:** `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
-`RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, cube and
-volume textures.
+`RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, and volume
+(`Texture3D`) textures.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
