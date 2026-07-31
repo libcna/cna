@@ -216,6 +216,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_MsaaDepthContract COMMAND cna_test_headless_msaa_depth_contract
         TIMEOUT 900 LABELS "Headless")
 
+    # REMED-GFX-154 cross-backend control: the same PUBLIC first-readback contract on this
+    # backend. The defect was Bgfx-only and only Bgfx production changed; running the identical
+    # fixture here is what makes that claim falsifiable rather than asserted.
+    cna_headless_test(cna_test_headless_msaa_first_readback
+        examples/rendertarget_msaa_first_readback_test.cpp)
+    cna_register_backend_test(NAME Headless_MsaaFirstReadback COMMAND cna_test_headless_msaa_first_readback
+        TIMEOUT 900 LABELS "Headless")
     # REMED-GFX-165 cross-backend control: Headless does not rasterize, so the pixel oracle is a
     # declared boundary; the run still exercises the shared dimension/rectangle-validation path.
     cna_headless_test(cna_test_headless_backbuffer_readback_dimension

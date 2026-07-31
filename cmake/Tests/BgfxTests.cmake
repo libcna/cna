@@ -1209,6 +1209,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_MsaaDepthContract COMMAND cna_test_bgfx_msaa_depth_contract
         TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-154, the home backend of the finding: the FIRST GetData of a multisampled
+    # RenderTarget2D returned every texel as (0,0,0,0) while a second read of the same target was
+    # exact. bgfx's GL renderer resolves a framebuffer only when the renderer switches AWAY from it,
+    # and the readback blit was drained by the tail submitBlit() while the producer's framebuffer was
+    # still current and unresolved -- so the copy read the freshly-zeroed resolve texture. Every leg
+    # runs in its own process, because "the first readback of the PROCESS" is exactly what is under
+    # test. The Bgfx half of REMED-GFX-164 is the same defect; GFX-164 keeps only its EasyGL scope.
+    cna_bgfx_test(cna_test_bgfx_msaa_first_readback
+        examples/rendertarget_msaa_first_readback_test.cpp)
+    cna_register_backend_test(NAME Bgfx_MsaaFirstReadback COMMAND cna_test_bgfx_msaa_first_readback
+        TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-165 cross-backend control: Bgfx already honoured the authoritative-dimension
     # GetBackBufferData contract; this run establishes that the shared fix left it byte-unchanged.
     cna_bgfx_test(cna_test_bgfx_backbuffer_readback_dimension

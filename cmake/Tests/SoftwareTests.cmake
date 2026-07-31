@@ -223,6 +223,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_MsaaDepthContract COMMAND cna_test_software_msaa_depth_contract
         TIMEOUT 900 LABELS "Software")
 
+    # REMED-GFX-154 cross-backend control: the same PUBLIC first-readback contract on this
+    # backend. The defect was Bgfx-only and only Bgfx production changed; running the identical
+    # fixture here is what makes that claim falsifiable rather than asserted.
+    cna_software_test(cna_test_software_msaa_first_readback
+        examples/rendertarget_msaa_first_readback_test.cpp)
+    cna_register_backend_test(NAME Software_MsaaFirstReadback COMMAND cna_test_software_msaa_first_readback
+        TIMEOUT 900 LABELS "Software")
     # REMED-GFX-165 cross-backend control: the authoritative-backbuffer-dimension GetBackBufferData
     # contract. Software's backbuffer is a CPU buffer that genuinely resizes, so it is also where the
     # post-resize pixel oracle is meaningful. Software already honoured the contract (its viewport

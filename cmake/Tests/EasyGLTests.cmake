@@ -1806,6 +1806,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_MsaaDepthContract COMMAND cna_test_easygl_msaa_depth_contract
             TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-154 cross-backend control, and the one that carries a live boundary: the Bgfx
+        # half of REMED-GFX-164 was reconciled into GFX-154 and fixed there, while EasyGL's half
+        # stays OPEN and its production is deliberately untouched. The fixture therefore asserts the
+        # whole TRANSFER contract here (the call returns, every requested element is written, the
+        # protected prefix and suffix survive) and PRINTS the multisampled texels it measured instead
+        # of asserting them -- so when GFX-164 is fixed the stale declaration is visible rather than
+        # silently passing. The non-multisampled legs are asserted here exactly as everywhere else.
+        cna_easygl_test(cna_test_easygl_msaa_first_readback
+            examples/rendertarget_msaa_first_readback_test.cpp)
+        cna_register_backend_test(NAME EasyGL_MsaaFirstReadback COMMAND cna_test_easygl_msaa_first_readback
+            TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-165 cross-backend control: EasyGL already honoured the authoritative-dimension
         # GetBackBufferData contract; this run establishes that the shared fix left it byte-unchanged.
         cna_easygl_test(cna_test_easygl_backbuffer_readback_dimension

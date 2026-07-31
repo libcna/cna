@@ -487,6 +487,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_MsaaDepthContract COMMAND cna_test_sdlgpu_msaa_depth_contract
         TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-154 cross-backend control: the same PUBLIC first-readback contract on this
+    # backend. The defect was Bgfx-only and only Bgfx production changed; running the identical
+    # fixture here is what makes that claim falsifiable rather than asserted.
+    cna_sdlgpu_test(cna_test_sdlgpu_msaa_first_readback
+        examples/rendertarget_msaa_first_readback_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_MsaaFirstReadback COMMAND cna_test_sdlgpu_msaa_first_readback
+        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with

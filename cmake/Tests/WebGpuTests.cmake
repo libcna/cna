@@ -641,6 +641,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_MsaaDepthContract COMMAND cna_test_webgpu_msaa_depth_contract
         TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-154 cross-backend control: the same PUBLIC first-readback contract on this
+    # backend. The defect was Bgfx-only and only Bgfx production changed; running the identical
+    # fixture here is what makes that claim falsifiable rather than asserted.
+    cna_webgpu_test(cna_test_webgpu_msaa_first_readback
+        examples/rendertarget_msaa_first_readback_test.cpp)
+    cna_register_backend_test(NAME WebGPU_MsaaFirstReadback COMMAND cna_test_webgpu_msaa_first_readback
+        TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
