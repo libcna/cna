@@ -30,6 +30,8 @@ module**:
 * **`RenderTarget2D`**: draw into it (both `SpriteBatch` and the 3D path), unbind back to the
   swap chain, sample it back onto the screen, and `GetData()` straight off the colour attachment.
   See "Render targets" below for what this does and does not cover;
+* **`RenderTargetCube`**: draw into any of its 6 faces independently, unbind, sample the result
+  through `EnvironmentMapEffect`, and `GetData()` per face. See "Render targets" below;
 * **occlusion queries**: real `LLGL::QueryHeap`-backed `OcclusionQuery`. See "Occlusion queries"
   below for how `IsComplete()`/`PixelCount()` behave on this backend;
 * **custom `ShaderEffect`s**, scoped to `SpriteBatch` draws. See "Custom effects" below for the
@@ -48,7 +50,7 @@ module**:
   "SkinnedEffect" below.
 
 **Not implemented:** `PbrEffect`,
-`RenderTargetCube`, multiple render targets (MRT), and MSAA/mip-mapped render targets.
+multiple render targets (MRT), and MSAA/mip-mapped render targets.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -188,8 +190,16 @@ normalized byte4.
 
 `RenderTarget2D` draws into an off-screen colour (and always-allocated depth/stencil) attachment,
 which is then either sampled back with `SpriteBatch`/the 3D path like any other `Texture2D`, or
-read back directly with `GetData()`. `RenderTargetCube`, multiple simultaneous render targets
-(MRT), and MSAA/mip-mapped render targets are not implemented and fail by name.
+read back directly with `GetData()`. `RenderTargetCube` draws into any of 6 faces independently --
+one shared `TextureCube` colour texture (6 array layers) plus one shared depth/stencil texture
+(matching FNA's own `RenderTargetCube`, one depth buffer for the whole cube), 6
+`LLGL::RenderTarget`s built once at construction, each attaching a different `arrayLayer` of the
+shared colour texture. A new `LlglBoundRenderTarget` common interface lets the backend's "what's
+currently bound" state point at either a plain `RenderTarget2D` or one cube face without any of the
+queue/replay code needing to know which -- the per-distinct-target render-pass grouping described
+below already keys purely off `LLGL::RenderTarget*` pointer identity, so 6 distinct per-face
+pointers just work. Multiple simultaneous render targets (MRT) and MSAA/mip-mapped render targets
+are not implemented and fail by name.
 
 Two implementation choices are worth knowing if you are debugging a render-target frame:
 
@@ -214,6 +224,18 @@ of scope, all within one `Draw()`) is safe: like `VertexBuffer`/`IndexBuffer`, t
 objects are released only once the frame that may still reference them has actually been
 submitted. `RenderTarget2D::GetData()` also forces any of its own still-queued draws to be
 submitted first — its content, unlike a plain `Texture2D`'s, only exists once they are.
+`RenderTargetCube`'s destructor does the same for its 6 face targets, releasing the shared colour
+and depth textures exactly once (not 6 times) regardless of how many of the 6 faces were ever
+drawn into.
+
+Unlike `RenderTarget2D`'s anonymous (textureless) depth/stencil attachment, `RenderTargetCube`'s
+shared depth/stencil buffer is a real, explicitly-owned `LLGL::Texture` — it has to be, since all 6
+face `AttachmentDescriptor`s need to reference the SAME one, which an anonymous per-attachment
+buffer cannot do. Sampling a `RenderTargetCube` through `EnvironmentMapEffect` (or anywhere else
+that accepts an `ITextureCubeBackend`) resolves through a new `ResolveSampledTextureCube()` helper
+mirroring `ResolveSampledTexture()`'s own dual `LlglTextureBackend`/`LlglRenderTargetBackend`
+resolution — a hard `dynamic_cast<const LlglTextureCubeBackend*>` alone would have silently failed
+to sample a rendered cube face.
 
 ## Occlusion queries
 
@@ -412,9 +434,11 @@ source, covering `EnvironmentMapEffect`'s alpha-scaled cube-map base lerp (Task 
 limitation of this project's own OpenGL module, not a gap in this backend).
 `Llgl_SkinnedEffect_IdentityBones`/`Llgl_SkinnedEffect_TwoBoneBlend` are ported (not verbatim, but
 adapted with only the class name/comment changed) from the Vulkan backend's own sources -- see
-"SkinnedEffect" above.
+"SkinnedEffect" above. `Llgl_RenderTargetCube` covers 6 independent per-face draw/`GetData()` round
+trips plus sampling the result through `EnvironmentMapEffect`; like the `EnvironmentMapEffect` test
+it has no `_OpenGL` twin, for the same `hasCubeTextures` reason.
 Every other test is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty-five
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty-six
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 

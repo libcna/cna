@@ -146,6 +146,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-26 follow-up: RenderTargetCube -- 6 independent LLGL::RenderTargets sharing one
+    # TextureCube colour texture (a different arrayLayer each) and one shared depth texture,
+    # mirroring CreateRenderTarget2D's own established pattern. No _OpenGL variant, same reason as
+    # Llgl_EnvironmentMapEffect_AlphaScaledLerp: this project's own OpenGL module has no cube
+    # texture support at all (hasCubeTextures false), and this test samples the cube through
+    # EnvironmentMapEffect as its own final check.
+    cna_llgl_test(cna_test_llgl_rendertargetcube examples/llgl_rendertargetcube_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTargetCube COMMAND cna_test_llgl_rendertargetcube
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-17: the same two binaries, pinned to the OpenGL module instead of the default
     # (Vulkan-first) preference. Running only the default preference is what let the OpenGL module
     # clear correctly and draw nothing for as long as it did -- a module nothing exercises is a

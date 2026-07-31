@@ -433,6 +433,21 @@ namespace CNA::Internal::Backends::Llgl
         return {};
     }
 
+    /// Cube-map equivalent of ResolveSampledTexture() above -- EnvironmentMapEffect's own
+    /// `EnvironmentMap` property accepts an arbitrary ITextureCubeBackend&, which is exactly as
+    /// often the ITextureCubeBackend a RenderTargetCube hands back when sampled as a TextureCube
+    /// (RenderTargetCube inherits TextureCube) as a plain uploaded TextureCube. A hard
+    /// dynamic_cast<const LlglTextureCubeBackend*> alone would silently fail to sample a
+    /// RenderTargetCube face -- the entire real-time-reflection use case this feature exists for.
+    static LLGL::Texture* ResolveSampledTextureCube(const ITextureCubeBackend& cube)
+    {
+        if (const auto* plain = dynamic_cast<const LlglTextureCubeBackend*>(&cube))
+            return plain->GetLlglTexture();
+        if (const auto* target = dynamic_cast<const LlglRenderTargetCubeBackend*>(&cube))
+            return target->GetLlglTexture();
+        return nullptr;
+    }
+
     // -----------------------------------------------------------------------------------------
     // LlglTextureBackend
     // -----------------------------------------------------------------------------------------
@@ -776,6 +791,114 @@ namespace CNA::Internal::Backends::Llgl
         imageView.dataSize = required;
 
         renderSystem_->ReadTexture(*colorTexture_, region, imageView);
+        return true;
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // LlglRenderTargetCubeBackend
+    // -----------------------------------------------------------------------------------------
+
+    LlglRenderTargetCubeBackend::LlglRenderTargetCubeBackend(
+        LLGL::RenderSystem* renderSystem, LLGL::Texture* cubeTexture, LLGL::Texture* depthTexture,
+        const std::array<LLGL::RenderTarget*, 6>& faceTargets, int size, bool hasRealDepthBuffer,
+        LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner)
+        : renderSystem_(renderSystem)
+        , cubeTexture_(cubeTexture)
+        , depthTexture_(depthTexture)
+        , faceTargets_(faceTargets)
+        , size_(size)
+        , hasRealDepthBuffer_(hasRealDepthBuffer)
+        , spriteProjectionBuffer_(spriteProjectionBuffer)
+        , owner_(owner)
+    {
+        if (renderSystem_ == nullptr || cubeTexture_ == nullptr || depthTexture_ == nullptr ||
+            spriteProjectionBuffer_ == nullptr)
+        {
+            throw std::runtime_error(std::string(kBackendName) + " backend: render target cube creation failed");
+        }
+        for (int face = 0; face < 6; ++face)
+        {
+            if (faceTargets_[static_cast<std::size_t>(face)] == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: render target cube creation failed");
+            }
+            faceBindings_[static_cast<std::size_t>(face)] = LlglRenderTargetCubeFaceBinding(
+                faceTargets_[static_cast<std::size_t>(face)], size_, spriteProjectionBuffer_);
+        }
+    }
+
+    LlglRenderTargetCubeBackend::~LlglRenderTargetCubeBackend()
+    {
+        if (renderSystem_ == nullptr)
+            return;
+
+        // Deferred, like LlglRenderTargetBackend -- a RenderTargetCube that goes out of scope
+        // before Present() is a perfectly normal pattern, and frameCommands_/FrameCommandBucket may
+        // still reference any of its 6 faces by raw pointer at that point. The shared colour/depth
+        // texture and the shared sprite projection buffer must each be released exactly once, so
+        // only the FIRST of the 6 calls passes them through -- ScheduleRenderTargetReleaseEXT
+        // already treats a null texture/buffer argument as "nothing to do" for that slot.
+        if (owner_ != nullptr)
+        {
+            for (int face = 0; face < 6; ++face)
+            {
+                owner_->ScheduleRenderTargetReleaseEXT(
+                    faceTargets_[static_cast<std::size_t>(face)],
+                    face == 0 ? cubeTexture_ : nullptr,
+                    face == 0 ? depthTexture_ : nullptr,
+                    face == 0 ? spriteProjectionBuffer_ : nullptr);
+            }
+            return;
+        }
+
+        for (LLGL::RenderTarget* renderTarget : faceTargets_)
+        {
+            if (renderTarget != nullptr)
+                renderSystem_->Release(*renderTarget);
+        }
+        if (depthTexture_ != nullptr)
+            renderSystem_->Release(*depthTexture_);
+        if (cubeTexture_ != nullptr)
+            renderSystem_->Release(*cubeTexture_);
+        if (spriteProjectionBuffer_ != nullptr)
+            renderSystem_->Release(*spriteProjectionBuffer_);
+    }
+
+    bool LlglRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                              void* data, int dataLength) const
+    {
+        if (data == nullptr || w <= 0 || h <= 0 || face < 0 || face >= 6 || level != 0 ||
+            renderSystem_ == nullptr || cubeTexture_ == nullptr)
+        {
+            return false;
+        }
+
+        const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        // Same reasoning as LlglRenderTargetBackend::GetData: this face's content comes only from
+        // draws recorded into the owning backend's frameCommands_, so those must reach the GPU
+        // before reading the colour attachment back.
+        if (owner_ != nullptr)
+            owner_->FlushPendingFrameEXT();
+
+        LLGL::TextureRegion region;
+        region.subresource.baseArrayLayer = static_cast<std::uint32_t>(face);
+        region.subresource.numArrayLayers = 1;
+        region.subresource.baseMipLevel = 0;
+        region.subresource.numMipLevels = 1;
+        region.offset = {x, y, 0};
+        region.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
+
+        LLGL::MutableImageView imageView;
+        imageView.format = LLGL::ImageFormat::RGBA;
+        imageView.dataType = LLGL::DataType::UInt8;
+        imageView.data = data;
+        imageView.dataSize = required;
+
+        renderSystem_->ReadTexture(*cubeTexture_, region, imageView);
         return true;
     }
 
@@ -2602,14 +2725,13 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::Texture* resolvedEnvMap = nullptr;
         if (envMapping)
         {
-            const auto* cubeBackend = dynamic_cast<const LlglTextureCubeBackend*>(params->envMap);
-            if (cubeBackend == nullptr)
+            resolvedEnvMap = ResolveSampledTextureCube(*params->envMap);
+            if (resolvedEnvMap == nullptr)
             {
                 throw std::runtime_error(
                     std::string(kBackendName) + " backend: EnvironmentMapEffect's EnvironmentMap "
                     "belongs to another backend");
             }
-            resolvedEnvMap = cubeBackend->GetLlglTexture();
         }
 
         const bool skinned = (params != nullptr && params->skinned);
@@ -4268,6 +4390,109 @@ namespace CNA::Internal::Backends::Llgl
                                                           spriteProjectionBuffer, this);
     }
 
+    std::unique_ptr<IRenderTargetCubeBackend> LlglGraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/,
+        int /*multiSampleCount*/)
+    {
+        if (size <= 0)
+            throw std::runtime_error(std::string(kBackendName) + " backend: render target cube has no pixels");
+
+        LLGL::TextureDescriptor colorDesc;
+        colorDesc.type = LLGL::TextureType::TextureCube;
+        colorDesc.bindFlags = LLGL::BindFlags::ColorAttachment | LLGL::BindFlags::Sampled |
+                              LLGL::BindFlags::CopySrc;
+        // Matches the swap chain's own colour format, exactly like CreateRenderTarget2D -- every
+        // cached sprite/primitive pipeline needs a matching attachment signature to be reusable
+        // across render passes.
+        colorDesc.format = swapChain_->GetColorFormat();
+        colorDesc.extent = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size), 1};
+        colorDesc.arrayLayers = 6;
+        colorDesc.mipLevels = 1;
+        colorDesc.miscFlags = 0;
+
+        LLGL::Texture* cubeTexture = renderer_->CreateTexture(colorDesc);
+        if (cubeTexture == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: render target cube colour texture creation failed");
+        }
+
+        // ONE shared depth/stencil texture for the whole cube -- matches FNA's own RenderTargetCube,
+        // which allocates exactly one depth/stencil buffer regardless of face count, mirrored by the
+        // Vulkan backend's own precedent. Unlike CreateRenderTarget2D's anonymous (textureless)
+        // attachment, this needs to be a real, explicitly-owned texture so all 6 face
+        // AttachmentDescriptors can reference the SAME one.
+        LLGL::TextureDescriptor depthDesc;
+        depthDesc.type = LLGL::TextureType::Texture2D;
+        depthDesc.bindFlags = LLGL::BindFlags::DepthStencilAttachment;
+        depthDesc.format = swapChain_->GetDepthStencilFormat();
+        depthDesc.extent = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size), 1};
+        depthDesc.mipLevels = 1;
+        depthDesc.miscFlags = 0;
+
+        LLGL::Texture* depthTexture = renderer_->CreateTexture(depthDesc);
+        if (depthTexture == nullptr)
+        {
+            renderer_->Release(*cubeTexture);
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: render target cube depth texture creation failed");
+        }
+
+        std::array<LLGL::RenderTarget*, 6> faceTargets{};
+        for (int face = 0; face < 6; ++face)
+        {
+            LLGL::RenderTargetDescriptor targetDesc;
+            targetDesc.resolution = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size)};
+            // The project's own face order (0=+X..5=-Z) already matches the array-layer convention
+            // LLGL documents for cube textures -- no remapping needed, same as LlglTextureCubeBackend.
+            targetDesc.colorAttachments[0] =
+                LLGL::AttachmentDescriptor{cubeTexture, 0, static_cast<std::uint32_t>(face)};
+            targetDesc.depthStencilAttachment = LLGL::AttachmentDescriptor{depthTexture};
+
+            LLGL::RenderTarget* faceTarget = renderer_->CreateRenderTarget(targetDesc);
+            if (faceTarget == nullptr)
+            {
+                for (int cleanupFace = 0; cleanupFace < face; ++cleanupFace)
+                    renderer_->Release(*faceTargets[static_cast<std::size_t>(cleanupFace)]);
+                renderer_->Release(*depthTexture);
+                renderer_->Release(*cubeTexture);
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: render target cube face " +
+                    std::to_string(face) + " creation failed");
+            }
+            faceTargets[static_cast<std::size_t>(face)] = faceTarget;
+        }
+
+        // Shared by all 6 faces: a cube face is always square, and a face's resolution never
+        // changes after construction, so one projection buffer serves every face -- same reasoning
+        // as CreateRenderTarget2D's own single (per-target) projection buffer.
+        const float projection[16] = {
+            2.0f / static_cast<float>(size), 0.0f,                              0.0f, 0.0f,
+            0.0f,                            -2.0f / static_cast<float>(size),  0.0f, 0.0f,
+            0.0f,                            0.0f,                              1.0f, 0.0f,
+            -1.0f,                           1.0f,                              0.0f, 1.0f
+        };
+        LLGL::BufferDescriptor projectionDesc;
+        projectionDesc.size = sizeof(projection);
+        projectionDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
+        LLGL::Buffer* spriteProjectionBuffer = renderer_->CreateBuffer(projectionDesc, projection);
+        if (spriteProjectionBuffer == nullptr)
+        {
+            for (LLGL::RenderTarget* faceTarget : faceTargets)
+                renderer_->Release(*faceTarget);
+            renderer_->Release(*depthTexture);
+            renderer_->Release(*cubeTexture);
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: render target cube projection buffer creation failed");
+        }
+
+        const bool hasRealDepthBuffer = depthFormat != 0;
+
+        return std::make_unique<LlglRenderTargetCubeBackend>(
+            renderer_.get(), cubeTexture, depthTexture, faceTargets, size, hasRealDepthBuffer,
+            spriteProjectionBuffer, this);
+    }
+
     void LlglGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         if (rt == nullptr)
@@ -4299,10 +4524,26 @@ namespace CNA::Internal::Backends::Llgl
         if (count > 1)
             NotYetImplemented(kBackendName, "multiple simultaneous render targets");
 
-        if (!renderTargets[0].IsRenderTarget2D())
-            NotYetImplemented(kBackendName, "RenderTargetCube faces");
+        if (renderTargets[0].IsRenderTarget2D())
+        {
+            SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+            return;
+        }
 
-        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        auto* cubeBackend = dynamic_cast<LlglRenderTargetCubeBackend*>(renderTargets[0].GetRenderTargetCube());
+        if (cubeBackend == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: SetRenderTargets was given a RenderTargetCube from another backend");
+        }
+        const int face = renderTargets[0].GetCubeFace();
+        if (face < 0 || face >= 6)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: RenderTargetCube face " + std::to_string(face) +
+                " is out of range");
+        }
+        currentRenderTargetBackend_ = cubeBackend->GetFaceBinding(face);
     }
 
     void LlglGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

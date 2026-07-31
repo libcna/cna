@@ -8,6 +8,7 @@
 
 #include <LLGL/LLGL.h>
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -361,6 +362,29 @@ namespace CNA::Internal::Backends::Llgl
     };
 
     /**
+     * @brief What `LlglGraphicsBackend::currentRenderTargetBackend_` needs from whatever is
+     * currently bound, regardless of whether that is a `RenderTarget2D` or one face of a
+     * `RenderTargetCube`. NOXNA.
+     *
+     * `QueueClear`/`QueueSpriteEXT`/`QueuePrimitives`/`GetActiveDrawRect` only ever need these
+     * four things from the bound target -- this lets `currentRenderTargetBackend_` point at
+     * either kind without any of those call sites needing to know which.
+     */
+    class LlglBoundRenderTarget
+    {
+    public:
+        virtual ~LlglBoundRenderTarget() = default;
+        /** @brief Returns the underlying LLGL render target to begin a pass against. */
+        [[nodiscard]] virtual LLGL::RenderTarget* GetLlglRenderTarget() const = 0;
+        /** @brief Returns the width in pixels. */
+        [[nodiscard]] virtual int GetWidth() const = 0;
+        /** @brief Returns the height in pixels. */
+        [[nodiscard]] virtual int GetHeight() const = 0;
+        /** @brief Returns this target's own fixed pixel-to-clip-space sprite projection buffer. */
+        [[nodiscard]] virtual LLGL::Buffer* GetSpriteProjectionBuffer() const = 0;
+    };
+
+    /**
      * @brief An off-screen 2D render target living in LLGL. NOXNA.
      *
      * Backs `Microsoft::Xna::Framework::Graphics::RenderTarget2D`. Owns a colour texture (and,
@@ -373,7 +397,7 @@ namespace CNA::Internal::Backends::Llgl
      * sprite/primitive command is queued -- not by an immediate GPU bind at the moment XNA code
      * calls `GraphicsDevice.SetRenderTarget()`.
      */
-    class LlglRenderTargetBackend final : public IRenderTargetBackend
+    class LlglRenderTargetBackend final : public IRenderTargetBackend, public LlglBoundRenderTarget
     {
     public:
         /**
@@ -448,13 +472,13 @@ namespace CNA::Internal::Backends::Llgl
         }
 
         /** @brief Returns the underlying LLGL render target. */
-        [[nodiscard]] LLGL::RenderTarget* GetLlglRenderTarget() const { return renderTarget_; }
+        [[nodiscard]] LLGL::RenderTarget* GetLlglRenderTarget() const override { return renderTarget_; }
 
         /** @brief Returns the underlying LLGL colour texture, for sampling as a `Texture2D`. */
         [[nodiscard]] LLGL::Texture* GetLlglColorTexture() const { return colorTexture_; }
 
         /** @brief Returns this target's own fixed pixel-to-clip-space sprite projection buffer. */
-        [[nodiscard]] LLGL::Buffer* GetSpriteProjectionBuffer() const { return spriteProjectionBuffer_; }
+        [[nodiscard]] LLGL::Buffer* GetSpriteProjectionBuffer() const override { return spriteProjectionBuffer_; }
 
     private:
         LLGL::RenderSystem* renderSystem_       = nullptr;
@@ -466,6 +490,139 @@ namespace CNA::Internal::Backends::Llgl
         bool                hasRealDepthBuffer_  = false;
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
         LlglGraphicsBackend* owner_               = nullptr;
+    };
+
+    /**
+     * @brief One face of an `LlglRenderTargetCubeBackend`, as seen by
+     * `LlglGraphicsBackend::currentRenderTargetBackend_`. NOXNA.
+     *
+     * A thin, non-owning view -- all 6 of these live as plain value members of the cube backend
+     * that owns the real LLGL resources; this class exists only so `currentRenderTargetBackend_`
+     * (typed `LlglBoundRenderTarget*`) can point at "face N of this cube" without a heap
+     * allocation or a separate owning type.
+     */
+    class LlglRenderTargetCubeFaceBinding final : public LlglBoundRenderTarget
+    {
+    public:
+        LlglRenderTargetCubeFaceBinding() = default;
+        LlglRenderTargetCubeFaceBinding(LLGL::RenderTarget* renderTarget, int size,
+                                        LLGL::Buffer* spriteProjectionBuffer)
+            : renderTarget_(renderTarget), size_(size), spriteProjectionBuffer_(spriteProjectionBuffer)
+        {
+        }
+
+        [[nodiscard]] LLGL::RenderTarget* GetLlglRenderTarget() const override { return renderTarget_; }
+        [[nodiscard]] int GetWidth() const override { return size_; }
+        [[nodiscard]] int GetHeight() const override { return size_; }
+        [[nodiscard]] LLGL::Buffer* GetSpriteProjectionBuffer() const override { return spriteProjectionBuffer_; }
+
+    private:
+        LLGL::RenderTarget* renderTarget_ = nullptr;
+        int                 size_         = 0;
+        LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
+    };
+
+    /**
+     * @brief An off-screen cube-map render target living in LLGL. NOXNA.
+     *
+     * Backs `Microsoft::Xna::Framework::Graphics::RenderTargetCube`. Owns ONE
+     * `LLGL::TextureType::TextureCube` colour texture (`arrayLayers=6`, sampled as a whole cube
+     * afterwards -- e.g. by `EnvironmentMapEffect`, via `ResolveSampledTextureCube()`) and ONE
+     * SHARED depth/stencil texture, matching FNA's own `RenderTargetCube`, which allocates exactly
+     * one depth/stencil buffer for the whole cube rather than one per face (the Vulkan backend's
+     * own `VulkanRenderTargetCubeBackend` follows the identical convention). Six
+     * `LLGL::RenderTarget`s are built once at construction, each attaching the SAME colour texture
+     * at a different `arrayLayer` (`LLGL::AttachmentDescriptor`'s own documented cube-face
+     * convention) alongside the shared depth texture -- never recreated per bind.
+     *
+     * Like `LlglRenderTargetBackend`, `BindAsRenderTargetFace()`/`UnbindAsRenderTarget()` are
+     * no-ops: "which face is active" is tracked by `LlglGraphicsBackend::currentRenderTargetBackend_`
+     * pointing at one of `faceBindings_` below, exactly like a plain `RenderTarget2D` bind.
+     */
+    class LlglRenderTargetCubeBackend final : public IRenderTargetCubeBackend
+    {
+    public:
+        /**
+         * @brief Takes ownership of an already-created cube texture, shared depth texture, and the
+         * six per-face render targets built from them.
+         *
+         * @param renderSystem  Render system that created these resources and will release them.
+         * @param cubeTexture   The shared colour attachment (6 array layers); must not be null.
+         * @param depthTexture  The shared depth/stencil attachment; must not be null.
+         * @param faceTargets   Six framebuffer objects, one per face (0=+X..5=-Z), each attaching
+         *                      @p cubeTexture at its own array layer and @p depthTexture; none may
+         *                      be null.
+         * @param size          Width/height of each face in pixels.
+         * @param hasRealDepthBuffer Whether a real `DepthFormat` was requested (the physical
+         *        buffer is always allocated regardless -- see `HasRealDepthBuffer()`'s own doc).
+         * @param spriteProjectionBuffer This cube's own fixed pixel-to-clip-space projection --
+         *        shared by all 6 faces, since every face is the same size (a cube is always
+         *        square) and a face's resolution never changes after construction.
+         * @param owner Backend whose frame this target may be referenced by; the destructor defers
+         *        releasing the underlying LLGL objects to it, exactly like `LlglRenderTargetBackend`.
+         */
+        LlglRenderTargetCubeBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* cubeTexture,
+                                    LLGL::Texture* depthTexture,
+                                    const std::array<LLGL::RenderTarget*, 6>& faceTargets,
+                                    int size, bool hasRealDepthBuffer,
+                                    LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner);
+
+        /** @brief Releases the six render targets and the shared cube/depth textures and buffer. */
+        ~LlglRenderTargetCubeBackend() override;
+
+        LlglRenderTargetCubeBackend(const LlglRenderTargetCubeBackend&) = delete;
+        LlglRenderTargetCubeBackend& operator=(const LlglRenderTargetCubeBackend&) = delete;
+
+        /** @brief Returns the width/height of each cube face in pixels. */
+        [[nodiscard]] int GetSize() const override { return size_; }
+
+        /** @brief No-op; see this class's own doc comment for why. */
+        void BindAsRenderTargetFace(int /*face*/) override {}
+
+        /** @brief No-op; see this class's own doc comment for why. */
+        void UnbindAsRenderTarget() override {}
+
+        /** @brief Returns whether this target has a real depth/stencil attachment. */
+        [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override
+        {
+            return hasRealDepthBuffer_;
+        }
+
+        /**
+         * @brief Reads pixels back from one face of the colour attachment.
+         *
+         * @param face       Which face to read (0=+X..5=-Z).
+         * @param level      Mip level to read; only level 0 exists on a render target today.
+         * @param x          Left edge of the region in pixels.
+         * @param y          Top edge of the region in pixels.
+         * @param w          Width of the region in pixels.
+         * @param h          Height of the region in pixels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; must be at least w * h * 4.
+         * @return True if the whole region was read back; false if it could not be.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /** @brief Returns the underlying LLGL cube texture, for sampling as a `TextureCube`. */
+        [[nodiscard]] LLGL::Texture* GetLlglTexture() const { return cubeTexture_; }
+
+        /** @brief Returns the bindable view of face @p face (0=+X..5=-Z). */
+        [[nodiscard]] LlglBoundRenderTarget* GetFaceBinding(int face)
+        {
+            return &faceBindings_[static_cast<std::size_t>(face)];
+        }
+
+    private:
+        LLGL::RenderSystem* renderSystem_       = nullptr;
+        LLGL::Texture*      cubeTexture_        = nullptr;
+        LLGL::Texture*      depthTexture_       = nullptr;
+        std::array<LLGL::RenderTarget*, 6> faceTargets_{};
+        std::array<LlglRenderTargetCubeFaceBinding, 6> faceBindings_{};
+        int                 size_               = 0;
+        bool                hasRealDepthBuffer_ = false;
+        LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
+        LlglGraphicsBackend* owner_              = nullptr;
     };
 
     /**
@@ -1016,6 +1173,30 @@ namespace CNA::Internal::Backends::Llgl
             int multiSampleCount = 0) override;
 
         /**
+         * @brief Creates an off-screen `RenderTargetCube`.
+         *
+         * Six `LLGL::RenderTarget`s are built once here, each attaching a different `arrayLayer`
+         * of ONE shared `LLGL::TextureType::TextureCube` colour texture, alongside ONE shared
+         * depth/stencil texture -- matching FNA's own `RenderTargetCube`, which allocates exactly
+         * one depth/stencil buffer for the whole cube (see `LlglRenderTargetCubeBackend`'s own doc
+         * comment). Mip-mapping and multisampling are ignored in this first cut, matching
+         * `CreateRenderTarget2D`'s own identical scope; `preserveContents` is ignored too, for the
+         * same render-pass-grouping reason `CreateRenderTarget2D` ignores it.
+         *
+         * @param size             Width/height of each face in pixels.
+         * @param depthFormat      Raw `DepthFormat` ordinal; only used to decide whether a real
+         *                         depth buffer is reported through `HasRealDepthBuffer`.
+         * @param preserveContents Ignored in this first cut.
+         * @param mipMap           Ignored; not yet implemented.
+         * @param multiSampleCount Ignored; not yet implemented.
+         * @return The new render target cube backend.
+         * @throws std::runtime_error If @p size is not positive, or GPU resource creation fails.
+         */
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
+            int multiSampleCount = 0) override;
+
+        /**
          * @brief Activates a `RenderTarget2D` (or restores the back buffer).
          *
          * @param rt Target to draw into, or null to restore the back buffer.
@@ -1025,13 +1206,13 @@ namespace CNA::Internal::Backends::Llgl
         /**
          * @brief Binds a set of render targets.
          *
-         * Accepts either the "restore the back buffer" request or exactly one `RenderTarget2D`
-         * slot; `RenderTargetCube` faces and multiple simultaneous render targets are not
-         * implemented yet and fail loudly rather than silently drawing to the window.
+         * Accepts either the "restore the back buffer" request, exactly one `RenderTarget2D`
+         * slot, or exactly one `RenderTargetCube` face; multiple simultaneous render targets are
+         * not implemented yet and fail loudly rather than silently drawing to the window.
          *
          * @param renderTargets Ordered target descriptors, or null.
          * @param count         Number of descriptors; 0 restores the back buffer.
-         * @throws std::runtime_error If more than one target is supplied, or a cube face is.
+         * @throws std::runtime_error If more than one target is supplied.
          */
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
@@ -1772,10 +1953,12 @@ namespace CNA::Internal::Backends::Llgl
         int   depthCompareFunction_ = 3;  // CompareFunction::LessEqual, the XNA default
         bool  stencilRequested_  = false;
 
-        /// Non-owning; null means "draw to the swap chain". Set by SetRenderTarget2D(), consulted
-        /// when each Clear/sprite/primitive command is QUEUED (not at bind time -- this backend
-        /// defers every draw to Present()).
-        LlglRenderTargetBackend* currentRenderTargetBackend_ = nullptr;
+        /// Non-owning; null means "draw to the swap chain". Points at either a plain
+        /// LlglRenderTargetBackend (set by SetRenderTarget2D()) or one face of an
+        /// LlglRenderTargetCubeBackend (an LlglRenderTargetCubeFaceBinding, set by SetRenderTargets()
+        /// for a cube-face descriptor) -- consulted when each Clear/sprite/primitive command is
+        /// QUEUED (not at bind time -- this backend defers every draw to Present()).
+        LlglBoundRenderTarget* currentRenderTargetBackend_ = nullptr;
         int   cullMode_ = 2;
         int   fillMode_ = 0;
     };
