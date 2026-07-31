@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <set>
 #include <stdexcept>
 #include <string>
 
@@ -355,6 +356,127 @@ namespace CNA::Internal::Backends::Software
         /// Namespace-scope (not function-local) so a disabled trace costs one load and one branch per
         /// sample, with no thread-safe-static guard.
         SamplerTrace g_samplerTrace = MakeSamplerTrace();
+
+        /// REMED-GFX-182: env-gated ENVIRONMENT-MAP CUBE trace. The 2D trace above measures the
+        /// sampler REMED-GFX-150 gave the ordinary texture path; this one measures what reaches the
+        /// reflection cube, which is a different question and had a different answer.
+        ///
+        /// It prints, on one line per env-map fragment, BOTH ends of the sampler pipeline: the
+        /// public `GraphicsDevice.SamplerStates[0]` and `SamplerStates[1]` descriptions captured for
+        /// this draw (`slot0=` / `slot1=`) and the description the cube sample EFFECTIVELY ran under
+        /// (`eff=`), together with every stage between the reflection vector and the final effect
+        /// contribution. A divergence between `slot1=` and `eff=` is the whole finding: pre-fix
+        /// `SampleCubeMap` took no sampler at all, so `eff=` was the same fixed
+        /// point/clamp/clamp/level-0 description on every draw however `slot1=` was set.
+        ///
+        ///   CNA_SOFTWARE_CUBE_TRACE unset or 0  off; one predictable branch per cube sample.
+        ///   CNA_SOFTWARE_CUBE_TRACE=1           count cube samples, texel fetches and the DISTINCT
+        ///                                       captured/effective descriptions; print a summary at
+        ///                                       exit.
+        ///   CNA_SOFTWARE_CUBE_TRACE=2           additionally print one line per env-map fragment,
+        ///                                       bounded by CNA_SOFTWARE_CUBE_TRACE_LIMIT
+        ///                                       (default 64).
+        struct CubeTrace
+        {
+            bool enabled = false;
+            bool verbose = false;
+            long long limit = 64;
+            long long printed = 0;
+            /// CNA_SOFTWARE_CUBE_TRACE_DRAW: print only this draw's lines (0 = every draw). A whole
+            /// fixture issues tens of thousands of cube samples, so naming ONE draw is what keeps a
+            /// per-fragment dump readable while still covering it completely.
+            long long drawFilter = 0;
+
+            /// Draw bookkeeping, stamped by the draw entry points (trace-only).
+            long long drawId = 0;
+            const char* family = "-";
+
+            /// The two public slot descriptions captured for the triangle being rasterized.
+            int slot0Filter = 0, slot0AddrU = 1, slot0AddrV = 1;
+            int slot1Filter = 0, slot1AddrU = 1, slot1AddrV = 1;
+
+            /// Cardinality.
+            long long cubeSamples = 0;
+            long long cubeTexelFetches = 0;
+            long long cubeLevelSamples = 0;
+
+            /// Distinct (filter, addressU, addressV) triples the PUBLIC slot 1 held at a cube sample.
+            std::set<std::uint32_t> capturedKeys;
+            /// Distinct (within-level filter, addressU, addressV, mip mode, level(s)) the cube sample
+            /// really ran under. One element means the public state never reached the cube.
+            std::set<std::uint32_t> effectiveKeys;
+
+            /// The stage values of the cube sample in progress, filled by SampleCubeMap and printed
+            /// by WriteShadedFragment once the effect contribution is known.
+            float dirX = 0.0f, dirY = 0.0f, dirZ = 0.0f;
+            int face = -1;
+            float faceU = 0.0f, faceV = 0.0f;
+            int levelCount = 1;
+            float lambda = 0.0f;
+            int lowLevel = 0, highLevel = 0;
+            float mipWeight = 0.0f;
+            bool mipPoint = true;
+            bool magnify = true;
+            bool withinPoint = true;
+            int texelX = 0, texelY = 0;
+            int fetchCount = 0;
+            float sampleR = 0.0f, sampleG = 0.0f, sampleB = 0.0f, sampleA = 0.0f;
+
+            ~CubeTrace()
+            {
+                if (!enabled) return;
+                std::fprintf(stderr,
+                             "[CNA_SOFTWARE_CUBE_TRACE] cubeSamples=%lld texelFetches=%lld "
+                             "levelSamples=%lld fetchesPerSample=%.4f distinctCaptured=%zu "
+                             "distinctEffective=%zu\n",
+                             cubeSamples, cubeTexelFetches, cubeLevelSamples,
+                             cubeSamples ? static_cast<double>(cubeTexelFetches) /
+                                           static_cast<double>(cubeSamples) : 0.0,
+                             capturedKeys.size(), effectiveKeys.size());
+            }
+        };
+
+        CubeTrace MakeCubeTrace()
+        {
+            CubeTrace t;
+            const char* mode = std::getenv("CNA_SOFTWARE_CUBE_TRACE");
+            if (mode == nullptr || mode[0] == '0' || mode[0] == '\0') return t;
+            t.enabled = true;
+            t.verbose = (mode[0] == '2');
+            if (const char* lim = std::getenv("CNA_SOFTWARE_CUBE_TRACE_LIMIT"))
+            {
+                const long long parsed = std::atoll(lim);
+                if (parsed > 0) t.limit = parsed;
+            }
+            if (const char* draw = std::getenv("CNA_SOFTWARE_CUBE_TRACE_DRAW"))
+            {
+                const long long parsed = std::atoll(draw);
+                if (parsed > 0) t.drawFilter = parsed;
+            }
+            return t;
+        }
+
+        CubeTrace g_cubeTrace = MakeCubeTrace();
+
+        /// REMED-GFX-182: a public (filter, addressU, addressV) triple as one comparable key.
+        std::uint32_t SamplerDescKey(int filter, int addressU, int addressV)
+        {
+            return (static_cast<std::uint32_t>(filter & 0xFF) << 16) |
+                   (static_cast<std::uint32_t>(addressU & 0xFF) << 8) |
+                    static_cast<std::uint32_t>(addressV & 0xFF);
+        }
+
+        /// REMED-GFX-182: the address-mode ordinal name, for the trace only.
+        const char* AddressName(int mode)
+        {
+            switch (mode)
+            {
+                case 0: return "Wrap";
+                case 1: return "Clamp";
+                case 2: return "Mirror";
+                default: return "?";
+            }
+        }
 
         /// REMED-GFX-150: the largest magnitude a texel index may reach before the float->int
         /// conversion below stops being representable. A coordinate beyond this is saturated in
@@ -743,6 +865,79 @@ namespace CNA::Internal::Backends::Software
             g = pixels[idx + 1] / 255.0f;
             b = pixels[idx + 2] / 255.0f;
             a = pixels[idx + 3] / 255.0f;
+
+            // REMED-GFX-182: record what this sample actually did. There is no sampler parameter to
+            // record, which IS the finding -- the effective description below is a constant.
+            if (g_cubeTrace.enabled)
+            {
+                ++g_cubeTrace.cubeSamples;
+                ++g_cubeTrace.cubeLevelSamples;
+                g_cubeTrace.cubeTexelFetches += 1;
+                g_cubeTrace.capturedKeys.insert(SamplerDescKey(g_cubeTrace.slot1Filter,
+                                                               g_cubeTrace.slot1AddrU,
+                                                               g_cubeTrace.slot1AddrV));
+                g_cubeTrace.effectiveKeys.insert(SamplerDescKey(1 /*Point*/, 1 /*Clamp*/, 1 /*Clamp*/) |
+                                                 (1u << 24) /*mip Point*/ | (0u << 28) /*level 0*/);
+                g_cubeTrace.dirX = dir.X; g_cubeTrace.dirY = dir.Y; g_cubeTrace.dirZ = dir.Z;
+                g_cubeTrace.face = face;
+                g_cubeTrace.faceU = s; g_cubeTrace.faceV = t;
+                // The cube's REAL allocated chain against the single level this function can read:
+                // `levels=6 mip=[0,0]` is the mip half of the finding stated as a measurement.
+                g_cubeTrace.levelCount = cube.LevelCount();
+                g_cubeTrace.lambda = 0.0f;
+                g_cubeTrace.lowLevel = 0; g_cubeTrace.highLevel = 0; g_cubeTrace.mipWeight = 0.0f;
+                g_cubeTrace.mipPoint = true;
+                g_cubeTrace.magnify = true;
+                g_cubeTrace.withinPoint = true;
+                g_cubeTrace.texelX = px; g_cubeTrace.texelY = py;
+                g_cubeTrace.fetchCount = 1;
+                g_cubeTrace.sampleR = r; g_cubeTrace.sampleG = g;
+                g_cubeTrace.sampleB = b; g_cubeTrace.sampleA = a;
+            }
+        }
+
+        /// REMED-GFX-182: one complete cube-sample line, emitted once the effect contribution is
+        /// known. Every stage of the operation is on it, so a disputed pixel can be classified
+        /// without a debugger: which slot state was captured, which face and face-local coordinate
+        /// the reflection selected, which level(s) the MIPMAP component chose, which filter ran
+        /// inside them, how many texels were fetched, and what the effect finally wrote.
+        void PrintCubeTraceLine(float outR, float outG, float outB)
+        {
+            if (!g_cubeTrace.verbose || g_cubeTrace.printed >= g_cubeTrace.limit) return;
+            if (g_cubeTrace.drawFilter != 0 && g_cubeTrace.drawId != g_cubeTrace.drawFilter) return;
+            ++g_cubeTrace.printed;
+            std::fprintf(stderr,
+                         "[cube] draw=%lld family=%s dest=(%d,%d) "
+                         "slot0=(filter=%d,%s,%s) slot1=(filter=%d,%s,%s) "
+                         "eff=(within=%s,addr=%s/%s,mip=%s) "
+                         "dir=(%.6f,%.6f,%.6f) face=%d st=(%.6f,%.6f) levels=%d lambda=%.6f "
+                         "mip=[%d,%d] w=%.6f magnify=%d texel=(%d,%d) fetches=%d "
+                         "sample=(%d,%d,%d,%d) out=(%d,%d,%d)\n",
+                         g_cubeTrace.drawId, g_cubeTrace.family,
+                         g_samplerTrace.fragX, g_samplerTrace.fragY,
+                         g_cubeTrace.slot0Filter, AddressName(g_cubeTrace.slot0AddrU),
+                         AddressName(g_cubeTrace.slot0AddrV),
+                         g_cubeTrace.slot1Filter, AddressName(g_cubeTrace.slot1AddrU),
+                         AddressName(g_cubeTrace.slot1AddrV),
+                         g_cubeTrace.withinPoint ? "Point" : "Linear",
+                         AddressName(1), AddressName(1),
+                         g_cubeTrace.mipPoint ? "Point" : "Linear",
+                         static_cast<double>(g_cubeTrace.dirX), static_cast<double>(g_cubeTrace.dirY),
+                         static_cast<double>(g_cubeTrace.dirZ),
+                         g_cubeTrace.face,
+                         static_cast<double>(g_cubeTrace.faceU), static_cast<double>(g_cubeTrace.faceV),
+                         g_cubeTrace.levelCount, static_cast<double>(g_cubeTrace.lambda),
+                         g_cubeTrace.lowLevel, g_cubeTrace.highLevel,
+                         static_cast<double>(g_cubeTrace.mipWeight),
+                         g_cubeTrace.magnify ? 1 : 0,
+                         g_cubeTrace.texelX, g_cubeTrace.texelY, g_cubeTrace.fetchCount,
+                         static_cast<int>(g_cubeTrace.sampleR * 255.0f + 0.5f),
+                         static_cast<int>(g_cubeTrace.sampleG * 255.0f + 0.5f),
+                         static_cast<int>(g_cubeTrace.sampleB * 255.0f + 0.5f),
+                         static_cast<int>(g_cubeTrace.sampleA * 255.0f + 0.5f),
+                         static_cast<int>(std::clamp(outR, 0.0f, 1.0f) * 255.0f + 0.5f),
+                         static_cast<int>(std::clamp(outG, 0.0f, 1.0f) * 255.0f + 0.5f),
+                         static_cast<int>(std::clamp(outB, 0.0f, 1.0f) * 255.0f + 0.5f));
         }
 
         /// SOFTWARE-81: whether a triangle with the given signed screen-space `area` should be
@@ -1185,7 +1380,10 @@ namespace CNA::Internal::Backends::Software
             // entirely (no colour, no depth). Default 0xFFFFFFFF keeps bit 0 set.
             if ((ctx.multiSampleMask & 1u) == 0u)
                 return;
-            if (g_samplerTrace.enabled) { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
+            // REMED-GFX-182: the cube trace reports the same destination pixel, so this stamp is
+            // shared by both traces rather than tied to the 2D one.
+            if (g_samplerTrace.enabled || g_cubeTrace.enabled)
+            { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
             // REMED-GFX-030: comparison precedes shading and every color/depth write.
@@ -1268,6 +1466,8 @@ namespace CNA::Internal::Backends::Software
                 r = r * (1.0f - blendFactor) + (envR * a) * blendFactor + ctx.params.envMapSpecular[0] * envA * a;
                 g = g * (1.0f - blendFactor) + (envG * a) * blendFactor + ctx.params.envMapSpecular[1] * envA * a;
                 b = b * (1.0f - blendFactor) + (envB * a) * blendFactor + ctx.params.envMapSpecular[2] * envA * a;
+
+                if (g_cubeTrace.enabled) PrintCubeTraceLine(r, g, b);   // REMED-GFX-182
             }
 
             // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
@@ -1366,6 +1566,17 @@ namespace CNA::Internal::Backends::Software
             if (ShouldCullTriangle(area, cullMode))
                 return;
             if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
+            // REMED-GFX-182: stamp BOTH captured slot descriptions, so the cube trace can print the
+            // public state this draw carried beside the description its cube sample really ran under.
+            if (g_cubeTrace.enabled)
+            {
+                g_cubeTrace.slot0Filter = sampler0.filter;
+                g_cubeTrace.slot0AddrU = sampler0.addressU;
+                g_cubeTrace.slot0AddrV = sampler0.addressV;
+                g_cubeTrace.slot1Filter = sampler1.filter;
+                g_cubeTrace.slot1AddrU = sampler1.addressU;
+                g_cubeTrace.slot1AddrV = sampler1.addressV;
+            }
 
             // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling). hasBias is
             // 0 for the common zero-bias case, so the depth expressions below stay byte-identical then.
@@ -2609,6 +2820,8 @@ namespace CNA::Internal::Backends::Software
         if (params.envMapping && params.envMap == nullptr)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: envMapping=true but envMap is null");
 
+        if (g_cubeTrace.enabled) { ++g_cubeTrace.drawId; g_cubeTrace.family = "DrawPrimitives"; }
+
         // REMED-GFX-119: this path receives the public vertexStart. It was previously dropped, so
         // every non-indexed draw rendered the element-zero prefix of the bound buffer; only the
         // consumed count was ever right.
@@ -2710,6 +2923,8 @@ namespace CNA::Internal::Backends::Software
             throw std::runtime_error(
                 "SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: unsupported vertex stride "
                 "(only 16/20/24/32/52 supported in v1)");
+
+        if (g_cubeTrace.enabled) { ++g_cubeTrace.drawId; g_cubeTrace.family = "DrawIndexedPrimitives"; }
 
         const std::uint8_t* vbBase = swVb.Data().data();
         const std::uint8_t* ibBase = swIb.Data().data();

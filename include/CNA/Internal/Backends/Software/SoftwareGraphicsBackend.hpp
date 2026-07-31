@@ -332,6 +332,16 @@ namespace CNA::Internal::Backends::Software
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSize() const { return size_; }
+        /**
+         * @brief How many mip levels this cube ALLOCATED, counting from level 0.
+         *
+         * REMED-GFX-182. This is the chain `TextureCube` declared and REMED-GFX-135 gave storage to,
+         * not the part of it a caller filled -- see FaceLevelCount() for that. Reported by the cube
+         * trace so "six levels are stored and only level 0 is reachable" is a measured statement.
+         *
+         * @return The allocated level count, always at least 1.
+         */
+        [[nodiscard]] int LevelCount() const { return levelCount_; }
         /// Real RGBA8 pixel storage for one of the 6 faces (CubeMapFace ordinal 0-5) at mip 0,
         /// size*size*4 bytes -- the rasterizer's cube sampler (SOFTWARE-82) reads directly from
         /// here, and samples level 0 only.
