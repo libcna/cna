@@ -211,29 +211,6 @@ namespace
 #endif
 
     /**
-     * @brief Whether a level OUTSIDE the declared chain is rejected before any native call here.
-     *
-     * False on VULKAN, measured by this fixture's own controls on 2026-07-31 and recorded as
-     * **REMED-GFX-189**: `VulkanRenderTargetBackend::GetData` range-checks nothing, so
-     * `GetData(LevelCount, ...)` reaches `vkCmdCopyImageToBuffer` with an image extent of
-     * (0, 0, 0) -- `VUID-vkCmdCopyImageToBuffer-imageSubresource-07970` fires -- and the call then
-     * WRITES the caller's destination and returns normally, which is the fabricated content
-     * REMED-GFX-127/130 exist to forbid. It is the same class of hole REMED-GFX-186 closed on
-     * SDL_GPU (whose symptom was a SIGSEGV rather than fabrication), but it is a different
-     * backend's production code, and this task changes SDL_GPU only.
-     *
-     * A NEGATIVE level is rejected on every backend, because `Texture2D::GetData` checks that in
-     * the shared layer -- so this really is about the upper bound, not about argument checking in
-     * general.
-     */
-    constexpr bool kOutOfRangeLevelRejected =
-#if defined(CNA_BACKEND_VULKAN)
-        false;
-#else
-        true;
-#endif
-
-    /**
      * @brief Whether an MRT PRIMARY attachment's mip chain is generated here.
      *
      * False on VULKAN, measured by this fixture's own controls on 2026-07-31 and recorded as
@@ -814,20 +791,11 @@ class RenderTargetMsaaMipReadbackTest : public Game
         for (const Color& c : buf)
             if (!Exact(c, kSentinel)) { untouched = false; break; }
 
-        // A NEGATIVE level is the shared layer's own check and holds everywhere; only the upper
-        // bound is backend-owned, so only that one consults the declaration.
-        if (level >= 0 && !kOutOfRangeLevelRejected)
-        {
-            boundary(label + ": REMED-GFX-189 -- this backend does NOT reject a level outside the "
-                             "declared chain; measured threw=" + std::string(threw ? "yes" : "no") +
-                     " destinationUntouched=" + (untouched ? "yes" : "no") +
-                     ". If BOTH become yes, the defect was fixed and this declaration must go");
-            check(!threw && !untouched,
-                  label + ": REMED-GFX-189's boundary still reproduces exactly -- the call returns "
-                          "normally and writes the destination instead of refusing");
-            return;
-        }
-
+        // REMED-GFX-189 CLOSED (2026-07-31): Vulkan used to answer an out-of-range level with
+        // fabricated level-0 content instead of refusing, so this file carried a
+        // `kOutOfRangeLevelRejected` carve-out asserting that defect. The carve-out is DELETED
+        // rather than flipped, so every backend now runs the same unconditional assertion here and
+        // a backend that regresses fails outright instead of quietly matching a declaration.
         check(threw, label + ": rejected through a catchable public exception, not a signal");
         if (threw) note(label + ": " + what);
         check(untouched, label + ": the refused read left the whole destination untouched");
