@@ -41,7 +41,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 22;
+    constexpr int kExpectedChecks = 24;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -333,6 +333,66 @@ protected:
                   "Wrap keeps the full out-of-bounds sourceRectangle width (4px), unlike Clamp");
             check(JsSpriteBackgroundRepeat(1) == 1,
                   "TextureAddressMode::Wrap maps to CSS background-repeat: repeat");
+        }
+
+        if (frame_ == 6)
+        {
+            // plan_html_dom.md HTMLDOM-45's other half: while a render target is bound, Wrap is
+            // implemented by a completely SEPARATE code path -- a Canvas2D repeating pattern
+            // (CNA_HtmlDom_FlushSprites' `targetCtx` branch), not the CSS background-repeat frame 5
+            // just checked. That path has never been exercised at all until now, structurally or
+            // otherwise, so this checks it pixel-exact rather than just structurally: draw the 2x2
+            // texture into the 4x4 render target with a matching 4x4 sourceRectangle under Wrap,
+            // which must tile the source twice across each axis.
+            dev.SetRenderTarget(renderTarget_.get());
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                                const_cast<SamplerState*>(&SamplerState::PointWrap), nullptr, nullptr);
+            spriteBatch_->Draw(*texture_, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+            spriteBatch_->End();
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            std::vector<Color> pixels(16, Color(0xCD, 0xCD, 0xCD, 0xCD));
+            bool readOk = false;
+            try
+            {
+                renderTarget_->GetData(pixels.data(), 0, static_cast<int>(pixels.size()));
+                readOk = true;
+            }
+            catch (const std::exception& e)
+            {
+                std::printf("       RenderTarget2D::GetData (Wrap tile) threw: %s\n", e.what());
+            }
+            check(readOk, "the Wrap-tiled render target can be read back");
+
+            // Source layout (LoadContent's comment): (0,0)=red (1,0)=green (0,1)=blue (1,1)=yellow.
+            // Tiled 2x2 across the 4x4 target, texel (x,y) must equal source texel (x%2, y%2).
+            bool tileMatches = readOk;
+            for (int y = 0; tileMatches && y < 4; ++y)
+            {
+                for (int x = 0; x < 4; ++x)
+                {
+                    const Color& actual = pixels[static_cast<std::size_t>(y) * 4 + x];
+                    const bool wantRed = (x % 2 == 0 && y % 2 == 0);
+                    const bool wantGreen = (x % 2 == 1 && y % 2 == 0);
+                    const bool wantBlue = (x % 2 == 0 && y % 2 == 1);
+                    const Color expected = wantRed   ? Color(255, 0, 0, 255)
+                                          : wantGreen ? Color(0, 255, 0, 255)
+                                          : wantBlue  ? Color(0, 0, 255, 255)
+                                                      : Color(255, 255, 0, 255);
+                    if (actual.getRProperty() != expected.getRProperty() ||
+                        actual.getGProperty() != expected.getGProperty() ||
+                        actual.getBProperty() != expected.getBProperty())
+                    {
+                        std::printf("       tile mismatch at (%d,%d): got (%d,%d,%d), want (%d,%d,%d)\n",
+                                    x, y, actual.getRProperty(), actual.getGProperty(), actual.getBProperty(),
+                                    expected.getRProperty(), expected.getGProperty(), expected.getBProperty());
+                        tileMatches = false;
+                        break;
+                    }
+                }
+            }
+            check(tileMatches,
+                  "the render-target Wrap path tiles the source texture exactly, pixel-for-pixel");
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

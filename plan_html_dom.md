@@ -187,7 +187,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 | HTMLDOM-42 | ✅ | `Opaque` → alpha-stripped variant; `AlphaBlend` → un-premultiplied variant; `NonPremultiplied` → straight; `Additive` → `mix-blend-mode: plus-lighter`. |
 | HTMLDOM-43 | ✅ | Colour tint → cached tinted variant; alpha → `opacity` (free). |
 | HTMLDOM-44 | ✅ | `TextureFilter` → `image-rendering: pixelated` vs `auto`, using the same magnification-dominant grouping `SDL_RENDERER` Task 701 and `CANVAS` CANVAS-42 use. |
-| HTMLDOM-45 | ✅ | `Clamp` is exact and unit-tested; `Mirror` and mixed per-axis modes throw (unit-tested). `Wrap` maps to CSS background repetition — verified in the browser run: a texture drawn with a source rectangle double its own size under `SamplerState.PointWrap` keeps its full (unclamped) element width and gets `background-repeat: repeat`, distinguishing it from Clamp's narrowing. The render-target-path repeating-pattern half of Wrap remains reviewed-only, not separately exercised. |
+| HTMLDOM-45 | ✅ | `Clamp` is exact and unit-tested; `Mirror` and mixed per-axis modes throw (unit-tested). `Wrap` maps to CSS background repetition on the DOM path — verified in the browser run: a texture drawn with a source rectangle double its own size under `SamplerState.PointWrap` keeps its full (unclamped) element width and gets `background-repeat: repeat`. The render-target path's separate Canvas2D-repeating-pattern implementation is verified too, pixel-exact: a 2x2 source tiled into a 4x4 render target under Wrap reads back with every texel matching `source(x%2, y%2)` exactly. |
 | HTMLDOM-46 | ✅ | `ColorWriteChannels`/`MultiSampleMask` documented as inexpressible in CSS compositing. |
 
 ### D6 — Render targets
@@ -214,7 +214,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 |---|---|---|
 | HTMLDOM-70 | ✅ | GTest coverage for every pure-C++ unit: blend mapping, address-mode validation, command encoding, 3D throw surface. |
 | HTMLDOM-71 | ✅ | Real Emscripten build (`emcmake`, emsdk 6.0.5). |
-| HTMLDOM-72 | ✅ | **Real browser verification** — 22/22 checks pass in headless Chromium via Playwright, asserting against the DOM the backend produced (surface, clear colour, sprite transforms/sizes/opacity/data-URL backgrounds, element recycling, a `RenderTarget2D` readback round-trip, the backbuffer refusal, `SpriteFont::DrawString`, and `TextureAddressMode::Wrap`). This is what `CANVAS` could never do in its own dev loop — and it earned its keep immediately: see the note below. |
+| HTMLDOM-72 | ✅ | **Real browser verification** — 24/24 checks pass in headless Chromium via Playwright, asserting against the DOM/pixels the backend actually produced (surface, clear colour, sprite transforms/sizes/opacity/data-URL backgrounds, element recycling, a `RenderTarget2D` readback round-trip, the backbuffer refusal, `SpriteFont::DrawString`, `TextureAddressMode::Wrap` on both the DOM path and the render-target's separate Canvas2D-pattern path, the latter checked pixel-exact). This is what `CANVAS` could never do in its own dev loop — and it earned its keep immediately: see the note below. |
 | HTMLDOM-73 | ✅ | `docs/html-dom-backend.md` capability/limitation matrix. |
 
 ---

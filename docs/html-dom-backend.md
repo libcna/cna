@@ -10,9 +10,9 @@ acceptance criteria*; 🟨 code exists but has not met those criteria; ⬜ not i
 
 **What ✅ means here.** Unlike the `CANVAS` backend's own document, ✅ on this page is backed by a
 real Emscripten build (emsdk 6.0.5) and, for everything the smoke test covers, by a real run in
-headless Chromium — `scripts/run-htmldom-browser-test.sh` loads the generated page, drives five
-frames (22 checks total), and asserts against the DOM the backend actually produced. Rows marked
-🟨 are implemented and code-reviewed but not covered by that automated run.
+headless Chromium — `scripts/run-htmldom-browser-test.sh` loads the generated page, drives six
+frames (24 checks total), and asserts against the DOM/pixels the backend actually produced. Rows
+marked 🟨 are implemented and code-reviewed but not covered by that automated run.
 
 Select it with:
 
@@ -95,7 +95,7 @@ appends a fixed-stride 80-byte command and `End()` hands the array over as a blo
 |---|---|---|
 | `TextureFilter` (magnification) | ✅ | `image-rendering: auto` vs `pixelated`, using the same magnification-dominant grouping `SDL_RENDERER` (Task 701) and `CANVAS` (CANVAS-42) use. |
 | `TextureAddressMode::Clamp` | ✅ | Implemented for real: the source rectangle is narrowed into the texture and the sprite's local box shifted to match — not a reliance on implicit out-of-bounds behaviour. |
-| `TextureAddressMode::Wrap` | ✅ | CSS `background-repeat: repeat`. Only differs from Clamp when the source rectangle leaves the texture — verified in-browser: an out-of-bounds source rectangle keeps its full (unclamped) element width and gets `background-repeat: repeat`. The render-target path's repeating Canvas2D pattern equivalent is reviewed-only, not separately exercised. |
+| `TextureAddressMode::Wrap` | ✅ | CSS `background-repeat: repeat` on the DOM path; a repeating Canvas2D pattern on the render-target path (two separate code paths). Only differs from Clamp when the source rectangle leaves the texture. Both verified in-browser: the DOM path keeps its full (unclamped) element width and gets `background-repeat: repeat`; the render-target path is checked pixel-exact — a 2x2 source tiled into a 4x4 target reads back with every texel matching `source(x%2, y%2)`. |
 | `TextureAddressMode::Mirror` | ✅ throws-by-design | CSS has no mirror-repeat background repetition, and pre-tiling a mirrored copy per draw would defeat the DOM path's purpose. |
 | Mixed per-axis modes, out of bounds | ✅ throws-by-design | Both axes derive from one mode here; a mixed request is rejected rather than silently reduced. |
 
