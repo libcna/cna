@@ -53,7 +53,37 @@ cbuffer Constants
     float4 g_LightDiffuse[3];
     float4 g_LightSpecular[3];
     float4 g_Flags;
+    float4 g_AlphaTest;
+    float4 g_FogVector;
+    float4 g_FogColor;
 };
+
+/// FNA's fog term: dot the object-space position with the fog vector, then keep = 1 - saturate(it).
+/// An all-zero fog vector (fog disabled) yields keep = 1, a true no-op.
+float ComputeFogKeep(float3 objectPosition)
+{
+    return 1.0 - saturate(dot(float4(objectPosition, 1.0), g_FogVector));
+}
+)";
+
+        /// Appended to pixel shaders only. `discard` is not valid in a vertex shader, so this
+        /// cannot live in the shared constants block above even though every stage includes that.
+        constexpr const char* kPixelHelpersHlsl = R"(
+/// XNA alpha test, in the encoding GpuDrawParams::alphaTest documents:
+///   tolerance > 0 -> pass = |alpha - reference| < tolerance
+///   otherwise     -> pass = alpha < reference
+/// then the pass/fail weight decides whether the pixel survives. {0,0,1,1} never discards.
+/// Fog is applied afterwards, RGB only, exactly as the other CNA backends do.
+float4 FinishPixel(float4 color, float fogKeep)
+{
+    bool passesAlphaTest = (g_AlphaTest.y > 0.0) ? (abs(color.a - g_AlphaTest.x) < g_AlphaTest.y)
+                                                 : (color.a < g_AlphaTest.x);
+    float weight = passesAlphaTest ? g_AlphaTest.z : g_AlphaTest.w;
+    if (weight < 0.0)
+        discard;
+    color.rgb = lerp(g_FogColor.rgb, color.rgb, fogKeep);
+    return color;
+}
 )";
 
         constexpr const char* kSpriteVertexHlsl = R"(
@@ -110,22 +140,25 @@ struct VSInput
 
 struct PSInput
 {
-    float4 Pos   : SV_POSITION;
-    float4 Color : COLOR0;
+    float4 Pos     : SV_POSITION;
+    float4 Color   : COLOR0;
+    float  FogKeep : FOG_KEEP;
 };
 
 void main(in VSInput vsIn, out PSInput psIn)
 {
-    psIn.Pos   = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
-    psIn.Color = vsIn.Color * g_DiffuseColor;
+    psIn.Pos     = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
+    psIn.Color   = vsIn.Color * g_DiffuseColor;
+    psIn.FogKeep = ComputeFogKeep(vsIn.Pos);
 }
 )";
 
         constexpr const char* kColoredPixelHlsl = R"(
 struct PSInput
 {
-    float4 Pos   : SV_POSITION;
-    float4 Color : COLOR0;
+    float4 Pos     : SV_POSITION;
+    float4 Color   : COLOR0;
+    float  FogKeep : FOG_KEEP;
 };
 
 struct PSOutput
@@ -135,7 +168,7 @@ struct PSOutput
 
 void main(in PSInput psIn, out PSOutput psOut)
 {
-    psOut.Color = psIn.Color;
+    psOut.Color = FinishPixel(psIn.Color, psIn.FogKeep);
 }
 )";
 
@@ -148,16 +181,18 @@ struct VSInput
 
 struct PSInput
 {
-    float4 Pos   : SV_POSITION;
-    float2 UV    : TEX_COORD;
-    float4 Color : COLOR0;
+    float4 Pos     : SV_POSITION;
+    float2 UV      : TEX_COORD;
+    float4 Color   : COLOR0;
+    float  FogKeep : FOG_KEEP;
 };
 
 void main(in VSInput vsIn, out PSInput psIn)
 {
-    psIn.Pos   = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
-    psIn.UV    = vsIn.UV;
-    psIn.Color = g_DiffuseColor;
+    psIn.Pos     = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
+    psIn.UV      = vsIn.UV;
+    psIn.Color   = g_DiffuseColor;
+    psIn.FogKeep = ComputeFogKeep(vsIn.Pos);
 }
 )";
 
@@ -171,16 +206,18 @@ struct VSInput
 
 struct PSInput
 {
-    float4 Pos   : SV_POSITION;
-    float2 UV    : TEX_COORD;
-    float4 Color : COLOR0;
+    float4 Pos     : SV_POSITION;
+    float2 UV      : TEX_COORD;
+    float4 Color   : COLOR0;
+    float  FogKeep : FOG_KEEP;
 };
 
 void main(in VSInput vsIn, out PSInput psIn)
 {
-    psIn.Pos   = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
-    psIn.UV    = vsIn.UV;
-    psIn.Color = vsIn.Color * g_DiffuseColor;
+    psIn.Pos     = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
+    psIn.UV      = vsIn.UV;
+    psIn.Color   = vsIn.Color * g_DiffuseColor;
+    psIn.FogKeep = ComputeFogKeep(vsIn.Pos);
 }
 )";
 
@@ -190,9 +227,10 @@ SamplerState g_Texture_sampler;
 
 struct PSInput
 {
-    float4 Pos   : SV_POSITION;
-    float2 UV    : TEX_COORD;
-    float4 Color : COLOR0;
+    float4 Pos     : SV_POSITION;
+    float2 UV      : TEX_COORD;
+    float4 Color   : COLOR0;
+    float  FogKeep : FOG_KEEP;
 };
 
 struct PSOutput
@@ -203,7 +241,7 @@ struct PSOutput
 void main(in PSInput psIn, out PSOutput psOut)
 {
     float4 texel = g_Texture.Sample(g_Texture_sampler, psIn.UV);
-    psOut.Color = lerp(psIn.Color, texel * psIn.Color, g_Flags.x);
+    psOut.Color = FinishPixel(lerp(psIn.Color, texel * psIn.Color, g_Flags.x), psIn.FogKeep);
 }
 )";
 
@@ -224,6 +262,7 @@ struct PSInput
     float2 UV       : TEX_COORD;
     float3 WorldPos : WORLD_POS;
     float3 Normal   : NORMAL;
+    float  FogKeep  : FOG_KEEP;
 };
 
 void main(in VSInput vsIn, out PSInput psIn)
@@ -232,6 +271,7 @@ void main(in VSInput vsIn, out PSInput psIn)
     psIn.WorldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
     psIn.Normal   = mul(float4(vsIn.Normal, 0.0), g_World).xyz;
     psIn.UV       = vsIn.UV;
+    psIn.FogKeep  = ComputeFogKeep(vsIn.Pos);
 }
 )";
 
@@ -245,6 +285,7 @@ struct PSInput
     float2 UV       : TEX_COORD;
     float3 WorldPos : WORLD_POS;
     float3 Normal   : NORMAL;
+    float  FogKeep  : FOG_KEEP;
 };
 
 struct PSOutput
@@ -260,7 +301,7 @@ void main(in PSInput psIn, out PSOutput psOut)
 
     if (g_Flags.z < 0.5)
     {
-        psOut.Color = baseColor;
+        psOut.Color = FinishPixel(baseColor, psIn.FogKeep);
         return;
     }
 
@@ -283,7 +324,7 @@ void main(in PSInput psIn, out PSOutput psOut)
     }
 
     float3 lit = baseColor.rgb * diffuse + specular * g_SpecularColor.rgb;
-    psOut.Color = float4(lit, baseColor.a);
+    psOut.Color = FinishPixel(float4(lit, baseColor.a), psIn.FogKeep);
 }
 )";
 
@@ -1317,6 +1358,7 @@ void main(in PSInput psIn, out PSOutput psOut)
 
         CreateDeviceAndSwapChain(args);
         CreateConstantBuffer();
+        CreateFallbackTexture();
 
         maxTextureDimension_ = static_cast<int>(device_->GetAdapterInfo().Texture.MaxTexture2DDimension);
         if (maxTextureDimension_ <= 0)
@@ -1504,6 +1546,32 @@ void main(in PSInput psIn, out PSOutput psOut)
         device_->CreateBuffer(desc, nullptr, &constantBuffer_);
         if (!constantBuffer_)
             throw std::runtime_error("CNA Diligent: constant buffer creation failed");
+    }
+
+    void DiligentGraphicsBackend::CreateFallbackTexture()
+    {
+        Dg::TextureDesc desc;
+        desc.Name = "CNA fallback white texture";
+        desc.Type = Dg::RESOURCE_DIM_TEX_2D;
+        desc.Width = 1;
+        desc.Height = 1;
+        desc.MipLevels = 1;
+        desc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
+        desc.Usage = Dg::USAGE_IMMUTABLE;
+        desc.BindFlags = Dg::BIND_SHADER_RESOURCE;
+
+        constexpr std::uint8_t kWhite[4] = {255, 255, 255, 255};
+        Dg::TextureSubResData level0{};
+        level0.pData = kWhite;
+        level0.Stride = 4;
+        Dg::TextureData initialData{&level0, 1};
+
+        device_->CreateTexture(desc, &initialData, &fallbackTexture_);
+        if (!fallbackTexture_)
+            throw std::runtime_error("CNA Diligent: fallback texture creation failed");
+        fallbackTextureView_ = fallbackTexture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
+        if (fallbackTextureView_ == nullptr)
+            throw std::runtime_error("CNA Diligent: fallback texture has no shader resource view");
     }
 
     void DiligentGraphicsBackend::SyncSwapChainSize()
@@ -2208,7 +2276,7 @@ void main(in PSInput psIn, out PSOutput psOut)
         }
 
         const std::string vertexHlsl = std::string(kConstantsHlsl) + vertexSource;
-        const std::string pixelHlsl = std::string(kConstantsHlsl) + pixelSource;
+        const std::string pixelHlsl = std::string(kConstantsHlsl) + kPixelHelpersHlsl + pixelSource;
 
         Dg::ShaderCreateInfo shaderCI;
         shaderCI.SourceLanguage = Dg::SHADER_SOURCE_LANGUAGE_HLSL;
@@ -2472,6 +2540,8 @@ void main(in PSInput psIn, out PSOutput psOut)
         constants.diffuseColor[2] = 1.0f;
         constants.diffuseColor[3] = 1.0f;
         constants.flags[0] = 1.0f;
+        constants.alphaTest[2] = 1.0f;
+        constants.alphaTest[3] = 1.0f;
         UploadConstants(constants);
 
         // Sprites go through the sampler the SpriteBatch selected, which is independent of the
@@ -2566,9 +2636,6 @@ void main(in PSInput psIn, out PSOutput psOut)
             else if (params->pbr)                    unsupported = "PbrEffect";
             else if (params->customEffectBackend)    unsupported = "custom ShaderEffect programs";
             else if (params->instanceCount > 1)      unsupported = "hardware instancing";
-            else if (params->fogEnabled)             unsupported = "fog";
-            else if (params->alphaTest[0] != 0.0f || params->alphaTest[1] != 0.0f)
-                unsupported = "AlphaTestEffect";
             if (unsupported != nullptr)
                 throw std::runtime_error(std::string("CNA ") + kBackendName + " backend: " +
                                          unsupported + " is not implemented yet");
@@ -2598,6 +2665,9 @@ void main(in PSInput psIn, out PSOutput psOut)
         constants.diffuseColor[2] = 1.0f;
         constants.diffuseColor[3] = 1.0f;
         constants.eyePositionSpecularPower[3] = 16.0f;
+        // GpuDrawParams' own "always pass" encoding; an all-zero fog vector is a no-op keep of 1.
+        constants.alphaTest[2] = 1.0f;
+        constants.alphaTest[3] = 1.0f;
 
         const ITextureBackend* texture = nullptr;
         if (params != nullptr)
@@ -2622,6 +2692,13 @@ void main(in PSInput psIn, out PSOutput psOut)
                 constants.lightSpecular[2][component] = params->light2Specular[component];
             }
             constants.eyePositionSpecularPower[3] = params->specularPower;
+            for (int component = 0; component < 4; ++component)
+            {
+                constants.alphaTest[component] = params->alphaTest[component];
+                constants.fogVector[component] = params->fogVector[component];
+            }
+            for (int component = 0; component < 3; ++component)
+                constants.fogColor[component] = params->fogColor[component];
             constants.flags[0] = params->textureEnabled && texture != nullptr ? 1.0f : 0.0f;
             constants.flags[1] = params->vertexColorEnabled ? 1.0f : 0.0f;
             constants.flags[2] = params->lightingEnabled ? 1.0f : 0.0f;
@@ -2635,16 +2712,19 @@ void main(in PSInput psIn, out PSOutput psOut)
         CachedPipeline& pipeline = GetOrCreatePipeline(MakePipelineKey(variant, primitive));
         if (pipeline.textureVariable != nullptr)
         {
+            // A vertex layout that carries texture coordinates does not oblige the caller to
+            // supply a texture: BasicEffect.TextureEnabled = false over a
+            // VertexPositionColorTexture stream is ordinary XNA. The shader already ignores the
+            // sample in that case (g_Flags.x is 0), but the pipeline still declares the variable,
+            // so something has to be bound -- the fallback white texture is that something.
             const auto* diligentTexture = dynamic_cast<const DiligentSampledTexture*>(texture);
-            if (diligentTexture == nullptr)
-                throw std::runtime_error(
-                    "CNA Diligent: a textured vertex layout was drawn without a texture");
-            if (auto* view = diligentTexture->GetShaderResourceView())
-            {
-                view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_,
-                                                    samplerAddressV_, samplerMaxAnisotropy_));
-                pipeline.textureVariable->Set(view);
-            }
+            Dg::ITextureView* view =
+                diligentTexture != nullptr ? diligentTexture->GetShaderResourceView() : nullptr;
+            if (view == nullptr)
+                view = fallbackTextureView_;
+            view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
+                                                samplerMaxAnisotropy_));
+            pipeline.textureVariable->Set(view);
         }
 
         context_->SetPipelineState(pipeline.pipeline);

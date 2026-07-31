@@ -52,7 +52,7 @@ Practical consequences that shaped this plan:
 | Namespace alias | `Dg = ::Diligent` — the CNA namespace is itself named `Diligent`, so unqualified `Diligent::X` inside it would resolve to the CNA namespace and fail |
 | Third-party pin | DiligentCore `v2.5.6`, via `FetchContent` in `cmake/ThirdPartyDiligent.cmake` |
 | Task prefix | `DILIGENT-` |
-| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget` |
+| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_AlphaTestFog` |
 
 ---
 
@@ -131,12 +131,14 @@ Deliberately refused (each throws, naming itself):
 
 - `RenderTarget2D` (`DILIGENT-20`/`DILIGENT-21`): off-screen colour, an optional real depth-stencil
   buffer, `GetData` readback, sampling the unbound target, and mip regeneration on unbind.
+- `AlphaTestEffect`'s per-pixel discard and `BasicEffect`'s fog (`DILIGENT-31`/`DILIGENT-32`), on
+  every 3D shader variant.
 
 Deliberately refused (each throws, naming itself):
 
 - Cube-map render targets, MRT (2..4 slots), occlusion queries, custom `ShaderEffect` programs,
-  hardware instancing, fog, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`,
-  `SkinnedEffect`, `PbrEffect`, MSAA. `SupportsCapability()` reports each of these honestly.
+  hardware instancing, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
+  MSAA. `SupportsCapability()` reports each of these honestly.
 
 ---
 
@@ -181,8 +183,8 @@ Deliberately refused (each throws, naming itself):
 | Task | Description | Status | Notes |
 | --- | --- | --- | --- |
 | `DILIGENT-30` | Verify the OpenGL device type end-to-end (sprite Y orientation in particular) | ⬜ | Design decision 9 |
-| `DILIGENT-31` | `AlphaTestEffect` (per-pixel discard, all four compare modes) | ⬜ | |
-| `DILIGENT-32` | Fog for the `BasicEffect` family (`GpuDrawParams::fogVector`) | ⬜ | |
+| `DILIGENT-31` | `AlphaTestEffect` (per-pixel discard) | ✅ | Implemented in `GpuDrawParams::alphaTest`'s own reference/tolerance/weight encoding, so all four compare modes come from the effect layer rather than from a per-mode shader. Verified by `Diligent_AlphaTestFog` (discard and keep, same geometry, same effect object) |
+| `DILIGENT-32` | Fog for the `BasicEffect` family (`GpuDrawParams::fogVector`) | ✅ | The vertex stage computes FNA's `keep = 1 - saturate(dot(objectPos, fogVector))`, the pixel stage blends RGB toward `FogColor`. Verified fogged vs. fog-disabled on the same geometry |
 | `DILIGENT-33` | `DualTextureEffect` | ⬜ | Needs a second sampler slot in the resource layout |
 | `DILIGENT-34` | `EnvironmentMapEffect` | ⬜ | `DILIGENT-23` (its dependency) is done; still needs a cube-sampling shader variant |
 | `DILIGENT-35` | `SkinnedEffect` (72-bone palette) | ⬜ | Diligent has no push-constant size cap of SDL_GPU's kind; a uniform buffer is enough |

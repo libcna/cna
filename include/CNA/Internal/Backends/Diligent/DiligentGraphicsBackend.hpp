@@ -1140,6 +1140,9 @@ namespace CNA::Internal::Backends::Diligent
             float lightDiffuse[3][4];
             float lightSpecular[3][4];
             float flags[4];
+            float alphaTest[4];
+            float fogVector[4];
+            float fogColor[4];
         };
 
         /** @brief The physical viewport rectangle a logical (virtual) canvas maps onto. */
@@ -1156,6 +1159,7 @@ namespace CNA::Internal::Backends::Diligent
         void CreateDeviceAndSwapChain(const GraphicsBackendCreateArgs& args);
         bool TryCreateDevice(DiligentDeviceType type, int multiSampleCount);
         void CreateConstantBuffer();
+        void CreateFallbackTexture();
         void SyncSwapChainSize();
         void EnsureRenderTargetsBound();
         void ApplyViewportAndScissor();
@@ -1189,6 +1193,11 @@ namespace CNA::Internal::Backends::Diligent
         Dg::RefCntAutoPtr<Dg::ISwapChain> swapChain_;
         Dg::RefCntAutoPtr<Dg::IEngineFactory> engineFactory_;
         Dg::RefCntAutoPtr<Dg::IBuffer> constantBuffer_;
+        /// 1x1 opaque white, bound whenever a textured vertex layout is drawn with texturing
+        /// switched off. The shader ignores it (`g_Flags.x` is 0), but a pipeline that declares a
+        /// texture variable still has to have one bound.
+        Dg::RefCntAutoPtr<Dg::ITexture> fallbackTexture_;
+        Dg::ITextureView* fallbackTextureView_ = nullptr;
 
         std::unordered_map<PipelineKey, CachedPipeline, PipelineKeyHash> pipelines_;
         std::unordered_map<std::uint64_t, Dg::RefCntAutoPtr<Dg::ISampler>> samplers_;

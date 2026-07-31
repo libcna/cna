@@ -36,6 +36,7 @@
 #include <cstdlib>
 #include <exception>
 #include <memory>
+#include <string>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -206,7 +207,20 @@ int main()
     }
     catch (const std::exception& error)
     {
-        std::printf("[SKIP] CNA Diligent smoke: no usable device (%s)\n", error.what());
-        return 77;
+        // Only a genuine "there is no device here" failure is a skip. Any other exception is a
+        // real defect and must fail: an over-broad catch turned a backend bug into a green skip
+        // once already while this test was being written.
+        const std::string message = error.what();
+        const bool noDevice = message.find("no device type could be created") != std::string::npos ||
+                              message.find("unsupported SDL video driver") != std::string::npos ||
+                              message.find("SDL_Init") != std::string::npos ||
+                              message.find("live SDL window") != std::string::npos;
+        if (noDevice)
+        {
+            std::printf("[SKIP] CNA Diligent smoke: no usable device (%s)\n", error.what());
+            return 77;
+        }
+        std::printf("[FAIL] unexpected exception: %s\n", error.what());
+        return 1;
     }
 }
