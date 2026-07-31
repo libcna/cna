@@ -226,6 +226,12 @@ namespace CNA::Internal::Backends::Bgfx
         // Texture2D, whose memory is top-down. The SpriteBatch sample path flips V for these
         // sources when caps->originBottomLeft is set. Default false; only render targets override.
         virtual bool IsRenderTargetColorSource() const { return false; }
+        // REMED-GFX-181: the exact `_flags` word this resource was CREATED with. bgfx keeps a
+        // per-texture sampler state (`TextureGL::m_flags` and its per-renderer equivalents) and
+        // falls back to it for any binding that does not supply its own, so a trace that means to
+        // say WHICH state a draw really sampled with has to be able to name both candidates.
+        // Reported for diagnostics only -- nothing in the draw path branches on it.
+        virtual uint64_t GetBgfxCreationFlagsEXT() const = 0;
     };
 
     // -------------------------------------------------------------------------
@@ -242,6 +248,8 @@ namespace CNA::Internal::Backends::Bgfx
     {
         virtual ~IBgfxCubeSamplable() = default;
         virtual bgfx::TextureHandle GetBgfxCubeTextureHandle() const = 0;
+        /// REMED-GFX-181: see IBgfxSamplable::GetBgfxCreationFlagsEXT. Diagnostics only.
+        virtual uint64_t GetBgfxCubeCreationFlagsEXT() const = 0;
     };
 
     class BgfxTextureBackend : public ITextureBackend, public IBgfxSamplable
@@ -250,6 +258,8 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::TextureHandle textureHandle = BGFX_INVALID_HANDLE;
         int width = 0;
         int height = 0;
+        /// REMED-GFX-181: the `_flags` word passed to bgfx::createTexture2D. Diagnostics only.
+        uint64_t creationFlags_ = 0;
 
         explicit BgfxTextureBackend(const ImageData& data);
         ~BgfxTextureBackend() override;
@@ -257,6 +267,7 @@ namespace CNA::Internal::Backends::Bgfx
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
         bgfx::TextureHandle GetBgfxTextureHandle() const override { return textureHandle; }
+        uint64_t GetBgfxCreationFlagsEXT() const override { return creationFlags_; }
         // Task 926 (split from Task 867): real GPU upload for level 0 and level>0, mirroring
         // BgfxTextureCubeBackend::SetData's established bgfx::updateTextureCube pattern.
         void UpdatePixels(const uint8_t* rgba, int stride) override;
@@ -271,9 +282,12 @@ namespace CNA::Internal::Backends::Bgfx
         int size_ = 0;
         /// Mip levels bgfx really allocated for this cube (REMED-GFX-135).
         int levelCount_ = 1;
+        /// REMED-GFX-181: the `_flags` word passed to bgfx::createTextureCube. Diagnostics only.
+        uint64_t creationFlags_ = 0;
 
         BgfxTextureCubeBackend(int size, bool mipMap, int surfaceFormat);
         bgfx::TextureHandle GetBgfxCubeTextureHandle() const override { return handle; }
+        uint64_t GetBgfxCubeCreationFlagsEXT() const override { return creationFlags_; }
         ~BgfxTextureCubeBackend() override;
 
         /// REMED-GFX-135: true only once the whole region has been handed to bgfx as a
@@ -333,6 +347,8 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 910: this instance's own stable bgfx view id, allocated at construction --
         // see Detail::AllocateRtViewId()'s comment for why every RT needs a distinct one.
         bgfx::ViewId viewId_ = Detail::kInvalidRtViewId;
+        /// REMED-GFX-181: the `_flags` word passed to bgfx::createTexture2D. Diagnostics only.
+        uint64_t creationFlags_ = 0;
 
         BgfxRenderTargetBackend(BgfxGraphicsBackend* owner, int w, int h, int depthFormat,
                                  bool preserveContents = false,
@@ -346,6 +362,7 @@ namespace CNA::Internal::Backends::Bgfx
         void BindGL() const override {}
         int GetMultiSampleCount() const override { return multiSampleCount; }
         bgfx::TextureHandle GetBgfxTextureHandle() const override { return colorTex; }
+        uint64_t GetBgfxCreationFlagsEXT() const override { return creationFlags_; }
         // REMED-GFX-067: this IS a render-target color attachment — see IBgfxSamplable.
         bool IsRenderTargetColorSource() const override { return true; }
 
@@ -431,6 +448,8 @@ namespace CNA::Internal::Backends::Bgfx
 
         /// Mip levels bgfx really allocated for this cube target (REMED-GFX-134).
         int levelCount_ = 1;
+        /// REMED-GFX-181: the `_flags` word passed to bgfx::createTextureCube. Diagnostics only.
+        uint64_t creationFlags_ = 0;
 
         BgfxRenderTargetCubeBackend(BgfxGraphicsBackend* owner, int size, int depthFormat,
                                      bool mipMap = false, int requestedMultiSampleCount = 0);
@@ -442,6 +461,7 @@ namespace CNA::Internal::Backends::Bgfx
         int GetMultiSampleCount() const override { return multiSampleCount; }
         [[nodiscard]] unsigned int GetGLHandle() const override { return 0; }
         bgfx::TextureHandle GetBgfxCubeTextureHandle() const override { return cubeTex; }
+        uint64_t GetBgfxCubeCreationFlagsEXT() const override { return creationFlags_; }
 
         /**
          * @brief Reads a RENDERED cube face's mip level back to the CPU.
@@ -1123,6 +1143,14 @@ namespace CNA::Internal::Backends::Bgfx
         // the slot in rtFlipV_ (slots 0-3) so SubmitViewProgram's u_rtFlipV upload V-flips it.
         void BindSamplerSlot(int slot, bgfx::UniformHandle sampler,
                              const ITextureBackend* texture, bgfx::TextureHandle fallback);
+
+        // REMED-GFX-181: prints the whole two-slot EnvironmentMapEffect binding on one line --
+        // both captured public sampler words, both resources' bgfx creation flags, and the
+        // `_flags` argument each bgfx::setTexture actually received, rendered the way bgfx
+        // resolves it. Gated on CNA_BGFX_ENVMAP_TRACE; a no-op otherwise.
+        void TraceEnvMapBinding(const char* path, uint16_t viewId,
+                                const ITextureBackend* baseTexture, uint32_t baseArgument,
+                                const IBgfxCubeSamplable* cube, uint32_t cubeArgument) const;
 
         // Task 448: submits a 3D draw call's already-configured bgfx state to currentViewId_,
         // routing through bgfx's occlusion-query submit() overload when activeOcclusionQuery_ is

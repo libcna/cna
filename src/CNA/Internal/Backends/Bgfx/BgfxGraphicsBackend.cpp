@@ -233,13 +233,14 @@ namespace CNA::Internal::Backends::Bgfx
         // can genuinely re-upload later. hasMips now genuinely threaded through (was hardcoded
         // false regardless of data.mipLevels) so a real mip chain can be allocated and later
         // populated via UpdatePixelsLevel.
+        creationFlags_ = BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
         textureHandle = bgfx::createTexture2D(
             static_cast<uint16_t>(width),
             static_cast<uint16_t>(height),
             data.mipLevels > 1,
             1,
             bgfx::TextureFormat::RGBA8,
-            BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP
+            creationFlags_
         );
 
         if (!bgfx::isValid(textureHandle))
@@ -539,12 +540,13 @@ namespace CNA::Internal::Backends::Bgfx
     {
         // Task 914: mipMap now genuinely threaded through (was hardcoded false) -- verifiable now
         // that GetData() (below) provides a real readback path to check mip-level content.
+        creationFlags_ = BGFX_TEXTURE_NONE;
         handle = bgfx::createTextureCube(
             static_cast<uint16_t>(size),
             mipMap,
             1,
             bgfx::TextureFormat::RGBA8,
-            BGFX_TEXTURE_NONE);
+            creationFlags_);
     }
 
     BgfxTextureCubeBackend::~BgfxTextureCubeBackend()
@@ -879,9 +881,10 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 878 vkCmdBlitImage cascade -- bgfx already has a real glGenerateMipmap-equivalent,
         // just gated behind the framebuffer-attachment resolve flag rather than surfaced on
         // bgfx::blit() (which really is a same-size copy only, as originally found).
+        creationFlags_ = msaaFlag | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
         colorTex = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
             mipMap, 1, bgfx::TextureFormat::RGBA8,
-            msaaFlag | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+            creationFlags_);
 
         bgfx::TextureHandle attachments[2] = { colorTex, BGFX_INVALID_HANDLE };
         int numAttachments = 1;
@@ -1102,9 +1105,10 @@ namespace CNA::Internal::Backends::Bgfx
         // BGFX_RESOLVE_AUTO_GEN_MIPS (its own default, unconditionally, unlike the simple
         // TextureHandle-array createFrameBuffer overload), so this is the only change needed --
         // same mechanism as Task 906's RenderTarget2D fix.
+        creationFlags_ = msaaFlag | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
         cubeTex = bgfx::createTextureCube(static_cast<uint16_t>(size), mipMap, 1,
                                            bgfx::TextureFormat::RGBA8,
-                                           msaaFlag | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP);
+                                           creationFlags_);
         // Task 877: single 2D depth/stencil texture shared across all 6 faces (mirrors
         // VulkanRenderTargetCubeBackend's shared depthImage_) -- omitted entirely for
         // DepthFormat::None (previously RenderTargetCube had no depth attachment support at all
@@ -3297,6 +3301,122 @@ namespace CNA::Internal::Backends::Bgfx
         SubmitViewProgram(colored3DProgram_);
     }
 
+    // -------------------------------------------------------------------------
+    // REMED-GFX-181: env-gated diagnostics for the EnvironmentMapEffect two-slot binding.
+    //
+    // `bgfx::setTexture(_stage, _sampler, _handle, _flags)` defaults `_flags` to UINT32_MAX, and
+    // bgfx reads that as a SENTINEL, not as a flag word: `EncoderImpl::setTexture` stores
+    // `BGFX_SAMPLER_INTERNAL_DEFAULT` (0x10000000) whenever that bit is present in the argument,
+    // and every renderer then resolves the binding as
+    // `0 == (BGFX_SAMPLER_INTERNAL_DEFAULT & _flags) ? _flags : m_flags` -- i.e. an explicit word
+    // REPLACES the texture's own creation state outright (masked to BGFX_SAMPLER_BITS_MASK), while
+    // the sentinel selects that creation state. So "which sampler did this draw really use" is not
+    // observable from the CNA side at all unless both candidates are printed next to the argument
+    // that chose between them. This trace prints exactly that, once per env-map submit, and is off
+    // unless CNA_BGFX_ENVMAP_TRACE is set to something other than empty or "0".
+    // -------------------------------------------------------------------------
+    namespace
+    {
+        bool EnvMapTraceEnabled()
+        {
+            static const bool enabled = []
+            {
+                const char* v = std::getenv("CNA_BGFX_ENVMAP_TRACE");
+                return v != nullptr && v[0] != '\0' && std::strcmp(v, "0") != 0;
+            }();
+            return enabled;
+        }
+
+        /// Decodes the BGFX_SAMPLER_* bits that a per-binding override may carry
+        /// (BGFX_SAMPLER_BITS_MASK: U/V/W address, MIN/MAG/MIP filter, COMPARE).
+        std::string DescribeBgfxSamplerFlags(uint64_t flags)
+        {
+            std::string out;
+            const auto add = [&out](const char* s) { if (!out.empty()) out += '+'; out += s; };
+            switch (flags & BGFX_SAMPLER_MIN_MASK)
+            {
+            case BGFX_SAMPLER_MIN_POINT:       add("minPoint");  break;
+            case BGFX_SAMPLER_MIN_ANISOTROPIC: add("minAniso");  break;
+            default:                           add("minLinear"); break;
+            }
+            switch (flags & BGFX_SAMPLER_MAG_MASK)
+            {
+            case BGFX_SAMPLER_MAG_POINT:       add("magPoint");  break;
+            case BGFX_SAMPLER_MAG_ANISOTROPIC: add("magAniso");  break;
+            default:                           add("magLinear"); break;
+            }
+            add((flags & BGFX_SAMPLER_MIP_MASK) == BGFX_SAMPLER_MIP_POINT ? "mipPoint" : "mipLinear");
+            switch (flags & BGFX_SAMPLER_U_MASK)
+            {
+            case BGFX_SAMPLER_U_MIRROR: add("uMirror"); break;
+            case BGFX_SAMPLER_U_CLAMP:  add("uClamp");  break;
+            case BGFX_SAMPLER_U_BORDER: add("uBorder"); break;
+            default:                    add("uWrap");   break;
+            }
+            switch (flags & BGFX_SAMPLER_V_MASK)
+            {
+            case BGFX_SAMPLER_V_MIRROR: add("vMirror"); break;
+            case BGFX_SAMPLER_V_CLAMP:  add("vClamp");  break;
+            case BGFX_SAMPLER_V_BORDER: add("vBorder"); break;
+            default:                    add("vWrap");   break;
+            }
+            switch (flags & BGFX_SAMPLER_W_MASK)
+            {
+            case BGFX_SAMPLER_W_MIRROR: add("wMirror"); break;
+            case BGFX_SAMPLER_W_CLAMP:  add("wClamp");  break;
+            case BGFX_SAMPLER_W_BORDER: add("wBorder"); break;
+            default:                    add("wWrap");   break;
+            }
+            return out;
+        }
+
+        std::string DescribeHex(uint64_t v)
+        {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "0x%08llx", static_cast<unsigned long long>(v));
+            return buf;
+        }
+
+        /// The word the draw hands to bgfx, rendered the way bgfx will read it.
+        std::string DescribeEffectiveFlags(uint32_t argument, uint64_t creationFlags)
+        {
+            if ((argument & 0x10000000u) != 0u)  // BGFX_SAMPLER_INTERNAL_DEFAULT (bgfx_p.h, private)
+                return "DEFAULT->creation " + DescribeHex(creationFlags & 0xffffffffull)
+                     + " (" + DescribeBgfxSamplerFlags(creationFlags) + ")";
+            return "EXPLICIT " + DescribeHex(argument) + " (" + DescribeBgfxSamplerFlags(argument) + ")";
+        }
+    }
+
+    void BgfxGraphicsBackend::TraceEnvMapBinding(const char* path, uint16_t viewId,
+                                                  const ITextureBackend* baseTexture,
+                                                  uint32_t baseArgument,
+                                                  const IBgfxCubeSamplable* cube,
+                                                  uint32_t cubeArgument) const
+    {
+        if (!EnvMapTraceEnabled()) return;
+        static uint32_t submitOrder = 0;
+        const uint64_t baseCreation = baseTexture != nullptr
+            ? [baseTexture]() -> uint64_t {
+                  const auto* s = dynamic_cast<const IBgfxSamplable*>(baseTexture);
+                  return s != nullptr ? s->GetBgfxCreationFlagsEXT() : 0ull;
+              }()
+            : 0ull;
+        const uint64_t cubeCreation = cube != nullptr ? cube->GetBgfxCubeCreationFlagsEXT() : 0ull;
+        std::cout << "[CNA_BGFX_ENVMAP] draw=" << submitOrder++
+                  << " family=EnvironmentMap"
+                  << " path=" << path
+                  << " view=" << viewId
+                  << " | captured0=" << DescribeHex(samplerFlags_[0])
+                  << " (" << DescribeBgfxSamplerFlags(samplerFlags_[0]) << ")"
+                  << " | captured1=" << DescribeHex(samplerFlags_[1])
+                  << " (" << DescribeBgfxSamplerFlags(samplerFlags_[1]) << ")"
+                  << " | baseCreation=" << DescribeHex(baseCreation)
+                  << " | cubeCreation=" << DescribeHex(cubeCreation)
+                  << " | effective0=" << DescribeEffectiveFlags(baseArgument, baseCreation)
+                  << " | effective1=" << DescribeEffectiveFlags(cubeArgument, cubeCreation)
+                  << std::endl;
+    }
+
     void BgfxGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb_in,
                                                const Matrix& world, const Matrix& view,
                                                const Matrix& projection,
@@ -3596,7 +3716,11 @@ namespace CNA::Internal::Backends::Bgfx
                 // params.envMap may be a BgfxRenderTargetCubeBackend (a sampled RenderTargetCube),
                 // whose layout differs entirely from BgfxTextureCubeBackend's.
                 if (const auto* samplable = dynamic_cast<const IBgfxCubeSamplable*>(params.envMap))
+                {
                     bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle());
+                    TraceEnvMapBinding("DrawPrimitivesEx", currentViewId_, params.texture0,
+                                       samplerFlags_[0], samplable, UINT32_MAX);
+                }
             }
             SubmitViewProgram(envMap3DProgram_);
         }
@@ -4029,7 +4153,11 @@ namespace CNA::Internal::Backends::Bgfx
                 // params.envMap may be a BgfxRenderTargetCubeBackend (a sampled RenderTargetCube),
                 // whose layout differs entirely from BgfxTextureCubeBackend's.
                 if (const auto* samplable = dynamic_cast<const IBgfxCubeSamplable*>(params.envMap))
+                {
                     bgfx::setTexture(1, envMapSampler_, samplable->GetBgfxCubeTextureHandle());
+                    TraceEnvMapBinding("DrawIndexedPrimitivesEx", currentViewId_, params.texture0,
+                                       samplerFlags_[0], samplable, UINT32_MAX);
+                }
             }
             SubmitViewProgram(envMap3DProgram_);
         }
