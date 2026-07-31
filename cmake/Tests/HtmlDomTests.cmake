@@ -18,4 +18,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1
         -sEXPORTED_RUNTIME_METHODS=UTF8ToString)
+
+    # NOXNA. A small visual demo (examples/htmldom_visual_demo.cpp) that exists to be looked at
+    # rather than asserted against -- distinct from the smoke test above. Runs forever (no Exit()),
+    # so it is driven by taking a screenshot after a short settle time rather than by reading
+    # PASS/FAIL console lines.
+    add_executable(cna_htmldom_visual_demo examples/htmldom_visual_demo.cpp)
+    target_link_libraries(cna_htmldom_visual_demo PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    set_target_properties(cna_htmldom_visual_demo PROPERTIES SUFFIX ".html")
+    target_link_options(cna_htmldom_visual_demo PRIVATE -sALLOW_MEMORY_GROWTH=1)
 endif()
