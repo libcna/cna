@@ -140,6 +140,9 @@ Implemented:
   per-instance step rate, alongside the per-vertex `Position`-only stream at slot 0. Deliberately
   minimal, matching every other CNA backend's own instancing baseline: no texture, no lighting,
   flat diffuse colour output.
+- `SetStringMarkerEXT` — a real `IDeviceContext::InsertDebugLabel()` call, visible to external debug
+  tools (RenderDoc, PIX, Vulkan validation layers with debug-utils enabled); has no rendering effect
+  of its own.
 
 Not implemented — each **throws with its own name** rather than rendering an approximation, and
 `GraphicsDevice.GraphicsCapabilities` reports each honestly:
@@ -185,8 +188,8 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Twelve further binaries are the real-device pixel proofs (55 checks total): `Diligent_2D` (6),
-`Diligent_3D` (5), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
+Twelve further binaries are the real-device pixel proofs (56 checks total): `Diligent_2D` (6),
+`Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4),
 `Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4) and
 `Diligent_DrawOffset` (5). They clear, draw `SpriteBatch` quads and 3D primitives on the back

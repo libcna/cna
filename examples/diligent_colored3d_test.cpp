@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSize = 64;
-    constexpr int kChecks = 5;
+    constexpr int kChecks = 6;
 
     bool ColorNear(Color a, Color b, int tolerance = 12)
     {
@@ -179,6 +179,17 @@ protected:
         }
         Check(ColorNear(ReadCenter(device), Color::Blue),
               "textured quad samples its texture (stride-20 layout, textured shader variant)");
+
+        // DILIGENT-46: SetStringMarkerEXT is debug-only (no rendering effect) -- the only thing to
+        // prove is that inserting a label around a draw doesn't disturb it. Bracket the same
+        // vertex-coloured draw as check A with markers and confirm it still renders correctly.
+        device.Clear(Color::Black);
+        device.SetStringMarkerEXT("diligent_colored3d_test: before quad");
+        DrawFullScreenQuad(device, 0.5f, Color::Red);
+        device.SetStringMarkerEXT("diligent_colored3d_test: after quad");
+        device.SetStringMarkerEXT(""); // empty marker: documented no-op, must not throw either
+        Check(ColorNear(ReadCenter(device), Color::Red),
+              "SetStringMarkerEXT around a draw does not disturb it");
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);
         result_ = passCount_ == kChecks ? 0 : 1;

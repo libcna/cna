@@ -1053,6 +1053,15 @@ namespace CNA::Internal::Backends::Diligent
         [[nodiscard]] int GetMaxTextureDimension() const override { return maxTextureDimension_; }
 
         /**
+         * @brief Inserts a named GPU debug label into the command stream via
+         * `IDeviceContext::InsertDebugLabel()`. External debug tools (RenderDoc, PIX, Vulkan
+         * validation layers with debug-utils enabled) may surface this; it has no rendering effect.
+         *
+         * @param marker Label text. A null or empty marker is a no-op.
+         */
+        void SetStringMarkerEXT(const char* marker) override;
+
+        /**
          * @brief Applies an XNA `BlendState` to the pipeline state used by subsequent draws.
          *
          * @param colorSrcBlend  Raw XNA `Blend` ordinal for the colour source factor.

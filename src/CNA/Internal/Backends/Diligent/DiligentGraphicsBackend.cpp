@@ -2938,6 +2938,13 @@ float4 main(in PSInput psIn) : SV_Target
         return std::make_unique<DiligentOcclusionQueryBackend>(this);
     }
 
+    void DiligentGraphicsBackend::SetStringMarkerEXT(const char* marker)
+    {
+        if (marker == nullptr || marker[0] == '\0')
+            return;
+        context_->InsertDebugLabel(marker);
+    }
+
     void DiligentGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                    int colorDstBlend, int alphaDstBlend,
                                                    int colorBlendFunc, int alphaBlendFunc,
