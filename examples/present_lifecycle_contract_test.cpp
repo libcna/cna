@@ -174,24 +174,14 @@ namespace
     /**
      * @brief Whether a multisampled render target may be given a real DepthFormat here.
      *
-     * BGFX aborts the PROCESS if it is: `BgfxRenderTargetBackend`'s constructor creates the MSAA
-     * depth attachment with the sample-count flag alone, and `bgfx::createFrameBuffer` asserts
-     * "Frame buffer depth MSAA texture cannot be resolved. It must be created with either
-     * `BGFX_TEXTURE_RT_WRITE_ONLY` or `BGFX_TEXTURE_MSAA_SAMPLE` flag." -- a bgfx BX_ASSERT, so it
-     * arrives as SIGTRAP rather than as an exception the public layer could turn into a clean
-     * NotSupportedException. `RenderTarget2D(dev, w, h, false, Color, Depth24, 4, ...)` is an
-     * entirely legal XNA construction, so this is a defect and it is recorded as REMED-GFX-184, NOT
-     * fixed here -- this task is scoped to the present lifecycle. Declared rather than probed because
-     * an abort cannot be caught: leg A9 uses DepthFormat::None on BGFX and still measures the
-     * resolve-on-unbind-then-Present transition it exists for. No pre-existing fixture reached this:
-     * REMED-GFX-168's leg D1 is the only other MSAA target and it passes DepthFormat::None.
+     * True on every backend. This was false on BGFX while REMED-GFX-163 was open: a depth-backed
+     * multisampled target aborted the PROCESS by SIGTRAP inside `bgfx::createFrameBuffer`, so leg A9
+     * had to drop the depth attachment THERE and declare the boundary rather than measure it. That
+     * defect is fixed -- `BgfxDepthAttachmentFlags` now gives a multisampled depth attachment
+     * `BGFX_TEXTURE_RT_WRITE_ONLY` -- so A9 asks for `DepthFormat::Depth24` everywhere again and
+     * this constant is kept only as the place any future backend would declare the same limit.
      */
-    constexpr bool kMsaaTargetMayHaveDepth =
-#if defined(CNA_BACKEND_BGFX)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMsaaTargetMayHaveDepth = true;
 
     /// Distinct, far-apart flat colours. Any two of them differ by far more than kTol on at least one
     /// channel, so a wrong destination or a dropped draw can never land inside the tolerance.
@@ -564,15 +554,15 @@ class PresentLifecycleContractTest : public Game
     void LegA9(GraphicsDevice& dev)
     {
         std::unique_ptr<RenderTarget2D> a;
-        // See kMsaaTargetMayHaveDepth: on BGFX a depth-backed multisampled target aborts the process
-        // inside bgfx's own framebuffer validation (REMED-GFX-184), so the depth attachment is
-        // dropped THERE only and the leg still measures what it exists for.
+        // REMED-GFX-163 re-armed this: BGFX used to abort the process here, so this leg dropped the
+        // depth attachment on that backend alone. It no longer does, and every backend now measures
+        // the resolve-on-unbind-then-Present transition with a real depth attachment attached.
         const DepthFormat msaaDepth =
             kMsaaTargetMayHaveDepth ? DepthFormat::Depth24 : DepthFormat::None;
         if (!kMsaaTargetMayHaveDepth)
-            boundary("A9: " + std::string(kBackendName) + " aborts on a depth-backed multisampled "
-                     "render target (REMED-GFX-184) -- measured without a depth attachment");
-        step("A9: create a 4x multisampled target");
+            boundary("A9: " + std::string(kBackendName) + " cannot build a depth-backed multisampled "
+                     "render target -- measured without a depth attachment");
+        step("A9: create a 4x multisampled DEPTH-BACKED target");
         try
         {
             a = std::make_unique<RenderTarget2D>(dev, kRT, kRT, false, SurfaceFormat::Color,

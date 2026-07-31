@@ -199,10 +199,10 @@ namespace
         bool    orderedClearInCycle;
         /**
          * A multisampled RenderTarget2D with a real DepthFormat can be created and bound at all.
-         * False only on bgfx, where `bgfx::isFrameBufferValid` refuses a multisampled depth
-         * attachment whose texture lacks `BGFX_TEXTURE_RT_WRITE_ONLY` and ABORTS the process.
-         * REMED-GFX-141 fixed exactly that on the cube leg and recorded the 2D leg as a separate
-         * finding; this file must not trip it, so check D8 never builds the target there.
+         * True everywhere now. It was false on bgfx, where `bgfx::isFrameBufferValid` refuses a
+         * multisampled depth attachment whose texture lacks `BGFX_TEXTURE_RT_WRITE_ONLY` and ABORTS
+         * the process. REMED-GFX-141 fixed exactly that on the cube leg and recorded the 2D leg as a
+         * separate finding; REMED-GFX-163 closed it, so check D8 builds the target on bgfx again.
          */
         bool    msaaDepthRT2D;
         /// The same for a multisampled depth-backed RenderTargetCube (REMED-GFX-141 fixed bgfx's).
@@ -268,11 +268,12 @@ namespace
                                  true, true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_BGFX)
     // Render-target views are left at BGFX_CLEAR_NONE, so the depth attachment persists.
-    // `msaaDepthRT2D` false: a multisampled depth-backed RenderTarget2D aborts the process here
-    // (see the field's own comment) -- a recorded finding outside REMED-GFX-142's scope.
+    // `msaaDepthRT2D` was false while a multisampled depth-backed RenderTarget2D aborted the process
+    // here; REMED-GFX-163 fixed that, so check D8 builds the target again. It still reports the
+    // no-resolved-readback boundary through `msaaReadback`, which is a separate open finding.
     constexpr Contract kContract{"BGFX", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 false, true, false, true, true, false, false};
+                                 true, true, false, true, true, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // `msaaRt2dPreserves` false: the multisampled RenderTarget2D leg hardcodes
     // `discardContents=true`, discarding colour AND depth -- REMED-GFX-141's recorded finding.

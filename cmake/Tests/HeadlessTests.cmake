@@ -207,6 +207,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_PresentLifecycle COMMAND cna_test_headless_present_lifecycle
         TIMEOUT 900 LABELS "Headless")
 
+    # REMED-GFX-163 cross-backend control: the same public depth-backed MULTISAMPLED
+    # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
+    # production changed; this backend is registered to show the construction was always legal
+    # and to keep it that way.
+    cna_headless_test(cna_test_headless_msaa_depth_contract
+        examples/rendertarget_msaa_depth_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_MsaaDepthContract COMMAND cna_test_headless_msaa_depth_contract
+        TIMEOUT 900 LABELS "Headless")
+
     # REMED-GFX-165 cross-backend control: Headless does not rasterize, so the pixel oracle is a
     # declared boundary; the run still exercises the shared dimension/rectangle-validation path.
     cna_headless_test(cna_test_headless_backbuffer_readback_dimension

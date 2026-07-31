@@ -98,10 +98,11 @@ class BgfxRenderTarget2DMsaaTest : public Game
     // Renders the diagonal triangle once into a RenderTarget2D with the given MultiSampleCount,
     // then repeatedly samples it back onto the backbuffer 1:1 (retrying the backbuffer-sample step
     // only, per this file's header comment) and returns the full centre-row pixel colours.
-    std::vector<Color> RenderAndReadRow(GraphicsDevice& device, int multiSampleCount)
+    std::vector<Color> RenderAndReadRow(GraphicsDevice& device, int multiSampleCount,
+                                        DepthFormat depthFormat)
     {
         RenderTarget2D rt(device, kRTSize, kRTSize, false, SurfaceFormat::Color,
-                           DepthFormat::None, multiSampleCount, RenderTargetUsage::DiscardContents);
+                           depthFormat, multiSampleCount, RenderTargetUsage::DiscardContents);
 
         device.setBlendStateProperty(BlendState::Opaque);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -191,8 +192,8 @@ protected:
 
         auto& device = getGraphicsDeviceProperty();
 
-        const std::vector<Color> noMsaaRow = RenderAndReadRow(device, 0);
-        const std::vector<Color> msaaRow   = RenderAndReadRow(device, 8);
+        const std::vector<Color> noMsaaRow = RenderAndReadRow(device, 0, DepthFormat::None);
+        const std::vector<Color> msaaRow   = RenderAndReadRow(device, 8, DepthFormat::None);
 
         const bool noMsaaOk = IsBinary(noMsaaRow);
         const bool msaaOk   = HasIntermediate(msaaRow);
@@ -201,6 +202,25 @@ protected:
                     noMsaaOk ? "PASS" : "FAIL");
         std::printf("[%s] MultiSampleCount=8: diagonal edge has genuinely blended pixels (real AA)\n",
                     msaaOk ? "PASS" : "FAIL");
+
+        // REMED-GFX-163: every case above asks for DepthFormat::None, so this file measured MSAA
+        // WITHOUT depth and never reached the combination that used to abort the process inside
+        // bgfx's framebuffer validation. A depth attachment must not change the resolve at all, so
+        // the same two judgements are repeated with one attached -- and reaching them is itself the
+        // regression gate, because pre-fix the constructor below killed the process by SIGTRAP.
+        const std::vector<Color> noMsaaDepthRow =
+            RenderAndReadRow(device, 0, DepthFormat::Depth24Stencil8);
+        const std::vector<Color> msaaDepthRow =
+            RenderAndReadRow(device, 8, DepthFormat::Depth24Stencil8);
+
+        const bool noMsaaDepthOk = IsBinary(noMsaaDepthRow);
+        const bool msaaDepthOk   = HasIntermediate(msaaDepthRow);
+
+        std::printf("[%s] MultiSampleCount=0 + Depth24Stencil8: still a hard binary transition\n",
+                    noMsaaDepthOk ? "PASS" : "FAIL");
+        std::printf("[%s] MultiSampleCount=8 + Depth24Stencil8: still genuinely blended pixels -- a "
+                    "depth attachment does not disturb the colour resolve\n",
+                    msaaDepthOk ? "PASS" : "FAIL");
 
         if (!noMsaaOk)
         {
@@ -213,7 +233,7 @@ protected:
                         "actually averaging sub-pixel coverage.\n");
         }
 
-        result_ = (noMsaaOk && msaaOk) ? 0 : 1;
+        result_ = (noMsaaOk && msaaOk && noMsaaDepthOk && msaaDepthOk) ? 0 : 1;
         Exit();
     }
 

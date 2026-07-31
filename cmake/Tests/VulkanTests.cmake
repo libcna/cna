@@ -1339,6 +1339,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_PresentLifecycle COMMAND cna_test_vulkan_present_lifecycle
             TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-163 cross-backend control: the same public depth-backed MULTISAMPLED
+        # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
+        # production changed; this backend is registered to show the construction was always legal
+        # and to keep it that way.
+        cna_vulkan_test(cna_test_vulkan_msaa_depth_contract
+            examples/rendertarget_msaa_depth_contract_test.cpp)
+        cna_register_backend_test(NAME Vulkan_MsaaDepthContract COMMAND cna_test_vulkan_msaa_depth_contract
+            TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-165 cross-backend control: Vulkan already honoured the authoritative-dimension
         # GetBackBufferData contract (its swapchain extent equals the backbuffer); this run establishes
         # that the shared fix left it byte-unchanged and that only WebGPU/SDL_GPU production changed.

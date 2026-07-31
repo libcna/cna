@@ -214,6 +214,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_PresentLifecycle COMMAND cna_test_software_present_lifecycle
         TIMEOUT 900 LABELS "Software")
 
+    # REMED-GFX-163 cross-backend control: the same public depth-backed MULTISAMPLED
+    # RenderTarget2D construction and lifecycle that aborted the process on Bgfx. Only Bgfx
+    # production changed; this backend is registered to show the construction was always legal
+    # and to keep it that way.
+    cna_software_test(cna_test_software_msaa_depth_contract
+        examples/rendertarget_msaa_depth_contract_test.cpp)
+    cna_register_backend_test(NAME Software_MsaaDepthContract COMMAND cna_test_software_msaa_depth_contract
+        TIMEOUT 900 LABELS "Software")
+
     # REMED-GFX-165 cross-backend control: the authoritative-backbuffer-dimension GetBackBufferData
     # contract. Software's backbuffer is a CPU buffer that genuinely resizes, so it is also where the
     # post-resize pixel oracle is meaningful. Software already honoured the contract (its viewport
