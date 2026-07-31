@@ -727,6 +727,15 @@ namespace CNA::Internal::Backends::Bgfx
         // on demand -- that trace is the structural evidence behind this task's ordering claims and
         // is how a future ordering regression is diagnosed without re-deriving the id partition.
         bool traceViewOrder_ = false;
+        // REMED-GFX-154: set from CNA_BGFX_TRACE_READBACK=1. A multisample RESOLVE is not observable
+        // through bgfx's public API either -- there is no handle for the multisample side and no
+        // capability bit to ask -- so the whole readback sequence (source handles, blit view, frame
+        // numbers, the completion generation bgfx::readTexture returned, and how many frames were
+        // processed while waiting for it) is written to stderr on demand. This trace is the evidence
+        // behind this task's ordering claims.
+        bool traceReadback_ = false;
+        /// REMED-GFX-154: how many public readbacks this device has served, for the trace's own index.
+        int readbackCallIndex_ = 0;
         // The active view's viewport identity. The FIRST viewport on a target uses its BASE view (view 0 /
         // RT id) exactly as before this task -- a custom viewport still shrinks that base view's rect
         // (REMED-GFX-063), so a single-viewport frame is byte-identical to pre-GFX-065. A draw whose

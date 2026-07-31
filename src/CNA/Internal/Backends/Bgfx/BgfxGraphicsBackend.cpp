@@ -454,18 +454,35 @@ namespace CNA::Internal::Backends::Bgfx
     }
 
     // Task 914: advances bgfx frames until the given target frame number (as returned by
-    // bgfx::readTexture()) has been reached, mirroring ReadBackbuffer's own established
-    // retry-until-ready convention for bgfx's inherently async/deferred completion model.
-    // Bounded by a generous attempt cap as a safety net (never observed to need more than 1-2
-    // in this project's single-threaded-bgfx sandbox, matching ReadBackbuffer's own comment).
-    static bool AdvanceFramesUntil(uint32_t targetFrame)
+    // bgfx::readTexture()) has been reached -- bgfx's readback is inherently deferred and the
+    // destination is only guaranteed complete at that generation.
+    //
+    // REMED-GFX-154: the wait is bounded by THAT GENERATION, not by an attempt count. bgfx derives
+    // the value it returns as `m_submit->m_frameNum + 2` (bgfx_p.h, Context::readTexture) and
+    // bgfx::frame() advances the counter by exactly one and returns the new value, so the number of
+    // frames still owed is derivable from what bgfx itself reported rather than guessed. The
+    // previous spelling capped the loop at four attempts, which was a magic number sitting one step
+    // above the three this path actually needs on the renderer used here -- a silent
+    // `completed=false` (and therefore a NotSupportedException) waiting for the first machine that
+    // needed one more. A counter that fails to advance is the only way out other than success, and
+    // it is reported as a failure rather than spun on forever.
+    static bool AdvanceFramesUntil(uint32_t targetFrame, int* outFramesAdvanced = nullptr,
+                                   uint32_t* outReachedFrame = nullptr)
     {
-        for (int attempt = 0; attempt < 4; ++attempt)
+        int advanced = 0;
+        bool havePrevious = false;
+        uint32_t previous = 0;
+        for (;;)
         {
             const uint32_t current = bgfx::frame();
+            ++advanced;
+            if (outFramesAdvanced) *outFramesAdvanced = advanced;
+            if (outReachedFrame) *outReachedFrame = current;
             if (current >= targetFrame) return true;
+            if (havePrevious && current <= previous) return false;   // the counter stalled
+            previous = current;
+            havePrevious = true;
         }
-        return false;
     }
 
     bool BgfxGraphicsBackend::ReadTextureRegionEXT(bgfx::TextureHandle srcTexture, int level,
@@ -490,6 +507,34 @@ namespace CNA::Internal::Backends::Bgfx
             return false;
         }
 
+        // REMED-GFX-154: give the readback view a RENDER ITEM, and point it at the backbuffer.
+        //
+        // Queueing the blit on the reserved highest view id is necessary but NOT sufficient, and the
+        // difference is what made the first read of a multisampled target come back all zero. A
+        // renderer only VISITS a view that owns at least one render item: `RendererContextGL::submit`
+        // iterates render items, and its per-view prologue is what calls `setFrameBuffer()` and then
+        // `submitBlit(bs, view)`. A view holding nothing but a blit is never reached, so its blit
+        // falls through to the tail `submitBlit(bs, BGFX_CONFIG_MAX_VIEWS)` -- which runs while the
+        // PRODUCER's framebuffer is still the current one.
+        //
+        // That matters because a multisample RESOLVE is not performed at frame end. `setFrameBuffer`
+        // is the only caller of `FrameBufferGL::resolve()`, and only when switching to a DIFFERENT
+        // framebuffer: the resolve is the `glBlitFramebuffer` from `m_fbo[0]` (the multisample
+        // renderbuffer) into `m_fbo[1]` (the single-sample texture that `colorTex` names). Copying
+        // out of `colorTex` before that switch reads a texture nothing has written yet -- freshly
+        // created and therefore zero-filled, so the readback SUCCEEDS over untouched memory instead
+        // of failing, which is exactly the fabricated transparent-black result REMED-GFX-127/130
+        // exist to forbid.
+        //
+        // Touching the view repairs both halves at once and in the right order: the renderer reaches
+        // view kBackbufferFlushViewId, sees a framebuffer different from the producer's and resolves
+        // it, and only THEN drains this blit. No extra public frame, Present, dummy target bind,
+        // sleep, retry or second read is involved -- one empty submit on a view that is already
+        // reserved for exactly this purpose. `ReadBackbuffer` has always done the same thing for the
+        // same reason (Task 951); this path simply never learned it.
+        Detail::SetViewFrameBufferEXT(Detail::kBackbufferFlushViewId, BGFX_INVALID_HANDLE);
+        bgfx::touch(Detail::kBackbufferFlushViewId);
+
         // The blit must run AFTER every render-target and viewport-segment view queued this frame,
         // or it would copy the previous frame's content. bgfx processes views in ascending id
         // order and kBackbufferFlushViewId is the reserved highest id, above both the RT base range
@@ -503,7 +548,25 @@ namespace CNA::Internal::Backends::Bgfx
                    static_cast<uint16_t>(w), static_cast<uint16_t>(h), 1);
 
         const uint32_t targetFrame = bgfx::readTexture(readback, data);
-        const bool completed = AdvanceFramesUntil(targetFrame);
+        int framesAdvanced = 0;
+        uint32_t reachedFrame = 0;
+        const bool completed = AdvanceFramesUntil(targetFrame, &framesAdvanced, &reachedFrame);
+        if (traceReadback_)
+        {
+            ++readbackCallIndex_;
+            std::cerr << "[GFX-154] readback#" << readbackCallIndex_
+                      << " srcTex=" << srcTexture.idx << " level=" << level
+                      << " layer=" << layer
+                      << " rect=" << x << "," << y << " " << w << "x" << h
+                      << " readbackTex=" << readback.idx
+                      << " blitView=" << static_cast<int>(Detail::kBackbufferFlushViewId)
+                      << " touchedBlitView=yes"
+                      << " readTextureCompletionFrame=" << targetFrame
+                      << " framesAdvanced=" << framesAdvanced
+                      << " reachedFrame=" << reachedFrame
+                      << " completed=" << (completed ? "yes" : "no")
+                      << " cpuBytes=" << (static_cast<std::size_t>(w) * h * 4u) << "\n";
+        }
         // bgfx::frame() ran, so this backend's per-frame state must be recycled exactly as
         // ReadBackbuffer does after its own frame advance -- otherwise the segment view ids
         // allocated before this readback would be treated as still belonging to the current frame.
@@ -1528,6 +1591,12 @@ namespace CNA::Internal::Backends::Bgfx
         {
             const char* trace = SDL_getenv("CNA_BGFX_TRACE_VIEW_ORDER");
             traceViewOrder_ = trace != nullptr && trace[0] != '\0' && trace[0] != '0';
+        }
+
+        // REMED-GFX-154: same idea for the readback/resolve sequence, read once for the same reason.
+        {
+            const char* trace = SDL_getenv("CNA_BGFX_TRACE_READBACK");
+            traceReadback_ = trace != nullptr && trace[0] != '\0' && trace[0] != '0';
         }
 
         try
