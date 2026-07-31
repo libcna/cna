@@ -158,6 +158,61 @@ namespace CNA::Internal::Backends::Llgl
     };
 
     /**
+     * @brief A volume (3D) texture living in LLGL. NOXNA.
+     *
+     * Backs `Microsoft::Xna::Framework::Graphics::Texture3D`. One `LLGL::TextureType::Texture3D`
+     * resource with a real depth extent (not array layers). Pixels are always RGBA8, matching
+     * `LlglTextureBackend`.
+     */
+    class LlglTexture3DBackend final : public ITexture3DBackend
+    {
+    public:
+        /**
+         * @brief Takes ownership of an already-created LLGL volume texture.
+         *
+         * @param renderSystem Render system that created @p texture and will release it.
+         * @param texture      The texture resource; must not be null.
+         * @param width        Width in voxels of mip level 0.
+         * @param height       Height in voxels of mip level 0.
+         * @param depth        Depth in voxels of mip level 0.
+         * @param mipLevels    Number of mip levels the texture was created with.
+         */
+        LlglTexture3DBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* texture,
+                             int width, int height, int depth, int mipLevels);
+
+        /** @brief Releases the LLGL texture. */
+        ~LlglTexture3DBackend() override;
+
+        LlglTexture3DBackend(const LlglTexture3DBackend&) = delete;
+        LlglTexture3DBackend& operator=(const LlglTexture3DBackend&) = delete;
+
+        /**
+         * @brief Uploads raw RGBA8 voxels into a sub-volume of the given mip level.
+         * @return True if the whole box was stored; false if this backend stored nothing.
+         */
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Reads back raw RGBA8 voxels from a sub-volume of the given mip level.
+         * @return True if the whole box was written; false if this backend read nothing back.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   void* data, int dataLength) const override;
+
+        /** @brief Returns the underlying LLGL texture. */
+        [[nodiscard]] LLGL::Texture* GetLlglTexture() const { return texture_; }
+
+    private:
+        LLGL::RenderSystem* renderSystem_ = nullptr;
+        LLGL::Texture*      texture_      = nullptr;
+        int                 width_        = 0;
+        int                 height_       = 0;
+        int                 depth_        = 0;
+        int                 mipLevels_    = 1;
+    };
+
+    /**
      * @brief A vertex buffer living in LLGL. NOXNA.
      *
      * Uploads are real: the data reaches GPU memory and the vertex count round-trips. Drawing from
@@ -867,6 +922,20 @@ namespace CNA::Internal::Backends::Llgl
          */
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
+
+        /**
+         * @brief Creates a volume (3D) texture, RGBA8.
+         *
+         * @param w            Width in voxels.
+         * @param h            Height in voxels.
+         * @param depth        Depth in voxels.
+         * @param mipMap       Whether to allocate a full mip chain.
+         * @param surfaceFormat Ignored, matching the Vulkan backend -- every texture in this
+         *                      backend is RGBA8.
+         * @return The new volume texture backend.
+         */
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
+                                                            int surfaceFormat) override;
 
         /** @brief Creates a sprite batch bound to this backend. */
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;

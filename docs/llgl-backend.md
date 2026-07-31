@@ -39,10 +39,11 @@ module**:
   "Capability boundary" below;
 * **cube textures** (`TextureCube`): create, upload and read back all 6 faces and every mip level.
   Not yet sampled from a 3D shader for reflections -- that is `EnvironmentMapEffect`, still open.
+* **volume textures** (`Texture3D`): create, box-region upload and box-region read back. Not yet
+  sampled from a 3D shader.
 
 **Not implemented:** `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
-`RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, and volume
-(`Texture3D`) textures.
+`RenderTargetCube`, multiple render targets (MRT), and MSAA/mip-mapped render targets.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -320,7 +321,8 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |
 | `OcclusionQuery` | yes | Real `LLGL::QueryHeap`-backed queries — see "Occlusion queries" above for how `IsComplete()`/`PixelCount()` behave on this backend. |
 | `CustomEffects` | yes | Real `ShaderEffect`, scoped to `SpriteBatch` draws — see "Custom effects" above. |
-| `MultipleRenderTargets`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |
+| `Texture3D` | yes | Real `LLGL::TextureType::Texture3D` storage — `CreateTexture3D`/box-region `SetData`/`GetData`. Nothing samples a volume texture from a 3D shader yet. |
+| `MultipleRenderTargets` | no | Not implemented — see `plan_llgl.md` phase LLGL-26. |
 
 There is no standalone `SupportsCapability` flag for single-target `RenderTarget2D` support (XNA
 has none either) — `CreateRenderTarget2D` returning a real backend instead of null is the signal,

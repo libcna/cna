@@ -577,6 +577,87 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     // -----------------------------------------------------------------------------------------
+    // LlglTexture3DBackend
+    // -----------------------------------------------------------------------------------------
+
+    LlglTexture3DBackend::LlglTexture3DBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* texture,
+                                               int width, int height, int depth, int mipLevels)
+        : renderSystem_(renderSystem)
+        , texture_(texture)
+        , width_(width)
+        , height_(height)
+        , depth_(depth)
+        , mipLevels_(mipLevels > 0 ? mipLevels : 1)
+    {
+        if (renderSystem_ == nullptr || texture_ == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: volume texture creation failed");
+    }
+
+    LlglTexture3DBackend::~LlglTexture3DBackend()
+    {
+        if (renderSystem_ != nullptr && texture_ != nullptr)
+            renderSystem_->Release(*texture_);
+    }
+
+    bool LlglTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                       const void* data, int dataLength)
+    {
+        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0 ||
+            level < 0 || level >= mipLevels_)
+            return false;
+
+        const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
+                                     static_cast<std::size_t>(depth) * 4u;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        LLGL::TextureRegion region;
+        region.subresource.baseMipLevel = static_cast<std::uint32_t>(level);
+        region.subresource.numMipLevels = 1;
+        region.offset = {x, y, z};
+        region.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
+                         static_cast<std::uint32_t>(depth)};
+
+        LLGL::ImageView imageView;
+        imageView.format = LLGL::ImageFormat::RGBA;
+        imageView.dataType = LLGL::DataType::UInt8;
+        imageView.data = data;
+        imageView.dataSize = required;
+
+        renderSystem_->WriteTexture(*texture_, region, imageView);
+        return true;
+    }
+
+    bool LlglTexture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                       void* data, int dataLength) const
+    {
+        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0 ||
+            level < 0 || level >= mipLevels_)
+            return false;
+
+        const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
+                                     static_cast<std::size_t>(depth) * 4u;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        LLGL::TextureRegion region;
+        region.subresource.baseMipLevel = static_cast<std::uint32_t>(level);
+        region.subresource.numMipLevels = 1;
+        region.offset = {x, y, z};
+        region.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
+                         static_cast<std::uint32_t>(depth)};
+
+        LLGL::MutableImageView imageView;
+        imageView.format = LLGL::ImageFormat::RGBA;
+        imageView.dataType = LLGL::DataType::UInt8;
+        imageView.data = data;
+        imageView.dataSize = required;
+
+        renderSystem_->ReadTexture(*texture_, region, imageView);
+        return true;
+    }
+
+    // -----------------------------------------------------------------------------------------
     // LlglRenderTargetBackend
     // -----------------------------------------------------------------------------------------
 
@@ -2463,6 +2544,45 @@ namespace CNA::Internal::Backends::Llgl
         return std::make_unique<LlglTextureCubeBackend>(renderer_.get(), texture, size, mipLevels);
     }
 
+    std::unique_ptr<ITexture3DBackend> LlglGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+    {
+        if (w <= 0 || h <= 0 || depth <= 0)
+            throw std::runtime_error(std::string(kBackendName) + " backend: volume texture has no voxels");
+
+        // Depth does not participate in the level count, matching FNA's own Texture3D
+        // constructor (and the Vulkan backend's identical CalculateVulkanTexture3DMipLevels).
+        int mipLevels = 1;
+        if (mipMap)
+        {
+            int mw = w, mh = h;
+            mipLevels = 1;
+            while (mw > 1 || mh > 1)
+            {
+                mw = std::max(1, mw / 2);
+                mh = std::max(1, mh / 2);
+                ++mipLevels;
+            }
+        }
+
+        LLGL::TextureDescriptor textureDesc;
+        textureDesc.type = LLGL::TextureType::Texture3D;
+        textureDesc.bindFlags = LLGL::BindFlags::Sampled | LLGL::BindFlags::CopyDst |
+                                LLGL::BindFlags::CopySrc;
+        textureDesc.format = LLGL::Format::RGBA8UNorm;
+        textureDesc.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
+                              static_cast<std::uint32_t>(depth)};
+        textureDesc.mipLevels = static_cast<std::uint32_t>(mipLevels);
+        // No GenerateMips: the shared texture layer uploads each level it wants to exist, same
+        // reasoning as CreateTexture()/CreateTextureCube() above.
+        textureDesc.miscFlags = 0;
+
+        // No initial image -- the shared Texture3D layer always follows construction with its own
+        // SetData() call per level, exactly like Texture2D's own typed constructors do.
+        LLGL::Texture* texture = renderer_->CreateTexture(textureDesc, nullptr);
+        return std::make_unique<LlglTexture3DBackend>(renderer_.get(), texture, w, h, depth, mipLevels);
+    }
+
     std::unique_ptr<ISpriteBatchBackend> LlglGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<LlglSpriteBatchBackend>(*this);
@@ -3796,10 +3916,14 @@ namespace CNA::Internal::Backends::Llgl
             case CNA::GraphicsCapability::CustomEffects:
                 return true;
 
+            // LLGL-26: real volume texture storage via CreateTexture3D -- create/upload/readback,
+            // not sampling one from a 3D shader (nothing in this backend samples Texture3D yet).
+            case CNA::GraphicsCapability::Texture3D:
+                return true;
+
             // Everything below is still unimplemented. Reporting false is what lets a caller ask
             // instead of discovering the gap through an exception.
             case CNA::GraphicsCapability::MultipleRenderTargets:
-            case CNA::GraphicsCapability::Texture3D:
                 return false;
         }
         return false;
