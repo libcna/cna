@@ -324,6 +324,23 @@ namespace CNA::Internal::Backends::SdlGpu
             return enabled;
         }
 
+        // REMED-GFX-176: a Texture2D's declared level count, the count SDL was really asked for and
+        // every level upload's exact destination, on one line each. Without it "the texture has a
+        // chain" can only be inferred from pixels, and a texture that allocates one level looks
+        // identical from the public API to one that allocates four and never had them written.
+        [[nodiscard]] bool TextureTraceEnabled()
+        {
+            static const bool enabled = std::getenv("CNA_SDLGPU_TEXTURE_TRACE") != nullptr;
+            return enabled;
+        }
+
+        /// Distinguishes textures in CNA_SDLGPU_TEXTURE_TRACE; never read for anything else.
+        [[nodiscard]] int NextTextureTraceId()
+        {
+            static int next = 0;
+            return ++next;
+        }
+
         // REMED-GFX-170: XNA's SamplerState.MaxAnisotropy default. ISpriteBatchBackend carries the
         // filter ordinal and the two address modes and nothing else, so a sprite cannot express a
         // non-default anisotropy on ANY backend.
@@ -5622,10 +5639,25 @@ namespace CNA::Internal::Backends::SdlGpu
         createInfo.layer_count_or_depth = 1;
         createInfo.num_levels = 1;
         createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        levelCount_ = static_cast<int>(createInfo.num_levels);
 
         state_->texture = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
         if (state_->texture == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create Texture2D: ") + SDL_GetError());
+
+        if (TextureTraceEnabled())
+        {
+            traceId_ = NextTextureTraceId();
+            std::fprintf(stderr,
+                         "[cna-sdlgpu-texture] id=%d created %dx%d format=R8G8B8A8_UNORM "
+                         "usage=SAMPLER requestedLevels=%d maxLevels=%d nativeLevels=%u "
+                         "texture=%p\n",
+                         traceId_, width_, height_, std::max(1, data.mipLevels),
+                         CalculateMipLevels(width_, height_),
+                         static_cast<unsigned>(createInfo.num_levels),
+                         static_cast<void*>(state_->texture));
+            std::fflush(stderr);
+        }
 
         UpdatePixels(data.pixels.data(), width_ * 4);
         // A throwing UpdatePixels no longer needs its own cleanup: state_ is already constructed,
@@ -5691,6 +5723,20 @@ namespace CNA::Internal::Backends::SdlGpu
             throw std::runtime_error(std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer (texture upload) failed: ") + SDL_GetError());
         }
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+
+        if (TextureTraceEnabled() && traceId_ != 0)
+        {
+            std::fprintf(stderr,
+                         "[cna-sdlgpu-texture] id=%d level=0 levelDims=%dx%d mip_level=%u "
+                         "region=(0,0,%ux%u) transferBytes=%u rowPitch=%u pixelsPerRow=%u "
+                         "srcStride=%d cycle=yes submit=ok\n",
+                         traceId_, width_, height_,
+                         static_cast<unsigned>(destination.mip_level),
+                         static_cast<unsigned>(destination.w), static_cast<unsigned>(destination.h),
+                         static_cast<unsigned>(sizeBytes), static_cast<unsigned>(rowBytes),
+                         static_cast<unsigned>(source.pixels_per_row), stride);
+            std::fflush(stderr);
+        }
     }
 
     // ---- SdlGpuTexture3DBackend (Phase SDLGPU-9, SDLGPU-40/SDLGPU-41) ----

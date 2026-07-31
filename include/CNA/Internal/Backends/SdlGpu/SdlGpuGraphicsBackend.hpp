@@ -165,6 +165,12 @@ namespace CNA::Internal::Backends::SdlGpu
         /** @brief Returns the underlying `SDL_GPUTexture`. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return state_->texture; }
         /**
+         * @brief Returns the number of mip levels SDL really allocated. NOXNA — REMED-GFX-176.
+         *
+         * @return The native `num_levels` this texture was created with; never below one.
+         */
+        NOXNA [[nodiscard]] int LevelCountEXT() const { return levelCount_; }
+        /**
          * @brief Returns this texture as a bindable, lifetime-safe sampled resource. NOXNA.
          *
          * @return The native handle paired with the shared state that keeps it alive.
@@ -178,6 +184,10 @@ namespace CNA::Internal::Backends::SdlGpu
         std::shared_ptr<SdlGpuSampledTextureState> state_;
         int width_ = 0;
         int height_ = 0;
+        /// Mip levels SDL really allocated for this texture (REMED-GFX-176).
+        int levelCount_ = 1;
+        /// Identifies this texture in CNA_SDLGPU_TEXTURE_TRACE output; 0 when tracing is off.
+        int traceId_ = 0;
     };
 
     /**

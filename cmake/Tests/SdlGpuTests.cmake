@@ -334,6 +334,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_TextureFilterMipContract COMMAND cna_test_sdlgpu_texture_filter_mip_contract
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-176: the question UNDERNEATH the filter contract above. SdlGpuTextureBackend
+    # hardcoded num_levels = 1 and declared no UpdatePixelsLevel override, so a mipMap=true
+    # Texture2D reported a LevelCount its GPU resource did not have and every SetData above level 0
+    # was silently discarded. This fixture asserts allocation and upload against the NATIVE texture
+    # rather than inferring them from a sampled pixel, so a partial fix cannot look complete.
+    cna_sdlgpu_test(cna_test_sdlgpu_texture2d_mip_storage
+        examples/sdlgpu_texture2d_mip_storage_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_Texture2DMipStorage COMMAND cna_test_sdlgpu_texture2d_mip_storage
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-177 cross-backend control: descriptor/binding bookkeeping must be a function of what
     # is LIVE, never of what has ever existed. D3D12 owned four fixed-capacity heaps with a monotonic
     # bump cursor and no free list, so the 65th sampleable resource EVER CREATED threw even when six
