@@ -460,4 +460,49 @@ TEST_F(HtmlDom3DSurfaceTest, ViewportFollowsTheVirtualResolutionSetting)
     EXPECT_FALSE(backend.TransformWindowToLogical(10.0f, 10.0f, lx, ly));
     EXPECT_FALSE(backend.TransformLogicalToWindow(10.0f, 10.0f, lx, ly));
 }
+
+// plan_html_dom.md HTMLDOM-91: ApplyRasterizerState/ApplyDepthStencilState/SetBlendFactor/
+// SetReferenceStencil are all inherited IGraphicsBackend no-ops on this backend, never audited.
+// Verified reasoning (see the task's own note): ApplyDepthStencilState/SetReferenceStencil are
+// meaningless because SupportsDepthStencil() is unconditionally false (no depth/stencil buffer
+// exists to configure); SetBlendFactor's constant colour can only matter for
+// Blend.BlendFactor/InverseBlendFactor, and BlendStateToDomCompositeOp already throws for both
+// before ApplyBlendState could ever consume that colour; ApplyRasterizerState's CullMode/FillMode/
+// depth-bias fields are 3D-only concepts with no 2D SpriteBatch analogue, and its one 2D-relevant
+// field (scissorTestEnable) is deliberately not wired up (HTMLDOM-80's whole-surface scissor
+// mirrors SDL_RENDERER's own behaviour of ignoring this flag too -- SdlGraphicsBackend.cpp never
+// overrides ApplyRasterizerState either). These tests turn that reasoning into a checked fact:
+// each setter is called with a deliberately non-default value and must neither throw nor change
+// any state a caller could observe afterwards.
+TEST_F(HtmlDom3DSurfaceTest, InertStateSettersAcceptArbitraryValuesWithNoObservableEffect)
+{
+    EXPECT_FALSE(backend.SupportsDepthStencil());
+
+    EXPECT_NO_THROW(backend.ApplyDepthStencilState(
+        /*depthEnable=*/true, /*depthWriteEnable=*/true, /*depthFunc=*/3,
+        /*stencilEnable=*/true, /*stencilFunc=*/5, /*stencilPass=*/2, /*stencilFail=*/1,
+        /*stencilDepthFail=*/1, /*stencilMask=*/0xFF, /*stencilWriteMask=*/0xFF,
+        /*referenceStencil=*/42, /*twoSidedStencilMode=*/true,
+        /*ccwStencilFunc=*/5, /*ccwStencilPass=*/2, /*ccwStencilFail=*/1, /*ccwStencilDepthFail=*/1));
+    EXPECT_NO_THROW(backend.SetReferenceStencil(42));
+
+    // SetBlendFactor's colour must not leak into -- or otherwise disturb -- the composite op an
+    // ApplyBlendState call already selected: it is only ever consumed for a BlendFactor blend
+    // combination, which ApplyBlendState rejects before this backend could ever read it.
+    SetCurrentCompositeOpEXT(DomCompositeOp::Additive);
+    EXPECT_NO_THROW(backend.SetBlendFactor(0.25f, 0.5f, 0.75f, 1.0f));
+    EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::Additive);
+    SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
+
+    // Non-default cull/fill/depth-bias values, and scissorTestEnable=true specifically (the one
+    // field that could plausibly gate something): none of it may throw, and none of it may change
+    // whether a subsequent ApplyBlendState call still behaves normally afterward.
+    EXPECT_NO_THROW(backend.ApplyRasterizerState(
+        /*cullMode=*/2, /*fillMode=*/1, /*scissorTestEnable=*/true,
+        /*depthBias=*/0.5f, /*slopeScaleDepthBias=*/0.25f));
+    const BlendWriteState writeState{};
+    EXPECT_NO_THROW(backend.ApplyBlendState(4, 4, 5, 5, 0, 0, writeState));
+    EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::NonPremultiplied);
+    SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
+}
 #endif // CNA_BACKEND_HTML_DOM
