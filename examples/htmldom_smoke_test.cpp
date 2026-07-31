@@ -26,6 +26,8 @@
 
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
 
+#include <SDL3/SDL.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <memory>
@@ -41,7 +43,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 27;
+    constexpr int kExpectedChecks = 29;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -452,6 +454,64 @@ protected:
                   "to 0 instead of producing a negative (expanding) inset()");
 
             dev.setScissorRectangleProperty(Rectangle(0, 0, 64, 64));
+        }
+
+        // plan_html_dom.md HTMLDOM-93: window resize + active scissor rect interaction, with no
+        // GraphicsDevice.Reset() in between -- checks whether the clip-path's insets (computed once
+        // against the surface size at SetScissorRect()-call time) go stale relative to the surface's
+        // new size once it actually resizes, or get automatically re-derived.
+        //
+        // Deliberately calls HtmlDomGraphicsBackend::SetScissorRect/Present() directly rather than
+        // going through GraphicsDevice::setScissorRectangleProperty()/Present(): a real, separate
+        // finding while building this test was that GraphicsDevice::UpdateViewportFromWindow()
+        // (called from every GraphicsDevice::Present(), for every backend, not an HTML_DOM
+        // peculiarity) already resets BOTH Viewport and ScissorRectangle to the complete new
+        // backbuffer size the instant it detects any viewport-size change -- matching FNA's own
+        // real-resize behaviour. That means this staleness can never actually manifest through the
+        // public XNA API: by the time a game could observe it, GraphicsDevice has already reset the
+        // scissor to the full surface itself. Confirmed non-gap at the framework level (the same
+        // shape of finding as HTMLDOM-81's SetViewport one), verified by first reproducing this
+        // exact scenario through dev.setScissorRectangleProperty()/dev.Present() and observing
+        // GraphicsDevice's own reset win, not assumed. What this test verifies instead is
+        // HtmlDomGraphicsBackend's OWN contract in isolation -- it must not depend on
+        // GraphicsDevice's reset to stay correct, since nothing stops a future caller from reaching
+        // the backend directly the way this test now deliberately does.
+        if (frame_ == 8)
+        {
+            // The constructor's PreferredBackBufferWidth/Height (64x64) already pinned a FIXED
+            // virtual resolution equal to the initial backbuffer size (GraphicsDevice's own
+            // constructor takes virtualWidth_/virtualHeight_ straight from
+            // PresentationParameters.BackBufferWidth/Height and pushes them into the backend via
+            // SetVirtualResolution()). Force 1:1 mode (no virtual resolution) directly on the
+            // backend instead -- a real, supported configuration (getLogicalSize()'s own
+            // `virtualHeight_ <= 0` branch) where logical size tracks physical size exactly, so a
+            // physical resize genuinely moves the ground a previously-set scissor rect was measured
+            // against.
+            backend.SetVirtualResolution(0, 0);
+
+            // Surface is currently still 64x64 (SetVirtualResolution alone doesn't resize anything;
+            // it only changes how future geometry is computed).
+            backend.SetScissorRect(5, 5, 10, 10);
+            check(JsRootClipPathInsetIs(5, 49, 49, 5) == 1,
+                  "HTMLDOM-93a: scissor rect set against the current (pre-resize) 64x64 surface");
+
+            // Resize the real SDL window, then call the backend's own Present() directly -- that is
+            // what notices the logical size changed and re-derives the clip-path (HtmlDomState's
+            // CNA_HtmlDom_UpdateSurface). Not dev.Present(): see the note above for why that would
+            // hide what this test is checking behind GraphicsDevice's own separate reset.
+            SDL_SetWindowSize(backend.GetWindowInternal(), 128, 128);
+            backend.Present();
+
+            // Without CNA_HtmlDom_UpdateSurface re-deriving the clip on resize, this would still
+            // read back the OLD (5,49,49,5) insets computed against the pre-resize 64x64 surface,
+            // even though #cna-dom-root's own box is now 128x128 -- silently clipping the wrong
+            // fraction of the resized surface instead of the same logical (5,5,10,10) rectangle.
+            check(JsRootClipPathInsetIs(5, 113, 113, 5) == 1,
+                  "HTMLDOM-93b: HtmlDomGraphicsBackend automatically re-derives the scissor clip "
+                  "against the new 128x128 surface after a resize, with no GraphicsDevice.Reset() "
+                  "and no scissor reapplication by the caller");
+
+            backend.SetScissorRect(0, 0, 128, 128);
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

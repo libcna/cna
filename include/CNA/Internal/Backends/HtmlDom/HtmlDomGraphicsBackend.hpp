@@ -129,6 +129,11 @@ namespace CNA::Internal::Backends::HtmlDom
          * particular rectangle was active earlier in the same frame -- true per-draw-call
          * scissoring is out of scope for this backend's flat, pooled sprite architecture.
          *
+         * The rectangle is remembered in logical coordinates and automatically re-applied against
+         * the surface's current logical size whenever that size changes (e.g. a window resize with
+         * no `GraphicsDevice.Reset()`), so the clip stays correct without the caller needing to
+         * reissue it purely because the surface was resized (HTMLDOM-93).
+         *
          * @param x Left edge of the clip rectangle, in logical pixels.
          * @param y Top edge of the clip rectangle, in logical pixels.
          * @param w Width of the clip rectangle, in logical pixels.

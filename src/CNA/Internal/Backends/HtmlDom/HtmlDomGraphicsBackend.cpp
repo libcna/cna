@@ -40,6 +40,24 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     Module['cnaDomHighWater'] = 0;
     Module['cnaDomBoundCtx'] = null;
     Module['cnaDomClearColor'] = null;
+    Module['cnaDomScissorRect'] = null;
+    // Shared by CNA_HtmlDom_SetScissorRect and CNA_HtmlDom_UpdateSurface (below): computes
+    // clip-path insets from Module['cnaDomScissorRect'] (stored in LOGICAL pixel coordinates)
+    // against the CURRENT Module['cnaDomLogicalW'/'H']. Calling it again from UpdateSurface after a
+    // resize re-derives the clip against the new size instead of leaving stale absolute-px insets
+    // applied to a box that has since changed size (plan_html_dom.md HTMLDOM-93).
+    Module['cnaDomApplyScissorClip'] = function () {
+        const r = Module['cnaDomRoot'];
+        const rect = Module['cnaDomScissorRect'];
+        if (!r || !rect) return;
+        const logicalW = Module['cnaDomLogicalW'] || 0;
+        const logicalH = Module['cnaDomLogicalH'] || 0;
+        const top = Math.max(0, rect.y);
+        const left = Math.max(0, rect.x);
+        const right = Math.max(0, logicalW - (rect.x + rect.w));
+        const bottom = Math.max(0, logicalH - (rect.y + rect.h));
+        r.style.clipPath = 'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
+    };
 });
 
 EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
@@ -52,6 +70,7 @@ EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
     Module['cnaDomPool'] = null;
     Module['cnaDomUsed'] = 0;
     Module['cnaDomHighWater'] = 0;
+    Module['cnaDomScissorRect'] = null;
 });
 
 // plan_html_dom.md HTMLDOM-11 / design decision 9: XNA's Clear overwrites everything drawn so far,
@@ -138,6 +157,11 @@ EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH, int physW, i
         root.style.left = canvas.offsetLeft + 'px';
         root.style.top = canvas.offsetTop + 'px';
     }
+    // HTMLDOM-93: the logical size just changed (that is the only reason this function runs at
+    // all -- Present() only calls it when geometry differs from last frame). Re-derive any
+    // currently-active scissor clip against the new size rather than leaving it applied at insets
+    // computed for the old one.
+    if (Module['cnaDomScissorRect']) Module['cnaDomApplyScissorClip']();
 });
 
 // plan_html_dom.md HTMLDOM-80 / design decision 13: real scissor clipping via `clip-path: inset()`
@@ -159,15 +183,12 @@ EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH, int physW, i
 // (rarely) extends past the surface's own bounds produces a no-op-on-that-edge clip rather than an
 // inset() that expands outward instead of clipping inward.
 EM_JS(void, CNA_HtmlDom_SetScissorRect, (int x, int y, int w, int h), {
-    const root = Module['cnaDomRoot'];
-    if (!root) return;
-    const logicalW = Module['cnaDomLogicalW'] || 0;
-    const logicalH = Module['cnaDomLogicalH'] || 0;
-    const top = Math.max(0, y);
-    const left = Math.max(0, x);
-    const right = Math.max(0, logicalW - (x + w));
-    const bottom = Math.max(0, logicalH - (y + h));
-    root.style.clipPath = 'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
+    if (!Module['cnaDomRoot']) return;
+    // Stored in logical pixel coordinates (not translated to insets here) so
+    // CNA_HtmlDom_UpdateSurface can re-derive the clip-path against a NEW logical size after a
+    // resize, instead of the previously-applied insets silently going stale (HTMLDOM-93).
+    Module['cnaDomScissorRect'] = { x: x, y: y, w: w, h: h };
+    Module['cnaDomApplyScissorClip']();
 });
 
 // Reads back the currently bound render target. Returns 0 when nothing is bound -- the DOM
