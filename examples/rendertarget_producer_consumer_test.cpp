@@ -164,6 +164,17 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "CANVAS";
+#elif defined(CNA_BACKEND_SOKOL)
+    // plan_sokol.md SOKOL-25: real geometry really is rasterized into a RenderTarget2D here (this
+    // is not a HEADLESS-style non-rasterizing backend), but `SokolRenderTargetBackend` does not
+    // override `ITextureBackend::GetData` (docs/sokol-backend.md), so it inherits the base class's
+    // `return false` default and every RenderTarget2D::GetData call in this file raises
+    // System::NotSupportedException regardless. `kRasterizes` only gates `RequireReadable()`'s
+    // expectation below, so `false` is the accurate declaration for THIS file's contract even
+    // though the backend truly draws -- Leg C's own SpriteBatch/BasicEffect production still runs,
+    // only the subsequent GetData()-based observation is what this records as absent.
+    constexpr bool kRasterizes = false;
+    constexpr const char* kBackendName = "SOKOL";
 #else
 #error "REMED-GFX-151: this backend has no declared render-target producer/consumer contract."
 #endif
@@ -179,6 +190,10 @@ namespace
      * runs: SIGSEGV against the pre-fix backend, 4/4 exact after.
      */
     constexpr bool kStockEffectRtSourceSupported = true;
+
+    // kStockEffectRtSourceSupported never gates GetData: it is read only where kRasterizes is
+    // already true, which is never SOKOL's case above, so its value is moot for this backend and
+    // left at the shared default rather than given a branch of its own.
 
     /**
      * @brief Whether a BACKBUFFER draw can sample a render target that was never read back.
@@ -222,6 +237,13 @@ namespace
      */
     constexpr bool kDualTextureAcceptsPositionTexture =
 #if defined(CNA_BACKEND_D3D9)
+        false;
+#elif defined(CNA_BACKEND_SOKOL)
+        // Not a vertex-layout rejection: SokolGraphicsBackend::DrawColored3D refuses ANY
+        // `params.dualTexture` draw outright (plan_sokol.md -- dual-texture 3D is not implemented
+        // yet, unlike the single-texture Textured/Lit paths SOKOL-21 landed), so C4 would throw
+        // uncaught here rather than reject cleanly. Reusing this flag to skip it is the same
+        // "documented boundary, unrelated to render-to-texture" carve-out D3D9 already uses.
         false;
 #else
         true;

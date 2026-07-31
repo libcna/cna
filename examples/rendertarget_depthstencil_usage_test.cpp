@@ -340,6 +340,29 @@ namespace
     constexpr Contract kContract{"D3D12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
+#elif defined(CNA_BACKEND_SOKOL)
+    // plan_sokol.md SOKOL-25: RenderTarget2D only (no RenderTargetCube -- SOKOL-26), and
+    // RenderTarget2D::GetData is not implemented at all (docs/sokol-backend.md), so `readback` is
+    // Unsupported and every readback-driven check in this file (including all of D8) safely
+    // degenerates to its legality-only skeleton. `stencilInRT` false:
+    // SokolGraphicsBackend::ApplyDepthStencilState deliberately never wires stencil state into any
+    // pipeline (this backend's only draw paths -- SpriteBatch and colored/textured/lit 3D -- always
+    // run with stencil effectively disabled), so a stencil-gated draw passes everywhere. Depth,
+    // by contrast, is real per SokolRenderTargetBackend's own depth-stencil image
+    // (Sokol_RenderTarget2D_Depth already proves a target's own depth buffer genuinely gates a
+    // draw inside it). `depthPreserves` true and `orderedClearInCycle` true: BeginPassIfNeeded
+    // always uses SG_LOADACTION_LOAD unless an explicit Clear() is pending, and QueueClear ends the
+    // active pass so a mid-cycle Clear cannot be reordered against an earlier draw -- the same
+    // "GraphicsDevice itself clears a DiscardContents target" convention EasyGL documents.
+    // `msaaDepthRT2D` true: CreateRenderTarget2D silently clamps `multiSampleCount` to 1 (this
+    // backend's documented, codebase-wide convention for a capability with a self-reporting query)
+    // rather than throwing or aborting, so the target genuinely can be created and bound; the
+    // readback-gated checks that would otherwise measure it stay skipped regardless.
+    // `msaaDepthCube` false: there is no RenderTargetCube at all to request MSAA on, which is also
+    // why `msaaCubeReadback` -- a field this file gained after this lane was branched -- is false.
+    constexpr Contract kContract{"SOKOL", Support::Unsupported, false, Support::Unsupported,
+                                 true, false, true, false, true,
+                                 true, false, false, false, true, true, false, false};
 #else
 #error "REMED-GFX-142: this backend has no declared render-target depth/stencil contract."
 #endif

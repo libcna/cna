@@ -164,24 +164,17 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
         bindings.emplace_back(targets.back().get());
     }
-#if defined(CNA_BACKEND_SOKOL)
-    // plan_sokol.md Phase 5 (SOKOL-25): the sokol_gfx backend's 2D baseline creates no render
-    // target of any kind -- CreateRenderTarget2D keeps IGraphicsBackend's nullptr default -- so the
-    // shared layer refuses the binding one step earlier than the single-target backends below, with
-    // System::NotSupportedException rather than a backend-raised std::runtime_error. This is a
-    // distinct branch from theirs precisely because "supports exactly one" and "supports none" are
-    // different answers and must not be collapsed into one expectation.
-    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
-#elif defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8)
+#if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_DX1) || defined(CNA_BACKEND_DX2) || defined(CNA_BACKEND_DX3) || defined(CNA_BACKEND_DX5) || defined(CNA_BACKEND_DX6) || defined(CNA_BACKEND_DX7) || defined(CNA_BACKEND_DX8) || defined(CNA_BACKEND_SOKOL)
     // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
-    // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): all six support
-    // exactly one active render target at a time -- unlike the other, real-MRT-capable backends,
-    // binding more than one target here must throw clearly rather than silently rendering to only
-    // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap this test's name/history
-    // (Task 881) refers to, so the throw here comes entirely from the backend's own single-target
-    // limitation, not the cap check. ASCII (plan_ascii.md) forwards SetRenderTargets straight to
-    // the same real SdlGraphicsBackend instance it wraps, so it inherits this exact throw too.
+    // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4) / plan_sokol.md
+    // SOKOL-25: each supports exactly one active render target at a time -- unlike the other,
+    // real-MRT-capable backends, binding more than one target here must throw clearly rather than
+    // silently rendering to only the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
+    // this test's name/history (Task 881) refers to, so the throw here comes entirely from the
+    // backend's own single-target limitation, not the cap check. ASCII (plan_ascii.md) forwards
+    // SetRenderTargets straight to the same real SdlGraphicsBackend instance it wraps, so it
+    // inherits this exact throw too.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
 #elif defined(CNA_BACKEND_STUB)
     // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsBackend's nullptr
@@ -216,18 +209,12 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_BACKEND_STUB) || defined(CNA_BACKEND_SOKOL)
+#if defined(CNA_BACKEND_STUB)
     // Same Stub contract as the four-target case above: no render-target support of any kind, so
     // even a single binding is refused deterministically rather than silently accepted.
-    // plan_sokol.md Phase 5 (SOKOL-25): the sokol_gfx 2D baseline is in the same class -- unlike
-    // every 2D-only backend this test was written against, which all support one target, it
-    // creates no render target at all, so even a single binding is refused. Gated rather than
-    // made conditional-free so the refusal stays an asserted, deliberate boundary instead of a
-    // silently tolerated one.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
-#endif
 }
 
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)

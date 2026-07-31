@@ -236,6 +236,21 @@ namespace CNA::Internal::Backends::Sokol
             int value = base >> level;
             return value > 0 ? value : 1;
         }
+
+        /// Resolves the sokol_gfx texture-view id for a texture-sampling draw, accepting either a
+        /// plain SokolTextureBackend or a SokolRenderTargetBackend sampled as a texture (a target
+        /// rendered to in an earlier pass) -- the two are unrelated class hierarchies (a render
+        /// target's ITextureBackend half has no CPU-side pixel data at all), so this tries both
+        /// rather than assuming one.
+        std::uint32_t ResolveSampledTextureViewId(const ITextureBackend& texture, const char* context)
+        {
+            if (const auto* plain = dynamic_cast<const SokolTextureBackend*>(&texture))
+                return plain->GetViewIdEXT();
+            if (const auto* renderTarget = dynamic_cast<const SokolRenderTargetBackend*>(&texture))
+                return renderTarget->GetColorTextureViewIdEXT();
+            throw std::runtime_error(
+                std::string("Sokol backend: ") + context + " was handed a foreign texture backend");
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -389,6 +404,127 @@ namespace CNA::Internal::Backends::Sokol
                         static_cast<std::size_t>(w) * 4u);
         }
         return true;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // SokolRenderTargetBackend
+    // ---------------------------------------------------------------------------------------
+
+    SokolRenderTargetBackend::SokolRenderTargetBackend(int width, int height, bool hasDepthStencil)
+        : width_(width)
+        , height_(height)
+    {
+        if (width <= 0 || height <= 0)
+            throw std::runtime_error("Sokol backend: render target dimensions must be positive");
+
+        sg_image_desc colorDesc = {};
+        colorDesc.type = SG_IMAGETYPE_2D;
+        colorDesc.usage.color_attachment = true;
+        colorDesc.width = width_;
+        colorDesc.height = height_;
+        colorDesc.num_mipmaps = 1;
+        colorDesc.sample_count = 1;
+        colorDesc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        colorDesc.label = "cna_render_target_color";
+        colorImageId_ = sg_make_image(&colorDesc).id;
+        if (sg_query_image_state(MakeImageHandle(colorImageId_)) != SG_RESOURCESTATE_VALID)
+        {
+            colorImageId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_image failed for a RenderTarget2D's colour image");
+        }
+
+        sg_view_desc colorAttachmentDesc = {};
+        colorAttachmentDesc.color_attachment.image = MakeImageHandle(colorImageId_);
+        colorAttachmentDesc.label = "cna_render_target_color_attachment_view";
+        colorAttachmentViewId_ = sg_make_view(&colorAttachmentDesc).id;
+        if (sg_query_view_state(MakeViewHandle(colorAttachmentViewId_)) != SG_RESOURCESTATE_VALID)
+        {
+            colorAttachmentViewId_ = 0;
+            sg_destroy_image(MakeImageHandle(colorImageId_));
+            colorImageId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_view (colour attachment) failed for a RenderTarget2D");
+        }
+
+        sg_view_desc colorTextureDesc = {};
+        colorTextureDesc.texture.image = MakeImageHandle(colorImageId_);
+        colorTextureDesc.label = "cna_render_target_color_texture_view";
+        colorTextureViewId_ = sg_make_view(&colorTextureDesc).id;
+        if (sg_query_view_state(MakeViewHandle(colorTextureViewId_)) != SG_RESOURCESTATE_VALID)
+        {
+            colorTextureViewId_ = 0;
+            sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
+            colorAttachmentViewId_ = 0;
+            sg_destroy_image(MakeImageHandle(colorImageId_));
+            colorImageId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_view (texture) failed for a RenderTarget2D");
+        }
+
+        if (!hasDepthStencil) return;
+
+        sg_image_desc depthDesc = {};
+        depthDesc.type = SG_IMAGETYPE_2D;
+        depthDesc.usage.depth_stencil_attachment = true;
+        depthDesc.width = width_;
+        depthDesc.height = height_;
+        depthDesc.num_mipmaps = 1;
+        depthDesc.sample_count = 1;
+        depthDesc.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+        depthDesc.label = "cna_render_target_depth_stencil";
+        depthStencilImageId_ = sg_make_image(&depthDesc).id;
+        if (sg_query_image_state(MakeImageHandle(depthStencilImageId_)) != SG_RESOURCESTATE_VALID)
+        {
+            depthStencilImageId_ = 0;
+            sg_destroy_view(MakeViewHandle(colorTextureViewId_));
+            colorTextureViewId_ = 0;
+            sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
+            colorAttachmentViewId_ = 0;
+            sg_destroy_image(MakeImageHandle(colorImageId_));
+            colorImageId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_image failed for a RenderTarget2D's depth-stencil image");
+        }
+
+        sg_view_desc depthAttachmentDesc = {};
+        depthAttachmentDesc.depth_stencil_attachment.image = MakeImageHandle(depthStencilImageId_);
+        depthAttachmentDesc.label = "cna_render_target_depth_stencil_attachment_view";
+        depthStencilAttachmentViewId_ = sg_make_view(&depthAttachmentDesc).id;
+        if (sg_query_view_state(MakeViewHandle(depthStencilAttachmentViewId_)) != SG_RESOURCESTATE_VALID)
+        {
+            depthStencilAttachmentViewId_ = 0;
+            sg_destroy_image(MakeImageHandle(depthStencilImageId_));
+            depthStencilImageId_ = 0;
+            sg_destroy_view(MakeViewHandle(colorTextureViewId_));
+            colorTextureViewId_ = 0;
+            sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
+            colorAttachmentViewId_ = 0;
+            sg_destroy_image(MakeImageHandle(colorImageId_));
+            colorImageId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_view (depth-stencil attachment) failed for a RenderTarget2D");
+        }
+    }
+
+    SokolRenderTargetBackend::~SokolRenderTargetBackend()
+    {
+        if (depthStencilAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(depthStencilAttachmentViewId_));
+        if (depthStencilImageId_ != 0) sg_destroy_image(MakeImageHandle(depthStencilImageId_));
+        if (colorTextureViewId_ != 0) sg_destroy_view(MakeViewHandle(colorTextureViewId_));
+        if (colorAttachmentViewId_ != 0) sg_destroy_view(MakeViewHandle(colorAttachmentViewId_));
+        if (colorImageId_ != 0) sg_destroy_image(MakeImageHandle(colorImageId_));
+    }
+
+    int SokolRenderTargetBackend::GetWidth() const { return width_; }
+
+    int SokolRenderTargetBackend::GetHeight() const { return height_; }
+
+    SDL_Texture* SokolRenderTargetBackend::GetNativeTexture() const { return nullptr; }
+
+    void SokolRenderTargetBackend::BindAsRenderTarget() {}
+
+    void SokolRenderTargetBackend::UnbindAsRenderTarget() {}
+
+    bool SokolRenderTargetBackend::HasRealDepthBuffer(bool depthFormatWasRequested) const
+    {
+        (void)depthFormatWasRequested;
+        return depthStencilAttachmentViewId_ != 0;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -672,7 +808,8 @@ namespace CNA::Internal::Backends::Sokol
             && blendEnabled == other.blendEnabled
             && depthTestEnabled == other.depthTestEnabled
             && depthWriteEnabled == other.depthWriteEnabled
-            && depthFunc == other.depthFunc;
+            && depthFunc == other.depthFunc
+            && hasDepthAttachment == other.hasDepthAttachment;
     }
 
     std::size_t SokolGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const
@@ -692,6 +829,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.depthTestEnabled));
         mix(static_cast<std::size_t>(key.depthWriteEnabled));
         mix(static_cast<std::size_t>(key.depthFunc));
+        mix(static_cast<std::size_t>(key.hasDepthAttachment));
         return hash;
     }
 
@@ -709,6 +847,7 @@ namespace CNA::Internal::Backends::Sokol
             && depthTestEnabled == other.depthTestEnabled
             && depthWriteEnabled == other.depthWriteEnabled
             && depthFunc == other.depthFunc
+            && hasDepthAttachment == other.hasDepthAttachment
             && cullMode == other.cullMode
             && primitiveType == other.primitiveType
             && indexType == other.indexType
@@ -741,6 +880,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.depthTestEnabled));
         mix(static_cast<std::size_t>(key.depthWriteEnabled));
         mix(static_cast<std::size_t>(key.depthFunc));
+        mix(static_cast<std::size_t>(key.hasDepthAttachment));
         mix(static_cast<std::size_t>(key.cullMode));
         mix(static_cast<std::size_t>(key.primitiveType));
         mix(static_cast<std::size_t>(key.indexType));
@@ -986,20 +1126,15 @@ namespace CNA::Internal::Backends::Sokol
     {
         if (passActive_) return;
 
-        int physicalWidth = 0;
-        int physicalHeight = 0;
-        GetPhysicalSizeEXT(physicalWidth, physicalHeight);
-
         sg_pass pass = {};
-        pass.swapchain.width = physicalWidth;
-        pass.swapchain.height = physicalHeight;
-        pass.swapchain.sample_count = sampleCount_;
-        pass.swapchain.color_format = SG_PIXELFORMAT_RGBA8;
-        pass.swapchain.depth_format = SG_PIXELFORMAT_DEPTH_STENCIL;
-        pass.swapchain.gl.framebuffer = 0;
 
         // LOAD unless an explicit Clear* asked otherwise: a pass restarted mid-frame (because a
         // clear or a state change closed the previous one) must not discard what was already drawn.
+        // This is also what makes a bound render target's content survive across separate
+        // SetRenderTarget(s) bind/unbind cycles regardless of RenderTargetUsage -- matching the
+        // EasyGL backend's own documented simplification: a real FBO naturally preserves content,
+        // and an explicit Clear() (which GraphicsDevice itself issues for a DiscardContents
+        // target immediately after binding) is what actually discards it, on every backend.
         pass.action.colors[0].load_action = pendingClearColor_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
         pass.action.colors[0].store_action = SG_STOREACTION_STORE;
         pass.action.colors[0].clear_value.r = pendingClear_[0];
@@ -1007,15 +1142,48 @@ namespace CNA::Internal::Backends::Sokol
         pass.action.colors[0].clear_value.b = pendingClear_[2];
         pass.action.colors[0].clear_value.a = pendingClear_[3];
 
-        pass.action.depth.load_action = pendingClearDepth_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
-        pass.action.depth.store_action = SG_STOREACTION_STORE;
-        pass.action.depth.clear_value = pendingDepth_;
+        const bool hasDepthStencil = currentRenderTarget_ == nullptr
+            || currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
+        if (hasDepthStencil)
+        {
+            pass.action.depth.load_action = pendingClearDepth_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
+            pass.action.depth.store_action = SG_STOREACTION_STORE;
+            pass.action.depth.clear_value = pendingDepth_;
 
-        pass.action.stencil.load_action = pendingClearStencil_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
-        pass.action.stencil.store_action = SG_STOREACTION_STORE;
-        pass.action.stencil.clear_value = static_cast<std::uint8_t>(pendingStencil_ & 0xFF);
+            pass.action.stencil.load_action = pendingClearStencil_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
+            pass.action.stencil.store_action = SG_STOREACTION_STORE;
+            pass.action.stencil.clear_value = static_cast<std::uint8_t>(pendingStencil_ & 0xFF);
+        }
+        // No depth attachment at all: pass.action.depth/.stencil are left at their zero-value
+        // defaults (LOADACTION_DEFAULT), which sokol_gfx ignores when attachments.depth_stencil is
+        // an unset view -- a Clear(DepthBuffer) queued while such a target is bound has nothing to
+        // act on, matching real XNA's own no-op-if-no-depth-buffer behaviour.
 
-        pass.label = "cna_swapchain_pass";
+        if (currentRenderTarget_ == nullptr)
+        {
+            int physicalWidth = 0;
+            int physicalHeight = 0;
+            GetPhysicalSizeEXT(physicalWidth, physicalHeight);
+
+            pass.swapchain.width = physicalWidth;
+            pass.swapchain.height = physicalHeight;
+            pass.swapchain.sample_count = sampleCount_;
+            pass.swapchain.color_format = SG_PIXELFORMAT_RGBA8;
+            pass.swapchain.depth_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+            pass.swapchain.gl.framebuffer = 0;
+            pass.label = "cna_swapchain_pass";
+        }
+        else
+        {
+            pass.attachments.colors[0] =
+                MakeViewHandle(currentRenderTarget_->GetColorAttachmentViewIdEXT());
+            if (hasDepthStencil)
+            {
+                pass.attachments.depth_stencil =
+                    MakeViewHandle(currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT());
+            }
+            pass.label = "cna_render_target_pass";
+        }
 
         sg_begin_pass(&pass);
         passActive_ = true;
@@ -1037,6 +1205,39 @@ namespace CNA::Internal::Backends::Sokol
     void SokolGraphicsBackend::ApplyPendingViewportAndScissor()
     {
         if (!passActive_) return;
+
+        if (currentRenderTarget_ != nullptr)
+        {
+            // A render target's pixel space IS logical space -- no window letterbox scaling
+            // applies to it at all (GraphicsDevice::ResetViewportAndScissorForRenderTarget already
+            // resets the public Viewport/ScissorRectangle to the target's own size in target-pixel
+            // units on every bind, so any SetViewport/SetScissorRect this backend receives while a
+            // target is bound already arrives in that same space).
+            int targetWidth = 0;
+            int targetHeight = 0;
+            GetCurrentTargetSizeEXT(targetWidth, targetHeight);
+
+            if (viewportSet_)
+            {
+                sg_apply_viewport(viewportRect_[0], viewportRect_[1],
+                                  viewportRect_[2], viewportRect_[3], true);
+            }
+            else
+            {
+                sg_apply_viewport(0, 0, targetWidth, targetHeight, true);
+            }
+
+            if (scissorEnabled_)
+            {
+                sg_apply_scissor_rect(scissorRect_[0], scissorRect_[1],
+                                      scissorRect_[2], scissorRect_[3], true);
+            }
+            else
+            {
+                sg_apply_scissor_rect(0, 0, targetWidth, targetHeight, true);
+            }
+            return;
+        }
 
         int physicalWidth = 0;
         int physicalHeight = 0;
@@ -1072,6 +1273,17 @@ namespace CNA::Internal::Backends::Sokol
         {
             sg_apply_scissor_rect(0, 0, physicalWidth, physicalHeight, true);
         }
+    }
+
+    void SokolGraphicsBackend::GetCurrentTargetSizeEXT(int& width, int& height) const
+    {
+        if (currentRenderTarget_ != nullptr)
+        {
+            width = currentRenderTarget_->GetWidth();
+            height = currentRenderTarget_->GetHeight();
+            return;
+        }
+        GetPhysicalSizeEXT(width, height);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1244,16 +1456,64 @@ namespace CNA::Internal::Backends::Sokol
         return std::make_unique<SokolIndexBufferBackend>(indexCapacity, true);
     }
 
+    std::unique_ptr<IRenderTargetBackend> SokolGraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        // preserveContents is intentionally unused -- see this method's own header doc and
+        // BeginPassIfNeeded's identical comment for why every bind already behaves that way.
+        (void)preserveContents;
+        if (mipMap)
+            NotYetImplemented(kBackendName, "a mipmapped RenderTarget2D");
+        // multiSampleCount is silently clamped to 1 (no MSAA), NOT thrown -- this matches the
+        // established codebase-wide convention every backend follows: IRenderTargetBackend::
+        // GetMultiSampleCount() exists specifically so a caller can observe what was actually
+        // applied (RenderTarget2D.MultiSampleCount reflects the real, device-clamped value, not
+        // the raw request), the same way a real GPU clamps to its own maximum. Unlike a mipmapped
+        // request there is no silent correctness trap here: the request is self-documenting
+        // through that property.
+        (void)multiSampleCount;
+
+        return std::make_unique<SokolRenderTargetBackend>(w, h, depthFormat != 0);
+    }
+
     // ---------------------------------------------------------------------------------------
     // SokolGraphicsBackend -- state
     // ---------------------------------------------------------------------------------------
 
+    void SokolGraphicsBackend::BindSingleRenderTarget2D(SokolRenderTargetBackend* rt)
+    {
+        if (currentRenderTarget_ == rt) return;
+        EndPassIfActive();
+        currentRenderTarget_ = rt;
+        // Any pending Clear* from before this bind belongs to whatever was previously active
+        // (the back buffer, or a different target); GraphicsDevice always issues its own
+        // DiscardContents Clear() AFTER this call returns (see GraphicsDevice::SetRenderTarget(s)'s
+        // own sequencing), so nothing here should carry a stale pending clear into the new target.
+        pendingClearColor_ = false;
+        pendingClearDepth_ = false;
+        pendingClearStencil_ = false;
+    }
+
+    void SokolGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        BindSingleRenderTarget2D(static_cast<SokolRenderTargetBackend*>(rt));
+    }
+
     void SokolGraphicsBackend::SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                                                 int count)
     {
-        if (renderTargets == nullptr || count == 0) return; // Back buffer: already the only target.
+        if (renderTargets == nullptr || count == 0)
+        {
+            BindSingleRenderTarget2D(nullptr);
+            return;
+        }
+        if (count > 1)
+            NotYetImplemented(kBackendName, "multiple render targets (MRT)");
+        if (!renderTargets[0].IsRenderTarget2D())
+            NotYetImplemented(kBackendName, "RenderTargetCube");
 
-        NotYetImplemented(kBackendName, "render targets (SetRenderTargets with a bound target)");
+        BindSingleRenderTarget2D(
+            static_cast<SokolRenderTargetBackend*>(renderTargets[0].GetRenderTarget2D()));
     }
 
     void SokolGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -1385,10 +1645,17 @@ namespace CNA::Internal::Backends::Sokol
 
     std::uint32_t SokolGraphicsBackend::GetSpritePipeline()
     {
+        // See BeginPassIfNeeded's identical computation: whether the CURRENTLY ACTIVE pass (the
+        // swapchain, or a bound render target) has a real depth-stencil attachment at all. Needed
+        // here too, not just for the 3D pipelines -- a SpriteBatch draw into a depth-less render
+        // target hits the exact same sokol_gfx pipeline/pass pixel-format mismatch otherwise.
+        const bool hasDepthAttachment = currentRenderTarget_ == nullptr
+            || currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
+
         const PipelineKey key{
             blendColorSrc_, blendAlphaSrc_, blendColorDst_, blendAlphaDst_,
             blendColorFunc_, blendAlphaFunc_, colorWriteChannels_,
-            blendEnabled_, depthTestEnabled_, depthWriteEnabled_, depthFunc_};
+            blendEnabled_, depthTestEnabled_, depthWriteEnabled_, depthFunc_, hasDepthAttachment};
 
         if (const auto found = pipelineCache_.find(key); found != pipelineCache_.end())
             return found->second;
@@ -1406,9 +1673,21 @@ namespace CNA::Internal::Backends::Sokol
         desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
         desc.cull_mode = SG_CULLMODE_NONE;
         desc.sample_count = sampleCount_;
-        desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
-        desc.depth.compare = key.depthTestEnabled ? ToCompareFunc(key.depthFunc) : SG_COMPAREFUNC_ALWAYS;
-        desc.depth.write_enabled = key.depthTestEnabled && key.depthWriteEnabled;
+        if (key.hasDepthAttachment)
+        {
+            desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+            desc.depth.compare = key.depthTestEnabled ? ToCompareFunc(key.depthFunc) : SG_COMPAREFUNC_ALWAYS;
+            desc.depth.write_enabled = key.depthTestEnabled && key.depthWriteEnabled;
+        }
+        else
+        {
+            // sokol_gfx requires compare=ALWAYS/NEVER and write_enabled=false when the pipeline's
+            // own depth.pixel_format is NONE -- a depth test/write request is simply impossible
+            // to honour with no depth attachment, matching real hardware.
+            desc.depth.pixel_format = SG_PIXELFORMAT_NONE;
+            desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
+            desc.depth.write_enabled = false;
+        }
         desc.color_count = 1;
         desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
         desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
@@ -1474,9 +1753,7 @@ namespace CNA::Internal::Backends::Sokol
     {
         if (vertices.empty()) return;
 
-        const auto* sokolTexture = dynamic_cast<const SokolTextureBackend*>(&texture);
-        if (sokolTexture == nullptr)
-            throw std::runtime_error("Sokol backend: SpriteBatch was handed a foreign texture backend");
+        const std::uint32_t textureViewId = ResolveSampledTextureViewId(texture, "SpriteBatch");
 
         BeginPassIfNeeded();
 
@@ -1496,11 +1773,18 @@ namespace CNA::Internal::Backends::Sokol
 
         int logicalWidth = 0;
         int logicalHeight = 0;
-        GetLogicalSizeEXT(logicalWidth, logicalHeight);
+        // XNA builds the SpriteBatch projection from Viewport.Width/Height, which
+        // GraphicsDevice::ResetViewportAndScissorForRenderTarget already reset to the bound
+        // target's own pixel size on bind -- so this needs the TARGET's size, not the window's
+        // letterboxed logical size, whenever a render target is active.
+        if (currentRenderTarget_ != nullptr)
+            GetCurrentTargetSizeEXT(logicalWidth, logicalHeight);
+        else
+            GetLogicalSizeEXT(logicalWidth, logicalHeight);
         if (viewportSet_ && viewportRect_[2] > 0 && viewportRect_[3] > 0)
         {
-            // XNA builds the SpriteBatch projection from Viewport.Width/Height, so a custom
-            // sub-viewport makes sprite coordinates viewport-local rather than window-local.
+            // A custom sub-viewport makes sprite coordinates viewport-local rather than
+            // window/target-local, on top of either size above.
             logicalWidth = viewportRect_[2];
             logicalHeight = viewportRect_[3];
         }
@@ -1521,7 +1805,7 @@ namespace CNA::Internal::Backends::Sokol
         bindings.vertex_buffers[0] = vertexBuffer;
         bindings.vertex_buffer_offsets[0] = vertexOffset;
         bindings.index_buffer = MakeBufferHandle(spriteIndexBufferId_);
-        bindings.views[VIEW_cna_tex] = MakeViewHandle(sokolTexture->GetViewIdEXT());
+        bindings.views[VIEW_cna_tex] = MakeViewHandle(textureViewId);
         bindings.samplers[SMP_cna_smp] = MakeSamplerHandle(GetSampler(filter, addressU, addressV, 1));
         sg_apply_bindings(&bindings);
 
@@ -1543,6 +1827,17 @@ namespace CNA::Internal::Backends::Sokol
 #if CNA_SOKOL_HAS_GL_READBACK
         if (pixels == nullptr || w <= 0 || h <= 0)
             throw std::runtime_error("Sokol backend: ReadBackbuffer called with an empty region");
+
+        // Real XNA's GraphicsDevice.GetBackBufferData always reads the actual presented window
+        // surface, never whatever RenderTarget2D happens to be currently bound -- and this
+        // implementation reads whatever pass is active, which would be the wrong surface while a
+        // target is bound. Refusing loudly beats returning the wrong pixels silently; matching the
+        // real semantic (temporarily unbinding, reading, then rebinding) is plan_sokol.md SOKOL-25b.
+        if (currentRenderTarget_ != nullptr)
+        {
+            NotYetImplemented(kBackendName,
+                "GetBackBufferData while a RenderTarget2D is bound");
+        }
 
         // BeginPassIfNeeded() first, for the same reason Present() does it: a Clear() only records
         // a pending pass action, so a Clear()-then-read-back sequence with nothing drawn in
@@ -1679,9 +1974,20 @@ namespace CNA::Internal::Backends::Sokol
         // stated convention instead of to whatever upstream happens to default to.
         desc.face_winding = SG_FACEWINDING_CW;
         desc.sample_count = sampleCount_;
-        desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
-        desc.depth.compare = key.depthTestEnabled ? ToCompareFunc(key.depthFunc) : SG_COMPAREFUNC_ALWAYS;
-        desc.depth.write_enabled = key.depthTestEnabled && key.depthWriteEnabled;
+        if (key.hasDepthAttachment)
+        {
+            desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+            desc.depth.compare = key.depthTestEnabled ? ToCompareFunc(key.depthFunc) : SG_COMPAREFUNC_ALWAYS;
+            desc.depth.write_enabled = key.depthTestEnabled && key.depthWriteEnabled;
+        }
+        else
+        {
+            // See GetSpritePipeline's identical branch: sokol_gfx requires compare=ALWAYS and
+            // write_enabled=false whenever the pipeline's own depth.pixel_format is NONE.
+            desc.depth.pixel_format = SG_PIXELFORMAT_NONE;
+            desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
+            desc.depth.write_enabled = false;
+        }
         desc.color_count = 1;
         desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
         desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
@@ -1750,11 +2056,6 @@ namespace CNA::Internal::Backends::Sokol
         if (vb.GetBufferIdEXT() == 0 || vb.GetVertexCount() <= 0) return;
 
         const VertexDeclaration* declaration = vb.GetDeclarationEXT();
-        if (declaration == nullptr)
-        {
-            NotYetImplemented(kBackendName,
-                "a 3D draw from a VertexBuffer with no VertexDeclaration");
-        }
 
         // Resolved before the pipeline key is built: the index width is part of the pipeline.
         const SokolIndexBufferBackend* ib = nullptr;
@@ -1782,11 +2083,15 @@ namespace CNA::Internal::Backends::Sokol
         key.depthWriteEnabled = depthWriteEnabled_;
         key.depthFunc = depthFunc_;
         key.cullMode = cullMode_;
+        // See GetSpritePipeline's identical computation: the currently active pass (swapchain or
+        // bound render target) may have no depth-stencil attachment at all, and sokol_gfx bakes
+        // the attachment's pixel format into the pipeline itself.
+        key.hasDepthAttachment = currentRenderTarget_ == nullptr
+            || currentRenderTarget_->GetDepthStencilAttachmentViewIdEXT() != 0;
         key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
         key.indexType = static_cast<int>(
             ib == nullptr ? SG_INDEXTYPE_NONE
                           : (ib->IsThirtyTwoBit() ? SG_INDEXTYPE_UINT32 : SG_INDEXTYPE_UINT16));
-        key.stride = declaration->getVertexStrideProperty();
         key.positionOffset = -1;
         key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
         key.colorOffset = -1;
@@ -1796,36 +2101,107 @@ namespace CNA::Internal::Backends::Sokol
         key.normalOffset = -1;
         key.normalFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
 
-        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
-        for (const VertexElement& element : declaration->GetVertexElements())
+        if (declaration != nullptr)
         {
-            const sg_vertex_format format = ToVertexFormat(element.getVertexElementFormatProperty());
-            if (format == SG_VERTEXFORMAT_INVALID) continue;
-            // Only usage index 0 participates: every shader here declares at most one input per
-            // usage, so a second set (e.g. a second TEXCOORD for lightmapping) would have nowhere
-            // to go.
-            if (element.getUsageIndexProperty() != 0) continue;
+            key.stride = declaration->getVertexStrideProperty();
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            for (const VertexElement& element : declaration->GetVertexElements())
+            {
+                const sg_vertex_format format = ToVertexFormat(element.getVertexElementFormatProperty());
+                if (format == SG_VERTEXFORMAT_INVALID) continue;
+                // Only usage index 0 participates: every shader here declares at most one input
+                // per usage, so a second set (e.g. a second TEXCOORD for lightmapping) would have
+                // nowhere to go.
+                if (element.getUsageIndexProperty() != 0) continue;
 
-            const VertexElementUsage usage = element.getVertexElementUsageProperty();
-            if (usage == VertexElementUsage::Position && key.positionOffset < 0)
-            {
-                key.positionOffset = element.getOffsetProperty();
-                key.positionFormat = static_cast<int>(format);
+                const VertexElementUsage usage = element.getVertexElementUsageProperty();
+                if (usage == VertexElementUsage::Position && key.positionOffset < 0)
+                {
+                    key.positionOffset = element.getOffsetProperty();
+                    key.positionFormat = static_cast<int>(format);
+                }
+                else if (usage == VertexElementUsage::Color && key.colorOffset < 0)
+                {
+                    key.colorOffset = element.getOffsetProperty();
+                    key.colorFormat = static_cast<int>(format);
+                }
+                else if (usage == VertexElementUsage::TextureCoordinate && key.texCoordOffset < 0)
+                {
+                    key.texCoordOffset = element.getOffsetProperty();
+                    key.texCoordFormat = static_cast<int>(format);
+                }
+                else if (usage == VertexElementUsage::Normal && key.normalOffset < 0)
+                {
+                    key.normalOffset = element.getOffsetProperty();
+                    key.normalFormat = static_cast<int>(format);
+                }
             }
-            else if (usage == VertexElementUsage::Color && key.colorOffset < 0)
+        }
+        else
+        {
+            // GraphicsDevice's typed, no-explicit-declaration DrawUserPrimitives()/
+            // DrawUserIndexedPrimitives() overloads (VertexPositionColor, VertexPositionTexture,
+            // VertexPositionColorTexture, VertexPositionNormalTexture -- and their *Colored
+            // convenience wrappers) each pack into one of CNA::Internal::Graphics's four fixed,
+            // shared GPU vertex streams and never call SetVertexDeclaration on the temp buffer:
+            // there is no per-call declaration to read, only the upload stride, which uniquely
+            // identifies which of the four built-in layouts this is.
+            switch (vb.GetStrideEXT())
             {
-                key.colorOffset = element.getOffsetProperty();
-                key.colorFormat = static_cast<int>(format);
-            }
-            else if (usage == VertexElementUsage::TextureCoordinate && key.texCoordOffset < 0)
-            {
-                key.texCoordOffset = element.getOffsetProperty();
-                key.texCoordFormat = static_cast<int>(format);
-            }
-            else if (usage == VertexElementUsage::Normal && key.normalOffset < 0)
-            {
-                key.normalOffset = element.getOffsetProperty();
-                key.normalFormat = static_cast<int>(format);
+                case 16:  // PositionColorStream: float3 position @0, ubyte4n color @12.
+                    if (kind != Shader3DKind::Colored)
+                        NotYetImplemented(kBackendName,
+                            "a textured or lit 3D draw from an undeclared VertexPositionColor "
+                            "buffer");
+                    key.stride = 16;
+                    key.positionOffset = 0;
+                    key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);
+                    key.colorOffset = 12;
+                    key.colorFormat = static_cast<int>(SG_VERTEXFORMAT_UBYTE4N);
+                    break;
+                case 20:  // PositionTextureStream: float3 position @0, float2 texcoord @12.
+                    if (kind != Shader3DKind::Textured)
+                        NotYetImplemented(kBackendName,
+                            "a colored or lit 3D draw from an undeclared VertexPositionTexture "
+                            "buffer");
+                    key.stride = 20;
+                    key.positionOffset = 0;
+                    key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);
+                    key.texCoordOffset = 12;
+                    key.texCoordFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT2);
+                    break;
+                case 24:  // PositionColorTextureStream: float3 position @0, ubyte4n color @12,
+                          // float2 texcoord @16.
+                    if (kind != Shader3DKind::Textured)
+                        NotYetImplemented(kBackendName,
+                            "a colored or lit 3D draw from an undeclared VertexPositionColorTexture "
+                            "buffer");
+                    key.stride = 24;
+                    key.positionOffset = 0;
+                    key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);
+                    key.colorOffset = 12;
+                    key.colorFormat = static_cast<int>(SG_VERTEXFORMAT_UBYTE4N);
+                    key.texCoordOffset = 16;
+                    key.texCoordFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT2);
+                    break;
+                case 32:  // PositionNormalTextureStream: float3 position @0, float3 normal @12,
+                          // float2 texcoord @24.
+                    if (kind != Shader3DKind::Lit)
+                        NotYetImplemented(kBackendName,
+                            "a colored or plain-textured 3D draw from an undeclared "
+                            "VertexPositionNormalTexture buffer");
+                    key.stride = 32;
+                    key.positionOffset = 0;
+                    key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);
+                    key.normalOffset = 12;
+                    key.normalFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);
+                    key.texCoordOffset = 24;
+                    key.texCoordFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT2);
+                    break;
+                default:
+                    NotYetImplemented(kBackendName,
+                        "a 3D draw from a VertexBuffer with no VertexDeclaration and an "
+                        "unrecognised stride");
             }
         }
 
@@ -1850,18 +2226,16 @@ namespace CNA::Internal::Backends::Sokol
         }
 
         // Resolved before the pass begins: a Textured draw needs a real texture, and a Lit draw
-        // needs one only when actually textured (the white fallback otherwise).
-        const SokolTextureBackend* texture = nullptr;
+        // needs one only when actually textured (the white fallback otherwise). Accepts a
+        // render-target-as-texture the same way the SpriteBatch path does.
+        bool hasTexture = false;
+        std::uint32_t textureViewId = 0;
         if (kind == Shader3DKind::Textured || (kind == Shader3DKind::Lit && params.textureEnabled))
         {
             if (params.texture0 != nullptr)
             {
-                texture = dynamic_cast<const SokolTextureBackend*>(params.texture0);
-                if (texture == nullptr)
-                {
-                    throw std::runtime_error(
-                        "Sokol backend: a textured 3D draw was handed a foreign texture backend");
-                }
+                textureViewId = ResolveSampledTextureViewId(*params.texture0, "a textured 3D draw");
+                hasTexture = true;
             }
             else if (kind == Shader3DKind::Textured)
             {
@@ -1869,8 +2243,11 @@ namespace CNA::Internal::Backends::Sokol
                     "Sokol backend: TextureEnabled draw with no texture bound");
             }
         }
-        if (texture == nullptr && kind == Shader3DKind::Lit)
-            texture = &GetDefaultWhiteTexture();
+        if (!hasTexture && kind == Shader3DKind::Lit)
+        {
+            textureViewId = GetDefaultWhiteTexture().GetViewIdEXT();
+            hasTexture = true;
+        }
 
         BeginPassIfNeeded();
 
@@ -1883,10 +2260,10 @@ namespace CNA::Internal::Backends::Sokol
         bindings.vertex_buffer_offsets[0] = params.baseVertex * key.stride;
         if (ib != nullptr)
             bindings.index_buffer = MakeBufferHandle(ib->GetBufferIdEXT());
-        if (texture != nullptr)
+        if (hasTexture)
         {
             const SamplerSlotState& sampler = samplerSlots_[0];
-            bindings.views[VIEW_cna_tex] = MakeViewHandle(texture->GetViewIdEXT());
+            bindings.views[VIEW_cna_tex] = MakeViewHandle(textureViewId);
             bindings.samplers[SMP_cna_smp] = MakeSamplerHandle(
                 GetSampler(sampler.filter, sampler.addressU, sampler.addressV,
                           sampler.maxAnisotropy));

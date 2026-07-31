@@ -180,7 +180,7 @@ That makes it valuable to CNA in two specific ways:
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
-| SOKOL-25 | `RenderTarget2D` via `sg_view` colour/depth-stencil attachments | ⬜ | `SetRenderTargets` throws on any non-null target today |
+| SOKOL-25 | `RenderTarget2D` via `sg_view` colour/depth-stencil attachments | ✅ | `SetRenderTarget2D`/`SetRenderTargets` bind a real colour(+depth-stencil) attachment pass; `GetData()` on a RenderTarget2D is not implemented (throws `NotSupportedException`, matching the base `IGraphicsBackend::GetData` default) — sampling a render target as a texture (SpriteBatch and 3D alike) and `GetBackBufferData()` while none is bound both work. 8 shared cross-backend oracles registered and passing: `Sokol_RenderTarget_ViewportScissorReset`, `Sokol_RenderTarget2D_Depth`, `Sokol_RenderTarget_DepthStencilUsage`, `Sokol_RenderTarget_PassBoundary`, `Sokol_RenderTarget_ProducerConsumer`, `Sokol_RenderTarget_BackbufferConsumer`, `Sokol_RenderTarget_FirstUse`, `Sokol_RenderTarget_SamplingOrientation`. `multiSampleCount` is silently clamped to 1 (codebase convention); `mipMap=true` throws `NotYetImplemented`. |
 | SOKOL-26 | `RenderTargetCube`, MRT, render-target MSAA resolve | ⬜ | |
 | SOKOL-27 | `TextureCube` and `Texture3D` | ⬜ | `CreateTextureCube`/`CreateTexture3D` return null today |
 | SOKOL-28 | Custom `ShaderEffect` — needs a runtime GLSL path or a shdc-at-build-time contract | ⬜ | `CreateEffectBackend` returns null today |

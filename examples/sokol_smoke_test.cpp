@@ -11,7 +11,9 @@
 //   GetIndexCount() reports exactly what was uploaded, for both 16- and 32-bit indices.
 // Check F -- Clear(Target|DepthBuffer|Stencil) followed by GetBackBufferData() returns the exact
 //   clear colour, so the pass/clear path genuinely reached the GPU.
-// Check G -- binding a RenderTarget2D throws rather than silently rendering nowhere.
+// Check G -- binding a RenderTarget2D, clearing it and unbinding completes with no exception
+//   (SOKOL-25: render targets are implemented; the dedicated rendertarget_*_test.cpp fixtures are
+//   what prove their pixel content and lifetime semantics).
 // Check H -- SupportsCapability() reports this backend's documented boundary.
 // Check I -- 60 frames of Clear() + the automatic end-of-frame Present() complete with no
 //   exception.
@@ -95,23 +97,23 @@ class SokolSmokeTest : public Game
         check(indexBuffer32.getIndexCountProperty() == 6,
               "IndexBuffer::SetData() round-trips its 32-bit index count");
 
-        // Render targets remain unimplemented on this backend, and must fail loudly: a silent
-        // no-op would let a game render an entire off-screen pass into nothing and report success.
-        // (The 3D draw path is implemented as of SOKOL-20 -- its own boundary, the lit/textured
-        // variants, is asserted by Sokol_3D where a real scene can prove it.)
+        // Render targets are implemented as of SOKOL-25 -- this is a lifecycle smoke check only
+        // (bind, clear, unbind with no exception); the dedicated rendertarget_*_test.cpp fixtures
+        // pixel-verify content, depth gating and cross-cycle lifetime semantics.
         RenderTarget2D renderTarget(device, 4, 4);
         const std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&renderTarget) };
         bool threw = false;
         try
         {
             device.SetRenderTargets(bindings);
+            device.Clear(Color::CornflowerBlue);
         }
         catch (const std::exception&)
         {
             threw = true;
         }
         device.SetRenderTargets({});
-        check(threw, "binding a RenderTarget2D throws instead of silently rendering nowhere");
+        check(!threw, "binding a RenderTarget2D, clearing it and unbinding raises no exception");
     }
 
     void CheckCapabilities(SokolGraphicsBackend& backend)

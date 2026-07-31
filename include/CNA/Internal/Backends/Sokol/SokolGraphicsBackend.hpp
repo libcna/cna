@@ -145,6 +145,111 @@ namespace CNA::Internal::Backends::Sokol
     };
 
     /**
+     * @brief Backend handle for a 2D off-screen render target.
+     *
+     * plan_sokol.md SOKOL-25: a real colour attachment (plus an optional combined depth-stencil
+     * attachment) that a pass can render into, and a separate texture view of the same colour
+     * image so a later pass can sample it -- sokol_gfx requires a distinct sg_view per use even
+     * when both reference the same sg_image (see the "offscreen rendering" section of
+     * sokol_gfx.h's own doc comment).
+     *
+     * Scope for this task: a single, non-multisampled, non-mipmapped target. `RenderTargetCube`,
+     * MRT and MSAA render targets are not implemented yet (plan_sokol.md SOKOL-26) and
+     * `CreateRenderTarget2D` refuses them explicitly rather than silently downgrading the request.
+     * `GetData()` (reading a rendered target back to the CPU) is not implemented either -- it
+     * would need either sokol's opaque per-backend image handle exposed for a raw GL readback (the
+     * approach ReadBackbuffer() already uses for the window's own framebuffer) or an injected,
+     * self-managed GL texture; neither is done here, so it inherits ITextureBackend::GetData's
+     * `return false` default, which the shared layer turns into a clean
+     * `System::NotSupportedException` rather than fabricated pixels.
+     */
+    class SokolRenderTargetBackend : public IRenderTargetBackend
+    {
+    public:
+        /**
+         * @brief Creates the colour (and optional depth-stencil) attachment images and views.
+         * @param width       Target width in pixels.
+         * @param height      Target height in pixels.
+         * @param hasDepthStencil True to also allocate a combined depth-stencil attachment.
+         */
+        SokolRenderTargetBackend(int width, int height, bool hasDepthStencil);
+
+        /** @brief Destroys every sokol_gfx view and image owned by this target. */
+        ~SokolRenderTargetBackend() override;
+
+        SokolRenderTargetBackend(const SokolRenderTargetBackend&) = delete;
+        SokolRenderTargetBackend& operator=(const SokolRenderTargetBackend&) = delete;
+
+        /**
+         * @brief Returns the target's width in pixels.
+         * @return Target width.
+         */
+        [[nodiscard]] int GetWidth() const override;
+
+        /**
+         * @brief Returns the target's height in pixels.
+         * @return Target height.
+         */
+        [[nodiscard]] int GetHeight() const override;
+
+        /**
+         * @brief Returns null; this backend renders through sokol_gfx, not SDL_Renderer.
+         * @return Always nullptr.
+         */
+        [[nodiscard]] SDL_Texture* GetNativeTexture() const override;
+
+        /** @brief Bind is driven entirely by SokolGraphicsBackend's own bound-target tracking;
+         *         this override exists only to satisfy the pure-virtual interface. */
+        void BindAsRenderTarget() override;
+
+        /** @brief Unbind is driven entirely by SokolGraphicsBackend's own bound-target tracking;
+         *         this override exists only to satisfy the pure-virtual interface. */
+        void UnbindAsRenderTarget() override;
+
+        /**
+         * @brief Returns whether this target actually allocated a depth-stencil attachment.
+         * @param depthFormatWasRequested Unused: this backend allocates one iff it was asked to.
+         * @return True if a depth-stencil attachment exists.
+         */
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
+
+        /**
+         * @brief Returns the raw sokol_gfx colour image handle id. NOXNA.
+         * @return sg_image id, or 0 when creation failed.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetColorImageIdEXT() const { return colorImageId_; }
+
+        /**
+         * @brief Returns the raw sokol_gfx colour-attachment view handle id, used when this
+         * target is the active render target. NOXNA.
+         * @return sg_view id, or 0 when creation failed.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetColorAttachmentViewIdEXT() const { return colorAttachmentViewId_; }
+
+        /**
+         * @brief Returns the raw sokol_gfx texture-view handle id, used to sample this target as
+         * an ordinary texture in a later pass. NOXNA.
+         * @return sg_view id, or 0 when creation failed.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetColorTextureViewIdEXT() const { return colorTextureViewId_; }
+
+        /**
+         * @brief Returns the raw sokol_gfx depth-stencil-attachment view handle id. NOXNA.
+         * @return sg_view id, or 0 when this target has no depth-stencil attachment.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetDepthStencilAttachmentViewIdEXT() const { return depthStencilAttachmentViewId_; }
+
+    private:
+        int width_ = 0;
+        int height_ = 0;
+        std::uint32_t colorImageId_ = 0;
+        std::uint32_t colorAttachmentViewId_ = 0;
+        std::uint32_t colorTextureViewId_ = 0;
+        std::uint32_t depthStencilImageId_ = 0;
+        std::uint32_t depthStencilAttachmentViewId_ = 0;
+    };
+
+    /**
      * @brief Backend handle for a vertex buffer.
      *
      * Each SetData() recreates the underlying immutable sokol_gfx buffer. sokol_gfx allows only
@@ -592,7 +697,36 @@ namespace CNA::Internal::Backends::Sokol
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         /**
-         * @brief Binds a render-target set. Only the back buffer (null / count 0) is supported.
+         * @brief Creates a single, non-multisampled, non-mipmapped off-screen render target.
+         *
+         * @param w                Target width in pixels.
+         * @param h                Target height in pixels.
+         * @param depthFormat      Raw DepthFormat ordinal; None (0) allocates no depth-stencil
+         *                         attachment, any other value allocates a combined one.
+         * @param preserveContents Unused: this backend always preserves a target's content across
+         *                         binds (a real FBO naturally does), matching the EasyGL
+         *                         backend's own documented simplification -- an explicit `Clear()`
+         *                         is what actually discards content, on every backend.
+         * @param mipMap           Must be false; a mipmapped render target is not implemented yet.
+         * @param multiSampleCount Silently clamped to 1 (no MSAA) -- not implemented yet
+         *                         (plan_sokol.md SOKOL-26); observable via IRenderTargetBackend::
+         *                         GetMultiSampleCount(), matching every other backend's own
+         *                         device-clamped-count convention.
+         * @return The new render target backend.
+         */
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount) override;
+
+        /**
+         * @brief Activates a single render target, or restores the back buffer.
+         * @param rt The target to activate, or null to restore the back buffer.
+         */
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+
+        /**
+         * @brief Binds a render-target set. Only a single RenderTarget2D (or the back buffer --
+         * null / count 0) is supported; RenderTargetCube and MRT are not implemented yet.
          * @param renderTargets Ordered attachment descriptors, or null for the back buffer.
          * @param count         Number of attachments; 0 restores the back buffer.
          */
@@ -866,6 +1000,8 @@ namespace CNA::Internal::Backends::Sokol
             bool depthTestEnabled;
             bool depthWriteEnabled;
             int depthFunc;
+            /// See Pipeline3DKey's identical field for why this has to be part of the key.
+            bool hasDepthAttachment;
 
             bool operator==(const PipelineKey& other) const;
         };
@@ -914,6 +1050,12 @@ namespace CNA::Internal::Backends::Sokol
             bool depthTestEnabled;
             bool depthWriteEnabled;
             int depthFunc;
+            /// Whether the pass this pipeline is used in has a real depth-stencil attachment at
+            /// all -- true for the swapchain always, and for a render target only when it was
+            /// created with a depth format. sokol_gfx bakes the attachment's pixel format into the
+            /// pipeline and rejects SG_PIXELFORMAT_DEPTH_STENCIL against a pass with none, so this
+            /// has to be part of the key, not just depthTestEnabled/depthWriteEnabled.
+            bool hasDepthAttachment;
             int cullMode;
             int primitiveType;
             /// Raw sg_index_type: sokol_gfx bakes the index type into the pipeline, and rejects
@@ -979,6 +1121,15 @@ namespace CNA::Internal::Backends::Sokol
         [[nodiscard]] std::uint32_t GetSampler(int filter, int addressU, int addressV,
                                                int maxAnisotropy);
         void ApplyPendingViewportAndScissor();
+        /// Shared by SetRenderTarget2D and the single-RenderTarget2D case of SetRenderTargets --
+        /// both public GraphicsDevice entry points (the singular SetRenderTarget(RenderTarget2D*)
+        /// convenience and the vector-based SetRenderTargets) reach the backend through genuinely
+        /// different IGraphicsBackend virtuals, so there is no single call site to put this in.
+        void BindSingleRenderTarget2D(SokolRenderTargetBackend* rt);
+        /// Returns the size (in pixels) of whatever is currently the draw/clear target: the bound
+        /// render target when one is active, otherwise the window's physical size. RT pixel space
+        /// has no logical/physical distinction (no letterboxing), unlike the back buffer.
+        void GetCurrentTargetSizeEXT(int& width, int& height) const;
 
         SDL_Window* window_ = nullptr;
         void* glContext_ = nullptr;
@@ -989,6 +1140,11 @@ namespace CNA::Internal::Backends::Sokol
         int swapInterval_ = 1;
 
         bool passActive_ = false;
+        /// The active off-screen render target, or null for the back buffer. Not owned -- the
+        /// public RenderTarget2D (via its backend unique_ptr) owns the lifetime; a target that
+        /// outlives its binding is unbound the same way GraphicsDevice::Dispose() unbinds anything
+        /// else, by the caller issuing SetRenderTarget(nullptr)/SetRenderTargets({}) first.
+        SokolRenderTargetBackend* currentRenderTarget_ = nullptr;
         /// Pending pass action for the next BeginPassIfNeeded(), reset to "load" after each use so
         /// only an explicit Clear* call ever discards existing content.
         bool pendingClearColor_ = false;

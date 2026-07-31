@@ -54,6 +54,9 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Lit 3D draws (`BasicEffect.LightingEnabled`): ambient + up to 3 real per-pixel Blinn-Phong directional lights, specular, emissive, alpha test, fog | ✅ | `Sokol_Lit3D` checks E-I -- real per-pixel lighting, not per-vertex |
 | `SamplerState` for the 3D texture unit (`GraphicsDevice.SamplerStates[0]`) | ✅ | Read at draw time, same as every other backend |
 | Virtual resolution / presentation scaling / window↔logical transforms | ✅ | Same geometry as EasyGL's `FixedHeightDynamicWidth` |
+| `RenderTarget2D` bind/draw/sample (`SetRenderTarget`/`SetRenderTargets`, real colour + optional depth-stencil attachment, viewport/scissor reset on bind/unbind) | ✅ | `Sokol_RenderTarget_ViewportScissorReset`, `Sokol_RenderTarget2D_Depth`, `Sokol_RenderTarget_DepthStencilUsage`, `Sokol_RenderTarget_PassBoundary` |
+| Sampling a `RenderTarget2D` as a texture, including a never-read-back target the same frame it was produced | ✅ | `Sokol_RenderTarget_ProducerConsumer`, `Sokol_RenderTarget_BackbufferConsumer`, `Sokol_RenderTarget_SamplingOrientation` — SpriteBatch and BasicEffect/AlphaTestEffect textured 3D alike, top-left logical orientation preserved |
+| A brand-new `RenderTarget2D` usable immediately, no warm-up frame | ✅ | `Sokol_RenderTarget_FirstUse` |
 
 ## What does not work yet
 
@@ -64,7 +67,10 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Per-vertex (Gouraud) lighting (`BasicEffect.PreferPerPixelLighting = false`) | ignored -- always renders per-pixel, matching every CNA backend except D3D9 | not planned |
 | A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
 | Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |
-| `RenderTarget2D`, `RenderTargetCube`, MRT | `SetRenderTargets` with any target throws; `CreateRenderTarget2D` returns null, so the shared layer raises `NotSupportedException` | `SOKOL-25`/`SOKOL-26` |
+| `RenderTarget2D::GetData` (direct CPU readback) | throws `System::NotSupportedException` — `SokolRenderTargetBackend` does not override `ITextureBackend::GetData`, so it inherits the base class's `return false` default. Sampling the target as a texture, or reading the backbuffer after drawing it there, both work. | `SOKOL-26` |
+| `RenderTarget2D` mip-mapped (`mipMap=true`) | `CreateRenderTarget2D` throws `NotYetImplemented` | `SOKOL-26` |
+| `RenderTarget2D` MSAA | `multiSampleCount` is silently clamped to 1 (`GetMultiSampleCount()` reports the real, clamped value — the same convention every other backend uses for this parameter) | `SOKOL-26` |
+| `RenderTargetCube`, MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented`/`NotSupportedException`; `CreateRenderTargetCube` returns null, so the shared layer raises `NotSupportedException` | `SOKOL-26` |
 | `TextureCube`, `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` | `SOKOL-27` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `OcclusionQuery` | `CreateOcclusionQuery` returns null — sokol_gfx exposes no query API at all | `SOKOL-29` |
@@ -100,8 +106,8 @@ correctly, which the table above is the authority on.
 
 ## Verification status
 
-All three CTest entries run under Xvfb with Mesa's **llvmpipe software GL** on this dev machine — a real
-GL 4.1 driver and real rendering, but not discrete-GPU hardware. `SOKOL-30` tracks running them
+All CTest entries below run under Xvfb with Mesa's **llvmpipe software GL** on this dev machine — a
+real GL 4.1 driver and real rendering, but not discrete-GPU hardware. `SOKOL-30` tracks running them
 against a real GPU.
 
 ```bash
@@ -114,6 +120,21 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_2D` | 15, every one a real pixel read-back | all pass |
 | `Sokol_3D` | 10, nine of them real pixel read-backs | all pass |
 | `Sokol_Lit3D` | 10, every one a real pixel read-back | all pass |
+| `Sokol_RenderTarget_ViewportScissorReset` | 6 | all pass |
+| `Sokol_RenderTarget2D_Depth` | 1, a real depth-occlusion proof inside a render target | all pass |
+| `Sokol_RenderTarget_DepthStencilUsage` | 29 | all pass |
+| `Sokol_RenderTarget_PassBoundary` | 28 | all pass |
+| `Sokol_RenderTarget_ProducerConsumer` | 27 | all pass |
+| `Sokol_RenderTarget_BackbufferConsumer` | 3 real, the rest honestly INFO-skipped (no direct `RenderTarget2D::GetData`) | all pass |
+| `Sokol_RenderTarget_FirstUse` | 15 | all pass |
+| `Sokol_RenderTarget_SamplingOrientation` | 29 | all pass |
+
+The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
+Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. Most of their
+checks assert `System::NotSupportedException` from a direct `RenderTarget2D::GetData()` call — see
+the "What does not work yet" table — which every one of these fixtures treats as a legitimate,
+distinctly-asserted backend declaration rather than a failure. The checks that DO exercise real
+pixel content on SOKOL go through `SpriteBatch`/3D sampling or `GetBackBufferData()` instead.
 
 The full `CnaTests` suite also runs under this backend. Note that the shared suite gates several
 capability-dependent expectations on an explicit list of backend macros (`kCubeStorageSupported`

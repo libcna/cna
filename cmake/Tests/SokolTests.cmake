@@ -47,4 +47,62 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
     cna_register_backend_test(NAME Sokol_Lit3D COMMAND cna_test_sokol_lit3d
         TIMEOUT 120 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-25: RenderTarget2D. These are shared, backend-agnostic oracles (already
+    # registered for EasyGL/Vulkan/Bgfx/SdlGpu/etc.) exercising only the public XNA API, reused
+    # here rather than duplicated -- Task 338 (viewport/scissor reset on bind/unbind) and Task 335
+    # (a render target's own depth buffer genuinely gates its draws).
+    cna_sokol_test(cna_test_sokol_rendertarget_viewport_scissor_reset
+                    examples/rendertarget_viewport_scissor_reset_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget_ViewportScissorReset
+        COMMAND cna_test_sokol_rendertarget_viewport_scissor_reset
+        TIMEOUT 60 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sokol_test(cna_test_sokol_rendertarget2d_depth examples/rendertarget2d_depth_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget2D_Depth COMMAND cna_test_sokol_rendertarget2d_depth
+        TIMEOUT 60 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sokol_test(cna_test_sokol_rendertarget_depthstencil_usage
+                    examples/rendertarget_depthstencil_usage_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget_DepthStencilUsage
+        COMMAND cna_test_sokol_rendertarget_depthstencil_usage
+        TIMEOUT 60 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sokol_test(cna_test_sokol_rendertarget_pass_boundary
+                    examples/rendertarget_pass_boundary_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget_PassBoundary
+        COMMAND cna_test_sokol_rendertarget_pass_boundary
+        TIMEOUT 60 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sokol_test(cna_test_sokol_rendertarget_producer_consumer
+                    examples/rendertarget_producer_consumer_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget_ProducerConsumer
+        COMMAND cna_test_sokol_rendertarget_producer_consumer
+        TIMEOUT 60 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sokol_test(cna_test_sokol_rendertarget_backbuffer_consumer
+                    examples/rendertarget_backbuffer_consumer_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget_BackbufferConsumer
+        COMMAND cna_test_sokol_rendertarget_backbuffer_consumer
+        TIMEOUT 60 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sokol_test(cna_test_sokol_rendertarget_first_use
+                    examples/rendertarget_first_use_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget_FirstUse
+        COMMAND cna_test_sokol_rendertarget_first_use
+        TIMEOUT 60 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sokol_test(cna_test_sokol_rendertarget_sampling_orientation
+                    examples/rendertarget_sampling_orientation_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget_SamplingOrientation
+        COMMAND cna_test_sokol_rendertarget_sampling_orientation
+        TIMEOUT 60 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
