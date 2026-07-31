@@ -121,6 +121,14 @@ namespace CNA::Internal::Backends::Llgl
                 std::to_string(addressMode));
         }
 
+        /// True when a blend factor ordinal refers to the constant blend colour, i.e. the only case
+        /// in which the pipeline needs dynamic blend-factor state at all.
+        bool UsesConstantBlendFactor(int blend)
+        {
+            const XnaBlend value = static_cast<XnaBlend>(blend);
+            return value == XnaBlend::BlendFactor || value == XnaBlend::InverseBlendFactor;
+        }
+
         std::uint8_t MapColorWriteMask(int colorWriteChannels)
         {
             std::uint8_t mask = 0;
@@ -569,7 +577,25 @@ namespace CNA::Internal::Backends::Llgl
         // The shading language the loaded module reports decides which of the two checked-in
         // shader flavours is used -- not the module name -- so a module that gains or loses a
         // language cannot end up handed a form it never accepted.
-        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::SPIRV))
+        //
+        // GLSL is checked FIRST, and that order is load-bearing rather than cosmetic. A modern
+        // OpenGL module reports BOTH languages, because desktop GL can ingest SPIR-V through
+        // GL_ARB_gl_spirv -- but the SPIR-V shipped here was compiled for Vulkan's binding model,
+        // and GL accepts it far enough to be dangerous: the position attribute still arrives, so
+        // geometry rasterizes in the right place while the uniform block and every other attribute
+        // silently read as zero. That is what made the OpenGL module clear correctly and draw
+        // nothing at all (LLGL-17). Preferring GLSL wherever it exists keeps each module on the
+        // form its own binding model was authored against; SPIR-V is the fallback for a module
+        // that has no GLSL at all, which is exactly Vulkan.
+        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
+        {
+            vertexDesc.source = Shaders::kSprite2dVertGlsl;
+            vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+
+            fragmentDesc.source = Shaders::kSprite2dFragGlsl;
+            fragmentDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+        }
+        else if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::SPIRV))
         {
             vertexDesc.source = reinterpret_cast<const char*>(Shaders::kSprite2dVertSpv);
             vertexDesc.sourceSize = sizeof(Shaders::kSprite2dVertSpv);
@@ -580,14 +606,6 @@ namespace CNA::Internal::Backends::Llgl
             fragmentDesc.sourceSize = sizeof(Shaders::kSprite2dFragSpv);
             fragmentDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
             fragmentDesc.entryPoint = "main";
-        }
-        else if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
-        {
-            vertexDesc.source = Shaders::kSprite2dVertGlsl;
-            vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
-
-            fragmentDesc.source = Shaders::kSprite2dFragGlsl;
-            fragmentDesc.sourceType = LLGL::ShaderSourceType::CodeString;
         }
         else
         {
@@ -645,6 +663,12 @@ namespace CNA::Internal::Backends::Llgl
             throw std::runtime_error(std::string(kBackendName) + " backend: sprite constant buffer creation failed");
     }
 
+    bool LlglGraphicsBackend::UsesConstantBlendFactorState() const
+    {
+        return UsesConstantBlendFactor(colorSrcBlend_) || UsesConstantBlendFactor(colorDstBlend_) ||
+               UsesConstantBlendFactor(alphaSrcBlend_) || UsesConstantBlendFactor(alphaDstBlend_);
+    }
+
     std::uint64_t LlglGraphicsBackend::MakeBlendPipelineKey(bool scissorEnabled) const
     {
         // Packs every field the sprite pipeline is built from, so a cache hit really is the same
@@ -692,7 +716,13 @@ namespace CNA::Internal::Backends::Llgl
         pipelineDesc.rasterizer.multiSampleEnabled = (swapChain_->GetSamples() > 1);
         pipelineDesc.rasterizer.scissorTestEnabled = scissorEnabled;
         pipelineDesc.rasterizer.cullMode = LLGL::CullMode::Disabled;
-        pipelineDesc.blend.blendFactorDynamic = true;
+        // Dynamic blend-factor state is requested only when the blend state actually references the
+        // constant blend colour. It is not free: LLGL implements it on OpenGL with glBlendColor,
+        // which is genuinely absent from some GL proc tables (this project's own software-rasterized
+        // test environment among them) and throws rather than being ignored (LLGL-18). Asking for it
+        // unconditionally would make every draw depend on a call that the overwhelming majority of
+        // blend states have no use for.
+        pipelineDesc.blend.blendFactorDynamic = UsesConstantBlendFactorState();
         pipelineDesc.blend.targets[0].blendEnabled = !opaqueFactors;
         pipelineDesc.blend.targets[0].srcColor = MapBlendFactor(colorSrcBlend_);
         pipelineDesc.blend.targets[0].dstColor = MapBlendFactor(colorDstBlend_);
@@ -1139,6 +1169,7 @@ namespace CNA::Internal::Backends::Llgl
         command.firstVertex = firstVertex;
         command.vertexCount = static_cast<std::uint32_t>(kSpriteVerticesPerQuad);
         std::memcpy(command.blendFactor, blendFactor_, sizeof(command.blendFactor));
+        command.usesBlendFactor = UsesConstantBlendFactorState();
         std::memcpy(command.scissor, scissor, sizeof(command.scissor));
         command.scissorEnabled = scissorEnabled;
         frameCommands_.push_back(command);
@@ -1234,7 +1265,8 @@ namespace CNA::Internal::Backends::Llgl
                     }
 
                     commands_->SetPipelineState(*command.pipeline);
-                    commands_->SetBlendFactor(command.blendFactor);
+                    if (command.usesBlendFactor)
+                        commands_->SetBlendFactor(command.blendFactor);
                     if (command.scissorEnabled)
                     {
                         commands_->SetScissor(LLGL::Scissor{command.scissor[0], command.scissor[1],

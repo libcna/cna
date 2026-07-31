@@ -722,6 +722,7 @@ namespace CNA::Internal::Backends::Llgl
             std::uint32_t    firstVertex  = 0;
             std::uint32_t    vertexCount  = 0;
             float            blendFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+            bool             usesBlendFactor = false;
             std::int32_t     scissor[4]   = {0, 0, 0, 0};
             bool             scissorEnabled = false;
         };
@@ -742,6 +743,7 @@ namespace CNA::Internal::Backends::Llgl
         void ReplayFrameCommands();
         void UpdateSwapChainResolution();
         [[nodiscard]] PresentationRect ComputePresentationRect() const;
+        [[nodiscard]] bool UsesConstantBlendFactorState() const;
         [[nodiscard]] std::uint64_t MakeBlendPipelineKey(bool scissorEnabled) const;
         LLGL::PipelineState* AcquireSpritePipeline(bool scissorEnabled);
         LLGL::Sampler* AcquireSampler(int filter, int addressU, int addressV, int maxAnisotropy);

@@ -1,20 +1,23 @@
 # LLGL Graphics Backend — Implementation Plan
 
-> **Status (2026-07-31): the 2D baseline is implemented and verified against real GPU pixels via
-> the Vulkan module.** `CNA_GRAPHICS_BACKEND=LLGL` configures and builds
-> (`cna_backend_graphics_llgl`), and on this environment's virtual display (Xvfb + Mesa lavapipe)
-> a real SDL window, a real `LLGL::RenderSystem`, and a real swap chain clear and present 60
-> frames, upload a real `Texture2D`, and draw a real `SpriteBatch` scene whose pixels are read back
-> and asserted: quadrant orientation, tint multiplication, `SpriteEffects::FlipHorizontally`, and
-> `BlendState::NonPremultiplied` alpha blending — `Llgl_Smoke` (8/8) and `Llgl_2D` (10/10 pixel
-> checks).
+> **Status (2026-07-31): the 2D baseline is implemented and verified against real GPU pixels on
+> BOTH renderer modules.** `CNA_GRAPHICS_BACKEND=LLGL` configures and builds
+> (`cna_backend_graphics_llgl`), and on this environment's virtual display (Xvfb + Mesa lavapipe
+> for Vulkan, llvmpipe for OpenGL) a real SDL window, a real `LLGL::RenderSystem`, and a real swap
+> chain clear and present 60 frames, upload a real `Texture2D`, and draw a real `SpriteBatch` scene
+> whose pixels are read back and asserted: quadrant orientation, tint multiplication,
+> `SpriteEffects::FlipHorizontally`, and `BlendState::NonPremultiplied` alpha blending. Four CTests,
+> all green: `Llgl_Smoke` and `Llgl_Smoke_OpenGL` (8/8 each), `Llgl_2D` and `Llgl_2D_OpenGL`
+> (10/10 pixel checks each).
 >
-> **The OpenGL module is NOT verified.** It loads and clears correctly, but a sprite draw through
-> it produces nothing on this environment's Mesa llvmpipe GL 4.5 core context: only the first
-> vertex attribute reaches the shader and the uniform block is never fed. See `LLGL-17` below and
-> `known_bugs.md`. Since the runtime preference is Vulkan first, this affects a machine with no
-> usable Vulkan driver, where the backend currently renders a blank window instead of failing.
-> Do not describe this backend as "OpenGL or Vulkan" without that caveat.
+> **`LLGL-17` — "the OpenGL module clears but draws nothing" — is fixed** (2026-07-31, same day it
+> was filed). The cause was CNA's own shader-language selection, not LLGL: a modern OpenGL module
+> reports *both* GLSL and SPIR-V (desktop GL ingests SPIR-V through `GL_ARB_gl_spirv`), the
+> selection checked SPIR-V first, and GL accepted the Vulkan-targeted SPIR-V far enough to
+> rasterize geometry from the position attribute while every other attribute and the uniform block
+> read as zero. GLSL is now preferred wherever a module offers it. The regression that let this
+> survive is closed too: the OpenGL module now has its own CTest registrations rather than being
+> exercised only by whatever the default preference happened to pick.
 >
 > Everything beyond the 2D baseline — the whole 3D pipeline, render targets, cube and volume
 > textures, custom `ShaderEffect`s, occlusion queries — is deliberately not implemented. Each
@@ -57,7 +60,7 @@ plan's own `LLGL-17` investigation did exactly that).
 | 5 | **Only the OpenGL module gets `SDL_WINDOW_OPENGL`.** The Vulkan module builds its surface from the native window handle and needs no SDL flag. | SDL refuses to create a window that is both `SDL_WINDOW_OPENGL` and `SDL_WINDOW_VULKAN`, so the flag has to follow the runtime module decision — which is why `ResolveRendererModule()` caches: `GraphicsDevice` asks before the window exists and the backend asks after. |
 | 6 | **X11 only, for now.** A Wayland SDL window is refused with a clear error naming `SDL_VIDEODRIVER=x11`. | LLGL 0.04b compiles Wayland support only when explicitly enabled, and this integration does not enable it. Refusing beats handing LLGL a handle it cannot present to. |
 | 7 | **The X11 visual is reported to LLGL, not left for LLGL to choose.** | A GLX context created for a visual other than the drawable's cannot be made current. The SDL window already committed to a visual when it was created, so it is the only one that can work. |
-| 8 | **Both shader flavours are checked in, and the choice is made from the module's reported shading language.** Vulkan gets SPIR-V words, OpenGL gets GLSL source. | A build needs no shader toolchain — same discipline as the Bgfx and SDL_GPU backends' generated headers. Keying off the reported language rather than the module name means a module that gains or loses a language cannot be handed a form it never accepted. |
+| 8 | **Both shader flavours are checked in, and the choice is made from the module's reported shading language, GLSL first.** Vulkan gets SPIR-V words, OpenGL gets GLSL source. | A build needs no shader toolchain — same discipline as the Bgfx and SDL_GPU backends' generated headers. The GLSL-first order is load-bearing, not cosmetic: a modern OpenGL module reports SPIR-V too, and accepting it there silently breaks every binding (see `LLGL-17`). |
 | 9 | **The whole frame is buffered on the CPU and recorded at `Present()`.** Clears and sprites go into one ordered command list; vertex data accumulates in one array. | LLGL forbids buffer uploads inside a render pass. Deferring everything means uploads happen with no command buffer open at all, and submission order matches call order without any pass-splitting. |
 | 10 | **Sprite geometry is baked into window pixels on the CPU; the GPU viewport stays at the full window.** Letterboxing lives in the geometry, XNA's sub-`Viewport` clipping in the scissor. | Keeps one projection constant for a whole frame, which is what makes decision 9 cheap. |
 | 11 | **Clip space is treated as Y-up on every module.** | LLGL submits Vulkan viewports with a negated height, flipping Vulkan's natively Y-down clip space to match OpenGL's. `RenderingCapabilities::screenOrigin` describes viewport/scissor *rectangle* space, not clip space — keying the projection's Y sign off it renders the scene upside down (found by reading back real pixels, see `LLGL-13`). |
@@ -123,8 +126,8 @@ plan's own `LLGL-17` investigation did exactly that).
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| LLGL-17 | **Open bug: the OpenGL module draws nothing.** | ⬜ | Reproduced 2026-07-31 in a standalone LLGL-only spike (no CNA involved), so it is not a CNA-integration artefact in the usual sense. On Mesa llvmpipe, GL 4.5 core: a quad drawn with an identity matrix renders in the right place, proving the position attribute and the pipeline work, but `texCoord` and `color` both arrive as zero and the `Scene` uniform block is never fed (with the real projection the quad collapses entirely). Adding explicit `layout(location=)`/`layout(binding=)` qualifiers to the OpenGL shader flavour did not change it. Unresolved: needs either an LLGL-side investigation of `SetResource`/VAO setup for individually-bound (non-heap) resources on GL, or a switch to `ResourceHeap`. Until then, treat the OpenGL module as unsupported. |
-| LLGL-18 | `SetBlendFactor` on OpenGL hits `ErrUnsupportedGLProc: glBlendColor` on this environment's context. | 🟨 | Worked around 2026-07-31 by emitting the call only when the blend state genuinely uses a blend-factor term, which is both correct and cheaper. A game that really uses `Blend::BlendFactor` on such a driver will still fail loudly. |
+| LLGL-17 | **The OpenGL module clears but draws nothing.** | ✅ | Filed and fixed 2026-07-31. **The cause was CNA's, not LLGL's.** A standalone LLGL-only spike narrowed it down step by step: a quad with an identity matrix rendered in the right place (so position, pipeline and render pass were fine) while `texCoord`, `color` and the uniform block all read as zero; explicit `layout(location=)`/`layout(binding=)` qualifiers changed nothing; a `ResourceHeap` instead of individual `SetResource` bindings changed nothing; and a fragment shader hardcoded to output magenta still rendered black — which is what finally ruled out the binding path entirely. Instrumenting LLGL's own `GLLegacyShader::CompileShaderSource` showed it was never called: LLGL's GL core profile advertises `ShadingLanguage::SPIRV` (`GL_ARB_gl_spirv`) alongside GLSL, and this backend's selection checked SPIR-V first, so the OpenGL module was being handed SPIR-V compiled for Vulkan's binding model. Fixed by preferring GLSL wherever a module offers it. Both flavours are now pixel-verified: `Llgl_2D_OpenGL` 10/10, `Llgl_2D` (Vulkan) 10/10. |
+| LLGL-18 | `SetBlendFactor` on OpenGL hits `ErrUnsupportedGLProc: glBlendColor` on this environment's context. | ✅ | Fixed 2026-07-31 by requesting dynamic blend-factor state, and emitting the call, only when the blend state genuinely references `Blend::BlendFactor`/`InverseBlendFactor` — correct, cheaper, and it keeps the overwhelming majority of blend states off a proc some GL tables genuinely lack. **A first pass documented this workaround before implementing it**; the gap surfaced immediately once the OpenGL module actually drew and hit the unimplemented path. A game that really uses `Blend::BlendFactor` on such a driver still fails loudly, with LLGL's own error. |
 | LLGL-19 | Direct `Texture2D::GetData()` round-trip test (upload known pixels, read them back byte-exactly). | ⬜ | The code path exists and is exercised indirectly; it deserves its own test. |
 | LLGL-20 | Pixel-verify the remaining four presentation modes and a real window resize. | ⬜ | One shared code path, only `FixedHeightDynamicWidth` proven. |
 | LLGL-21 | `BlendState.MultiSampleMask` and the per-MRT colour write masks for slots 1..3. | ⬜ | Deliberately not applied: this backend renders to a single attachment, and LLGL's sample mask lives in the blend descriptor and would multiply the pipeline cache with no 2D use. Documented, not lost. |
@@ -147,7 +150,13 @@ plan's own `LLGL-17` investigation did exactly that).
 
 ## Closing notes
 
-The 2D baseline is real and pixel-verified, on one module, on one driver, on one platform. That is
-the honest scope. Before this backend is offered as a general alternative to `VULKAN` or `EASYGL`
-it needs, at minimum, `LLGL-17` resolved (or the OpenGL module removed from the fallback chain),
-and a run on real hardware rather than a software rasterizer.
+The 2D baseline is real and pixel-verified on both renderer modules — but on one platform, and
+against a software rasterizer rather than a real GPU. That is the honest scope. Before this backend
+is offered as a general alternative to `VULKAN` or `EASYGL` it still needs a run on real hardware,
+and phase LLGL-5 for anything beyond 2D.
+
+`LLGL-17` is worth remembering for more than its fix: every symptom pointed at resource binding,
+and every experiment aimed there was wasted. What actually settled it was a shader that could not
+possibly produce black, and then instrumenting the dependency to see whether it compiled the source
+at all. When a component's own behaviour contradicts what it was configured with, check that it
+received what you think you gave it before theorising about what it does with it.

@@ -7,7 +7,8 @@ added 2026-07-31. Unlike every other backend in this project it does not name a 
 API: LLGL is itself an abstraction layer, and the module it drives is selected when the process
 starts.
 
-What is implemented and verified today is the **2D pipeline through LLGL's Vulkan module**:
+What is implemented and verified today is the **2D pipeline, on both the Vulkan and the OpenGL
+module**:
 
 * real SDL window, `LLGL::RenderSystem`, swap chain (24-bit depth, 8-bit stencil), clear and
   present;
@@ -23,11 +24,8 @@ What is implemented and verified today is the **2D pipeline through LLGL's Vulka
 `ShaderEffect`s, occlusion queries. Each either reports itself unsupported through
 `GraphicsDevice.SupportsCapability()` or throws — none of them silently does nothing.
 
-**Known open bug:** LLGL's OpenGL module clears correctly but draws nothing (see
-[`known_bugs.md`](../known_bugs.md) and `plan_llgl.md` task `LLGL-17`). Because the default
-runtime preference is Vulkan first, this only bites on a machine with no usable Vulkan driver —
-where the backend currently shows a blank window rather than failing. Do not describe this backend
-as "OpenGL or Vulkan" until that is resolved.
+Both modules are covered by their own CTests, so neither can break unnoticed because the default
+preference happened to select the other one.
 
 ## Building
 
@@ -110,7 +108,10 @@ python3 src/CNA/Internal/Backends/Llgl/shaders/compile_shaders.py --check   # ve
 ```
 
 Which flavour is used is decided from the shading language the loaded module reports, not from the
-module's name.
+module's name — **and GLSL is preferred wherever a module offers it**. That order matters: a modern
+OpenGL module reports SPIR-V as well (desktop GL ingests it through `GL_ARB_gl_spirv`), but the
+SPIR-V here is compiled for Vulkan's binding model, and GL accepts it far enough to rasterize
+geometry while silently zeroing every other attribute and the uniform block. That was `LLGL-17`.
 
 ## Tests
 
@@ -121,8 +122,10 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure
 `Llgl_Smoke` covers the device/window/swap-chain lifecycle, buffer round-trips, and 60 frames of
 clear and present. `Llgl_2D` asserts real pixels read back from the GPU: quadrant orientation
 (where a Y-flip mistake shows up immediately), tint multiplication, `SpriteEffects` flipping, and
-`NonPremultiplied` alpha blending. Both need a display; on a machine without one they report
-SKIPPED rather than FAILED. On a headless machine a virtual display works:
+`NonPremultiplied` alpha blending. `Llgl_Smoke_OpenGL` and `Llgl_2D_OpenGL` are the same two
+binaries pinned to the OpenGL module through `CNA_LLGL_RENDERER`, which also exercises the
+selection path itself. All four need a display; on a machine without one they report SKIPPED
+rather than FAILED. On a headless machine a virtual display works:
 
 ```bash
 Xvfb :99 -screen 0 1280x1024x24 &
