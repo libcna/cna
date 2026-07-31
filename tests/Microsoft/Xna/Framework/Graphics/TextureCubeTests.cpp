@@ -75,8 +75,8 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
 // Software), even though nothing on this backend samples a cube texture as a GPU resource yet.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || \
-    defined(CNA_BACKEND_GDI)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_HTML_DOM) || \
+    defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_GDI)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else
@@ -517,7 +517,8 @@ TEST_F(TextureCubeTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
     std::vector<Color> src(11, poison);
     for (int i = 0; i < 4; ++i)
         src[static_cast<std::size_t>(3 + i)] =
-            Color(static_cast<std::uint8_t>(60 + i * 9), 140, 25, static_cast<std::uint8_t>(180 - i));
+            Color(static_cast<std::uint8_t>(60 + i * 9), static_cast<std::uint8_t>(140),
+                  static_cast<std::uint8_t>(25), static_cast<std::uint8_t>(180 - i));
     ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::NegativeY, src.data(), 3, 4); });
 
     if (kCubeLevel0ReadbackSupported)

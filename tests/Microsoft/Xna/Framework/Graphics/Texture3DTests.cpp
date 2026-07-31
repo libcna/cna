@@ -195,7 +195,7 @@ TEST_F(Texture3DTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
     std::vector<Color> src(15, poison);
     for (int i = 0; i < 8; ++i)
         src[static_cast<std::size_t>(4 + i)] =
-            Color(static_cast<std::uint8_t>(20 + i * 11), 130,
+            Color(static_cast<std::uint8_t>(20 + i * 11), static_cast<std::uint8_t>(130),
                   static_cast<std::uint8_t>(200 - i * 9), static_cast<std::uint8_t>(150 + i));
     EXPECT_NO_THROW(tex.SetData(src.data(), 4, 8));
 
