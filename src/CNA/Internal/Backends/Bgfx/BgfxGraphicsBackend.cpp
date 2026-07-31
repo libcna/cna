@@ -744,6 +744,57 @@ namespace CNA::Internal::Backends::Bgfx
         return BGFX_TEXTURE_RT;
     }
 
+    // REMED-GFX-163: the two flag words every render-target attachment is built from. Both target
+    // types used to spell this arithmetic out inline and they DRIFTED -- the cube path learned the
+    // multisampled-depth rule under REMED-GFX-141 and its RenderTarget2D sibling never did, so a
+    // legal `RenderTarget2D(dev, w, h, false, Color, Depth24, 4, usage)` killed the process. They
+    // share these two helpers now so a rule can only ever be learned once, by both.
+
+    /**
+     * @brief Creation flags for a render target's COLOUR attachment.
+     *
+     * Sampler flags belong here because a colour attachment IS sampled -- that is the whole point of
+     * rendering to a texture. bgfx resolves the multisampled content back into this same handle.
+     */
+    static uint64_t BgfxColorAttachmentFlags(uint64_t msaaFlag)
+    {
+        return msaaFlag | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
+    }
+
+    /**
+     * @brief Creation flags for a render target's DEPTH/STENCIL attachment.
+     *
+     * bgfx cannot resolve a multisampled depth surface, so `isFrameBufferValid` (bgfx.cpp, the
+     * `bimg::isDepth` branch) reads the DEPTH TEXTURE'S OWN creation flags and requires that any
+     * depth attachment whose `BGFX_TEXTURE_RT_MSAA_MASK` field decodes to more than one sample also
+     * carries `BGFX_TEXTURE_RT_WRITE_ONLY` or `BGFX_TEXTURE_MSAA_SAMPLE`. It enforces that with a
+     * BX_ASSERT -- a SIGTRAP that no public layer can catch and turn into a clean exception.
+     *
+     * `BGFX_TEXTURE_RT_WRITE_ONLY` is the correct half of that pair here, and it is this texture's
+     * own truth rather than a way of silencing the assertion: CNA never samples, reads back or
+     * resolves a render target's depth attachment: it is only depth-tested and depth-written while
+     * the target is bound. `BGFX_TEXTURE_MSAA_SAMPLE` would instead keep a real
+     * `GL_TEXTURE_2D_MULTISAMPLE` alive to be fetched per sample in a shader, which nothing here
+     * does. bgfx's own Vulkan swapchain builds its depth attachment with exactly
+     * `BGFX_TEXTURE_RT | BGFX_TEXTURE_RT_WRITE_ONLY` plus the sample field (renderer_vk.cpp,
+     * SwapChainVK::createAttachments), so this matches the reference implementation's own choice.
+     *
+     * The flag is applied ONLY when the target really is multisampled. A single-sampled depth
+     * attachment does not need it (bgfx's check exempts a sample field of 1 explicitly), and adding
+     * it there would change the working path: bgfx's GL renderer creates a renderbuffer instead of a
+     * texture when `writeOnly` is set, so a non-multisampled depth attachment would silently change
+     * native resource kind for no reason. At two or more samples the renderbuffer is chosen by the
+     * sample count alone, so this flag adds no native object and only suppresses the depth blit in
+     * the resolve path -- which is precisely the resolve bgfx is telling us cannot be performed.
+     *
+     * The sample count itself is deliberately NOT reduced: colour and depth must report the same
+     * `m_numSamples` or `isFrameBufferValid`'s "Mismatch in texture sample count" fires instead.
+     */
+    static uint64_t BgfxDepthAttachmentFlags(uint64_t msaaFlag, int appliedMsaa)
+    {
+        return appliedMsaa > 0 ? (msaaFlag | BGFX_TEXTURE_RT_WRITE_ONLY) : msaaFlag;
+    }
+
     // Task 877: maps a Microsoft::Xna::Framework::Graphics::DepthFormat ordinal to the
     // bgfx::TextureFormat a render target's depth/stencil attachment should use. Returns false
     // for DepthFormat::None, meaning no depth/stencil attachment should be created at all.
@@ -881,7 +932,7 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 878 vkCmdBlitImage cascade -- bgfx already has a real glGenerateMipmap-equivalent,
         // just gated behind the framebuffer-attachment resolve flag rather than surfaced on
         // bgfx::blit() (which really is a same-size copy only, as originally found).
-        creationFlags_ = msaaFlag | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
+        creationFlags_ = BgfxColorAttachmentFlags(msaaFlag);
         colorTex = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
             mipMap, 1, bgfx::TextureFormat::RGBA8,
             creationFlags_);
@@ -892,9 +943,13 @@ namespace CNA::Internal::Backends::Bgfx
         ::bgfx::TextureFormat::Enum depthBgfxFormat;
         if (MapDepthFormat(depthFormat, depthBgfxFormat))
         {
-            // Depth attachment must share the color attachment's sample count.
+            // Depth attachment must share the color attachment's sample count, and -- REMED-GFX-163 --
+            // must say so with BGFX_TEXTURE_RT_WRITE_ONLY once that count exceeds one. See
+            // BgfxDepthAttachmentFlags: without it bgfx aborts the process here rather than
+            // returning an error this backend could report.
             attachments[1] = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
-                false, 1, depthBgfxFormat, msaaFlag);
+                false, 1, depthBgfxFormat,
+                BgfxDepthAttachmentFlags(msaaFlag, appliedMsaa));
             numAttachments = 2;
         }
 
@@ -1105,7 +1160,7 @@ namespace CNA::Internal::Backends::Bgfx
         // BGFX_RESOLVE_AUTO_GEN_MIPS (its own default, unconditionally, unlike the simple
         // TextureHandle-array createFrameBuffer overload), so this is the only change needed --
         // same mechanism as Task 906's RenderTarget2D fix.
-        creationFlags_ = msaaFlag | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
+        creationFlags_ = BgfxColorAttachmentFlags(msaaFlag);
         cubeTex = bgfx::createTextureCube(static_cast<uint16_t>(size), mipMap, 1,
                                            bgfx::TextureFormat::RGBA8,
                                            creationFlags_);
@@ -1116,26 +1171,19 @@ namespace CNA::Internal::Backends::Bgfx
         ::bgfx::TextureFormat::Enum depthBgfxFormat;
         if (MapDepthFormat(depthFormat, depthBgfxFormat))
         {
-            // Depth attachment must share the color attachment's sample count (Task 903).
+            // Depth attachment must share the color attachment's sample count (Task 903), and when
+            // that count exceeds one it must also carry BGFX_TEXTURE_RT_WRITE_ONLY. REMED-GFX-141
+            // discovered that rule here -- every depth-backed multisampled RenderTargetCube aborted
+            // at the first BindAsRenderTargetFace, unnoticed because every existing bgfx cube MSAA
+            // check used DepthFormat::None -- and Task 951's BGFX_RESOLVE_NONE on the ATTACHMENT is
+            // not enough, because bgfx reads the TEXTURE's creation flags instead.
             //
-            // ...and, when that sample count is > 1, it must also say so. bgfx's own
-            // isFrameBufferValid() refuses a MULTISAMPLED depth attachment whose TEXTURE was not
-            // created with BGFX_TEXTURE_RT_WRITE_ONLY or BGFX_TEXTURE_MSAA_SAMPLE -- "Frame buffer
-            // depth MSAA texture cannot be resolved" -- and refuses it with a hard assert that
-            // aborts the process, not a recoverable error. Task 951 already gave the ATTACHMENT
-            // BGFX_RESOLVE_NONE below, but that check reads the texture's creation flags, not the
-            // attachment's resolve mode. So every depth-backed multisampled RenderTargetCube ever
-            // constructed on this backend aborted at the first BindAsRenderTargetFace; it went
-            // unnoticed because every existing bgfx cube MSAA check uses DepthFormat::None, and
-            // REMED-GFX-141's oracle is the first thing to combine the two.
-            //
-            // WRITE_ONLY is this texture's own truth: it is never sampled, never read back and
-            // never resolved (that is exactly what BGFX_RESOLVE_NONE declares), only depth-tested
-            // and depth-written during the face's pass.
-            const uint64_t depthFlags = appliedMsaa > 0 ? (msaaFlag | BGFX_TEXTURE_RT_WRITE_ONLY)
-                                                        : msaaFlag;
+            // REMED-GFX-163: the arithmetic that used to be spelled out here now lives in the shared
+            // BgfxDepthAttachmentFlags, because RenderTarget2D needed the identical rule and did not
+            // have it. Its full reasoning is documented there.
             depthTex = bgfx::createTexture2D(static_cast<uint16_t>(size), static_cast<uint16_t>(size),
-                false, 1, depthBgfxFormat, depthFlags);
+                false, 1, depthBgfxFormat,
+                BgfxDepthAttachmentFlags(msaaFlag, appliedMsaa));
         }
         // The FBO is created per-face bind to attach the right face layer
         fbo = BGFX_INVALID_HANDLE;
