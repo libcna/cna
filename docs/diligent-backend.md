@@ -44,7 +44,18 @@ describe the wrong device.
 
 All shaders are authored once in HLSL and cross-compiled by Diligent: to SPIR-V through its glslang
 HLSL front end on Vulkan, to GLSL through its own HLSL2GLSL converter on OpenGL, and to DXBC/DXIL
-on Direct3D. There is no offline shader compilation step and no per-device shader source.
+on Direct3D. There is no offline shader compilation step and no per-device shader source. The
+shared HLSL constant-buffer declarations use `#pragma pack_matrix(row_major)` rather than an
+inline `row_major` qualifier on each matrix: the HLSL2GLSL converter only recognizes and strips the
+pragma form, and passes an inline qualifier through into the GLSL output completely unchanged
+(which is not valid GLSL and fails to compile).
+
+Unlike the Vulkan/D3D device types, Diligent's own OpenGL context object does not create a GL
+context itself — it asserts one is already current on the calling thread and attaches to it. This
+backend creates and makes current a real SDL GL context (`SDL_GL_CreateContext`/
+`SDL_GL_MakeCurrent`) before ever calling into Diligent's OpenGL device creation, and requests the
+matching SDL window flag (`SDL_WINDOW_OPENGL` vs. `SDL_WINDOW_VULKAN`) by reading the same
+`CNA_DILIGENT_DEVICE` override — SDL3 rejects a window created with both graphics flags set.
 
 ## Dependencies
 
@@ -141,10 +152,15 @@ Not implemented — each **throws with its own name** rather than rendering an a
   XCB connection) and has no Wayland surface member, so a Wayland session must use SDL's X11
   fallback: `SDL_VIDEODRIVER=x11`. A Wayland session fails at backend construction with that
   instruction rather than deep inside Diligent.
-- **OpenGL is built but unverified.** The device path exists and is reachable via
-  `CNA_DILIGENT_DEVICE=opengl`, but the verification below was performed on the Vulkan device type only.
-  OpenGL's swap-chain image origin differs from Direct3D's and the sprite path's Y orientation has
-  not been confirmed there (`DILIGENT-30`).
+- **OpenGL creates a device and renders most of the baseline, but is not fully verified or CTest-covered
+  yet (`DILIGENT-30`).** The verification below was performed on the Vulkan device type; running the
+  same GPU test binaries by hand with `CNA_DILIGENT_DEVICE=opengl` passes most checks, but two real
+  bugs remain open: a texture/shader-resource-variable binding issue where the second distinct
+  texture sampled in a session appears to still read the first one's content (affects
+  `SpriteBatch.Draw` with a `sourceRectangle`, `DualTextureEffect`'s second layer, sampling an
+  unbound `RenderTarget2D`, and `RenderTarget2D` MSAA resolve), and `SkinnedEffect`'s vertex shader
+  failing to convert to GLSL at all (a local `float4x4` variable never gets translated, unlike the
+  same type inside a constant buffer).
 - **Direct3D 11/12 are code paths only.** They compile only in a Windows-targeting build and have
   not been run.
 - **Depth-stencil is always `D24_UNORM_S8_UINT`**, regardless of the requested `DepthFormat`.

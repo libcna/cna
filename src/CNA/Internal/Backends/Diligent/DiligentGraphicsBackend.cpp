@@ -37,14 +37,19 @@ namespace CNA::Internal::Backends::Diligent
         constexpr const char* kBackendName = "Diligent";
 
         /// Every built-in shader shares one constant buffer, so one HLSL declaration is prepended
-        /// to each program instead of being repeated. The matrices are `row_major` deliberately:
-        /// CNA's Matrix stores rows contiguously and XNA's convention is `v * M`, so this lets the
-        /// shaders write `mul(v, m)` with the CNA matrix memory uploaded verbatim.
+        /// to each program instead of being repeated. The matrices are row-major deliberately: CNA's
+        /// Matrix stores rows contiguously and XNA's convention is `v * M`, so this lets the shaders
+        /// write `mul(v, m)` with the CNA matrix memory uploaded verbatim. `#pragma pack_matrix` is
+        /// used instead of an inline `row_major` qualifier on each variable: Diligent's HLSL2GLSL
+        /// converter (used to cross-compile to the OpenGL device type) recognizes and strips only
+        /// the pragma form, passing an inline `row_major` qualifier through into the GLSL output
+        /// completely unchanged -- which is not valid GLSL syntax and fails to compile there.
         constexpr const char* kConstantsHlsl = R"(
+#pragma pack_matrix(row_major)
 cbuffer Constants
 {
-    row_major float4x4 g_WorldViewProj;
-    row_major float4x4 g_World;
+    float4x4 g_WorldViewProj;
+    float4x4 g_World;
     float4 g_DiffuseColor;
     float4 g_EmissiveAmbient;
     float4 g_EyePositionSpecularPower;
@@ -459,11 +464,14 @@ void main(in PSInput psIn, out PSOutput psOut)
 )";
 
         /// The bone palette lives in its own constant buffer: 72 matrices is 4.5 KB, far too much
-        /// to append to the per-draw block every non-skinned draw also uploads.
+        /// to append to the per-draw block every non-skinned draw also uploads. Row-major via the
+        /// `#pragma pack_matrix(row_major)` in kConstantsHlsl, always prepended before this block --
+        /// see that constant's own doc comment for why the pragma form is used over an inline
+        /// `row_major` qualifier here.
         constexpr const char* kBonesHlsl = R"(
 cbuffer Bones
 {
-    row_major float4x4 g_Bones[72];
+    float4x4 g_Bones[72];
 };
 
 /// FNA's Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2 or 4) weight/index pairs.
@@ -1877,6 +1885,26 @@ void main(in VSInput vsIn, out PSInput psIn)
         }
         pipelines_.clear();
         samplers_.clear();
+        // Every Diligent object is explicitly released here, in the body, rather than left to the
+        // members' own implicit destruction (which only runs AFTER this body finishes, in reverse
+        // declaration order): on the OpenGL device type, releasing one of these issues real GL
+        // delete calls, which need glContext_ to still be current. Destroying glContext_ itself has
+        // to be the last thing this destructor does, once nothing Diligent-owned can touch GL again.
+        msaaBackBufferColor_.Release();
+        msaaBackBufferDepth_.Release();
+        constantBuffer_.Release();
+        boneBuffer_.Release();
+        fallbackTexture_.Release();
+        swapChain_.Release();
+        context_.Release();
+        device_.Release();
+        engineFactory_.Release();
+        if (glContext_ != nullptr)
+        {
+            SDL_GL_MakeCurrent(window_, nullptr);
+            SDL_GL_DestroyContext(reinterpret_cast<SDL_GLContext>(glContext_));
+            glContext_ = nullptr;
+        }
     }
 
     void DiligentGraphicsBackend::CreateDeviceAndSwapChain(const GraphicsBackendCreateArgs& args)
@@ -1912,6 +1940,15 @@ void main(in VSInput vsIn, out PSInput psIn)
             context_.Release();
             swapChain_.Release();
             engineFactory_.Release();
+            // A failed OpenGL attempt may have gotten as far as creating (and making current) a
+            // real SDL GL context before CreateDeviceAndSwapChainGL() itself threw -- release it
+            // too, or it leaks and stays wrongly current for whatever candidate tries next.
+            if (glContext_ != nullptr)
+            {
+                SDL_GL_MakeCurrent(window_, nullptr);
+                SDL_GL_DestroyContext(reinterpret_cast<SDL_GLContext>(glContext_));
+                glContext_ = nullptr;
+            }
         }
 
         throw std::runtime_error("CNA Diligent: no device type could be created -- tried " + failures);
@@ -1975,6 +2012,22 @@ void main(in VSInput vsIn, out PSInput psIn)
 #if CNA_DILIGENT_HAS_OPENGL
             case DiligentDeviceType::OpenGL:
             {
+                // Unlike Vulkan/D3D, Diligent's own GLContext (GLContextLinux.cpp) does not create a
+                // GL context itself -- it asserts one is already current on this thread
+                // (glXGetCurrentContext()) and attaches to it. SDL owns creating and making it
+                // current; this has to happen before CreateDeviceAndSwapChainGL() even attempts
+                // anything.
+                SDL_GLContext sdlGlContext = SDL_GL_CreateContext(window_);
+                if (sdlGlContext == nullptr)
+                    throw std::runtime_error(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
+                if (!SDL_GL_MakeCurrent(window_, sdlGlContext))
+                {
+                    const std::string message = std::string("SDL_GL_MakeCurrent failed: ") + SDL_GetError();
+                    SDL_GL_DestroyContext(sdlGlContext);
+                    throw std::runtime_error(message);
+                }
+                glContext_ = reinterpret_cast<SDL_GLContextState*>(sdlGlContext);
+
                 auto* factory = Dg::GetEngineFactoryOpenGL();
                 Dg::EngineGLCreateInfo createInfo;
                 createInfo.Window = nativeWindow;

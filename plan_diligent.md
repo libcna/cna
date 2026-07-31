@@ -90,10 +90,10 @@ Practical consequences that shaped this plan:
    window id / display or an XCB connection; it has no Wayland surface member, so a Wayland session
    has to go through SDL's X11 fallback. A Wayland session throws with that instruction, rather
    than failing deep inside Diligent.
-9. **OpenGL is built but unverified.** The device path exists and is reachable via
-   `CNA_DILIGENT_DEVICE=opengl`, but every claim in this plan's ✅ rows was measured on the Vulkan
-   device type. GL's swap-chain image origin differs from Direct3D's and CNA has not yet confirmed
-   the sprite path's Y orientation there — treat GL as `🟨` until `DILIGENT-30` closes.
+9. **OpenGL now creates a device and renders most of the 2D/3D baseline, but is not fully verified.**
+   Every claim in this plan's ✅ rows was still measured on the Vulkan device type — treat GL as `🟨`
+   until `DILIGENT-30` closes. Two real, distinct bugs were found and are not yet fixed; see that
+   task's own row for the current, precise state.
 10. **The back buffer's format is whatever the surface grants, not what CNA asks for.** Diligent
     substitutes a supported format when the surface rejects the requested one, so raw pixel readback
     consults `ITexture::GetDesc().Format` and swizzles BGRA→RGBA when needed. Rendering is
@@ -199,7 +199,7 @@ Deliberately refused (each throws, naming itself):
 
 | Task | Description | Status | Notes |
 | --- | --- | --- | --- |
-| `DILIGENT-30` | Verify the OpenGL device type end-to-end (sprite Y orientation in particular) | ⬜ | Design decision 9 |
+| `DILIGENT-30` | Verify the OpenGL device type end-to-end (sprite Y orientation in particular) | 🟨 | Substantial progress, not closed. Two real, distinct, pre-existing bugs found and fixed: (1) the OpenGL device type could not create a device at all -- Diligent's own `GLContext` (`GLContextLinux.cpp`) asserts a GL context is already current via `glXGetCurrentContext()` rather than creating one itself, unlike every other device type here, and nothing called `SDL_GL_CreateContext()`/`SDL_GL_MakeCurrent()` before `CreateDeviceAndSwapChainGL()`; fixed in `DiligentGraphicsBackend::TryCreateDevice()`, plus `GraphicsDevice.cpp`'s window-flag selection, which previously requested both `SDL_WINDOW_VULKAN` and `SDL_WINDOW_OPENGL` together -- SDL3 rejects that combination outright ("Conflicting window graphics flags specified"), so it now reads the same `CNA_DILIGENT_DEVICE` override the backend itself reads to request the one flag that will actually be used. (2) Every shader failed to compile to GLSL at all -- `kConstantsHlsl`/`kBonesHlsl`'s inline `row_major` qualifiers pass through Diligent's HLSL2GLSL converter completely unstripped (invalid GLSL syntax); switched to the `#pragma pack_matrix(row_major)` form the converter actually recognizes and strips. With both fixed, `Diligent_2D`/`_3D`/`_AlphaTestFog`/`_RenderTargetCube`/`_MRT`/`_OcclusionQuery` mostly or fully pass under `CNA_DILIGENT_DEVICE=opengl` (manually, not yet a CTest target). Two further real bugs remain, not yet root-caused: (a) a texture/shader-resource-variable binding bug where the SECOND distinct texture sampled in a session appears to still read the FIRST one's content, reproduced independently in `Diligent_2D`'s sourceRectangle check, `Diligent_DualTextureEnvMap`'s second layer, `Diligent_RenderTarget`'s unbound-target sampling, and `Diligent_MSAA`'s `RenderTarget2D` resolve; (b) `Diligent_Skinned`'s vertex shader fails to convert to GLSL at all -- a local `float4x4 skin = ComputeSkinMatrix(...)` variable declaration is left as literal HLSL syntax in the GLSL output, unlike the same type used inside a cbuffer (which the `#pragma pack_matrix` fix above already handles correctly) |
 | `DILIGENT-31` | `AlphaTestEffect` (per-pixel discard) | ✅ | Implemented in `GpuDrawParams::alphaTest`'s own reference/tolerance/weight encoding, so all four compare modes come from the effect layer rather than from a per-mode shader. Verified by `Diligent_AlphaTestFog` (discard and keep, same geometry, same effect object) |
 | `DILIGENT-32` | Fog for the `BasicEffect` family (`GpuDrawParams::fogVector`) | ✅ | The vertex stage computes FNA's `keep = 1 - saturate(dot(objectPos, fogVector))`, the pixel stage blends RGB toward `FogColor`. Verified fogged vs. fog-disabled on the same geometry |
 | `DILIGENT-33` | `DualTextureEffect` | ✅ | Two shader variants (stride 20 and 24) sharing one two-sampler pixel shader; the first layer is doubled before the modulate, as XNA does. Both layers share one UV set, matching every other CNA backend. Verified by `Diligent_DualTextureEnvMap` |

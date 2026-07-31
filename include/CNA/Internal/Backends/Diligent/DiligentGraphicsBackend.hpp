@@ -18,6 +18,11 @@
 #include "Graphics/GraphicsEngine/interface/RenderDevice.h"
 #include "Graphics/GraphicsEngine/interface/SwapChain.h"
 
+/// Forward declaration matching SDL3's own `typedef struct SDL_GLContextState* SDL_GLContext;` --
+/// avoids pulling the full SDL3 header into every translation unit that includes this one, the same
+/// rationale IGraphicsBackend.hpp's own `struct SDL_Window;` forward declaration already follows.
+struct SDL_GLContextState;
+
 namespace CNA::Internal::Backends::Diligent
 {
     /// Short alias for the third-party Diligent Engine namespace. Without it, every unqualified
@@ -1442,6 +1447,14 @@ namespace CNA::Internal::Backends::Diligent
         void ResolveTextureSubresource(Dg::ITexture* src, Dg::ITexture* dst);
 
         SDL_Window* window_ = nullptr;
+        /// Only set when deviceType_ == OpenGL. Diligent's own GLContext (GLContextLinux.cpp)
+        /// attaches to whatever GL context is already current on this thread via glXGetCurrentContext()
+        /// -- it does not create one itself, unlike Vulkan/D3D where DiligentCore owns the whole
+        /// device/context/swap-chain lifecycle. SDL_GL_CreateContext()/SDL_GL_MakeCurrent() must run
+        /// before CreateDeviceAndSwapChainGL(), and this context outlives it (destroyed only in
+        /// ~DiligentGraphicsBackend(), after device_/context_/swapChain_ are done with the GL calls
+        /// they make internally).
+        SDL_GLContextState* glContext_ = nullptr;
         DiligentDeviceType deviceType_ = DiligentDeviceType::Vulkan;
         Dg::RefCntAutoPtr<Dg::IRenderDevice> device_;
         Dg::RefCntAutoPtr<Dg::IDeviceContext> context_;

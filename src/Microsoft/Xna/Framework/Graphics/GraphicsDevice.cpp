@@ -34,6 +34,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -136,6 +137,30 @@ namespace Microsoft::Xna::Framework::Graphics
             // configure-time warning), so the flag is unconditional here.
 #ifdef CNA_BACKEND_SOKOL
             windowFlags |= SDL_WINDOW_OPENGL;
+#endif
+
+#ifdef CNA_BACKEND_DILIGENT
+            // Diligent picks its concrete device type (D3D12/Vulkan/D3D11/OpenGL) at RUNTIME, after
+            // this window already exists -- but unlike CNA_BACKEND_BGFX's identical problem below,
+            // SDL3 rejects a window created with BOTH SDL_WINDOW_VULKAN and SDL_WINDOW_OPENGL set
+            // ("Conflicting window graphics flags specified"), so only one can be requested. Reads
+            // the same CNA_DILIGENT_DEVICE override DiligentGraphicsBackend::CreateDeviceAndSwapChain()
+            // itself reads, mirroring CNA_BACKEND_BGFX's CNA_BGFX_RENDERER pattern just below. With no
+            // override, Vulkan is assumed: it is DiligentGraphicsBackend's first-tried candidate on
+            // Linux (D3D12 not being one), so this only actually needs to guess right when the game
+            // is not pinning a specific device type.
+            windowFlags |= [] {
+                const char* override = SDL_getenv("CNA_DILIGENT_DEVICE");
+                if (override == nullptr)
+                    return SDL_WINDOW_VULKAN;
+                const std::string value = [&] {
+                    std::string lower(override);
+                    std::transform(lower.begin(), lower.end(), lower.begin(),
+                                   [](unsigned char c) { return std::tolower(c); });
+                    return lower;
+                }();
+                return (value == "opengl" || value == "gl") ? SDL_WINDOW_OPENGL : SDL_WINDOW_VULKAN;
+            }();
 #endif
 
 #ifdef CNA_BACKEND_BGFX
