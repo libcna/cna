@@ -412,51 +412,61 @@ class DualTextureSlotSamplerContractTest : public Game
     /// How many blocks vary along X between their first and last column. With the separable
     /// colTex_/rowTex_ pair this counts SLOT 0's magnification filter and nothing else: slot 1's
     /// texture is constant along X, so it multiplies every pixel of a block row by the same value.
-    static int XEdgeVariation(const std::vector<Color>& pix, int edge = kRT, int block = kBlock)
+    ///
+    /// The block extent is derived from the image's OWN width and height rather than assumed
+    /// square: the deferred-snapshot and interleaving legs draw into a half-height viewport, where
+    /// one texel covers w/kTex columns but only h/kTex rows, and comparing a fixed 8 rows apart
+    /// there would straddle a block boundary and report variation that POINT filtering never
+    /// produced.
+    static int XEdgeVariation(const std::vector<Color>& pix, int w = kRT, int h = kRT)
     {
+        const int bw = std::max(1, w / kTex);
         int n = 0;
-        for (int y = 0; y < edge; ++y)
-            for (int bx = 0; bx < edge / block; ++bx)
+        for (int y = 0; y < h; ++y)
+            for (int bx = 0; bx < kTex; ++bx)
             {
-                const std::size_t left  = static_cast<std::size_t>(y) * edge + bx * block;
-                const std::size_t right = left + static_cast<std::size_t>(block) - 1u;
+                const std::size_t left  = static_cast<std::size_t>(y) * w + bx * bw;
+                const std::size_t right = left + static_cast<std::size_t>(bw) - 1u;
                 if (right < pix.size() && !SameColor(pix[left], pix[right])) ++n;
             }
         return n;
     }
 
     /// The transpose: counts SLOT 1's magnification filter and nothing else.
-    static int YEdgeVariation(const std::vector<Color>& pix, int edge = kRT, int block = kBlock)
+    static int YEdgeVariation(const std::vector<Color>& pix, int w = kRT, int h = kRT)
     {
+        const int bh = std::max(1, h / kTex);
         int n = 0;
-        for (int x = 0; x < edge; ++x)
-            for (int by = 0; by < edge / block; ++by)
+        for (int x = 0; x < w; ++x)
+            for (int by = 0; by < kTex; ++by)
             {
-                const std::size_t top    = static_cast<std::size_t>(by * block) * edge + x;
-                const std::size_t bottom = static_cast<std::size_t>(by * block + block - 1) * edge + x;
+                const std::size_t top    = static_cast<std::size_t>(by * bh) * w + x;
+                const std::size_t bottom = static_cast<std::size_t>(by * bh + bh - 1) * w + x;
                 if (bottom < pix.size() && !SameColor(pix[top], pix[bottom])) ++n;
             }
         return n;
     }
 
-    /// True when every kBlock x kBlock block is one flat colour -- the signature of BOTH slots
+    /// True when every one-texel block is one flat colour -- the signature of BOTH slots
     /// magnifying by POINT.
     static bool BlockUniform(const std::vector<Color>& pix, std::string& why,
-                             int edge = kRT, int block = kBlock)
+                             int w = kRT, int h = kRT)
     {
-        for (int by = 0; by < edge / block; ++by)
-            for (int bx = 0; bx < edge / block; ++bx)
+        const int bw = std::max(1, w / kTex);
+        const int bh = std::max(1, h / kTex);
+        for (int by = 0; by < kTex; ++by)
+            for (int bx = 0; bx < kTex; ++bx)
             {
-                const Color first = pix[static_cast<std::size_t>(by * block) * edge + bx * block];
-                for (int y = 0; y < block; ++y)
-                    for (int x = 0; x < block; ++x)
+                const Color first = pix[static_cast<std::size_t>(by * bh) * w + bx * bw];
+                for (int y = 0; y < bh; ++y)
+                    for (int x = 0; x < bw; ++x)
                     {
-                        const Color& c = pix[static_cast<std::size_t>(by * block + y) * edge +
-                                             bx * block + x];
-                        if (!SameColor(c, first))
+                        const std::size_t i = static_cast<std::size_t>(by * bh + y) * w + bx * bw + x;
+                        if (i >= pix.size()) continue;
+                        if (!SameColor(pix[i], first))
                         {
                             why = "block(" + std::to_string(bx) + "," + std::to_string(by) +
-                                  ") has " + Str(first) + " and " + Str(c);
+                                  ") has " + Str(first) + " and " + Str(pix[i]);
                             return false;
                         }
                     }
@@ -1136,7 +1146,7 @@ class DualTextureSlotSamplerContractTest : public Game
         // The first half was queued under the pair set before RenderTwo, the second under (0,0).
         const std::vector<Color> top = TopHalf(two1);
         const std::vector<Color> bottom = BottomHalf(two1);
-        check(XEdgeVariation(top, kRT, kBlock) == 0 || YEdgeVariation(top, kRT, kBlock) == 0 ||
+        check(XEdgeVariation(top, kRT, kRT / 2) == 0 || YEdgeVariation(top, kRT, kRT / 2) == 0 ||
               DiffPixels(top, bottom) > 0,
               "E4: two draws in one frame under different sampler pairs do not produce identical "
               "halves (differing=" + std::to_string(DiffPixels(top, bottom)) + ")");
@@ -1159,14 +1169,14 @@ class DualTextureSlotSamplerContractTest : public Game
         const std::vector<Color> top = TopHalf(pix);
         const std::vector<Color> bottom = BottomHalf(pix);
 
-        check(XEdgeVariation(top, kRT, kBlock) == 0 && YEdgeVariation(top, kRT, kBlock) == 0,
+        check(XEdgeVariation(top, kRT, kRT / 2) == 0 && YEdgeVariation(top, kRT, kRT / 2) == 0,
               "F1: the draw queued under (Point,Point) kept BOTH of its samplers after the public "
-              "pair was changed twice (x=" + std::to_string(XEdgeVariation(top, kRT, kBlock)) +
-              ", y=" + std::to_string(YEdgeVariation(top, kRT, kBlock)) + ")");
-        check(XEdgeVariation(bottom, kRT, kBlock) > 0 && YEdgeVariation(bottom, kRT, kBlock) > 0,
+              "pair was changed twice (x=" + std::to_string(XEdgeVariation(top, kRT, kRT / 2)) +
+              ", y=" + std::to_string(YEdgeVariation(top, kRT, kRT / 2)) + ")");
+        check(XEdgeVariation(bottom, kRT, kRT / 2) > 0 && YEdgeVariation(bottom, kRT, kRT / 2) > 0,
               "F2: and the draw queued under (Linear,Linear) kept ITS pair too (x=" +
-              std::to_string(XEdgeVariation(bottom, kRT, kBlock)) + ", y=" +
-              std::to_string(YEdgeVariation(bottom, kRT, kBlock)) + ")");
+              std::to_string(XEdgeVariation(bottom, kRT, kRT / 2)) + ", y=" +
+              std::to_string(YEdgeVariation(bottom, kRT, kRT / 2)) + ")");
 
         // The asymmetric case: the two queued draws differ in slot 1 ONLY.
         SetPair(dev, 1, 1);
@@ -1174,16 +1184,16 @@ class DualTextureSlotSamplerContractTest : public Game
             dev, Sep(), Sep(),
             [](GraphicsDevice& g) { SetPair(g, 1, 0); },
             [](GraphicsDevice& g) { SetPair(g, 0, 0); });
-        check(YEdgeVariation(TopHalf(pix2), kRT, kBlock) == 0 &&
-              YEdgeVariation(BottomHalf(pix2), kRT, kBlock) > 0,
+        check(YEdgeVariation(TopHalf(pix2), kRT, kRT / 2) == 0 &&
+              YEdgeVariation(BottomHalf(pix2), kRT, kRT / 2) > 0,
               "F3: two queued draws differing in slot 1 ALONE keep their own slot-1 samplers "
-              "(top y=" + std::to_string(YEdgeVariation(TopHalf(pix2), kRT, kBlock)) + ", bottom y=" +
-              std::to_string(YEdgeVariation(BottomHalf(pix2), kRT, kBlock)) + ")");
-        check(XEdgeVariation(TopHalf(pix2), kRT, kBlock) == 0 &&
-              XEdgeVariation(BottomHalf(pix2), kRT, kBlock) == 0,
+              "(top y=" + std::to_string(YEdgeVariation(TopHalf(pix2), kRT, kRT / 2)) + ", bottom y=" +
+              std::to_string(YEdgeVariation(BottomHalf(pix2), kRT, kRT / 2)) + ")");
+        check(XEdgeVariation(TopHalf(pix2), kRT, kRT / 2) == 0 &&
+              XEdgeVariation(BottomHalf(pix2), kRT, kRT / 2) == 0,
               "F4: and neither of them picked up the slot-0 Linear set AFTER both were queued "
-              "(top x=" + std::to_string(XEdgeVariation(TopHalf(pix2), kRT, kBlock)) + ", bottom x=" +
-              std::to_string(XEdgeVariation(BottomHalf(pix2), kRT, kBlock)) + ")");
+              "(top x=" + std::to_string(XEdgeVariation(TopHalf(pix2), kRT, kRT / 2)) + ", bottom x=" +
+              std::to_string(XEdgeVariation(BottomHalf(pix2), kRT, kRT / 2)) + ")");
         SetPair(dev, 0, 0);
     }
 
@@ -1242,9 +1252,11 @@ class DualTextureSlotSamplerContractTest : public Game
 
     void RunI(GraphicsDevice& dev)
     {
-        // DualTexture(pair A) | BasicEffect textured | DualTexture(pair D), in one frame, in three
-        // horizontal bands. A sampler that leaks across a family transition shows up as the wrong
-        // variation axis in band 3.
+        // DualTexture(Point,Linear) | BasicEffect textured | DualTexture(Linear,Point), in ONE
+        // frame, in three non-overlapping bands. A sampler that leaks across a family transition
+        // shows up as the wrong variation axis in band 3. Each band is kBandH rows so that a whole
+        // number of one-texel block rows fits inside it and the two variation oracles stay exact.
+        constexpr int kBandH = kRT / 4;
         RenderTarget2D rt(dev, kRT, kRT, false, SurfaceFormat::Color, DepthFormat::None, 0,
                           RenderTargetUsage::DiscardContents);
         dev.SetRenderTarget(&rt);
@@ -1252,15 +1264,15 @@ class DualTextureSlotSamplerContractTest : public Game
         dev.Clear(kSentinel);
 
         SetPair(dev, 1, 0);
-        dev.setViewportProperty(Viewport(0, 0, kRT, kRT / 2));
+        dev.setViewportProperty(Viewport(0, 0, kRT, kBandH));
         DrawDual(dev, Sep());
 
         SetPair(dev, 0, 0);
-        dev.setViewportProperty(Viewport(0, 0, kRT, 1));
+        dev.setViewportProperty(Viewport(0, kBandH, kRT, kBandH));
         DrawBasicTextured(dev, gridA_.get());
 
         SetPair(dev, 0, 1);
-        dev.setViewportProperty(Viewport(0, kRT / 2, kRT, kRT / 2));
+        dev.setViewportProperty(Viewport(0, 2 * kBandH, kRT, kBandH));
         DrawDual(dev, Sep());
 
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
@@ -1268,20 +1280,21 @@ class DualTextureSlotSamplerContractTest : public Game
         std::vector<Color> pix(static_cast<std::size_t>(kRT) * kRT, Color(0, 0, 0, 0));
         rt.GetData(pix.data(), 0, static_cast<int>(pix.size()));
 
-        // Row 0 was overwritten by the BasicEffect band, so the top band is read from row kBlock on.
-        std::vector<Color> topBand(pix.begin() + static_cast<std::ptrdiff_t>(kRT) * kBlock,
-                                   pix.begin() + static_cast<std::ptrdiff_t>(kRT) * (kRT / 2));
-        const std::vector<Color> bottomBand = BottomHalf(pix);
-        check(YEdgeVariation(topBand, kRT, kBlock) > 0 && XEdgeVariation(topBand, kRT, kBlock) == 0,
+        const std::vector<Color> topBand(pix.begin(),
+                                         pix.begin() + static_cast<std::ptrdiff_t>(kRT) * kBandH);
+        const std::vector<Color> bottomBand(
+            pix.begin() + static_cast<std::ptrdiff_t>(kRT) * 2 * kBandH,
+            pix.begin() + static_cast<std::ptrdiff_t>(kRT) * 3 * kBandH);
+        check(YEdgeVariation(topBand, kRT, kBandH) > 0 && XEdgeVariation(topBand, kRT, kBandH) == 0,
               "I1: the DualTexture draw queued BEFORE another textured family kept its (Point,Linear) "
-              "pair (x=" + std::to_string(XEdgeVariation(topBand, kRT, kBlock)) + ", y=" +
-              std::to_string(YEdgeVariation(topBand, kRT, kBlock)) + ")");
-        check(XEdgeVariation(bottomBand, kRT, kBlock) > 0 &&
-              YEdgeVariation(bottomBand, kRT, kBlock) == 0,
+              "pair (x=" + std::to_string(XEdgeVariation(topBand, kRT, kBandH)) + ", y=" +
+              std::to_string(YEdgeVariation(topBand, kRT, kBandH)) + ")");
+        check(XEdgeVariation(bottomBand, kRT, kBandH) > 0 &&
+              YEdgeVariation(bottomBand, kRT, kBandH) == 0,
               "I2: and the one queued AFTER it kept its own (Linear,Point) pair, so no sampler "
               "leaked across the family transition (x=" +
-              std::to_string(XEdgeVariation(bottomBand, kRT, kBlock)) + ", y=" +
-              std::to_string(YEdgeVariation(bottomBand, kRT, kBlock)) + ")");
+              std::to_string(XEdgeVariation(bottomBand, kRT, kBandH)) + ", y=" +
+              std::to_string(YEdgeVariation(bottomBand, kRT, kBandH)) + ")");
         SetPair(dev, 0, 0);
     }
 
