@@ -188,9 +188,12 @@ namespace
                                  true, true, false,
                                  true, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_BGFX)
+    // `msaaTargetReadback` was false while a multisampled RenderTarget2D reported a successful
+    // readback over untouched memory; REMED-GFX-154 fixed that, so check S1 measures the ordered
+    // Clear on a multisampled destination instead of skipping it.
     constexpr Contract kContract{"BGFX", true, true, true, true, true,
                                  true, true, true,
-                                 true, true, true, true, false, false, false};
+                                 true, true, true, true, false, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     // wgpu delivers a clear only through the pass load op, exactly as SDL_gpu does, and a
     // WGPURenderPassDescriptor has exactly one set of them. REMED-GFX-156 put Clear() into the same

@@ -211,22 +211,11 @@ namespace
         true;
 #endif
 
-    /**
-     * @brief Whether a multisampled target's FIRST readback after rendering returns its content.
-     *
-     * REMED-GFX-154 (recorded here, not owned by this task): on bgfx the first GetData of a
-     * multisampled RenderTarget2D returns all zeroes, and a second read after any further target
-     * switch returns the correct bytes -- the resolve has not completed when the read is issued.
-     * Its non-multisampled target read in the same frame is byte-exact, and the cube path already
-     * carries an explicit CompleteFrameForResolveEXT() for this (REMED-GFX-134); the 2D
-     * multisampled path does not.
-     */
-    constexpr bool kMsaaFirstReadbackWorks =
-#if defined(CNA_BACKEND_BGFX)
-        false;
-#else
-        true;
-#endif
+    // REMED-GFX-154 is FIXED, so the `kMsaaFirstReadbackWorks` declaration that used to live here --
+    // false on BGFX, pinning "the first readback of a multisampled target is entirely empty" -- is
+    // gone, together with the dummy-target bind leg L1 used to nudge the resolve into completing.
+    // The declaration was written to fail the moment the defect was fixed, and it did exactly that.
+    // L1 now reads the multisampled target ONCE and asserts the pattern, like every other leg.
 
     constexpr int kBBW = 64;   ///< Backbuffer width.
     constexpr int kBBH = 64;   ///< Backbuffer height.
@@ -1259,31 +1248,17 @@ class RenderTargetSamplingOrientationTest : public Game
         }
 
         RenderPatternInto(dev, msaa);
+        // REMED-GFX-154: exactly one read, immediately, with no dummy target bind between the render
+        // and the read. That sequence is the whole contract now.
         Readback rm = ReadWhole(msaa, kPW, kPH);
         if (!RequireReadable(rm, "L1 MSAA target readback")) return;
-        if (!kMsaaFirstReadbackWorks)
-        {
-            int empty = 0;
-            for (const Color& c : rm.pixels)
-                if (c.getRProperty() == 0 && c.getGProperty() == 0 && c.getBProperty() == 0 &&
-                    c.getAProperty() == 0) ++empty;
-            check(empty == kPW * kPH,
-                  "L1 REMED-GFX-154 pinned: this backend's FIRST readback of a multisampled target "
-                  "is entirely empty (" + std::to_string(empty) + "/" +
-                  std::to_string(kPW * kPH) + " texels) because the resolve has not completed. "
-                  "Fixing REMED-GFX-154 must flip this declaration.");
-            // A second read after a further target switch returns the real bytes; take it, so the
-            // orientation assertions below measure orientation rather than that separate defect.
-            RenderTarget2D nudge(dev, 4, 4, false, SurfaceFormat::Color, DepthFormat::None, 0,
-                                 RenderTargetUsage::DiscardContents);
-            dev.SetRenderTarget(&nudge);
-            ResetState(dev);
-            dev.Clear(Color(0, 0, 0, 255));
-            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            ResetState(dev);
-            rm = ReadWhole(msaa, kPW, kPH);
-            if (!RequireReadable(rm, "L1 MSAA target second readback")) return;
-        }
+        int empty = 0;
+        for (const Color& c : rm.pixels)
+            if (c.getRProperty() == 0 && c.getGProperty() == 0 && c.getBProperty() == 0 &&
+                c.getAProperty() == 0) ++empty;
+        check(empty == 0,
+              "L1 the FIRST readback of a multisampled target is not empty (" +
+              std::to_string(empty) + "/" + std::to_string(kPW * kPH) + " texels were all-zero)");
         CheckPattern(rm, "L1 MSAA target resolves to top-down bytes");
 
         RenderTarget2D dst(dev, kPW * 2, kPH, false, SurfaceFormat::Color, DepthFormat::None, 0,

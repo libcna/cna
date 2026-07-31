@@ -231,17 +231,11 @@ namespace
     /**
      * @brief Whether an MSAA render target's RESOLVED colour is publicly readable after an unbind.
      *
-     * Leg D1's control half only. Declared false on BGFX, where the resolved level 0 measured
-     * (0,0,0,0) against a flat (70,145,210,255) clear -- a readback gap kept separate from this
-     * task, exactly as the neighbouring MSAA fixtures already keep it. D1's destroy-while-bound half
-     * stays asserted there.
+     * Leg D1's control half only. This was declared false on BGFX, where the resolved level 0
+     * measured (0,0,0,0) against a flat (70,145,210,255) clear. That gap was REMED-GFX-154 and is
+     * fixed, so the BGFX arm is gone and D1a measures the resolved colour like every other backend.
      */
-    constexpr bool kMsaaResolveReadable =
-#if defined(CNA_BACKEND_BGFX)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMsaaResolveReadable = true;
 
     /**
      * @brief The producer pattern texel at (@p x, @p y), (0, 0) being the TOP-LEFT corner.

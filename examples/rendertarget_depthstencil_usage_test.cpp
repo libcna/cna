@@ -214,6 +214,16 @@ namespace
          */
         bool    msaaReadback;
         /**
+         * The same question for a multisampled RenderTargetCube FACE, declared separately because
+         * the two routes diverged. REMED-GFX-154 fixed the RenderTarget2D resolve on bgfx, but a
+         * multisampled cube face there is still a deterministic REFUSAL rather than a zero read
+         * (`BgfxRenderTargetCubeBackend::GetData` returns false for any multisampled target) --
+         * REMED-GFX-134's separately recorded boundary, on a different helper path, which
+         * REMED-GFX-154 deliberately did not expand into. One field could not describe both once
+         * only one of them was fixed, and check U4 turned red saying so.
+         */
+        bool    msaaCubeReadback;
+        /**
          * A multisampled RenderTarget2D honours `PreserveContents` at all. False on Vulkan, where
          * `VulkanRenderTargetBackend::GetRenderPass()` hands its MSAA leg a hardcoded
          * `discardContents=true` -- COLOUR and DEPTH alike. That is the multisampled-RT2D
@@ -242,14 +252,15 @@ namespace
     // Field order:
     //   name, readback, cubeTargets, cubeReadback,
     //   depthInRT, stencilInRT, depthPreserves, stencilPreserves, orderedClearInCycle,
-    //   msaaDepthRT2D, msaaDepthCube, msaaReadback, msaaRt2dPreserves, drawsUserPrimitives,
+    //   msaaDepthRT2D, msaaDepthCube, msaaReadback, msaaCubeReadback, msaaRt2dPreserves,
+    //   drawsUserPrimitives,
     //   preferMultiSampling, wantHiDefProfile
 #if defined(CNA_BACKEND_HEADLESS)
     // Headless rasterizes nothing, so it owns no colour at all and its readback is
     // REMED-GFX-127/130's deterministic refusal. Every sequence must still be legal.
     constexpr Contract kContract{"HEADLESS", Support::Unsupported, true, Support::Unsupported,
                                  false, false, false, false, true,
-                                 true, true, false, true, true, false, false};
+                                 true, true, false, false, true, true, false, false};
 #elif defined(CNA_BACKEND_SOFTWARE)
     // No RenderTargetCube. A real CPU depth buffer per framebuffer, owned by that framebuffer and
     // never shared, so depth simply persists. NO stencil storage at all
@@ -258,28 +269,29 @@ namespace
     // instead of a result it cannot have.
     constexpr Contract kContract{"SOFTWARE", Support::Exact, false, Support::Unsupported,
                                  true, false, true, false, true,
-                                 true, true, false, true, true, false, false};
+                                 true, true, false, false, true, true, false, false};
 #elif defined(CNA_BACKEND_EASYGL)
     // A real depth renderbuffer per target, attached once at construction and never re-attached;
     // no glInvalidateFramebuffer and no clear-on-bind anywhere, so an FBO's depth/stencil simply
     // persists -- exactly FNA3D's OpenGL driver.
     constexpr Contract kContract{"EASYGL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, true, true, true, false, false};
+                                 true, true, true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_BGFX)
     // Render-target views are left at BGFX_CLEAR_NONE, so the depth attachment persists.
     // `msaaDepthRT2D` was false while a multisampled depth-backed RenderTarget2D aborted the process
-    // here; REMED-GFX-163 fixed that, so check D8 builds the target again. It still reports the
-    // no-resolved-readback boundary through `msaaReadback`, which is a separate open finding.
+    // here; REMED-GFX-163 fixed that, so check D8 builds the target again. `msaaReadback` was then
+    // false because a multisampled target's readback reported success over untouched memory;
+    // REMED-GFX-154 fixed THAT, so D8 now measures multisampled depth instead of skipping it.
     constexpr Contract kContract{"BGFX", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, false, true, true, false, false};
+                                 true, true, true, false, true, true, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // `msaaRt2dPreserves` false: the multisampled RenderTarget2D leg hardcodes
     // `discardContents=true`, discarding colour AND depth -- REMED-GFX-141's recorded finding.
     constexpr Contract kContract{"VULKAN", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, true, false, true, true, false};
+                                 true, true, true, true, false, true, true, false};
 #elif defined(CNA_BACKEND_WEBGPU)
     // `stencilInRT` false: `WebGPUGraphicsBackend::ApplyDepthStencilState` stores the stencil
     // state and deliberately never bakes it into any pipeline's `WGPUStencilFaceState` (WEBGPU-83),
@@ -291,7 +303,7 @@ namespace
     // asserts the ordered result here; it was measured red the moment the fix landed.
     constexpr Contract kContract{"WEBGPU", Support::Exact, true, Support::Exact,
                                  true, false, true, false, true,
-                                 true, true, false, true, true, false, false};
+                                 true, true, false, false, true, true, false, false};
 #elif defined(CNA_BACKEND_SDL_GPU)
     // Already FNA3D-shaped: every depth/stencil target info uses `clearX ? CLEAR : LOAD` with an
     // unconditional STORE, which is what FNA3D's own SDL_GPU driver does.
@@ -299,35 +311,35 @@ namespace
     // (check K7); both now segment the bind cycle at every observable Clear.
     constexpr Contract kContract{"SDL_GPU", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, true, true, true, false, false};
+                                 true, true, true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr Contract kContract{"SDL_RENDERER", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
-                                 true, true, false, true, false, false, false};
+                                 true, true, false, false, true, false, false, false};
 #elif defined(CNA_BACKEND_ASCII)
     constexpr Contract kContract{"ASCII", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
-                                 true, true, false, true, false, false, false};
+                                 true, true, false, false, true, false, false, false};
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr Contract kContract{"CANVAS", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
-                                 true, true, false, true, false, false, false};
+                                 true, true, false, false, true, false, false, false};
 #elif defined(CNA_BACKEND_DX3)
     constexpr Contract kContract{"DX3", Support::Exact, false, Support::Unsupported,
                                  false, false, false, false, true,
-                                 true, true, false, true, false, false, false};
+                                 true, true, false, false, true, false, false, false};
 #elif defined(CNA_BACKEND_D3D9)
     constexpr Contract kContract{"D3D9", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, false, true, true, false, true};
+                                 true, true, false, false, true, true, false, true};
 #elif defined(CNA_BACKEND_D3D11)
     constexpr Contract kContract{"D3D11", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, true, true, true, false, false};
+                                 true, true, true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_D3D12)
     constexpr Contract kContract{"D3D12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
-                                 true, true, true, true, true, false, false};
+                                 true, true, true, true, true, true, false, false};
 #else
 #error "REMED-GFX-142: this backend has no declared render-target depth/stencil contract."
 #endif
@@ -1107,8 +1119,10 @@ class RenderTargetDepthStencilUsageTest : public Game
         if (!kContract.msaaDepthCube)
             skip("U4 multisampled cube depth (a multisampled depth-backed RenderTargetCube cannot "
                  "be built here)");
-        else if (!canRead || !kContract.msaaReadback || !kContract.depthInRT)
-            skip("U4 multisampled cube depth (no resolved readback on this backend)");
+        else if (!canRead || !kContract.msaaCubeReadback || !kContract.depthInRT)
+            skip("U4 multisampled cube depth (no resolved readback of a multisampled cube FACE on "
+                 "this backend -- a different route from the RenderTarget2D one REMED-GFX-154 "
+                 "fixed, and REMED-GFX-134's separately recorded boundary)");
         else
         {
             auto cube = MakeCube(dev, RenderTargetUsage::PreserveContents,
@@ -1117,8 +1131,9 @@ class RenderTargetDepthStencilUsageTest : public Game
             if (applied <= 0)
                 skip("U4 multisampled cube depth (this backend applies no MSAA to a cube target, "
                      "applied " + std::to_string(applied) + ")");
-            else if (!canRead || !kContract.msaaReadback || !kContract.depthInRT)
-                skip("U4 multisampled cube depth (no resolved readback on this backend)");
+            else if (!canRead || !kContract.msaaCubeReadback || !kContract.depthInRT)
+                skip("U4 multisampled cube depth (no resolved readback of a multisampled cube "
+                     "FACE on this backend -- REMED-GFX-134's separately recorded boundary)");
             else
             {
                 dev.SetRenderTarget(cube.get(), CubeMapFace::PositiveZ);  DepthCycle1(dev);

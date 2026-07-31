@@ -186,8 +186,11 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
+    // `msaaTargetReadback` was false while a multisampled RenderTarget2D reported a successful
+    // readback over untouched memory; REMED-GFX-154 fixed that, so K1/K2 measure pass boundaries on
+    // a multisampled destination instead of skipping them.
     constexpr Contract kContract{"BGFX", true, Support::Exact, true, Support::Exact,
-                                 true, true, false, true, false, true, false, false};
+                                 true, true, false, true, false, true, true, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // `clearOnPreserveTarget` / `clearAfterDrawWins` were BOTH false here while REMED-GFX-129 was
     // open: `GetOrCreateRTRenderPass` delivered the clear colour through VK_ATTACHMENT_LOAD_OP_CLEAR
