@@ -195,6 +195,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_BoundTargetLifetime COMMAND cna_test_headless_bound_target_lifetime
         TIMEOUT 600 LABELS "Headless")
 
+    # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
+    # aborted with `Cannot present while render targets are bound`, which is the SECOND event in a
+    # two-stage chain: an over-range DrawPrimitives (two triangles from a three-vertex buffer) was
+    # correctly rejected by REMED-GFX-113's range guard, that rejection unwound past the fixture's own
+    # SetRenderTarget(nullptr), and EndDraw then met a still-bound target. FNA's contract is REJECT,
+    # never auto-unbind, so both guards are right and the fixture was wrong. Every leg runs in its own
+    # process; leg C2 reproduces the abort end to end and its correct outcome is SIGABRT.
+    cna_headless_test(cna_test_headless_present_lifecycle
+        examples/present_lifecycle_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_PresentLifecycle COMMAND cna_test_headless_present_lifecycle
+        TIMEOUT 900 LABELS "Headless")
+
     # REMED-GFX-165 cross-backend control: Headless does not rasterize, so the pixel oracle is a
     # declared boundary; the run still exercises the shared dimension/rectangle-validation path.
     cna_headless_test(cna_test_headless_backbuffer_readback_dimension

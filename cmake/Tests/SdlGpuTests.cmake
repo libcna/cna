@@ -466,6 +466,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_BoundTargetLifetime COMMAND cna_test_sdlgpu_bound_target_lifetime
         TIMEOUT 600 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
+    # aborted with `Cannot present while render targets are bound`, which is the SECOND event in a
+    # two-stage chain: an over-range DrawPrimitives (two triangles from a three-vertex buffer) was
+    # correctly rejected by REMED-GFX-113's range guard, that rejection unwound past the fixture's own
+    # SetRenderTarget(nullptr), and EndDraw then met a still-bound target. FNA's contract is REJECT,
+    # never auto-unbind, so both guards are right and the fixture was wrong. Every leg runs in its own
+    # process; leg C2 reproduces the abort end to end and its correct outcome is SIGABRT.
+    cna_sdlgpu_test(cna_test_sdlgpu_present_lifecycle
+        examples/present_lifecycle_contract_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_PresentLifecycle COMMAND cna_test_sdlgpu_present_lifecycle
+        TIMEOUT 900 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with

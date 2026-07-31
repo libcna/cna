@@ -620,6 +620,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_BoundTargetLifetime COMMAND cna_test_webgpu_bound_target_lifetime
         TIMEOUT 600 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-180: the public render-target -> Present lifecycle contract. `SdlGpu_RenderState`
+    # aborted with `Cannot present while render targets are bound`, which is the SECOND event in a
+    # two-stage chain: an over-range DrawPrimitives (two triangles from a three-vertex buffer) was
+    # correctly rejected by REMED-GFX-113's range guard, that rejection unwound past the fixture's own
+    # SetRenderTarget(nullptr), and EndDraw then met a still-bound target. FNA's contract is REJECT,
+    # never auto-unbind, so both guards are right and the fixture was wrong. Every leg runs in its own
+    # process; leg C2 reproduces the abort end to end and its correct outcome is SIGABRT.
+    cna_webgpu_test(cna_test_webgpu_present_lifecycle
+        examples/present_lifecycle_contract_test.cpp)
+    cna_register_backend_test(NAME WebGPU_PresentLifecycle COMMAND cna_test_webgpu_present_lifecycle
+        TIMEOUT 900 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which
