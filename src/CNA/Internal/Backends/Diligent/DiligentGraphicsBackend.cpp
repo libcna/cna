@@ -336,6 +336,133 @@ void main(in PSInput psIn, out PSOutput psOut)
 }
 )";
 
+        /// DILIGENT-37: real XNA's own default (`BasicEffect`/`SkinnedEffect`'s
+        /// `PreferPerPixelLighting == false`) evaluates Blinn-Phong once per vertex and
+        /// Gouraud-interpolates the result, rather than re-evaluating it per fragment the way
+        /// kLitPixelHlsl above does. Extracted from kLitPixelHlsl's own inline math unchanged --
+        /// only the STAGE it runs in differs between the two -- so kLitVertexLitVertexHlsl and
+        /// kSkinnedVertexLitVertexHlsl below both call this from the vertex stage instead. Always
+        /// prepended alongside kConstantsHlsl (see the assembly point below): harmless dead code in
+        /// variants that never call it, since every uniform it reads is already declared there.
+        constexpr const char* kVertexLightingHlsl = R"(
+void ComputeVertexLighting(float3 worldPos, float3 normal, out float3 litDiffuse, out float3 litSpecular)
+{
+    float3 eyeDir = normalize(g_EyePositionSpecularPower.xyz - worldPos);
+    litDiffuse  = g_EmissiveAmbient.rgb;
+    litSpecular = float3(0.0, 0.0, 0.0);
+
+    for (int i = 0; i < 3; ++i)
+    {
+        float3 lightDir = -g_LightDir[i].xyz;
+        float  nDotL    = max(dot(normal, lightDir), 0.0);
+        litDiffuse += g_LightDiffuse[i].rgb * nDotL;
+        if (nDotL > 0.0)
+        {
+            float3 halfVec = normalize(lightDir + eyeDir);
+            float  nDotH   = max(dot(normal, halfVec), 0.0);
+            litSpecular += g_LightSpecular[i].rgb * pow(nDotH, max(g_EyePositionSpecularPower.w, 1.0));
+        }
+    }
+}
+)";
+
+        constexpr const char* kLitVertexLitVertexHlsl = R"(
+struct VSInput
+{
+    float3 Pos    : ATTRIB0;
+    float3 Normal : ATTRIB1;
+    float2 UV     : ATTRIB2;
+};
+
+struct PSInput
+{
+    float4 Pos         : SV_POSITION;
+    float2 UV          : TEX_COORD;
+    float3 LitDiffuse  : LIT_DIFFUSE;
+    float3 LitSpecular : LIT_SPECULAR;
+    float  FogKeep     : FOG_KEEP;
+};
+
+void main(in VSInput vsIn, out PSInput psIn)
+{
+    psIn.Pos      = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
+    float3 worldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
+    float3 normal   = normalize(mul(float4(vsIn.Normal, 0.0), g_World).xyz);
+    ComputeVertexLighting(worldPos, normal, psIn.LitDiffuse, psIn.LitSpecular);
+    psIn.UV       = vsIn.UV;
+    psIn.FogKeep  = ComputeFogKeep(vsIn.Pos);
+}
+)";
+
+        constexpr const char* kLitVertexLitPixelHlsl = R"(
+Texture2D    g_Texture;
+SamplerState g_Texture_sampler;
+
+struct PSInput
+{
+    float4 Pos         : SV_POSITION;
+    float2 UV          : TEX_COORD;
+    float3 LitDiffuse  : LIT_DIFFUSE;
+    float3 LitSpecular : LIT_SPECULAR;
+    float  FogKeep     : FOG_KEEP;
+};
+
+struct PSOutput
+{
+    float4 Color : SV_TARGET;
+};
+
+void main(in PSInput psIn, out PSOutput psOut)
+{
+    float4 baseColor = g_DiffuseColor;
+    if (g_Flags.x > 0.5)
+        baseColor *= g_Texture.Sample(g_Texture_sampler, psIn.UV);
+
+    float3 lit = baseColor.rgb * psIn.LitDiffuse + psIn.LitSpecular * g_SpecularColor.rgb;
+    psOut.Color = FinishPixel(float4(lit, baseColor.a), psIn.FogKeep);
+}
+)";
+
+        /// Identical to kSkinnedVertexHlsl except the last step: instead of handing the pixel stage
+        /// a raw WorldPos/Normal to re-light every fragment, it calls the same
+        /// ComputeVertexLighting() kLitVertexLitVertexHlsl uses and hands the pixel stage the
+        /// already-lit diffuse/specular accumulators (kLitVertexLitPixelHlsl, shared with that
+        /// variant -- both PSInput layouts are identical).
+        constexpr const char* kSkinnedVertexLitVertexHlsl = R"(
+struct VSInput
+{
+    float3 Pos          : ATTRIB0;
+    float3 Normal       : ATTRIB1;
+    float2 UV           : ATTRIB2;
+    float4 BlendWeights : ATTRIB3;
+    uint4  BlendIndices : ATTRIB4;
+};
+
+struct PSInput
+{
+    float4 Pos         : SV_POSITION;
+    float2 UV          : TEX_COORD;
+    float3 LitDiffuse  : LIT_DIFFUSE;
+    float3 LitSpecular : LIT_SPECULAR;
+    float  FogKeep     : FOG_KEEP;
+};
+
+void main(in VSInput vsIn, out PSInput psIn)
+{
+    float4x4 skin = ComputeSkinMatrix(vsIn.BlendWeights, vsIn.BlendIndices, g_Flags.w);
+    float4 skinnedPos = mul(float4(vsIn.Pos, 1.0), skin);
+
+    psIn.Pos = mul(skinnedPos, g_WorldViewProj);
+    float3 worldPos = mul(skinnedPos, g_World).xyz;
+
+    float3 skinnedNormal = mul(vsIn.Normal, (float3x3)skin);
+    float3 normal = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)g_World)));
+    ComputeVertexLighting(worldPos, normal, psIn.LitDiffuse, psIn.LitSpecular);
+    psIn.UV      = vsIn.UV;
+    psIn.FogKeep = ComputeFogKeep(skinnedPos.xyz);
+}
+)";
+
         constexpr const char* kDualTextureVertexHlsl = R"(
 struct VSInput
 {
@@ -3279,10 +3406,33 @@ float4 main(in PSInput psIn) : SV_Target
                                       Dg::LAYOUT_ELEMENT_AUTO_STRIDE, Dg::INPUT_ELEMENT_FREQUENCY_PER_INSTANCE},
                 };
                 break;
+            case ShaderVariant::LitTexturedVertexLit3D:
+                vertexSource = kLitVertexLitVertexHlsl;
+                pixelSource = kLitVertexLitPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False},
+                };
+                usesTexture = true;
+                break;
+            case ShaderVariant::SkinnedVertexLit3D:
+                vertexSource = kSkinnedVertexLitVertexHlsl;
+                pixelSource = kLitVertexLitPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{3, 0, 4, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_UINT8, Dg::False},
+                };
+                usesTexture = true;
+                usesBones = true;
+                break;
         }
 
-        const std::string vertexHlsl =
-            std::string(kConstantsHlsl) + (usesBones ? kBonesHlsl : "") + vertexSource;
+        const std::string vertexHlsl = std::string(kConstantsHlsl) + kVertexLightingHlsl +
+            (usesBones ? kBonesHlsl : "") + vertexSource;
         const std::string pixelHlsl = std::string(kConstantsHlsl) + kPixelHelpersHlsl + pixelSource;
 
         Dg::ShaderCreateInfo shaderCI;
@@ -3764,10 +3914,21 @@ float4 main(in PSInput psIn) : SV_Target
                                       : ShaderVariant::ColoredTextured3D;
                 break;
             case 32:
-                variant = (params != nullptr && params->envMapping) ? ShaderVariant::EnvironmentMap3D
-                                                                    : ShaderVariant::LitTextured3D;
+                // EnvironmentMapEffect has no PreferPerPixelLighting property in real XNA -- it
+                // always evaluates per pixel regardless of what a caller sharing GpuDrawParams with
+                // BasicEffect might have left set. Only the plain lit path honors the flag.
+                if (params != nullptr && params->envMapping)
+                    variant = ShaderVariant::EnvironmentMap3D;
+                else if (params != nullptr && params->lightingEnabled && !params->preferPerPixelLighting)
+                    variant = ShaderVariant::LitTexturedVertexLit3D;
+                else
+                    variant = ShaderVariant::LitTextured3D;
                 break;
-            case 52: variant = ShaderVariant::Skinned3D; break;
+            case 52:
+                variant = (params != nullptr && params->lightingEnabled && !params->preferPerPixelLighting)
+                    ? ShaderVariant::SkinnedVertexLit3D
+                    : ShaderVariant::Skinned3D;
+                break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
@@ -3845,7 +4006,8 @@ float4 main(in PSInput psIn) : SV_Target
             constants.flags[1] = 1.0f;
         }
         UploadConstants(constants);
-        if (variant == ShaderVariant::Skinned3D && params != nullptr)
+        if ((variant == ShaderVariant::Skinned3D || variant == ShaderVariant::SkinnedVertexLit3D) &&
+            params != nullptr)
             UploadBoneTransforms(*params);
 
         CachedPipeline& pipeline = GetOrCreatePipeline(MakePipelineKey(variant, primitive));

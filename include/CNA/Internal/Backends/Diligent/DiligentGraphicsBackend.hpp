@@ -1380,6 +1380,8 @@ namespace CNA::Internal::Backends::Diligent
             EnvironmentMap3D,   ///< stride 32: lit surface plus a cube-map reflection
             Skinned3D,          ///< stride 52: lit surface skinned by a 72-bone palette
             Instanced3D,        ///< position-only vertex + a per-instance world matrix, flat colour
+            LitTexturedVertexLit3D, ///< stride 32: LitTextured3D's PreferPerPixelLighting==false sibling
+            SkinnedVertexLit3D,     ///< stride 52: Skinned3D's PreferPerPixelLighting==false sibling
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */

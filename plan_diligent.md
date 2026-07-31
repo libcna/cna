@@ -56,7 +56,7 @@ Practical consequences that shaped this plan:
 | Namespace alias | `Dg = ::Diligent` — the CNA namespace is itself named `Diligent`, so unqualified `Diligent::X` inside it would resolve to the CNA namespace and fail |
 | Third-party pin | DiligentCore `v2.5.6`, via `FetchContent` in `cmake/ThirdPartyDiligent.cmake` |
 | Task prefix | `DILIGENT-` |
-| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT`, `Diligent_OcclusionQuery`, `Diligent_MSAA`, `Diligent_Instanced`, `Diligent_DrawOffset`, `Diligent_SetDataOptions` |
+| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT`, `Diligent_OcclusionQuery`, `Diligent_MSAA`, `Diligent_Instanced`, `Diligent_DrawOffset`, `Diligent_SetDataOptions`, `Diligent_VertexLit` |
 
 ---
 
@@ -212,7 +212,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-34` | `EnvironmentMapEffect` | ✅ | Reuses the lit vertex stage and adds a `TextureCube` sampler: reflection vector, flat or Fresnel-weighted blend factor, and the env-map specular term. Verified at amount 1 and amount 0 on the same geometry. Not byte-compared against FNA's `PSEnvMap` |
 | `DILIGENT-35` | `SkinnedEffect` (72-bone palette, stride 52) | ✅ | The palette lives in its own uniform buffer (4.5 KB is too much for the per-draw block); FNA's `WeightsPerVertex` truncation and the bone-skin ∘ world normal matrix are both honoured. Verified by `Diligent_Skinned`, including a trap bone the second weight pair must never reach. The stride-56 vertex-colour variant is not implemented |
 | `DILIGENT-36` | `PbrEffect`/`SkinnedPbrEffect` | ⬜ | |
-| `DILIGENT-37` | Per-vertex lighting variant (`PreferPerPixelLighting == false`) | ⬜ | Same tracked cross-backend divergence as everywhere except D3D9 |
+| `DILIGENT-37` | Per-vertex lighting variant (`PreferPerPixelLighting == false`) | ✅ | Two new `ShaderVariant`s, `LitTexturedVertexLit3D` (stride 32, `BasicEffect`'s sibling to `LitTextured3D`) and `SkinnedVertexLit3D` (stride 52, `Skinned3D`'s sibling) -- selected in `DrawInternal()` when `lightingEnabled && !preferPerPixelLighting` (real XNA's own default). `EnvironmentMapEffect` has no `PreferPerPixelLighting` property in real XNA, so `envMapping` is checked first and always wins regardless of the flag. Both new vertex shaders extract kLitPixelHlsl's own inline Blinn-Phong math unchanged into a shared `ComputeVertexLighting()` helper and call it once per vertex instead of per pixel, handing the pixel stage pre-lit diffuse/specular varyings to Gouraud-interpolate -- same formula, only the evaluation frequency changes. Verified by `Diligent_VertexLit`: for a flat quad with one uniform normal, per-pixel and per-vertex evaluation have nothing to differ on, so `PreferPerPixelLighting=true` and `=false` must (and do) read back pixel-identical results, for both `BasicEffect` and `SkinnedEffect`. Found and fixed a real regression while landing this: `DrawInternal()`'s bone-palette upload was gated on `variant == ShaderVariant::Skinned3D` specifically, so once vertex-lit skinned draws started selecting `SkinnedVertexLit3D` instead (XNA's own default, i.e. the actually-more-common path) the bone buffer was silently never uploaded -- caught immediately by a DiligentCore validation assertion (`Diligent_Skinned` crashing with `SIGTRAP`) rather than silently, but still a real bug this task introduced and fixed before landing, not a pre-existing one. Also corrected `IGraphicsBackend.hpp`'s own `preferPerPixelLighting` doc comment, which claimed "every backend except D3D9" ignores the field -- already false for EasyGL/WebGPU before this task |
 
 ### Phase `DILIGENT-4` — remaining device surface
 
@@ -239,12 +239,12 @@ use:
 2. **Runs without a GPU** — `Diligent_DeviceSelection` exercises the device-preference and override
    parsing with no device created at all. ✅
 3. **Real device pixels** — a real Diligent device renders and a test asserts on read-back pixels.
-   ✅ **reached, on a software device**: all 13 `Diligent_*` CTest binaries (60 checks total —
+   ✅ **reached, on a software device**: all 14 `Diligent_*` CTest binaries (64 checks total —
    `Diligent_2D` 6, `Diligent_3D` 6, `Diligent_RenderTarget` 5, `Diligent_RenderTargetCube` 4,
    `Diligent_AlphaTestFog` 4, `Diligent_DualTextureEnvMap` 4, `Diligent_Skinned` 4, `Diligent_MRT` 4,
    `Diligent_OcclusionQuery` 4, `Diligent_MSAA` 5, `Diligent_Instanced` 4, `Diligent_DrawOffset` 5,
-   `Diligent_SetDataOptions` 4) run against a genuine Vulkan device provided by Mesa's `lavapipe` ICD
-   under Xvfb. These are real
+   `Diligent_SetDataOptions` 4, `Diligent_VertexLit` 4) run against a genuine Vulkan device provided
+   by Mesa's `lavapipe` ICD under Xvfb. These are real
    draws through the real Vulkan engine — real pipelines, real HLSL→SPIR-V compilation, real depth
    testing — read back through `GraphicsDevice.GetBackBufferData`/`RenderTarget[Cube].GetData`, not
    stubs. Several real defects were found this way and fixed, spanning both the backend and its own

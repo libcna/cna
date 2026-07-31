@@ -784,7 +784,7 @@ namespace CNA::Internal::Backends
         /// (`VSBasicPixelLighting*`/`PSBasicPixelLighting*`); when false (XNA's own default),
         /// it selects a per-vertex-lit shader instead. Backends that generate both lighting
         /// families honour this (D3D9, D3D11, D3D12, WebGPU, Vulkan, bgfx, EasyGL, OpenGL4,
-        /// Magnum); fixed-function backends evaluate lighting per vertex by construction; a
+        /// Magnum, Diligent); fixed-function backends evaluate lighting per vertex by construction; a
         /// backend with neither renders per-pixel regardless of its value -- a known, tracked
         /// divergence from XNA's default, not fixed by adding this field alone. Only meaningful
         /// when `lightingEnabled` is true.
