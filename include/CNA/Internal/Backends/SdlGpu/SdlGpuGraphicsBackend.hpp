@@ -1313,12 +1313,23 @@ namespace CNA::Internal::Backends::SdlGpu
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             SdlGpuSampledTextureEXT texture;  ///< REMED-GFX-152: resolved once, at queue time
             SdlGpuSampledTextureEXT envMapTexture;  ///< REMED-GFX-152: resolved once, at queue time
+            ///@{ REMED-GFX-173: the base 2D texture's own GraphicsDevice.SamplerStates[0].
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
             /// REMED-GFX-170: captured with the filter, so a queued draw cannot observe a
             /// later ApplySamplerState. XNA SamplerState.MaxAnisotropy default.
             int maxAnisotropy = 4;
+            ///@}
+            ///@{ REMED-GFX-173: the reflection cube's own GraphicsDevice.SamplerStates[1], captured
+            /// independently of slot 0 and by value -- exactly the shape DualTextureDrawCommand
+            /// already uses for its second texture. Without these fields the cube's sampler could
+            /// not survive to replay at all, whatever IssueEnvMapDraw bound.
+            int envMapFilter = 0;
+            int envMapAddressU = 0;
+            int envMapAddressV = 0;
+            int envMapMaxAnisotropy = 4;
+            ///@}
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -2377,5 +2388,12 @@ namespace CNA::Internal::Backends::SdlGpu
         // SamplerStateCollection::MaxSamplers), set by ApplySamplerState() and read directly into
         // each DrawCommand's own textureFilter/addressU/addressV fields at Queue*Draw() time.
         std::array<SamplerSlotState, 16> samplerSlots_;
+
+        ///@{ REMED-GFX-173: monotonic counters for CNA_SDLGPU_ENVMAP_TRACE only -- never read by
+        /// any rendering decision. Per-device rather than process-global so two devices in one
+        /// process each number their own draws.
+        std::uint32_t envMapTraceQueueIndex_ = 0;
+        std::uint32_t envMapTraceReplayIndex_ = 0;
+        ///@}
     };
 }

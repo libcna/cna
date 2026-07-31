@@ -324,6 +324,17 @@ namespace CNA::Internal::Backends::SdlGpu
             return enabled;
         }
 
+        // REMED-GFX-173: EnvironmentMapEffect binds TWO sampled resources from TWO public sampler
+        // slots, and CNA_SDLGPU_SAMPLER_TRACE reports one binding per line with no way to tell
+        // which pair belonged to the same draw. This prints the whole two-slot binding on one
+        // line, at both ends of the deferred pipeline: what the public draw call CAPTURED, and
+        // what replay actually BOUND.
+        [[nodiscard]] bool EnvMapTraceEnabled()
+        {
+            static const bool enabled = std::getenv("CNA_SDLGPU_ENVMAP_TRACE") != nullptr;
+            return enabled;
+        }
+
         // REMED-GFX-176: a Texture2D's declared level count, the count SDL was really asked for and
         // every level upload's exact destination, on one line each. Without it "the texture has a
         // chain" can only be inferred from pixels, and a texture that allocates one level looks
@@ -4565,12 +4576,18 @@ namespace CNA::Internal::Backends::SdlGpu
         FillEnvMapParams(command.envMapUniforms, params);
         command.texture = ResolveSampledTextureEXT(params.texture0, "EnvironmentMapEffect.Texture");
         command.envMapTexture = envMapTexture;
-        // SDLGPU-21: diffuse texture0 gets real per-slot dynamic sampler state; the env map
-        // itself stays fixed Linear+Clamp regardless (see RenderEnvMapDraws' own comment).
+        // SDLGPU-21 / REMED-GFX-173: EnvironmentMapEffect samples TWO resources, and each one takes
+        // the sampler of its OWN public slot -- the base texture GraphicsDevice.SamplerStates[0],
+        // the reflection cube SamplerStates[1]. Both are captured HERE, by value, so a later
+        // ApplySamplerState cannot reach back into this already-queued draw.
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
         command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.envMapFilter = samplerSlots_[1].filter;
+        command.envMapAddressU = samplerSlots_[1].addressU;
+        command.envMapAddressV = samplerSlots_[1].addressV;
+        command.envMapMaxAnisotropy = samplerSlots_[1].maxAnisotropy;
 
         if (ib != nullptr)
         {
@@ -4588,6 +4605,26 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         command.target = CurrentDrawTarget();
+        if (EnvMapTraceEnabled())
+        {
+            std::fprintf(stderr,
+                         "[cna-sdlgpu-envmap] queue=%u family=EnvironmentMap3D tex2D=%p cube=%p | "
+                         "public slot0 filter=%d(%s) addrU=%d addrV=%d aniso=%d | "
+                         "public slot1 filter=%d(%s) addrU=%d addrV=%d aniso=%d | "
+                         "captured slot0 filter=%d addrU=%d addrV=%d aniso=%d | "
+                         "captured slot1 filter=%d addrU=%d addrV=%d aniso=%d | indexed=%d\n",
+                         static_cast<unsigned>(envMapTraceQueueIndex_++),
+                         static_cast<void*>(command.texture.texture),
+                         static_cast<void*>(command.envMapTexture.texture),
+                         samplerSlots_[0].filter, TextureFilterName(samplerSlots_[0].filter),
+                         samplerSlots_[0].addressU, samplerSlots_[0].addressV, samplerSlots_[0].maxAnisotropy,
+                         samplerSlots_[1].filter, TextureFilterName(samplerSlots_[1].filter),
+                         samplerSlots_[1].addressU, samplerSlots_[1].addressV, samplerSlots_[1].maxAnisotropy,
+                         command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy,
+                         command.envMapFilter, command.envMapAddressU, command.envMapAddressV,
+                         command.envMapMaxAnisotropy,
+                         command.indexed ? 1 : 0);
+        }
         envMapDrawCommands_.push_back(std::move(command));
         PushDrawOrder(DrawKind::EnvMap, envMapDrawCommands_.size() - 1);
         framePending_ = true;
@@ -4832,24 +4869,44 @@ namespace CNA::Internal::Backends::SdlGpu
         vbBinding.buffer = command.uploadedVertexBuffer;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
-        // The env map is always sampled Linear+Clamp regardless of texture0's own filter/
-        // address settings -- matches this project's other backends' fixed reflection-map
-        // sampling convention (address mode is largely moot for a direction-addressed cube map).
-        // REMED-GFX-173 (recorded, NOT fixed here): Vulkan's EnvironmentMapEffect now honours
-        // GraphicsDevice.SamplerStates[1] for this cube after REMED-GFX-169, so the convention is
-        // no longer uniform across backends. That is a state-capture question, not the filter
-        // ordinal translation REMED-GFX-170 is scoped to, so the LinearClamp constant is kept
-        // here byte-for-byte and the divergence is filed separately.
+        // REMED-GFX-173: binding 0 (sampler2D uTexture) and binding 1 (samplerCube uEnvMap) are two
+        // INDEPENDENT sampled resources, so each takes the sampler captured from its own public
+        // slot -- the identical shape IssueDualTextureDraw already uses. This previously bound a
+        // literal LinearClamp for the cube, described as "this project's other backends' fixed
+        // reflection-map sampling convention"; REMED-GFX-169 ended that convention by making
+        // Vulkan honour GraphicsDevice.SamplerStates[1] for the same binding.
         SDL_GPUTextureSamplerBinding samplerBindings[2]{};
         samplerBindings[0].texture = command.texture.texture;
         samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                       command.addressV, command.maxAnisotropy,
                                                       "EnvironmentMap3D");
         samplerBindings[1].texture = command.envMapTexture.texture;
-        samplerBindings[1].sampler = GetOrCreateSampler(/*textureFilter=*/0, /*addressU=*/1,
-                                                       /*addressV=*/1, kSpriteBatchMaxAnisotropy,
+        samplerBindings[1].sampler = GetOrCreateSampler(command.envMapFilter, command.envMapAddressU,
+                                                       command.envMapAddressV,
+                                                       command.envMapMaxAnisotropy,
                                                        "EnvironmentMap3D/cube");
         SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
+        // REMED-GFX-173: the whole two-slot binding on one line -- both public slots, both native
+        // samplers and both texture identities together, so "the cube got slot 0's sampler" or
+        // "the cube got a constant" is readable directly instead of inferred from pixels.
+        if (EnvMapTraceEnabled())
+        {
+            std::fprintf(stderr,
+                         "[cna-sdlgpu-envmap] replay=%u family=EnvironmentMap3D "
+                         "tex2D=%p cube=%p | slot0 filter=%d(%s) addrU=%d addrV=%d aniso=%d "
+                         "sampler=%p | slot1 filter=%d(%s) addrU=%d addrV=%d aniso=%d sampler=%p | "
+                         "indexed=%d\n",
+                         static_cast<unsigned>(envMapTraceReplayIndex_++),
+                         static_cast<void*>(command.texture.texture),
+                         static_cast<void*>(command.envMapTexture.texture),
+                         command.textureFilter, TextureFilterName(command.textureFilter),
+                         command.addressU, command.addressV, command.maxAnisotropy,
+                         static_cast<void*>(samplerBindings[0].sampler),
+                         command.envMapFilter, TextureFilterName(command.envMapFilter),
+                         command.envMapAddressU, command.envMapAddressV, command.envMapMaxAnisotropy,
+                         static_cast<void*>(samplerBindings[1].sampler),
+                         command.indexed ? 1 : 0);
+        }
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
