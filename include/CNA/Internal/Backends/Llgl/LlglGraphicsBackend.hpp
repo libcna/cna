@@ -361,6 +361,72 @@ namespace CNA::Internal::Backends::Llgl
     };
 
     /**
+     * @brief An occlusion query living in LLGL. NOXNA.
+     *
+     * Backs `Microsoft::Xna::Framework::Graphics::OcclusionQuery`. `Begin()`/`End()` record
+     * `LLGL::CommandBuffer::BeginQuery()`/`EndQuery()` into the owning backend's deferred frame,
+     * exactly like a `Clear`/`Sprite`/`Primitives` command -- LLGL requires both to be issued
+     * inside an open render pass, which this backend only ever opens at `Present()`/
+     * `ReadBackbuffer()`/`FlushPendingFrameEXT()` time.
+     *
+     * A fresh `LLGL::QueryHeap` is created for every `Begin()`, never reused across cycles: LLGL
+     * 0.04b's own Vulkan module never issues the `vkCmdResetQueryPool` a query needs before a
+     * second `vkCmdBeginQuery` on the same query index (`VKCommandBuffer::ResetQueryPoolsInFlight`
+     * exists but is `#if 0`'d out in the vendored source, confirmed by reading it directly) --
+     * reusing one would be undefined behaviour by the Vulkan spec's own query-reset rule. A fresh
+     * query pool is always in the valid "unavailable" state for its first use, so this sidesteps
+     * the gap entirely rather than working around it with an explicit reset LLGL does not expose.
+     *
+     * `IsComplete()`/`PixelCount()` answer synchronously: if this query's `End()` is still sitting
+     * unsubmitted in the owning backend's frame, they force a full submit-and-wait
+     * (`FlushPendingFrameEXT()`) first. Real hardware occlusion queries are meant to be polled
+     * asynchronously across frames to avoid a CPU stall; this backend trades that performance
+     * characteristic for a result that is always immediately correct rather than genuinely async --
+     * a documented, deliberate simplification, not a silent behavioural gap.
+     */
+    class LlglOcclusionQueryBackend final : public IOcclusionQueryBackend
+    {
+    public:
+        /**
+         * @brief Binds this query to the backend that will record and submit it.
+         *
+         * @param renderSystem Render system that creates and releases each query heap.
+         * @param queue        Command queue used to read back the query result.
+         * @param owner        Backend whose frame this query's Begin/End commands are queued into.
+         */
+        LlglOcclusionQueryBackend(LLGL::RenderSystem* renderSystem, LLGL::CommandQueue* queue,
+                                  LlglGraphicsBackend* owner);
+
+        /** @brief Releases the current query heap, if any (deferred if a frame may reference it). */
+        ~LlglOcclusionQueryBackend() override;
+
+        LlglOcclusionQueryBackend(const LlglOcclusionQueryBackend&) = delete;
+        LlglOcclusionQueryBackend& operator=(const LlglOcclusionQueryBackend&) = delete;
+
+        /** @brief Creates a fresh query heap and queues `BeginQuery` into the current frame. */
+        void Begin() override;
+
+        /** @brief Queues `EndQuery` into the current frame. */
+        void End() override;
+
+        /** @brief Forces any pending frame containing this query to submit, then polls the result. */
+        [[nodiscard]] bool IsComplete() const override;
+
+        /** @brief Forces any pending frame containing this query to submit, then reads the result. */
+        [[nodiscard]] int PixelCount() const override;
+
+    private:
+        void ResolveResultEXT() const;
+
+        LLGL::RenderSystem*  renderSystem_ = nullptr;
+        LLGL::CommandQueue*  queue_        = nullptr;
+        LlglGraphicsBackend* owner_        = nullptr;
+        LLGL::QueryHeap*     queryHeap_    = nullptr;
+        mutable bool         hasResult_    = false;
+        mutable std::uint64_t pixelCount_  = 0;
+    };
+
+    /**
      * @brief Sprite rendering for `Microsoft::Xna::Framework::Graphics::SpriteBatch`. NOXNA.
      *
      * Each `Draw` turns into six vertices appended to the owning backend's frame, so sprites from
@@ -656,6 +722,13 @@ namespace CNA::Internal::Backends::Llgl
          * @throws std::runtime_error If the copy could not be performed.
          */
         void ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels) override;
+
+        /**
+         * @brief Creates an occlusion query.
+         *
+         * @return The new occlusion query backend; never null.
+         */
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
         /**
          * @brief Creates an off-screen `RenderTarget2D`.
@@ -965,6 +1038,33 @@ namespace CNA::Internal::Backends::Llgl
                                             LLGL::Buffer* spriteProjectionBuffer);
 
         /**
+         * @brief Defers releasing an occlusion query's `LLGL::QueryHeap`, same reasoning as
+         * `ScheduleRenderTargetReleaseEXT`.
+         *
+         * @param queryHeap The query heap to release once the frame that may reference it (a
+         *                  queued `QueryBegin`/`QueryEnd`) has been submitted, or null.
+         */
+        void ScheduleQueryHeapReleaseEXT(LLGL::QueryHeap* queryHeap);
+
+        /**
+         * @brief Appends a `BeginQuery` to the current frame.
+         *
+         * Called by `LlglOcclusionQueryBackend::Begin()`; not part of the shared backend interface.
+         *
+         * @param queryHeap Query heap to begin; must not be null.
+         */
+        void QueueQueryBeginEXT(LLGL::QueryHeap* queryHeap);
+
+        /**
+         * @brief Appends an `EndQuery` to the current frame.
+         *
+         * Called by `LlglOcclusionQueryBackend::End()`; not part of the shared backend interface.
+         *
+         * @param queryHeap Query heap to end; must not be null.
+         */
+        void QueueQueryEndEXT(LLGL::QueryHeap* queryHeap);
+
+        /**
          * @brief Submits any queued-but-not-yet-submitted frame commands and waits for them to
          * finish, without presenting.
          *
@@ -1010,7 +1110,7 @@ namespace CNA::Internal::Backends::Llgl
         /** @brief One recorded frame operation, replayed in submission order at Present(). */
         struct FrameCommand
         {
-            enum class Kind { Clear, Sprite, Primitives };
+            enum class Kind { Clear, Sprite, Primitives, QueryBegin, QueryEnd };
 
             /** @brief Which operation this entry replays. */
             Kind             kind         = Kind::Clear;
@@ -1042,6 +1142,9 @@ namespace CNA::Internal::Backends::Llgl
             std::uint32_t    firstIndex   = 0;
             /** @brief Primitives only: value added to each index before vertex fetch. */
             std::int32_t     baseVertex   = 0;
+
+            /** @brief QueryBegin/QueryEnd only: the occlusion query heap to begin/end. */
+            LLGL::QueryHeap* queryHeap    = nullptr;
         };
 
         /** @brief The letterboxed destination rectangle of the logical canvas, in window pixels. */
@@ -1153,6 +1256,10 @@ namespace CNA::Internal::Backends::Llgl
         /// A destroyed RenderTarget2D's own colour (and, if ever non-anonymous, depth) textures,
         /// deferred for the same reason as pendingRenderTargetReleases_.
         std::vector<LLGL::Texture*> pendingTextureReleases_;
+        /// Occlusion query heaps replaced (a new one is created on every Begin()) or destroyed
+        /// before the frame that may still reference them was submitted. See
+        /// ScheduleQueryHeapReleaseEXT.
+        std::vector<LLGL::QueryHeap*> pendingQueryHeapReleases_;
 
         std::vector<float>          spriteVertexData_;
         std::vector<FrameCommand>   frameCommands_;

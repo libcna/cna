@@ -522,6 +522,86 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     // -----------------------------------------------------------------------------------------
+    // LlglOcclusionQueryBackend
+    // -----------------------------------------------------------------------------------------
+
+    LlglOcclusionQueryBackend::LlglOcclusionQueryBackend(LLGL::RenderSystem* renderSystem,
+                                                          LLGL::CommandQueue* queue,
+                                                          LlglGraphicsBackend* owner)
+        : renderSystem_(renderSystem)
+        , queue_(queue)
+        , owner_(owner)
+    {
+        if (renderSystem_ == nullptr || queue_ == nullptr || owner_ == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: occlusion query creation failed");
+    }
+
+    LlglOcclusionQueryBackend::~LlglOcclusionQueryBackend()
+    {
+        if (queryHeap_ != nullptr)
+            owner_->ScheduleQueryHeapReleaseEXT(queryHeap_);
+    }
+
+    void LlglOcclusionQueryBackend::Begin()
+    {
+        // Never reused across cycles -- see this class's own doc comment for why (LLGL 0.04b's
+        // Vulkan module never resets a query pool between uses).
+        if (queryHeap_ != nullptr)
+            owner_->ScheduleQueryHeapReleaseEXT(queryHeap_);
+
+        LLGL::QueryHeapDescriptor queryDesc;
+        queryDesc.type = LLGL::QueryType::SamplesPassed;
+        queryDesc.numQueries = 1;
+        queryHeap_ = renderSystem_->CreateQueryHeap(queryDesc);
+        if (queryHeap_ == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: query heap creation failed");
+
+        hasResult_ = false;
+        pixelCount_ = 0;
+        owner_->QueueQueryBeginEXT(queryHeap_);
+    }
+
+    void LlglOcclusionQueryBackend::End()
+    {
+        if (queryHeap_ == nullptr)
+            return;
+
+        owner_->QueueQueryEndEXT(queryHeap_);
+    }
+
+    void LlglOcclusionQueryBackend::ResolveResultEXT() const
+    {
+        if (queryHeap_ == nullptr || hasResult_)
+            return;
+
+        // This query's End() may still be sitting unsubmitted in the owning backend's frame --
+        // LLGL requires BeginQuery/EndQuery to be recorded inside an open render pass, which this
+        // backend only opens at submit time. Forcing a submit-and-wait here is what makes
+        // IsComplete()/PixelCount() always answer correctly rather than genuinely asynchronously
+        // (see this class's own doc comment).
+        owner_->FlushPendingFrameEXT();
+
+        std::uint64_t result = 0;
+        if (queue_->QueryResult(*queryHeap_, 0, 1, &result, sizeof(result)))
+        {
+            pixelCount_ = result;
+            hasResult_ = true;
+        }
+    }
+
+    bool LlglOcclusionQueryBackend::IsComplete() const
+    {
+        ResolveResultEXT();
+        return hasResult_;
+    }
+
+    int LlglOcclusionQueryBackend::PixelCount() const
+    {
+        ResolveResultEXT();
+        return static_cast<int>(pixelCount_);
+    }
+
+    // -----------------------------------------------------------------------------------------
     // LlglVertexBufferBackend
     // -----------------------------------------------------------------------------------------
 
@@ -1894,6 +1974,11 @@ namespace CNA::Internal::Backends::Llgl
         return std::make_unique<LlglIndexBufferBackend>(renderer_.get(), this, index_capacity, true);
     }
 
+    std::unique_ptr<IOcclusionQueryBackend> LlglGraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<LlglOcclusionQueryBackend>(renderer_.get(), queue_, this);
+    }
+
     void LlglGraphicsBackend::QueueClear(long flags, const float color[4], float depth, std::uint32_t stencil)
     {
         FrameCommand command;
@@ -1908,6 +1993,34 @@ namespace CNA::Internal::Backends::Llgl
         command.clearStencil = stencil;
         frameCommands_.push_back(command);
         backbufferCacheValid_ = false;
+    }
+
+    void LlglGraphicsBackend::QueueQueryBeginEXT(LLGL::QueryHeap* queryHeap)
+    {
+        if (queryHeap == nullptr)
+            return;
+
+        FrameCommand command;
+        command.kind = FrameCommand::Kind::QueryBegin;
+        command.target = currentRenderTargetBackend_ != nullptr
+            ? currentRenderTargetBackend_->GetLlglRenderTarget()
+            : nullptr;
+        command.queryHeap = queryHeap;
+        frameCommands_.push_back(command);
+    }
+
+    void LlglGraphicsBackend::QueueQueryEndEXT(LLGL::QueryHeap* queryHeap)
+    {
+        if (queryHeap == nullptr)
+            return;
+
+        FrameCommand command;
+        command.kind = FrameCommand::Kind::QueryEnd;
+        command.target = currentRenderTargetBackend_ != nullptr
+            ? currentRenderTargetBackend_->GetLlglRenderTarget()
+            : nullptr;
+        command.queryHeap = queryHeap;
+        frameCommands_.push_back(command);
     }
 
     void LlglGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -2242,10 +2355,26 @@ namespace CNA::Internal::Backends::Llgl
         }
     }
 
+    void LlglGraphicsBackend::ScheduleQueryHeapReleaseEXT(LLGL::QueryHeap* queryHeap)
+    {
+        if (queryHeap == nullptr)
+            return;
+
+        // Nothing recorded refers to it, so there is nothing to wait for -- same reasoning as
+        // ScheduleBufferReleaseEXT.
+        if (frameCommands_.empty())
+        {
+            renderer_->Release(*queryHeap);
+            return;
+        }
+
+        pendingQueryHeapReleases_.push_back(queryHeap);
+    }
+
     void LlglGraphicsBackend::ReleasePendingBuffers()
     {
         if (pendingBufferReleases_.empty() && pendingRenderTargetReleases_.empty() &&
-            pendingTextureReleases_.empty())
+            pendingTextureReleases_.empty() && pendingQueryHeapReleases_.empty())
         {
             return;
         }
@@ -2274,6 +2403,12 @@ namespace CNA::Internal::Backends::Llgl
                 renderer_->Release(*texture);
         }
         pendingTextureReleases_.clear();
+        for (LLGL::QueryHeap* queryHeap : pendingQueryHeapReleases_)
+        {
+            if (queryHeap != nullptr)
+                renderer_->Release(*queryHeap);
+        }
+        pendingQueryHeapReleases_.clear();
     }
 
     void LlglGraphicsBackend::FlushPendingFrameEXT()
@@ -2397,6 +2532,20 @@ namespace CNA::Internal::Backends::Llgl
                     commands_->SetResource(2, *command.sampler);
                     commands_->SetVertexBuffer(*spriteVertexBuffer_);
                     commands_->Draw(command.vertexCount, command.firstVertex);
+                    break;
+                }
+
+                case FrameCommand::Kind::QueryBegin:
+                {
+                    if (command.queryHeap != nullptr)
+                        commands_->BeginQuery(*command.queryHeap);
+                    break;
+                }
+
+                case FrameCommand::Kind::QueryEnd:
+                {
+                    if (command.queryHeap != nullptr)
+                        commands_->EndQuery(*command.queryHeap);
                     break;
                 }
             }
@@ -2968,10 +3117,13 @@ namespace CNA::Internal::Backends::Llgl
             case CNA::GraphicsCapability::WireFrame:
                 return SupportsWireFrameEXT();
 
+            // LLGL-28: real occlusion queries via LLGL::QueryHeap(QueryType::SamplesPassed).
+            case CNA::GraphicsCapability::OcclusionQuery:
+                return true;
+
             // Everything below is still unimplemented. Reporting false is what lets a caller ask
             // instead of discovering the gap through an exception.
             case CNA::GraphicsCapability::MultipleRenderTargets:
-            case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::CustomEffects:
             case CNA::GraphicsCapability::Texture3D:
                 return false;

@@ -26,13 +26,15 @@ module**:
   and **per-pixel directional lighting** (ambient, up to three lights, specular, `EmissiveColor`),
   plus **`AlphaTestEffect`**. Lighting currently requires a texture to also be bound -- a lit,
   untextured draw is refused by name rather than silently dropping the light;
-* **`RenderTarget2D`**: draw into it, unbind back to the swap chain, sample it back onto the
-  screen with `SpriteBatch`, and `GetData()` straight off the colour attachment. See "Render
-  targets" below for what this does and does not cover.
+* **`RenderTarget2D`**: draw into it (both `SpriteBatch` and the 3D path), unbind back to the
+  swap chain, sample it back onto the screen, and `GetData()` straight off the colour attachment.
+  See "Render targets" below for what this does and does not cover;
+* **occlusion queries**: real `LLGL::QueryHeap`-backed `OcclusionQuery`. See "Occlusion queries"
+  below for how `IsComplete()`/`PixelCount()` behave on this backend.
 
 **Not implemented:** `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
 `RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, cube and
-volume textures, custom `ShaderEffect`s, occlusion queries.
+volume textures, custom `ShaderEffect`s.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -163,6 +165,26 @@ objects are released only once the frame that may still reference them has actua
 submitted. `RenderTarget2D::GetData()` also forces any of its own still-queued draws to be
 submitted first — its content, unlike a plain `Texture2D`'s, only exists once they are.
 
+## Occlusion queries
+
+`OcclusionQuery.Begin()`/`End()` queue `LLGL::CommandBuffer::BeginQuery()`/`EndQuery()` into the
+same deferred frame as everything else this backend draws — LLGL requires both to be issued
+inside an open render pass, which this backend only opens at submit time.
+
+Two things are worth knowing:
+
+* **A fresh `LLGL::QueryHeap` is created for every `Begin()`, never reused.** LLGL 0.04b's own
+  vendored Vulkan module never issues the `vkCmdResetQueryPool` a query needs before a second
+  `vkCmdBeginQuery` on the same query index (the call exists in its source but is `#if 0`'d out),
+  and reusing a query pool without an external reset LLGL does not expose would be undefined
+  behaviour by the Vulkan spec's own query-reset rule. A fresh query pool is always in the valid
+  "unavailable" state for its first use, so this sidesteps the gap entirely.
+* **`IsComplete()`/`PixelCount()` answer synchronously.** The first call after `End()` forces a
+  full submit-and-wait (the same `FlushPendingFrameEXT()` `RenderTarget2D::GetData()` uses) rather
+  than genuinely polling across frames the way real hardware occlusion queries are meant to be
+  used to avoid a CPU stall. This is a deliberate, documented trade of that performance
+  characteristic for a result that is always immediately correct.
+
 ## Tests
 
 ```bash
@@ -178,8 +200,10 @@ clear and present. `Llgl_2D` asserts real pixels read back from the GPU: quadran
 textures, tinting, alpha, fog and the alpha test, `Llgl_Lighting` covers ambient/directional/
 specular/emissive lighting, and `Llgl_RenderTarget` covers drawing into a `RenderTarget2D`,
 unbinding back to the swap chain, sampling the target back onto the screen, and `GetData()`.
+`Llgl_OcclusionQuery` covers a fully visible quad, a fully occluded one (real depth test), and two
+draws inside one `Begin()`/`End()` summing their contributions.
 Every one of them is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All sixteen
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All eighteen
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
@@ -199,7 +223,8 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | `AnisotropicFiltering` | device-dependent | From LLGL's reported `limits.maxAnisotropy`. |
 | `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog, the alpha test, and per-pixel lighting (textured draws only); the remaining stock effects are not implemented. |
 | `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |
-| `MultipleRenderTargets`, `OcclusionQuery`, `CustomEffects`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |
+| `OcclusionQuery` | yes | Real `LLGL::QueryHeap`-backed queries — see "Occlusion queries" above for how `IsComplete()`/`PixelCount()` behave on this backend. |
+| `MultipleRenderTargets`, `CustomEffects`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |
 
 There is no standalone `SupportsCapability` flag for single-target `RenderTarget2D` support (XNA
 has none either) — `CreateRenderTarget2D` returning a real backend instead of null is the signal,
