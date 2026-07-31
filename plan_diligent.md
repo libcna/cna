@@ -4,10 +4,10 @@
 > top of it.** What that means concretely is in the "What the baseline actually does" section below
 > — read it before assuming parity with Vulkan/EasyGL/SDL_GPU, which this backend does **not** have.
 > `RenderTarget2D`/`RenderTargetCube`, `AlphaTestEffect`, `DualTextureEffect`,
-> `EnvironmentMapEffect`, `SkinnedEffect` (stride 52) and several simultaneous render targets are
-> all implemented and verified on a real (software) Vulkan device. Volume-texture sampling, MSAA,
-> occlusion queries, custom `ShaderEffect` programs, instancing and `PbrEffect` are **not**
-> implemented, and each one *refuses loudly* rather than rendering a near-miss.
+> `EnvironmentMapEffect`, `SkinnedEffect` (stride 52), several simultaneous render targets and
+> `OcclusionQuery` are all implemented and verified on a real (software) Vulkan device.
+> Volume-texture sampling, MSAA, custom `ShaderEffect` programs, instancing and `PbrEffect` are
+> **not** implemented, and each one *refuses loudly* rather than rendering a near-miss.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -54,7 +54,7 @@ Practical consequences that shaped this plan:
 | Namespace alias | `Dg = ::Diligent` — the CNA namespace is itself named `Diligent`, so unqualified `Diligent::X` inside it would resolve to the CNA namespace and fail |
 | Third-party pin | DiligentCore `v2.5.6`, via `FetchContent` in `cmake/ThirdPartyDiligent.cmake` |
 | Task prefix | `DILIGENT-` |
-| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT` |
+| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT`, `Diligent_OcclusionQuery` |
 
 ---
 
@@ -139,12 +139,15 @@ Implemented and exercised:
 - `SkinnedEffect` at stride 52 (`DILIGENT-35`).
 - Several simultaneous render targets (`DILIGENT-24`): all bound slots are attached and cleared,
   though only slot 0 receives fragments from CNA's single-output built-in shaders.
+- `OcclusionQuery` (`DILIGENT-41`): a real `IQuery`-backed query, falling back from
+  `QUERY_TYPE_OCCLUSION` to `QUERY_TYPE_BINARY_OCCLUSION` (0/1, matching EasyGL's GLES3 convention)
+  on a device without the `occlusionQueryPrecise` feature — which includes `lavapipe`, this
+  backend's own verification device.
 
 Deliberately refused (each throws, naming itself):
 
-- Occlusion queries, custom `ShaderEffect` programs, hardware instancing, `PbrEffect`, MSAA, and
-  `SkinnedEffect`'s stride-56 vertex-colour variant. `SupportsCapability()` reports each of these
-  honestly.
+- Custom `ShaderEffect` programs, hardware instancing, `PbrEffect`, MSAA, and `SkinnedEffect`'s
+  stride-56 vertex-colour variant. `SupportsCapability()` reports each of these honestly.
 
 ---
 
@@ -169,7 +172,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-13` | `ReadBackbuffer` | ✅ | |
 | `DILIGENT-14` | Honest `SupportsCapability()` + loud refusals for the unimplemented set | ✅ | Design decision 7 |
 | `DILIGENT-15` | `Diligent_DeviceSelection` unit tests (no GPU required) | ✅ | Runs in the normal `CnaTests` suite |
-| `DILIGENT-16` | `Diligent_*` CTest binaries | ✅ | 8 binaries, 37 pixel checks total, all passing on a real Vulkan device — Mesa `lavapipe` (software rasterizer) under Xvfb, not hardware. See "Verification status" |
+| `DILIGENT-16` | `Diligent_*` CTest binaries | ✅ | 9 binaries, 41 pixel checks total, all passing on a real Vulkan device — Mesa `lavapipe` (software rasterizer) under Xvfb, not hardware. See "Verification status" |
 | `DILIGENT-17` | `docs/diligent-backend.md` | ✅ | |
 
 ### Phase `DILIGENT-2` — render targets
@@ -202,7 +205,7 @@ Deliberately refused (each throws, naming itself):
 | Task | Description | Status | Notes |
 | --- | --- | --- | --- |
 | `DILIGENT-40` | `Texture3D` | ✅ | `RESOURCE_DIM_TEX_3D`, sub-box upload and readback. Verified by the shared `Texture3D*` tests |
-| `DILIGENT-41` | `OcclusionQuery` | ⬜ | Diligent's `IQuery`/`QUERY_TYPE_OCCLUSION` maps directly |
+| `DILIGENT-41` | `OcclusionQuery` | ✅ | `DiligentOcclusionQueryBackend` uses Diligent's `IQuery`. `QUERY_TYPE_OCCLUSION` needs the `occlusionQueryPrecise` device feature, which lavapipe (this backend's only verification device) does not expose; the backend transparently falls back to `QUERY_TYPE_BINARY_OCCLUSION` (0/1, the same convention EasyGL already uses for GLES3) when it is unavailable. `End()` flushes the immediate context so a result doesn't require waiting for a frame boundary. Verified by `Diligent_OcclusionQuery`: an unbegun query, an empty Begin/End span, a fully-visible quad and a fully depth-occluded quad |
 | `DILIGENT-42` | Custom `ShaderEffect` (`CreateEffectBackend`) | ⬜ | Diligent compiles HLSL at runtime on every device type, so unlike SDL_GPU no extra compiler dependency is needed — but CNA's `ShaderEffect` contract is GLSL-shaped; resolve that first |
 | `DILIGENT-43` | Hardware instancing (`DrawInstancedPrimitivesEx`) | ⬜ | |
 | `DILIGENT-44` | `SetDataOptions` streaming hints (`Discard`/`NoOverwrite`) | ⬜ | Currently ignored via the interface's own default |
@@ -222,10 +225,11 @@ use:
 2. **Runs without a GPU** — `Diligent_DeviceSelection` exercises the device-preference and override
    parsing with no device created at all. ✅
 3. **Real device pixels** — a real Diligent device renders and a test asserts on read-back pixels.
-   ✅ **reached, on a software device**: all 8 `Diligent_*` CTest binaries (37 pixel checks total —
+   ✅ **reached, on a software device**: all 9 `Diligent_*` CTest binaries (41 pixel checks total —
    `Diligent_2D` 6, `Diligent_3D` 5, `Diligent_RenderTarget` 5, `Diligent_RenderTargetCube` 4,
-   `Diligent_AlphaTestFog` 4, `Diligent_DualTextureEnvMap` 4, `Diligent_Skinned` 4, `Diligent_MRT` 4)
-   run against a genuine Vulkan device provided by Mesa's `lavapipe` ICD under Xvfb. These are real
+   `Diligent_AlphaTestFog` 4, `Diligent_DualTextureEnvMap` 4, `Diligent_Skinned` 4, `Diligent_MRT` 4,
+   `Diligent_OcclusionQuery` 4) run against a genuine Vulkan device provided by Mesa's `lavapipe` ICD
+   under Xvfb. These are real
    draws through the real Vulkan engine — real pipelines, real HLSL→SPIR-V compilation, real depth
    testing — read back through `GraphicsDevice.GetBackBufferData`/`RenderTarget[Cube].GetData`, not
    stubs. Several real defects were found this way and fixed, spanning both the backend and its own
@@ -246,9 +250,10 @@ use:
 
 ### Cross-backend test suite
 
-`CnaTests` under `CNA_GRAPHICS_BACKEND=DILIGENT`: **5692 passed, 7 skipped, 1 failed**, unchanged
-since `DILIGENT-23`/`DILIGENT-40` (cube/volume textures) closed the last of the guards this backend
-ever needed in the shared fixtures. The single failure is `XnbContainerFuzzTest.
+`CnaTests` under `CNA_GRAPHICS_BACKEND=DILIGENT`: **5692 passed, 7 skipped, 1 failed**. The total
+held steady through `DILIGENT-41`: closing it removed one more stale guard from
+`GraphicsDeviceCapabilityTests.cpp` (`SupportsOcclusionQuery`, previously `EXPECT_FALSE` on this
+backend) rather than adding a new one. The single failure is `XnbContainerFuzzTest.
 MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, which fails identically on the `HEADLESS`
 backend (verified in the same session) — a pre-existing gap in that test's accepted-exception list
 (`System::ArgumentException` from `VertexBuffer::SetData`'s declaration/stride validation is not

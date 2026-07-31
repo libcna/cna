@@ -3,9 +3,9 @@
 ## Status
 
 The Diligent Engine backend is CNA's newest graphics backend and is **experimental**. Its
-implemented surface covers the 2D/3D baseline plus render targets (2D and cube) and most stock
-effects, described in `plan_diligent.md` Phases `DILIGENT-1` through `3`; it is **not** at parity
-with the Vulkan, EasyGL, SDL_GPU or bgfx backends (MSAA, occlusion queries, custom `ShaderEffect`
+implemented surface covers the 2D/3D baseline plus render targets (2D and cube), occlusion queries
+and most stock effects, described in `plan_diligent.md` Phases `DILIGENT-1` through `4`; it is
+**not** at parity with the Vulkan, EasyGL, SDL_GPU or bgfx backends (MSAA, custom `ShaderEffect`
 and instancing are still unimplemented). Read
 ["What works / what does not"](#what-works--what-does-not) before using it for anything real.
 
@@ -111,6 +111,11 @@ Implemented:
 - `BlendState`, `DepthStencilState`, `RasterizerState` and slot-0 `SamplerState`, all folded into
   the pipeline-state cache key.
 - `ReadBackbuffer` / `GraphicsDevice.GetBackBufferData`.
+- `OcclusionQuery` — a real `IQuery`-backed query. On a device with the `occlusionQueryPrecise`
+  feature this is an exact visible-sample count (`QUERY_TYPE_OCCLUSION`); without it (including
+  Mesa's `lavapipe`, this backend's own verification device) it transparently falls back to
+  `QUERY_TYPE_BINARY_OCCLUSION` and reports only 0 or 1, the same convention `OcclusionQuery`
+  already documents for EasyGL's GLES3.
 
 Not implemented — each **throws with its own name** rather than rendering an approximation, and
 `GraphicsDevice.GraphicsCapabilities` reports each honestly:
@@ -120,7 +125,6 @@ Not implemented — each **throws with its own name** rather than rendering an a
 | MSAA (back buffer and render targets) | `DILIGENT-25` |
 | Sampling a volume texture from a shader | `DILIGENT-42` |
 | `PbrEffect`, `SkinnedEffect`'s stride-56 vertex-colour variant | `DILIGENT-36`, `DILIGENT-35` |
-| `OcclusionQuery` | `DILIGENT-41` |
 | Custom `ShaderEffect` programs | `DILIGENT-42` |
 | Hardware instancing | `DILIGENT-43` |
 
@@ -149,15 +153,15 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Eight further binaries are the real-device pixel proofs (37 checks total): `Diligent_2D` (6),
+Nine further binaries are the real-device pixel proofs (41 checks total): `Diligent_2D` (6),
 `Diligent_3D` (5), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
-`Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4) and
-`Diligent_MRT` (4). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
-into off-screen 2D/cube targets, and assert on pixels read back through
-`GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData`. All 37
-pass against a real Vulkan device. On a machine with no usable device they exit 77 and print
-`[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a pass with nothing rendered
-would be dishonest.
+`Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4),
+`Diligent_MRT` (4) and `Diligent_OcclusionQuery` (4). They clear, draw `SpriteBatch` quads and 3D
+primitives on the back buffer and into off-screen 2D/cube targets, and assert on pixels (or query
+results) read back through `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` /
+`RenderTargetCube.GetData` / `OcclusionQuery`. All 41 pass against a real Vulkan device. On a
+machine with no usable device they exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest
+reports as a skip — reporting a pass with nothing rendered would be dishonest.
 
 ```bash
 ctest --test-dir cmake-build-diligent -R Diligent --output-on-failure

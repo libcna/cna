@@ -1645,6 +1645,91 @@ void main(in VSInput vsIn, out PSInput psIn)
         bufferedSprites_ = 0;
     }
 
+    // ---- DiligentOcclusionQueryBackend ----
+
+    DiligentOcclusionQueryBackend::DiligentOcclusionQueryBackend(DiligentGraphicsBackend* owner)
+        : owner_(owner)
+    {
+        const auto& features = owner_->device_->GetDeviceInfo().Features;
+        Dg::QueryDesc desc;
+        if (features.OcclusionQueries == Dg::DEVICE_FEATURE_STATE_ENABLED)
+        {
+            desc.Type = Dg::QUERY_TYPE_OCCLUSION;
+        }
+        else if (features.BinaryOcclusionQueries == Dg::DEVICE_FEATURE_STATE_ENABLED)
+        {
+            desc.Type = Dg::QUERY_TYPE_BINARY_OCCLUSION;
+            binaryOnly_ = true;
+        }
+        else
+        {
+            throw std::runtime_error(
+                "CNA Diligent: this device supports neither exact nor binary occlusion queries");
+        }
+
+        owner_->device_->CreateQuery(desc, &query_);
+        if (!query_)
+            throw std::runtime_error("CNA Diligent: failed to create an occlusion query");
+    }
+
+    void DiligentOcclusionQueryBackend::Begin()
+    {
+        owner_->context_->BeginQuery(query_);
+        ended_ = false;
+    }
+
+    void DiligentOcclusionQueryBackend::End()
+    {
+        owner_->context_->EndQuery(query_);
+        // Diligent's immediate context batches commands until some internal limit, Present(), or an
+        // explicit Flush() -- without one of those, a query polled right after End() (rather than
+        // after a frame boundary) would never leave VK_NOT_READY. Every draw call here already
+        // rebinds the pipeline state and shader resources unconditionally (Flush()'s own
+        // documented requirement), so flushing mid-frame is safe.
+        owner_->context_->Flush();
+        ended_ = true;
+    }
+
+    bool DiligentOcclusionQueryBackend::IsComplete() const
+    {
+        // GetData() is only legal once the query has reached Diligent's own "Ended" state -- never
+        // before the first End(), and no longer true after a GetData() call already auto-invalidated
+        // it (see PixelCount()). Calling it outside that window is a DEV_CHECK abort, not a "not
+        // ready yet" result, so ended_ has to gate the call rather than just its return value.
+        if (!ended_)
+            return false;
+        return query_->GetData(nullptr, 0, false);
+    }
+
+    int DiligentOcclusionQueryBackend::PixelCount() const
+    {
+        if (!ended_)
+            return pixelCount_;
+
+        bool ready = false;
+        if (binaryOnly_)
+        {
+            Dg::QueryDataBinaryOcclusion data;
+            ready = query_->GetData(&data, sizeof(data), true);
+            if (ready)
+                pixelCount_ = data.AnySamplePassed ? 1 : 0;
+        }
+        else
+        {
+            Dg::QueryDataOcclusion data;
+            ready = query_->GetData(&data, sizeof(data), true);
+            if (ready)
+                pixelCount_ = static_cast<int>(
+                    std::min<Dg::Uint64>(data.NumSamples, static_cast<Dg::Uint64>(INT32_MAX)));
+        }
+        // AutoInvalidate=true only actually invalidates the query once its data was retrieved, so
+        // ended_ must follow that, not the Begin()/End() pair alone -- a further call here before
+        // the next Begin() would otherwise hit the same DEV_CHECK IsComplete() guards against.
+        if (ready)
+            ended_ = false;
+        return pixelCount_;
+    }
+
     // ---- DiligentGraphicsBackend: pipeline key ----
 
     bool DiligentGraphicsBackend::PipelineKey::operator==(const PipelineKey& other) const noexcept
@@ -2503,12 +2588,18 @@ void main(in VSInput vsIn, out PSInput psIn)
                 return true;
             case CNA::GraphicsCapability::MultipleRenderTargets:
                 return true;
-            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
             case CNA::GraphicsCapability::OcclusionQuery:
+                return true;
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
             case CNA::GraphicsCapability::CustomEffects:
                 return false;
         }
         return false;
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> DiligentGraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<DiligentOcclusionQueryBackend>(this);
     }
 
     void DiligentGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

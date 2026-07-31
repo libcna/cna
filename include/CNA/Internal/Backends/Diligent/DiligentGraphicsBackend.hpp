@@ -14,6 +14,7 @@
 #include "Common/interface/RefCntAutoPtr.hpp"
 #include "Graphics/GraphicsEngine/interface/DeviceContext.h"
 #include "Graphics/GraphicsEngine/interface/EngineFactory.h"
+#include "Graphics/GraphicsEngine/interface/Query.h"
 #include "Graphics/GraphicsEngine/interface/RenderDevice.h"
 #include "Graphics/GraphicsEngine/interface/SwapChain.h"
 
@@ -731,6 +732,57 @@ namespace CNA::Internal::Backends::Diligent
     };
 
     /**
+     * @brief Hardware occlusion query backed by Diligent's `IQuery`.
+     *
+     * Unlike Vulkan's CNA backend (which defers all draws to a later command-buffer recording pass
+     * and therefore has to track which deferred draws fall between `Begin()`/`End()`), this backend
+     * issues draws immediately against a single `IDeviceContext`, so `Begin()`/`End()` can wrap the
+     * real `BeginQuery`/`EndQuery` calls directly.
+     *
+     * `QUERY_TYPE_OCCLUSION` (an exact visible-sample count) needs the device feature
+     * `occlusionQueryPrecise`, which not every Vulkan implementation exposes — Mesa's `lavapipe`
+     * software rasterizer, used for this backend's own GPU tests, is one that does not. When the
+     * exact query type is unavailable this falls back to `QUERY_TYPE_BINARY_OCCLUSION` and reports
+     * only 0 (nothing visible) or 1 (something visible), matching the CNA convention already
+     * documented on `OcclusionQuery::getPixelCountProperty()` for GLES3's identical limitation.
+     */
+    class DiligentOcclusionQueryBackend final : public IOcclusionQueryBackend
+    {
+    public:
+        /**
+         * @brief Creates a hardware occlusion query owned by @p owner.
+         * @param owner Backend that owns the render device and context; must outlive this query.
+         * @throws std::runtime_error If neither exact nor binary occlusion queries are supported.
+         */
+        explicit DiligentOcclusionQueryBackend(DiligentGraphicsBackend* owner);
+
+        /** @brief Marks the start of the query; subsequent draws are counted until `End()`. */
+        void Begin() override;
+        /** @brief Marks the end of the query. */
+        void End() override;
+        /** @brief Returns whether the GPU has finished the query and a pixel count is available. */
+        [[nodiscard]] bool IsComplete() const override;
+        /**
+         * @brief Returns the last retrieved visible-sample count, or 0 before one is available.
+         *
+         * On a device without `occlusionQueryPrecise` this is 0 or 1 rather than an exact count
+         * (see the class comment).
+         */
+        [[nodiscard]] int PixelCount() const override;
+
+    private:
+        DiligentGraphicsBackend* owner_ = nullptr;
+        Dg::RefCntAutoPtr<Dg::IQuery> query_;
+        bool binaryOnly_ = false;
+        // Diligent's IQuery asserts (DEV_CHECK) if GetData() is called outside its own Ended
+        // state -- before the first End(), or again after a GetData() call already auto-invalidated
+        // it back to Inactive. This mirrors that state machine so GetData() is only ever reached
+        // when it is actually legal to call.
+        mutable bool ended_ = false;
+        mutable int pixelCount_ = 0;
+    };
+
+    /**
      * @brief CNA graphics backend implemented on Diligent Engine.
      *
      * Unlike CNA's other backends this one does not target a single native API: DiligentCore is a
@@ -741,10 +793,9 @@ namespace CNA::Internal::Backends::Diligent
      *
      * The implemented surface is the 2D/3D baseline described in `plan_diligent.md`: swap chain
      * setup, the clear/present family, `Texture2D`, vertex/index buffers, `SpriteBatch`, the
-     * untextured/textured/lit 3D draw paths, back-buffer readback, and the blend/depth-stencil/
-     * rasterizer/sampler state family. Everything outside it — render targets, cube and volume
-     * textures, occlusion queries, custom `ShaderEffect` programs, instancing, and the
-     * `DualTexture`/`EnvironmentMap`/`Skinned`/`Pbr` effect variants — reports itself as
+     * untextured/textured/lit 3D draw paths, back-buffer readback, occlusion queries, and the
+     * blend/depth-stencil/rasterizer/sampler state family. Everything outside it — MSAA, custom
+     * `ShaderEffect` programs, instancing, and the `Pbr` effect variant — reports itself as
      * unsupported rather than silently rendering something else.
      */
     class DiligentGraphicsBackend final : public IGraphicsBackend
@@ -757,6 +808,7 @@ namespace CNA::Internal::Backends::Diligent
         friend class DiligentVertexBufferBackend;
         friend class DiligentIndexBufferBackend;
         friend class DiligentSpriteBatchBackend;
+        friend class DiligentOcclusionQueryBackend;
 
     public:
         /**
@@ -947,6 +999,12 @@ namespace CNA::Internal::Backends::Diligent
          * @return True when supported.
          */
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        /**
+         * @brief Creates a hardware occlusion query.
+         * @return A real `DiligentOcclusionQueryBackend` backed by Diligent's `IQuery`.
+         */
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
         /** @brief Returns the device's real maximum 2D texture dimension. */
         [[nodiscard]] int GetMaxTextureDimension() const override { return maxTextureDimension_; }
