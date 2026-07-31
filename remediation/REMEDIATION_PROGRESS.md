@@ -2502,10 +2502,11 @@ existing task.
 | REMED-GFX-177 | D3D12's four descriptor heaps were monotonic bump cursors with no free list and no growth, and no sampleable-resource class had a destructor, so a slot was consumed for the lifetime of the PROCESS rather than of the resource. The trace names the exact failure: the 65th CBV/SRV/UAV request, made while only 30 resources were alive — 34 of the 64 occupied slots belonged to already-destroyed resources. The SAMPLER heap failed the same way (GFX-170 died at check 26). Fixed by two allocators that reclaim (fence-stamped free lists) and grow bounded — RTV/DSV by appending a block so issued handles never move, CBV/SRV/UAV and SAMPLER by a non-shader-visible staging heap mirrored into the shader-visible one, addressed by stable index. Starting capacities deliberately unchanged. | LOW | P3 | REMED-GFX-175 cross-backend controls | **DONE 2026-07-30 — NEW 29-CHECK PUBLIC FIXTURE 2/15 -> 29/29 ON D3D12, NEW 55-CHECK NATIVE ALLOCATOR FIXTURE 55/55, AND GFX-175's OWN FIXTURE 64-CHECKS-THEN-ABORT -> 87/87. THRESHOLDS 1/2/31/32/63/64/65/66/96/128/256 ALL GREEN; 5435 ALLOCATIONS OVER THE RUN OF WHICH 5177 RECYCLED, PEAK LIVE 258, CAPACITY 512 AFTER 3 DOUBLINGS, 2 HEAP OBJECTS, NO WAIT/IDLE/EXTRA SUBMIT/EXTRA FRAME ADDED. SIX CROSS-BACKEND CONTROLS GREEN, BGFX 28/29 = REMED-GFX-179. ONE FALSE POSITIVE FOUND AND CORRECTED (d3d12_smoke_test CHECK C ASSERTED THE BUMP ALLOCATOR AND FREED NOTHING). SPAWNED GFX-178/179.** |
 | REMED-GFX-178 | D3D12: `TextureFilter::MinPointMagLinearMipLinear` (ordinal 7) magnifies with POINT. Measured by REMED-GFX-170's ordinal fixture, leg C7: `manufactured colours=0` where its sibling `MinPointMagLinearMipPoint` (ordinal 8) correctly reports 124 on the same geometry, so the two ordinals that share a LINEAR magnification component disagree. Previously UNREACHABLE — pre-REMED-GFX-177 that fixture aborted at check 26 on `SAMPLER descriptor heap exhausted`, so leg C7 had never run on D3D12. Same family as GFX-170/GFX-175 (an ordinal losing one of its three components) but a distinct backend expression, so it is not absorbed. | LOW | P3 | REMED-GFX-177 regression gates | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
 | REMED-GFX-179 | Bgfx: `BgfxGraphicsBackend`'s render-target view-id allocator draws from `[1, kFirstSegmentViewId)` and `kFirstSegmentViewId` is **64**, so **63 concurrently live render targets is a hard ceiling** — REMED-GFX-177's public fixture, leg F, needs 66 and throws `Bgfx: exhausted view ids`. Same SHAPE as the D3D12 defect but not the same mechanism and not the same fix: the free list here already works (leg E's 256 sequential create/destroy cycles pass), what is missing is headroom — bgfx's own `BGFX_CONFIG_MAX_VIEWS` default is 256 and CNA reserves `[64, 255)` for REMED-GFX-065's per-frame viewport-segment views, so the partition, not bgfx, sets the limit. Deliberately NOT fixed under GFX-177, whose boundary forbids changing another backend because its binding model differs. | LOW | P3 | REMED-GFX-177 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
-| REMED-GFX-180 | SDL_GPU: `examples/sdlgpu_renderstate_test.cpp` (`SdlGpu_RenderState`) aborts before its FIRST check with `System::InvalidOperationException: Cannot present while render targets are bound`. Deterministic — 3/3 standalone runs, zero `[PASS]`/`[FAIL]` lines emitted, so nothing in its own try/catch around `RunAll` is ever reached. NOT caused by REMED-GFX-176: it reproduces identically with the pre-GFX-176 backend rebuilt from `249e9f9f`, that session's starting HEAD. The reported exception is a SECONDARY one raised from the present path because a render target was still bound when the frame ended; the primary failure that unwound out of `Draw` without unbinding is masked by it and was deliberately not diagnosed under GFX-176's boundary. | LOW | P3 | REMED-GFX-176 regression gates | OPEN (isolated 2026-07-31 during REMED-GFX-176) |
+| REMED-GFX-180 | SDL_GPU: `examples/sdlgpu_renderstate_test.cpp` (`SdlGpu_RenderState`) aborts before its FIRST check with `System::InvalidOperationException: Cannot present while render targets are bound`. Deterministic — 3/3 standalone runs, zero `[PASS]`/`[FAIL]` lines emitted, so nothing in its own try/catch around `RunAll` is ever reached. NOT caused by REMED-GFX-176: it reproduces identically with the pre-GFX-176 backend rebuilt from `249e9f9f`, that session's starting HEAD. The reported exception is a SECONDARY one raised from the present path because a render target was still bound when the frame ended; the primary failure that unwound out of `Draw` without unbinding is masked by it and was deliberately not diagnosed under GFX-176's boundary. | LOW | P3 | REMED-GFX-176 regression gates | **DONE 2026-07-31 — A FIXTURE DEFECT IN TWO STAGES; NO PRODUCTION CHANGED. THE TICKET IS RIGHT THAT IT ABORTS AND WRONG THAT ZERO CHECKS RAN — unbuffered rerun shows 11 PASS + 5 FAIL had already executed into a stdout buffer the abort discarded. PRIMARY EXCEPTION: `ArgumentOutOfRangeException: The requested primitive range exceeds the bound vertex buffer. (Parameter 'primitiveCount') Actual value was 2.` — `RunFillModeChecks` handed a THREE-vertex triangle buffer to a helper hardcoding TWO primitives. The rejection unwound past its own `SetRenderTarget(nullptr)`, so `Game::EndDraw` -> `Present` met a bound target and refused; uncaught -> SIGABRT. CONTRACT A (REJECT, never auto-unbind) read verbatim from FNA `GraphicsDevice.cs:619-631` + `GraphicsDeviceManager.cs:574-581`. SDL_GPU's own `Present` is never reached. A/B: with only the GFX-113 guard short-circuited the UNMODIFIED fixture is 16/16 — Check E had read past its buffer since 827cd036 and passed anyway. RESULT 0 visible checks + SIGABRT -> 18/18; SDL_GPU shard 102/102, the first fully green one. NEW 22-leg / 82-check process-isolated `present_lifecycle_contract_test` on SEVEN backends (22/22 each; 82/82/82/82/77/73/45). Leg C2 REQUIRES SIGABRT. Validation proven loaded, zero VUIDs; ASan+UBSan clean. 14 pass segments per frame, unchanged. ONE NEW FINDING: REMED-GFX-184. |
 | REMED-GFX-181 | Bgfx: `BgfxGraphicsBackend`'s two `EnvironmentMapEffect` submit sites call the FOUR-argument `bgfx::setTexture(1, envMapSampler_, cubeHandle)` and omit `_flags`, so bgfx falls back to the cube texture's own creation flags (`BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP`, linear) and `GraphicsDevice.SamplerStates[1]` never reaches the reflection cube. The base slot one function away does pass `samplerFlags_[0]`. Measured on REMED-GFX-173's fixture at **BGFX 62/104**, byte-identically the failure SET SDL_GPU had before that task: every Point-mode check reports the whole image off-palette and A4 reports differing=0. | LOW | P3 | REMED-GFX-173 cross-backend controls | **DONE 2026-07-31 — THE TICKET IS RIGHT AND THE CORRECTION IS THE TWO LINES IT IMPLIES; WHAT HAD TO BE PROVEN FIRST IS WHAT AN OMITTED `_flags` MEANS. UINT32_MAX IS A SENTINEL, NOT A FLAG WORD: `EncoderImpl::setTexture` STORES `BGFX_SAMPLER_INTERNAL_DEFAULT` AND EVERY RENDERER RESOLVES `0 == (INTERNAL_DEFAULT & _flags) ? _flags : m_flags`, SO AN EXPLICIT WORD **REPLACES** THE CREATION STATE AND NEVER COMBINES WITH IT. `ApplySamplerState` ALREADY HELD GFX-170'S COMPLETE NINE-ORDINAL TRANSLATION AND `applySamplerStatesToBackend` ALREADY DROVE IT FOR EVERY SLOT — `samplerFlags_[1]` WAS CORRECT AND WAS DISCARDED ONE LINE BEFORE THE SUBMIT. NO NEW STATE, NO NEW CAPTURE, NO SECOND TABLE. SUBMIT-SITE COUNT VERIFIED NOT ASSUMED: EXACTLY TWO, AND `DrawInstancedPrimitivesEx` HAS NO ENV-MAP BRANCH AT ALL. BGFX SUBMITS IMMEDIATELY AND **BGFX ITSELF** SNAPSHOTS THE BIND STATE AT `submit()`, SO READING `samplerFlags_[1]` THERE **IS** THE PER-DRAW CAPTURE — NO CNA-SIDE COMMAND STRUCT EXISTS, WHICH IS WHAT SEPARATES THIS FROM GFX-173'S SHAPE; LEG F1 PROVES IT. NEW `CNA_BGFX_ENVMAP_TRACE` OVER 86 BINDS: BEFORE, `effective1` IS `DEFAULT->creation` ON ALL 86 (TWO DISTINCT VALUES) AGAINST TWELVE DISTINCT `captured1`; AFTER, EXPLICIT ON ALL 86, TWELVE DISTINCT, AND `captured1 == effective1` WITH ZERO MISMATCHES. 62/104 -> 104/104. THE FAILING SET WAS EXACTLY THE POINT-MAGNIFYING ORDINALS {1,4,5,6} BECAUSE THE FALLBACK IS LINEAR AND COINCIDES WITH {0,3,7,8}. LEG C1 PASSED **BEFORE** THE FIX, SO THIS WAS NEVER SLOT-0 INHERITANCE — THAT IS WHAT SEPARATES IT FROM WEBGPU'S GFX-172. CARDINALITY BYTE-IDENTICAL PRE/POST (86 BINDS, 4 VIEWS, 76/10 PATHS, 86 EXPLICIT slot-0); ONLY FLAG-BEARING SLOT-1 CALLS MOVE, 0 -> 86. 15 PRE-EXISTING BGFX ENV-MAP/CUBE FIXTURES ALL PASSED UNFIXED AND **NOT ONE EVER SETS `SamplerStates[1]`**; ELEVEN ALSO USE A 1x1 SOLID CUBE. NONE ASSERTS ANYTHING FALSE, SO NONE WAS CHANGED. UBSAN AND ASAN 104/104 WITH ZERO ERRORS; THE 103852 B / 453-ALLOCATION LEAK IS BYTE-IDENTICAL PRE/POST WITH ZERO CNA FRAMES. BGFX SHARD 162/168 BEFORE **AND** AFTER, THE SAME SIX FAILURES PROVEN PRE-EXISTING BY A NARROW RESTORE TO 38c4e09a. CONTROLS: SDL_GPU 104/104, VULKAN 104/104, EASYGL 104/104, HEADLESS 8/8, WEBGPU 74/104 (GFX-172 UNCHANGED), SOFTWARE 66/100 (GFX-182 UNCHANGED). ACTIVE RENDERER OPENGL 2.1; THE BGFX VULKAN ROUTE IS REPORTED **UNTESTED** BECAUSE XVFB HAS NO DRI3. ONLY BGFX PRODUCTION CHANGED. NO NEW FINDINGS.** |
 | REMED-GFX-182 | Software: `SoftwareGraphicsBackend::SampleCubeMap` takes no sampler state at all — it ends in a single clamped `static_cast<int>` texel fetch — so an `EnvironmentMapEffect` reflection cube is ALWAYS point-sampled whatever `GraphicsDevice.SamplerStates[1]` holds. This is the shape REMED-GFX-150 replaced on the 2D path (`SampleTexture`, with explicit filter selection and address transform) and did not reach on the cube path. Measured on REMED-GFX-173's fixture at **SOFTWARE 66/100** (leg L skipped, no RenderTargetCube): every Linear-mode check reports 0 interpolated pixels and 16 distinct colours. NOT slot-0 inheritance — C1 passes with differing=0, which is what separates it from WebGPU's REMED-GFX-172. | LOW | P3 | REMED-GFX-173 cross-backend controls | **DONE 2026-07-31 — THE TICKET IS RIGHT AND NAMES THE MECHANISM EXACTLY; WHAT IT COULD NOT SAY IS THAT THE CAPTURE WAS ALREADY THERE AND ONLY THE CONSUMPTION WAS MISSING. SOFTWARE RASTERIZES IMMEDIATELY AND BOTH DRAW ENTRY POINTS ALREADY READ `GetSamplerState(0)`/`GetSamplerState(1)` AT THE PUBLIC CALL AND SNAPSHOT THEM INTO `ShadedContext`, SO SLOT 1 WAS SITTING ONE LINE AWAY FROM `SampleCubeMap` AS AN IMMUTABLE PER-DRAW COPY — THE OPPOSITE OF GFX-173'S SDL_GPU SHAPE WHERE A WHOLE COMMAND FIELD HAD TO BE ADDED. FIX = A `CubeFaceSurface` VIEW OF THE SELECTED FACE THROUGH GFX-124'S COLOUR-SURFACE CAPABILITY, SO THE CUBE GOES THROUGH `SampleTexture` ITSELF: NO FILTER CODE, NO SECOND ORDINAL TABLE, NO `bool linear`, AND MIN/MAG, MIP AND ADDRESS ARE IDENTICAL FOR A CUBE AND A TEXTURE2D BY CONSTRUCTION. STAGES 1-2 UNCHANGED: FACE SELECTION AND THE PER-FACE UV PROJECTION WERE FACTORED OUT VERBATIM SO THE NEW PER-TRIANGLE LOD USES THE SAME CONVENTION, NOT A SECOND COPY. THREE SUPPORTING PIECES WERE EACH FORCED BY THE FIX: PER-FACE SUPPLIED-LEVEL TRACKING (GFX-135 ALLOCATES THE WHOLE CHAIN BUT ZEROED, SO GFX-175'S `storedLevels_` SEMANTICS HAD TO BE APPLIED PER FACE OR A DECLARED-BUT-UNWRITTEN CHAIN WOULD MINIFY INTO BLACK NOBODY UPLOADED); `TriangleCubeTexelRate` THROUGH A SHARED `ScreenSpaceTexelRate` (BYTE-IDENTICAL FOR 2D, ONCE PER TRIANGLE, NO ALLOCATION); AND `SampleLevel`'S BILINEAR REWRITTEN AS NESTED LERPS `a+(b-a)*t` BECAUSE THE WEIGHTED SUM `a*(1-t)+b*t` LANDS ONE ULP LOW WHEN THE TAPS AGREE AND THE TRUNCATING STORE THEN WRITES A BYTE LOWER — MEASURED, NOT GUESSED: ORDINALS 3 AND 6 GAVE `out=(26,48,167)` ON 8 OF 64 PIXELS OF A FLAT MIP LEVEL WHERE EVERY OTHER ORDINAL GAVE `(26,49,167)`. CUBE ADDRESSING STAYS FACE-LOCAL CLAMP, MATCHING THE 0-DIFFERING CLAMP/WRAP/MIRROR GFX-173 AND GFX-181 MEASURED ON EVERY GPU BACKEND; NO CONVENTION IS INVENTED AND THE CAPTURED MODE IS CARRIED IN THE TRACE. NEW `CNA_SOFTWARE_CUBE_TRACE`: distinctCaptured=12 AND distinctEffective **1 -> 8**, texelFetches 72544 -> 160072 OVER AN UNCHANGED 72544 CUBE SAMPLES; CARDINALITY IS THE CANONICAL MINIMUM — 1 FETCH FOR POINT+MIP-POINT, 4 FOR LINEAR, 2 FOR POINT ACROSS EXACTLY TWO ADJACENT LEVELS, 8 FOR LINEAR+MIP-LINEAR — WITH ZERO PER-SAMPLE ALLOCATION AND NO EXTRA DRAW/PASS/FRAME/READBACK. GFX-173'S FIXTURE **66/100 -> 100/100**; NEW `envmap_cube_sampler_state_test` **21/25 -> 25/25** ON SOFTWARE, THE FOUR MOVED CHECKS BEING EXACTLY THOSE NEEDING SLOT 1 TO REACH THE CUBE. 9 PRE-EXISTING SOFTWARE ENV-MAP FIXTURES ALL PASSED UNFIXED AND **NOT ONE EVER SETS `SamplerStates[1]` DIFFERENTLY FROM `SamplerStates[0]`**; NONE ASSERTS ANYTHING FALSE, SO NONE WAS CHANGED. ASAN AND UBSAN CLEAN ON BOTH FIXTURES AND ON GFX-150/174/175'S OWN, RUNTIMES PROVEN LINKED. SOFTWARE SHARD 49/50 -> 51/51, PROVEN BY A NARROW RESTORE. CONTROLS: SDL_GPU 104/104 + 24/24, VULKAN 104/104 + 24/24, BGFX 104/104, EASYGL 104/104, HEADLESS 8/8, WEBGPU 74/104 = THE UNCHANGED GFX-172 BOUNDARY. RENDERTARGETCUBE IS AN EXPLICIT SOFTWARE V1 BOUNDARY — THE OBJECT CONSTRUCTS BUT BINDING A FACE THROWS CLEANLY, SO NO CUBE TARGET CAN EVER HOLD CONTENT TO SAMPLE. ONLY SOFTWARE PRODUCTION CHANGED. NO NEW FINDINGS.** |
 | REMED-GFX-183 | WebGPU: `IndexedDrawDeferredTest.WebGpuTriangleStripAlternatesWindingBeforeCulling` fails — a triangle strip drawn under `CullCounterClockwise` and one under `CullClockwise` return INVERTED interior samples, so a strip's odd-indexed triangles are kept and culled the opposite way round from the D3D/XNA convention. Found while running REMED-GFX-172's regression gates and A/B-proven pre-existing at `8ffed33a`. A gtest unit outside the `ctest -L WebGPU` shard, which is why REMED-GFX-160's winding work did not surface it. | GRAPHICS | OPEN |
+| REMED-GFX-184 | Bgfx: creating a `RenderTarget2D` with BOTH a multisample count and a real `DepthFormat` aborts the process by SIGTRAP inside bgfx's own framebuffer validation — `bgfx.cpp(5116): ASSERT isOk() -> ErrorAssert: 0x02006762 'Frame buffer depth MSAA texture cannot be resolved. It must be created with either BGFX_TEXTURE_RT_WRITE_ONLY or BGFX_TEXTURE_MSAA_SAMPLE flag.'` — not a catchable exception. `BgfxRenderTargetBackend`'s constructor (`BgfxGraphicsBackend.cpp:896-898`) creates the MSAA depth attachment with `msaaFlag` alone; the depth attachment is never sampled, so `BGFX_TEXTURE_RT_WRITE_ONLY` is what it lacks. `RenderTarget2D(dev, w, h, false, Color, Depth24, 4, ...)` is legal XNA. No existing fixture reached it: REMED-GFX-168's leg D1 is the only other MSAA target and passes `DepthFormat::None`, so MSAA alone is safe — it is MSAA COMBINED with a depth format that aborts. | MEDIUM | P2 | REMED-GFX-180 cross-backend controls | OPEN (isolated 2026-07-31 during REMED-GFX-180) |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -22773,3 +22774,292 @@ way round from the D3D/XNA convention. Found while running this task's regressio
 commit before GFX-172 began. It is a gtest unit outside the `ctest -L WebGPU` shard, which is why the
 GFX-160 winding work did not surface it. Recorded against a new ID, not investigated: this task is
 scoped to sampler independence and that is a rasterizer-state question.
+
+---
+
+## REMED-GFX-180 — the render-target -> Present lifecycle, and what `SdlGpu_RenderState` was really doing (2026-07-31)
+
+### The ticket is right that it aborts, and wrong that nothing ran
+
+The recorded symptom was `System::InvalidOperationException: Cannot present while render targets are
+bound`, "deterministic — 3/3 standalone runs, zero `[PASS]`/`[FAIL]` lines emitted, so nothing in its
+own try/catch around `RunAll` is ever reached."
+
+The abort is real. The inference is not. `Check()` used `std::printf` without a flush, stdout is
+**block-buffered when it is a pipe**, and `std::terminate` discards that buffer. Re-run under
+`stdbuf -o0`, the same binary prints **eleven `[PASS]` and five `[FAIL]` lines** before it dies. The
+try/catch around `RunAll` was reached, executed, and reported — its output was thrown away by the
+very failure it was describing.
+
+That is why every print in both fixtures is now flushed. A test whose diagnostics cannot survive its
+own failure mode is not diagnosable.
+
+### The exact pre-fix outcome
+
+| | |
+|---|---|
+| exit | **134 — SIGABRT, core dumped** |
+| thread | main; no other thread exists |
+| first visible line | `[FAIL] threw during RunAll: The requested primitive range exceeds the bound vertex buffer. (Parameter 'primitiveCount') Actual value was 2.` |
+| checks actually reached | **11 PASS, 5 FAIL** (A, B, C×2, G×2, H, D×3 pass; E×2 and F×2 fail) |
+| last line | `terminate called after throwing an instance of 'System::InvalidOperationException'` / `what(): Cannot present while render targets are bound` |
+| the fixture's first intended check | `Check(true, "all RenderState checks render with no exception")` — it *did* run, as its `Check(false, "threw during RunAll: …")` branch |
+
+### The chain, in two stages
+
+**Stage 1 — the primary exception the ticket said was masked.** `fillTriangleGreenVb_` is created
+with **three** vertices (`SetData(fillTriangleVerts, 0, 3)`), and `RunFillModeChecks` drew it through
+a helper called `DrawFullQuad` whose body hardcoded `DrawPrimitives(PrimitiveType::TriangleList, 0,
+2)` — **six** vertices. REMED-GFX-113's range guard in `GraphicsDevice::DrawPrimitives`
+(`GraphicsDevice.cpp:686-699`) rejects exactly that: `vertexStart + consumed` must fit the bound
+buffer.
+
+The intent was never ambiguous. The buffer's own comment says *"Centroid = (0,0) — render target
+centre"*, and Check E needs a **triangle** specifically: a quad's centre lies **on** the shared
+diagonal edge, so WireFrame would fill it and the check would be meaningless. One primitive is what
+Check E was always asking for.
+
+**Stage 2 — the reported exception.** The rejection unwound past `RunFillModeChecks`' own
+`SetRenderTarget(nullptr)`, so `Draw` returned with `rtFillSolid_` still bound. Then:
+
+```
+Game::Tick  ->  Game::EndDraw  ->  GraphicsDeviceManager::EndDraw  ->  GraphicsDevice::Present
+                                                                        └─ renderTargetBound_ == true  ->  throw
+```
+
+The fixture never calls `Present` itself. The call is **framework-driven** — not explicit, not
+fixture cleanup, not `GraphicsDevice` teardown, not screenshot/readback infrastructure. Nothing
+caught the throw, it left `main`, and `std::terminate` raised SIGABRT.
+
+### Public state vs backend state at the abort
+
+| | |
+|---|---|
+| public `renderTargetBound_` | **true** |
+| public `GetRenderTargets()` | **one** entry — `rtFillSolid_`, the target `RunFillModeChecks` bound |
+| SDL_GPU logical destination | that target; one open `PassSegment` carrying the queued `Clear(Magenta)` and zero draws |
+| native pass / command buffer / swapchain | **untouched by the refusal** |
+
+The last row is the important one. `SdlGpuGraphicsBackend::Present()` is nothing but
+`EnsureFrameRendered()`, and **it is never reached** — the shared public guard throws first. No
+native pass is left open, no command buffer is left unsubmitted, no swapchain texture is acquired and
+abandoned. There is no stale backend state to find, no pending deferred bind cycle, and no
+disposed-target question: the target wrapper is alive throughout. **SDL_GPU is not implicated at
+all** — any backend aborts identically on this sequence. The fixture is merely SDL_GPU-registered.
+
+### The authoritative contract: A — reject, never auto-unbind
+
+Read from FNA, not assumed:
+
+* `FNA/src/Graphics/GraphicsDevice.cs:619-631` and `:633-641` — **both** `Present` overloads throw
+  `InvalidOperationException("Cannot present while render targets are bound")` when
+  `renderTargetCount > 0`.
+* `FNA/src/Game.cs` `EndDraw()` -> `FNA/src/GraphicsDeviceManager.cs:574-581` -> `graphicsDevice.Present()`.
+  **No unbind anywhere in that path.**
+
+CNA reproduces both halves verbatim, down to the message string. So the framework does **not** return
+to the backbuffer on the application's behalf, and `Game.EndDraw` guarantees nothing of the sort:
+ending a frame with a binding is an application error, and it is reported. Option B and option C are
+both wrong for this codebase.
+
+Nothing here was weakened. No target is auto-unbound at Present, no guard was removed, and the
+`Present` call was not deleted from the fixture — the fixture never had one.
+
+### Production or fixture: **fixture**, and it is A/B-proven
+
+With **only** the REMED-GFX-113 range guard short-circuited and nothing else changed, the
+**unmodified** fixture runs **16/16 and exits 0** — precisely its pre-guard behaviour. So:
+
+* the fixture was written at `827cd036` (2026-07-15) already asking for six vertices out of three;
+* the guard arrived at `0cdd7ee5` (2026-07-26);
+* between those dates **Check E passed while reading past the end of its own vertex buffer**, and
+  GFX-113 turned that latent out-of-range request into the deterministic public rejection this task
+  traced.
+
+The fixture moved, not the guard. Both guards — the range check and the Present refusal — are correct
+and both are load-bearing, so **no production file was changed by this task.**
+
+### The repair
+
+| | |
+|---|---|
+| **0 visible checks + SIGABRT** | **-> 18/18 PASS, exit 0** |
+
+Four changes, all in `examples/sdlgpu_renderstate_test.cpp`:
+
+1. the primitive count is a **parameter** of `DrawGeometry`, named at every call site through
+   `DrawFullQuad`(2) and `DrawTriangle`(1), so a helper's name and its geometry cannot drift apart
+   again;
+2. `Check()` flushes stdout;
+3. `RunAllGuarded` reports a thrown group as a **FAIL carrying its message** and always returns to
+   the backbuffer, so a future failure stays a legible check instead of becoming an abort. Frames
+   2..120 ran outside any handler at all, and the closing `"120 frames …"` check was an
+   **unconditional `Check(true)`** — it is now a real assertion naming the frame that threw;
+4. Check E's WireFrame half is made positive (below).
+
+**All sixteen original checks are retained unchanged.** 16 -> 18.
+
+### The blind spot inside the subject itself
+
+Check E's WireFrame half asserted only an **absence** — the triangle's centre must stay background —
+and an absence is satisfied just as well by a draw that never happened. Its Solid half could not
+cover that, because it runs under a **different** `RasterizerState`. So a silently dropped WireFrame
+draw would have passed.
+
+Two positive checks close it, counting lit pixels over the whole target rather than depending on
+which exact pixels a driver's line rasterizer picks: WireFrame must light **something**, and far less
+than Solid. Measured **wire = 64 edge pixels, solid = 240** — a 3.75x margin against a 2x threshold.
+
+### The new contract fixture
+
+`examples/present_lifecycle_contract_test.cpp` — **22 process-isolated legs, 82 checks**, registered
+on SDL_GPU, Vulkan, EasyGL, WebGPU, Bgfx, Software and Headless. Run with no arguments it is a
+**supervisor** that re-execs itself once per leg and classifies each child as PASS / FAIL / ABORT /
+CRASH-with-the-signal-named / TIMEOUT / SKIP / exec-failure.
+
+Group A covers the fourteen valid lifecycles that must present cleanly — empty bind cycle, Clear
+only, draw, A->B->backbuffer, cube face, MRT, MSAA, mid-cycle Clear, backbuffer readback on either
+side of a Present, `Reset()`, first frame vs later frame, 120 repeated cycles. Group B is the
+**negative Present contract**: the refusal must leave the binding, the cycle's queued work and the
+device exactly as they were, the very next Present after an unbind must succeed, and a further full
+frame after that must still be exact — a guard that threw the right exception but poisoned the device
+fails leg B1.
+
+Group C is GFX-180 itself:
+
+* **C1** asserts each link separately — the range rejection naming `primitiveCount` and the range it
+  exceeded; the target still publicly bound afterwards, **identity-checked** through
+  `GetRenderTargets()[0]` rather than merely counted; the refusal carrying FNA's exact message;
+  recovery by unbinding **alone**; the queued `Clear` surviving both the failed draw and the refused
+  Present; and the same buffer **accepted** as one primitive.
+* **C2** runs the identical sequence with nothing catching it and the supervisor **requires SIGABRT**.
+  The terminate classification is measured, not inferred from message text.
+* **C3** is the recovery pattern the repaired fixture now uses, asserted as a contract.
+* **C4** hands a live, unbound target to device teardown — and **declares that matrix item 18 as
+  literally written is unreachable**: a frame cannot end with a binding, because `EndDraw` presents
+  and `Present` refuses. That is what C2 measures, so the gap is named rather than left untested.
+
+### Cardinality
+
+Measured with `CNA_SDLGPU_TRACE_CLEAR_ORDER` over the repaired fixture's full 120 frames:
+
+| | |
+|---|---|
+| pass segments | **1680 over 120 frames = exactly 14 per frame** |
+| frame 1 | also **14** — the two whole-target reads Check E gained cost no pass |
+| per frame | 11 render-target segments (one per bind cycle, for 11 targets) + 3 backbuffer |
+| segment ids | linear to 2879 — no unbounded growth over 120 frames |
+| Presents | one per frame, all framework-driven; the fixture calls none |
+
+**No Present, frame, bind cycle, wait, retry, sleep or dummy target switch was added.** The two extra
+`GetData` reads occur on frame 1 only and after the frame's first `GetData` has already flushed, so
+they add no pass, submit or frame. No queued draw or Clear is lost, and no target resolve/store
+changed — nothing in the resolve path was touched.
+
+### Validation
+
+`VK_LAYER_KHRONOS_validation` **proven inserted** beneath SDL_GPU (`Insert instance layer
+"VK_LAYER_KHRONOS_validation"` — 44 insertions across the 22 legs, 2 on the RenderState fixture),
+with `SDL_GPU_DEBUGMODE=1`. **Zero VUIDs and zero validation errors on both fixtures.** No render
+pass active at present, no swapchain texture used while a target is bound, no unsubmitted commands at
+presentation, no device loss.
+
+### Sanitizers
+
+ASan+UBSan and UBSan-only, both fixtures, runtimes proven linked (`libasan.so.8`, `libubsan.so.1`):
+**zero AddressSanitizer errors and zero UBSan runtime errors**, 22/22 legs and 18/18 checks under
+each.
+
+The LeakSanitizer residual is **driver-side and pre-existing**: every frame is `<unknown module>`,
+**zero CNA frames**, and the untouched `cna_test_sdlgpu_depth_bias` — which this task never touched —
+produces the byte-identical 624 B / 6-allocation report and the same non-zero exit. A/B classified,
+not waived.
+
+### Regression gates and cross-backend controls
+
+**`ctest -R '^SdlGpu' -j1`: 102/102, zero failures.** This is the **first fully green SDL_GPU shard**
+— `SdlGpu_RenderState` is the single failure that was carried through REMED-GFX-127, 143/145, 152,
+156, 165, 170, 173, 175 and 176. GFX-143/145 segmentation, GFX-152 lifetime, GFX-156 ordered Clear,
+GFX-165 backbuffer proxy, GFX-170 sampler translation, GFX-173 EnvironmentMap samplers and GFX-176
+mip storage all green.
+
+The new fixture on every registered backend, **22/22 legs each**:
+
+| backend | checks | shortfall |
+|---|---|---|
+| SDL_GPU | 82 | — |
+| Vulkan | 82 | — |
+| EasyGL | 82 | — |
+| Bgfx | 82 | two declared boundaries (below) |
+| WebGPU | 77 | no MRT — legs A8 (3) and B4 (2), declared at run time |
+| Software | 73 | no cube destination and no MRT — A7 (3), A8 (3), B4 (3) |
+| Headless | 45 | does not rasterize — every pixel oracle declares a boundary |
+
+Every shortfall is a **runtime-declared** boundary printed by the leg that hit it, never a silent
+skip. D3D9/D3D11/D3D12 runtime controls were not run: no shared production changed, so there is
+nothing for them to control for.
+
+### Bgfx's two boundaries
+
+* **Leg A14** reached Bgfx's **documented** per-frame ordered view-segment ceiling after **96** of
+  120 cycles (96 x 2 = 192 segments against the ~190 limit), reporting it as a clear exception naming
+  REMED-GFX-065/GFX-018/GFX-155. Caught, declared, and the leg's tail still asserted — the boundary
+  costs coverage of the **count** only.
+* **Leg A9** exposed a genuine defect, filed as **REMED-GFX-184** (below).
+
+### False-positive audit
+
+**The "hardcoded primitive count fed a foreign buffer" shape.** Six fixtures share it. The other five
+were **verified**, not assumed: every buffer they can be handed holds exactly six vertices, matching
+their hardcoded two primitives — `backbuffer_pass_order_test` (`std::array<…, 6>`),
+`sdlgpu_rendertarget_viewport_test`, `sdlgpu_rendertarget_scissor_test`,
+`sdlgpu_rendertarget_blendfactor_test` (all literal 6), and `sdlgpu_pass_boundary_upload_test` (a
+`std::vector` built only from `Quad()`'s `std::array<…, 6>`). The four other `DrawFullQuad`-named
+helpers — in `bgfx_rendertargetcube_depthformat_test`, `rendertarget2d_depth_test`,
+`graphicsdevice_depth_contract_test` and `easygl_rendertargetcube_depthformat_test` — build their own
+six-vertex array **inside** the helper, so name and geometry cannot drift apart there at all.
+`sdlgpu_renderstate_test` was the only one where a helper named for a quad was handed a triangle.
+
+**The Present-refusal contract.** Two pre-existing fixtures already assert it, both correct and both
+narrower:
+
+| fixture | what it covers | what it did not |
+|---|---|---|
+| `easygl_device_validation_test` check 4 | the refusal happens | EasyGL only; type only, not the message; no assertion that the binding survives or that the device stays usable |
+| `bound_target_lifetime_test` leg P1 | the refusal is identical for a live and a **destroyed** bound target, on 7 backends | no MRT/cube binding shape; no "queued work survived"; no recovery-then-full-frame |
+
+**Neither asserts anything false, so neither was changed or weakened** — the gap was coverage, closed
+by legs B1/B2/B4/C1. `rendertarget_effect_source_test` already documented this exact abort in a
+comment and defended against it with a per-leg unbind; GFX-180 turns that habit into an asserted
+contract. No fixture anywhere catches the abort and calls it expected, and none asserts merely that
+"Present did not crash".
+
+**One genuine blind spot found, inside the subject itself** — Check E's absence-only WireFrame half,
+described above and now closed.
+
+### Scope kept
+
+**REMED-GFX-183 was not begun and remains uninvestigated** — it is a WebGPU triangle-strip
+winding/culling question and this task is the present lifecycle. `REMED-GFX-178`, `REMED-GFX-179`,
+`REMED-GFX-171`, `REMED-GFX-153` and `REMED-GFX-154` were likewise not begun. **No backend production
+was modified — no file under `src/CNA/Internal/Backends/` and no file under
+`src/Microsoft/` changed.** No public API changed. No Present guard was removed or relaxed, no target
+is auto-unbound at Present, no queued work is discarded to permit a Present, and no retry, sleep,
+dummy target switch or global exception suppression was added. `audit/` is untouched.
+
+### New findings
+
+**One. REMED-GFX-184** — Bgfx aborts the **process** by SIGTRAP when a `RenderTarget2D` is created
+with both a multisample count and a real `DepthFormat`. `bgfx.cpp(5116): ASSERT isOk() ->
+ErrorAssert: 0x02006762 'Frame buffer depth MSAA texture cannot be resolved. It must be created with
+either BGFX_TEXTURE_RT_WRITE_ONLY or BGFX_TEXTURE_MSAA_SAMPLE flag.'` —
+`BgfxRenderTargetBackend`'s constructor (`BgfxGraphicsBackend.cpp:896-898`) creates the MSAA depth
+attachment with `msaaFlag` alone, and that attachment is never sampled, so `BGFX_TEXTURE_RT_WRITE_ONLY`
+is what it is missing. `RenderTarget2D(dev, w, h, false, Color, Depth24, 4, …)` is entirely legal
+XNA, and this is an abort rather than a catchable exception, so leg A9 declares it through a
+`constexpr` boundary and drops the depth attachment on Bgfx only — an abort cannot be caught. No
+existing fixture reached it because REMED-GFX-168's leg D1, the only other multisampled target in the
+suite, passes `DepthFormat::None`: **MSAA alone is safe; it is MSAA combined with a depth format that
+aborts.** Recorded against its own ID, not investigated further.
+
+Commits: test `0a288b70`, fix `b7989273`, controls + docs (this).
