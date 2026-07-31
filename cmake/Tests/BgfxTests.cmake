@@ -1197,6 +1197,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_PresentLifecycle COMMAND cna_test_bgfx_present_lifecycle
         TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-163: a depth-backed MULTISAMPLED RenderTarget2D killed the process by SIGTRAP inside
+    # bgfx's own framebuffer validation -- the depth attachment was created with the sample-count flag
+    # alone, and bgfx requires BGFX_TEXTURE_RT_WRITE_ONLY (or BGFX_TEXTURE_MSAA_SAMPLE) on any depth
+    # attachment whose sample count is greater than one, because it cannot resolve multisampled depth.
+    # The identical fix already existed on the CUBE path (REMED-GFX-141) and was never applied to its
+    # 2D sibling. Every leg runs in its own process so a native ASSERT cannot take the shard with it;
+    # the supervisor names SIGTRAP specifically. No leg is permitted to abort.
+    cna_bgfx_test(cna_test_bgfx_msaa_depth_contract
+        examples/rendertarget_msaa_depth_contract_test.cpp)
+    cna_register_backend_test(NAME Bgfx_MsaaDepthContract COMMAND cna_test_bgfx_msaa_depth_contract
+        TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-165 cross-backend control: Bgfx already honoured the authoritative-dimension
     # GetBackBufferData contract; this run establishes that the shared fix left it byte-unchanged.
     cna_bgfx_test(cna_test_bgfx_backbuffer_readback_dimension
