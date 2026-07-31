@@ -119,6 +119,24 @@ namespace CNA::Internal::Backends::HtmlDom
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         /**
+         * @brief Clips subsequent rendering to the given rectangle, in logical game pixels.
+         *
+         * plan_html_dom.md HTMLDOM-80 / design decision 13: implemented as a real CSS
+         * `clip-path: inset()` on the DOM surface, applied unconditionally -- the same
+         * `RasterizerState.ScissorTestEnable`-independent behaviour `SDL_RENDERER` has (it never
+         * overrides `ApplyRasterizerState` either). Scoped as whole-surface, current-value
+         * clipping: it clips everything currently on screen, not only sprites drawn while this
+         * particular rectangle was active earlier in the same frame -- true per-draw-call
+         * scissoring is out of scope for this backend's flat, pooled sprite architecture.
+         *
+         * @param x Left edge of the clip rectangle, in logical pixels.
+         * @param y Top edge of the clip rectangle, in logical pixels.
+         * @param w Width of the clip rectangle, in logical pixels.
+         * @param h Height of the clip rectangle, in logical pixels.
+         */
+        void SetScissorRect(int x, int y, int w, int h) override;
+
+        /**
          * @brief Creates a texture from decoded image data.
          *
          * @param data Decoded RGBA8 image.

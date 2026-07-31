@@ -120,11 +120,16 @@ EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
 // Sizes the surface and applies the logical→physical scale. Called only when the geometry actually
 // changed (the backend caches the last values), because these are the backend's only
 // layout-affecting style writes -- doing them every frame would defeat the whole design.
+//
+// Stashes the logical size on Module so CNA_HtmlDom_SetScissorRect (below) can compute clip-path
+// insets without re-parsing root.style.width/height's own "NNNpx" string back into a number.
 EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH, int physW, int physH), {
     const root = Module['cnaDomRoot'];
     if (!root) return;
     root.style.width = logicalW + 'px';
     root.style.height = logicalH + 'px';
+    Module['cnaDomLogicalW'] = logicalW;
+    Module['cnaDomLogicalH'] = logicalH;
     const scale = logicalH > 0 ? physH / logicalH : 1;
     root.style.transform = scale !== 1 ? 'scale(' + scale + ')' : "";
     const canvas = Module['canvas'] ||
@@ -133,6 +138,36 @@ EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH, int physW, i
         root.style.left = canvas.offsetLeft + 'px';
         root.style.top = canvas.offsetTop + 'px';
     }
+});
+
+// plan_html_dom.md HTMLDOM-80 / design decision 13: real scissor clipping via `clip-path: inset()`
+// on #cna-dom-root itself. Exact, with no transform-inverse maths needed: root carries no
+// rotation (only the uniform logical->physical scale() CNA_HtmlDom_UpdateSurface applies), so
+// clip-path's own pre-transform local coordinate space already coincides with the same logical-
+// pixel space every sprite's destX/destY is expressed in -- the scissor rect can be turned into
+// inset() distances directly, with no per-sprite transform to invert.
+//
+// Applied UNCONDITIONALLY, the same way SdlGraphicsBackend::SetScissorRect behaves: SDL_Renderer
+// never overrides ApplyRasterizerState at all, so its own SDL_SetRenderClipRect call is never
+// gated on RasterizerState.ScissorTestEnable either -- confirmed by reading SdlGraphicsBackend.cpp
+// before matching its behaviour here, not assumed.
+//
+// Scoped honestly as WHOLE-SURFACE, CURRENT-VALUE clipping: it clips everything currently in
+// #cna-dom-root, not only the sprites drawn while a narrower scissor rect was active earlier in
+// the same frame -- true per-draw-call scissoring would need the flat sprite pool restructured
+// into nested per-region containers, out of scope here. Insets are clamped to >= 0 so a rect that
+// (rarely) extends past the surface's own bounds produces a no-op-on-that-edge clip rather than an
+// inset() that expands outward instead of clipping inward.
+EM_JS(void, CNA_HtmlDom_SetScissorRect, (int x, int y, int w, int h), {
+    const root = Module['cnaDomRoot'];
+    if (!root) return;
+    const logicalW = Module['cnaDomLogicalW'] || 0;
+    const logicalH = Module['cnaDomLogicalH'] || 0;
+    const top = Math.max(0, y);
+    const left = Math.max(0, x);
+    const right = Math.max(0, logicalW - (x + w));
+    const bottom = Math.max(0, logicalH - (y + h));
+    root.style.clipPath = 'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
 });
 
 // Reads back the currently bound render target. Returns 0 when nothing is bound -- the DOM
@@ -336,6 +371,15 @@ namespace CNA::Internal::Backends::HtmlDom
 #else
         (void)x; (void)y; (void)w; (void)h; (void)pixels;
         throw std::runtime_error("HTML_DOM backend: no browser, so no pixels to read back.");
+#endif
+    }
+
+    void HtmlDomGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+#if defined(__EMSCRIPTEN__)
+        CNA_HtmlDom_SetScissorRect(x, y, w, h);
+#else
+        (void)x; (void)y; (void)w; (void)h;
 #endif
     }
 

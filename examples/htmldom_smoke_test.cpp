@@ -41,7 +41,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 24;
+    constexpr int kExpectedChecks = 27;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -123,6 +123,35 @@ namespace
         return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
     });
 
+    /// 1 when the #cna-dom-root surface's clip-path is `inset(top right bottom left)` with those
+    /// four values (in px). Compares parsed numbers rather than the raw string: the CSSOM
+    /// normalizes `inset(0px 0px 0px 0px)` down to the shorthand `inset(0px)` when all four
+    /// values are equal, so an exact-string comparison would be asserting the serializer's own
+    /// formatting choice rather than the geometry.
+    // Deliberately no regular expression: a backslash inside an EM_JS body does not survive the
+    // preprocessor's stringification of that body (see JsClearColorMatches's own comment, above,
+    // for the bug this caused once already in this same file) -- parsed with plain
+    // indexOf/substring/split instead.
+    EM_JS(int, JsRootClipPathInsetIs, (int top, int right, int bottom, int left), {
+        const root = document.getElementById('cna-dom-root');
+        if (!root) return 0;
+        const cp = root.style.clipPath;
+        const open = cp.indexOf('inset(');
+        const close = cp.indexOf(')');
+        if (open !== 0 || close < 0) return 0;
+        const inner = cp.substring(open + 6, close).trim();
+        const nums = inner.split(' ').filter(function(s) { return s.length > 0; })
+                          .map(function(s) { return parseFloat(s); });
+        // The shorthand normalizes like margin/padding: 1 value = all four, 2 = top/bottom,
+        // left/right, 4 = top,right,bottom,left explicitly.
+        let t, r, b, l;
+        if (nums.length === 1) { t = r = b = l = nums[0]; }
+        else if (nums.length === 2) { t = b = nums[0]; r = l = nums[1]; }
+        else if (nums.length === 4) { t = nums[0]; r = nums[1]; b = nums[2]; l = nums[3]; }
+        else { return 0; }
+        return (t === top && r === right && b === bottom && l === left) ? 1 : 0;
+    });
+
     /// 1 when sprite `i`'s `background-repeat` is `'repeat'` (TextureAddressMode::Wrap tiling).
     EM_JS(int, JsSpriteBackgroundRepeat, (int i), {
         const root = document.getElementById('cna-dom-root');
@@ -147,6 +176,7 @@ namespace
     int JsSpriteOpacity255(int) { return -1; }
     int JsCanvasHidden() { return 0; }
     int JsSpriteBackgroundRepeat(int) { return 0; }
+    int JsRootClipPathInsetIs(int, int, int, int) { return 0; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -393,6 +423,35 @@ protected:
             }
             check(tileMatches,
                   "the render-target Wrap path tiles the source texture exactly, pixel-for-pixel");
+        }
+
+        // plan_html_dom.md HTMLDOM-80: SetScissorRect, implemented as clip-path: inset() on
+        // #cna-dom-root (design decision 13) -- verified the same way every other CSS-property
+        // mapping in this file is (checking the computed value against a hand-derived expected
+        // string), consistent with how transform/backgroundRepeat/mixBlendMode are already
+        // checked above, rather than a pixel screenshot: the browser's own clip-path rendering is
+        // standard engine behaviour this project doesn't re-verify anywhere else either.
+        if (frame_ == 7)
+        {
+            // Backbuffer is 64x64 (see the constructor below). A rect fully inside it:
+            // top=10, left=10, right=64-(10+20)=34, bottom=64-(10+30)=24.
+            dev.setScissorRectangleProperty(Rectangle(10, 10, 20, 30));
+            check(JsRootClipPathInsetIs(10, 34, 24, 10) == 1,
+                  "HTMLDOM-80a: a scissor rect inside the surface maps to the exact inset() values");
+
+            // Resetting to the full backbuffer must produce an all-zero (no-op) inset.
+            dev.setScissorRectangleProperty(Rectangle(0, 0, 64, 64));
+            check(JsRootClipPathInsetIs(0, 0, 0, 0) == 1,
+                  "HTMLDOM-80b: a scissor rect matching the full surface clips nothing");
+
+            // A rect extending past the surface's own bounds: right/bottom insets would go
+            // negative from the raw formula and must clamp to 0 rather than expand outward.
+            dev.setScissorRectangleProperty(Rectangle(50, 50, 30, 30));
+            check(JsRootClipPathInsetIs(50, 0, 0, 50) == 1,
+                  "HTMLDOM-80c: a scissor rect extending past the surface clamps its far insets "
+                  "to 0 instead of producing a negative (expanding) inset()");
+
+            dev.setScissorRectangleProperty(Rectangle(0, 0, 64, 64));
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
