@@ -54,6 +54,20 @@ namespace CNA::Internal::Backends::Llgl
         /// cleaner than repurposing unrelated padding fields in the shared one.
         constexpr std::size_t kEnvMapUniformFloats = 84;
 
+        /// Floats in SkinnedEffect's own dedicated parameter uniform block (see
+        /// shaders/skinned3d.vert.glsl's SkinnedParams for the byte layout): 92 floats = 368 bytes.
+        /// Same reasoning as kEnvMapUniformFloats -- SkinnedEffect's own field set (per-light
+        /// specular, WeightsPerVertex, no alpha test) doesn't fit the shared block, and its shader
+        /// pair is never linked with any other shader here.
+        constexpr std::size_t kSkinnedUniformFloats = 92;
+
+        /// Floats in SkinnedEffect's SEPARATE per-draw bone transform buffer: 72 `mat4`s (the real
+        /// XNA `SkinnedEffect.MaxBones`) = 1152 floats = 4608 bytes -- kept in its own buffer pool
+        /// rather than folded into kSkinnedUniformFloats above, mirroring the Vulkan backend's own
+        /// BoneBlock/FogParams UBO split (a buffer this much larger than every other per-draw
+        /// uniform block in this backend does not belong sharing one growth/reuse pool with them).
+        constexpr std::size_t kSkinnedBoneFloats = 72 * 16;
+
         /// Floats per sprite vertex: position (2), texture coordinate (2), colour (4).
         constexpr std::size_t kSpriteVertexFloats = 8;
         constexpr std::size_t kSpriteVertexStride = kSpriteVertexFloats * sizeof(float);
@@ -278,6 +292,11 @@ namespace CNA::Internal::Backends::Llgl
                 case XnaVertexElementUsage::Color:             name = "color";    location = 1; return true;
                 case XnaVertexElementUsage::TextureCoordinate: name = "texCoord"; location = 2; return true;
                 case XnaVertexElementUsage::Normal:            name = "normal";   location = 3; return true;
+                // SkinnedEffect (LLGL-25): matches the locations the declaration-less stride-52
+                // fallback below (case 52) and env_map3d/skinned3d shaders' own attribute
+                // declarations already use.
+                case XnaVertexElementUsage::BlendWeight:       name = "aBoneWeights"; location = 4; return true;
+                case XnaVertexElementUsage::BlendIndices:      name = "aBoneIndices"; location = 5; return true;
                 default: return false;
             }
         }
@@ -1174,6 +1193,17 @@ namespace CNA::Internal::Backends::Llgl
                 addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
                 addAttribute("texCoord", LLGL::Format::RG32Float, 2, 24);
                 break;
+            // SkinnedEffect (LLGL-25): VertexPositionNormalTextureSkinned's own GPU-packed stream --
+            // float3 pos + float3 normal + float2 uv + float4 blend weights (plain, NOT normalized)
+            // + ubyte4 blend indices (a genuine INTEGER attribute -- RGBA8UInt, not RGBA8UNorm --
+            // matching every other backend's own convention, see AcquirePrimitiveSkinnedVertexShader).
+            case 52:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 24);
+                addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 32);
+                addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 48);
+                break;
             default:
                 break;
         }
@@ -1451,6 +1481,13 @@ namespace CNA::Internal::Backends::Llgl
         }
         primitiveEnvMapVertexShaderCache_.clear();
 
+        for (const auto& entry : primitiveSkinnedVertexShaderCache_)
+        {
+            if (entry.second != nullptr)
+                renderer_->Release(*entry.second);
+        }
+        primitiveSkinnedVertexShaderCache_.clear();
+
         for (LLGL::Buffer* buffer : pendingBufferReleases_)
         {
             if (buffer != nullptr)
@@ -1479,6 +1516,20 @@ namespace CNA::Internal::Backends::Llgl
         }
         envMapUniformBuffers_.clear();
 
+        for (LLGL::Buffer* buffer : skinnedUniformBuffers_)
+        {
+            if (buffer != nullptr)
+                renderer_->Release(*buffer);
+        }
+        skinnedUniformBuffers_.clear();
+
+        for (LLGL::Buffer* buffer : skinnedBoneBuffers_)
+        {
+            if (buffer != nullptr)
+                renderer_->Release(*buffer);
+        }
+        skinnedBoneBuffers_.clear();
+
         if (customEffectLayout_ != nullptr)
             renderer_->Release(*customEffectLayout_);
 
@@ -1494,6 +1545,8 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveDualTextureFragmentShader_);
         if (primitiveEnvMapFragmentShader_ != nullptr)
             renderer_->Release(*primitiveEnvMapFragmentShader_);
+        if (primitiveSkinnedFragmentShader_ != nullptr)
+            renderer_->Release(*primitiveSkinnedFragmentShader_);
         if (primitiveLayout_ != nullptr)
             renderer_->Release(*primitiveLayout_);
         if (primitiveTexturedLayout_ != nullptr)
@@ -1502,6 +1555,8 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveDualTextureLayout_);
         if (primitiveEnvMapLayout_ != nullptr)
             renderer_->Release(*primitiveEnvMapLayout_);
+        if (primitiveSkinnedLayout_ != nullptr)
+            renderer_->Release(*primitiveSkinnedLayout_);
 
         if (spriteVertexBuffer_ != nullptr)
             renderer_->Release(*spriteVertexBuffer_);
@@ -1708,6 +1763,9 @@ namespace CNA::Internal::Backends::Llgl
         primitiveEnvMapFragmentShader_ = createFragmentShader(
             Shaders::kEnvMap3dFragGlsl, Shaders::kEnvMap3dFragSpv,
             sizeof(Shaders::kEnvMap3dFragSpv), "environment map 3D fragment shader");
+        primitiveSkinnedFragmentShader_ = createFragmentShader(
+            Shaders::kSkinned3dFragGlsl, Shaders::kSkinned3dFragSpv,
+            sizeof(Shaders::kSkinned3dFragSpv), "skinned 3D fragment shader");
 
         // Two layouts rather than one with an optionally-unused texture slot: a pipeline whose
         // layout declares a texture the draw never binds is a validation error on Vulkan, not a
@@ -1789,8 +1847,31 @@ namespace CNA::Internal::Backends::Llgl
         };
         primitiveEnvMapLayout_ = renderer_->CreatePipelineLayout(envMapLayoutDesc);
 
+        // SkinnedEffect: its own dedicated parameter uniform block (SkinnedParams) PLUS a second,
+        // much larger bone transform block (BoneBlock, 72 mat4s) at its own binding, plus the
+        // diffuse texture/sampler pair (SkinnedEffect is always textured, unlike BasicEffect).
+        LLGL::PipelineLayoutDescriptor skinnedLayoutDesc;
+        skinnedLayoutDesc.bindings =
+        {
+            LLGL::BindingDescriptor{"SkinnedParams", LLGL::ResourceType::Buffer,
+                                    LLGL::BindFlags::ConstantBuffer,
+                                    LLGL::StageFlags::VertexStage | LLGL::StageFlags::FragmentStage, 1},
+            LLGL::BindingDescriptor{"BoneBlock", LLGL::ResourceType::Buffer,
+                                    LLGL::BindFlags::ConstantBuffer, LLGL::StageFlags::VertexStage, 2},
+            LLGL::BindingDescriptor{"colorMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 3},
+            LLGL::BindingDescriptor{"samplerState", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 4},
+        };
+        skinnedLayoutDesc.combinedTextureSamplers =
+        {
+            LLGL::CombinedTextureSamplerDescriptor{"colorMap", "colorMap", "samplerState", 3},
+        };
+        primitiveSkinnedLayout_ = renderer_->CreatePipelineLayout(skinnedLayoutDesc);
+
         if (primitiveLayout_ == nullptr || primitiveTexturedLayout_ == nullptr ||
-            primitiveDualTextureLayout_ == nullptr || primitiveEnvMapLayout_ == nullptr)
+            primitiveDualTextureLayout_ == nullptr || primitiveEnvMapLayout_ == nullptr ||
+            primitiveSkinnedLayout_ == nullptr)
             throw std::runtime_error(std::string(kBackendName) + " backend: 3D pipeline layout creation failed");
     }
 
@@ -2005,9 +2086,86 @@ namespace CNA::Internal::Backends::Llgl
         return shader;
     }
 
+    LLGL::Shader* LlglGraphicsBackend::AcquirePrimitiveSkinnedVertexShader(
+        const std::vector<LLGL::VertexAttribute>& attributes)
+    {
+        const std::uint64_t key = MakeVertexLayoutKey(attributes);
+        const auto cached = primitiveSkinnedVertexShaderCache_.find(key);
+        if (cached != primitiveSkinnedVertexShaderCache_.end())
+            return cached->second;
+
+        // SkinnedEffect is always textured and lit (GpuDrawParams::textureEnabled/lightingEnabled
+        // are unconditionally true in SkinnedEffect::FillGpuDrawParams), so like
+        // AcquirePrimitiveEnvMapVertexShader() there is only one shader variant -- just the vertex
+        // layout (and hence caching) varies.
+        bool hasTexCoord = false;
+        bool hasNormal = false;
+        bool hasBoneWeights = false;
+        bool hasBoneIndices = false;
+        for (const LLGL::VertexAttribute& attribute : attributes)
+        {
+            if (attribute.location == 2) hasTexCoord = true;
+            if (attribute.location == 3) hasNormal = true;
+            if (attribute.location == 4) hasBoneWeights = true;
+            if (attribute.location == 5) hasBoneIndices = true;
+        }
+        if (!hasTexCoord || !hasNormal || !hasBoneWeights || !hasBoneIndices)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: SkinnedEffect needs a vertex layout with "
+                "texture coordinates, normals, and bone weights/indices, and this one is missing "
+                "at least one");
+        }
+
+        std::vector<LLGL::VertexAttribute> shaderAttributes;
+        for (const LLGL::VertexAttribute& attribute : attributes)
+        {
+            if (attribute.location == 1) // vertex colour: this shader never reads one
+                continue;
+            shaderAttributes.push_back(attribute);
+        }
+
+        const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
+
+        LLGL::ShaderDescriptor vertexDesc;
+        vertexDesc.type = LLGL::ShaderType::Vertex;
+        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
+        {
+            vertexDesc.source = Shaders::kSkinned3dVertGlsl;
+            vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+        }
+        else
+        {
+            vertexDesc.source = reinterpret_cast<const char*>(Shaders::kSkinned3dVertSpv);
+            vertexDesc.sourceSize = sizeof(Shaders::kSkinned3dVertSpv);
+            vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
+            vertexDesc.entryPoint = "main";
+        }
+        vertexDesc.vertex.inputAttribs = shaderAttributes;
+
+        LLGL::Shader* shader = renderer_->CreateShader(vertexDesc);
+        if (shader == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: SkinnedEffect vertex shader creation failed");
+        }
+        if (const LLGL::Report* report = shader->GetReport())
+        {
+            if (report->HasErrors())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: SkinnedEffect vertex shader "
+                    "compilation failed: " + (report->GetText() != nullptr ? report->GetText() : "no details"));
+            }
+        }
+
+        primitiveSkinnedVertexShaderCache_.emplace(key, shader);
+        return shader;
+    }
+
     LLGL::PipelineState* LlglGraphicsBackend::AcquirePrimitivePipeline(
         const LlglVertexBufferBackend& vertexBuffer, PrimitiveType primitive, bool scissorEnabled,
-        bool textured, bool lit, bool dualTexture, bool envMapping)
+        bool textured, bool lit, bool dualTexture, bool envMapping, bool skinned)
     {
         const std::vector<LLGL::VertexAttribute>& attributes = vertexBuffer.GetVertexAttributes();
 
@@ -2023,6 +2181,7 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + (lit ? 1u : 0u);
         key = key * 2u + (dualTexture ? 1u : 0u);
         key = key * 2u + (envMapping ? 1u : 0u);
+        key = key * 2u + (skinned ? 1u : 0u);
         key = key * 1024u + (MakeBlendPipelineKey(scissorEnabled) & 0x3FFu);
 
         const auto cached = primitivePipelineCache_.find(key);
@@ -2030,30 +2189,37 @@ namespace CNA::Internal::Backends::Llgl
             return cached->second;
 
         LLGL::GraphicsPipelineDescriptor pipelineDesc;
-        pipelineDesc.debugName = envMapping ? "CNA.EnvMap3D"
+        pipelineDesc.debugName = skinned ? "CNA.Skinned3D"
+                                : envMapping ? "CNA.EnvMap3D"
                                 : dualTexture ? "CNA.DualTexture3D"
                                 : lit ? "CNA.Lit3D" : (textured ? "CNA.Textured3D" : "CNA.Colored3D");
         // DualTextureEffect is never lit (GpuDrawParams::lightingEnabled is always false for it),
         // and its vertex-side behaviour is identical to a plain textured draw -- so the vertex
         // shader is the SAME one AcquirePrimitiveVertexShader() already selects for `textured`,
-        // and only the fragment shader and pipeline layout differ below. EnvironmentMapEffect,
-        // unlike DualTextureEffect, needs its OWN vertex shader (world-space normal/eye vector),
-        // so it does not go through AcquirePrimitiveVertexShader() at all.
-        pipelineDesc.vertexShader = envMapping ? AcquirePrimitiveEnvMapVertexShader(attributes)
+        // and only the fragment shader and pipeline layout differ below. EnvironmentMapEffect and
+        // SkinnedEffect, unlike DualTextureEffect, each need their OWN vertex shader (world-space
+        // normal/eye vector; bone weight/index skinning), so neither goes through
+        // AcquirePrimitiveVertexShader() at all.
+        pipelineDesc.vertexShader = skinned ? AcquirePrimitiveSkinnedVertexShader(attributes)
+                                   : envMapping ? AcquirePrimitiveEnvMapVertexShader(attributes)
                                    : AcquirePrimitiveVertexShader(attributes, textured, lit);
-        pipelineDesc.fragmentShader = envMapping ? primitiveEnvMapFragmentShader_
+        pipelineDesc.fragmentShader = skinned ? primitiveSkinnedFragmentShader_
+                                    : envMapping ? primitiveEnvMapFragmentShader_
                                     : dualTexture ? primitiveDualTextureFragmentShader_
                                     : lit && textured ? primitiveLitFragmentShader_
                                     : lit ? primitiveLitUntexturedFragmentShader_
                                     : textured ? primitiveTexturedFragmentShader_
                                     : primitiveFragmentShader_;
-        // Layout selection follows `textured`/`dualTexture`/`envMapping` (LLGL-31/DualTextureEffect/
-        // EnvironmentMapEffect): a lit-untextured draw's shader declares no colorMap/samplerState
-        // binding, so it reuses primitiveLayout_ exactly like the unlit-untextured path does, not
-        // primitiveTexturedLayout_; a dual-texture draw needs the layout with BOTH texture/sampler
-        // pairs; an env-map draw needs its own dedicated layout (its own uniform block plus a
-        // texture/sampler pair AND a cube map texture/sampler pair).
-        pipelineDesc.pipelineLayout = envMapping ? primitiveEnvMapLayout_
+        // Layout selection follows `textured`/`dualTexture`/`envMapping`/`skinned`
+        // (LLGL-31/DualTextureEffect/EnvironmentMapEffect/SkinnedEffect): a lit-untextured draw's
+        // shader declares no colorMap/samplerState binding, so it reuses primitiveLayout_ exactly
+        // like the unlit-untextured path does, not primitiveTexturedLayout_; a dual-texture draw
+        // needs the layout with BOTH texture/sampler pairs; an env-map draw needs its own
+        // dedicated layout (its own uniform block plus a texture/sampler pair AND a cube map
+        // texture/sampler pair); a skinned draw needs its own dedicated layout too (its own
+        // parameter uniform block, a separate bone transform block, and a texture/sampler pair).
+        pipelineDesc.pipelineLayout = skinned ? primitiveSkinnedLayout_
+                                     : envMapping ? primitiveEnvMapLayout_
                                      : dualTexture ? primitiveDualTextureLayout_
                                      : textured ? primitiveTexturedLayout_ : primitiveLayout_;
         pipelineDesc.renderPass = swapChain_->GetRenderPass();
@@ -2269,6 +2435,77 @@ namespace CNA::Internal::Backends::Llgl
         }
     }
 
+    void LlglGraphicsBackend::FillSkinnedUniforms(float (&uniforms)[kSkinnedUniformFloats],
+                                                   const float matrix[16],
+                                                   const GpuDrawParams& params)
+    {
+        std::memset(uniforms, 0, sizeof(float) * kSkinnedUniformFloats);
+        std::memcpy(uniforms, matrix, sizeof(float) * 16);
+        std::memcpy(uniforms + 16, params.worldColMajor, sizeof(float) * 16);
+
+        uniforms[32] = params.diffuseColor[0];
+        uniforms[33] = params.diffuseColor[1];
+        uniforms[34] = params.diffuseColor[2];
+        uniforms[35] = params.diffuseColor[3];
+
+        // Pre-folded (EmissiveColor + AmbientLightColor*DiffuseColor)*Alpha, matching
+        // EnvironmentMapEffect's own convention -- see skinned3d.frag.glsl's own comment.
+        uniforms[36] = params.emissiveColor[0];
+        uniforms[37] = params.emissiveColor[1];
+        uniforms[38] = params.emissiveColor[2];
+
+        const float* lightDirs[3]      = {params.light0Dir, params.light1Dir, params.light2Dir};
+        const float* lightDiffuses[3]  = {params.light0Diffuse, params.light1Diffuse, params.light2Diffuse};
+        const float* lightSpeculars[3] = {params.light0Specular, params.light1Specular, params.light2Specular};
+        for (int light = 0; light < 3; ++light)
+        {
+            const std::size_t base = 40 + static_cast<std::size_t>(light) * 12;
+            uniforms[base + 0] = lightDirs[light][0];
+            uniforms[base + 1] = lightDirs[light][1];
+            uniforms[base + 2] = lightDirs[light][2];
+            uniforms[base + 4] = lightDiffuses[light][0];
+            uniforms[base + 5] = lightDiffuses[light][1];
+            uniforms[base + 6] = lightDiffuses[light][2];
+            uniforms[base + 8] = lightSpeculars[light][0];
+            uniforms[base + 9] = lightSpeculars[light][1];
+            uniforms[base + 10] = lightSpeculars[light][2];
+        }
+
+        uniforms[76] = params.eyePositionWorld[0];
+        uniforms[77] = params.eyePositionWorld[1];
+        uniforms[78] = params.eyePositionWorld[2];
+        uniforms[79] = static_cast<float>(params.weightsPerVertex);
+
+        uniforms[80] = params.specularColor[0];
+        uniforms[81] = params.specularColor[1];
+        uniforms[82] = params.specularColor[2];
+        uniforms[83] = params.specularPower;
+
+        if (params.fogEnabled)
+        {
+            uniforms[84] = params.fogColor[0];
+            uniforms[85] = params.fogColor[1];
+            uniforms[86] = params.fogColor[2];
+            uniforms[87] = 1.0f;
+            uniforms[88] = params.fogVector[0];
+            uniforms[89] = params.fogVector[1];
+            uniforms[90] = params.fogVector[2];
+            uniforms[91] = params.fogVector[3];
+        }
+    }
+
+    void LlglGraphicsBackend::FillSkinnedBoneData(float (&bones)[kSkinnedBoneFloats],
+                                                   const GpuDrawParams& params)
+    {
+        std::memset(bones, 0, sizeof(float) * kSkinnedBoneFloats);
+        const int boneCount = std::max(0, std::min(params.boneCount, 72));
+        if (boneCount > 0)
+        {
+            std::memcpy(bones, params.boneTransforms,
+                       sizeof(float) * 16 * static_cast<std::size_t>(boneCount));
+        }
+    }
+
     void LlglGraphicsBackend::QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                                                const LlglIndexBufferBackend* indexBuffer,
                                                const Matrix& world, const Matrix& view,
@@ -2375,10 +2612,24 @@ namespace CNA::Internal::Backends::Llgl
             resolvedEnvMap = cubeBackend->GetLlglTexture();
         }
 
+        const bool skinned = (params != nullptr && params->skinned);
+        if (skinned && params->texture0 == nullptr)
+        {
+            // No fabricated-white-texture fallback here either, matching the DualTextureEffect/
+            // EnvironmentMapEffect precedent above -- SkinnedEffect is always textured in real
+            // XNA, unlike BasicEffect.
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: SkinnedEffect needs Texture bound");
+        }
+
         float uniforms[kEffectUniformFloats] = {};
         std::uint32_t transformIndex = 0;
         float envMapUniforms[kEnvMapUniformFloats] = {};
         std::uint32_t envMapUniformIndex = 0;
+        float skinnedUniforms[kSkinnedUniformFloats] = {};
+        std::uint32_t skinnedUniformIndex = 0;
+        float skinnedBones[kSkinnedBoneFloats] = {};
+        std::uint32_t skinnedBoneIndex = 0;
         if (envMapping)
         {
             FillEnvMapUniforms(envMapUniforms, matrix, *params);
@@ -2386,6 +2637,20 @@ namespace CNA::Internal::Backends::Llgl
                 static_cast<std::uint32_t>(envMapUniformData_.size() / kEnvMapUniformFloats);
             envMapUniformData_.insert(envMapUniformData_.end(),
                                       std::begin(envMapUniforms), std::end(envMapUniforms));
+        }
+        else if (skinned)
+        {
+            FillSkinnedUniforms(skinnedUniforms, matrix, *params);
+            skinnedUniformIndex =
+                static_cast<std::uint32_t>(skinnedUniformData_.size() / kSkinnedUniformFloats);
+            skinnedUniformData_.insert(skinnedUniformData_.end(),
+                                       std::begin(skinnedUniforms), std::end(skinnedUniforms));
+
+            FillSkinnedBoneData(skinnedBones, *params);
+            skinnedBoneIndex =
+                static_cast<std::uint32_t>(skinnedBoneData_.size() / kSkinnedBoneFloats);
+            skinnedBoneData_.insert(skinnedBoneData_.end(),
+                                    std::begin(skinnedBones), std::end(skinnedBones));
         }
         else
         {
@@ -2404,7 +2669,7 @@ namespace CNA::Internal::Backends::Llgl
             : nullptr;
         command.vertexBuffer = vertexBuffer.GetLlglBuffer();
         command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured,
-                                                     lit, dualTexture, envMapping);
+                                                     lit, dualTexture, envMapping, skinned);
         if (textured)
         {
             command.texture = resolvedTexture.texture;
@@ -2426,6 +2691,9 @@ namespace CNA::Internal::Backends::Llgl
         command.envMapping = envMapping;
         command.transformIndex = transformIndex;
         command.envMapUniformIndex = envMapUniformIndex;
+        command.skinned = skinned;
+        command.skinnedUniformIndex = skinnedUniformIndex;
+        command.skinnedBoneIndex = skinnedBoneIndex;
         command.vertexCount = static_cast<std::uint32_t>(elementCount);
         command.firstVertex = static_cast<std::uint32_t>(std::max(0, vertexStart));
         command.firstIndex = static_cast<std::uint32_t>(std::max(0, startIndex));
@@ -3287,6 +3555,51 @@ namespace CNA::Internal::Backends::Llgl
                                    sizeof(float) * kEnvMapUniformFloats);
         }
 
+        // Two constant buffer pools per SkinnedEffect draw this frame -- the small parameter block
+        // (kSkinnedUniformFloats) and the much larger 72-bone transform block (kSkinnedBoneFloats),
+        // kept as separate pools for the same reason as envMapUniformBuffers_ above (own shape/size).
+        const std::size_t skinnedUniformCount = skinnedUniformData_.size() / kSkinnedUniformFloats;
+        while (skinnedUniformBuffers_.size() < skinnedUniformCount)
+        {
+            LLGL::BufferDescriptor skinnedDesc;
+            skinnedDesc.size = sizeof(float) * kSkinnedUniformFloats;
+            skinnedDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
+            LLGL::Buffer* buffer = renderer_->CreateBuffer(skinnedDesc);
+            if (buffer == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: SkinnedEffect uniform buffer creation failed");
+            }
+            skinnedUniformBuffers_.push_back(buffer);
+        }
+        for (std::size_t index = 0; index < skinnedUniformCount; ++index)
+        {
+            renderer_->WriteBuffer(*skinnedUniformBuffers_[index], 0,
+                                   skinnedUniformData_.data() + index * kSkinnedUniformFloats,
+                                   sizeof(float) * kSkinnedUniformFloats);
+        }
+
+        const std::size_t skinnedBoneCount = skinnedBoneData_.size() / kSkinnedBoneFloats;
+        while (skinnedBoneBuffers_.size() < skinnedBoneCount)
+        {
+            LLGL::BufferDescriptor boneDesc;
+            boneDesc.size = sizeof(float) * kSkinnedBoneFloats;
+            boneDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
+            LLGL::Buffer* buffer = renderer_->CreateBuffer(boneDesc);
+            if (buffer == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: SkinnedEffect bone buffer creation failed");
+            }
+            skinnedBoneBuffers_.push_back(buffer);
+        }
+        for (std::size_t index = 0; index < skinnedBoneCount; ++index)
+        {
+            renderer_->WriteBuffer(*skinnedBoneBuffers_[index], 0,
+                                   skinnedBoneData_.data() + index * kSkinnedBoneFloats,
+                                   sizeof(float) * kSkinnedBoneFloats);
+        }
+
         if (spriteVertexData_.empty())
             return;
 
@@ -3475,6 +3788,8 @@ namespace CNA::Internal::Backends::Llgl
         transformData_.clear();
         customEffectUniformData_.clear();
         envMapUniformData_.clear();
+        skinnedUniformData_.clear();
+        skinnedBoneData_.clear();
         frameSubmitted_ = true;
     }
 
@@ -3530,6 +3845,9 @@ namespace CNA::Internal::Backends::Llgl
                 {
                     const bool uniformBufferBound = command.envMapping
                         ? command.envMapUniformIndex < envMapUniformBuffers_.size()
+                        : command.skinned
+                        ? (command.skinnedUniformIndex < skinnedUniformBuffers_.size() &&
+                           command.skinnedBoneIndex < skinnedBoneBuffers_.size())
                         : command.transformIndex < transformBuffers_.size();
                     if (command.vertexBuffer == nullptr || command.pipeline == nullptr ||
                         !uniformBufferBound)
@@ -3557,6 +3875,16 @@ namespace CNA::Internal::Backends::Llgl
                         {
                             commands_->SetResource(3, *command.envMapTexture);
                             commands_->SetResource(4, *command.envMapSampler);
+                        }
+                    }
+                    else if (command.skinned)
+                    {
+                        commands_->SetResource(0, *skinnedUniformBuffers_[command.skinnedUniformIndex]);
+                        commands_->SetResource(1, *skinnedBoneBuffers_[command.skinnedBoneIndex]);
+                        if (command.texture != nullptr && command.sampler != nullptr)
+                        {
+                            commands_->SetResource(2, *command.texture);
+                            commands_->SetResource(3, *command.sampler);
                         }
                     }
                     else
@@ -3680,6 +4008,8 @@ namespace CNA::Internal::Backends::Llgl
         transformData_.clear();
         customEffectUniformData_.clear();
         envMapUniformData_.clear();
+        skinnedUniformData_.clear();
+        skinnedBoneData_.clear();
         frameSubmitted_ = false;
         backbufferCacheValid_ = false;
     }
@@ -3754,6 +4084,8 @@ namespace CNA::Internal::Backends::Llgl
         transformData_.clear();
         customEffectUniformData_.clear();
         envMapUniformData_.clear();
+        skinnedUniformData_.clear();
+        skinnedBoneData_.clear();
         frameSubmitted_ = true;
 
         backbufferCache_.assign(
@@ -4123,8 +4455,7 @@ namespace CNA::Internal::Backends::Llgl
         // rather than quietly rendering something that merely looks plausible -- an unlit surface
         // where lighting was asked for is a wrong answer, not a degraded one.
         const char* unsupported = nullptr;
-        if (params.skinned)                                  unsupported = "SkinnedEffect";
-        else if (params.pbr)                                 unsupported = "PbrEffect";
+        if (params.pbr)                                      unsupported = "PbrEffect";
         else if (params.customEffectBackend != nullptr)      unsupported = "custom ShaderEffect";
         else if (params.instanceCount > 1)                   unsupported = "instanced drawing";
 

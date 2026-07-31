@@ -42,9 +42,12 @@ module**:
   sampled from a 3D shader;
 * **`EnvironmentMapEffect`**: cube-map reflections, its own dedicated vertex/fragment shader pair
   and pipeline layout (not the shared `Transform` block every other effect here uses). See
-  "EnvironmentMapEffect" below.
+  "EnvironmentMapEffect" below;
+* **`SkinnedEffect`**: GPU vertex skinning, up to 4 bone weight/index pairs, its own dedicated
+  vertex/fragment shader pair and pipeline layout, plus a separate 72-bone transform buffer. See
+  "SkinnedEffect" below.
 
-**Not implemented:** `SkinnedEffect`, `PbrEffect`,
+**Not implemented:** `PbrEffect`,
 `RenderTargetCube`, multiple render targets (MRT), and MSAA/mip-mapped render targets.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
@@ -139,6 +142,9 @@ src/CNA/Internal/Backends/Llgl/shaders/
   env_map3d.vert.glsl     env_map3d.frag.glsl        EnvironmentMapEffect -- its OWN uniform
                                                        block (EnvMapParams), not the shared one
                                                        every other effect here uses
+  skinned3d.vert.glsl     skinned3d.frag.glsl        SkinnedEffect -- its OWN uniform blocks
+                                                       (SkinnedParams + a separate 72-bone
+                                                       BoneBlock), not the shared one either
   effect3d_common.glsl.inc                           the uniform block they all share
   compile_shaders.py                                regenerates llgl_shaders.hpp
   llgl_shaders.hpp                                  generated; do not edit
@@ -168,11 +174,15 @@ not it uses it. The lit shaders don't need a separate field for the same flag --
 `VertexPositionTexture`, `VertexPositionColorTexture`, `VertexPositionNormalTexture`) work too
 (`LLGL-32`): they route through `IGraphicsBackend::CreateVertexBuffer(int)` (count-only, no
 `VertexDeclaration`) and a raw byte `SetData`, so `LlglVertexBufferBackend::ResolveVertexAttributes()`
-infers the vertex layout from the upload stride instead -- 16/20/24/32 bytes are each a distinct,
-unambiguous size among `GraphicsDevice.cpp`'s own GPU-packed stream structs, the same technique the
-Vulkan backend's own `MakeExt3DKey()` already uses for these exact stream sizes. Skinned/tangent
-streams (52/68/48 bytes) are not recognised -- `SkinnedEffect` is not implemented on this backend
-at all yet.
+infers the vertex layout from the upload stride instead -- 16/20/24/32/**52** bytes are each a
+distinct, unambiguous size among `GraphicsDevice.cpp`'s own GPU-packed stream structs plus
+`VertexPositionNormalTextureSkinned`'s own (stride 52, `SkinnedEffect`), the same technique the
+Vulkan backend's own `MakeExt3DKey()` already uses for these exact stream sizes. Tangent/PBR-skinned
+streams (68/48 bytes) are still not recognised -- `SkinnedPbrEffect` and `PbrEffect` are not
+implemented on this backend at all yet. The real-`VertexDeclaration` path (`MapVertexUsage()`) also
+maps `VertexElementUsage::BlendWeight`/`BlendIndices` now, at locations 4/5 -- `BlendIndices` binds
+as a genuine integer vertex attribute (`LLGL::Format::RGBA8UInt`, read in GLSL as `uvec4`), not a
+normalized byte4.
 
 ## Render targets
 
@@ -306,6 +316,63 @@ effect or in `CreateTextureCube` itself (cube textures were previously only ever
 pinned CTest). No `_OpenGL` CTest variant is registered for `Llgl_EnvironmentMapEffect_
 AlphaScaledLerp` for this reason.
 
+## SkinnedEffect
+
+GPU vertex skinning: up to 4 bone weight/index pairs blended per vertex against a per-draw bone
+transform array. Like `EnvironmentMapEffect`, `SkinnedEffect` does NOT reuse the shared `Transform`
+block or `AcquirePrimitiveVertexShader()`'s variant selection -- it gets its own:
+
+* `primitiveSkinnedLayout_` pipeline layout: a `SkinnedParams` uniform buffer at binding 1, a
+  SEPARATE `BoneBlock` (72 `mat4`s, 4608 bytes) at binding 2, `colorMap`/`samplerState` (the
+  diffuse texture -- `SkinnedEffect` is always textured, unlike `BasicEffect`) at 3/4;
+* two per-draw buffer pools: `skinnedUniformBuffers_`/`skinnedUniformData_` for the small
+  92-float (368-byte) parameter block, and a SEPARATE `skinnedBoneBuffers_`/`skinnedBoneData_`
+  pool for the 72-`mat4` bone array -- kept apart because the bone array is far larger than every
+  other per-draw uniform block here, mirroring the Vulkan backend's own `BoneBlock`/`FogParams`
+  UBO split;
+* dedicated vertex shader (`AcquirePrimitiveSkinnedVertexShader()`), reading two extra vertex
+  attributes (`aBoneWeights` at location 4, a plain unnormalized `float4`; `aBoneIndices` at
+  location 5, a genuine INTEGER attribute -- `LLGL::Format::RGBA8UInt`, read in GLSL as `uvec4`,
+  not a normalized byte4).
+
+The skinning formula blends up to `WeightsPerVertex` (1, 2, or 4) bone matrices, gated at runtime
+by `weightsPerVertex >= 2.0`/`>= 4.0` rather than a compile-time-unrolled per-bone-count shader
+variant the way real XNA compiles 9 distinct permutations -- matching this project's own
+established simplification (Task 895). The skinned position feeds both `gl_Position` and the fog
+factor (dotted against the POST-skin position, not pre-skin), and the bone-skin 3x3 is composed
+with the outer world inverse-transpose normal matrix before lighting, so a rotated or
+non-uniformly-scaled skinned model lights correctly. Both are transliterated directly from the
+Vulkan backend's own `skinned3d.vert.glsl`. The lighting formula (per-light Lambertian diffuse +
+Blinn-Phong specular) pre-folds `AmbientLightColor*DiffuseColor` into `EmissiveColor` on the CPU
+side exactly like `EnvironmentMapEffect` does (confirmed by reading `SkinnedEffect::FillGpuDrawParams`
+directly), not `BasicEffect`'s separate-ambient-term convention.
+
+**Two real, independent vertex-layout gaps were closed to add this** (found by reading the code,
+not by a failing test): `MapVertexUsage()` (the real-`VertexDeclaration` attribute-mapping path)
+had no cases for `VertexElementUsage::BlendWeight`/`BlendIndices` at all, and
+`LlglVertexBufferBackend::ResolveVertexAttributes()`'s declaration-less stride-inference switch
+(`LLGL-32`) had no case for stride 52 (`VertexPositionNormalTextureSkinned`'s own GPU-packed size)
+-- every `SkinnedEffect` pixel test drives it through exactly that path
+(`VertexBuffer::SetDataRaw`), so the second gap would have thrown "this vertex layout is not
+supported" without the fix.
+
+**`Texture` must be bound** -- there is no fabricated white-texture fallback for a null one
+(mirroring `DualTextureEffect`/`EnvironmentMapEffect`'s own established convention);
+`QueuePrimitives` throws by name instead ("SkinnedEffect needs Texture bound").
+
+Unlike `EnvironmentMapEffect`, `SkinnedEffect` needs no cube texture, so it works cleanly on the
+OpenGL module too -- `Llgl_SkinnedEffect_IdentityBones`/`Llgl_SkinnedEffect_TwoBoneBlend` are
+registered on both modules. Both tests were ported (not verbatim-shared, but adapted with only the
+class name/comment changed) from the Vulkan backend's own `examples/vulkan_skinnedeffect_*_test.cpp`,
+which are already fully backend-agnostic real-XNA-API code.
+
+**Out of scope**: real XNA's `PreferPerPixelLighting` selecting a genuinely different, per-vertex
+(Gouraud) lit shader -- this backend is per-pixel-lit only, matching every established CNA backend
+except D3D9 (`GpuDrawParams::preferPerPixelLighting`'s own documented deviation). The
+`VertexColorEnabled` CNA-only (`NOXNA`) extension property and its stride-56 vertex-colour variant
+are not implemented. `SkinnedPbrEffect` (stride 68, `PbrEffect` combined with skinning) is out of
+scope, tracked under `PbrEffect` itself.
+
 ## Tests
 
 ```bash
@@ -343,8 +410,11 @@ recognised upload strides. `Llgl_EnvironmentMapEffect_AlphaScaledLerp` is anothe
 source, covering `EnvironmentMapEffect`'s alpha-scaled cube-map base lerp (Task 891's fix); see
 "EnvironmentMapEffect" above for why it has no `_OpenGL` twin (a genuine `hasCubeTextures`
 limitation of this project's own OpenGL module, not a gap in this backend).
+`Llgl_SkinnedEffect_IdentityBones`/`Llgl_SkinnedEffect_TwoBoneBlend` are ported (not verbatim, but
+adapted with only the class name/comment changed) from the Vulkan backend's own sources -- see
+"SkinnedEffect" above.
 Every other test is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty-one
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty-five
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 

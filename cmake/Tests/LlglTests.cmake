@@ -130,6 +130,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-25 follow-up: SkinnedEffect -- ported (not verbatim-shared, unlike the two tests above)
+    # from the Vulkan backend's own examples/vulkan_skinnedeffect_*_test.cpp, which are themselves
+    # fully backend-agnostic (real public XNA API + VertexBuffer::SetDataRaw, no Vulkan-specific
+    # code at all) and so port over with only the class name/comment header changed.
+    cna_llgl_test(cna_test_llgl_skinnedeffect_identity_bones
+                  examples/llgl_skinnedeffect_identity_bones_test.cpp)
+    cna_register_backend_test(NAME Llgl_SkinnedEffect_IdentityBones COMMAND cna_test_llgl_skinnedeffect_identity_bones
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_skinnedeffect_twobone_blend
+                  examples/llgl_skinnedeffect_twobone_blend_test.cpp)
+    cna_register_backend_test(NAME Llgl_SkinnedEffect_TwoBoneBlend COMMAND cna_test_llgl_skinnedeffect_twobone_blend
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-17: the same two binaries, pinned to the OpenGL module instead of the default
     # (Vulkan-first) preference. Running only the default preference is what let the OpenGL module
     # clear correctly and draw nothing for as long as it did -- a module nothing exercises is a
@@ -188,4 +204,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     # Vulkan-preferred TextureCubeTest, never through a CNA_LLGL_RENDERER=opengl-pinned CTest),
     # not a regression in EnvironmentMapEffect or CreateTextureCube itself. See plan_llgl.md
     # LLGL-25/LLGL-26 and docs/llgl-backend.md.
+    cna_register_backend_test(NAME Llgl_SkinnedEffect_IdentityBones_OpenGL COMMAND cna_test_llgl_skinnedeffect_identity_bones
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_SkinnedEffect_TwoBoneBlend_OpenGL COMMAND cna_test_llgl_skinnedeffect_twobone_blend
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 endif()

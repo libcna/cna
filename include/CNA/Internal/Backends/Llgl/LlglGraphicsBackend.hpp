@@ -1499,6 +1499,16 @@ namespace CNA::Internal::Backends::Llgl
             /** @brief Primitives only, when `envMapping`: index into the frame's per-draw
              *  EnvironmentMapEffect uniform buffer pool. */
             std::uint32_t    envMapUniformIndex = 0;
+            /** @brief Primitives only: true when this draw is `SkinnedEffect`, in which case
+             *  `skinnedUniformIndex`/`skinnedBoneIndex` (not `transformIndex`) name this draw's
+             *  own uniform/bone buffers, from their own differently-sized pools. */
+            bool             skinned      = false;
+            /** @brief Primitives only, when `skinned`: index into the frame's per-draw
+             *  SkinnedEffect parameter uniform buffer pool. */
+            std::uint32_t    skinnedUniformIndex = 0;
+            /** @brief Primitives only, when `skinned`: index into the frame's per-draw bone
+             *  transform buffer pool (72 `mat4`s each). */
+            std::uint32_t    skinnedBoneIndex = 0;
             /** @brief Primitives only: first index of an indexed draw; ignored otherwise. */
             std::uint32_t    firstIndex   = 0;
             /** @brief Primitives only: value added to each index before vertex fetch. */
@@ -1535,10 +1545,14 @@ namespace CNA::Internal::Backends::Llgl
         /// lit, never variant-selected by (textured, lit) like AcquirePrimitiveVertexShader --
         /// only the vertex layout (attribute trimming/caching) varies.
         LLGL::Shader* AcquirePrimitiveEnvMapVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
+        /// SkinnedEffect's own vertex shader (skinned3d.vert.glsl): always textured and lit, and
+        /// needs the two extra bone attributes (`aBoneWeights`/`aBoneIndices`) present -- never
+        /// variant-selected like AcquirePrimitiveVertexShader, only the vertex layout varies.
+        LLGL::Shader* AcquirePrimitiveSkinnedVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
         LLGL::PipelineState* AcquirePrimitivePipeline(const LlglVertexBufferBackend& vertexBuffer,
                                                       PrimitiveType primitive, bool scissorEnabled,
                                                       bool textured, bool lit, bool dualTexture,
-                                                      bool envMapping);
+                                                      bool envMapping, bool skinned);
         void QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                              const LlglIndexBufferBackend* indexBuffer,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -1556,6 +1570,15 @@ namespace CNA::Internal::Backends::Llgl
         /// FillEffectUniforms, `params` is never null here (only called when `envMapping` is set).
         static void FillEnvMapUniforms(float (&uniforms)[84], const float matrix[16],
                                        const GpuDrawParams& params);
+        /// Fills one SkinnedEffect draw's own 368-byte parameter uniform block (92 floats -- see
+        /// shaders/skinned3d.vert.glsl's SkinnedParams for the byte layout). `params` is never
+        /// null here (only called when `skinned` is set).
+        static void FillSkinnedUniforms(float (&uniforms)[92], const float matrix[16],
+                                        const GpuDrawParams& params);
+        /// Fills one SkinnedEffect draw's own 72-`mat4` (1152-float) bone transform buffer, copying
+        /// only `params.boneCount` entries (the rest stay zeroed, matching a disabled/unused bone
+        /// slot the shader never indexes into since `boneCount` bounds every real index).
+        static void FillSkinnedBoneData(float (&bones)[72 * 16], const GpuDrawParams& params);
         /**
          * @brief One contiguous render pass worth of frame commands, all sharing the same
          * destination (null means the swap chain).
@@ -1634,6 +1657,27 @@ namespace CNA::Internal::Backends::Llgl
         /// uniform block has a different shape/size (kEnvMapUniformFloats, not kEffectUniformFloats).
         std::vector<LLGL::Buffer*>  envMapUniformBuffers_;
         std::vector<float>         envMapUniformData_;
+
+        /// `SkinnedEffect` (LLGL-25 follow-up): its own dedicated vertex layout, fragment shader
+        /// and pipeline layout, exactly like `EnvironmentMapEffect` above -- the skinning transform
+        /// (bone weight/index blend) is a per-vertex-attribute concern no other vertex shader here
+        /// has. See AcquirePrimitiveSkinnedVertexShader() and shaders/skinned3d.vert.glsl.
+        LLGL::PipelineLayout*       primitiveSkinnedLayout_ = nullptr;
+        LLGL::Shader*               primitiveSkinnedFragmentShader_ = nullptr;
+        std::map<std::uint64_t, LLGL::Shader*> primitiveSkinnedVertexShaderCache_;
+        /// One small constant buffer per SkinnedEffect draw in a frame for the non-bone parameters
+        /// (kSkinnedUniformFloats) -- same reasoning as envMapUniformBuffers_ above.
+        std::vector<LLGL::Buffer*>  skinnedUniformBuffers_;
+        std::vector<float>         skinnedUniformData_;
+        /// A SECOND, much larger per-draw buffer pool for the 72-bone `mat4` array
+        /// (kSkinnedBoneFloats = 72*16 floats = 4608 bytes) -- kept separate from
+        /// skinnedUniformBuffers_ rather than folded into one buffer, mirroring the Vulkan
+        /// backend's own two-UBO split (`BoneBlock`/`FogParams`), since the two buffers have
+        /// wildly different sizes and this project's own established growth/reuse pool pattern is
+        /// already per-buffer-shape (transformBuffers_/customEffectUniformBuffers_/
+        /// envMapUniformBuffers_ are three separate pools for exactly this reason).
+        std::vector<LLGL::Buffer*>  skinnedBoneBuffers_;
+        std::vector<float>         skinnedBoneData_;
 
         /// Shared by every `LlglEffectBackend` (LLGL-27); built lazily by
         /// AcquireCustomEffectLayoutEXT() on the first `ShaderEffect` any game constructs. Unlike
