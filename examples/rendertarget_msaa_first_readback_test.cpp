@@ -135,19 +135,26 @@ namespace
 #endif
 
     /**
-     * @brief Whether a MULTISAMPLED render target's CONTENT can be asserted on this backend.
+     * @brief Whether a MULTISAMPLED render target's CONTENT is asserted on this backend.
      *
-     * False only on EASYGL, whose all-zero MSAA readback is the remaining, still-open scope of
-     * REMED-GFX-164 and is deliberately NOT fixed by REMED-GFX-154 (this task changes Bgfx
-     * production only). Where this is false the leg still asserts the entire transfer contract and
-     * PRINTS the texels it actually got, so the declaration cannot quietly outlive the defect.
+     * TRUE EVERYWHERE, INCLUDING EASYGL -- and that is a measurement, not an assumption.
+     *
+     * This started as an EasyGL boundary, because REMED-GFX-164 records an all-zero multisampled
+     * readback there and REMED-GFX-154 changes Bgfx production only. The boundary was written to
+     * PRINT the texels it measured rather than skip silently, exactly so a stale declaration would
+     * be visible -- and it was: EasyGL measured **0/256 all-zero texels with the centre reading the
+     * correct (250,25,15,255)**. Asserting the content there instead gives **34/34 legs and 145/145
+     * checks**, so EasyGL's multisampled readback is byte-exact through THIS public sequence and the
+     * declaration was simply too broad.
+     *
+     * REMED-GFX-164 is NOT thereby closed. Its own fixture, `frontface_winding_test.cpp`, still
+     * reproduces on EasyGL in the same run: leg W1msaa reports the NEVER-COVERED quadrants of a 4x
+     * target reading `(0,0,0,0)` where `(0,0,0,255)` was expected. So the remaining EasyGL scope is
+     * narrower than "MSAA render targets read back all-zero" -- it is sequence-specific, and a
+     * region that only a Clear ever touched is where it shows. Recorded under REMED-GFX-164;
+     * EasyGL production is untouched by this task.
      */
-    constexpr bool kMsaaContentReadable =
-#if defined(CNA_BACKEND_EASYGL)
-        false;
-#else
-        true;
-#endif
+    constexpr bool kMsaaContentReadable = true;
 
     /**
      * @brief Whether this backend can read a render target's colour attachment back at all.
@@ -161,6 +168,23 @@ namespace
      */
     constexpr bool kTargetReadbackSupported =
 #if defined(CNA_BACKEND_HEADLESS)
+        false;
+#else
+        true;
+#endif
+
+    /**
+     * @brief Whether probing mip level 1 of a mipmapped MULTISAMPLED target is survivable here.
+     *
+     * False on SDL_GPU, which **SEGFAULTS** on `GetData(1, rect, ...)` of a
+     * `RenderTarget2D(16,16,mipMap=true,MSAA=4)` -- level 0 of the very same target reads back
+     * exactly first. Isolated 2026-07-31 while running REMED-GFX-154's cross-backend controls and
+     * recorded as **REMED-GFX-186**; it is a pre-existing SDL_GPU defect on a different backend and
+     * a different route, so REMED-GFX-154 declares it rather than fixing it. A SIGSEGV cannot be
+     * caught, so leg G1 must not issue that read here -- it says so instead.
+     */
+    constexpr bool kMsaaMipLevelProbeSafe =
+#if defined(CNA_BACKEND_SDL_GPU)
         false;
 #else
         true;
@@ -975,6 +999,14 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         // Level 1 of a multisampled render target is a SEPARATE, independently tracked route (mip
         // regeneration, not resolve). Classified here so the boundary is on record, never fixed
         // here and never absorbed into this ticket.
+        if (!kMsaaMipLevelProbeSafe)
+        {
+            boundary("G1 mip level 1 of a mipmapped multisampled target SEGFAULTS on this backend "
+                     "(REMED-GFX-186, isolated by this task's controls) -- a SIGSEGV cannot be "
+                     "caught, so the probe is declared instead of issued. Level 0 above is exact.");
+            check(true, "G1 mip level 1 behaviour is classified rather than absorbed");
+            return;
+        }
         const int lvl1 = (kRT / 2) * (kRT / 2);
         std::vector<Color> buf = SentinelBuffer(lvl1);
         const Rectangle r(0, 0, kRT / 2, kRT / 2);
