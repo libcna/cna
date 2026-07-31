@@ -171,6 +171,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # plan_canvas.md design decision 2: reuses the existing SDL-created window/canvas element,
     # so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
+    # plan_html_dom.md design decision 2: reuses the SDL-created window/canvas element for sizing,
+    # input and events, so SDL3 is still linked even though every draw goes through EM_JS/DOM/CSS
+    # and no SDL_Renderer is ever created.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
     # SKIA-160: CNA_SKIA_LINK_TARGET is CNA::Skia (raster, default) or CNA::SkiaGanesh (GANESH
     # mode), set by BackendSelection.cmake's CNA_SKIA_MODE branch above -- never both; the two are

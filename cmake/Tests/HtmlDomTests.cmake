@@ -1,0 +1,21 @@
+# plan_html_dom.md HTMLDOM-15/HTMLDOM-72: the HTML_DOM backend's end-to-end smoke test.
+#
+# Deliberately NOT registered as a CTest, for the same reason every CANVAS entry is not: this
+# backend produces a wasm module that only runs inside a browser -- SDL_Init(SDL_INIT_VIDEO) itself
+# throws under `node` (no DOM), before any backend code runs. Unlike CANVAS, though, this one is
+# genuinely runnable here: scripts/run-htmldom-browser-test.sh serves the generated page and drives
+# it through headless Chromium, reading the PASS/FAIL lines the test prints.
+#
+# SUFFIX ".html" makes Emscripten emit its default shell page (which provides the <canvas> element
+# SDL3 binds to and this backend anchors its DOM surface over) alongside the .js/.wasm.
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
+    add_executable(cna_test_htmldom_smoke examples/htmldom_smoke_test.cpp)
+    target_link_libraries(cna_test_htmldom_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    set_target_properties(cna_test_htmldom_smoke PROPERTIES SUFFIX ".html")
+    # UTF8ToString is referenced from an EM_JS body rather than from C++, so it has to be kept
+    # explicitly -- the linker cannot see that use and would otherwise drop it.
+    target_link_options(cna_test_htmldom_smoke PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sEXIT_RUNTIME=1
+        -sEXPORTED_RUNTIME_METHODS=UTF8ToString)
+endif()

@@ -44,6 +44,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_CANVAS
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_HTML_DOM
+    ++enabled;
+#endif
 #ifdef CNA_BACKEND_SKIA
     ++enabled;
 #endif

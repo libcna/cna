@@ -49,8 +49,8 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores every declared mip level's six faces in a
 // real CPU shadow, so its readback is exact at every level too.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || \
-    defined(CNA_BACKEND_GDI)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_HTML_DOM) || \
+    defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_GDI)
 constexpr bool kCubeStorageSupported         = false;
 constexpr bool kCubeLevel0ReadbackSupported  = false;
 constexpr bool kCubeMipReadbackSupported     = false;
