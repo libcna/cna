@@ -197,6 +197,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     find_package(OpenGL REQUIRED)
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT")
+    # plan_diligent.md DILIGENT-2: SDL3 provides the window (and the native handle Diligent's swap
+    # chain is created from); every graphics call goes through the Diligent engine targets that
+    # cna_configure_diligent() actually built for this platform.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+    cna_link_diligent(${BACKEND_TARGET})
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package

@@ -173,6 +173,13 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE Magnum::GL Magnum::Magnum)
     endif()
 
+    # plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the backend header,
+    # which includes DiligentCore's own headers. cna_link_diligent() keeps those PRIVATE to the
+    # backend target (same discipline as WebGPU just above), so expose them here too.
+    if(CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT")
+        cna_link_diligent(CnaTests)
+    endif()
+
     if(CNA_ENABLE_NET)
         target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
     endif()

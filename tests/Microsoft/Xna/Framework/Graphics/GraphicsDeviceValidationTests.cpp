@@ -187,6 +187,11 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // the correct behaviour and the reason it is asserted here: a no-op backend must not report
     // false success for a target it cannot honour.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+#elif defined(CNA_BACKEND_DILIGENT)
+    // plan_diligent.md DILIGENT-20/DILIGENT-24: the Diligent backend creates no render target at
+    // all yet, so the refusal comes from the shared layer (a RenderTarget2D with no backend), not
+    // from a backend-specific single-target limit like the backends above.
+    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #elif defined(CNA_BACKEND_OPENGLES1)
     // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
     // adds one -- a third distinct case from the single-target backends above (which support one)
@@ -212,9 +217,11 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_BACKEND_STUB)
+#if defined(CNA_BACKEND_STUB) || defined(CNA_BACKEND_DILIGENT)
     // Same Stub contract as the four-target case above: no render-target support of any kind, so
     // even a single binding is refused deterministically rather than silently accepted.
+    // plan_diligent.md DILIGENT-20: no render targets yet, so binding one fails loudly in the
+    // shared layer instead of quietly drawing to the back buffer.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));

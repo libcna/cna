@@ -190,6 +190,7 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - `D3D10` (Windows-only; CNA's real Direct3D 10 backend -- no fixed-function pipeline at all, real HLSL vs_4_0/ps_4_0 shaders via Wine's own d3d10.dll + DXVK's d3d10core.dll, real MRT)
 - `WICKED` (Wicked Engine's `wi::graphics` RHI; Linux/Windows, needs a Wicked Engine checkout)
 - `SOKOL` (sokol_gfx single-header GPU abstraction; dispatches onto desktop OpenGL 4.1 core here)
+- `DILIGENT` (experimental)
 
 ### Tradeoffs
 
@@ -206,6 +207,11 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
     - Integrates through CNA backend abstraction and can be selected via `CNA_GRAPHICS_BACKEND=BGFX`.
     - Uses native `bgfx` API (window/platform init, texture creation, sprite draws, frame submission), not `SDL_Renderer` rendering.
     - `bgfx` is integrated in CMake for this backend via `FetchContent` (`bgfx.cmake`).
+
+- **Diligent Engine backend (experimental)**
+    - The only backend that does not target one native API: DiligentCore is itself an abstraction over Direct3D 11/12, Vulkan, OpenGL and Metal, so the native API is chosen **at runtime** (`D3D12` → `Vulkan` → `D3D11` → `OpenGL`, overridable with the `CNA_DILIGENT_DEVICE` environment variable).
+    - Shaders are authored once in HLSL and cross-compiled by Diligent for whichever device was selected.
+    - Implements a 2D/3D baseline only — render targets, cube/volume textures, MSAA and most stock effects are not implemented yet and refuse loudly instead of approximating. See `docs/diligent-backend.md` and `plan_diligent.md`.
 
 - **Vulkan backend**
     - Present as an architecture target/scaffold.

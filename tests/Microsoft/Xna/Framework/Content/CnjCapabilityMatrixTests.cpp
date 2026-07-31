@@ -198,8 +198,12 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 // reviewed backend set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
 // plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
+// plan_diligent.md DILIGENT-23: the Diligent backend keeps CreateTextureCube's nullptr
+// default for now -- it owns no cube resource at all, exactly like the four 2D-only
+// backends listed here, so it belongs in the same set rather than in a new one.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || \
+    defined(CNA_BACKEND_DILIGENT)
 constexpr bool kCubeStorageSupported = false;
 #else
 constexpr bool kCubeStorageSupported = true;

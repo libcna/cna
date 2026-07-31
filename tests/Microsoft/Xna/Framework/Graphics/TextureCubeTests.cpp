@@ -74,8 +74,12 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores every declared mip level's six faces in a
 // real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
 // Software), even though nothing on this backend samples a cube texture as a GPU resource yet.
+// plan_diligent.md DILIGENT-23: the Diligent backend keeps CreateTextureCube's nullptr
+// default for now -- it owns no cube resource at all, exactly like the four 2D-only
+// backends listed here, so it belongs in the same set rather than in a new one.
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || \
+    defined(CNA_BACKEND_DILIGENT)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else

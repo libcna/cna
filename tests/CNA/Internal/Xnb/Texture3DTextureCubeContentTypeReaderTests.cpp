@@ -48,8 +48,11 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
 // plan_sokol.md SOKOL-27: SokolTextureCubeBackend stores every declared mip level's six faces in a
 // real CPU shadow, so its readback is exact at every level too.
+// plan_diligent.md DILIGENT-23: the Diligent backend owns no cube resource yet either, so it
+// belongs in this same set (see tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp).
 #if defined(CNA_BACKEND_SDL_RENDERER) || defined(CNA_BACKEND_ASCII) || \
-    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS)
+    defined(CNA_BACKEND_CANVAS) || defined(CNA_BACKEND_FREEDIRECT) || defined(CNA_BACKEND_HEADLESS) || \
+    defined(CNA_BACKEND_DILIGENT)
 constexpr bool kCubeStorageSupported         = false;
 constexpr bool kCubeLevel0ReadbackSupported  = false;
 constexpr bool kCubeMipReadbackSupported     = false;

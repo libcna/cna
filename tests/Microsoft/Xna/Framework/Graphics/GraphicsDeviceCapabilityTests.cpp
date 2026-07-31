@@ -87,6 +87,14 @@ constexpr bool kExpectCustomEffects         = false;
 constexpr bool kExpectMultipleRenderTargets = true;
 constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_BACKEND_DILIGENT)
+// plan_diligent.md DILIGENT-20/DILIGENT-41/DILIGENT-42: a third genuinely 3D-capable backend with
+// its own honest, narrower profile at this point in its implementation -- no render targets (so no
+// MRT), no occlusion queries and no custom ShaderEffect compilation. Each is reported truthfully
+// rather than inherited from EasyGL, and each arm value moves when its own task lands.
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
 #else
 constexpr bool kExpectMultipleRenderTargets = true;
 constexpr bool kExpectOcclusionQuery        = true;

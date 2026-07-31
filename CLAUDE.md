@@ -428,10 +428,13 @@ Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 (`SDL_RENDERER` | `EASYGL` | `BGFX` | `VULKAN` | `WEBGPU` | `MAGNUM` | `HEADLESS` | `SOFTWARE` |
 `STUB` | `D3D11` | `D3D12` | `CANVAS` | `ASCII` | `FREEDIRECT` | `D3D9` | `DX1` | `DX2` | `DX3` |
 `DX5` | `DX6` | `DX7` | `DX8` | `D3D10` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
-`SDL_GPU` | `WICKED`). `WEBGPU` is experimental and has a functional native 2D baseline, not yet
-the 3D/effect parity of the established GPU backends.
+`SDL_GPU` | `WICKED` | `SOKOL` | `DILIGENT`). `WEBGPU` is experimental and has a functional native
+2D baseline, not yet the 3D/effect parity of the established GPU backends.
 `MAGNUM` is a desktop-OpenGL backend built on mosra/magnum -- see `docs/magnum-backend.md` and
 `plan_magnum.md` for its own capability boundary.
+`DILIGENT` is experimental too, and is the one backend whose native API is chosen at **runtime**
+(DiligentCore is itself an abstraction over D3D11/D3D12/Vulkan/OpenGL/Metal) — see
+`plan_diligent.md` and `docs/diligent-backend.md`.
 
 ---
 

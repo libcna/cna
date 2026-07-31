@@ -77,6 +77,7 @@ namespace
             case GraphicsBackendType::OpenGL2:     return "OPENGL2";
             case GraphicsBackendType::Wicked:      return "WICKED";
             case GraphicsBackendType::Sokol:       return "SOKOL";
+            case GraphicsBackendType::Diligent:    return "DILIGENT";
         }
         return {};
     }
@@ -85,7 +86,7 @@ namespace
 TEST(GraphicsBackendTypeTest, NameMatchesTypeForEveryBackend)
 {
     // Every call in this build returns the SAME compile-time-selected backend, so one build
-    // checks one arm; the 30 backend builds between them cover the whole enum. What this asserts
+    // checks one arm; the 31 backend builds between them cover the whole enum. What this asserts
     // is that the (type, name) pair is internally consistent AND that the active backend has an
     // expected-name arm at all -- a backend with no arm fails here instead of passing vacuously.
     const auto type = getCurrentGraphicsBackendType();
