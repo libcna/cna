@@ -177,7 +177,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 | HTMLDOM-35 | ✅ | `sourceRectangle` → `background-position` + element size; source rects are clamped into the texture. |
 | HTMLDOM-36 | ✅ | `Begin(transformMatrix)` → a CSS `matrix(M11,M12,M21,M22,M41,M42)` on a batch wrapper element, composed under each sprite's own transform. |
 | HTMLDOM-37 | ✅ | `SetCustomEffect(non-null)` throws — no programmable shader stage exists. |
-| HTMLDOM-38 | 🟨 | `SpriteFont::DrawString` needs no backend-specific code (design decision 12) — every glyph funnels through the same `Draw` overload. Reviewed, but not in the automated browser run. |
+| HTMLDOM-38 | ✅ | `SpriteFont::DrawString` needs no backend-specific code (design decision 12) — every glyph funnels through the same `Draw` overload. Verified in the browser run: a one-glyph font's `DrawString` produces a real DOM element, textured from a generated PNG data URL, sized from the glyph's own atlas bounds. |
 
 ### D5 — Blend and sampler state
 
@@ -187,7 +187,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 | HTMLDOM-42 | ✅ | `Opaque` → alpha-stripped variant; `AlphaBlend` → un-premultiplied variant; `NonPremultiplied` → straight; `Additive` → `mix-blend-mode: plus-lighter`. |
 | HTMLDOM-43 | ✅ | Colour tint → cached tinted variant; alpha → `opacity` (free). |
 | HTMLDOM-44 | ✅ | `TextureFilter` → `image-rendering: pixelated` vs `auto`, using the same magnification-dominant grouping `SDL_RENDERER` Task 701 and `CANVAS` CANVAS-42 use. |
-| HTMLDOM-45 | 🟨 | `Clamp` is exact and unit-tested; `Mirror` and mixed per-axis modes throw (✅, unit-tested). `Wrap` maps to CSS background repetition (and a repeating Canvas2D pattern on the render-target path) but is not covered by the browser run — 🟨 is for that gap. |
+| HTMLDOM-45 | ✅ | `Clamp` is exact and unit-tested; `Mirror` and mixed per-axis modes throw (unit-tested). `Wrap` maps to CSS background repetition — verified in the browser run: a texture drawn with a source rectangle double its own size under `SamplerState.PointWrap` keeps its full (unclamped) element width and gets `background-repeat: repeat`, distinguishing it from Clamp's narrowing. The render-target-path repeating-pattern half of Wrap remains reviewed-only, not separately exercised. |
 | HTMLDOM-46 | ✅ | `ColorWriteChannels`/`MultiSampleMask` documented as inexpressible in CSS compositing. |
 
 ### D6 — Render targets
@@ -214,7 +214,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 |---|---|---|
 | HTMLDOM-70 | ✅ | GTest coverage for every pure-C++ unit: blend mapping, address-mode validation, command encoding, 3D throw surface. |
 | HTMLDOM-71 | ✅ | Real Emscripten build (`emcmake`, emsdk 6.0.5). |
-| HTMLDOM-72 | ✅ | **Real browser verification** — 17/17 checks pass in headless Chromium via Playwright, asserting against the DOM the backend produced (surface, clear colour, sprite transforms/sizes/opacity/data-URL backgrounds, element recycling, a `RenderTarget2D` readback round-trip, and the backbuffer refusal). This is what `CANVAS` could never do in its own dev loop — and it earned its keep immediately: see the note below. |
+| HTMLDOM-72 | ✅ | **Real browser verification** — 22/22 checks pass in headless Chromium via Playwright, asserting against the DOM the backend produced (surface, clear colour, sprite transforms/sizes/opacity/data-URL backgrounds, element recycling, a `RenderTarget2D` readback round-trip, the backbuffer refusal, `SpriteFont::DrawString`, and `TextureAddressMode::Wrap`). This is what `CANVAS` could never do in its own dev loop — and it earned its keep immediately: see the note below. |
 | HTMLDOM-73 | ✅ | `docs/html-dom-backend.md` capability/limitation matrix. |
 
 ---
@@ -231,6 +231,17 @@ test was replaced with `split`/`indexOf` parsing.
 
 Worth knowing project-wide: no `EM_JS` body anywhere in CNA should contain a backslash escape.
 `CANVAS`'s own `EM_JS` bodies happen not to, so nothing else is affected today.
+
+Extending the smoke test to cover `SpriteFont::DrawString` (HTMLDOM-38) and `TextureAddressMode::Wrap`
+(HTMLDOM-45) caught a second, unrelated test bug the same way: 19 of 22 checks failed with symptoms
+(`visible=3` instead of `2`, a glyph landing at index 0 with the WRONG width) that looked exactly
+like a backend defect. The cause was in the test's own frame dispatch: the pre-existing `if (frame_
+<= 2) {...} else {...}` block that drives frames 3-4's single-sprite recycling check used an
+unconditional `else`, so it kept running on frame 5 too — queuing an extra, unplanned sprite *before*
+the new glyph/Wrap draws, shifting every sprite index by one. Fixed by bounding that block to `else
+if (frame_ <= 4)` so frame 5 owns its own drawing (and its own sprite indices) outright. Two real
+bugs found by two different real-browser runs, zero backend defects either time — exactly the
+point of running this in an actual browser instead of trusting a structural review.
 
 ## Known limitations (honest list)
 

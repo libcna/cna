@@ -16,9 +16,12 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
@@ -38,7 +41,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 17;
+    constexpr int kExpectedChecks = 22;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -89,7 +92,7 @@ namespace
     EM_JS(int, JsSpriteTransformContains, (int i, const char* needle), {
         const root = document.getElementById('cna-dom-root');
         if (!root || !root.children[i]) return 0;
-        const strip = function(s) { return s.split(' ').join(''); };
+        const strip = function(s) { return s.split(" ").join(""); };
         return strip(root.children[i].style.transform).indexOf(strip(UTF8ToString(needle))) >= 0 ? 1 : 0;
     });
 
@@ -120,6 +123,13 @@ namespace
         return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
     });
 
+    /// 1 when sprite `i`'s `background-repeat` is `'repeat'` (TextureAddressMode::Wrap tiling).
+    EM_JS(int, JsSpriteBackgroundRepeat, (int i), {
+        const root = document.getElementById('cna-dom-root');
+        if (!root || !root.children[i]) return 0;
+        return root.children[i].style.backgroundRepeat === 'repeat' ? 1 : 0;
+    });
+
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
         window.__cnaSmokeResult = result;
         window.__cnaSmokePassed = passed;
@@ -136,6 +146,7 @@ namespace
     int JsSpriteWidth(int) { return -1; }
     int JsSpriteOpacity255(int) { return -1; }
     int JsCanvasHidden() { return 0; }
+    int JsSpriteBackgroundRepeat(int) { return 0; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -146,6 +157,7 @@ class HtmlDomSmokeTest : public Game
     std::unique_ptr<SpriteBatch> spriteBatch_;
     std::unique_ptr<Texture2D> texture_;
     std::unique_ptr<RenderTarget2D> renderTarget_;
+    std::unique_ptr<SpriteFont> font_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -168,6 +180,25 @@ protected:
                 0, 0, 255, 255,   255, 255, 0, 255,
             }));
         renderTarget_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 4, 4);
+
+        // plan_html_dom.md HTMLDOM-38: a one-glyph SpriteFont ('A', a 4x4 fully-opaque atlas cell,
+        // no cropping offset, no bearing) -- enough to exercise DrawString() through the shared
+        // SpriteFont/SpriteBatch layer and confirm it reaches the DOM path with zero backend-
+        // specific code, per this backend's own claim.
+        std::vector<std::uint8_t> glyphPixels(4 * 4 * 4, 0);
+        for (std::size_t i = 0; i < glyphPixels.size(); i += 4)
+        {
+            glyphPixels[i] = 255; glyphPixels[i + 1] = 200; glyphPixels[i + 2] = 0; glyphPixels[i + 3] = 255;
+        }
+        Texture2D glyphAtlas = Texture2D::CreateFromPixels(getGraphicsDeviceProperty(), 4, 4, glyphPixels);
+        font_ = std::make_unique<SpriteFont>(
+            glyphAtlas,
+            std::vector<Rectangle>{Rectangle(0, 0, 4, 4)},
+            std::vector<Rectangle>{Rectangle(0, 0, 4, 4)},
+            std::vector<charcs>{u'A'},
+            /*lineSpacing=*/4, /*spacing=*/0.0f,
+            std::vector<Vector3>{Vector3(0.0f, 4.0f, 0.0f)},
+            std::nullopt);
     }
 
     void Draw(const GameTime&) override
@@ -201,7 +232,7 @@ protected:
                                SpriteEffects::FlipHorizontally, 0.0f);
             spriteBatch_->End();
         }
-        else
+        else if (frame_ <= 4)
         {
             // One sprite: the pool must recycle, leaving the second element hidden rather than
             // removed -- that recycling is the whole performance premise of this backend.
@@ -209,6 +240,8 @@ protected:
             spriteBatch_->Draw(*texture_, Vector2(8, 8), Color::White);
             spriteBatch_->End();
         }
+        // frame_ == 5 draws nothing here -- its own block below owns this frame's drawing
+        // entirely, so its sprite indices are known exactly (0 = glyph, 1 = Wrap sprite).
 
         if (frame_ == 2)
         {
@@ -272,6 +305,34 @@ protected:
         {
             check(JsVisibleSpriteCount() == 1 && JsPooledSpriteCount() == 2,
                   "the element pool recycles: 1 visible, 2 retained");
+        }
+
+        if (frame_ == 5)
+        {
+            // plan_html_dom.md HTMLDOM-38: DrawString needs no backend-specific code -- every
+            // glyph funnels through the same Draw() overload as an ordinary sprite.
+            spriteBatch_->Begin();
+            spriteBatch_->DrawString(*font_, "A", Vector2(2, 2), Color::White);
+            spriteBatch_->End();
+
+            // plan_html_dom.md HTMLDOM-45: TextureAddressMode::Wrap, only distinguishable from
+            // Clamp once the requested sourceRectangle exceeds the texture's own bounds -- draw the
+            // 2x2 texture with a 4x4 source rectangle (double its size) under PointWrap.
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
+                                const_cast<SamplerState*>(&SamplerState::PointWrap), nullptr, nullptr);
+            spriteBatch_->Draw(*texture_, Rectangle(40, 40, 8, 8), Rectangle(0, 0, 4, 4), Color::White);
+            spriteBatch_->End();
+
+            check(JsVisibleSpriteCount() == 2,
+                  "both the glyph and the Wrap-addressed sprite are present as DOM elements");
+            check(JsSpriteHasDataUrlBackground(0) == 1,
+                  "DrawString's glyph is textured from a generated PNG data URL");
+            check(JsSpriteWidth(0) == 4,
+                  "the glyph element is sized from the font atlas's own glyph bounds (4px)");
+            check(JsSpriteWidth(1) == 4,
+                  "Wrap keeps the full out-of-bounds sourceRectangle width (4px), unlike Clamp");
+            check(JsSpriteBackgroundRepeat(1) == 1,
+                  "TextureAddressMode::Wrap maps to CSS background-repeat: repeat");
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
