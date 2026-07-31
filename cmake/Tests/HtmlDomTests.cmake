@@ -38,4 +38,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
     target_link_options(cna_test_htmldom_pixel_verification PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
+
+    # plan_html_dom.md Phase D9 (HTMLDOM-89/90): a performance benchmark (500 animated sprites/
+    # frame, steady-state ms/frame) and a 300-frame stability run (oscillating sprite counts,
+    # cycling tints forcing real variant-cache LRU eviction). Driven by the same harness.
+    add_executable(cna_test_htmldom_stress examples/htmldom_stress_test.cpp)
+    target_link_libraries(cna_test_htmldom_stress PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    set_target_properties(cna_test_htmldom_stress PROPERTIES SUFFIX ".html")
+    target_link_options(cna_test_htmldom_stress PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sEXIT_RUNTIME=1)
 endif()
