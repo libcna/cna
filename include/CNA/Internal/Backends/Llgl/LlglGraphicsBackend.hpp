@@ -519,6 +519,9 @@ namespace CNA::Internal::Backends::Llgl
          * @param w      Width of the region in pixels.
          * @param h      Height of the region in pixels.
          * @param pixels Destination for w * h * 4 bytes of RGBA8, top row first.
+         * @note Under a scaled or letterboxed presentation one logical pixel covers a block of
+         *       window pixels; the block's centre pixel is returned. Nearest-neighbour rather than
+         *       an average, so every value handed back is a colour the frame genuinely contained.
          * @throws std::runtime_error If the copy could not be performed.
          */
         void ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels) override;

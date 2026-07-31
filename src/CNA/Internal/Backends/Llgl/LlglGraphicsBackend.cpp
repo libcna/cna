@@ -1408,48 +1408,73 @@ namespace CNA::Internal::Backends::Llgl
             CaptureBackbuffer();
 
         // The caller's region is in logical (virtual-resolution) coordinates, which coincide with
-        // window pixels only when nothing is letterboxed or scaled.
+        // window pixels only when the presentation is 1:1. Under any letterbox or scale, one
+        // logical pixel covers a block of window pixels.
         const PresentationRect rect = ComputePresentationRect();
-        int windowX = x;
-        int windowY = y;
-        int windowW = w;
-        int windowH = h;
+        float offsetX = 0.0f;
+        float offsetY = 0.0f;
+        float scaleX = 1.0f;
+        float scaleY = 1.0f;
         if (rect.logicalWidth > 0.0f && rect.logicalHeight > 0.0f && rect.width > 0.0f && rect.height > 0.0f)
         {
-            const float scaleX = rect.width / rect.logicalWidth;
-            const float scaleY = rect.height / rect.logicalHeight;
-            windowX = static_cast<int>(std::lround(rect.x + static_cast<float>(x) * scaleX));
-            windowY = static_cast<int>(std::lround(rect.y + static_cast<float>(y) * scaleY));
-            windowW = std::max(1, static_cast<int>(std::lround(static_cast<float>(w) * scaleX)));
-            windowH = std::max(1, static_cast<int>(std::lround(static_cast<float>(h) * scaleY)));
+            offsetX = rect.x;
+            offsetY = rect.y;
+            scaleX = rect.width / rect.logicalWidth;
+            scaleY = rect.height / rect.logicalHeight;
         }
 
-        if (windowW != w || windowH != h)
-        {
-            // A scaled readback would have to resample the captured region back down to the size
-            // the caller allocated, which is no longer a transfer -- fail rather than return a
-            // differently-sized image in a buffer sized for the original request.
-            throw std::runtime_error(
-                std::string(kBackendName) + " backend: ReadBackbuffer of a scaled presentation is "
-                "not supported (logical region " + std::to_string(w) + "x" + std::to_string(h) +
-                " maps to " + std::to_string(windowW) + "x" + std::to_string(windowH) + " window pixels)");
-        }
+        const bool oneToOne = (offsetX == 0.0f && offsetY == 0.0f && scaleX == 1.0f && scaleY == 1.0f);
 
-        if (windowX < 0 || windowY < 0 ||
-            windowX + w > backbufferCacheWidth_ || windowY + h > backbufferCacheHeight_)
+        // A scaled logical pixel is resolved to the window pixel at the CENTRE of the block it
+        // covers -- nearest-neighbour, deliberately not an average. Every value handed back is
+        // then a colour the frame genuinely contained at a known position; averaging would invent
+        // colours that were never rendered, which is precisely what a pixel test must not be given.
+        const auto sampleWindowX = [&](int logicalX) {
+            const float centre = offsetX + (static_cast<float>(logicalX) + 0.5f) * scaleX;
+            return std::clamp(static_cast<int>(centre), 0, backbufferCacheWidth_ - 1);
+        };
+        const auto sampleWindowY = [&](int logicalY) {
+            const float centre = offsetY + (static_cast<float>(logicalY) + 0.5f) * scaleY;
+            return std::clamp(static_cast<int>(centre), 0, backbufferCacheHeight_ - 1);
+        };
+
+        if (backbufferCacheWidth_ <= 0 || backbufferCacheHeight_ <= 0)
+            throw std::runtime_error(std::string(kBackendName) + " backend: the captured back buffer is empty");
+
+        if (oneToOne)
         {
-            throw std::runtime_error(
-                std::string(kBackendName) + " backend: ReadBackbuffer region lies outside the back buffer");
+            if (x < 0 || y < 0 || x + w > backbufferCacheWidth_ || y + h > backbufferCacheHeight_)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: ReadBackbuffer region lies outside the back buffer");
+            }
+
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t sourceOffset =
+                    (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(backbufferCacheWidth_) +
+                     static_cast<std::size_t>(x)) * 4u;
+                std::memcpy(pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4u,
+                            backbufferCache_.data() + sourceOffset,
+                            static_cast<std::size_t>(w) * 4u);
+            }
+            return;
         }
 
         for (int row = 0; row < h; ++row)
         {
-            const std::size_t sourceOffset =
-                (static_cast<std::size_t>(windowY + row) * static_cast<std::size_t>(backbufferCacheWidth_) +
-                 static_cast<std::size_t>(windowX)) * 4u;
-            std::memcpy(pixels + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4u,
-                        backbufferCache_.data() + sourceOffset,
-                        static_cast<std::size_t>(w) * 4u);
+            const int sourceRow = sampleWindowY(y + row);
+            for (int column = 0; column < w; ++column)
+            {
+                const int sourceColumn = sampleWindowX(x + column);
+                const std::size_t sourceOffset =
+                    (static_cast<std::size_t>(sourceRow) * static_cast<std::size_t>(backbufferCacheWidth_) +
+                     static_cast<std::size_t>(sourceColumn)) * 4u;
+                const std::size_t destinationOffset =
+                    (static_cast<std::size_t>(row) * static_cast<std::size_t>(w) +
+                     static_cast<std::size_t>(column)) * 4u;
+                std::memcpy(pixels + destinationOffset, backbufferCache_.data() + sourceOffset, 4u);
+            }
         }
     }
 
