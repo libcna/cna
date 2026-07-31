@@ -58,6 +58,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Sampling a `RenderTarget2D` as a texture, including a never-read-back target the same frame it was produced | ✅ | `Sokol_RenderTarget_ProducerConsumer`, `Sokol_RenderTarget_BackbufferConsumer`, `Sokol_RenderTarget_SamplingOrientation` — SpriteBatch and BasicEffect/AlphaTestEffect textured 3D alike, top-left logical orientation preserved |
 | A brand-new `RenderTarget2D` usable immediately, no warm-up frame | ✅ | `Sokol_RenderTarget_FirstUse` |
 | `TextureCube` storage (`SetData`/`GetData`, every declared mip level, all 6 faces) | ✅ | `CnaTests`' `TextureCubeTest` suite (49 tests), plus the XNB `TextureCubeReader` and CNJ cube content-loading tests |
+| `Texture3D` storage (`SetData`/`GetData`, every declared mip level, box regions) | ✅ | `CnaTests`' `Texture3DTest` suite (39 tests), `CnjTexture3DTest`, `Texture3DTextureCubeContentTypeReaderTest` |
 | Stencil test operations for 3D draws (`DepthStencilState.StencilEnable`/`StencilFunction`/`StencilPass`/`StencilFail`/`StencilDepthBufferFail`, masks, reference, two-sided mode) | ✅ | Wired into `Pipeline3DKey`/`Get3DPipeline`; `SpriteBatch` never requests stencil (matches XNA) |
 | `RenderTargetCube` bind/draw/unbind, one face at a time, with per-face colour isolation and a shared depth-stencil buffer | ✅ | `Sokol_RenderTarget_PassBoundary` (C1/C2), `Sokol_RenderTarget_DepthStencilUsage` (U1-U4), plus the cube legs in `Sokol_RenderTarget_FirstUse`/`BackbufferConsumer` |
 | `OcclusionQuery` (real `GL_SAMPLES_PASSED` sample count, GL-only) | ✅ | `Sokol_OcclusionQuery_Cycle`, `Sokol_OcclusionQuery_VisibleQuad`, `Sokol_OcclusionQuery_OccludedQuad` |
@@ -79,7 +80,6 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTargetCube` mip-mapped or MSAA | mip-mapped throws `NotYetImplemented`; `multiSampleCount` silently clamped to 1, same convention as `RenderTarget2D` | `SOKOL-26` |
 | MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented` | `SOKOL-26` |
 | Render-target MSAA resolve | not implemented (`multiSampleCount` is clamped, never resolved) | `SOKOL-26` |
-| `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` (Software leaves this unimplemented too) | `SOKOL-27` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `RasterizerState.FillMode` (`WireFrame`) | accepted and ignored — sokol_gfx exposes no polygon fill mode at all, unlike EasyGL's CPU-side triangle-to-`GL_LINES` re-expansion at draw time (not implemented here). A permanent, not-just-"not yet" gap | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
@@ -110,6 +110,9 @@ correctly, which the table above is the authority on.
   `EnvironmentMapEffect`'s 3D draw path throws `NotYetImplemented` -- so a real `sg_image` would be
   a resource with no consumer. `SetData`/`GetData` round-trip exactly; a future `EnvironmentMapEffect`
   implementation is what would add the matching `sg_image`/view.
+- **`Texture3D` allocates no GPU resource either** (`SokolTexture3DBackend` is the same CPU-storage
+  shape as `TextureCube` above, one flat voxel buffer per mip level). Nothing on this backend samples
+  a volume texture yet, so `SetData`/`GetData` round-trip exactly with no GPU-visible effect.
 - **`RenderTargetCube`, unlike the plain `TextureCube` above, DOES allocate a real `sg_image`** --
   it exists specifically to be rendered into, so the resource has a genuine consumer even before
   any shader samples it back. Its depth-stencil buffer is a single 2D image shared by all six

@@ -502,6 +502,107 @@ namespace CNA::Internal::Backends::Sokol
     }
 
     // ---------------------------------------------------------------------------------------
+    // SokolTexture3DBackend
+    // ---------------------------------------------------------------------------------------
+
+    namespace
+    {
+        // Mirrors Texture3D.cpp's own CalculateMipLevels(width, height) exactly -- depth does not
+        // participate in the level COUNT (matching FNA's Texture3D.cs constructor), even though
+        // LevelDepth() below still halves depth per level like width/height do.
+        int CalculateVolumeMipLevels(int w, int h)
+        {
+            int levels = 1;
+            while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+            return levels;
+        }
+    }
+
+    int SokolTexture3DBackend::LevelWidth(int level) const { return std::max(1, width_ >> level); }
+    int SokolTexture3DBackend::LevelHeight(int level) const { return std::max(1, height_ >> level); }
+    int SokolTexture3DBackend::LevelDepth(int level) const { return std::max(1, depth_ >> level); }
+
+    SokolTexture3DBackend::SokolTexture3DBackend(int width, int height, int depth, bool mipMap)
+        : width_(width)
+        , height_(height)
+        , depth_(depth)
+        , levelCount_(mipMap ? CalculateVolumeMipLevels(width, height) : 1)
+    {
+        levels_.resize(static_cast<std::size_t>(levelCount_));
+        for (int level = 0; level < levelCount_; ++level)
+        {
+            const std::size_t voxelCount = static_cast<std::size_t>(LevelWidth(level))
+                * static_cast<std::size_t>(LevelHeight(level))
+                * static_cast<std::size_t>(LevelDepth(level));
+            levels_[static_cast<std::size_t>(level)].assign(voxelCount * 4u, 0u);
+        }
+    }
+
+    bool SokolTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                        const void* data, int dataLength)
+    {
+        if (data == nullptr || level < 0 || level >= levelCount_) return false;
+        const int levelW = LevelWidth(level);
+        const int levelH = LevelHeight(level);
+        const int levelD = LevelDepth(level);
+        if (w <= 0 || h <= 0 || depth <= 0 || x < 0 || y < 0 || z < 0 ||
+            x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        if (dataLength < w * h * depth * 4) return false;
+
+        const auto* src = static_cast<const std::uint8_t*>(data);
+        std::vector<std::uint8_t>& voxels = levels_[static_cast<std::size_t>(level)];
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        const std::size_t srcSliceBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        for (int slice = 0; slice < depth; ++slice)
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t dstOffset =
+                    ((static_cast<std::size_t>(z + slice) * static_cast<std::size_t>(levelH)
+                      + static_cast<std::size_t>(y + row)) * static_cast<std::size_t>(levelW)
+                     + static_cast<std::size_t>(x)) * 4u;
+                const std::size_t srcOffset = static_cast<std::size_t>(slice) * srcSliceBytes
+                    + static_cast<std::size_t>(row) * rowBytes;
+                std::memcpy(voxels.data() + dstOffset, src + srcOffset, rowBytes);
+            }
+        }
+        return true;
+    }
+
+    bool SokolTexture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                        void* data, int dataLength) const
+    {
+        if (data == nullptr || level < 0 || level >= levelCount_) return false;
+        const int levelW = LevelWidth(level);
+        const int levelH = LevelHeight(level);
+        const int levelD = LevelDepth(level);
+        if (w <= 0 || h <= 0 || depth <= 0 || x < 0 || y < 0 || z < 0 ||
+            x + w > levelW || y + h > levelH || z + depth > levelD)
+            return false;
+        if (dataLength < w * h * depth * 4) return false;
+
+        auto* dst = static_cast<std::uint8_t*>(data);
+        const std::vector<std::uint8_t>& voxels = levels_[static_cast<std::size_t>(level)];
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        const std::size_t dstSliceBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        for (int slice = 0; slice < depth; ++slice)
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t srcOffset =
+                    ((static_cast<std::size_t>(z + slice) * static_cast<std::size_t>(levelH)
+                      + static_cast<std::size_t>(y + row)) * static_cast<std::size_t>(levelW)
+                     + static_cast<std::size_t>(x)) * 4u;
+                const std::size_t dstOffset = static_cast<std::size_t>(slice) * dstSliceBytes
+                    + static_cast<std::size_t>(row) * rowBytes;
+                std::memcpy(dst + dstOffset, voxels.data() + srcOffset, rowBytes);
+            }
+        }
+        return true;
+    }
+
+    // ---------------------------------------------------------------------------------------
     // SokolRenderTargetBackend
     // ---------------------------------------------------------------------------------------
 
@@ -1812,6 +1913,13 @@ namespace CNA::Internal::Backends::Sokol
         return std::make_unique<SokolTextureCubeBackend>(size, mipMap);
     }
 
+    std::unique_ptr<ITexture3DBackend> SokolGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        (void)surfaceFormat;  // always stored as RGBA8, matching CreateTexture
+        return std::make_unique<SokolTexture3DBackend>(w, h, depth, mipMap);
+    }
+
     std::unique_ptr<IOcclusionQueryBackend> SokolGraphicsBackend::CreateOcclusionQuery()
     {
 #if CNA_SOKOL_HAS_GL_READBACK
@@ -2949,12 +3057,16 @@ namespace CNA::Internal::Backends::Sokol
             // the same GL-only boundary ReadBackbuffer already declares.
             case CNA::GraphicsCapability::OcclusionQuery:
                 return CNA_SOKOL_HAS_GL_READBACK != 0;
+            // Real as of SOKOL-27: SokolTexture3DBackend stores real per-mip-level voxels
+            // (SetData/GetData round-trip exactly), the same CPU-storage-only shape as
+            // SokolTextureCubeBackend -- no sg_image, since nothing samples a volume texture yet.
+            case CNA::GraphicsCapability::Texture3D:
+                return true;
             // The remaining boundary. Each needs a phase that is not implemented yet -- see
             // plan_sokol.md; every one fails loudly rather than silently no-opping.
             case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::WireFrame:
             case CNA::GraphicsCapability::CustomEffects:
-            case CNA::GraphicsCapability::Texture3D:
                 return false;
         }
         return false;

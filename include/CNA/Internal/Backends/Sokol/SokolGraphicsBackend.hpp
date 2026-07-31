@@ -413,6 +413,82 @@ namespace CNA::Internal::Backends::Sokol
     };
 
     /**
+     * @brief Backend handle for a volume (3D) texture: pure CPU-side RGBA8 storage, no sokol_gfx
+     * image.
+     *
+     * plan_sokol.md SOKOL-27. Same rationale as `SokolTextureCubeBackend`: nothing on this backend
+     * samples a volume texture (there is no 3D-sampler shader variant), so a real `sg_image` would
+     * be a GPU resource with no consumer. Mirrors Software's own choice to leave `Texture3D`
+     * unimplemented entirely -- this backend goes one step further and at least stores real pixels.
+     */
+    class SokolTexture3DBackend : public ITexture3DBackend
+    {
+    public:
+        /**
+         * @brief Allocates zeroed RGBA8 storage for every mip level.
+         *
+         * @param width  Level-0 width in texels.
+         * @param height Level-0 height in texels.
+         * @param depth  Level-0 depth in texels.
+         * @param mipMap Allocate the full mip chain down to 1x1x1 as well as level 0. Matches
+         *               Texture3D.cpp's own `CalculateMipLevels(width, height)` -- depth does not
+         *               participate in the level COUNT, even though it still halves per level like
+         *               width/height do (real volume-texture mip convention).
+         */
+        SokolTexture3DBackend(int width, int height, int depth, bool mipMap);
+
+        /**
+         * @brief Copies an RGBA8 sub-volume into this backend's CPU storage.
+         *
+         * @param level      Mip level to write.
+         * @param x          Left edge of the requested box, in voxels.
+         * @param y          Top edge of the requested box, in voxels.
+         * @param z          Front edge of the requested box, in voxels.
+         * @param w          Width of the requested box, in voxels.
+         * @param h          Height of the requested box, in voxels.
+         * @param depth      Depth of the requested box, in voxels.
+         * @param data       Source voxels, tightly packed RGBA8, slice by slice front to back.
+         * @param dataLength Size of @p data in bytes.
+         * @return True if the whole box was stored; false for an out-of-range level, an
+         *         out-of-bounds box, or a source buffer too small for the region.
+         */
+        [[nodiscard]] bool SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   const void* data, int dataLength) override;
+
+        /**
+         * @brief Reads an RGBA8 sub-volume back from this backend's CPU shadow.
+         *
+         * @param level      Mip level to read.
+         * @param x          Left edge of the requested box, in voxels.
+         * @param y          Top edge of the requested box, in voxels.
+         * @param z          Front edge of the requested box, in voxels.
+         * @param w          Width of the requested box, in voxels.
+         * @param h          Height of the requested box, in voxels.
+         * @param depth      Depth of the requested box, in voxels.
+         * @param data       Destination for tightly packed RGBA8 voxels, slice by slice front to
+         *                   back.
+         * @param dataLength Size of @p data in bytes.
+         * @return True if the whole box was written; false for an out-of-range level or an
+         *         out-of-bounds box.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                   void* data, int dataLength) const override;
+
+    private:
+        [[nodiscard]] int LevelWidth(int level) const;
+        [[nodiscard]] int LevelHeight(int level) const;
+        [[nodiscard]] int LevelDepth(int level) const;
+
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
+        int levelCount_ = 1;
+        /// levels_[level] -- one tightly packed RGBA8 buffer per allocated mip level, voxels
+        /// ordered slice by slice (front to back), each slice row-major with the top row first.
+        std::vector<std::vector<std::uint8_t>> levels_;
+    };
+
+    /**
      * @brief Backend handle for a vertex buffer.
      *
      * Each SetData() recreates the underlying immutable sokol_gfx buffer. sokol_gfx allows only
@@ -903,6 +979,23 @@ namespace CNA::Internal::Backends::Sokol
          */
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
             int size, bool mipMap, int surfaceFormat) override;
+
+        /**
+         * @brief Creates a CPU-storage-only volume texture (plan_sokol.md SOKOL-27).
+         *
+         * No real GPU resource is allocated: nothing on this backend samples a volume texture yet
+         * (there is no 3D-sampler shader variant), so `SokolTexture3DBackend` only stores the
+         * voxels `SetData()`/`GetData()` need.
+         *
+         * @param w            Level-0 width in texels.
+         * @param h            Level-0 height in texels.
+         * @param depth        Level-0 depth in texels.
+         * @param mipMap       Allocate the full mip chain down to 1x1x1 as well as level 0.
+         * @param surfaceFormat Unused -- this backend always stores RGBA8, matching CreateTexture.
+         * @return The new volume texture backend.
+         */
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(
+            int w, int h, int depth, bool mipMap, int surfaceFormat) override;
 
         /**
          * @brief Creates a raw-GL occlusion query (plan_sokol.md SOKOL-29).
