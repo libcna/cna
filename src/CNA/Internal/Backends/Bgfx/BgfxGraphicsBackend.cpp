@@ -1523,6 +1523,21 @@ namespace CNA::Internal::Backends::Bgfx
         screenshotReady = true;
     }
 
+    // REMED-GFX-154: bgfx's own diagnostics, on demand. See the declaration for why.
+    void BgfxCnaCallback::traceVargs(const char* _filePath, uint16_t _line, const char* _format,
+                                     va_list _argList)
+    {
+        if (!traceDiagnostics) return;
+        char message[2048];
+        std::vsnprintf(message, sizeof(message), _format, _argList);
+        std::fprintf(stderr, "[bgfx] %s(%u): %s", _filePath ? _filePath : "?",
+                     static_cast<unsigned>(_line), message);
+        // bgfx's format strings usually already end in a newline; add one only when they do not.
+        const std::size_t len = std::strlen(message);
+        if (len == 0 || message[len - 1] != '\n') std::fputc('\n', stderr);
+        std::fflush(stderr);
+    }
+
     BgfxGraphicsBackend::BgfxGraphicsBackend(SDL_Window* window, int swapInterval)
         : window(window)
         , resetFlags_(swapInterval > 0 ? BGFX_RESET_VSYNC : BGFX_RESET_NONE)
@@ -1543,6 +1558,14 @@ namespace CNA::Internal::Backends::Bgfx
         const uint16_t initialHeight = static_cast<uint16_t>(std::max(height, 1));
         const char* rendererOverride = SDL_getenv(kRendererOverrideEnvVar);
         const bgfx::RendererType::Enum requestedRendererType = Detail::ResolveRendererType(rendererOverride);
+
+        // REMED-GFX-154: decided BEFORE bgfx::init, because renderer selection and fallback are
+        // among the things bgfx traces and they happen inside init itself.
+        {
+            const char* diag = SDL_getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
+            readbackCallback_.traceDiagnostics =
+                diag != nullptr && diag[0] != '\0' && diag[0] != '0';
+        }
 
         bgfx::Init init;
         init.type = requestedRendererType;

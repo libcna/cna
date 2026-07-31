@@ -150,6 +150,23 @@ namespace
 #endif
 
     /**
+     * @brief Whether this backend can read a render target's colour attachment back at all.
+     *
+     * False on HEADLESS, which rasterizes nothing and therefore owns no colour to return. Its
+     * `GetData` is REMED-GFX-127/130's deterministic public REFUSAL --
+     * `System::NotSupportedException` -- rather than a fabricated transparent-black frame, and that
+     * refusal is exactly what this file asserts there: it must throw, and it must leave the
+     * caller's destination completely untouched. A refusal that quietly wrote zeroes would be
+     * indistinguishable from the defect this whole ticket is about.
+     */
+    constexpr bool kTargetReadbackSupported =
+#if defined(CNA_BACKEND_HEADLESS)
+        false;
+#else
+        true;
+#endif
+
+    /**
      * @brief Whether a render target may be built with a mip chain here.
      *
      * False on WEBGPU, whose `RenderTarget2D` constructor raises a catchable `std::runtime_error`
@@ -339,6 +356,35 @@ class RenderTargetMsaaFirstReadbackTest : public Game
     }
 
     /**
+     * @brief Runs @p doRead, or asserts this backend's deterministic refusal instead.
+     *
+     * On a backend that cannot read a render target back, the ONLY correct behaviour is a public
+     * exception that writes nothing -- so that is what gets asserted, using the same sentinel
+     * buffer. A refusal that silently wrote zeroes would look exactly like REMED-GFX-154 itself.
+     *
+     * @return true when the read really happened and @p buf may be inspected.
+     */
+    template <typename F>
+    bool IssueRead(F&& doRead, const std::vector<Color>& buf, const std::string& label)
+    {
+        if (kTargetReadbackSupported)
+        {
+            doRead();
+            return true;
+        }
+        bool threw = false;
+        try { doRead(); }
+        catch (const std::exception&) { threw = true; }
+        check(threw, label + ": this backend REFUSES render-target readback, and does so through a "
+                             "catchable public exception");
+        bool untouched = true;
+        for (const Color& c : buf)
+            if (!Exact(c, kSentinel)) { untouched = false; break; }
+        check(untouched, label + ": the refused read left the whole destination untouched");
+        return false;
+    }
+
+    /**
      * @brief Asserts the protected prefix and suffix around a `count`-element window are untouched.
      */
     bool GuardsIntact(const std::vector<Color>& buf, int count, const std::string& label)
@@ -426,7 +472,8 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         std::vector<Color> buf = SentinelBuffer(count);
 
         step(label + ": GetData(dst, " + std::to_string(kGuard) + ", " + std::to_string(count) + ")");
-        rt.GetData(buf.data(), kGuard, count);
+        if (!IssueRead([&] { rt.GetData(buf.data(), kGuard, count); }, buf, label))
+            return std::vector<Color>(static_cast<std::size_t>(count), kSentinel);
 
         int untouched = 0, zeroed = 0;
         std::string firstMismatch;
@@ -489,6 +536,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         const std::vector<Color> first  = ReadAndAssert(*rt, "A2 first read", kMsaaContentReadable);
         const std::vector<Color> second = ReadAndAssert(*rt, "A2 second read", kMsaaContentReadable);
 
+        if (!kTargetReadbackSupported) return;   // both reads were refused, asserted above
         int differing = 0;
         for (std::size_t i = 0; i < first.size(); ++i)
             if (!Exact(first[i], second[i])) ++differing;
@@ -521,7 +569,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         const int count = kRT * kRT;
         std::vector<Color> buf = SentinelBuffer(count);
         step("A4: GetData after Clear only");
-        rt->GetData(buf.data(), kGuard, count);
+        if (!IssueRead([&] { rt->GetData(buf.data(), kGuard, count); }, buf, "A4")) return;
 
         int untouched = 0, wrong = 0, zeroed = 0;
         for (int i = 0; i < count; ++i)
@@ -640,6 +688,11 @@ class RenderTargetMsaaFirstReadbackTest : public Game
                 if (same) ++stable;
             }
         }
+        if (!kTargetReadbackSupported)
+        {
+            boundary("A9 all five reads were refused deterministically, asserted above");
+            return;
+        }
         check(stable == 4, "A9 five reads in one public frame all agree");
     }
 
@@ -655,12 +708,19 @@ class RenderTargetMsaaFirstReadbackTest : public Game
             RenderPattern(dev, *rt);
             const int count = kRT * kRT;
             std::vector<Color> buf = SentinelBuffer(count);
-            rt->GetData(buf.data(), kGuard, count);
+            if (!IssueRead([&] { rt->GetData(buf.data(), kGuard, count); }, buf,
+                           "A10 cycle " + std::to_string(i + 1)))
+                continue;
             int untouched = 0, zeroed = 0;
             std::string mm;
             const bool matched = WindowMatches(buf, 0, 0, kRT, kRT, kRT, kRT, untouched, zeroed, mm);
             if (untouched == 0 && (matched || !kMsaaContentReadable)) ++good;
             rt->Dispose();
+        }
+        if (!kTargetReadbackSupported)
+        {
+            boundary("A10 six cycles each refused their read deterministically, asserted above");
+            return;
         }
         if (!kMsaaContentReadable)
             boundary("A10 content unasserted on this backend (REMED-GFX-164)");
@@ -735,7 +795,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         const int count = kRT * kRT;
         std::vector<Color> buf(static_cast<std::size_t>(count) + kGuard, kSentinel);
         step("E1: GetData(dst, elementCount)");
-        rt->GetData(buf.data(), count);
+        if (!IssueRead([&] { rt->GetData(buf.data(), count); }, buf, "E1")) return;
         int untouched = 0;
         for (int i = 0; i < count; ++i)
             if (Exact(buf[static_cast<std::size_t>(i)], kSentinel)) ++untouched;
@@ -822,7 +882,8 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         step(label + ": GetData(0, rect(" + std::to_string(rect.X) + "," + std::to_string(rect.Y) +
              "," + std::to_string(rect.Width) + "," + std::to_string(rect.Height) + "), dst, " +
              std::to_string(kGuard) + ", " + std::to_string(count) + ")");
-        rt.GetData(0, &rect, buf.data(), kGuard, count);
+        if (!IssueRead([&] { rt.GetData(0, &rect, buf.data(), kGuard, count); }, buf, label))
+            return;
 
         int untouched = 0, zeroed = 0;
         std::string mm;

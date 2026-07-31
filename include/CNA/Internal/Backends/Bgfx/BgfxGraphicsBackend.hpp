@@ -142,7 +142,19 @@ namespace CNA::Internal::Backends::Bgfx
 
         void fatal(const char* _file, uint16_t _line,
                    bgfx::Fatal::Enum _code, const char* _str) override;
-        void traceVargs(const char*, uint16_t, const char*, va_list) override {}
+        /**
+         * @brief Forwards bgfx's own trace and warning stream to stderr when asked to.
+         *
+         * REMED-GFX-154: this was an unconditional no-op, so every `BX_TRACE`/`BX_WARN` bgfx emits
+         * -- invalid blit, invalid readback usage, destroyed-handle use, framebuffer and resolve
+         * complaints, renderer fallback -- was discarded before anyone could read it. A readback
+         * defect is exactly the kind bgfx would have warned about, so a diagnostics run needs the
+         * stream. Off unless `CNA_BGFX_TRACE_DIAGNOSTICS` is set, so ordinary runs are byte-identical.
+         */
+        void traceVargs(const char* _filePath, uint16_t _line, const char* _format,
+                        va_list _argList) override;
+        /// Set once from `CNA_BGFX_TRACE_DIAGNOSTICS`; see traceVargs.
+        bool traceDiagnostics = false;
         void profilerBegin(const char*, uint32_t, const char*, uint16_t) override {}
         void profilerBeginLiteral(const char*, uint32_t, const char*, uint16_t) override {}
         void profilerEnd() override {}
