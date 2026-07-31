@@ -199,3 +199,33 @@ all yet, so there is no shader to feed them to.
 **Tracked as:** `plan_llgl.md` task `LLGL-32`.
 
 ---
+
+## LLGL backend: `EnvironmentMapEffect` rendered fully black whenever fog was disabled — FIXED 2026-07-31
+
+**Symptom:** every `EnvironmentMapEffect` draw with `FogEnabled=false` (the default) rendered its
+whole surface in the same colour as `FogColor` (black, since fog was never configured) instead of
+the real lit/reflected colour — the cube map, lighting, and diffuse texture all had zero visible
+effect.
+
+**Cause:** `env_map3d.frag.glsl`/`.gl.frag.glsl`'s fog blend was written as
+`mix(fogColor.rgb, rgb, vFogFactor)`, copied verbatim from the plain Vulkan-standalone backend's
+own `env_map3d.frag.glsl` — but that backend's `vFogFactor` uses the OPPOSITE convention (0 = fully
+fogged) from this backend's own established one (`lit_textured3d.vert.glsl`/`.frag.glsl`: 0 = no
+fog, matching `mix(original, fogColor, vFogFactor)`). This backend's `env_map3d.vert.glsl` computes
+`vFogFactor` using its OWN (0-means-no-fog) convention — correctly copied from
+`lit_textured3d.vert.glsl` — so the two halves of the formula disagreed: with fog disabled
+(`vFogFactor=0`, `fogColor` left at its zeroed default), `mix()` returned its FIRST argument
+(`fogColor.rgb` = black) unconditionally, discarding the real shading result entirely.
+
+**Fix:** swapped the `mix()` argument order to `mix(rgb, fogColor.rgb, vFogFactor)` in both shader
+flavours, matching this backend's own established fog convention instead of the source line it was
+transliterated from. Found while adding `Llgl_EnvironmentMapEffect_AlphaScaledLerp` (reusing the
+pre-existing, cross-backend `examples/environmentmapeffect_alphascaledlerp_test.cpp`): both its
+checks read back solid black instead of the expected cube-map colour, isolated via a series of
+temporary debug-shader edits (hardcoded output colour, then real cube sampling with a fixed
+direction, then real `N`/`E`/`reflDir`, then individual field readouts) that progressively narrowed
+the divergence down to the final `mix()` call.
+
+**Tracked as:** `plan_llgl.md` task `LLGL-25 (EnvironmentMapEffect)`.
+
+---

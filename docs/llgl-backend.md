@@ -37,12 +37,14 @@ module**:
 * **a real window resize** through `GraphicsDeviceManager.ApplyChanges()`, and **MSAA on the back
   buffer**, construction-time only and module-dependent — see the `MultiSampleAntiAliasing` row in
   "Capability boundary" below;
-* **cube textures** (`TextureCube`): create, upload and read back all 6 faces and every mip level.
-  Not yet sampled from a 3D shader for reflections -- that is `EnvironmentMapEffect`, still open.
+* **cube textures** (`TextureCube`): create, upload and read back all 6 faces and every mip level;
 * **volume textures** (`Texture3D`): create, box-region upload and box-region read back. Not yet
-  sampled from a 3D shader.
+  sampled from a 3D shader;
+* **`EnvironmentMapEffect`**: cube-map reflections, its own dedicated vertex/fragment shader pair
+  and pipeline layout (not the shared `Transform` block every other effect here uses). See
+  "EnvironmentMapEffect" below.
 
-**Not implemented:** `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
+**Not implemented:** `SkinnedEffect`, `PbrEffect`,
 `RenderTargetCube`, multiple render targets (MRT), and MSAA/mip-mapped render targets.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
@@ -134,6 +136,9 @@ src/CNA/Internal/Backends/Llgl/shaders/
   dual_textured3d.frag.glsl                          DualTextureEffect (reuses the plain
                                                        textured/colored_textured vertex shader --
                                                        no dedicated vertex shader of its own)
+  env_map3d.vert.glsl     env_map3d.frag.glsl        EnvironmentMapEffect -- its OWN uniform
+                                                       block (EnvMapParams), not the shared one
+                                                       every other effect here uses
   effect3d_common.glsl.inc                           the uniform block they all share
   compile_shaders.py                                regenerates llgl_shaders.hpp
   llgl_shaders.hpp                                  generated; do not edit
@@ -264,6 +269,43 @@ sprite shader does; there is no way yet to bind a second texture unit to a custo
 backend. See `examples/llgl_shadereffect_test.cpp` for a complete worked example, including the
 vertex shader's own pixel-to-NDC technique.
 
+## EnvironmentMapEffect
+
+Cube-map reflections. Unlike every other stock effect on this backend, `EnvironmentMapEffect` does
+NOT reuse the shared 100-float `Transform` uniform block or `AcquirePrimitiveVertexShader()`'s
+variant selection -- its field set (Fresnel factor, environment map amount/specular; no per-light
+specular, no alpha test) does not fit that layout, and its vertex/fragment pair
+(`env_map3d.{vert,frag}.glsl`) is never linked with any other shader here. It gets its own:
+
+* `primitiveEnvMapLayout_` pipeline layout: an `EnvMapParams` uniform buffer at binding 1,
+  `colorMap`/`samplerState` (the diffuse texture) at 2/3, `envMap`/`envMapSampler` (the cube map)
+  at 4/5;
+* 84-float (336-byte) `EnvMapParams` per-draw uniform buffer pool (`envMapUniformBuffers_`/
+  `envMapUniformData_`), grown and reused the same way `transformBuffers_`/
+  `customEffectUniformBuffers_` are;
+* dedicated vertex shader (`AcquirePrimitiveEnvMapVertexShader()`), computing a world-space normal
+  (inverse-transpose of the world matrix) and eye vector for the fragment shader's reflection.
+
+The fragment formula (ambient-free Lambertian light sum, `reflect(-eye, normal)`, cube sample
+lerped with the base colour by a flat-or-Fresnel-weighted blend factor, both the base lerp target
+AND the specular term scaled by the combined texture×diffuse alpha) is transliterated directly from
+the Vulkan backend's own `env_map3d.frag.glsl` -- itself the product of three previously-found
+formula bugs documented in `docs/environmentmapeffect-support.md` (additive instead of lerp'd base
+blend; an unscaled specular term; an unscaled base-lerp target) -- rather than re-derived from
+scratch, so those same mistakes could not recur here.
+
+**Both `Texture` and `EnvironmentMap` must be bound** -- there is no fabricated white-texture/cube
+fallback for a null one (mirroring `DualTextureEffect`'s own established convention); `QueuePrimitives`
+throws by name instead ("EnvironmentMapEffect needs both Texture and EnvironmentMap bound").
+
+**Not tested on the OpenGL module in this project's own environment**: `CreateTextureCube` aborts
+there with `"ValidateGLTextureType: ... LLGL::RenderingFeatures::hasCubeTextures not supported"` --
+a genuine, pre-existing GLX/llvmpipe software-rasterizer limitation, not a regression in this
+effect or in `CreateTextureCube` itself (cube textures were previously only ever exercised through
+`CnaTests`' default Vulkan-preferred `TextureCubeTest`, never through a `CNA_LLGL_RENDERER=opengl`-
+pinned CTest). No `_OpenGL` CTest variant is registered for `Llgl_EnvironmentMapEffect_
+AlphaScaledLerp` for this reason.
+
 ## Tests
 
 ```bash
@@ -297,9 +339,12 @@ independently (a white base plus a red overlay must read back red, not white).
 `Llgl_DualTextureEffect_VertexColor` and `Llgl_GraphicsDevice_DefaultStateOcclusion` are pre-existing,
 cross-backend shared sources (already registered on EasyGL/Vulkan/Bgfx) reused verbatim once
 `LLGL-32` made `DrawUserPrimitives()` work on this backend, exercising it through two of its four
-recognised upload strides.
-Every one of them is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty
+recognised upload strides. `Llgl_EnvironmentMapEffect_AlphaScaledLerp` is another such reused
+source, covering `EnvironmentMapEffect`'s alpha-scaled cube-map base lerp (Task 891's fix); see
+"EnvironmentMapEffect" above for why it has no `_OpenGL` twin (a genuine `hasCubeTextures`
+limitation of this project's own OpenGL module, not a gap in this backend).
+Every other test is registered a second time pinned to the OpenGL
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty-one
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 

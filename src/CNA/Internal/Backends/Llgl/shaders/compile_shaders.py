@@ -42,6 +42,8 @@ SHADERS = [
     ("LitColored3dVert", "lit_colored3d.vert.glsl", "lit_colored3d.gl.vert.glsl", "vert"),
     ("LitUntextured3dFrag", "lit_untextured3d.frag.glsl", "lit_untextured3d.gl.frag.glsl", "frag"),
     ("DualTextured3dFrag", "dual_textured3d.frag.glsl", "dual_textured3d.gl.frag.glsl", "frag"),
+    ("EnvMap3dVert", "env_map3d.vert.glsl", "env_map3d.gl.vert.glsl", "vert"),
+    ("EnvMap3dFrag", "env_map3d.frag.glsl", "env_map3d.gl.frag.glsl", "frag"),
 ]
 
 

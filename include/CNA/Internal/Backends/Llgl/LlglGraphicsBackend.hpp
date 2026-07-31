@@ -1474,6 +1474,9 @@ namespace CNA::Internal::Backends::Llgl
             /** @brief Primitives only, `DualTextureEffect`: the second texture/sampler pair. */
             LLGL::Texture*   texture2     = nullptr;
             LLGL::Sampler*   sampler2     = nullptr;
+            /** @brief Primitives only, `EnvironmentMapEffect`: the cube map texture/sampler pair. */
+            LLGL::Texture*   envMapTexture = nullptr;
+            LLGL::Sampler*   envMapSampler = nullptr;
             LLGL::PipelineState* pipeline = nullptr;
             std::uint32_t    firstVertex  = 0;
             std::uint32_t    vertexCount  = 0;
@@ -1485,8 +1488,17 @@ namespace CNA::Internal::Backends::Llgl
             /** @brief Primitives only: the caller's own vertex buffer, and index buffer if any. */
             LLGL::Buffer*    vertexBuffer = nullptr;
             LLGL::Buffer*    indexBuffer  = nullptr;
-            /** @brief Primitives only: index into the frame's per-draw transform buffer pool. */
+            /** @brief Primitives only: index into the frame's per-draw transform buffer pool.
+             *  Unused when `envMapping` is set -- `envMapUniformIndex` names the buffer instead,
+             *  since EnvironmentMapEffect's uniform block has a different shape and size. */
             std::uint32_t    transformIndex = 0;
+            /** @brief Primitives only: true when this draw is `EnvironmentMapEffect`, in which
+             *  case `envMapUniformIndex` (not `transformIndex`) names this draw's own uniform
+             *  buffer, from a differently-sized pool (`envMapUniformBuffers_`). */
+            bool             envMapping   = false;
+            /** @brief Primitives only, when `envMapping`: index into the frame's per-draw
+             *  EnvironmentMapEffect uniform buffer pool. */
+            std::uint32_t    envMapUniformIndex = 0;
             /** @brief Primitives only: first index of an indexed draw; ignored otherwise. */
             std::uint32_t    firstIndex   = 0;
             /** @brief Primitives only: value added to each index before vertex fetch. */
@@ -1519,9 +1531,14 @@ namespace CNA::Internal::Backends::Llgl
         void CreatePrimitivePipelineResources();
         LLGL::Shader* AcquirePrimitiveVertexShader(const std::vector<LLGL::VertexAttribute>& attributes,
                                                    bool textured, bool lit);
+        /// EnvironmentMapEffect's own vertex shader (env_map3d.vert.glsl): always textured and
+        /// lit, never variant-selected by (textured, lit) like AcquirePrimitiveVertexShader --
+        /// only the vertex layout (attribute trimming/caching) varies.
+        LLGL::Shader* AcquirePrimitiveEnvMapVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
         LLGL::PipelineState* AcquirePrimitivePipeline(const LlglVertexBufferBackend& vertexBuffer,
                                                       PrimitiveType primitive, bool scissorEnabled,
-                                                      bool textured, bool lit, bool dualTexture);
+                                                      bool textured, bool lit, bool dualTexture,
+                                                      bool envMapping);
         void QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                              const LlglIndexBufferBackend* indexBuffer,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -1534,6 +1551,11 @@ namespace CNA::Internal::Backends::Llgl
         /// first 32; the lit ones read all 100.
         static void FillEffectUniforms(float (&uniforms)[100], const float matrix[16],
                                        const GpuDrawParams* params);
+        /// Fills one EnvironmentMapEffect draw's own 336-byte uniform block (84 floats -- see
+        /// shaders/env_map3d.vert.glsl's EnvMapParams for the byte layout). Unlike
+        /// FillEffectUniforms, `params` is never null here (only called when `envMapping` is set).
+        static void FillEnvMapUniforms(float (&uniforms)[84], const float matrix[16],
+                                       const GpuDrawParams& params);
         /**
          * @brief One contiguous render pass worth of frame commands, all sharing the same
          * destination (null means the swap chain).
@@ -1598,6 +1620,20 @@ namespace CNA::Internal::Backends::Llgl
         /// or `AcquirePrimitiveVertexShader()` branch for it.
         LLGL::PipelineLayout*       primitiveDualTextureLayout_ = nullptr;
         LLGL::Shader*               primitiveDualTextureFragmentShader_ = nullptr;
+
+        /// `EnvironmentMapEffect` (LLGL-25 follow-up): its own dedicated vertex layout, fragment
+        /// shader and pipeline layout -- unlike DualTextureEffect it does NOT reuse the plain
+        /// textured vertex shader, since it needs a world-space normal/eye-vector/reflection
+        /// vector the other vertex shaders never compute. See AcquirePrimitiveEnvMapVertexShader()
+        /// and shaders/env_map3d.vert.glsl.
+        LLGL::PipelineLayout*       primitiveEnvMapLayout_ = nullptr;
+        LLGL::Shader*               primitiveEnvMapFragmentShader_ = nullptr;
+        std::map<std::uint64_t, LLGL::Shader*> primitiveEnvMapVertexShaderCache_;
+        /// One small constant buffer per EnvironmentMapEffect draw in a frame -- same reasoning as
+        /// transformBuffers_/customEffectUniformBuffers_, but its own pool because this effect's
+        /// uniform block has a different shape/size (kEnvMapUniformFloats, not kEffectUniformFloats).
+        std::vector<LLGL::Buffer*>  envMapUniformBuffers_;
+        std::vector<float>         envMapUniformData_;
 
         /// Shared by every `LlglEffectBackend` (LLGL-27); built lazily by
         /// AcquireCustomEffectLayoutEXT() on the first `ShaderEffect` any game constructs. Unlike

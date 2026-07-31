@@ -121,6 +121,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-25 follow-up: EnvironmentMapEffect -- verbatim reuse of the shared, backend-agnostic
+    # source already registered on the EasyGL/Vulkan/Bgfx backends (Task 891's alpha-scaled base
+    # lerp fix), the same one-source-N-backends pattern as the two DrawUserPrimitives reuses above.
+    cna_llgl_test(cna_test_llgl_environmentmapeffect_alphascaledlerp
+                  examples/environmentmapeffect_alphascaledlerp_test.cpp)
+    cna_register_backend_test(NAME Llgl_EnvironmentMapEffect_AlphaScaledLerp COMMAND cna_test_llgl_environmentmapeffect_alphascaledlerp
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-17: the same two binaries, pinned to the OpenGL module instead of the default
     # (Vulkan-first) preference. Running only the default preference is what let the OpenGL module
     # clear correctly and draw nothing for as long as it did -- a module nothing exercises is a
@@ -171,4 +180,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_register_backend_test(NAME Llgl_GraphicsDevice_DefaultStateOcclusion_OpenGL COMMAND cna_test_llgl_graphicsdevice_default_state_occlusion
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    # No _OpenGL variant of Llgl_EnvironmentMapEffect_AlphaScaledLerp: this project's own OpenGL
+    # module (GLX/llvmpipe software rasterizer) reports LLGL::RenderingFeatures::hasCubeTextures
+    # false, so ANY cube-texture creation aborts with "ValidateGLTextureType: ... not supported"
+    # on this module -- a genuine, pre-existing environment/driver gap discovered while adding
+    # this test (cube textures were previously exercised only through CnaTests' default,
+    # Vulkan-preferred TextureCubeTest, never through a CNA_LLGL_RENDERER=opengl-pinned CTest),
+    # not a regression in EnvironmentMapEffect or CreateTextureCube itself. See plan_llgl.md
+    # LLGL-25/LLGL-26 and docs/llgl-backend.md.
 endif()

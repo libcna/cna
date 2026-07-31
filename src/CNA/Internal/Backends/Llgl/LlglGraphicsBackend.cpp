@@ -45,6 +45,15 @@ namespace CNA::Internal::Backends::Llgl
         /// [4..19]=uMatrix, [20..23]=uColor, [24..31]=uFloats (only [24]=uFloat0 is ever written).
         constexpr std::size_t kCustomEffectUniformFloats = 32;
 
+        /// Floats in EnvironmentMapEffect's own dedicated uniform block (see
+        /// shaders/env_map3d.vert.glsl's EnvMapParams for the byte layout): 84 floats = 336 bytes.
+        /// This effect's field set (Fresnel factor, environment map amount/specular, no per-light
+        /// specular or alpha test) does not fit the shared 100-float Transform block, and its
+        /// vertex/fragment pair is never linked with any other shader in this backend, so a
+        /// dedicated block -- mirroring the Vulkan backend's own separate EnvMapParams UBO -- is
+        /// cleaner than repurposing unrelated padding fields in the shared one.
+        constexpr std::size_t kEnvMapUniformFloats = 84;
+
         /// Floats per sprite vertex: position (2), texture coordinate (2), colour (4).
         constexpr std::size_t kSpriteVertexFloats = 8;
         constexpr std::size_t kSpriteVertexStride = kSpriteVertexFloats * sizeof(float);
@@ -1435,6 +1444,13 @@ namespace CNA::Internal::Backends::Llgl
         }
         primitiveVertexShaderCache_.clear();
 
+        for (const auto& entry : primitiveEnvMapVertexShaderCache_)
+        {
+            if (entry.second != nullptr)
+                renderer_->Release(*entry.second);
+        }
+        primitiveEnvMapVertexShaderCache_.clear();
+
         for (LLGL::Buffer* buffer : pendingBufferReleases_)
         {
             if (buffer != nullptr)
@@ -1456,6 +1472,13 @@ namespace CNA::Internal::Backends::Llgl
         }
         customEffectUniformBuffers_.clear();
 
+        for (LLGL::Buffer* buffer : envMapUniformBuffers_)
+        {
+            if (buffer != nullptr)
+                renderer_->Release(*buffer);
+        }
+        envMapUniformBuffers_.clear();
+
         if (customEffectLayout_ != nullptr)
             renderer_->Release(*customEffectLayout_);
 
@@ -1469,12 +1492,16 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveLitUntexturedFragmentShader_);
         if (primitiveDualTextureFragmentShader_ != nullptr)
             renderer_->Release(*primitiveDualTextureFragmentShader_);
+        if (primitiveEnvMapFragmentShader_ != nullptr)
+            renderer_->Release(*primitiveEnvMapFragmentShader_);
         if (primitiveLayout_ != nullptr)
             renderer_->Release(*primitiveLayout_);
         if (primitiveTexturedLayout_ != nullptr)
             renderer_->Release(*primitiveTexturedLayout_);
         if (primitiveDualTextureLayout_ != nullptr)
             renderer_->Release(*primitiveDualTextureLayout_);
+        if (primitiveEnvMapLayout_ != nullptr)
+            renderer_->Release(*primitiveEnvMapLayout_);
 
         if (spriteVertexBuffer_ != nullptr)
             renderer_->Release(*spriteVertexBuffer_);
@@ -1678,6 +1705,9 @@ namespace CNA::Internal::Backends::Llgl
         primitiveDualTextureFragmentShader_ = createFragmentShader(
             Shaders::kDualTextured3dFragGlsl, Shaders::kDualTextured3dFragSpv,
             sizeof(Shaders::kDualTextured3dFragSpv), "dual-textured 3D fragment shader");
+        primitiveEnvMapFragmentShader_ = createFragmentShader(
+            Shaders::kEnvMap3dFragGlsl, Shaders::kEnvMap3dFragSpv,
+            sizeof(Shaders::kEnvMap3dFragSpv), "environment map 3D fragment shader");
 
         // Two layouts rather than one with an optionally-unused texture slot: a pipeline whose
         // layout declares a texture the draw never binds is a validation error on Vulkan, not a
@@ -1733,8 +1763,34 @@ namespace CNA::Internal::Backends::Llgl
         };
         primitiveDualTextureLayout_ = renderer_->CreatePipelineLayout(dualTextureLayoutDesc);
 
+        // EnvironmentMapEffect: its own dedicated uniform block (EnvMapParams, see
+        // env_map3d.vert.glsl) plus the diffuse texture/sampler pair AND a cube map texture/
+        // sampler pair. Binding indices follow the same "resource index = position in this list"
+        // convention ReplayFrameCommandsList()'s SetResource() calls rely on.
+        LLGL::PipelineLayoutDescriptor envMapLayoutDesc;
+        envMapLayoutDesc.bindings =
+        {
+            LLGL::BindingDescriptor{"EnvMapParams", LLGL::ResourceType::Buffer,
+                                    LLGL::BindFlags::ConstantBuffer,
+                                    LLGL::StageFlags::VertexStage | LLGL::StageFlags::FragmentStage, 1},
+            LLGL::BindingDescriptor{"colorMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 2},
+            LLGL::BindingDescriptor{"samplerState", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 3},
+            LLGL::BindingDescriptor{"envMap", LLGL::ResourceType::Texture,
+                                    LLGL::BindFlags::Sampled, LLGL::StageFlags::FragmentStage, 4},
+            LLGL::BindingDescriptor{"envMapSampler", LLGL::ResourceType::Sampler,
+                                    0, LLGL::StageFlags::FragmentStage, 5},
+        };
+        envMapLayoutDesc.combinedTextureSamplers =
+        {
+            LLGL::CombinedTextureSamplerDescriptor{"colorMap", "colorMap", "samplerState", 2},
+            LLGL::CombinedTextureSamplerDescriptor{"envMap", "envMap", "envMapSampler", 4},
+        };
+        primitiveEnvMapLayout_ = renderer_->CreatePipelineLayout(envMapLayoutDesc);
+
         if (primitiveLayout_ == nullptr || primitiveTexturedLayout_ == nullptr ||
-            primitiveDualTextureLayout_ == nullptr)
+            primitiveDualTextureLayout_ == nullptr || primitiveEnvMapLayout_ == nullptr)
             throw std::runtime_error(std::string(kBackendName) + " backend: 3D pipeline layout creation failed");
     }
 
@@ -1877,9 +1933,81 @@ namespace CNA::Internal::Backends::Llgl
         return shader;
     }
 
+    LLGL::Shader* LlglGraphicsBackend::AcquirePrimitiveEnvMapVertexShader(
+        const std::vector<LLGL::VertexAttribute>& attributes)
+    {
+        const std::uint64_t key = MakeVertexLayoutKey(attributes);
+        const auto cached = primitiveEnvMapVertexShaderCache_.find(key);
+        if (cached != primitiveEnvMapVertexShaderCache_.end())
+            return cached->second;
+
+        // EnvironmentMapEffect is always textured and lit (GpuDrawParams::textureEnabled/
+        // lightingEnabled are unconditionally true in EnvironmentMapEffect::FillGpuDrawParams),
+        // so unlike AcquirePrimitiveVertexShader() there is only one shader variant -- just the
+        // vertex layout (and hence caching) varies.
+        bool hasTexCoord = false;
+        bool hasNormal = false;
+        for (const LLGL::VertexAttribute& attribute : attributes)
+        {
+            if (attribute.location == 2) hasTexCoord = true;
+            if (attribute.location == 3) hasNormal = true;
+        }
+        if (!hasTexCoord || !hasNormal)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: EnvironmentMapEffect needs a vertex layout "
+                "with both texture coordinates and normals, and this one is missing at least one");
+        }
+
+        std::vector<LLGL::VertexAttribute> shaderAttributes;
+        for (const LLGL::VertexAttribute& attribute : attributes)
+        {
+            if (attribute.location == 1) // vertex colour: this shader never reads one
+                continue;
+            shaderAttributes.push_back(attribute);
+        }
+
+        const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
+
+        LLGL::ShaderDescriptor vertexDesc;
+        vertexDesc.type = LLGL::ShaderType::Vertex;
+        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
+        {
+            vertexDesc.source = Shaders::kEnvMap3dVertGlsl;
+            vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+        }
+        else
+        {
+            vertexDesc.source = reinterpret_cast<const char*>(Shaders::kEnvMap3dVertSpv);
+            vertexDesc.sourceSize = sizeof(Shaders::kEnvMap3dVertSpv);
+            vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
+            vertexDesc.entryPoint = "main";
+        }
+        vertexDesc.vertex.inputAttribs = shaderAttributes;
+
+        LLGL::Shader* shader = renderer_->CreateShader(vertexDesc);
+        if (shader == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: EnvironmentMapEffect vertex shader creation failed");
+        }
+        if (const LLGL::Report* report = shader->GetReport())
+        {
+            if (report->HasErrors())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: EnvironmentMapEffect vertex shader "
+                    "compilation failed: " + (report->GetText() != nullptr ? report->GetText() : "no details"));
+            }
+        }
+
+        primitiveEnvMapVertexShaderCache_.emplace(key, shader);
+        return shader;
+    }
+
     LLGL::PipelineState* LlglGraphicsBackend::AcquirePrimitivePipeline(
         const LlglVertexBufferBackend& vertexBuffer, PrimitiveType primitive, bool scissorEnabled,
-        bool textured, bool lit, bool dualTexture)
+        bool textured, bool lit, bool dualTexture, bool envMapping)
     {
         const std::vector<LLGL::VertexAttribute>& attributes = vertexBuffer.GetVertexAttributes();
 
@@ -1894,6 +2022,7 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + (textured ? 1u : 0u);
         key = key * 2u + (lit ? 1u : 0u);
         key = key * 2u + (dualTexture ? 1u : 0u);
+        key = key * 2u + (envMapping ? 1u : 0u);
         key = key * 1024u + (MakeBlendPipelineKey(scissorEnabled) & 0x3FFu);
 
         const auto cached = primitivePipelineCache_.find(key);
@@ -1901,24 +2030,31 @@ namespace CNA::Internal::Backends::Llgl
             return cached->second;
 
         LLGL::GraphicsPipelineDescriptor pipelineDesc;
-        pipelineDesc.debugName = dualTexture ? "CNA.DualTexture3D"
+        pipelineDesc.debugName = envMapping ? "CNA.EnvMap3D"
+                                : dualTexture ? "CNA.DualTexture3D"
                                 : lit ? "CNA.Lit3D" : (textured ? "CNA.Textured3D" : "CNA.Colored3D");
         // DualTextureEffect is never lit (GpuDrawParams::lightingEnabled is always false for it),
         // and its vertex-side behaviour is identical to a plain textured draw -- so the vertex
         // shader is the SAME one AcquirePrimitiveVertexShader() already selects for `textured`,
-        // and only the fragment shader and pipeline layout differ below.
-        pipelineDesc.vertexShader = AcquirePrimitiveVertexShader(attributes, textured, lit);
-        pipelineDesc.fragmentShader = dualTexture ? primitiveDualTextureFragmentShader_
+        // and only the fragment shader and pipeline layout differ below. EnvironmentMapEffect,
+        // unlike DualTextureEffect, needs its OWN vertex shader (world-space normal/eye vector),
+        // so it does not go through AcquirePrimitiveVertexShader() at all.
+        pipelineDesc.vertexShader = envMapping ? AcquirePrimitiveEnvMapVertexShader(attributes)
+                                   : AcquirePrimitiveVertexShader(attributes, textured, lit);
+        pipelineDesc.fragmentShader = envMapping ? primitiveEnvMapFragmentShader_
+                                    : dualTexture ? primitiveDualTextureFragmentShader_
                                     : lit && textured ? primitiveLitFragmentShader_
                                     : lit ? primitiveLitUntexturedFragmentShader_
                                     : textured ? primitiveTexturedFragmentShader_
                                     : primitiveFragmentShader_;
-        // Layout selection follows `textured`/`dualTexture` (LLGL-31/DualTextureEffect): a
-        // lit-untextured draw's shader declares no colorMap/samplerState binding, so it reuses
-        // primitiveLayout_ exactly like the unlit-untextured path does, not
+        // Layout selection follows `textured`/`dualTexture`/`envMapping` (LLGL-31/DualTextureEffect/
+        // EnvironmentMapEffect): a lit-untextured draw's shader declares no colorMap/samplerState
+        // binding, so it reuses primitiveLayout_ exactly like the unlit-untextured path does, not
         // primitiveTexturedLayout_; a dual-texture draw needs the layout with BOTH texture/sampler
-        // pairs, not the single-texture one.
-        pipelineDesc.pipelineLayout = dualTexture ? primitiveDualTextureLayout_
+        // pairs; an env-map draw needs its own dedicated layout (its own uniform block plus a
+        // texture/sampler pair AND a cube map texture/sampler pair).
+        pipelineDesc.pipelineLayout = envMapping ? primitiveEnvMapLayout_
+                                     : dualTexture ? primitiveDualTextureLayout_
                                      : textured ? primitiveTexturedLayout_ : primitiveLayout_;
         pipelineDesc.renderPass = swapChain_->GetRenderPass();
         pipelineDesc.primitiveTopology = MapPrimitiveTopology(primitive);
@@ -2065,6 +2201,74 @@ namespace CNA::Internal::Backends::Llgl
         uniforms[99] = params->specularPower;
     }
 
+    void LlglGraphicsBackend::FillEnvMapUniforms(float (&uniforms)[kEnvMapUniformFloats],
+                                                  const float matrix[16],
+                                                  const GpuDrawParams& params)
+    {
+        std::memset(uniforms, 0, sizeof(float) * kEnvMapUniformFloats);
+        std::memcpy(uniforms, matrix, sizeof(float) * 16);
+        std::memcpy(uniforms + 16, params.worldColMajor, sizeof(float) * 16);
+
+        uniforms[32] = params.diffuseColor[0];
+        uniforms[33] = params.diffuseColor[1];
+        uniforms[34] = params.diffuseColor[2];
+        uniforms[35] = params.diffuseColor[3];
+
+        // Pre-folded (EmissiveColor + AmbientLightColor*DiffuseColor)*Alpha -- see
+        // EnvironmentMapEffect::FillGpuDrawParams() and env_map3d.frag.glsl's own comment on why
+        // this is added unscaled rather than re-multiplied by diffuseColor a second time.
+        uniforms[36] = params.emissiveColor[0];
+        uniforms[37] = params.emissiveColor[1];
+        uniforms[38] = params.emissiveColor[2];
+        uniforms[39] = params.envMapAmount;
+
+        uniforms[40] = params.light0Dir[0];
+        uniforms[41] = params.light0Dir[1];
+        uniforms[42] = params.light0Dir[2];
+        uniforms[44] = params.light0Diffuse[0];
+        uniforms[45] = params.light0Diffuse[1];
+        uniforms[46] = params.light0Diffuse[2];
+
+        uniforms[48] = params.light1Dir[0];
+        uniforms[49] = params.light1Dir[1];
+        uniforms[50] = params.light1Dir[2];
+        uniforms[52] = params.light1Diffuse[0];
+        uniforms[53] = params.light1Diffuse[1];
+        uniforms[54] = params.light1Diffuse[2];
+
+        uniforms[56] = params.light2Dir[0];
+        uniforms[57] = params.light2Dir[1];
+        uniforms[58] = params.light2Dir[2];
+        uniforms[60] = params.light2Diffuse[0];
+        uniforms[61] = params.light2Diffuse[1];
+        uniforms[62] = params.light2Diffuse[2];
+
+        uniforms[64] = params.eyePositionWorld[0];
+        uniforms[65] = params.eyePositionWorld[1];
+        uniforms[66] = params.eyePositionWorld[2];
+
+        uniforms[68] = params.envMapSpecular[0];
+        uniforms[69] = params.envMapSpecular[1];
+        uniforms[70] = params.envMapSpecular[2];
+        uniforms[71] = params.fresnelFactor;
+
+        uniforms[72] = params.fresnelEnabled ? 1.0f : 0.0f;
+
+        if (params.fogEnabled)
+        {
+            uniforms[76] = params.fogColor[0];
+            uniforms[77] = params.fogColor[1];
+            uniforms[78] = params.fogColor[2];
+            // The alpha channel carries the enable bit, matching FillEffectUniforms's own
+            // fogColor.a convention.
+            uniforms[79] = 1.0f;
+            uniforms[80] = params.fogVector[0];
+            uniforms[81] = params.fogVector[1];
+            uniforms[82] = params.fogVector[2];
+            uniforms[83] = params.fogVector[3];
+        }
+    }
+
     void LlglGraphicsBackend::QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
                                                const LlglIndexBufferBackend* indexBuffer,
                                                const Matrix& world, const Matrix& view,
@@ -2124,6 +2328,16 @@ namespace CNA::Internal::Backends::Llgl
                 std::string(kBackendName) + " backend: DualTextureEffect needs both Texture and "
                 "Texture2 bound");
         }
+        const bool envMapping = (params != nullptr && params->envMapping);
+        if (envMapping && (params->texture0 == nullptr || params->envMap == nullptr))
+        {
+            // No fabricated-white-texture/cube fallback here either, matching the
+            // DualTextureEffect precedent above -- see AcquirePrimitiveVertexShader()'s own
+            // comment on this backend's convention of failing by name instead.
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: EnvironmentMapEffect needs both Texture and "
+                "EnvironmentMap bound");
+        }
 
         ResolvedSampledTexture resolvedTexture;
         if (textured)
@@ -2148,12 +2362,37 @@ namespace CNA::Internal::Backends::Llgl
             }
         }
 
-        float uniforms[kEffectUniformFloats] = {};
-        FillEffectUniforms(uniforms, matrix, params);
+        LLGL::Texture* resolvedEnvMap = nullptr;
+        if (envMapping)
+        {
+            const auto* cubeBackend = dynamic_cast<const LlglTextureCubeBackend*>(params->envMap);
+            if (cubeBackend == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: EnvironmentMapEffect's EnvironmentMap "
+                    "belongs to another backend");
+            }
+            resolvedEnvMap = cubeBackend->GetLlglTexture();
+        }
 
-        const auto transformIndex =
-            static_cast<std::uint32_t>(transformData_.size() / kEffectUniformFloats);
-        transformData_.insert(transformData_.end(), std::begin(uniforms), std::end(uniforms));
+        float uniforms[kEffectUniformFloats] = {};
+        std::uint32_t transformIndex = 0;
+        float envMapUniforms[kEnvMapUniformFloats] = {};
+        std::uint32_t envMapUniformIndex = 0;
+        if (envMapping)
+        {
+            FillEnvMapUniforms(envMapUniforms, matrix, *params);
+            envMapUniformIndex =
+                static_cast<std::uint32_t>(envMapUniformData_.size() / kEnvMapUniformFloats);
+            envMapUniformData_.insert(envMapUniformData_.end(),
+                                      std::begin(envMapUniforms), std::end(envMapUniforms));
+        }
+        else
+        {
+            FillEffectUniforms(uniforms, matrix, params);
+            transformIndex = static_cast<std::uint32_t>(transformData_.size() / kEffectUniformFloats);
+            transformData_.insert(transformData_.end(), std::begin(uniforms), std::end(uniforms));
+        }
 
         std::int32_t scissor[4] = {0, 0, 0, 0};
         const bool scissorEnabled = ComputeEffectiveScissor(scissor);
@@ -2165,7 +2404,7 @@ namespace CNA::Internal::Backends::Llgl
             : nullptr;
         command.vertexBuffer = vertexBuffer.GetLlglBuffer();
         command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured,
-                                                     lit, dualTexture);
+                                                     lit, dualTexture, envMapping);
         if (textured)
         {
             command.texture = resolvedTexture.texture;
@@ -2178,7 +2417,15 @@ namespace CNA::Internal::Backends::Llgl
             command.sampler2 = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
                                               samplerMaxAnisotropy_);
         }
+        if (envMapping)
+        {
+            command.envMapTexture = resolvedEnvMap;
+            command.envMapSampler = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
+                                                    samplerMaxAnisotropy_);
+        }
+        command.envMapping = envMapping;
         command.transformIndex = transformIndex;
+        command.envMapUniformIndex = envMapUniformIndex;
         command.vertexCount = static_cast<std::uint32_t>(elementCount);
         command.firstVertex = static_cast<std::uint32_t>(std::max(0, vertexStart));
         command.firstIndex = static_cast<std::uint32_t>(std::max(0, startIndex));
@@ -3016,6 +3263,30 @@ namespace CNA::Internal::Backends::Llgl
                                    sizeof(float) * kCustomEffectUniformFloats);
         }
 
+        // One constant buffer per EnvironmentMapEffect draw this frame -- same growth/reuse
+        // discipline as transformBuffers_, but its own pool because this effect's uniform block
+        // has a different shape/size (kEnvMapUniformFloats, not kEffectUniformFloats).
+        const std::size_t envMapUniformCount = envMapUniformData_.size() / kEnvMapUniformFloats;
+        while (envMapUniformBuffers_.size() < envMapUniformCount)
+        {
+            LLGL::BufferDescriptor envMapDesc;
+            envMapDesc.size = sizeof(float) * kEnvMapUniformFloats;
+            envMapDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
+            LLGL::Buffer* buffer = renderer_->CreateBuffer(envMapDesc);
+            if (buffer == nullptr)
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: EnvironmentMapEffect uniform buffer creation failed");
+            }
+            envMapUniformBuffers_.push_back(buffer);
+        }
+        for (std::size_t index = 0; index < envMapUniformCount; ++index)
+        {
+            renderer_->WriteBuffer(*envMapUniformBuffers_[index], 0,
+                                   envMapUniformData_.data() + index * kEnvMapUniformFloats,
+                                   sizeof(float) * kEnvMapUniformFloats);
+        }
+
         if (spriteVertexData_.empty())
             return;
 
@@ -3203,6 +3474,7 @@ namespace CNA::Internal::Backends::Llgl
         spriteVertexData_.clear();
         transformData_.clear();
         customEffectUniformData_.clear();
+        envMapUniformData_.clear();
         frameSubmitted_ = true;
     }
 
@@ -3256,8 +3528,11 @@ namespace CNA::Internal::Backends::Llgl
 
                 case FrameCommand::Kind::Primitives:
                 {
+                    const bool uniformBufferBound = command.envMapping
+                        ? command.envMapUniformIndex < envMapUniformBuffers_.size()
+                        : command.transformIndex < transformBuffers_.size();
                     if (command.vertexBuffer == nullptr || command.pipeline == nullptr ||
-                        command.transformIndex >= transformBuffers_.size())
+                        !uniformBufferBound)
                     {
                         break;
                     }
@@ -3270,16 +3545,33 @@ namespace CNA::Internal::Backends::Llgl
                         commands_->SetScissor(LLGL::Scissor{command.scissor[0], command.scissor[1],
                                                             command.scissor[2], command.scissor[3]});
                     }
-                    commands_->SetResource(0, *transformBuffers_[command.transformIndex]);
-                    if (command.texture != nullptr && command.sampler != nullptr)
+                    if (command.envMapping)
                     {
-                        commands_->SetResource(1, *command.texture);
-                        commands_->SetResource(2, *command.sampler);
+                        commands_->SetResource(0, *envMapUniformBuffers_[command.envMapUniformIndex]);
+                        if (command.texture != nullptr && command.sampler != nullptr)
+                        {
+                            commands_->SetResource(1, *command.texture);
+                            commands_->SetResource(2, *command.sampler);
+                        }
+                        if (command.envMapTexture != nullptr && command.envMapSampler != nullptr)
+                        {
+                            commands_->SetResource(3, *command.envMapTexture);
+                            commands_->SetResource(4, *command.envMapSampler);
+                        }
                     }
-                    if (command.texture2 != nullptr && command.sampler2 != nullptr)
+                    else
                     {
-                        commands_->SetResource(3, *command.texture2);
-                        commands_->SetResource(4, *command.sampler2);
+                        commands_->SetResource(0, *transformBuffers_[command.transformIndex]);
+                        if (command.texture != nullptr && command.sampler != nullptr)
+                        {
+                            commands_->SetResource(1, *command.texture);
+                            commands_->SetResource(2, *command.sampler);
+                        }
+                        if (command.texture2 != nullptr && command.sampler2 != nullptr)
+                        {
+                            commands_->SetResource(3, *command.texture2);
+                            commands_->SetResource(4, *command.sampler2);
+                        }
                     }
                     commands_->SetVertexBuffer(*command.vertexBuffer);
                     if (command.indexBuffer != nullptr)
@@ -3387,6 +3679,7 @@ namespace CNA::Internal::Backends::Llgl
         spriteVertexData_.clear();
         transformData_.clear();
         customEffectUniformData_.clear();
+        envMapUniformData_.clear();
         frameSubmitted_ = false;
         backbufferCacheValid_ = false;
     }
@@ -3460,6 +3753,7 @@ namespace CNA::Internal::Backends::Llgl
         spriteVertexData_.clear();
         transformData_.clear();
         customEffectUniformData_.clear();
+        envMapUniformData_.clear();
         frameSubmitted_ = true;
 
         backbufferCache_.assign(
@@ -3829,8 +4123,7 @@ namespace CNA::Internal::Backends::Llgl
         // rather than quietly rendering something that merely looks plausible -- an unlit surface
         // where lighting was asked for is a wrong answer, not a degraded one.
         const char* unsupported = nullptr;
-        if (params.envMapping)                               unsupported = "EnvironmentMapEffect";
-        else if (params.skinned)                             unsupported = "SkinnedEffect";
+        if (params.skinned)                                  unsupported = "SkinnedEffect";
         else if (params.pbr)                                 unsupported = "PbrEffect";
         else if (params.customEffectBackend != nullptr)      unsupported = "custom ShaderEffect";
         else if (params.instanceCount > 1)                   unsupported = "instanced drawing";
