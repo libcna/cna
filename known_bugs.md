@@ -70,3 +70,27 @@ that really uses `Blend::BlendFactor` on such a driver still fails loudly, with 
 **Tracked as:** `plan_llgl.md` task `LLGL-18`.
 
 ---
+
+## LLGL backend: sprites drawn into a `RenderTarget2D` landed in a tiny corner — FIXED 2026-07-31
+
+**Symptom:** a `SpriteBatch` draw issued while a `RenderTarget2D` was bound produced no visible
+content in the sampled region of the target at all — reading the target's colour attachment back
+(directly via `GetData()`, or after sampling it onto the screen) returned the clear colour
+everywhere the test checked.
+
+**Cause:** every sprite's pixel-space vertex positions are converted to clip space by a single,
+frame-global orthographic projection matrix (`spriteProjectionBuffer_`), uploaded once per frame
+from the SWAP CHAIN's own resolution. A sprite queued while a much smaller `RenderTarget2D` (e.g.
+64x64) was bound still had its vertex positions read through that same swap-chain-sized (e.g.
+800x480) projection, collapsing the whole draw into a sliver near one corner of the target's clip
+space instead of filling it.
+
+**Fix:** each `LlglRenderTargetBackend` now owns its own fixed pixel-to-clip-space projection
+buffer, built once at construction (a render target's resolution never changes after creation,
+unlike the swap chain's, which can resize). `QueueSpriteEXT` records which projection buffer a
+sprite command needs, and `ReplayFrameCommandsList` binds that one instead of the frame-global
+buffer whenever it is set.
+
+**Tracked as:** `plan_llgl.md` task `LLGL-26`.
+
+---

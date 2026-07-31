@@ -312,6 +312,29 @@ namespace CNA::Internal::Backends::Llgl
         }
     }
 
+    /// A sampled resource resolved from whichever concrete ITextureBackend the caller handed in.
+    /// Deliberately not a member of either texture-owning class: SpriteBatch and the 3D effect path
+    /// both accept an arbitrary ITextureBackend&, which is a plain Texture2D in the common case but
+    /// is exactly as often the ITextureBackend a RenderTarget2D hands back when it is sampled as a
+    /// texture (RenderTarget2D inherits Texture2D, and Texture2D::GetBackend() returns the same
+    /// backend_ pointer regardless of which concrete subtype constructed it) -- render-to-texture
+    /// only works at all if both are accepted here.
+    struct ResolvedSampledTexture
+    {
+        LLGL::Texture* texture = nullptr;
+        int width = 0;
+        int height = 0;
+    };
+
+    static ResolvedSampledTexture ResolveSampledTexture(const ITextureBackend& texture)
+    {
+        if (const auto* plain = dynamic_cast<const LlglTextureBackend*>(&texture))
+            return {plain->GetLlglTexture(), plain->GetWidth(), plain->GetHeight()};
+        if (const auto* target = dynamic_cast<const LlglRenderTargetBackend*>(&texture))
+            return {target->GetLlglColorTexture(), target->GetWidth(), target->GetHeight()};
+        return {};
+    }
+
     // -----------------------------------------------------------------------------------------
     // LlglTextureBackend
     // -----------------------------------------------------------------------------------------
@@ -401,6 +424,80 @@ namespace CNA::Internal::Backends::Llgl
         imageView.dataSize = required;
 
         renderSystem_->ReadTexture(*texture_, region, imageView);
+        return true;
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // LlglRenderTargetBackend
+    // -----------------------------------------------------------------------------------------
+
+    LlglRenderTargetBackend::LlglRenderTargetBackend(LLGL::RenderSystem* renderSystem,
+                                                      LLGL::RenderTarget* renderTarget,
+                                                      LLGL::Texture* colorTexture,
+                                                      LLGL::Texture* depthTexture,
+                                                      int width, int height, bool hasRealDepthBuffer,
+                                                      LLGL::Buffer* spriteProjectionBuffer)
+        : renderSystem_(renderSystem)
+        , renderTarget_(renderTarget)
+        , colorTexture_(colorTexture)
+        , depthTexture_(depthTexture)
+        , width_(width)
+        , height_(height)
+        , hasRealDepthBuffer_(hasRealDepthBuffer)
+        , spriteProjectionBuffer_(spriteProjectionBuffer)
+    {
+        if (renderSystem_ == nullptr || renderTarget_ == nullptr || colorTexture_ == nullptr ||
+            spriteProjectionBuffer_ == nullptr)
+        {
+            throw std::runtime_error(std::string(kBackendName) + " backend: render target creation failed");
+        }
+    }
+
+    LlglRenderTargetBackend::~LlglRenderTargetBackend()
+    {
+        if (renderSystem_ == nullptr)
+            return;
+
+        if (renderTarget_ != nullptr)
+            renderSystem_->Release(*renderTarget_);
+        // depthTexture_ is null whenever the depth/stencil attachment was created anonymously (the
+        // current CreateRenderTarget2D path always does this): LLGL then owns that buffer as part
+        // of the RenderTarget itself and releases it above. This branch only matters if a future
+        // caller ever hands this class a concrete depth texture of its own.
+        if (depthTexture_ != nullptr)
+            renderSystem_->Release(*depthTexture_);
+        if (colorTexture_ != nullptr)
+            renderSystem_->Release(*colorTexture_);
+        if (spriteProjectionBuffer_ != nullptr)
+            renderSystem_->Release(*spriteProjectionBuffer_);
+    }
+
+    bool LlglRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+    {
+        if (data == nullptr || w <= 0 || h <= 0 || level != 0 ||
+            renderSystem_ == nullptr || colorTexture_ == nullptr)
+        {
+            return false;
+        }
+
+        const std::size_t required = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            return false;
+
+        LLGL::TextureRegion region;
+        region.subresource.baseMipLevel = 0;
+        region.subresource.numMipLevels = 1;
+        region.offset = {x, y, 0};
+        region.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
+
+        LLGL::MutableImageView imageView;
+        imageView.format = LLGL::ImageFormat::RGBA;
+        imageView.dataType = LLGL::DataType::UInt8;
+        imageView.data = data;
+        imageView.dataSize = required;
+
+        renderSystem_->ReadTexture(*colorTexture_, region, imageView);
         return true;
     }
 
@@ -670,14 +767,7 @@ namespace CNA::Internal::Backends::Llgl
                                        SpriteEffects effects,
                                        float /*layerDepth*/)
     {
-        const auto* llglTexture = dynamic_cast<const LlglTextureBackend*>(&texture);
-        if (llglTexture == nullptr)
-        {
-            throw std::runtime_error(
-                std::string(kBackendName) + " backend: SpriteBatch was given a texture from another backend");
-        }
-
-        owner_.QueueSpriteEXT(*llglTexture, destinationRectangle, sourceRectangle, color, rotation,
+        owner_.QueueSpriteEXT(texture, destinationRectangle, sourceRectangle, color, rotation,
                               origin, effects, transform_, textureFilter_, addressU_, addressV_);
     }
 
@@ -1402,11 +1492,11 @@ namespace CNA::Internal::Backends::Llgl
             NotYetImplemented(kBackendName, "lighting without a texture");
         }
 
-        const LlglTextureBackend* texture = nullptr;
+        ResolvedSampledTexture resolvedTexture;
         if (textured)
         {
-            texture = dynamic_cast<const LlglTextureBackend*>(params->texture0);
-            if (texture == nullptr || texture->GetLlglTexture() == nullptr)
+            resolvedTexture = ResolveSampledTexture(*params->texture0);
+            if (resolvedTexture.texture == nullptr)
             {
                 throw std::runtime_error(
                     std::string(kBackendName) + " backend: the effect's texture belongs to another backend");
@@ -1425,11 +1515,14 @@ namespace CNA::Internal::Backends::Llgl
 
         FrameCommand command;
         command.kind = FrameCommand::Kind::Primitives;
+        command.target = currentRenderTargetBackend_ != nullptr
+            ? currentRenderTargetBackend_->GetLlglRenderTarget()
+            : nullptr;
         command.vertexBuffer = vertexBuffer.GetLlglBuffer();
         command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured, lit);
         if (textured)
         {
-            command.texture = texture->GetLlglTexture();
+            command.texture = resolvedTexture.texture;
             command.sampler = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
                                              samplerMaxAnisotropy_);
         }
@@ -1649,6 +1742,23 @@ namespace CNA::Internal::Backends::Llgl
         return rect;
     }
 
+    LlglGraphicsBackend::PresentationRect LlglGraphicsBackend::GetActiveDrawRect() const
+    {
+        // A render-target-bound draw uses the target's own 1:1 pixel space -- the swap chain's
+        // virtual-resolution letterbox/presentation-mode scaling only applies when drawing to the
+        // actual window, matching every other backend's own identical convention for this.
+        if (currentRenderTargetBackend_ != nullptr)
+        {
+            PresentationRect rect;
+            rect.x = 0.0f;
+            rect.y = 0.0f;
+            rect.width = rect.logicalWidth = static_cast<float>(currentRenderTargetBackend_->GetWidth());
+            rect.height = rect.logicalHeight = static_cast<float>(currentRenderTargetBackend_->GetHeight());
+            return rect;
+        }
+        return ComputePresentationRect();
+    }
+
     void LlglGraphicsBackend::GetViewportSize(int& width, int& height)
     {
         const PresentationRect rect = ComputePresentationRect();
@@ -1768,6 +1878,9 @@ namespace CNA::Internal::Backends::Llgl
     {
         FrameCommand command;
         command.kind = FrameCommand::Kind::Clear;
+        command.target = currentRenderTargetBackend_ != nullptr
+            ? currentRenderTargetBackend_->GetLlglRenderTarget()
+            : nullptr;
         command.clearFlags = flags;
         if (color != nullptr)
             std::memcpy(command.clearColor, color, sizeof(command.clearColor));
@@ -1820,7 +1933,7 @@ namespace CNA::Internal::Backends::Llgl
 
     bool LlglGraphicsBackend::ComputeEffectiveScissor(std::int32_t outRect[4]) const
     {
-        const PresentationRect rect = ComputePresentationRect();
+        const PresentationRect rect = GetActiveDrawRect();
         if (rect.width <= 0.0f || rect.height <= 0.0f ||
             rect.logicalWidth <= 0.0f || rect.logicalHeight <= 0.0f)
         {
@@ -1867,7 +1980,7 @@ namespace CNA::Internal::Backends::Llgl
         return true;
     }
 
-    void LlglGraphicsBackend::QueueSpriteEXT(const LlglTextureBackend& texture,
+    void LlglGraphicsBackend::QueueSpriteEXT(const ITextureBackend& texture,
                                               const Rectangle& destination,
                                               const Rectangle& source,
                                               const Color& color,
@@ -1877,14 +1990,21 @@ namespace CNA::Internal::Backends::Llgl
                                               const Matrix& transform,
                                               int filter, int addressU, int addressV)
     {
+        const ResolvedSampledTexture resolved = ResolveSampledTexture(texture);
+        if (resolved.texture == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: SpriteBatch was given a texture from another backend");
+        }
+
         if (destination.Width == 0 || destination.Height == 0 ||
             source.Width == 0 || source.Height == 0 ||
-            texture.GetWidth() <= 0 || texture.GetHeight() <= 0)
+            resolved.width <= 0 || resolved.height <= 0)
         {
             return;
         }
 
-        const PresentationRect rect = ComputePresentationRect();
+        const PresentationRect rect = GetActiveDrawRect();
         if (rect.width <= 0.0f || rect.height <= 0.0f ||
             rect.logicalWidth <= 0.0f || rect.logicalHeight <= 0.0f)
         {
@@ -1913,10 +2033,10 @@ namespace CNA::Internal::Backends::Llgl
             point.Y = rotatedX * transform.M12 + rotatedY * transform.M22 + transform.M42;
         }
 
-        float u0 = static_cast<float>(source.X) / static_cast<float>(texture.GetWidth());
-        float v0 = static_cast<float>(source.Y) / static_cast<float>(texture.GetHeight());
-        float u1 = static_cast<float>(source.X + source.Width) / static_cast<float>(texture.GetWidth());
-        float v1 = static_cast<float>(source.Y + source.Height) / static_cast<float>(texture.GetHeight());
+        float u0 = static_cast<float>(source.X) / static_cast<float>(resolved.width);
+        float v0 = static_cast<float>(source.Y) / static_cast<float>(resolved.height);
+        float u1 = static_cast<float>(source.X + source.Width) / static_cast<float>(resolved.width);
+        float v1 = static_cast<float>(source.Y + source.Height) / static_cast<float>(resolved.height);
 
         const int effectBits = static_cast<int>(effects);
         if ((effectBits & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0) std::swap(u0, u1);
@@ -1950,7 +2070,13 @@ namespace CNA::Internal::Backends::Llgl
 
         FrameCommand command;
         command.kind = FrameCommand::Kind::Sprite;
-        command.texture = texture.GetLlglTexture();
+        command.target = currentRenderTargetBackend_ != nullptr
+            ? currentRenderTargetBackend_->GetLlglRenderTarget()
+            : nullptr;
+        command.projectionBuffer = currentRenderTargetBackend_ != nullptr
+            ? currentRenderTargetBackend_->GetSpriteProjectionBuffer()
+            : nullptr;
+        command.texture = resolved.texture;
         command.sampler = AcquireSampler(filter, addressU, addressV, samplerMaxAnisotropy_);
         command.pipeline = AcquireSpritePipeline(scissorEnabled);
         command.firstVertex = firstVertex;
@@ -2078,10 +2204,42 @@ namespace CNA::Internal::Backends::Llgl
         pendingBufferReleases_.clear();
     }
 
-    void LlglGraphicsBackend::ReplayFrameCommands()
+    std::vector<LlglGraphicsBackend::FrameCommandBucket> LlglGraphicsBackend::GroupFrameCommandsByTargetEXT() const
     {
+        std::vector<FrameCommandBucket> buckets;
         for (const FrameCommand& command : frameCommands_)
         {
+            const auto found = std::find_if(buckets.begin(), buckets.end(),
+                [&](const FrameCommandBucket& bucket) { return bucket.target == command.target; });
+            if (found != buckets.end())
+            {
+                found->commands.push_back(&command);
+                continue;
+            }
+
+            FrameCommandBucket bucket;
+            bucket.target = command.target;
+            bucket.commands.push_back(&command);
+            buckets.push_back(std::move(bucket));
+        }
+
+        // Every RecordAndSubmitFrame/CaptureBackbuffer caller needs a swap-chain pass regardless of
+        // whether this frame drew to it directly (Present() must always submit something, and
+        // CaptureBackbuffer's framebuffer copy can only run inside one), so one is appended here
+        // rather than duplicated at each call site.
+        const bool hasSwapChainBucket = std::any_of(buckets.begin(), buckets.end(),
+            [](const FrameCommandBucket& bucket) { return bucket.target == nullptr; });
+        if (!hasSwapChainBucket)
+            buckets.push_back(FrameCommandBucket{});
+
+        return buckets;
+    }
+
+    void LlglGraphicsBackend::ReplayFrameCommandsList(const std::vector<const FrameCommand*>& commands)
+    {
+        for (const FrameCommand* commandPtr : commands)
+        {
+            const FrameCommand& command = *commandPtr;
             switch (command.kind)
             {
                 case FrameCommand::Kind::Clear:
@@ -2145,7 +2303,8 @@ namespace CNA::Internal::Backends::Llgl
                         commands_->SetScissor(LLGL::Scissor{command.scissor[0], command.scissor[1],
                                                             command.scissor[2], command.scissor[3]});
                     }
-                    commands_->SetResource(0, *spriteProjectionBuffer_);
+                    commands_->SetResource(0, command.projectionBuffer != nullptr
+                        ? *command.projectionBuffer : *spriteProjectionBuffer_);
                     commands_->SetResource(1, *command.texture);
                     commands_->SetResource(2, *command.sampler);
                     commands_->SetVertexBuffer(*spriteVertexBuffer_);
@@ -2158,15 +2317,23 @@ namespace CNA::Internal::Backends::Llgl
 
     void LlglGraphicsBackend::RecordAndSubmitFrame()
     {
-        const LLGL::Extent2D resolution = swapChain_->GetResolution();
+        const std::vector<FrameCommandBucket> buckets = GroupFrameCommandsByTargetEXT();
 
         commands_->Begin();
-        commands_->BeginRenderPass(*swapChain_);
-        commands_->SetViewport(LLGL::Viewport{0.0f, 0.0f,
-                                              static_cast<float>(resolution.width),
-                                              static_cast<float>(resolution.height)});
-        ReplayFrameCommands();
-        commands_->EndRenderPass();
+        for (const FrameCommandBucket& bucket : buckets)
+        {
+            LLGL::RenderTarget& renderTarget = bucket.target != nullptr
+                ? *bucket.target
+                : static_cast<LLGL::RenderTarget&>(*swapChain_);
+            const LLGL::Extent2D resolution = renderTarget.GetResolution();
+
+            commands_->BeginRenderPass(renderTarget);
+            commands_->SetViewport(LLGL::Viewport{0.0f, 0.0f,
+                                                  static_cast<float>(resolution.width),
+                                                  static_cast<float>(resolution.height)});
+            ReplayFrameCommandsList(bucket.commands);
+            commands_->EndRenderPass();
+        }
         commands_->End();
         queue_->Submit(*commands_);
     }
@@ -2225,24 +2392,38 @@ namespace CNA::Internal::Backends::Llgl
 
         // LLGL allows the framebuffer copy only inside a render pass, and the caller expects to
         // read what THIS frame drew -- so the pending frame is recorded and the copy appended to
-        // that very same pass, instead of reading whatever the previous Present() left behind.
+        // the swap chain's own pass, instead of reading whatever the previous Present() left
+        // behind. Any RenderTarget2D passes this frame also queued are recorded alongside it (see
+        // GroupFrameCommandsByTargetEXT), each in its own pass.
         UploadFrameResources();
-
-        commands_->Begin();
-        commands_->BeginRenderPass(*swapChain_);
-        commands_->SetViewport(LLGL::Viewport{0.0f, 0.0f,
-                                              static_cast<float>(resolution.width),
-                                              static_cast<float>(resolution.height)});
-        ReplayFrameCommands();
 
         LLGL::TextureRegion region;
         region.subresource.baseMipLevel = 0;
         region.subresource.numMipLevels = 1;
         region.offset = {0, 0, 0};
         region.extent = {resolution.width, resolution.height, 1};
-        commands_->CopyTextureFromFramebuffer(*staging, region, LLGL::Offset2D{0, 0});
 
-        commands_->EndRenderPass();
+        const std::vector<FrameCommandBucket> buckets = GroupFrameCommandsByTargetEXT();
+
+        commands_->Begin();
+        for (const FrameCommandBucket& bucket : buckets)
+        {
+            LLGL::RenderTarget& renderTarget = bucket.target != nullptr
+                ? *bucket.target
+                : static_cast<LLGL::RenderTarget&>(*swapChain_);
+            const LLGL::Extent2D bucketResolution = renderTarget.GetResolution();
+
+            commands_->BeginRenderPass(renderTarget);
+            commands_->SetViewport(LLGL::Viewport{0.0f, 0.0f,
+                                                  static_cast<float>(bucketResolution.width),
+                                                  static_cast<float>(bucketResolution.height)});
+            ReplayFrameCommandsList(bucket.commands);
+
+            if (bucket.target == nullptr)
+                commands_->CopyTextureFromFramebuffer(*staging, region, LLGL::Offset2D{0, 0});
+
+            commands_->EndRenderPass();
+        }
         commands_->End();
         queue_->Submit(*commands_);
         queue_->WaitIdle();
@@ -2355,15 +2536,119 @@ namespace CNA::Internal::Backends::Llgl
         }
     }
 
+    std::unique_ptr<IRenderTargetBackend> LlglGraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/,
+        int /*multiSampleCount*/)
+    {
+        if (w <= 0 || h <= 0)
+            throw std::runtime_error(std::string(kBackendName) + " backend: render target has no pixels");
+
+        LLGL::TextureDescriptor colorDesc;
+        colorDesc.type = LLGL::TextureType::Texture2D;
+        // Sampled so it can be drawn with SpriteBatch/the 3D path afterwards, CopySrc for
+        // GetData(), ColorAttachment so it can be bound as a render target at all.
+        colorDesc.bindFlags = LLGL::BindFlags::ColorAttachment | LLGL::BindFlags::Sampled |
+                              LLGL::BindFlags::CopySrc;
+        // Matches the swap chain's own colour format -- see this method's header doc comment on
+        // why every render target shares the back buffer's attachment signature.
+        colorDesc.format = swapChain_->GetColorFormat();
+        colorDesc.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
+        colorDesc.mipLevels = 1;
+        colorDesc.miscFlags = 0;
+
+        LLGL::Texture* colorTexture = renderer_->CreateTexture(colorDesc);
+        if (colorTexture == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: render target colour texture creation failed");
+        }
+
+        LLGL::RenderTargetDescriptor targetDesc;
+        targetDesc.resolution = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h)};
+        targetDesc.colorAttachments[0] = LLGL::AttachmentDescriptor{colorTexture};
+        // Anonymous (textureless) attachment: LLGL allocates and owns this buffer as part of the
+        // RenderTarget itself, always at the swap chain's own depth/stencil format, regardless of
+        // the requested DepthFormat -- see this method's header doc comment.
+        targetDesc.depthStencilAttachment = LLGL::AttachmentDescriptor{swapChain_->GetDepthStencilFormat()};
+
+        LLGL::RenderTarget* renderTarget = renderer_->CreateRenderTarget(targetDesc);
+        if (renderTarget == nullptr)
+        {
+            renderer_->Release(*colorTexture);
+            throw std::runtime_error(std::string(kBackendName) + " backend: render target creation failed");
+        }
+
+        // This target's own fixed pixel-to-clip-space projection -- identical in shape to
+        // UploadFrameResources()'s swap-chain one, but computed once here (a render target's
+        // resolution is immutable after construction, unlike the swap chain's, which can resize)
+        // rather than re-uploaded into a shared buffer every frame. Without this, every sprite
+        // queued while this target is bound would be transformed by the SWAP CHAIN's projection --
+        // e.g. a 64x64 target's pixel coordinates read through an 800x480 projection collapse into
+        // a tiny corner of the target's clip space instead of filling it (found by reading back
+        // real pixels: the drawn quad was entirely missing from the sampled region).
+        const float projection[16] = {
+            2.0f / static_cast<float>(w), 0.0f,                            0.0f, 0.0f,
+            0.0f,                         -2.0f / static_cast<float>(h),   0.0f, 0.0f,
+            0.0f,                         0.0f,                            1.0f, 0.0f,
+            -1.0f,                        1.0f,                            0.0f, 1.0f
+        };
+        LLGL::BufferDescriptor projectionDesc;
+        projectionDesc.size = sizeof(projection);
+        projectionDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
+        LLGL::Buffer* spriteProjectionBuffer = renderer_->CreateBuffer(projectionDesc, projection);
+        if (spriteProjectionBuffer == nullptr)
+        {
+            renderer_->Release(*renderTarget);
+            renderer_->Release(*colorTexture);
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: render target projection buffer creation failed");
+        }
+
+        // DepthFormat::None is ordinal 0; anything else asks for a real depth (and possibly
+        // stencil) buffer. The physical buffer is always allocated above -- this only changes what
+        // HasRealDepthBuffer() reports to the shared RenderTarget2D layer.
+        const bool hasRealDepthBuffer = depthFormat != 0;
+
+        return std::make_unique<LlglRenderTargetBackend>(renderer_.get(), renderTarget, colorTexture,
+                                                          nullptr, w, h, hasRealDepthBuffer,
+                                                          spriteProjectionBuffer);
+    }
+
+    void LlglGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt == nullptr)
+        {
+            currentRenderTargetBackend_ = nullptr;
+            return;
+        }
+
+        auto* target = dynamic_cast<LlglRenderTargetBackend*>(rt);
+        if (target == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: SetRenderTarget2D was given a target from another backend");
+        }
+
+        currentRenderTargetBackend_ = target;
+    }
+
     void LlglGraphicsBackend::SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count)
     {
-        // Restoring the back buffer is the only binding this backend can honour, and it is already
-        // the only thing it ever draws to. Anything else must fail rather than quietly redirect a
-        // render-target pass onto the window.
         if (renderTargets == nullptr || count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
             return;
+        }
 
-        NotYetImplemented(kBackendName, "render targets");
+        // MRT is a real, still-open gap (LLGL-26 scope): every cached pipeline declares exactly one
+        // colour attachment, so a second simultaneous target has nothing to write to.
+        if (count > 1)
+            NotYetImplemented(kBackendName, "multiple simultaneous render targets");
+
+        if (!renderTargets[0].IsRenderTarget2D())
+            NotYetImplemented(kBackendName, "RenderTargetCube faces");
+
+        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
     }
 
     void LlglGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -2432,7 +2717,7 @@ namespace CNA::Internal::Backends::Llgl
         viewportRect_[2] = w;
         viewportRect_[3] = h;
 
-        const PresentationRect rect = ComputePresentationRect();
+        const PresentationRect rect = GetActiveDrawRect();
         viewportSet_ = !(x == 0 && y == 0 &&
                          static_cast<float>(w) == rect.logicalWidth &&
                          static_cast<float>(h) == rect.logicalHeight);

@@ -253,6 +253,106 @@ namespace CNA::Internal::Backends::Llgl
     };
 
     /**
+     * @brief An off-screen 2D render target living in LLGL. NOXNA.
+     *
+     * Backs `Microsoft::Xna::Framework::Graphics::RenderTarget2D`. Owns a colour texture (and,
+     * when requested, a depth/stencil texture) plus the `LLGL::RenderTarget` that binds them
+     * together as a framebuffer.
+     *
+     * `BindAsRenderTarget()`/`UnbindAsRenderTarget()` are deliberately no-ops here: this backend
+     * defers every draw to `Present()`, so "which target is active" is tracked by
+     * `LlglGraphicsBackend::SetRenderTarget2D()` recording a pointer, consulted when each Clear/
+     * sprite/primitive command is queued -- not by an immediate GPU bind at the moment XNA code
+     * calls `GraphicsDevice.SetRenderTarget()`.
+     */
+    class LlglRenderTargetBackend final : public IRenderTargetBackend
+    {
+    public:
+        /**
+         * @brief Takes ownership of an already-created LLGL render target and its textures.
+         *
+         * @param renderSystem  Render system that created these resources and will release them.
+         * @param renderTarget  The framebuffer object; must not be null.
+         * @param colorTexture  The colour attachment; must not be null.
+         * @param depthTexture  The depth/stencil attachment, or null when none was requested.
+         * @param width         Width in pixels.
+         * @param height        Height in pixels.
+         * @param hasRealDepthBuffer Whether @p depthTexture is non-null.
+         * @param spriteProjectionBuffer Constant buffer holding this target's own pixel-to-clip-
+         *        space projection matrix; must not be null. A target's resolution never changes
+         *        after construction, unlike the swap chain's (which can resize), so this is built
+         *        once here rather than re-uploaded every frame -- see `QueueSpriteEXT`'s use of
+         *        it in place of the owning backend's own `spriteProjectionBuffer_` whenever a
+         *        sprite is queued while this target is bound.
+         */
+        LlglRenderTargetBackend(LLGL::RenderSystem* renderSystem, LLGL::RenderTarget* renderTarget,
+                                LLGL::Texture* colorTexture, LLGL::Texture* depthTexture,
+                                int width, int height, bool hasRealDepthBuffer,
+                                LLGL::Buffer* spriteProjectionBuffer);
+
+        /** @brief Releases the render target and its textures. */
+        ~LlglRenderTargetBackend() override;
+
+        LlglRenderTargetBackend(const LlglRenderTargetBackend&) = delete;
+        LlglRenderTargetBackend& operator=(const LlglRenderTargetBackend&) = delete;
+
+        /** @brief Returns the width in pixels. */
+        [[nodiscard]] int GetWidth() const override { return width_; }
+
+        /** @brief Returns the height in pixels. */
+        [[nodiscard]] int GetHeight() const override { return height_; }
+
+        /** @brief Returns null: this backend owns no SDL texture. */
+        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
+        /**
+         * @brief Reads pixels back from the colour attachment.
+         *
+         * @param level      Mip level to read; only level 0 exists on a render target today.
+         * @param x          Left edge of the region in pixels.
+         * @param y          Top edge of the region in pixels.
+         * @param w          Width of the region in pixels.
+         * @param h          Height of the region in pixels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes; must be at least w * h * 4.
+         * @return True if the whole region was read back; false if it could not be.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /** @brief No-op; see this class's own doc comment for why. */
+        void BindAsRenderTarget() override {}
+
+        /** @brief No-op; see this class's own doc comment for why. */
+        void UnbindAsRenderTarget() override {}
+
+        /** @brief Returns whether this target has a real depth/stencil attachment. */
+        [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override
+        {
+            return hasRealDepthBuffer_;
+        }
+
+        /** @brief Returns the underlying LLGL render target. */
+        [[nodiscard]] LLGL::RenderTarget* GetLlglRenderTarget() const { return renderTarget_; }
+
+        /** @brief Returns the underlying LLGL colour texture, for sampling as a `Texture2D`. */
+        [[nodiscard]] LLGL::Texture* GetLlglColorTexture() const { return colorTexture_; }
+
+        /** @brief Returns this target's own fixed pixel-to-clip-space sprite projection buffer. */
+        [[nodiscard]] LLGL::Buffer* GetSpriteProjectionBuffer() const { return spriteProjectionBuffer_; }
+
+    private:
+        LLGL::RenderSystem* renderSystem_       = nullptr;
+        LLGL::RenderTarget* renderTarget_        = nullptr;
+        LLGL::Texture*      colorTexture_        = nullptr;
+        LLGL::Texture*      depthTexture_        = nullptr;
+        int                 width_               = 0;
+        int                 height_              = 0;
+        bool                hasRealDepthBuffer_  = false;
+        LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
+    };
+
+    /**
      * @brief Sprite rendering for `Microsoft::Xna::Framework::Graphics::SpriteBatch`. NOXNA.
      *
      * Each `Draw` turns into six vertices appended to the owning backend's frame, so sprites from
@@ -550,15 +650,51 @@ namespace CNA::Internal::Backends::Llgl
         void ReadBackbuffer(int x, int y, int w, int h, std::uint8_t* pixels) override;
 
         /**
+         * @brief Creates an off-screen `RenderTarget2D`.
+         *
+         * Scoped to a single colour attachment (LLGL-26): `RenderTargetCube`, multiple render
+         * targets and multisampling are not implemented here yet. The colour attachment always
+         * takes the swap chain's own colour format, and a depth/stencil attachment matching the
+         * swap chain's own depth/stencil format is always allocated regardless of @p depthFormat --
+         * every cached sprite/primitive pipeline was built against the swap chain's render pass, and
+         * Vulkan's render-pass-compatibility rule requires a matching attachment signature to reuse
+         * a `LLGL::PipelineState` across render passes. Requesting `DepthFormat::None` therefore
+         * still allocates the buffer; it only changes whether the game's own depth-stencil state
+         * ends up testing or writing to it.
+         *
+         * @param w                Width in pixels.
+         * @param h                Height in pixels.
+         * @param depthFormat      Raw `DepthFormat` ordinal; only used to decide whether a real
+         *                         depth buffer is reported through `HasRealDepthBuffer`.
+         * @param preserveContents Ignored in this first cut -- see this backend's render-pass
+         *                         grouping note on `FrameCommandBucket`.
+         * @param mipMap           Ignored; not yet implemented.
+         * @param multiSampleCount Ignored; not yet implemented.
+         * @return The new render target backend.
+         * @throws std::runtime_error If @p w or @p h is not positive, or GPU resource creation
+         *         fails.
+         */
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(
+            int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false,
+            int multiSampleCount = 0) override;
+
+        /**
+         * @brief Activates a `RenderTarget2D` (or restores the back buffer).
+         *
+         * @param rt Target to draw into, or null to restore the back buffer.
+         */
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+
+        /**
          * @brief Binds a set of render targets.
          *
-         * This backend creates no render targets yet, so the only accepted request is the one that
-         * restores the back buffer; anything else fails loudly rather than silently drawing to the
-         * window.
+         * Accepts either the "restore the back buffer" request or exactly one `RenderTarget2D`
+         * slot; `RenderTargetCube` faces and multiple simultaneous render targets are not
+         * implemented yet and fail loudly rather than silently drawing to the window.
          *
          * @param renderTargets Ordered target descriptors, or null.
          * @param count         Number of descriptors; 0 restores the back buffer.
-         * @throws std::runtime_error If any target is supplied.
+         * @throws std::runtime_error If more than one target is supplied, or a cube face is.
          */
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
@@ -804,7 +940,8 @@ namespace CNA::Internal::Backends::Llgl
          *
          * Called by `LlglSpriteBatchBackend`; not part of the shared backend interface.
          *
-         * @param texture     Texture to sample.
+         * @param texture     Texture to sample -- either a plain `Texture2D` or a `RenderTarget2D`
+         *                    sampled back as a texture; both resolve to a real `LLGL::Texture`.
          * @param destination Destination rectangle in logical pixels.
          * @param source      Source region in texels.
          * @param color       Tint multiplied with the sampled texel.
@@ -815,8 +952,9 @@ namespace CNA::Internal::Backends::Llgl
          * @param filter      Raw `TextureFilter` ordinal for this draw.
          * @param addressU    Raw `TextureAddressMode` ordinal for U.
          * @param addressV    Raw `TextureAddressMode` ordinal for V.
+         * @throws std::runtime_error If @p texture belongs to another backend.
          */
-        void QueueSpriteEXT(const LlglTextureBackend& texture,
+        void QueueSpriteEXT(const ITextureBackend& texture,
                             const Rectangle& destination,
                             const Rectangle& source,
                             const Color& color,
@@ -834,10 +972,15 @@ namespace CNA::Internal::Backends::Llgl
 
             /** @brief Which operation this entry replays. */
             Kind             kind         = Kind::Clear;
+            /** @brief The render target this command draws into, or null for the swap chain. */
+            LLGL::RenderTarget* target    = nullptr;
             long             clearFlags   = 0;
             float            clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
             float            clearDepth   = 1.0f;
             std::uint32_t    clearStencil = 0;
+            /** @brief Sprite only: this target's own projection buffer, or null for the swap
+             *  chain's (see `LlglRenderTargetBackend::GetSpriteProjectionBuffer`). */
+            LLGL::Buffer*    projectionBuffer = nullptr;
             LLGL::Texture*   texture      = nullptr;
             LLGL::Sampler*   sampler      = nullptr;
             LLGL::PipelineState* pipeline = nullptr;
@@ -889,11 +1032,31 @@ namespace CNA::Internal::Backends::Llgl
         /// first 32; the lit ones read all 100.
         static void FillEffectUniforms(float (&uniforms)[100], const float matrix[16],
                                        const GpuDrawParams* params);
+        /**
+         * @brief One contiguous render pass worth of frame commands, all sharing the same
+         * destination (null means the swap chain).
+         *
+         * LLGL's public Vulkan render-pass API has no portable way to re-enter a render pass with
+         * `Load` semantics (see plan_llgl.md LLGL-26), so a frame that interleaves draws to the
+         * back buffer and one or more RenderTarget2D instances is replayed as one pass PER DISTINCT
+         * TARGET IDENTITY -- every command for a given target is grouped together into a single
+         * pass, in that target's first-appearance order, rather than faithfully replaying the
+         * original interleaved call order. `RenderTargetUsage.PreserveContents` is not honored
+         * across separate binds in this first cut.
+         */
+        struct FrameCommandBucket
+        {
+            LLGL::RenderTarget* target = nullptr;
+            std::vector<const FrameCommand*> commands;
+        };
+
+        [[nodiscard]] std::vector<FrameCommandBucket> GroupFrameCommandsByTargetEXT() const;
         void CaptureBackbuffer();
-        void ReplayFrameCommands();
+        void ReplayFrameCommandsList(const std::vector<const FrameCommand*>& commands);
         void ReleasePendingBuffers();
         void UpdateSwapChainResolution();
         [[nodiscard]] PresentationRect ComputePresentationRect() const;
+        [[nodiscard]] PresentationRect GetActiveDrawRect() const;
         [[nodiscard]] bool IsOpaqueBlendState() const;
         [[nodiscard]] bool UsesConstantBlendFactorState() const;
         [[nodiscard]] std::uint64_t MakeBlendPipelineKey(bool scissorEnabled) const;
@@ -985,6 +1148,11 @@ namespace CNA::Internal::Backends::Llgl
         bool  depthWriteEnabled_ = true;
         int   depthCompareFunction_ = 3;  // CompareFunction::LessEqual, the XNA default
         bool  stencilRequested_  = false;
+
+        /// Non-owning; null means "draw to the swap chain". Set by SetRenderTarget2D(), consulted
+        /// when each Clear/sprite/primitive command is QUEUED (not at bind time -- this backend
+        /// defers every draw to Present()).
+        LlglRenderTargetBackend* currentRenderTargetBackend_ = nullptr;
         int   cullMode_ = 2;
         int   fillMode_ = 0;
     };

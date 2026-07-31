@@ -25,10 +25,14 @@ module**:
 * **`BasicEffect` with one texture**, `DiffuseColor`, `Alpha`, vertex-colour modulation, fog,
   and **per-pixel directional lighting** (ambient, up to three lights, specular, `EmissiveColor`),
   plus **`AlphaTestEffect`**. Lighting currently requires a texture to also be bound -- a lit,
-  untextured draw is refused by name rather than silently dropping the light.
+  untextured draw is refused by name rather than silently dropping the light;
+* **`RenderTarget2D`**: draw into it, unbind back to the swap chain, sample it back onto the
+  screen with `SpriteBatch`, and `GetData()` straight off the colour attachment. See "Render
+  targets" below for what this does and does not cover.
 
 **Not implemented:** `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
-render targets, cube and volume textures, custom `ShaderEffect`s, occlusion queries.
+`RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, cube and
+volume textures, custom `ShaderEffect`s, occlusion queries.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -128,6 +132,30 @@ OpenGL module reports SPIR-V as well (desktop GL ingests it through `GL_ARB_gl_s
 SPIR-V here is compiled for Vulkan's binding model, and GL accepts it far enough to rasterize
 geometry while silently zeroing every other attribute and the uniform block. That was `LLGL-17`.
 
+## Render targets
+
+`RenderTarget2D` draws into an off-screen colour (and always-allocated depth/stencil) attachment,
+which is then either sampled back with `SpriteBatch`/the 3D path like any other `Texture2D`, or
+read back directly with `GetData()`. `RenderTargetCube`, multiple simultaneous render targets
+(MRT), and MSAA/mip-mapped render targets are not implemented and fail by name.
+
+Two implementation choices are worth knowing if you are debugging a render-target frame:
+
+* **One render pass per distinct target, not per bind.** LLGL's public Vulkan API has no way to
+  re-enter a render pass with `Load` semantics, so a frame that interleaves draws to the back
+  buffer and one or more render targets is replayed as one pass per distinct target IDENTITY, in
+  first-appearance order — every command for a given target is grouped together, not replayed in
+  original interleaved order. `RenderTargetUsage.PreserveContents` is not honoured across separate
+  binds of the same target within one frame as a result.
+* **Every render target shares the swap chain's own attachment formats.** The colour attachment
+  always takes the swap chain's colour format, and a depth/stencil attachment matching the swap
+  chain's own format is always allocated regardless of the requested `DepthFormat` (which only
+  changes what `HasRealDepthBuffer()` reports). This is what lets every cached sprite/primitive
+  pipeline — built once against the swap chain's render pass — be reused as-is for a render-target
+  pass, instead of needing a second, render-target-keyed pipeline cache: Vulkan's render-pass-
+  compatibility rule only requires matching attachment formats and sample counts, not the same
+  `VkRenderPass` object.
+
 ## Tests
 
 ```bash
@@ -140,9 +168,11 @@ clear and present. `Llgl_2D` asserts real pixels read back from the GPU: quadran
 `NonPremultiplied` alpha blending. `Llgl_TextureReadback` round-trips texture uploads byte-exactly,
 `Llgl_Presentation` covers the five presentation policies, `Llgl_3D` covers the 3D draw path
 (vertex colours, depth ordering, indexed draws, cull mode, wireframe), `Llgl_BasicEffect` covers
-textures, tinting, alpha, fog and the alpha test, and `Llgl_Lighting` covers ambient/directional/
-specular/emissive lighting. Every one of them is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All fourteen
+textures, tinting, alpha, fog and the alpha test, `Llgl_Lighting` covers ambient/directional/
+specular/emissive lighting, and `Llgl_RenderTarget` covers drawing into a `RenderTarget2D`,
+unbinding back to the swap chain, sampling the target back onto the screen, and `GetData()`.
+Every one of them is registered a second time pinned to the OpenGL
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All sixteen
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
@@ -163,3 +193,8 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog, the alpha test, and per-pixel lighting (textured draws only); the remaining stock effects are not implemented. |
 | `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |
 | `MultipleRenderTargets`, `OcclusionQuery`, `CustomEffects`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |
+
+There is no standalone `SupportsCapability` flag for single-target `RenderTarget2D` support (XNA
+has none either) — `CreateRenderTarget2D` returning a real backend instead of null is the signal,
+and `SetRenderTargets` accepts exactly one `RenderTarget2D` slot, matching `MultipleRenderTargets`
+above being false.
