@@ -48,6 +48,7 @@ SHADERS = [
     ("Skinned3dFrag", "skinned3d.frag.glsl", "skinned3d.gl.frag.glsl", "frag"),
     ("Pbr3dVert", "pbr3d.vert.glsl", "pbr3d.gl.vert.glsl", "vert"),
     ("Pbr3dFrag", "pbr3d.frag.glsl", "pbr3d.gl.frag.glsl", "frag"),
+    ("Pbr3dSkinnedVert", "pbr3d_skinned.vert.glsl", "pbr3d_skinned.gl.vert.glsl", "vert"),
 ]
 
 

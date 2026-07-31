@@ -5,10 +5,8 @@
 //
 // Adapted (not verbatim, unlike some other ported LLGL tests) from
 // examples/vulkan_pbreffect_handderived_test.cpp, which is itself already fully backend-agnostic
-// (real public XNA API + VertexBuffer::SetDataRaw, no Vulkan-specific code at all). Two
-// deliberate differences from that source:
-//   - Drops its own Check (d), a SkinnedPbrEffect check; SkinnedPbrEffect is a separate,
-//     not-yet-implemented follow-up on this backend.
+// (real public XNA API + VertexBuffer::SetDataRaw, no Vulkan-specific code at all). One
+// deliberate difference from that source:
 //   - Draws into an off-screen RenderTarget2D sized kSize x kSize and reads back with GetData(),
 //     matching this backend's own PixelTestGame convention (see llgl_shadereffect_test.cpp/
 //     llgl_rendertargetcube_test.cpp), rather than the Vulkan source's own hand-rolled Game
@@ -45,6 +43,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -73,12 +72,25 @@ namespace
     };
     static_assert(sizeof(PbrGpuVertex) == 48, "PBR vertex must be 48 bytes");
 
+    // Stride-68: the above with BlendWeight/BlendIndices appended (pbr3d_skinned.vert.glsl).
+    struct SkinnedPbrGpuVertex
+    {
+        float px, py, pz;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u, v;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+    };
+    static_assert(sizeof(SkinnedPbrGpuVertex) == 68, "skinned PBR vertex must be 68 bytes");
+
     // A single quad, large enough that the render target's centre texel is always covered
     // regardless of exact FOV/aspect rounding, flat normal (0,0,1), tangent (1,0,0,1).
-    std::vector<PbrGpuVertex> MakeQuad()
+    template <typename V>
+    std::vector<V> MakeQuad()
     {
-        PbrGpuVertex tl{}, bl{}, br{}, tr{};
-        auto fill = [](PbrGpuVertex& v, float x, float y) {
+        V tl{}, bl{}, br{}, tr{};
+        auto fill = [](V& v, float x, float y) {
             v.px = x; v.py = y; v.pz = 0.0f;
             v.nx = 0.0f; v.ny = 0.0f; v.nz = 1.0f;
             v.tx = 1.0f; v.ty = 0.0f; v.tz = 0.0f; v.tw = 1.0f;
@@ -116,9 +128,56 @@ public:
         fx.setViewProperty(Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
         fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));
 
-        auto verts = MakeQuad();
+        auto verts = MakeQuad<PbrGpuVertex>();
         VertexBuffer vb(dev, static_cast<int>(verts.size()));
         vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(PbrGpuVertex)));
+
+        dev.SetRenderTarget(&renderTarget);
+        dev.Clear(Color(0, 255, 0, 255));
+        dev.SetDepthTestEnabled(false);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.SetVertexBuffer(&vb);
+        fx.Apply();
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetRenderTarget(nullptr);
+
+        Color got(0, 0, 0, 0);
+        const Rectangle region(kSize / 2, kSize / 2, 1, 1);
+        renderTarget.GetData(0, &region, &got, 0, 1);
+        return got;
+    }
+
+    // Renders the identical scene as RenderPbr(white,0.5,0.0,...) via SkinnedPbrEffect with a
+    // single identity bone (weight 1.0 on bone 0, default Identity) -- a mathematical no-op skin
+    // transform, so the result must equal PbrEffect's own (mirrors
+    // vulkan_pbreffect_handderived_test.cpp's own oracle).
+    Color RenderSkinnedPbrIdentity(GraphicsDevice& dev, Texture2D& albedoTex)
+    {
+        RenderTarget2D renderTarget(dev, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None);
+
+        SkinnedPbrEffect fx(dev);
+        fx.setTextureProperty(&albedoTex);
+        fx.setNormalMapProperty(nullptr);
+        fx.setMetallicFactorProperty(0.0f);
+        fx.setRoughnessFactorProperty(0.5f);
+        fx.setAmbientLightColorProperty(Vector3::Zero);
+        fx.DirectionalLight0.setEnabledProperty(true);
+        fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+        fx.DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        fx.DirectionalLight1.setEnabledProperty(false);
+        fx.DirectionalLight2.setEnabledProperty(false);
+        fx.setWorldProperty(Matrix::getIdentityProperty());
+        fx.setViewProperty(Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
+        fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));
+        std::vector<Matrix> bones = { Matrix::getIdentityProperty() };
+        fx.SetBoneTransforms(bones);
+        fx.setWeightsPerVertexProperty(1);
+
+        auto verts = MakeQuad<SkinnedPbrGpuVertex>();
+        for (auto& v : verts) { v.w0 = 1.0f; v.w1 = v.w2 = v.w3 = 0.0f; v.i0 = v.i1 = v.i2 = v.i3 = 0; }
+        VertexBuffer vb(dev, static_cast<int>(verts.size()));
+        vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(SkinnedPbrGpuVertex)));
 
         dev.SetRenderTarget(&renderTarget);
         dev.Clear(Color(0, 255, 0, 255));
@@ -182,6 +241,14 @@ public:
         ExpectTrue("(b) metallic differs from (c) dielectric -- MetallicFactor genuinely changes the BRDF",
                   std::abs(b.getRProperty() - c.getRProperty()) > 10 ||
                   std::abs(b.getGProperty() - c.getGProperty()) > 10);
+
+        // (d) SkinnedPbrEffect, identical scene to (a), single identity bone -- must reproduce
+        // (a)'s own value exactly (mathematical no-op skin transform).
+        const Color d = RenderSkinnedPbrIdentity(dev, whiteTex);
+        ExpectTrue("(d) SkinnedPbrEffect identity bone reproduces PbrEffect (a)'s own value",
+                  std::abs(d.getRProperty() - a.getRProperty()) <= 10 &&
+                  std::abs(d.getGProperty() - a.getGProperty()) <= 10 &&
+                  std::abs(d.getBProperty() - a.getBProperty()) <= 10);
     }
 };
 

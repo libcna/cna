@@ -53,11 +53,13 @@ module**:
   the scope boundary (`RenderTarget2D` slots only, no 3D draws while one is bound);
 * **`PbrEffect`**: the glTF 2.0 metallic-roughness BRDF, 5 texture maps (base colour, normal,
   metallic-roughness, emissive, occlusion), its own dedicated vertex/fragment shader pair and
-  pipeline layout. See "PbrEffect" below.
+  pipeline layout;
+* **`SkinnedPbrEffect`**: `PbrEffect`'s glTF BRDF over a GPU-skinned mesh, reusing `PbrEffect`'s
+  own fragment shader verbatim (skinning is a vertex-stage-only concern) plus a new dedicated
+  vertex shader and pipeline layout. See "PbrEffect" below.
 
-**Not implemented:** `SkinnedPbrEffect` (`PbrEffect` + skinning combined) and MSAA/mip-mapped
-render targets. Each either reports itself unsupported through
-`GraphicsDevice.SupportsCapability()` or throws — none of them silently does nothing.
+**Not implemented:** MSAA/mip-mapped render targets. Each either reports itself unsupported
+through `GraphicsDevice.SupportsCapability()` or throws — none of them silently does nothing.
 
 Both modules are covered by their own CTests, so neither can break unnoticed because the default
 preference happened to select the other one.
@@ -181,15 +183,15 @@ not it uses it. The lit shaders don't need a separate field for the same flag --
 `VertexPositionTexture`, `VertexPositionColorTexture`, `VertexPositionNormalTexture`) work too
 (`LLGL-32`): they route through `IGraphicsBackend::CreateVertexBuffer(int)` (count-only, no
 `VertexDeclaration`) and a raw byte `SetData`, so `LlglVertexBufferBackend::ResolveVertexAttributes()`
-infers the vertex layout from the upload stride instead -- 16/20/24/32/**52** bytes are each a
-distinct, unambiguous size among `GraphicsDevice.cpp`'s own GPU-packed stream structs plus
-`VertexPositionNormalTextureSkinned`'s own (stride 52, `SkinnedEffect`), the same technique the
-Vulkan backend's own `MakeExt3DKey()` already uses for these exact stream sizes. Tangent/PBR-skinned
-streams (68/48 bytes) are still not recognised -- `SkinnedPbrEffect` and `PbrEffect` are not
-implemented on this backend at all yet. The real-`VertexDeclaration` path (`MapVertexUsage()`) also
-maps `VertexElementUsage::BlendWeight`/`BlendIndices` now, at locations 4/5 -- `BlendIndices` binds
-as a genuine integer vertex attribute (`LLGL::Format::RGBA8UInt`, read in GLSL as `uvec4`), not a
-normalized byte4.
+infers the vertex layout from the upload stride instead -- 16/20/24/32/**48**/**52**/**68** bytes
+are each a distinct, unambiguous size among `GraphicsDevice.cpp`'s own GPU-packed stream structs
+plus `VertexPositionNormalTextureSkinned`'s own (stride 52, `SkinnedEffect`),
+`VertexPositionNormalTangentTexture`'s own (stride 48, `PbrEffect`) and
+`VertexPositionNormalTangentTextureSkinned`'s own (stride 68, `SkinnedPbrEffect`), the same
+technique the Vulkan backend's own `MakeExt3DKey()` already uses for these exact stream sizes. The
+real-`VertexDeclaration` path (`MapVertexUsage()`) also maps `VertexElementUsage::BlendWeight`/
+`BlendIndices`/`Tangent` now, at locations 4/5/6 -- `BlendIndices` binds as a genuine integer
+vertex attribute (`LLGL::Format::RGBA8UInt`, read in GLSL as `uvec4`), not a normalized byte4.
 
 ## Render targets
 
@@ -429,8 +431,8 @@ which are already fully backend-agnostic real-XNA-API code.
 (Gouraud) lit shader -- this backend is per-pixel-lit only, matching every established CNA backend
 except D3D9 (`GpuDrawParams::preferPerPixelLighting`'s own documented deviation). The
 `VertexColorEnabled` CNA-only (`NOXNA`) extension property and its stride-56 vertex-colour variant
-are not implemented. `SkinnedPbrEffect` (stride 68, `PbrEffect` combined with skinning) is out of
-scope, tracked under `PbrEffect` itself.
+are not implemented. `SkinnedPbrEffect` (stride 68, `PbrEffect` combined with skinning) is done
+too -- see "PbrEffect" below.
 
 ## PbrEffect
 
@@ -473,16 +475,39 @@ declaration still needs its own binding even when the underlying resource is ide
 
 `Llgl_PbrEffect_HandDerived` (+ `_OpenGL`) is adapted from the Vulkan backend's own
 `examples/vulkan_pbreffect_handderived_test.cpp` (itself fully backend-agnostic real public XNA
-API + `VertexBuffer::SetDataRaw`), dropping its `SkinnedPbrEffect` check and drawing into an
-off-screen `RenderTarget2D` read back with `GetData()` instead of the source's own hand-rolled
-`Game` subclass that resizes the whole window -- `PixelTestGame`'s `Game` construction has no
-equivalent hook, and reading a hard-coded small pixel address directly off the (much larger)
-default back buffer sampled a world position over a full unit away from the coordinate origin the
-analytic derivation assumes (found via a debug shader pass outputting `vWorldPos` directly -- a
-test-authoring mistake, not a backend defect).
+API + `VertexBuffer::SetDataRaw`), drawing into an off-screen `RenderTarget2D` read back with
+`GetData()` instead of the source's own hand-rolled `Game` subclass that resizes the whole window
+-- `PixelTestGame`'s `Game` construction has no equivalent hook, and reading a hard-coded small
+pixel address directly off the (much larger) default back buffer sampled a world position over a
+full unit away from the coordinate origin the analytic derivation assumes (found via a debug
+shader pass outputting `vWorldPos` directly -- a test-authoring mistake, not a backend defect).
 
-**`SkinnedPbrEffect` (`PbrEffect` + skinning combined) is a separate, not-yet-implemented
-follow-up** -- `RejectUnsupportedDrawParams` refuses `pbr && skinned` by name.
+### SkinnedPbrEffect
+
+`PbrEffect`'s glTF BRDF over a GPU-skinned mesh -- `SkinnedEffect`'s own weightsPerVertex-gated
+bone blend applied to position/normal/tangent before the same `PbrLight()` fragment stage runs.
+The key design choice: `BoneBlock` (72 `mat4`s) is placed at binding **12**, deliberately AFTER
+every PBR texture/sampler pair (bindings 1-11, byte-for-byte identical to `primitivePbrLayout_`),
+rather than shifting them to make room. That means **`primitivePbrFragmentShader_` is reused
+verbatim, unchanged** -- skinning is entirely a vertex-stage concern, so only a new vertex shader
+(`AcquirePrimitivePbrSkinnedVertexShader()`, `pbr3d_skinned.vert.glsl`/`.gl.vert.glsl`) and pipeline
+layout (`primitivePbrSkinnedLayout_`) are needed; had the shared bindings shifted instead, the
+already-compiled fragment shader binary would no longer match the new layout's binding numbers.
+
+`PbrParams`' own `roughnessWeightsPad.y` field was reserved for `WeightsPerVertex` from
+`PbrEffect`'s own first cut (documented there as "unused by this shader"), so `FillPbrUniforms()`
+needed zero changes to support skinning -- it already wrote `params.weightsPerVertex`
+unconditionally. The bone transform buffer pool (`skinnedBoneBuffers_`/`skinnedBoneData_`,
+`FillSkinnedBoneData()`) is reused verbatim from plain `SkinnedEffect` too, since bone data is
+entirely effect-agnostic -- 72 `mat4`s mean the same thing regardless of which fragment shader
+samples the result. A new stride-68 (`VertexPositionNormalTangentTextureSkinned`) case was added
+to `ResolveVertexAttributes()`'s fallback switch (the stride-48 PBR layout with the stride-52
+skinning suffix appended); no new vertex-attribute locations were needed, since `Tangent`(6)/
+`BlendWeight`(4)/`BlendIndices`(5) were already reserved by `PbrEffect`/`SkinnedEffect`.
+
+`Llgl_PbrEffect_HandDerived`'s own Check (d) (ported back from the Vulkan source, no new test
+file) proves a single identity bone (weight 1.0, default `Matrix.Identity` -- a mathematical no-op
+skin transform) reproduces `PbrEffect`'s own Check (a) value exactly, on both modules.
 
 ## Tests
 
@@ -532,8 +557,9 @@ while the MRT set is bound, back-buffer isolation, and that an ordinary single-t
 works correctly once the MRT bind ends; unlike `RenderTargetCube`, plain `RenderTarget2D` slots
 work on both modules, so it has an `_OpenGL` twin.
 `Llgl_PbrEffect_HandDerived` covers the glTF metallic-roughness BRDF against hand-derived analytic
-values at a fully dot-product-aligned pixel -- full dielectric, fully metallic, and a control case
-proving `MetallicFactor` genuinely changes the result; like `Llgl_MRT`, plain
+values at a fully dot-product-aligned pixel -- full dielectric, fully metallic, a control case
+proving `MetallicFactor` genuinely changes the result, and a `SkinnedPbrEffect` identity-bone check
+reproducing the same BRDF value through a GPU-skinned mesh; like `Llgl_MRT`, plain
 `VertexPositionNormalTangentTexture` (stride 48) works on both modules, so it has an `_OpenGL` twin.
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All forty

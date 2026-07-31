@@ -1843,6 +1843,13 @@ namespace CNA::Internal::Backends::Llgl
         /// and normals -- never variant-selected like AcquirePrimitiveVertexShader, only the
         /// vertex layout varies.
         LLGL::Shader* AcquirePrimitivePbrVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
+        /// SkinnedPbrEffect's own vertex shader (pbr3d_skinned.vert.glsl): PbrEffect's TBN basis
+        /// plus SkinnedEffect's own weightsPerVertex-gated bone blend, needing all of `Tangent`,
+        /// `BlendWeight` and `BlendIndices` present. The FRAGMENT shader is `primitivePbrFragmentShader_`
+        /// itself, reused verbatim -- skinning is a vertex-stage-only concern, and `BoneBlock` is
+        /// deliberately placed at a binding number AFTER every PBR texture/sampler pair rather than
+        /// shifting them, precisely so the compiled fragment shader binary stays valid unchanged.
+        LLGL::Shader* AcquirePrimitivePbrSkinnedVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
         LLGL::PipelineState* AcquirePrimitivePipeline(const LlglVertexBufferBackend& vertexBuffer,
                                                       PrimitiveType primitive, bool scissorEnabled,
                                                       bool textured, bool lit, bool dualTexture,
@@ -2016,6 +2023,15 @@ namespace CNA::Internal::Backends::Llgl
         /// this backend itself (not a game object) owns.
         LLGL::Texture*              defaultWhitePbrTexture_ = nullptr;
         LLGL::Texture*              defaultFlatNormalPbrTexture_ = nullptr;
+
+        /// `SkinnedPbrEffect`: its own dedicated pipeline layout and vertex-shader cache -- the
+        /// fragment shader (`primitivePbrFragmentShader_`) and bone-transform buffer pool
+        /// (`skinnedBoneBuffers_`/`skinnedBoneData_`, `FillSkinnedBoneData()`) are both reused
+        /// verbatim from `PbrEffect`/`SkinnedEffect` respectively -- bone data is effect-agnostic,
+        /// and the fragment stage never touches bones at all. See
+        /// AcquirePrimitivePbrSkinnedVertexShader() and shaders/pbr3d_skinned.vert.glsl.
+        LLGL::PipelineLayout*       primitivePbrSkinnedLayout_ = nullptr;
+        std::map<std::uint64_t, LLGL::Shader*> primitivePbrSkinnedVertexShaderCache_;
 
         /// Shared by every `LlglEffectBackend` (LLGL-27); built lazily by
         /// AcquireCustomEffectLayoutEXT() on the first `ShaderEffect` any game constructs. Unlike
