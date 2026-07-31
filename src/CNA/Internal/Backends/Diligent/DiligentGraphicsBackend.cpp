@@ -56,6 +56,9 @@ cbuffer Constants
     float4 g_AlphaTest;
     float4 g_FogVector;
     float4 g_FogColor;
+    /// x = envMapAmount, y = fresnelEnabled, z = fresnelFactor, w unused.
+    float4 g_EnvMapParams;
+    float4 g_EnvMapSpecular;
 };
 
 /// FNA's fog term: dot the object-space position with the fog vector, then keep = 1 - saturate(it).
@@ -325,6 +328,133 @@ void main(in PSInput psIn, out PSOutput psOut)
 
     float3 lit = baseColor.rgb * diffuse + specular * g_SpecularColor.rgb;
     psOut.Color = FinishPixel(float4(lit, baseColor.a), psIn.FogKeep);
+}
+)";
+
+        constexpr const char* kDualTextureVertexHlsl = R"(
+struct VSInput
+{
+    float3 Pos : ATTRIB0;
+    float2 UV  : ATTRIB1;
+};
+
+struct PSInput
+{
+    float4 Pos     : SV_POSITION;
+    float2 UV      : TEX_COORD;
+    float4 Color   : COLOR0;
+    float  FogKeep : FOG_KEEP;
+};
+
+void main(in VSInput vsIn, out PSInput psIn)
+{
+    psIn.Pos     = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
+    psIn.UV      = vsIn.UV;
+    psIn.Color   = g_DiffuseColor;
+    psIn.FogKeep = ComputeFogKeep(vsIn.Pos);
+}
+)";
+
+        constexpr const char* kDualTextureColoredVertexHlsl = R"(
+struct VSInput
+{
+    float3 Pos   : ATTRIB0;
+    float4 Color : ATTRIB1;
+    float2 UV    : ATTRIB2;
+};
+
+struct PSInput
+{
+    float4 Pos     : SV_POSITION;
+    float2 UV      : TEX_COORD;
+    float4 Color   : COLOR0;
+    float  FogKeep : FOG_KEEP;
+};
+
+void main(in VSInput vsIn, out PSInput psIn)
+{
+    psIn.Pos     = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
+    psIn.UV      = vsIn.UV;
+    psIn.Color   = vsIn.Color * g_DiffuseColor;
+    psIn.FogKeep = ComputeFogKeep(vsIn.Pos);
+}
+)";
+
+        constexpr const char* kDualTexturePixelHlsl = R"(
+Texture2D    g_Texture;
+SamplerState g_Texture_sampler;
+Texture2D    g_Texture2;
+SamplerState g_Texture2_sampler;
+
+struct PSInput
+{
+    float4 Pos     : SV_POSITION;
+    float2 UV      : TEX_COORD;
+    float4 Color   : COLOR0;
+    float  FogKeep : FOG_KEEP;
+};
+
+struct PSOutput
+{
+    float4 Color : SV_TARGET;
+};
+
+void main(in PSInput psIn, out PSOutput psOut)
+{
+    float4 layer0 = g_Texture.Sample(g_Texture_sampler, psIn.UV);
+    float4 layer1 = g_Texture2.Sample(g_Texture2_sampler, psIn.UV);
+    // XNA's DualTextureEffect doubles the first layer before the modulate, so a mid-grey second
+    // layer leaves the first unchanged.
+    layer0.rgb *= 2.0;
+    psOut.Color = FinishPixel(layer0 * layer1 * psIn.Color, psIn.FogKeep);
+}
+)";
+
+        /// Reuses the lit vertex layout (position, normal, UV): an environment map needs the same
+        /// world-space normal and eye vector the lit shader already computes.
+        constexpr const char* kEnvironmentMapPixelHlsl = R"(
+Texture2D      g_Texture;
+SamplerState   g_Texture_sampler;
+TextureCube    g_EnvMap;
+SamplerState   g_EnvMap_sampler;
+
+struct PSInput
+{
+    float4 Pos      : SV_POSITION;
+    float2 UV       : TEX_COORD;
+    float3 WorldPos : WORLD_POS;
+    float3 Normal   : NORMAL;
+    float  FogKeep  : FOG_KEEP;
+};
+
+struct PSOutput
+{
+    float4 Color : SV_TARGET;
+};
+
+void main(in PSInput psIn, out PSOutput psOut)
+{
+    float3 normal = normalize(psIn.Normal);
+    float3 eyeDir = normalize(g_EyePositionSpecularPower.xyz - psIn.WorldPos);
+
+    float3 lightSum = g_EmissiveAmbient.rgb;
+    for (int i = 0; i < 3; ++i)
+        lightSum += g_LightDiffuse[i].rgb * max(dot(normal, -g_LightDir[i].xyz), 0.0);
+
+    float4 texel = g_Texture.Sample(g_Texture_sampler, psIn.UV);
+    float3 baseColor = lightSum * g_DiffuseColor.rgb * texel.rgb;
+    float combinedAlpha = g_DiffuseColor.a * texel.a;
+
+    float4 envSample = g_EnvMap.Sample(g_EnvMap_sampler, reflect(-eyeDir, normal));
+    // Flat envMapAmount, or edge-weighted by view angle when FresnelEnabled -- FNA's own
+    // PSEnvMap/PSEnvMapSpecular split.
+    float blendFactor = (g_EnvMapParams.y > 0.5)
+        ? pow(max(1.0 - abs(dot(eyeDir, normal)), 0.0), g_EnvMapParams.z) * g_EnvMapParams.x
+        : g_EnvMapParams.x;
+
+    float3 rgb = lerp(baseColor, envSample.rgb * combinedAlpha, blendFactor)
+               + g_EnvMapSpecular.rgb * envSample.a * combinedAlpha;
+    psOut.Color = FinishPixel(float4(rgb, combinedAlpha), psIn.FogKeep);
 }
 )";
 
@@ -2223,6 +2353,8 @@ void main(in PSInput psIn, out PSOutput psOut)
         const char* pixelSource = nullptr;
         std::vector<Dg::LayoutElement> layout;
         bool usesTexture = false;
+        bool usesSecondTexture = false;
+        bool usesEnvironmentMap = false;
 
         switch (key.variant)
         {
@@ -2272,6 +2404,38 @@ void main(in PSInput psIn, out PSOutput psOut)
                     Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False},
                 };
                 usesTexture = true;
+                break;
+            case ShaderVariant::DualTexture3D:
+                vertexSource = kDualTextureVertexHlsl;
+                pixelSource = kDualTexturePixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{1, 0, 2, Dg::VT_FLOAT32, Dg::False},
+                };
+                usesTexture = true;
+                usesSecondTexture = true;
+                break;
+            case ShaderVariant::DualTextureColored3D:
+                vertexSource = kDualTextureColoredVertexHlsl;
+                pixelSource = kDualTexturePixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{1, 0, 4, Dg::VT_UINT8, Dg::True},
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False},
+                };
+                usesTexture = true;
+                usesSecondTexture = true;
+                break;
+            case ShaderVariant::EnvironmentMap3D:
+                vertexSource = kLitVertexHlsl;
+                pixelSource = kEnvironmentMapPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False},
+                    Dg::LayoutElement{2, 0, 2, Dg::VT_FLOAT32, Dg::False},
+                };
+                usesTexture = true;
+                usesEnvironmentMap = true;
                 break;
         }
 
@@ -2362,13 +2526,25 @@ void main(in PSInput psIn, out PSOutput psOut)
         psoCI.pVS = vertexShader;
         psoCI.pPS = pixelShader;
 
-        Dg::ShaderResourceVariableDesc variables[1];
+        Dg::ShaderResourceVariableDesc variables[3];
         Dg::Uint32 variableCount = 0;
         if (usesTexture)
         {
-            variables[0] = Dg::ShaderResourceVariableDesc{Dg::SHADER_TYPE_PIXEL, "g_Texture",
-                                                          Dg::SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC};
-            variableCount = 1;
+            variables[variableCount++] =
+                Dg::ShaderResourceVariableDesc{Dg::SHADER_TYPE_PIXEL, "g_Texture",
+                                               Dg::SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC};
+        }
+        if (usesSecondTexture)
+        {
+            variables[variableCount++] =
+                Dg::ShaderResourceVariableDesc{Dg::SHADER_TYPE_PIXEL, "g_Texture2",
+                                               Dg::SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC};
+        }
+        if (usesEnvironmentMap)
+        {
+            variables[variableCount++] =
+                Dg::ShaderResourceVariableDesc{Dg::SHADER_TYPE_PIXEL, "g_EnvMap",
+                                               Dg::SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC};
         }
         psoCI.PSODesc.ResourceLayout.DefaultVariableType = Dg::SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
         psoCI.PSODesc.ResourceLayout.Variables = variableCount > 0 ? variables : nullptr;
@@ -2390,6 +2566,10 @@ void main(in PSInput psIn, out PSOutput psOut)
             throw std::runtime_error("CNA Diligent: shader resource binding creation failed");
         if (usesTexture)
             cached.textureVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_Texture");
+        if (usesSecondTexture)
+            cached.texture2Variable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_Texture2");
+        if (usesEnvironmentMap)
+            cached.envMapVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_EnvMap");
 
         return pipelines_.emplace(key, std::move(cached)).first->second;
     }
@@ -2630,9 +2810,7 @@ void main(in PSInput psIn, out PSOutput psOut)
             // available variant instead would silently produce a different image, so the draw is
             // refused until the matching phase of plan_diligent.md lands.
             const char* unsupported = nullptr;
-            if (params->dualTexture)                 unsupported = "DualTextureEffect";
-            else if (params->envMapping)             unsupported = "EnvironmentMapEffect";
-            else if (params->skinned)                unsupported = "SkinnedEffect";
+            if (params->skinned)                     unsupported = "SkinnedEffect";
             else if (params->pbr)                    unsupported = "PbrEffect";
             else if (params->customEffectBackend)    unsupported = "custom ShaderEffect programs";
             else if (params->instanceCount > 1)      unsupported = "hardware instancing";
@@ -2642,17 +2820,33 @@ void main(in PSInput psIn, out PSOutput psOut)
         }
 
         const std::size_t stride = vertexBuffer->GetStride();
+        const bool dualTexture = params != nullptr && params->dualTexture;
         ShaderVariant variant;
         switch (stride)
         {
             case 16: variant = ShaderVariant::Colored3D; break;
-            case 20: variant = ShaderVariant::Textured3D; break;
-            case 24: variant = ShaderVariant::ColoredTextured3D; break;
-            case 32: variant = ShaderVariant::LitTextured3D; break;
+            case 20:
+                variant = dualTexture ? ShaderVariant::DualTexture3D : ShaderVariant::Textured3D;
+                break;
+            case 24:
+                variant = dualTexture ? ShaderVariant::DualTextureColored3D
+                                      : ShaderVariant::ColoredTextured3D;
+                break;
+            case 32:
+                variant = (params != nullptr && params->envMapping) ? ShaderVariant::EnvironmentMap3D
+                                                                    : ShaderVariant::LitTextured3D;
+                break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
         }
+        if (dualTexture && stride != 20 && stride != 24)
+            throw std::runtime_error(
+                "CNA Diligent: DualTextureEffect needs a textured vertex layout (stride 20 or 24)");
+        if (params != nullptr && params->envMapping && stride != 32)
+            throw std::runtime_error(
+                "CNA Diligent: EnvironmentMapEffect needs a position/normal/UV vertex layout "
+                "(stride 32)");
 
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
@@ -2670,9 +2864,11 @@ void main(in PSInput psIn, out PSOutput psOut)
         constants.alphaTest[3] = 1.0f;
 
         const ITextureBackend* texture = nullptr;
+        const ITextureBackend* texture1 = nullptr;
         if (params != nullptr)
         {
             texture = params->texture0;
+            texture1 = params->texture1;
             for (int component = 0; component < 4; ++component)
                 constants.diffuseColor[component] = params->diffuseColor[component];
             for (int component = 0; component < 3; ++component)
@@ -2692,6 +2888,11 @@ void main(in PSInput psIn, out PSOutput psOut)
                 constants.lightSpecular[2][component] = params->light2Specular[component];
             }
             constants.eyePositionSpecularPower[3] = params->specularPower;
+            constants.envMapParams[0] = params->envMapAmount;
+            constants.envMapParams[1] = params->fresnelEnabled ? 1.0f : 0.0f;
+            constants.envMapParams[2] = params->fresnelFactor;
+            for (int component = 0; component < 3; ++component)
+                constants.envMapSpecular[component] = params->envMapSpecular[component];
             for (int component = 0; component < 4; ++component)
             {
                 constants.alphaTest[component] = params->alphaTest[component];
@@ -2725,6 +2926,31 @@ void main(in PSInput psIn, out PSOutput psOut)
             view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
                                                 samplerMaxAnisotropy_));
             pipeline.textureVariable->Set(view);
+        }
+        if (pipeline.texture2Variable != nullptr)
+        {
+            const auto* secondTexture = dynamic_cast<const DiligentSampledTexture*>(texture1);
+            Dg::ITextureView* view =
+                secondTexture != nullptr ? secondTexture->GetShaderResourceView() : nullptr;
+            // A missing second layer falls back to white, which the doubled-first-layer modulate
+            // turns into "just the first layer at double brightness" rather than a black surface.
+            if (view == nullptr)
+                view = fallbackTextureView_;
+            view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
+                                                samplerMaxAnisotropy_));
+            pipeline.texture2Variable->Set(view);
+        }
+        if (pipeline.envMapVariable != nullptr)
+        {
+            const auto* envMap = dynamic_cast<const DiligentTextureCubeBackend*>(
+                params != nullptr ? params->envMap : nullptr);
+            if (envMap == nullptr || envMap->GetShaderResourceView() == nullptr)
+                throw std::runtime_error(
+                    "CNA Diligent: EnvironmentMapEffect was drawn without a cube map");
+            Dg::ITextureView* view = envMap->GetShaderResourceView();
+            view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
+                                                samplerMaxAnisotropy_));
+            pipeline.envMapVariable->Set(view);
         }
 
         context_->SetPipelineState(pipeline.pipeline);

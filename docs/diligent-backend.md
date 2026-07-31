@@ -94,10 +94,13 @@ Implemented:
 - 3D draws for vertex strides 16/20/24/32, including `BasicEffect`'s three directional lights with
   Blinn-Phong specular evaluated per pixel.
 - `TextureCube` and `Texture3D` — creation with a mip chain, per-face / per-sub-box `SetData` and
-  `GetData`. Storage and readback only: no built-in shader variant samples them yet.
+  `GetData`. A cube map is also sampleable, through `EnvironmentMapEffect`; volume textures are
+  storage and readback only.
 - `RenderTarget2D` — off-screen colour with an optional real depth-stencil buffer, `GetData`
   readback, sampling the unbound target as a texture, and mip regeneration on unbind.
 - `AlphaTestEffect`'s per-pixel discard and `BasicEffect`'s fog, on every 3D shader variant.
+- `DualTextureEffect` (two modulated layers) and `EnvironmentMapEffect` (cube-map reflection, flat
+  or Fresnel-weighted).
 - `BlendState`, `DepthStencilState`, `RasterizerState` and slot-0 `SamplerState`, all folded into
   the pipeline-state cache key.
 - `ReadBackbuffer` / `GraphicsDevice.GetBackBufferData`.
@@ -109,8 +112,8 @@ Not implemented — each **throws with its own name** rather than rendering an a
 | --- | --- |
 | `RenderTargetCube`, MRT (2..4 simultaneous targets) | `DILIGENT-22`, `DILIGENT-24` |
 | MSAA (back buffer and render targets) | `DILIGENT-25` |
-| Sampling a cube map or volume texture from a shader | `DILIGENT-34`, `DILIGENT-42` |
-| `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect` | `DILIGENT-33`…`DILIGENT-36` |
+| Sampling a volume texture from a shader | `DILIGENT-42` |
+| `SkinnedEffect`, `PbrEffect` | `DILIGENT-35`, `DILIGENT-36` |
 | `OcclusionQuery` | `DILIGENT-41` |
 | Custom `ShaderEffect` programs | `DILIGENT-42` |
 | Hardware instancing | `DILIGENT-43` |
@@ -141,7 +144,7 @@ ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-fai
 ```
 
 `Diligent_2D` (6 checks), `Diligent_3D` (5 checks), `Diligent_RenderTarget` (5 checks) and
-`Diligent_AlphaTestFog` (4 checks) are the
+`Diligent_AlphaTestFog` (4 checks) and `Diligent_DualTextureEnvMap` (4 checks) are the
 real-device pixel proofs: they clear, draw `SpriteBatch` quads and 3D primitives on the back buffer
 and into an off-screen target, and assert on pixels read back through
 `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData`. Both pass against a real Vulkan device. On a machine with no

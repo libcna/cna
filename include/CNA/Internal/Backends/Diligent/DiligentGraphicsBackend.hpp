@@ -1089,6 +1089,9 @@ namespace CNA::Internal::Backends::Diligent
             Textured3D,         ///< stride 20: position + UV
             ColoredTextured3D,  ///< stride 24: position + packed colour + UV
             LitTextured3D,      ///< stride 32: position + normal + UV, directional lighting
+            DualTexture3D,      ///< stride 20: position + UV, two modulated texture layers
+            DualTextureColored3D, ///< stride 24: position + packed colour + UV, two layers
+            EnvironmentMap3D,   ///< stride 32: lit surface plus a cube-map reflection
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */
@@ -1125,6 +1128,8 @@ namespace CNA::Internal::Backends::Diligent
             Dg::RefCntAutoPtr<Dg::IPipelineState> pipeline;
             Dg::RefCntAutoPtr<Dg::IShaderResourceBinding> binding;
             Dg::IShaderResourceVariable* textureVariable = nullptr;
+            Dg::IShaderResourceVariable* texture2Variable = nullptr;
+            Dg::IShaderResourceVariable* envMapVariable = nullptr;
         };
 
         /** @brief Constant buffer contents shared by every built-in shader. */
@@ -1143,6 +1148,8 @@ namespace CNA::Internal::Backends::Diligent
             float alphaTest[4];
             float fogVector[4];
             float fogColor[4];
+            float envMapParams[4];
+            float envMapSpecular[4];
         };
 
         /** @brief The physical viewport rectangle a logical (virtual) canvas maps onto. */
