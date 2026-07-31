@@ -281,6 +281,20 @@ shrinks back down, not merely that the C++ looks correct.
 |---|---|---|
 | HTMLDOM-95 | ✅ | New `examples/htmldom_dispose_test.cpp` / `cna_test_htmldom_dispose` page, 6 checks. **95a**: creating 50 `Texture2D`s registers exactly 50 new `Module['cnaDomTextures']` entries; destroying all 50 (clearing the owning vector) removes exactly those 50, none orphaned. **95b**: same shape for 20 `RenderTarget2D`s (each owns one texture canvas internally). **95c**: the LAST render target is bound (`GraphicsDevice.SetRenderTarget`), drawn into, and then the whole vector — including that still-bound target — is destroyed with **no** explicit unbind first; `CNA::Internal::Backends::HtmlDom::GetBoundRenderTargetIdEXT()` reads back `0` immediately afterward, confirming `~HtmlDomRenderTargetBackend()`'s defensive unbind genuinely fires rather than leaving the draw path pointing at a canvas that no longer exists. A normal `Clear()`+`Draw()` to the ordinary backbuffer right after (the real, observable consequence of 95c holding) completes without throwing or silently doing nothing. **Found and fixed a real bug in the TEST itself, not the backend, while writing this**: destroying a still-bound render target without first calling `GraphicsDevice.SetRenderTarget(null)` leaves `GraphicsDevice`'s own separate `renderTargetBound_` flag (unrelated to the backend's own bound-canvas-id tracking HTMLDOM-95c checks) stuck `true`, and the framework's own `GraphicsDevice::Present()` guard (`"Cannot present while render targets are bound"`) then throws on the very next frame's automatic `Game::EndDraw()`-triggered `Present()` call — a real requirement of the public API (always call `SetRenderTarget(null)` before disposing a bound target), not a defect this task needed to fix. The test now does so, deliberately positioned AFTER the 95c check so that check still exercises the destructor's own defensive unbind in isolation. **95d**: 200 rapid create-then-immediately-destroy cycles (monotonically-increasing, never-reused texture ids) leave the registry exactly where it started — bounded correctness under churn, not just a single before/after snapshot. Full regression pass after adding this: 32/32 smoke, 11/11 pixel, 6/6 dispose. |
 
+### D14 — Closing the last two 🟨 rows
+
+Two capability-matrix rows had never been exercised end-to-end under this backend specifically:
+`Texture2D::GetData` on a plain (non-render-target) texture, and `Texture2D::FromStream` decode.
+Both are entirely shared/backend-agnostic C++ (the former reads `Texture2D`'s own `cpuPixels_`
+CPU-side shadow directly, never touching a backend at all; the latter's decode step is `stb_image`
+via `SaveAsPng`/`FromStream`, identical on every backend) — so closing them out is specifically
+about proving the two backend-touching *ends* of those pipelines behave correctly under this
+backend's real Emscripten canvas/PNG-data-URL upload machinery, not about writing new backend code.
+
+| Task | Status | Description |
+|---|---|---|
+| HTMLDOM-96 | ✅ | Added to `examples/htmldom_pixel_verification_test.cpp` (11 → 13 checks). **96a**: a plain `Texture2D` is created via `CreateFromPixels` with four distinct, unambiguous per-texel colours (including a non-255 alpha, ruling out both a wrong-channel and a wrong-texel-order bug), and `GetData()` is checked byte-exact against the source — `CreateFromPixels`/`GetData` is a lossless path with no codec involved, so no rounding tolerance is needed. **96b**: a source texture is created and uploaded through this backend, encoded to a real PNG via `SaveAsPng` (into a `System::IO::MemoryStream`), decoded back via `Texture2D::FromStream` (re-uploading through this backend's real canvas/data-URL machinery a second time, exercising the SAME upload path a fresh game asset load would), and read back matching the original colour within PNG's own lossless-but-8-bit-rounded tolerance. Both `docs/html-dom-backend.md` rows move from 🟨 to ✅ — this closes the last two 🟨 rows on that page. Full regression pass: 32/32 smoke, 13/13 pixel, 6/6 dispose, 33/33 GTest. |
+
 ---
 
 ## What the browser run caught

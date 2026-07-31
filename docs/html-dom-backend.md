@@ -10,13 +10,14 @@ acceptance criteria*; 🟨 code exists but has not met those criteria; ⬜ not i
 
 **What ✅ means here.** Unlike the `CANVAS` backend's own document, ✅ on this page is backed by a
 real Emscripten build (emsdk 6.0.5) and, for everything the test pages below cover, by real runs in
-headless Chromium via `scripts/run-htmldom-browser-test.sh`. Four pages, driven by the same harness,
-together assert against the actual DOM/pixels/timing the backend produced:
+headless Chromium via `scripts/run-htmldom-browser-test.sh`. Four PASS/FAIL pages plus one visual
+demo, driven by the same harness, together assert against the actual DOM/pixels/timing the backend
+produced:
 
 | Page | What it checks | Result |
 |---|---|---|
 | `cna_test_htmldom_smoke` | DOM surface, sprite pool/recycling, `RenderTarget2D` readback, backbuffer refusal, `SpriteFont`, `TextureAddressMode::Wrap`, `SetScissorRect` (per-batch region isolation), resize + scissor interaction | 32/32 |
-| `cna_test_htmldom_pixel_verification` | Pixel-exact tint/`AlphaBlend`/`Opaque`/`Additive`, multi-glyph `SpriteFont` (kerning/`\n`/scale/flip), `transformMatrix`, render-target-as-`Draw()`-source | 11/11 |
+| `cna_test_htmldom_pixel_verification` | Pixel-exact tint/`AlphaBlend`/`Opaque`/`Additive`, multi-glyph `SpriteFont` (kerning/`\n`/scale/flip), `transformMatrix`, render-target-as-`Draw()`-source, plain-texture `GetData`, `FromStream` decode | 13/13 |
 | `cna_test_htmldom_stress` | Performance benchmark, 300-frame stability run, LRU cache eviction | 3/3 |
 | `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn | 6/6 |
 | `cna_htmldom_visual_demo` | Screenshot-verified visual demo (not a PASS/FAIL page) | — |
@@ -86,7 +87,8 @@ appends a fixed-stride 80-byte command and `End()` hands the array over as a blo
 | `RenderTarget2D` used as a `Draw()` source texture | ✅ | Sampling a target's own rendered content back into an ordinary sprite draw (render-to-texture) — pixel-verified: content cleared into RT A and later `Draw()`n from RT A onto RT B reads back on B exactly, confirming the data-URL-regenerated-from-a-dirty-flag path round-trips real content. |
 | `RenderTarget2D` readback (`GetData`) | ✅ | Real synchronous `getImageData`, with the full REMED-GFX-127 argument-validation contract. Verified in-browser. |
 | `RenderTargetUsage` | ✅ | A shared `GraphicsDevice` concern; no backend-specific code. |
-| `Texture2D::FromStream` decode | 🟨 | Fully backend-agnostic before it reaches this backend's upload. |
+| `Texture2D::GetData` on a plain (non-render-target) texture | ✅ | Entirely shared/backend-agnostic code (reads from `Texture2D`'s own `cpuPixels_` CPU-side shadow, never touching the backend) — but had never been exercised end-to-end under this backend specifically until now. Verified in-browser byte-exact against four distinct per-texel colours (including non-255 alpha), ruling out both a wrong-channel and a wrong-texel-order bug. |
+| `Texture2D::FromStream` decode | ✅ | The decode itself (`stb_image`, via `SaveAsPng`/`FromStream`) is fully backend-agnostic shared code; what had never been proven under HTML_DOM specifically were the two backend-touching ends of that pipeline. Verified in-browser: a source texture created and uploaded through this backend is encoded to a real PNG via `SaveAsPng`, decoded back via `FromStream` (re-uploading through this backend's real canvas/data-URL machinery a second time), and read back matching the original colour. |
 | `SetRenderTargets` (MRT) | ✅ throws-by-design | One canvas backs each target; it is inherently single-output. |
 | **Backbuffer readback** | ✅ throws-by-design | **The one thing `CANVAS` can do and this backend cannot.** No browser API rasterizes a live DOM subtree. The exception says so and points at `RenderTarget2D`. Verified in-browser. |
 

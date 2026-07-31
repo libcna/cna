@@ -24,6 +24,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include "System/IO/MemoryStream.hpp"
+
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
 
 #include <cmath>
@@ -41,7 +43,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 11;
+    constexpr int kExpectedChecks = 13;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -518,6 +520,77 @@ protected:
         }
 
         if (frame_ == 12)
+        {
+            // plan_html_dom.md HTMLDOM-96a: Texture2D::GetData on a PLAIN (non-render-target)
+            // texture. Unlike RenderTarget2D::GetData (HTMLDOM-83/HtmlDomRenderTargetBackend's own
+            // Canvas2D getImageData), this path is entirely shared/backend-agnostic code
+            // (Texture2D::GetData reads from its own cpuPixels_ CPU-side shadow copy, never
+            // touching the backend at all) -- but it had never been exercised end-to-end under the
+            // HTML_DOM Emscripten build specifically, only reviewed by reading the source. Four
+            // distinct, unambiguous colours (one per texel, including a non-255 alpha) rule out
+            // both a wrong-channel and a wrong-texel-order bug; CreateFromPixels/GetData is a
+            // lossless path (no PNG/JPEG codec involved), so this is checked byte-exact, not with
+            // CloseEnough's rounding tolerance.
+            Texture2D plain = Texture2D::CreateFromPixels(dev, 2, 2, std::vector<std::uint8_t>{
+                255, 0, 0, 255,     0, 255, 0, 200,
+                0, 0, 255, 150,     255, 255, 0, 100,
+            });
+            std::vector<Color> px(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
+            plain.GetData(px.data(), 0, 4);
+            const bool plainMatches =
+                px[0] == Color(255, 0, 0, 255) && px[1] == Color(0, 255, 0, 200) &&
+                px[2] == Color(0, 0, 255, 150) && px[3] == Color(255, 255, 0, 100);
+            std::printf("       plain GetData: (%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d) (%d,%d,%d,%d)\n",
+                        px[0].getRProperty(), px[0].getGProperty(), px[0].getBProperty(), px[0].getAProperty(),
+                        px[1].getRProperty(), px[1].getGProperty(), px[1].getBProperty(), px[1].getAProperty(),
+                        px[2].getRProperty(), px[2].getGProperty(), px[2].getBProperty(), px[2].getAProperty(),
+                        px[3].getRProperty(), px[3].getGProperty(), px[3].getBProperty(), px[3].getAProperty());
+            check(plainMatches,
+                  "HTMLDOM-96a: Texture2D::GetData on a plain (non-render-target) texture returns "
+                  "the exact uploaded pixels, byte-for-byte, under the HTML_DOM backend");
+
+            // plan_html_dom.md HTMLDOM-96b: Texture2D::FromStream decode, closing the loop for this
+            // backend specifically. The decode itself (stb_image, via SaveAsPng/FromStream) is
+            // fully backend-agnostic shared code -- what had never been proven under HTML_DOM is
+            // the two backend-touching ends of that pipeline: the SOURCE texture's own upload
+            // (SetData, exercised by CreateFromPixels below) and the DECODED texture's own upload
+            // (FromStream's internal CreateFromPixels call), each going through this backend's real
+            // Emscripten canvas/PNG-data-URL machinery, not a native/desktop one.
+            Texture2D src = Texture2D::CreateFromPixels(dev, 4, 4, std::vector<std::uint8_t>(
+                static_cast<std::size_t>(4 * 4 * 4), 0));
+            {
+                std::vector<Color> solid(16, Color(30, 180, 220, 255));
+                src.SetData(solid.data(), 16);
+            }
+            System::IO::MemoryStream writeStream;
+            src.SaveAsPng(&writeStream, 4, 4);
+            const auto pngBytes = writeStream.GetBuffer();
+
+            System::IO::MemoryStream readStream(
+                pngBytes.data(), static_cast<System::IO::intcs>(pngBytes.size()));
+            Texture2D decoded = Texture2D::FromStream(dev, readStream);
+
+            std::vector<Color> decodedPx(16, Color(0xCD, 0xCD, 0xCD, 0xCD));
+            decoded.GetData(decodedPx.data(), 0, 16);
+            bool decodedMatches = decoded.getWidthProperty() == 4 && decoded.getHeightProperty() == 4;
+            for (int i = 0; decodedMatches && i < 16; ++i)
+            {
+                decodedMatches = CloseEnough(decodedPx[i].getRProperty(), 30, 2) &&
+                                 CloseEnough(decodedPx[i].getGProperty(), 180, 2) &&
+                                 CloseEnough(decodedPx[i].getBProperty(), 220, 2) &&
+                                 decodedPx[i].getAProperty() == 255;
+            }
+            std::printf("       FromStream decode: %dx%d px[0]=(%d,%d,%d,%d)\n",
+                        decoded.getWidthProperty(), decoded.getHeightProperty(),
+                        decodedPx[0].getRProperty(), decodedPx[0].getGProperty(),
+                        decodedPx[0].getBProperty(), decodedPx[0].getAProperty());
+            check(decodedMatches,
+                  "HTMLDOM-96b: Texture2D::FromStream decodes a PNG produced by this backend's own "
+                  "SaveAsPng and re-uploads it correctly -- both the source and decoded textures "
+                  "round-trip through the real HTML_DOM upload/readback path");
+        }
+
+        if (frame_ == 13)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
