@@ -965,26 +965,48 @@ namespace CNA::Internal::Backends::Llgl
             return;
         }
 
-        // No declaration: recognise the one layout the colour-only 3D path is defined for
-        // (VertexPositionColor -- Vector3 position then a packed Color, 16 bytes). Anything else
-        // is left empty, and the draw path refuses it by name instead of guessing.
-        if (strideInBytes == 16)
+        // No declaration -- this is the path GraphicsDevice::DrawUserPrimitives()'s typed
+        // overloads take (LLGL-32): they call CreateVertexBuffer(int) then SetData() straight
+        // from their own GPU-packed struct (GraphicsDevice.cpp's GpuVPC/GpuVPT/GpuVPCT/GpuVPNT),
+        // never a VertexDeclaration. Those four packed structs (CNA::Internal::Graphics::
+        // Position{Color,Texture,ColorTexture,NormalTexture}Stream) have four DISTINCT byte sizes,
+        // so the stride alone identifies which one was used -- the same "infer the layout from the
+        // stride" precedent the Vulkan backend's own MakeExt3DKey() already relies on for these
+        // exact same stream sizes. Anything else is left empty, and the draw path refuses it by
+        // name instead of guessing.
+        const auto addAttribute = [&](const char* name, LLGL::Format format,
+                                      std::uint32_t location, std::uint32_t offset) {
+            LLGL::VertexAttribute attribute;
+            attribute.name = name;
+            attribute.format = format;
+            attribute.location = location;
+            attribute.offset = offset;
+            attribute.stride = stride;
+            attributes_.push_back(attribute);
+        };
+
+        switch (strideInBytes)
         {
-            LLGL::VertexAttribute position;
-            position.name = "position";
-            position.format = LLGL::Format::RGB32Float;
-            position.location = 0;
-            position.offset = 0;
-            position.stride = stride;
-
-            LLGL::VertexAttribute color;
-            color.name = "color";
-            color.format = LLGL::Format::RGBA8UNorm;
-            color.location = 1;
-            color.offset = 12;
-            color.stride = stride;
-
-            attributes_ = {position, color};
+            case 16: // PositionColorStream (VertexPositionColor): float3 + ubyte4
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("color", LLGL::Format::RGBA8UNorm, 1, 12);
+                break;
+            case 20: // PositionTextureStream (VertexPositionTexture): float3 + float2
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 12);
+                break;
+            case 24: // PositionColorTextureStream (VertexPositionColorTexture): float3 + ubyte4 + float2
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("color", LLGL::Format::RGBA8UNorm, 1, 12);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 16);
+                break;
+            case 32: // PositionNormalTextureStream (VertexPositionNormalTexture): float3 + float3 + float2
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 24);
+                break;
+            default:
+                break;
         }
     }
 

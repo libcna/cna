@@ -170,3 +170,32 @@ leaves a colour-carrying draw untinted.
 **Tracked as:** `plan_llgl.md` task `LLGL-25`.
 
 ---
+
+## LLGL backend: `GraphicsDevice.DrawUserPrimitives()`'s typed overloads all threw — FIXED 2026-07-31
+
+**Symptom:** any typed `DrawUserPrimitives()` overload (`VertexPositionColor`,
+`VertexPositionTexture`, `VertexPositionColorTexture`, `VertexPositionNormalTexture`, ...) threw
+`"this vertex layout is not supported by the colour-only 3D path (stride N with no vertex
+declaration). Supply a VertexDeclaration, or use a VertexPositionColor layout."` on this backend.
+
+**Cause:** every typed `DrawUserPrimitives()` overload packs its own GPU-format struct
+(`GraphicsDevice.cpp`'s `GpuVPC`/`GpuVPT`/`GpuVPCT`/`GpuVPNT`) and uploads it through
+`backend_->CreateVertexBuffer(int)` (count-only) + a raw byte `SetData()` — never through a real
+`VertexDeclaration`. `LlglVertexBufferBackend::ResolveVertexAttributes()` already had a
+stride-based fallback for exactly this no-declaration case, but it only recognised stride 16
+(`VertexPositionColor`) — strides 20/24/32 (`VertexPositionTexture`/`VertexPositionColorTexture`/
+`VertexPositionNormalTexture`) fell through to an empty attribute list and the draw path refused
+them by name. Found while implementing `DualTextureEffect` (`LLGL-25`): its own cross-backend test,
+`examples/dualtextureeffect_vertexcolor_test.cpp`, uses `VertexPositionColorTexture` (stride 24)
+through `DrawUserPrimitives()` and hit this exact refusal.
+
+**Fix:** extended the stride-based fallback to recognise all four GPU-packed stream sizes this
+backend's shader family already supports (16/20/24/32 bytes), each a distinct, unambiguous size —
+the same "infer the vertex format from the upload stride" technique the Vulkan backend's own
+`MakeExt3DKey()` already relies on for these exact stream sizes. Skinned/tangent streams (48/52/68
+bytes) are deliberately still unrecognised: `SkinnedEffect` is not implemented on this backend at
+all yet, so there is no shader to feed them to.
+
+**Tracked as:** `plan_llgl.md` task `LLGL-32`.
+
+---

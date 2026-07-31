@@ -40,8 +40,7 @@ module**:
 
 **Not implemented:** `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
 `RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, cube and
-volume textures, and `GraphicsDevice.DrawUserPrimitives()`'s typed overloads (a real, pre-existing
-gap independent of any specific effect -- see the `DrawUserPrimitives` note in "Shaders" below).
+volume textures.
 Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
 none of them silently does nothing.
 
@@ -158,12 +157,14 @@ not it uses it. The lit shaders don't need a separate field for the same flag --
 `ambientColorLighting.w`, since offset 128 becomes `worldMatrix` for them.
 
 `GraphicsDevice.DrawUserPrimitives()`'s typed overloads (`VertexPositionColor`,
-`VertexPositionTexture`, `VertexPositionColorTexture`, `VertexPositionNormalTexture`, ...) all
-throw on this backend: they route through `IGraphicsBackend::CreateVertexBuffer(int)` (count-only,
-no `VertexDeclaration`) and a raw byte `SetData`, so the resulting buffer carries no attribute
-layout the 3D draw path can read. Use the typed `VertexBuffer(device, declaration, count, usage)`
-constructor with an explicit `VertexDeclaration` instead -- every other example and test in this
-directory already does. Tracked as `LLGL-32`.
+`VertexPositionTexture`, `VertexPositionColorTexture`, `VertexPositionNormalTexture`) work too
+(`LLGL-32`): they route through `IGraphicsBackend::CreateVertexBuffer(int)` (count-only, no
+`VertexDeclaration`) and a raw byte `SetData`, so `LlglVertexBufferBackend::ResolveVertexAttributes()`
+infers the vertex layout from the upload stride instead -- 16/20/24/32 bytes are each a distinct,
+unambiguous size among `GraphicsDevice.cpp`'s own GPU-packed stream structs, the same technique the
+Vulkan backend's own `MakeExt3DKey()` already uses for these exact stream sizes. Skinned/tangent
+streams (52/68/48 bytes) are not recognised -- `SkinnedEffect` is not implemented on this backend
+at all yet.
 
 ## Render targets
 
@@ -290,8 +291,12 @@ dependent checks report `[SKIP]` on a module that does not apply MSAA to the def
 all (the OpenGL module, on this project's own test environment) rather than failing. `Llgl_DualTexture`
 covers `DualTextureEffect`'s `VertexColorEnabled`-gated tint and proves the two textures sample
 independently (a white base plus a red overlay must read back red, not white).
+`Llgl_DualTextureEffect_VertexColor` and `Llgl_GraphicsDevice_DefaultStateOcclusion` are pre-existing,
+cross-backend shared sources (already registered on EasyGL/Vulkan/Bgfx) reused verbatim once
+`LLGL-32` made `DrawUserPrimitives()` work on this backend, exercising it through two of its four
+recognised upload strides.
 Every one of them is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All twenty-six
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All thirty
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 

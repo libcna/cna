@@ -101,6 +101,26 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-32: GraphicsDevice::DrawUserPrimitives()'s typed overloads -- verbatim reuse of the
+    # shared, backend-agnostic source already registered on the EasyGL/Vulkan/Bgfx backends. Only
+    # buildable now that ResolveVertexAttributes() infers a vertex layout from the raw upload
+    # stride when DrawUserPrimitives' own backend_->CreateVertexBuffer(int)-based buffer carries
+    # no VertexDeclaration at all.
+    cna_llgl_test(cna_test_llgl_dualtextureeffect_vertexcolor
+                  examples/dualtextureeffect_vertexcolor_test.cpp)
+    cna_register_backend_test(NAME Llgl_DualTextureEffect_VertexColor COMMAND cna_test_llgl_dualtextureeffect_vertexcolor
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # LLGL-32: DrawUserPrimitives() with VertexPositionColor (stride 16) -- the other stride the
+    # stride-inference fix covers, exercised through default device state rather than an explicit
+    # BlendState/DepthStencilState/RasterizerState (verbatim reuse of the shared source).
+    cna_llgl_test(cna_test_llgl_graphicsdevice_default_state_occlusion
+                  examples/graphicsdevice_default_state_occlusion_test.cpp)
+    cna_register_backend_test(NAME Llgl_GraphicsDevice_DefaultStateOcclusion COMMAND cna_test_llgl_graphicsdevice_default_state_occlusion
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-17: the same two binaries, pinned to the OpenGL module instead of the default
     # (Vulkan-first) preference. Running only the default preference is what let the OpenGL module
     # clear correctly and draw nothing for as long as it did -- a module nothing exercises is a
@@ -143,6 +163,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_backend_test(NAME Llgl_DualTexture_OpenGL COMMAND cna_test_llgl_dualtexture
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_DualTextureEffect_VertexColor_OpenGL COMMAND cna_test_llgl_dualtextureeffect_vertexcolor
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_GraphicsDevice_DefaultStateOcclusion_OpenGL COMMAND cna_test_llgl_graphicsdevice_default_state_occlusion
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 endif()
