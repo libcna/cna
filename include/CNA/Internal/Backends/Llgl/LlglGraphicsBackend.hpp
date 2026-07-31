@@ -123,7 +123,8 @@ namespace CNA::Internal::Backends::Llgl
          * @param renderSystem   Render system that will own the buffer.
          * @param vertexCapacity Number of vertices the caller intends to store.
          */
-        LlglVertexBufferBackend(LLGL::RenderSystem* renderSystem, int vertexCapacity);
+        LlglVertexBufferBackend(LLGL::RenderSystem* renderSystem, LlglGraphicsBackend* owner,
+                                int vertexCapacity);
 
         /** @brief Releases the LLGL buffer. */
         ~LlglVertexBufferBackend() override;
@@ -159,14 +160,34 @@ namespace CNA::Internal::Backends::Llgl
         /** @brief Returns the stride in bytes of the most recent upload, or 0 before it. */
         [[nodiscard]] std::size_t GetStride() const { return stride_; }
 
+        /**
+         * @brief Returns the LLGL vertex attributes this buffer's contents are described by.
+         *
+         * Translated once from the caller's `VertexDeclaration` (or, when none was supplied, from
+         * the upload stride) and used for two different things that must agree: the vertex array
+         * OpenGL builds for this buffer, and the input layout the 3D pipeline's vertex shader is
+         * created with.
+         *
+         * @return The attributes, or an empty list before the first upload.
+         */
+        [[nodiscard]] const std::vector<LLGL::VertexAttribute>& GetVertexAttributes() const
+        {
+            return attributes_;
+        }
+
     private:
-        LLGL::RenderSystem* renderSystem_   = nullptr;
+        void ResolveVertexAttributes(std::size_t strideInBytes);
+
+        LLGL::RenderSystem*  renderSystem_  = nullptr;
+        LlglGraphicsBackend* owner_         = nullptr;
         LLGL::Buffer*       buffer_         = nullptr;
         int                 vertexCapacity_ = 0;
         int                 vertexCount_    = 0;
         std::size_t         stride_         = 0;
         std::size_t         byteCapacity_   = 0;
         bool                hasDeclaration_ = false;
+        VertexDeclaration   declaration_;
+        std::vector<LLGL::VertexAttribute> attributes_;
     };
 
     /**
@@ -185,7 +206,8 @@ namespace CNA::Internal::Backends::Llgl
          * @param indexCapacity Number of indices the caller intends to store.
          * @param thirtyTwoBit  True for 32-bit indices, false for 16-bit.
          */
-        LlglIndexBufferBackend(LLGL::RenderSystem* renderSystem, int indexCapacity, bool thirtyTwoBit);
+        LlglIndexBufferBackend(LLGL::RenderSystem* renderSystem, LlglGraphicsBackend* owner,
+                               int indexCapacity, bool thirtyTwoBit);
 
         /** @brief Releases the LLGL buffer. */
         ~LlglIndexBufferBackend() override;
@@ -221,7 +243,8 @@ namespace CNA::Internal::Backends::Llgl
     private:
         void Upload(const void* data, int indexCount, std::size_t indexSize);
 
-        LLGL::RenderSystem* renderSystem_  = nullptr;
+        LLGL::RenderSystem*  renderSystem_ = nullptr;
+        LlglGraphicsBackend* owner_        = nullptr;
         LLGL::Buffer*       buffer_        = nullptr;
         int                 indexCapacity_ = 0;
         int                 indexCount_    = 0;
@@ -612,6 +635,38 @@ namespace CNA::Internal::Backends::Llgl
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
         /**
+         * @brief Applies a `DepthStencilState`.
+         *
+         * Depth test, depth write and the depth comparison reach the 3D pipeline. The stencil
+         * fields are recorded only: the swap chain has a real stencil buffer and `ClearStencil`
+         * works, but no draw path consumes a stencil test yet.
+         *
+         * @param depthEnable          Whether depth testing is enabled.
+         * @param depthWriteEnable     Whether depth writes are enabled.
+         * @param depthFunc            Raw `CompareFunction` ordinal for the depth test.
+         * @param stencilEnable        Whether stencil testing was requested.
+         * @param stencilFunc          Raw `CompareFunction` ordinal for the stencil test.
+         * @param stencilPass          Raw `StencilOperation` ordinal applied when the test passes.
+         * @param stencilFail          Raw `StencilOperation` ordinal applied when the test fails.
+         * @param stencilDepthFail     Raw `StencilOperation` ordinal for a depth failure.
+         * @param stencilMask          Stencil read mask.
+         * @param stencilWriteMask     Stencil write mask.
+         * @param referenceStencil     Stencil reference value.
+         * @param twoSidedStencilMode  Whether the counter-clockwise face has its own stencil state.
+         * @param ccwStencilFunc       Counter-clockwise `CompareFunction` ordinal.
+         * @param ccwStencilPass       Counter-clockwise pass operation ordinal.
+         * @param ccwStencilFail       Counter-clockwise fail operation ordinal.
+         * @param ccwStencilDepthFail  Counter-clockwise depth-fail operation ordinal.
+         */
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+
+        /**
          * @brief Records whether depth testing is enabled.
          *
          * @param enabled Requested depth test state.
@@ -633,7 +688,7 @@ namespace CNA::Internal::Backends::Llgl
         void SetDepthWriteEnabled(bool enabled) override;
 
         /**
-         * @brief Draws colour-only primitives; part of the not-yet-implemented 3D pipeline.
+         * @brief Draws colour-only primitives from a vertex buffer.
          *
          * @param vb             Vertex buffer to draw from.
          * @param world          World matrix.
@@ -641,14 +696,15 @@ namespace CNA::Internal::Backends::Llgl
          * @param projection     Projection matrix.
          * @param primitive      Primitive topology.
          * @param primitiveCount Number of primitives.
-         * @throws std::runtime_error Always.
+         * @throws std::runtime_error If the buffer is empty, belongs to another backend, carries a
+         *         vertex layout this path cannot express, or holds fewer vertices than the draw needs.
          */
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
 
         /**
-         * @brief Draws indexed colour-only primitives; part of the not-yet-implemented 3D pipeline.
+         * @brief Draws indexed colour-only primitives.
          *
          * @param vb             Vertex buffer to draw from.
          * @param ib             Index buffer to draw with.
@@ -657,11 +713,48 @@ namespace CNA::Internal::Backends::Llgl
          * @param projection     Projection matrix.
          * @param primitive      Primitive topology.
          * @param primitiveCount Number of primitives.
-         * @throws std::runtime_error Always.
+         * @throws std::runtime_error If either buffer is empty, belongs to another backend, carries
+         *         a vertex layout this path cannot express, or holds too few elements.
          */
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+
+        /**
+         * @brief Effect-aware draw; honours the vertex-start offset the shared layer supplies.
+         *
+         * @param vb             Vertex buffer to draw from.
+         * @param world          World matrix.
+         * @param view           View matrix.
+         * @param projection     Projection matrix.
+         * @param primitive      Primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @param params         Per-draw effect parameters.
+         * @throws std::runtime_error If @p params asks for anything beyond vertex colours -- a
+         *         texture, lighting, fog, skinning, a custom effect or instancing.
+         */
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+
+        /**
+         * @brief Indexed effect-aware draw; honours the start index and base vertex.
+         *
+         * @param vb             Vertex buffer to draw from.
+         * @param ib             Index buffer to draw with.
+         * @param world          World matrix.
+         * @param view           View matrix.
+         * @param projection     Projection matrix.
+         * @param primitive      Primitive topology.
+         * @param primitiveCount Number of primitives.
+         * @param params         Per-draw effect parameters.
+         * @throws std::runtime_error If @p params asks for anything beyond vertex colours.
+         */
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
 
         /**
          * @brief Reports whether a graphics capability is supported by this backend today.
@@ -674,11 +767,37 @@ namespace CNA::Internal::Backends::Llgl
         /** @brief Returns the largest single-axis texture dimension the device reports. */
         [[nodiscard]] int GetMaxTextureDimension() const override;
 
+        /**
+         * @brief Returns whether the loaded renderer module can draw in wireframe fill mode.
+         *
+         * Module-dependent, and LLGL exposes no capability flag for it: the OpenGL module draws
+         * real wireframe edges, the Vulkan module draws nothing at all. Requesting it on a module
+         * that cannot do it fails loudly rather than producing an empty frame.
+         *
+         * @return True when `FillMode::WireFrame` is honoured.
+         */
+        [[nodiscard]] bool SupportsWireFrameEXT() const;
+
         /** @brief Returns the renderer module this instance actually loaded. */
         [[nodiscard]] Detail::RendererModule GetRendererModule() const { return module_; }
 
         /** @brief Returns the LLGL renderer name reported by the loaded module. */
         [[nodiscard]] const char* GetRendererNameEXT() const;
+
+        /**
+         * @brief Takes over releasing a buffer whose owning resource is being destroyed.
+         *
+         * This backend records a whole frame and submits it at `Present()`, and a 3D draw refers to
+         * the caller's own vertex and index buffers rather than copying their contents. A game may
+         * legitimately destroy a `VertexBuffer` in the same frame it drew with -- XNA allows it --
+         * and releasing the underlying GPU buffer there and then would leave the recorded frame
+         * pointing at freed memory. Deferring the release to just after the frame is submitted
+         * keeps the pointer valid for exactly as long as it is needed, without copying geometry
+         * that is already resident on the GPU.
+         *
+         * @param buffer Buffer to release once the frame referencing it has been submitted.
+         */
+        void ScheduleBufferReleaseEXT(LLGL::Buffer* buffer);
 
         /**
          * @brief Appends one sprite's geometry to the current frame.
@@ -711,7 +830,7 @@ namespace CNA::Internal::Backends::Llgl
         /** @brief One recorded frame operation, replayed in submission order at Present(). */
         struct FrameCommand
         {
-            enum class Kind { Clear, Sprite };
+            enum class Kind { Clear, Sprite, Primitives };
 
             /** @brief Which operation this entry replays. */
             Kind             kind         = Kind::Clear;
@@ -728,6 +847,16 @@ namespace CNA::Internal::Backends::Llgl
             bool             usesBlendFactor = false;
             std::int32_t     scissor[4]   = {0, 0, 0, 0};
             bool             scissorEnabled = false;
+
+            /** @brief Primitives only: the caller's own vertex buffer, and index buffer if any. */
+            LLGL::Buffer*    vertexBuffer = nullptr;
+            LLGL::Buffer*    indexBuffer  = nullptr;
+            /** @brief Primitives only: index into the frame's per-draw transform buffer pool. */
+            std::uint32_t    transformIndex = 0;
+            /** @brief Primitives only: first index of an indexed draw; ignored otherwise. */
+            std::uint32_t    firstIndex   = 0;
+            /** @brief Primitives only: value added to each index before vertex fetch. */
+            std::int32_t     baseVertex   = 0;
         };
 
         /** @brief The letterboxed destination rectangle of the logical canvas, in window pixels. */
@@ -742,10 +871,22 @@ namespace CNA::Internal::Backends::Llgl
         };
 
         void CreateSpritePipelineResources();
+        void CreatePrimitivePipelineResources();
+        LLGL::Shader* AcquirePrimitiveVertexShader(const std::vector<LLGL::VertexAttribute>& attributes);
+        LLGL::PipelineState* AcquirePrimitivePipeline(const LlglVertexBufferBackend& vertexBuffer,
+                                                      PrimitiveType primitive, bool scissorEnabled);
+        void QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
+                             const LlglIndexBufferBackend* indexBuffer,
+                             const Matrix& world, const Matrix& view, const Matrix& projection,
+                             PrimitiveType primitive, int primitiveCount,
+                             int vertexStart, int startIndex, int baseVertex);
+        void RejectUnsupportedDrawParams(const GpuDrawParams& params) const;
         void CaptureBackbuffer();
         void ReplayFrameCommands();
+        void ReleasePendingBuffers();
         void UpdateSwapChainResolution();
         [[nodiscard]] PresentationRect ComputePresentationRect() const;
+        [[nodiscard]] bool IsOpaqueBlendState() const;
         [[nodiscard]] bool UsesConstantBlendFactorState() const;
         [[nodiscard]] std::uint64_t MakeBlendPipelineKey(bool scissorEnabled) const;
         LLGL::PipelineState* AcquireSpritePipeline(bool scissorEnabled);
@@ -770,8 +911,24 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::Buffer*               spriteVertexBuffer_     = nullptr;
         std::size_t                 spriteVertexCapacity_   = 0;
 
+        LLGL::PipelineLayout*       primitiveLayout_ = nullptr;
+        LLGL::Shader*               primitiveFragmentShader_ = nullptr;
+
         std::map<std::uint64_t, LLGL::PipelineState*> pipelineCache_;
         std::map<std::uint64_t, LLGL::Sampler*>       samplerCache_;
+        std::map<std::uint64_t, LLGL::PipelineState*> primitivePipelineCache_;
+        /// One vertex shader per distinct vertex layout: LLGL carries the input layout (offsets and
+        /// stride included) on the shader object, so a second layout genuinely needs a second one.
+        std::map<std::uint64_t, LLGL::Shader*>        primitiveVertexShaderCache_;
+
+        /// One small constant buffer per 3D draw in a frame, grown on demand and reused across
+        /// frames. Each draw has its own matrix, and LLGL's individual (non-heap) resource bindings
+        /// cannot offset into a shared buffer.
+        std::vector<LLGL::Buffer*>  transformBuffers_;
+        std::vector<float>          transformData_;
+        /// Buffers whose owning resource has been destroyed, released once the frame that may
+        /// reference them has been submitted. See ScheduleBufferReleaseEXT.
+        std::vector<LLGL::Buffer*>  pendingBufferReleases_;
 
         std::vector<float>          spriteVertexData_;
         std::vector<FrameCommand>   frameCommands_;
@@ -815,6 +972,8 @@ namespace CNA::Internal::Backends::Llgl
 
         bool  depthTestEnabled_  = false;
         bool  depthWriteEnabled_ = true;
+        int   depthCompareFunction_ = 3;  // CompareFunction::LessEqual, the XNA default
+        bool  stencilRequested_  = false;
         int   cullMode_ = 2;
         int   fillMode_ = 0;
     };

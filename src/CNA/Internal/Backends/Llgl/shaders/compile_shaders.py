@@ -31,6 +31,8 @@ DEFAULT_OUTPUT = HERE / "llgl_shaders.hpp"
 SHADERS = [
     ("Sprite2dVert", "sprite2d.vert.glsl", "sprite2d.gl.vert.glsl", "vert"),
     ("Sprite2dFrag", "sprite2d.frag.glsl", "sprite2d.gl.frag.glsl", "frag"),
+    ("Colored3dVert", "colored3d.vert.glsl", "colored3d.gl.vert.glsl", "vert"),
+    ("Colored3dFrag", "colored3d.frag.glsl", "colored3d.gl.frag.glsl", "frag"),
 ]
 
 

@@ -18,11 +18,15 @@ module**:
 * `SpriteBatch` with a per-blend-state pipeline cache and a per-sampler-state sampler cache,
   rotation, origin, both flips, tint, and the complete min/mag/mip triple for all nine XNA
   `TextureFilter` values;
-* back-buffer readback, so `GraphicsDevice.GetBackBufferData` and the project's pixel tests work.
+* back-buffer readback, so `GraphicsDevice.GetBackBufferData` and the project's pixel tests work;
+* the **colour-only 3D path**: `VertexDeclaration` translation, real vertex and index buffer draws
+  (with `vertexStart`, `startIndex` and `baseVertex` honoured), depth test and depth write, cull
+  mode, and fill mode.
 
-**Not implemented:** the entire 3D pipeline, render targets, cube and volume textures, custom
-`ShaderEffect`s, occlusion queries. Each either reports itself unsupported through
-`GraphicsDevice.SupportsCapability()` or throws — none of them silently does nothing.
+**Not implemented:** the stock effect family beyond vertex colours (textures, lighting, fog,
+skinning), render targets, cube and volume textures, custom `ShaderEffect`s, occlusion queries.
+Each either reports itself unsupported through `GraphicsDevice.SupportsCapability()` or throws —
+none of them silently does nothing.
 
 Both modules are covered by their own CTests, so neither can break unnoticed because the default
 preference happened to select the other one.
@@ -96,6 +100,8 @@ Both flavours are checked in and no shader toolchain is needed to build:
 src/CNA/Internal/Backends/Llgl/shaders/
   sprite2d.vert.glsl      sprite2d.frag.glsl        Vulkan flavour, compiled to SPIR-V
   sprite2d.gl.vert.glsl   sprite2d.gl.frag.glsl     OpenGL flavour, embedded as source
+  colored3d.vert.glsl     colored3d.frag.glsl       ditto, for the colour-only 3D path
+  colored3d.gl.vert.glsl  colored3d.gl.frag.glsl
   compile_shaders.py                                regenerates llgl_shaders.hpp
   llgl_shaders.hpp                                  generated; do not edit
 ```
@@ -122,9 +128,11 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure
 `Llgl_Smoke` covers the device/window/swap-chain lifecycle, buffer round-trips, and 60 frames of
 clear and present. `Llgl_2D` asserts real pixels read back from the GPU: quadrant orientation
 (where a Y-flip mistake shows up immediately), tint multiplication, `SpriteEffects` flipping, and
-`NonPremultiplied` alpha blending. `Llgl_Smoke_OpenGL` and `Llgl_2D_OpenGL` are the same two
-binaries pinned to the OpenGL module through `CNA_LLGL_RENDERER`, which also exercises the
-selection path itself. All four need a display; on a machine without one they report SKIPPED
+`NonPremultiplied` alpha blending. `Llgl_TextureReadback` round-trips texture uploads byte-exactly,
+`Llgl_Presentation` covers the five presentation policies, and `Llgl_3D` covers the colour-only 3D
+path (vertex colours, depth ordering, indexed draws, cull mode, wireframe). Every one of them is
+registered a second time pinned to the OpenGL module through `CNA_LLGL_RENDERER`, which also
+exercises the selection path itself. All ten need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
 ```bash
@@ -141,4 +149,6 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | `DepthStencilBuffer` | yes | The swap chain really has both attachments and all seven clear paths work. |
 | `MultiSampleAntiAliasing` | yes | Forwarded to the swap chain; not yet pixel-verified (`LLGL-22`). |
 | `AnisotropicFiltering` | device-dependent | From LLGL's reported `limits.maxAnisotropy`. |
-| `ThreeD`, `MultipleRenderTargets`, `WireFrame`, `OcclusionQuery`, `CustomEffects`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |
+| `ThreeD` | yes | Colour-only draws with depth, cull and fill state; the stock effect family is not implemented. |
+| `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |
+| `MultipleRenderTargets`, `OcclusionQuery`, `CustomEffects`, `Texture3D` | no | Not implemented — see `plan_llgl.md` phase LLGL-5. |

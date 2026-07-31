@@ -5,7 +5,12 @@
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
 #include <LLGL/Utils/VertexFormat.h>
 
@@ -127,6 +132,150 @@ namespace CNA::Internal::Backends::Llgl
         {
             const XnaBlend value = static_cast<XnaBlend>(blend);
             return value == XnaBlend::BlendFactor || value == XnaBlend::InverseBlendFactor;
+        }
+
+        using XnaCompareFunction = Microsoft::Xna::Framework::Graphics::CompareFunction;
+        using XnaCullMode = Microsoft::Xna::Framework::Graphics::CullMode;
+        using XnaFillMode = Microsoft::Xna::Framework::Graphics::FillMode;
+        using XnaVertexElementFormat = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using XnaVertexElementUsage = Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        LLGL::CompareOp MapCompareFunction(int compareFunction)
+        {
+            switch (static_cast<XnaCompareFunction>(compareFunction))
+            {
+                case XnaCompareFunction::Always:       return LLGL::CompareOp::AlwaysPass;
+                case XnaCompareFunction::Never:        return LLGL::CompareOp::NeverPass;
+                case XnaCompareFunction::Less:         return LLGL::CompareOp::Less;
+                case XnaCompareFunction::LessEqual:    return LLGL::CompareOp::LessEqual;
+                case XnaCompareFunction::Equal:        return LLGL::CompareOp::Equal;
+                case XnaCompareFunction::GreaterEqual: return LLGL::CompareOp::GreaterEqual;
+                case XnaCompareFunction::Greater:      return LLGL::CompareOp::Greater;
+                case XnaCompareFunction::NotEqual:     return LLGL::CompareOp::NotEqual;
+            }
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: unknown CompareFunction ordinal " +
+                std::to_string(compareFunction));
+        }
+
+        /// XNA names the winding it CULLS, and treats clockwise as front-facing (the Direct3D
+        /// convention). The pipeline is therefore configured with front = clockwise, which is what
+        /// makes "cull the counter-clockwise faces" the same thing as culling back faces.
+        LLGL::CullMode MapCullMode(int cullMode)
+        {
+            switch (static_cast<XnaCullMode>(cullMode))
+            {
+                case XnaCullMode::None:                    return LLGL::CullMode::Disabled;
+                case XnaCullMode::CullClockwiseFace:       return LLGL::CullMode::Front;
+                case XnaCullMode::CullCounterClockwiseFace: return LLGL::CullMode::Back;
+            }
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: unknown CullMode ordinal " + std::to_string(cullMode));
+        }
+
+        LLGL::PolygonMode MapFillMode(int fillMode)
+        {
+            switch (static_cast<XnaFillMode>(fillMode))
+            {
+                case XnaFillMode::Solid:     return LLGL::PolygonMode::Fill;
+                case XnaFillMode::WireFrame: return LLGL::PolygonMode::Wireframe;
+            }
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: unknown FillMode ordinal " + std::to_string(fillMode));
+        }
+
+        LLGL::PrimitiveTopology MapPrimitiveTopology(PrimitiveType primitive)
+        {
+            switch (primitive)
+            {
+                case PrimitiveType::TriangleList:  return LLGL::PrimitiveTopology::TriangleList;
+                case PrimitiveType::TriangleStrip: return LLGL::PrimitiveTopology::TriangleStrip;
+                case PrimitiveType::LineList:      return LLGL::PrimitiveTopology::LineList;
+                case PrimitiveType::LineStrip:     return LLGL::PrimitiveTopology::LineStrip;
+                case PrimitiveType::PointListEXT:  return LLGL::PrimitiveTopology::PointList;
+            }
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: unknown PrimitiveType ordinal " +
+                std::to_string(static_cast<int>(primitive)));
+        }
+
+        /// Number of vertices (or indices) a draw of @p primitiveCount primitives consumes.
+        int CountElementsForPrimitives(PrimitiveType primitive, int primitiveCount)
+        {
+            switch (primitive)
+            {
+                case PrimitiveType::TriangleList:  return primitiveCount * 3;
+                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+                case PrimitiveType::LineList:      return primitiveCount * 2;
+                case PrimitiveType::LineStrip:     return primitiveCount + 1;
+                case PrimitiveType::PointListEXT:  return primitiveCount;
+            }
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: unknown PrimitiveType ordinal " +
+                std::to_string(static_cast<int>(primitive)));
+        }
+
+        LLGL::Format MapVertexElementFormat(XnaVertexElementFormat format)
+        {
+            switch (format)
+            {
+                case XnaVertexElementFormat::Single:  return LLGL::Format::R32Float;
+                case XnaVertexElementFormat::Vector2: return LLGL::Format::RG32Float;
+                case XnaVertexElementFormat::Vector3: return LLGL::Format::RGB32Float;
+                case XnaVertexElementFormat::Vector4: return LLGL::Format::RGBA32Float;
+                // XNA's packed Color is four normalized bytes. CNA's Color stores them R,G,B,A in
+                // memory (its packed value is AABBGGRR little-endian), so this is RGBA8UNorm and
+                // not the BGRA8 the XNA documentation's own naming might suggest.
+                case XnaVertexElementFormat::Color:   return LLGL::Format::RGBA8UNorm;
+                case XnaVertexElementFormat::Byte4:   return LLGL::Format::RGBA8UInt;
+                case XnaVertexElementFormat::Short2:  return LLGL::Format::RG16SInt;
+                case XnaVertexElementFormat::Short4:  return LLGL::Format::RGBA16SInt;
+                case XnaVertexElementFormat::NormalizedShort2: return LLGL::Format::RG16SNorm;
+                case XnaVertexElementFormat::NormalizedShort4: return LLGL::Format::RGBA16SNorm;
+                case XnaVertexElementFormat::HalfVector2: return LLGL::Format::RG16Float;
+                case XnaVertexElementFormat::HalfVector4: return LLGL::Format::RGBA16Float;
+            }
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: unknown VertexElementFormat ordinal " +
+                std::to_string(static_cast<int>(format)));
+        }
+
+        /// Shader-side name and attribute location for a vertex usage.
+        ///
+        /// Locations are assigned by USAGE, not by the order elements happen to appear in the
+        /// declaration, so two declarations that carry the same semantics in a different order
+        /// still feed the same shader inputs. Only the usages the 3D shaders actually declare are
+        /// mapped; anything else is refused rather than silently bound to a location the shader
+        /// reads as something different.
+        bool MapVertexUsage(XnaVertexElementUsage usage, const char*& name, std::uint32_t& location)
+        {
+            switch (usage)
+            {
+                case XnaVertexElementUsage::Position:          name = "position"; location = 0; return true;
+                case XnaVertexElementUsage::Color:             name = "color";    location = 1; return true;
+                case XnaVertexElementUsage::TextureCoordinate: name = "texCoord"; location = 2; return true;
+                case XnaVertexElementUsage::Normal:            name = "normal";   location = 3; return true;
+                default: return false;
+            }
+        }
+
+        std::uint64_t MakeVertexLayoutKey(const std::vector<LLGL::VertexAttribute>& attributes)
+        {
+            // FNV-1a over the fields that genuinely change the input layout. Two layouts that hash
+            // equal really are the same layout; nothing else about the buffer takes part.
+            std::uint64_t hash = 1469598103934665603ull;
+            const auto mix = [&hash](std::uint64_t value) {
+                hash ^= value;
+                hash *= 1099511628211ull;
+            };
+            for (const LLGL::VertexAttribute& attribute : attributes)
+            {
+                mix(static_cast<std::uint64_t>(attribute.location));
+                mix(static_cast<std::uint64_t>(attribute.format));
+                mix(static_cast<std::uint64_t>(attribute.offset));
+                mix(static_cast<std::uint64_t>(attribute.stride));
+            }
+            return hash;
         }
 
         std::uint8_t MapColorWriteMask(int colorWriteChannels)
@@ -252,8 +401,10 @@ namespace CNA::Internal::Backends::Llgl
     // LlglVertexBufferBackend
     // -----------------------------------------------------------------------------------------
 
-    LlglVertexBufferBackend::LlglVertexBufferBackend(LLGL::RenderSystem* renderSystem, int vertexCapacity)
+    LlglVertexBufferBackend::LlglVertexBufferBackend(LLGL::RenderSystem* renderSystem,
+                                                      LlglGraphicsBackend* owner, int vertexCapacity)
         : renderSystem_(renderSystem)
+        , owner_(owner)
         , vertexCapacity_(vertexCapacity > 0 ? vertexCapacity : 0)
     {
         if (renderSystem_ == nullptr)
@@ -262,7 +413,14 @@ namespace CNA::Internal::Backends::Llgl
 
     LlglVertexBufferBackend::~LlglVertexBufferBackend()
     {
-        if (renderSystem_ != nullptr && buffer_ != nullptr)
+        if (buffer_ == nullptr)
+            return;
+
+        // Handed to the backend rather than released here: a frame recorded earlier this tick may
+        // still refer to this buffer, and it is only submitted at Present().
+        if (owner_ != nullptr)
+            owner_->ScheduleBufferReleaseEXT(buffer_);
+        else if (renderSystem_ != nullptr)
             renderSystem_->Release(*buffer_);
     }
 
@@ -274,6 +432,8 @@ namespace CNA::Internal::Backends::Llgl
             return;
         }
 
+        ResolveVertexAttributes(strideInBytes);
+
         const std::size_t byteSize = static_cast<std::size_t>(vertexCount) * strideInBytes;
         if (buffer_ == nullptr || byteSize > byteCapacity_)
         {
@@ -284,6 +444,10 @@ namespace CNA::Internal::Backends::Llgl
             bufferDesc.size = byteSize;
             bufferDesc.stride = static_cast<std::uint32_t>(strideInBytes);
             bufferDesc.bindFlags = LLGL::BindFlags::VertexBuffer;
+            // The attributes go on the buffer as well as on the shader: OpenGL builds this
+            // buffer's vertex array from them, while Vulkan takes the layout from the shader. Both
+            // come from the same translation, so the two cannot drift apart.
+            bufferDesc.vertexAttribs = attributes_;
             buffer_ = renderSystem_->CreateBuffer(bufferDesc, data);
             if (buffer_ == nullptr)
                 throw std::runtime_error(std::string(kBackendName) + " backend: vertex buffer creation failed");
@@ -300,21 +464,78 @@ namespace CNA::Internal::Backends::Llgl
 
     void LlglVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
-        // Recorded rather than translated into LLGL vertex attributes: the sprite pipeline has its
-        // own fixed layout, and the 3D draw path that would consume a caller-supplied declaration
-        // does not exist yet. The shared interface makes this method mandatory precisely so the
-        // decision is explicit rather than an accident.
-        (void)vertexDeclaration;
+        // Stored, not translated yet: the translation needs the upload stride as a fallback for a
+        // declaration that reports none, and SetData() has not run at this point.
+        declaration_ = vertexDeclaration;
         hasDeclaration_ = true;
+    }
+
+    void LlglVertexBufferBackend::ResolveVertexAttributes(std::size_t strideInBytes)
+    {
+        attributes_.clear();
+
+        const auto stride = static_cast<std::uint32_t>(
+            declaration_.getVertexStrideProperty() > 0
+                ? static_cast<std::uint32_t>(declaration_.getVertexStrideProperty())
+                : static_cast<std::uint32_t>(strideInBytes));
+
+        if (hasDeclaration_ && !declaration_.GetVertexElements().empty())
+        {
+            for (const VertexElement& element : declaration_.GetVertexElements())
+            {
+                const char* name = nullptr;
+                std::uint32_t location = 0;
+                if (!MapVertexUsage(element.getVertexElementUsageProperty(), name, location))
+                {
+                    // Deliberately skipped rather than assigned some spare location: a usage no
+                    // shader in this backend declares has no correct location, and inventing one
+                    // would feed the wrong bytes to whatever input happened to sit there.
+                    continue;
+                }
+
+                LLGL::VertexAttribute attribute;
+                attribute.name = name;
+                attribute.format = MapVertexElementFormat(element.getVertexElementFormatProperty());
+                attribute.location = location;
+                attribute.offset = static_cast<std::uint32_t>(element.getOffsetProperty());
+                attribute.stride = stride;
+                attributes_.push_back(attribute);
+            }
+            return;
+        }
+
+        // No declaration: recognise the one layout the colour-only 3D path is defined for
+        // (VertexPositionColor -- Vector3 position then a packed Color, 16 bytes). Anything else
+        // is left empty, and the draw path refuses it by name instead of guessing.
+        if (strideInBytes == 16)
+        {
+            LLGL::VertexAttribute position;
+            position.name = "position";
+            position.format = LLGL::Format::RGB32Float;
+            position.location = 0;
+            position.offset = 0;
+            position.stride = stride;
+
+            LLGL::VertexAttribute color;
+            color.name = "color";
+            color.format = LLGL::Format::RGBA8UNorm;
+            color.location = 1;
+            color.offset = 12;
+            color.stride = stride;
+
+            attributes_ = {position, color};
+        }
     }
 
     // -----------------------------------------------------------------------------------------
     // LlglIndexBufferBackend
     // -----------------------------------------------------------------------------------------
 
-    LlglIndexBufferBackend::LlglIndexBufferBackend(LLGL::RenderSystem* renderSystem, int indexCapacity,
+    LlglIndexBufferBackend::LlglIndexBufferBackend(LLGL::RenderSystem* renderSystem,
+                                                    LlglGraphicsBackend* owner, int indexCapacity,
                                                     bool thirtyTwoBit)
         : renderSystem_(renderSystem)
+        , owner_(owner)
         , indexCapacity_(indexCapacity > 0 ? indexCapacity : 0)
         , thirtyTwoBit_(thirtyTwoBit)
     {
@@ -324,7 +545,13 @@ namespace CNA::Internal::Backends::Llgl
 
     LlglIndexBufferBackend::~LlglIndexBufferBackend()
     {
-        if (renderSystem_ != nullptr && buffer_ != nullptr)
+        if (buffer_ == nullptr)
+            return;
+
+        // Same deferral as the vertex buffer above, for the same reason.
+        if (owner_ != nullptr)
+            owner_->ScheduleBufferReleaseEXT(buffer_);
+        else if (renderSystem_ != nullptr)
             renderSystem_->Release(*buffer_);
     }
 
@@ -515,6 +742,7 @@ namespace CNA::Internal::Backends::Llgl
             throw std::runtime_error(std::string(kBackendName) + " backend: command buffer creation failed");
 
         CreateSpritePipelineResources();
+        CreatePrimitivePipelineResources();
 
         IGraphicsBackend::RegisterForWindow(window_, this);
     }
@@ -540,6 +768,39 @@ namespace CNA::Internal::Backends::Llgl
                 renderer_->Release(*entry.second);
         }
         samplerCache_.clear();
+
+        for (const auto& entry : primitivePipelineCache_)
+        {
+            if (entry.second != nullptr)
+                renderer_->Release(*entry.second);
+        }
+        primitivePipelineCache_.clear();
+
+        for (const auto& entry : primitiveVertexShaderCache_)
+        {
+            if (entry.second != nullptr)
+                renderer_->Release(*entry.second);
+        }
+        primitiveVertexShaderCache_.clear();
+
+        for (LLGL::Buffer* buffer : pendingBufferReleases_)
+        {
+            if (buffer != nullptr)
+                renderer_->Release(*buffer);
+        }
+        pendingBufferReleases_.clear();
+
+        for (LLGL::Buffer* buffer : transformBuffers_)
+        {
+            if (buffer != nullptr)
+                renderer_->Release(*buffer);
+        }
+        transformBuffers_.clear();
+
+        if (primitiveFragmentShader_ != nullptr)
+            renderer_->Release(*primitiveFragmentShader_);
+        if (primitiveLayout_ != nullptr)
+            renderer_->Release(*primitiveLayout_);
 
         if (spriteVertexBuffer_ != nullptr)
             renderer_->Release(*spriteVertexBuffer_);
@@ -663,10 +924,284 @@ namespace CNA::Internal::Backends::Llgl
             throw std::runtime_error(std::string(kBackendName) + " backend: sprite constant buffer creation failed");
     }
 
+    bool LlglGraphicsBackend::SupportsWireFrameEXT() const
+    {
+        // Module-dependent, and LLGL exposes no capability flag for it, so this is the empirical
+        // answer: verified drawing real wireframe edges on the OpenGL module, verified drawing
+        // nothing at all on the Vulkan one.
+        return module_ == Detail::RendererModule::OpenGL;
+    }
+
+    bool LlglGraphicsBackend::IsOpaqueBlendState() const
+    {
+        // XNA has no separate "blending on" switch: BlendState.Opaque is expressed as One/Zero
+        // with Add, arithmetically identical to blending being off. Deriving the enable bit from
+        // the factors themselves keeps both representations in agreement without depending on
+        // whether SetBlendEnabled() happened to be called first.
+        return static_cast<XnaBlend>(colorSrcBlend_) == XnaBlend::One &&
+               static_cast<XnaBlend>(colorDstBlend_) == XnaBlend::Zero &&
+               static_cast<XnaBlend>(alphaSrcBlend_) == XnaBlend::One &&
+               static_cast<XnaBlend>(alphaDstBlend_) == XnaBlend::Zero &&
+               static_cast<XnaBlendFunction>(colorBlendFunc_) == XnaBlendFunction::Add &&
+               static_cast<XnaBlendFunction>(alphaBlendFunc_) == XnaBlendFunction::Add;
+    }
+
     bool LlglGraphicsBackend::UsesConstantBlendFactorState() const
     {
         return UsesConstantBlendFactor(colorSrcBlend_) || UsesConstantBlendFactor(colorDstBlend_) ||
                UsesConstantBlendFactor(alphaSrcBlend_) || UsesConstantBlendFactor(alphaDstBlend_);
+    }
+
+    void LlglGraphicsBackend::CreatePrimitivePipelineResources()
+    {
+        const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
+
+        LLGL::ShaderDescriptor fragmentDesc;
+        fragmentDesc.type = LLGL::ShaderType::Fragment;
+        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
+        {
+            fragmentDesc.source = Shaders::kColored3dFragGlsl;
+            fragmentDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+        }
+        else
+        {
+            fragmentDesc.source = reinterpret_cast<const char*>(Shaders::kColored3dFragSpv);
+            fragmentDesc.sourceSize = sizeof(Shaders::kColored3dFragSpv);
+            fragmentDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
+            fragmentDesc.entryPoint = "main";
+        }
+
+        primitiveFragmentShader_ = renderer_->CreateShader(fragmentDesc);
+        if (primitiveFragmentShader_ == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: 3D fragment shader creation failed");
+        if (const LLGL::Report* report = primitiveFragmentShader_->GetReport())
+        {
+            if (report->HasErrors())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: 3D fragment shader compilation failed: " +
+                    (report->GetText() != nullptr ? report->GetText() : "no details"));
+            }
+        }
+
+        LLGL::PipelineLayoutDescriptor layoutDesc;
+        layoutDesc.bindings =
+        {
+            LLGL::BindingDescriptor{"Transform", LLGL::ResourceType::Buffer,
+                                    LLGL::BindFlags::ConstantBuffer, LLGL::StageFlags::VertexStage, 1},
+        };
+        primitiveLayout_ = renderer_->CreatePipelineLayout(layoutDesc);
+        if (primitiveLayout_ == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: 3D pipeline layout creation failed");
+    }
+
+    LLGL::Shader* LlglGraphicsBackend::AcquirePrimitiveVertexShader(
+        const std::vector<LLGL::VertexAttribute>& attributes)
+    {
+        const std::uint64_t key = MakeVertexLayoutKey(attributes);
+        const auto cached = primitiveVertexShaderCache_.find(key);
+        if (cached != primitiveVertexShaderCache_.end())
+            return cached->second;
+
+        const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
+
+        LLGL::ShaderDescriptor vertexDesc;
+        vertexDesc.type = LLGL::ShaderType::Vertex;
+        if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
+        {
+            vertexDesc.source = Shaders::kColored3dVertGlsl;
+            vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
+        }
+        else
+        {
+            vertexDesc.source = reinterpret_cast<const char*>(Shaders::kColored3dVertSpv);
+            vertexDesc.sourceSize = sizeof(Shaders::kColored3dVertSpv);
+            vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
+            vertexDesc.entryPoint = "main";
+        }
+        vertexDesc.vertex.inputAttribs = attributes;
+
+        LLGL::Shader* shader = renderer_->CreateShader(vertexDesc);
+        if (shader == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: 3D vertex shader creation failed");
+        if (const LLGL::Report* report = shader->GetReport())
+        {
+            if (report->HasErrors())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: 3D vertex shader compilation failed: " +
+                    (report->GetText() != nullptr ? report->GetText() : "no details"));
+            }
+        }
+
+        primitiveVertexShaderCache_.emplace(key, shader);
+        return shader;
+    }
+
+    LLGL::PipelineState* LlglGraphicsBackend::AcquirePrimitivePipeline(
+        const LlglVertexBufferBackend& vertexBuffer, PrimitiveType primitive, bool scissorEnabled)
+    {
+        const std::vector<LLGL::VertexAttribute>& attributes = vertexBuffer.GetVertexAttributes();
+
+        std::uint64_t key = MakeVertexLayoutKey(attributes);
+        key = key * 8u + static_cast<std::uint64_t>(static_cast<int>(primitive) & 0x7);
+        key = key * 2u + (depthTestEnabled_ ? 1u : 0u);
+        key = key * 2u + (depthWriteEnabled_ ? 1u : 0u);
+        key = key * 8u + static_cast<std::uint64_t>(depthCompareFunction_ & 0x7);
+        key = key * 4u + static_cast<std::uint64_t>(cullMode_ & 0x3);
+        key = key * 2u + static_cast<std::uint64_t>(fillMode_ & 0x1);
+        key = key * 2u + (scissorEnabled ? 1u : 0u);
+        key = key * 1024u + (MakeBlendPipelineKey(scissorEnabled) & 0x3FFu);
+
+        const auto cached = primitivePipelineCache_.find(key);
+        if (cached != primitivePipelineCache_.end())
+            return cached->second;
+
+        LLGL::GraphicsPipelineDescriptor pipelineDesc;
+        pipelineDesc.debugName = "CNA.Colored3D";
+        pipelineDesc.vertexShader = AcquirePrimitiveVertexShader(attributes);
+        pipelineDesc.fragmentShader = primitiveFragmentShader_;
+        pipelineDesc.pipelineLayout = primitiveLayout_;
+        pipelineDesc.renderPass = swapChain_->GetRenderPass();
+        pipelineDesc.primitiveTopology = MapPrimitiveTopology(primitive);
+        pipelineDesc.depth.testEnabled = depthTestEnabled_;
+        pipelineDesc.depth.writeEnabled = depthWriteEnabled_;
+        pipelineDesc.depth.compareOp = MapCompareFunction(depthCompareFunction_);
+        pipelineDesc.rasterizer.multiSampleEnabled = (swapChain_->GetSamples() > 1);
+        pipelineDesc.rasterizer.scissorTestEnabled = scissorEnabled;
+        pipelineDesc.rasterizer.cullMode = MapCullMode(cullMode_);
+        if (static_cast<XnaFillMode>(fillMode_) == XnaFillMode::WireFrame && !SupportsWireFrameEXT())
+        {
+            // LLGL's Vulkan module does not enable the device feature a line polygon mode needs, and
+            // the request does not fail there -- it draws nothing at all, neither edges nor fill
+            // (measured, not assumed). Silently rendering an empty frame for a state the caller
+            // explicitly asked for is exactly the failure mode this project refuses.
+            NotYetImplemented(kBackendName, "FillMode::WireFrame on the Vulkan renderer module");
+        }
+        pipelineDesc.rasterizer.polygonMode = MapFillMode(fillMode_);
+        // XNA calls a clockwise winding front-facing, and it means clockwise ON SCREEN. Two Y
+        // flips cancel out on the way here -- LLGL's clip space is Y-up, and its Vulkan viewport is
+        // submitted with a negated height -- so the winding the rasterizer sees is the winding on
+        // screen, and front-facing is simply "not counter-clockwise". Verified rather than
+        // reasoned: with frontCCW true, CullClockwiseFace left a screen-clockwise triangle on
+        // screen, which is the opposite of what XNA does.
+        pipelineDesc.rasterizer.frontCCW = false;
+        pipelineDesc.blend.blendFactorDynamic = UsesConstantBlendFactorState();
+        pipelineDesc.blend.targets[0].blendEnabled = !IsOpaqueBlendState();
+        pipelineDesc.blend.targets[0].srcColor = MapBlendFactor(colorSrcBlend_);
+        pipelineDesc.blend.targets[0].dstColor = MapBlendFactor(colorDstBlend_);
+        pipelineDesc.blend.targets[0].colorArithmetic = MapBlendFunction(colorBlendFunc_);
+        pipelineDesc.blend.targets[0].srcAlpha = MapBlendFactor(alphaSrcBlend_);
+        pipelineDesc.blend.targets[0].dstAlpha = MapBlendFactor(alphaDstBlend_);
+        pipelineDesc.blend.targets[0].alphaArithmetic = MapBlendFunction(alphaBlendFunc_);
+        pipelineDesc.blend.targets[0].colorMask = MapColorWriteMask(colorWriteChannels_);
+
+        LLGL::PipelineState* pipeline = renderer_->CreatePipelineState(pipelineDesc);
+        if (pipeline == nullptr)
+            throw std::runtime_error(std::string(kBackendName) + " backend: 3D pipeline creation failed");
+        if (const LLGL::Report* report = pipeline->GetReport())
+        {
+            if (report->HasErrors())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: 3D pipeline link failed: " +
+                    (report->GetText() != nullptr ? report->GetText() : "no details"));
+            }
+        }
+
+        primitivePipelineCache_.emplace(key, pipeline);
+        return pipeline;
+    }
+
+    void LlglGraphicsBackend::QueuePrimitives(const LlglVertexBufferBackend& vertexBuffer,
+                                               const LlglIndexBufferBackend* indexBuffer,
+                                               const Matrix& world, const Matrix& view,
+                                               const Matrix& projection,
+                                               PrimitiveType primitive, int primitiveCount,
+                                               int vertexStart, int startIndex, int baseVertex)
+    {
+        if (primitiveCount <= 0)
+            return;
+
+        if (vertexBuffer.GetLlglBuffer() == nullptr || vertexBuffer.GetVertexCount() <= 0)
+            throw std::runtime_error(std::string(kBackendName) + " backend: the vertex buffer holds no data");
+
+        const std::vector<LLGL::VertexAttribute>& attributes = vertexBuffer.GetVertexAttributes();
+        if (attributes.empty())
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: this vertex layout is not supported by the "
+                "colour-only 3D path (stride " + std::to_string(vertexBuffer.GetStride()) +
+                " with no vertex declaration). Supply a VertexDeclaration, or use a "
+                "VertexPositionColor layout.");
+        }
+
+        const int elementCount = CountElementsForPrimitives(primitive, primitiveCount);
+
+        // The matrix is combined here, once per draw, in XNA's own row-vector order. ToColumnMajor
+        // then writes the row-major storage out verbatim, which GLSL reads as column-major -- the
+        // transpose, i.e. exactly the column-vector form the shader multiplies with.
+        const Matrix combined = world * view * projection;
+        float matrix[16] = {};
+        combined.ToColumnMajor(matrix);
+
+        // An XNA projection puts depth in [0,1] (the Direct3D convention). A render system whose
+        // clip space is [-1,+1] would compress every scene into the upper half of its depth range
+        // and stop clipping anything between the camera and the near plane, so the correction is
+        // folded into this matrix rather than duplicated in a second shader variant.
+        if (renderer_->GetRenderingCaps().clippingRange == LLGL::ClippingRange::MinusOneToOne)
+        {
+            for (int column = 0; column < 4; ++column)
+            {
+                float& z = matrix[column * 4 + 2];
+                const float w = matrix[column * 4 + 3];
+                z = 2.0f * z - w;
+            }
+        }
+
+        const auto transformIndex = static_cast<std::uint32_t>(transformData_.size() / 16);
+        transformData_.insert(transformData_.end(), std::begin(matrix), std::end(matrix));
+
+        std::int32_t scissor[4] = {0, 0, 0, 0};
+        const bool scissorEnabled = ComputeEffectiveScissor(scissor);
+
+        FrameCommand command;
+        command.kind = FrameCommand::Kind::Primitives;
+        command.vertexBuffer = vertexBuffer.GetLlglBuffer();
+        command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled);
+        command.transformIndex = transformIndex;
+        command.vertexCount = static_cast<std::uint32_t>(elementCount);
+        command.firstVertex = static_cast<std::uint32_t>(std::max(0, vertexStart));
+        command.firstIndex = static_cast<std::uint32_t>(std::max(0, startIndex));
+        command.baseVertex = baseVertex;
+        std::memcpy(command.blendFactor, blendFactor_, sizeof(command.blendFactor));
+        command.usesBlendFactor = UsesConstantBlendFactorState();
+        std::memcpy(command.scissor, scissor, sizeof(command.scissor));
+        command.scissorEnabled = scissorEnabled;
+
+        if (indexBuffer != nullptr)
+        {
+            if (indexBuffer->GetLlglBuffer() == nullptr || indexBuffer->GetIndexCount() <= 0)
+                throw std::runtime_error(std::string(kBackendName) + " backend: the index buffer holds no data");
+            if (startIndex + elementCount > indexBuffer->GetIndexCount())
+            {
+                throw std::runtime_error(
+                    std::string(kBackendName) + " backend: the draw needs indices [" +
+                    std::to_string(startIndex) + ", " + std::to_string(startIndex + elementCount) +
+                    ") but the buffer holds " + std::to_string(indexBuffer->GetIndexCount()));
+            }
+            command.indexBuffer = indexBuffer->GetLlglBuffer();
+        }
+        else if (vertexStart + elementCount > vertexBuffer.GetVertexCount())
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: the draw needs vertices [" +
+                std::to_string(vertexStart) + ", " + std::to_string(vertexStart + elementCount) +
+                ") but the buffer holds " + std::to_string(vertexBuffer.GetVertexCount()));
+        }
+
+        frameCommands_.push_back(command);
+        backbufferCacheValid_ = false;
     }
 
     std::uint64_t LlglGraphicsBackend::MakeBlendPipelineKey(bool scissorEnabled) const
@@ -692,18 +1227,6 @@ namespace CNA::Internal::Backends::Llgl
         if (cached != pipelineCache_.end())
             return cached->second;
 
-        // XNA has no separate "blending on" switch: BlendState.Opaque is expressed as One/Zero
-        // with Add, arithmetically identical to blending being off. Deriving the enable bit from
-        // the factors themselves keeps both representations in agreement without depending on
-        // whether SetBlendEnabled() happened to be called first.
-        const bool opaqueFactors =
-            static_cast<XnaBlend>(colorSrcBlend_) == XnaBlend::One &&
-            static_cast<XnaBlend>(colorDstBlend_) == XnaBlend::Zero &&
-            static_cast<XnaBlend>(alphaSrcBlend_) == XnaBlend::One &&
-            static_cast<XnaBlend>(alphaDstBlend_) == XnaBlend::Zero &&
-            static_cast<XnaBlendFunction>(colorBlendFunc_) == XnaBlendFunction::Add &&
-            static_cast<XnaBlendFunction>(alphaBlendFunc_) == XnaBlendFunction::Add;
-
         LLGL::GraphicsPipelineDescriptor pipelineDesc;
         pipelineDesc.debugName = "CNA.Sprite";
         pipelineDesc.vertexShader = spriteVertexShader_;
@@ -723,7 +1246,7 @@ namespace CNA::Internal::Backends::Llgl
         // unconditionally would make every draw depend on a call that the overwhelming majority of
         // blend states have no use for.
         pipelineDesc.blend.blendFactorDynamic = UsesConstantBlendFactorState();
-        pipelineDesc.blend.targets[0].blendEnabled = !opaqueFactors;
+        pipelineDesc.blend.targets[0].blendEnabled = !IsOpaqueBlendState();
         pipelineDesc.blend.targets[0].srcColor = MapBlendFactor(colorSrcBlend_);
         pipelineDesc.blend.targets[0].dstColor = MapBlendFactor(colorDstBlend_);
         pipelineDesc.blend.targets[0].colorArithmetic = MapBlendFunction(colorBlendFunc_);
@@ -964,17 +1487,17 @@ namespace CNA::Internal::Backends::Llgl
 
     std::unique_ptr<IVertexBufferBackend> LlglGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        return std::make_unique<LlglVertexBufferBackend>(renderer_.get(), vertex_capacity);
+        return std::make_unique<LlglVertexBufferBackend>(renderer_.get(), this, vertex_capacity);
     }
 
     std::unique_ptr<IIndexBufferBackend> LlglGraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<LlglIndexBufferBackend>(renderer_.get(), index_capacity, false);
+        return std::make_unique<LlglIndexBufferBackend>(renderer_.get(), this, index_capacity, false);
     }
 
     std::unique_ptr<IIndexBufferBackend> LlglGraphicsBackend::CreateIndexBuffer32(int index_capacity)
     {
-        return std::make_unique<LlglIndexBufferBackend>(renderer_.get(), index_capacity, true);
+        return std::make_unique<LlglIndexBufferBackend>(renderer_.get(), this, index_capacity, true);
     }
 
     void LlglGraphicsBackend::QueueClear(long flags, const float color[4], float depth, std::uint32_t stencil)
@@ -1213,6 +1736,25 @@ namespace CNA::Internal::Backends::Llgl
         };
         renderer_->WriteBuffer(*spriteProjectionBuffer_, 0, projection, sizeof(projection));
 
+        // One constant buffer per 3D draw recorded this frame. The pool only ever grows, so a
+        // steady-state frame allocates nothing.
+        const std::size_t transformCount = transformData_.size() / 16;
+        while (transformBuffers_.size() < transformCount)
+        {
+            LLGL::BufferDescriptor transformDesc;
+            transformDesc.size = sizeof(float) * 16;
+            transformDesc.bindFlags = LLGL::BindFlags::ConstantBuffer;
+            LLGL::Buffer* buffer = renderer_->CreateBuffer(transformDesc);
+            if (buffer == nullptr)
+                throw std::runtime_error(std::string(kBackendName) + " backend: transform buffer creation failed");
+            transformBuffers_.push_back(buffer);
+        }
+        for (std::size_t index = 0; index < transformCount; ++index)
+        {
+            renderer_->WriteBuffer(*transformBuffers_[index], 0,
+                                   transformData_.data() + index * 16, sizeof(float) * 16);
+        }
+
         if (spriteVertexData_.empty())
             return;
 
@@ -1240,6 +1782,37 @@ namespace CNA::Internal::Backends::Llgl
         }
     }
 
+    void LlglGraphicsBackend::ScheduleBufferReleaseEXT(LLGL::Buffer* buffer)
+    {
+        if (buffer == nullptr)
+            return;
+
+        // Nothing recorded refers to it, so there is nothing to wait for.
+        if (frameCommands_.empty())
+        {
+            renderer_->Release(*buffer);
+            return;
+        }
+
+        pendingBufferReleases_.push_back(buffer);
+    }
+
+    void LlglGraphicsBackend::ReleasePendingBuffers()
+    {
+        if (pendingBufferReleases_.empty())
+            return;
+
+        // The submitted frame may still be reading these buffers. Waiting only happens on the
+        // frames where a resource actually died, which is not a hot path.
+        queue_->WaitIdle();
+        for (LLGL::Buffer* buffer : pendingBufferReleases_)
+        {
+            if (buffer != nullptr)
+                renderer_->Release(*buffer);
+        }
+        pendingBufferReleases_.clear();
+    }
+
     void LlglGraphicsBackend::ReplayFrameCommands()
     {
         for (const FrameCommand& command : frameCommands_)
@@ -1253,6 +1826,36 @@ namespace CNA::Internal::Backends::Llgl
                     clearValue.depth = command.clearDepth;
                     clearValue.stencil = command.clearStencil;
                     commands_->Clear(command.clearFlags, clearValue);
+                    break;
+                }
+
+                case FrameCommand::Kind::Primitives:
+                {
+                    if (command.vertexBuffer == nullptr || command.pipeline == nullptr ||
+                        command.transformIndex >= transformBuffers_.size())
+                    {
+                        break;
+                    }
+
+                    commands_->SetPipelineState(*command.pipeline);
+                    if (command.usesBlendFactor)
+                        commands_->SetBlendFactor(command.blendFactor);
+                    if (command.scissorEnabled)
+                    {
+                        commands_->SetScissor(LLGL::Scissor{command.scissor[0], command.scissor[1],
+                                                            command.scissor[2], command.scissor[3]});
+                    }
+                    commands_->SetResource(0, *transformBuffers_[command.transformIndex]);
+                    commands_->SetVertexBuffer(*command.vertexBuffer);
+                    if (command.indexBuffer != nullptr)
+                    {
+                        commands_->SetIndexBuffer(*command.indexBuffer);
+                        commands_->DrawIndexed(command.vertexCount, command.firstIndex, command.baseVertex);
+                    }
+                    else
+                    {
+                        commands_->Draw(command.vertexCount, command.firstVertex);
+                    }
                     break;
                 }
 
@@ -1315,9 +1918,11 @@ namespace CNA::Internal::Backends::Llgl
         }
 
         swapChain_->Present();
+        ReleasePendingBuffers();
 
         frameCommands_.clear();
         spriteVertexData_.clear();
+        transformData_.clear();
         frameSubmitted_ = false;
         backbufferCacheValid_ = false;
     }
@@ -1371,9 +1976,11 @@ namespace CNA::Internal::Backends::Llgl
         commands_->End();
         queue_->Submit(*commands_);
         queue_->WaitIdle();
+        ReleasePendingBuffers();
 
         frameCommands_.clear();
         spriteVertexData_.clear();
+        transformData_.clear();
         frameSubmitted_ = true;
 
         backbufferCache_.assign(
@@ -1561,10 +2168,28 @@ namespace CNA::Internal::Backends::Llgl
                          static_cast<float>(h) == rect.logicalHeight);
     }
 
+    void LlglGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                      int depthFunc,
+                                                      bool stencilEnable, int /*stencilFunc*/,
+                                                      int /*stencilPass*/, int /*stencilFail*/,
+                                                      int /*stencilDepthFail*/,
+                                                      int /*stencilMask*/, int /*stencilWriteMask*/,
+                                                      int /*referenceStencil*/,
+                                                      bool /*twoSidedStencilMode*/,
+                                                      int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
+                                                      int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+    {
+        depthTestEnabled_ = depthEnable;
+        depthWriteEnabled_ = depthWriteEnable;
+        depthCompareFunction_ = depthFunc;
+        // Stencil is deliberately not applied: the swap chain carries a real stencil buffer and
+        // ClearStencil works, but no draw path consumes a stencil test yet, so translating the
+        // eight stencil fields into a pipeline nothing reads would only look like support.
+        stencilRequested_ = stencilEnable;
+    }
+
     void LlglGraphicsBackend::SetDepthTestEnabled(bool enabled)
     {
-        // Recorded for the 3D pipeline. Sprites never depth-test, so the value cannot change what
-        // this backend draws today.
         depthTestEnabled_ = enabled;
     }
 
@@ -1580,18 +2205,103 @@ namespace CNA::Internal::Backends::Llgl
         depthWriteEnabled_ = enabled;
     }
 
-    void LlglGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
-                                                     const Matrix&, const Matrix&, const Matrix&,
-                                                     PrimitiveType, int)
+    void LlglGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                                     const Matrix& world, const Matrix& view,
+                                                     const Matrix& projection,
+                                                     PrimitiveType primitive, int primitiveCount)
     {
-        NotYetImplemented(kBackendName, "3D primitive drawing");
+        const auto* vertexBuffer = dynamic_cast<const LlglVertexBufferBackend*>(&vb);
+        if (vertexBuffer == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: the vertex buffer belongs to another backend");
+        }
+
+        QueuePrimitives(*vertexBuffer, nullptr, world, view, projection, primitive, primitiveCount,
+                        0, 0, 0);
     }
 
-    void LlglGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&,
-                                                            const Matrix&, const Matrix&, const Matrix&,
-                                                            PrimitiveType, int)
+    void LlglGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+                                                            const IIndexBufferBackend& ib,
+                                                            const Matrix& world, const Matrix& view,
+                                                            const Matrix& projection,
+                                                            PrimitiveType primitive, int primitiveCount)
     {
-        NotYetImplemented(kBackendName, "indexed 3D primitive drawing");
+        const auto* vertexBuffer = dynamic_cast<const LlglVertexBufferBackend*>(&vb);
+        const auto* indexBuffer = dynamic_cast<const LlglIndexBufferBackend*>(&ib);
+        if (vertexBuffer == nullptr || indexBuffer == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: the vertex or index buffer belongs to another backend");
+        }
+
+        QueuePrimitives(*vertexBuffer, indexBuffer, world, view, projection, primitive, primitiveCount,
+                        0, 0, 0);
+    }
+
+    void LlglGraphicsBackend::RejectUnsupportedDrawParams(const GpuDrawParams& params) const
+    {
+        // The colour-only path can honour exactly one effect configuration: vertex colours, no
+        // texture, no lighting. Everything else has to fail by name rather than quietly render
+        // something that merely looks plausible -- an untextured surface where a texture was asked
+        // for is a wrong answer, not a degraded one.
+        const char* unsupported = nullptr;
+        if (params.textureEnabled || params.texture0 != nullptr) unsupported = "textured effects";
+        else if (params.lightingEnabled)                          unsupported = "lighting";
+        else if (params.dualTexture)                              unsupported = "DualTextureEffect";
+        else if (params.envMapping)                               unsupported = "EnvironmentMapEffect";
+        else if (params.skinned)                                  unsupported = "SkinnedEffect";
+        else if (params.pbr)                                      unsupported = "PbrEffect";
+        else if (params.fogEnabled)                               unsupported = "fog";
+        else if (params.customEffectBackend != nullptr)           unsupported = "custom ShaderEffect";
+        else if (params.instanceCount > 1)                        unsupported = "instanced drawing";
+
+        if (unsupported != nullptr)
+            NotYetImplemented(kBackendName, unsupported);
+    }
+
+    void LlglGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                                                const Matrix& world, const Matrix& view,
+                                                const Matrix& projection,
+                                                PrimitiveType primitive, int primitiveCount,
+                                                const GpuDrawParams& params)
+    {
+        RejectUnsupportedDrawParams(params);
+
+        const auto* vertexBuffer = dynamic_cast<const LlglVertexBufferBackend*>(&vb);
+        if (vertexBuffer == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: the vertex buffer belongs to another backend");
+        }
+
+        QueuePrimitives(*vertexBuffer, nullptr, world, view, projection, primitive, primitiveCount,
+                        params.vertexStart, 0, 0);
+    }
+
+    void LlglGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb,
+                                                       const IIndexBufferBackend& ib,
+                                                       const Matrix& world, const Matrix& view,
+                                                       const Matrix& projection,
+                                                       PrimitiveType primitive, int primitiveCount,
+                                                       const GpuDrawParams& params)
+    {
+        RejectUnsupportedDrawParams(params);
+
+        const auto* vertexBuffer = dynamic_cast<const LlglVertexBufferBackend*>(&vb);
+        const auto* indexBuffer = dynamic_cast<const LlglIndexBufferBackend*>(&ib);
+        if (vertexBuffer == nullptr || indexBuffer == nullptr)
+        {
+            throw std::runtime_error(
+                std::string(kBackendName) + " backend: the vertex or index buffer belongs to another backend");
+        }
+
+        // startIndex and baseVertex are honoured rather than dropped: the shared interface's own
+        // default implementation forwards neither, which silently turns a sub-range draw into a
+        // draw of the wrong range (a defect other backends in this project have had filed against
+        // them by name).
+        QueuePrimitives(*vertexBuffer, indexBuffer, world, view, projection, primitive, primitiveCount,
+                        0, params.startIndex, params.baseVertex);
     }
 
     bool LlglGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
@@ -1609,12 +2319,18 @@ namespace CNA::Internal::Backends::Llgl
                 return static_cast<bool>(renderer_) &&
                        renderer_->GetRenderingCaps().limits.maxAnisotropy > 1;
 
-            // Everything below belongs to the 3D pipeline, render targets, or custom effects --
-            // none of which this backend implements yet. Reporting false is what lets a caller ask
-            // instead of discovering the gap through an exception.
+            // The colour-only 3D path is real: vertex and index buffers draw, with depth test,
+            // depth write, cull mode and fill mode all applied (LLGL-24). The stock effect family
+            // is not implemented yet, which is LLGL-25's scope, not this capability's.
             case CNA::GraphicsCapability::ThreeD:
-            case CNA::GraphicsCapability::MultipleRenderTargets:
+                return true;
+
             case CNA::GraphicsCapability::WireFrame:
+                return SupportsWireFrameEXT();
+
+            // Everything below is still unimplemented. Reporting false is what lets a caller ask
+            // instead of discovering the gap through an exception.
+            case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::OcclusionQuery:
             case CNA::GraphicsCapability::CustomEffects:
             case CNA::GraphicsCapability::Texture3D:
