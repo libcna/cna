@@ -2505,6 +2505,7 @@ existing task.
 | REMED-GFX-180 | SDL_GPU: `examples/sdlgpu_renderstate_test.cpp` (`SdlGpu_RenderState`) aborts before its FIRST check with `System::InvalidOperationException: Cannot present while render targets are bound`. Deterministic — 3/3 standalone runs, zero `[PASS]`/`[FAIL]` lines emitted, so nothing in its own try/catch around `RunAll` is ever reached. NOT caused by REMED-GFX-176: it reproduces identically with the pre-GFX-176 backend rebuilt from `249e9f9f`, that session's starting HEAD. The reported exception is a SECONDARY one raised from the present path because a render target was still bound when the frame ended; the primary failure that unwound out of `Draw` without unbinding is masked by it and was deliberately not diagnosed under GFX-176's boundary. | LOW | P3 | REMED-GFX-176 regression gates | OPEN (isolated 2026-07-31 during REMED-GFX-176) |
 | REMED-GFX-181 | Bgfx: `BgfxGraphicsBackend`'s two `EnvironmentMapEffect` submit sites call the FOUR-argument `bgfx::setTexture(1, envMapSampler_, cubeHandle)` and omit `_flags`, so bgfx falls back to the cube texture's own creation flags (`BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP`, linear) and `GraphicsDevice.SamplerStates[1]` never reaches the reflection cube. The base slot one function away does pass `samplerFlags_[0]`. Measured on REMED-GFX-173's fixture at **BGFX 62/104**, byte-identically the failure SET SDL_GPU had before that task: every Point-mode check reports the whole image off-palette and A4 reports differing=0. | LOW | P3 | REMED-GFX-173 cross-backend controls | **DONE 2026-07-31 — THE TICKET IS RIGHT AND THE CORRECTION IS THE TWO LINES IT IMPLIES; WHAT HAD TO BE PROVEN FIRST IS WHAT AN OMITTED `_flags` MEANS. UINT32_MAX IS A SENTINEL, NOT A FLAG WORD: `EncoderImpl::setTexture` STORES `BGFX_SAMPLER_INTERNAL_DEFAULT` AND EVERY RENDERER RESOLVES `0 == (INTERNAL_DEFAULT & _flags) ? _flags : m_flags`, SO AN EXPLICIT WORD **REPLACES** THE CREATION STATE AND NEVER COMBINES WITH IT. `ApplySamplerState` ALREADY HELD GFX-170'S COMPLETE NINE-ORDINAL TRANSLATION AND `applySamplerStatesToBackend` ALREADY DROVE IT FOR EVERY SLOT — `samplerFlags_[1]` WAS CORRECT AND WAS DISCARDED ONE LINE BEFORE THE SUBMIT. NO NEW STATE, NO NEW CAPTURE, NO SECOND TABLE. SUBMIT-SITE COUNT VERIFIED NOT ASSUMED: EXACTLY TWO, AND `DrawInstancedPrimitivesEx` HAS NO ENV-MAP BRANCH AT ALL. BGFX SUBMITS IMMEDIATELY AND **BGFX ITSELF** SNAPSHOTS THE BIND STATE AT `submit()`, SO READING `samplerFlags_[1]` THERE **IS** THE PER-DRAW CAPTURE — NO CNA-SIDE COMMAND STRUCT EXISTS, WHICH IS WHAT SEPARATES THIS FROM GFX-173'S SHAPE; LEG F1 PROVES IT. NEW `CNA_BGFX_ENVMAP_TRACE` OVER 86 BINDS: BEFORE, `effective1` IS `DEFAULT->creation` ON ALL 86 (TWO DISTINCT VALUES) AGAINST TWELVE DISTINCT `captured1`; AFTER, EXPLICIT ON ALL 86, TWELVE DISTINCT, AND `captured1 == effective1` WITH ZERO MISMATCHES. 62/104 -> 104/104. THE FAILING SET WAS EXACTLY THE POINT-MAGNIFYING ORDINALS {1,4,5,6} BECAUSE THE FALLBACK IS LINEAR AND COINCIDES WITH {0,3,7,8}. LEG C1 PASSED **BEFORE** THE FIX, SO THIS WAS NEVER SLOT-0 INHERITANCE — THAT IS WHAT SEPARATES IT FROM WEBGPU'S GFX-172. CARDINALITY BYTE-IDENTICAL PRE/POST (86 BINDS, 4 VIEWS, 76/10 PATHS, 86 EXPLICIT slot-0); ONLY FLAG-BEARING SLOT-1 CALLS MOVE, 0 -> 86. 15 PRE-EXISTING BGFX ENV-MAP/CUBE FIXTURES ALL PASSED UNFIXED AND **NOT ONE EVER SETS `SamplerStates[1]`**; ELEVEN ALSO USE A 1x1 SOLID CUBE. NONE ASSERTS ANYTHING FALSE, SO NONE WAS CHANGED. UBSAN AND ASAN 104/104 WITH ZERO ERRORS; THE 103852 B / 453-ALLOCATION LEAK IS BYTE-IDENTICAL PRE/POST WITH ZERO CNA FRAMES. BGFX SHARD 162/168 BEFORE **AND** AFTER, THE SAME SIX FAILURES PROVEN PRE-EXISTING BY A NARROW RESTORE TO 38c4e09a. CONTROLS: SDL_GPU 104/104, VULKAN 104/104, EASYGL 104/104, HEADLESS 8/8, WEBGPU 74/104 (GFX-172 UNCHANGED), SOFTWARE 66/100 (GFX-182 UNCHANGED). ACTIVE RENDERER OPENGL 2.1; THE BGFX VULKAN ROUTE IS REPORTED **UNTESTED** BECAUSE XVFB HAS NO DRI3. ONLY BGFX PRODUCTION CHANGED. NO NEW FINDINGS.** |
 | REMED-GFX-182 | Software: `SoftwareGraphicsBackend::SampleCubeMap` takes no sampler state at all — it ends in a single clamped `static_cast<int>` texel fetch — so an `EnvironmentMapEffect` reflection cube is ALWAYS point-sampled whatever `GraphicsDevice.SamplerStates[1]` holds. This is the shape REMED-GFX-150 replaced on the 2D path (`SampleTexture`, with explicit filter selection and address transform) and did not reach on the cube path. Measured on REMED-GFX-173's fixture at **SOFTWARE 66/100** (leg L skipped, no RenderTargetCube): every Linear-mode check reports 0 interpolated pixels and 16 distinct colours. NOT slot-0 inheritance — C1 passes with differing=0, which is what separates it from WebGPU's REMED-GFX-172. | LOW | P3 | REMED-GFX-173 cross-backend controls | **DONE 2026-07-31 — THE TICKET IS RIGHT AND NAMES THE MECHANISM EXACTLY; WHAT IT COULD NOT SAY IS THAT THE CAPTURE WAS ALREADY THERE AND ONLY THE CONSUMPTION WAS MISSING. SOFTWARE RASTERIZES IMMEDIATELY AND BOTH DRAW ENTRY POINTS ALREADY READ `GetSamplerState(0)`/`GetSamplerState(1)` AT THE PUBLIC CALL AND SNAPSHOT THEM INTO `ShadedContext`, SO SLOT 1 WAS SITTING ONE LINE AWAY FROM `SampleCubeMap` AS AN IMMUTABLE PER-DRAW COPY — THE OPPOSITE OF GFX-173'S SDL_GPU SHAPE WHERE A WHOLE COMMAND FIELD HAD TO BE ADDED. FIX = A `CubeFaceSurface` VIEW OF THE SELECTED FACE THROUGH GFX-124'S COLOUR-SURFACE CAPABILITY, SO THE CUBE GOES THROUGH `SampleTexture` ITSELF: NO FILTER CODE, NO SECOND ORDINAL TABLE, NO `bool linear`, AND MIN/MAG, MIP AND ADDRESS ARE IDENTICAL FOR A CUBE AND A TEXTURE2D BY CONSTRUCTION. STAGES 1-2 UNCHANGED: FACE SELECTION AND THE PER-FACE UV PROJECTION WERE FACTORED OUT VERBATIM SO THE NEW PER-TRIANGLE LOD USES THE SAME CONVENTION, NOT A SECOND COPY. THREE SUPPORTING PIECES WERE EACH FORCED BY THE FIX: PER-FACE SUPPLIED-LEVEL TRACKING (GFX-135 ALLOCATES THE WHOLE CHAIN BUT ZEROED, SO GFX-175'S `storedLevels_` SEMANTICS HAD TO BE APPLIED PER FACE OR A DECLARED-BUT-UNWRITTEN CHAIN WOULD MINIFY INTO BLACK NOBODY UPLOADED); `TriangleCubeTexelRate` THROUGH A SHARED `ScreenSpaceTexelRate` (BYTE-IDENTICAL FOR 2D, ONCE PER TRIANGLE, NO ALLOCATION); AND `SampleLevel`'S BILINEAR REWRITTEN AS NESTED LERPS `a+(b-a)*t` BECAUSE THE WEIGHTED SUM `a*(1-t)+b*t` LANDS ONE ULP LOW WHEN THE TAPS AGREE AND THE TRUNCATING STORE THEN WRITES A BYTE LOWER — MEASURED, NOT GUESSED: ORDINALS 3 AND 6 GAVE `out=(26,48,167)` ON 8 OF 64 PIXELS OF A FLAT MIP LEVEL WHERE EVERY OTHER ORDINAL GAVE `(26,49,167)`. CUBE ADDRESSING STAYS FACE-LOCAL CLAMP, MATCHING THE 0-DIFFERING CLAMP/WRAP/MIRROR GFX-173 AND GFX-181 MEASURED ON EVERY GPU BACKEND; NO CONVENTION IS INVENTED AND THE CAPTURED MODE IS CARRIED IN THE TRACE. NEW `CNA_SOFTWARE_CUBE_TRACE`: distinctCaptured=12 AND distinctEffective **1 -> 8**, texelFetches 72544 -> 160072 OVER AN UNCHANGED 72544 CUBE SAMPLES; CARDINALITY IS THE CANONICAL MINIMUM — 1 FETCH FOR POINT+MIP-POINT, 4 FOR LINEAR, 2 FOR POINT ACROSS EXACTLY TWO ADJACENT LEVELS, 8 FOR LINEAR+MIP-LINEAR — WITH ZERO PER-SAMPLE ALLOCATION AND NO EXTRA DRAW/PASS/FRAME/READBACK. GFX-173'S FIXTURE **66/100 -> 100/100**; NEW `envmap_cube_sampler_state_test` **21/25 -> 25/25** ON SOFTWARE, THE FOUR MOVED CHECKS BEING EXACTLY THOSE NEEDING SLOT 1 TO REACH THE CUBE. 9 PRE-EXISTING SOFTWARE ENV-MAP FIXTURES ALL PASSED UNFIXED AND **NOT ONE EVER SETS `SamplerStates[1]` DIFFERENTLY FROM `SamplerStates[0]`**; NONE ASSERTS ANYTHING FALSE, SO NONE WAS CHANGED. ASAN AND UBSAN CLEAN ON BOTH FIXTURES AND ON GFX-150/174/175'S OWN, RUNTIMES PROVEN LINKED. SOFTWARE SHARD 49/50 -> 51/51, PROVEN BY A NARROW RESTORE. CONTROLS: SDL_GPU 104/104 + 24/24, VULKAN 104/104 + 24/24, BGFX 104/104, EASYGL 104/104, HEADLESS 8/8, WEBGPU 74/104 = THE UNCHANGED GFX-172 BOUNDARY. RENDERTARGETCUBE IS AN EXPLICIT SOFTWARE V1 BOUNDARY — THE OBJECT CONSTRUCTS BUT BINDING A FACE THROWS CLEANLY, SO NO CUBE TARGET CAN EVER HOLD CONTENT TO SAMPLE. ONLY SOFTWARE PRODUCTION CHANGED. NO NEW FINDINGS.** |
+| REMED-GFX-183 | WebGPU: `IndexedDrawDeferredTest.WebGpuTriangleStripAlternatesWindingBeforeCulling` fails — a triangle strip drawn under `CullCounterClockwise` and one under `CullClockwise` return INVERTED interior samples, so a strip's odd-indexed triangles are kept and culled the opposite way round from the D3D/XNA convention. Found while running REMED-GFX-172's regression gates and A/B-proven pre-existing at `8ffed33a`. A gtest unit outside the `ctest -L WebGPU` shard, which is why REMED-GFX-160's winding work did not surface it. | GRAPHICS | OPEN |
 | REMED-GFX-153 | Bgfx: REMED-GFX-067's bottom-up compensation is `std::swap(v1, v2)`, which only reverses rows INSIDE the source rectangle and so is correct only for a full-height source. Source rectangle (4,2,4,2) of an 8x4 target returns logical row 0 where row 2 is required. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg K1) |
 | REMED-GFX-154 | Bgfx: the first `GetData` of a multisampled `RenderTarget2D` returns 32/32 zero texels; a second read after any further target switch is byte-exact, and the non-multisampled read in the same frame is byte-exact. Resolve has not completed when the read is issued. | MEDIUM | P2 | — | OPEN (measured 2026-07-29 by REMED-GFX-147 leg L1) |
 | REMED-GFX-155 | Bgfx: a render target produced and unbound in this frame samples as entirely empty when the consumer draws to the BACKBUFFER (0/32, all 32 texels `(0,0,0,0)`), while the identical source sampled into another render target is byte-exact and an ordinary `Texture2D` in the same backbuffer batch is byte-exact too. | HIGH | P1 | — | **DONE 2026-07-29 — NOT A VISIBILITY, SYNCHRONIZATION OR RESOURCE-IDENTITY DEFECT: AN EXECUTION-ORDER ONE. BGFX RADIX-SORTS A FRAME'S DRAWS BY THEIR VIEW'S SORT POSITION, WHICH DEFAULTS TO THE NUMERIC VIEW ID, AND THIS BACKEND'S PARTITION PUTS THE BACKBUFFER AT 0 BELOW EVERY RENDER TARGET — SO THE CONSUMER EXECUTED BEFORE ITS OWN PRODUCER. MEASURED: THE CANONICAL FRAME USED VIEWS 1, 192, 0 IN PUBLIC ORDER AND EXECUTED THEM 0, 1, 192. FIXED BY MAKING THE IDS ASCEND WITH PUBLIC ORDER RATHER THAN BY REMAPPING BGFX'S SORT: A BIND CYCLE MAY KEEP ITS TARGET'S BASE VIEW ONLY WHEN THAT BASE IS ABOVE EVERY VIEW ALREADY USED THIS FRAME, OTHERWISE IT TAKES THE NEXT ORDERED SEGMENT (REMED-GFX-018/065'S OWN MONOTONIC POOL). A FIRST IMPLEMENTATION USING `bgfx::setViewOrder` WAS COMMITTED, MEASURED AND REPLACED — SAME PUBLIC RESULTS, LARGER BLAST RADIUS. NO `bgfx::frame()`, PRESENT, READBACK, WAIT, FLUSH OR SUBMIT-PER-SWITCH ADDED. VERIFIED STRUCTURALLY: EVERY TRACED FRAME'S VIEW SEQUENCE IS STRICTLY INCREASING, WHICH UNDER ASCENDING-ID EXECUTION IS THE CONTRACT. COST: ORDERING CONSUMES ONE SEGMENT ID PER OUT-OF-TURN BIND CYCLE, WHICH EXHAUSTED THE 63-ID POOL IN GFX-018'S OWN GATE, SO THE ID PARTITION WAS REBALANCED 192 -> 64 (191 -> 63 CONCURRENT RENDER TARGETS, 63 -> 190 ORDERED SEGMENTS PER FRAME). NEW DEDICATED FIXTURE 38/81 -> 81/81; GFX-151'S SHARED FIXTURE 37/37 -> 40/40 WITH LEGS D6 AND I2 FLIPPED FROM A DECLARED BOUNDARY TO AN ASSERTED CONTRACT. `ctest -R '^Bgfx'` 142/147, THE FIVE FAILURES A/B-PROVEN PRE-EXISTING. SEVEN CROSS-BACKEND CONTROLS GREEN; ASAN/UBSAN CLEAN WITH BOTH RUNTIMES PROVED LINKED; ALL FOURTEEN BACKEND LIBRARIES BUILD. TWO FALSE POSITIVES A/B-PROVEN AND STRENGTHENED — THE FIXTURE NAMED FOR THIS EXACT SEQUENCE ASSERTED ONLY "DID NOT CRASH" (3/5 -> 5/5), AND A SECOND CARRIED TWO `Present()` WORKAROUNDS FOR THIS DEFECT IN TEST CODE (54/81 -> 81/81 WITH THEM REMOVED). SPAWNED GFX-157 AND GFX-158.**
@@ -22482,3 +22483,293 @@ table was created, the cube face-selection convention is unchanged, and `audit/`
 losing a ULP over a uniform footprint — is not a separate finding: it is inside the same helper the
 cube path now shares, it was surfaced by this fix and only by this fix, and leaving it would have made
 Linear-over-a-flat-cube-level report a colour stored at no level. It is fixed here and recorded above.
+
+---
+
+## REMED-GFX-172 — WebGPU bound ONE sampler to the TWO texture views of both multi-texture families (2026-07-31)
+
+### The ticket, and where its scope was already right
+
+The ticket names `DualTexture3D`. A later scope update widened it to `EnvironmentMap3D` "same
+backend, same layout/WGSL root cause, same fix shape". **Both halves are right, and the two families
+turned out to be the IDENTICAL defect rather than two similar ones** — which is worth stating,
+because REMED-GFX-173 (SDL_GPU) had the opposite outcome: there the two families diverged and one
+fixture split into separate causes.
+
+### The authoritative slot mappings — measured, not assumed
+
+The task brief explicitly required establishing the DualTexture mapping from source rather than
+assuming it matches the EnvironmentMap numbering. It was read from FNA's own HLSL:
+
+| Effect | resource | declaration in FNA HLSL | public sampler slot |
+|---|---|---|---|
+| `DualTextureEffect` | `Texture` | `DECLARE_TEXTURE(Texture, 0)` | `SamplerStates[0]` |
+| `DualTextureEffect` | `Texture2` | `DECLARE_TEXTURE(Texture2, 1)` | `SamplerStates[1]` |
+| `EnvironmentMapEffect` | `Texture` | `DECLARE_TEXTURE(Texture, 0)` | `SamplerStates[0]` |
+| `EnvironmentMapEffect` | `EnvironmentMap` | `DECLARE_CUBEMAP(EnvironmentMap, 1)` | `SamplerStates[1]` |
+
+They DO agree. Cross-checked against CNA's own `DualTextureEffect::FillGpuDrawParams`, which assigns
+`Texture -> params.texture0` and `Texture2 -> params.texture1`.
+
+### The exact pre-fix shape, classified against the brief's own A–E options
+
+**Both families were A *and* D at the same time, and B, C and E were all FALSE.**
+
+| layer | `DualTexture3D` | `EnvironmentMap3D` |
+|---|---|---|
+| WGSL sampler declarations | ONE, `@group(1) @binding(0) var texSampler: sampler` | ONE, same declaration |
+| WGSL texture declarations | `tex0`/`tex1`, both `texture_2d<f32>` | `tex`, `texture_2d<f32>`; `envMap`, `texture_cube<f32>` |
+| both `textureSample` calls | pass `texSampler` | pass `texSampler` |
+| bind-group layout entries | 3 (sampler, view, view) | 3 (sampler, view, cube view) |
+| pipeline layout | group 0 `coloredBindGroupLayout_` + group 1 | group 0 UBO layout + group 1 |
+| command sampler fields | ONE `textureFilter/addressU/addressV/maxAnisotropy` | ONE, same names |
+| queue-time capture | `slotSamplers_[0]` only | `slotSamplers_[0]` only |
+| replay-time selection | one `GetOrCreateSlotSampler` call, used twice | one call, used twice |
+| bind-group cache key | **there is no bind-group cache** | **there is no bind-group cache** |
+
+Two of those rows decided the shape of the fix:
+
+* **There is no bind-group cache to key, invalidate or grow.** Bind groups are created per draw with
+  `wgpuDeviceCreateBindGroup` and pushed onto `pendingBindGroupReleases_`. The brief asked for
+  cache-key correctness; the honest answer is that the cache does not exist, and the new trace prints
+  `bgcache=none` so that stays measured rather than implied. Nothing was added — adding a cache would
+  have been scope the ticket does not carry.
+* **`slotSamplers_` is already a 16-slot array and `ApplySamplerState` already fills every slot.** The
+  public state was reaching the backend the whole time; only the two `Queue*Draw` functions never read
+  index 1. So the missing pieces were capture, declaration and binding — never state tracking.
+
+### Reproduction, before anything was fixed
+
+| fixture | WebGPU pre-fix |
+|---|---|
+| `envmap_cube_sampler_contract_test` (unchanged, 104 checks) | **74/104**, leg C1 failing exactly as declared |
+| `stock_effect_sampler_contract_test` (unchanged, 65 checks) | **64/65**, the declared leg M3 |
+| `dualtexture_slot_sampler_contract_test` (new, 106 checks) | **58/106** |
+
+Leg C1 reads `changing SamplerStates[0] does not alter the CUBE's contribution (differing=1024)` —
+every pixel moved, which is inheritance rather than a missing sampler. The new DualTexture fixture
+shows the same thing from both sides at once: `y-variation=0` whenever only slot 1 is Linear, and
+`y-variation=128` whenever only slot 0 is.
+
+### The new fixture, and why its oracle is stronger than isolation
+
+`examples/dualtexture_slot_sampler_contract_test.cpp` does not measure one slot at a time. Slot 0's
+texture varies along **X only**, slot 1's along **Y only**, and the shader's `(tex0*2) * tex1 * tint`
+with `tint = 0.5` is exactly `A(x) * B(y)` — a separable product. So `XEdgeVariation` reads slot 0's
+magnification filter and `YEdgeVariation` reads slot 1's **in the same image**, and "changing one
+sampler affects only its own sampled resource" becomes a direct measurement rather than an inference.
+A byte-exact second oracle backs it up: with a white partner, `(2*A)*1*0.5` and `(2*1)*B*0.5` are both
+exact in 8-bit, so "an interpolated colour appeared" is decidable with no tolerance.
+
+Thirteen legs, covering all twelve scenarios the brief required: PAL preconditions, A red-first, B the
+slot-0 regression gate, C the full independence matrix (both-Point, both-Linear, each cross, change
+only 0, change only 1, swap, and return to an earlier pair reproducing it byte-for-byte), D all nine
+ordinals on EACH slot, E resource-vs-sampler identity, F the deferred snapshot, G all eight public
+draw paths, H repeated frames, I interleaving with another textured family, J mip, K address modes,
+L the stride-24 vertex-colour shader module, M the unset-slot default.
+
+One fixture defect of my own was found and fixed mid-task: the mip legs originally used `uvMax = 4`,
+giving lambda exactly 2.0, where mip-POINT and mip-LINEAR select the same single level and agree by
+definition — a backend ignoring the mipmap component would have passed. `uvMax` is now 3.
+
+### The trace
+
+`CNA_WEBGPU_MULTITEX_SAMPLER_TRACE` emits one bounded row per multi-texture draw: public order,
+replay position, both views, both captured descriptions, `statesDiffer`, the sampler BOUND for each
+resource, the sampler slot 1's description WOULD resolve to, `sharedSampler`, `slotMismatch`, the
+layout, the pipeline layout, `bgcache=none`, the bind group and its entry count.
+
+| | pre-fix | post-fix |
+|---|---|---|
+| DualTexture3D rows | 97, **all** `sharedSampler=YES`, `entries=3` | 97, `entries=4`, **0** `slotMismatch=YES` |
+| ...of which `statesDiffer=YES` | 69, **all** `slotMismatch=YES` | 69, **all** `slotMismatch=no` |
+| EnvironmentMap3D rows | 86, **all** `sharedSampler=YES`, `entries=3` | 86, `entries=4`, **0** `slotMismatch=YES` |
+| ...of which `statesDiffer=YES` | 43, **all** `slotMismatch=YES` | 43, **all** `slotMismatch=no` |
+
+The capture landed one commit BEFORE the binding, deliberately and inertly (both fixtures scored
+identically with and without it), because the trace cannot prove "one native sampler serves two
+resources whose public descriptions DIFFER" until both descriptions exist to compare.
+
+Post-fix `sharedSampler=YES` survives on 28 and 43 rows — exactly the draws whose two slots genuinely
+hold the same state. That is the REMED-GFX-170 sampler cache returning one handle for one description,
+not a shared binding.
+
+### The fix
+
+One independently bound sampler per public sampler slot, at `@binding(3)` in both group-1 layouts.
+Binding 3 is APPENDED rather than the views renumbered, so `tex0`/`tex1` keep the binding numbers
+every other WebGPU 3D family uses.
+
+* `dual_texture3d.wgsl` and its stride-24 vertex-colour sibling: `tex0Sampler` at binding 0,
+  `tex1Sampler` at binding 3, each `textureSample` using its own. **Both modules had to change** —
+  they are separate shader modules with separate pipeline caches, which is what leg L measures.
+* `env_map3d.wgsl`: `envMapSampler` at binding 3, used by the cube's `textureSample`.
+* Both group-1 bind group layouts: 3 entries -> 4.
+* `IssueDualTextureDraw` / `IssueEnvMapDraw`: resolve the second sampler from the command's own
+  captured description through the **existing** `GetOrCreateSlotSampler`. No second translation table
+  was created; REMED-GFX-170's remains the only one.
+* The cube's fallback 1x1 white default is filtered by slot 1 as well — a missing resource does not
+  change which sampler slot owns that binding.
+
+The WGSL is an inline `static constexpr char[]` in `WebGPUGraphicsBackend.cpp`, not a generated
+artifact, so no generation step ran and no generated blob was hand-edited. No shared shader artifact
+exists for WebGPU and no other backend consumes it.
+
+### Layout and pipeline cache invalidation
+
+Changing a bind-group layout can strand pipelines built against the old one. It cannot here, and this
+was verified rather than assumed: `DestroyDualTextureResources` and `DestroyEnvMapResources` release
+and `clear()` every pipeline in `dualTexturePipelines_`, `dualTextureColoredPipelines_` and
+`envMapPipelines_` **before** releasing the layouts, and `Create*Resources` calls `Destroy*Resources`
+first. So the layouts and the pipelines built from them are recreated together, always. No layout
+version had to be added to any key, and no unrelated WebGPU pipeline is rebuilt per draw.
+
+### Results
+
+| fixture | pre-fix | post-fix |
+|---|---|---|
+| `dualtexture_slot_sampler_contract_test` | 58/106 | **106/106** |
+| `envmap_cube_sampler_contract_test` | 74/104 | **104/104** |
+| `stock_effect_sampler_contract_test` | 64/65 | **65/65** |
+
+Filters 0–8 are classified on BOTH slots independently (legs D1–D4): for every ordinal, the measured
+magnification of the swept slot matches `MagnifiesByPoint` and the OTHER slot's held-Point answer is
+unchanged, which is the part a shared sampler could never satisfy. Mip-point and mip-linear are
+classified per slot (J1–J6), including that changing slot 0's mipmap component leaves slot 1's
+contribution byte-identical. Address modes likewise (K1–K4).
+
+### A/B proof of the fixture
+
+The oracle was corrected mid-task (block extent derived from the image rather than a fixed constant;
+leg I restructured onto three non-overlapping bands). Re-running the FINAL fixture against the
+production of `c8c35032` — the reproduce commit, before any binding changed — still gives **58/106**.
+The reshaped legs are stricter, not looser: leg I1 was passing pre-fix by accident on a misaligned
+slice and correctly fails there now.
+
+### Cardinality and performance
+
+A/B on the byte-identical `envmap_cube_sampler_contract_test`:
+
+| | pre-fix | post-fix |
+|---|---|---|
+| sampler resolutions, EnvironmentMap3D | 86 (1/draw) | 172 (2/draw — the minimum, one per sampled resource) |
+| native `WGPUSampler` created (whole run) | 3 | 12 |
+| sampler cache hits | 89 | 166 |
+| public draw enqueues | 262 | **262** |
+| render passes | 89 | **89** |
+| rendertarget / rendertargetcube issues | 86 / 6 | **86 / 6** |
+| bind-group layouts, pipeline layouts | 1 + 1 per family | 1 + 1 per family (one extra ENTRY each) |
+
+The draw-order trace is **byte-identical** pre and post. Native sampler creations rise 3 -> 12 only
+because slot 1's nine ordinals were previously never resolved at all; against 166 cache hits nothing
+is created per draw, and no pipeline variant was added for any sampler value. No extra draw, pass,
+submit, frame, wait, readback or texture copy. No CPU resampling. No texture duplicated. No public API
+changed.
+
+### WebGPU validation
+
+Validation, the uncaptured-error callback and the device-lost callback are all already wired
+(`OnUncapturedError` / `OnDeviceLost`, installed on the device descriptor). Across both fixtures, with
+the new 4-entry layouts and the two new shader modules: **zero uncaptured errors and zero device-lost
+callbacks**. Nothing was suppressed. A duplicate binding index, a missing sampler binding or a
+shader/layout mismatch would each have been a validation error at bind-group or pipeline creation.
+
+### Sanitizers
+
+`cmake-build-webgpu-asan-ubsan` (`CNA_SANITIZE=address,undefined`), runtimes proven linked —
+`libasan.so.8` and `libubsan.so.1` in `ldd`, 54 sanitizer symbols in each binary.
+
+| | dualtexture fixture | envmap fixture |
+|---|---|---|
+| checks | **106/106** | **104/104** |
+| heap-use-after-free | 0 | 0 |
+| ASan errors of any kind | 0 | 0 |
+| UBSan runtime errors | 0 | 0 |
+| double-free | 0 | 0 |
+
+**The external leak is A/B-classified exactly**: 368 bytes in 4 allocations, in `libLLVM` frames, and
+the count is **identical pre-GFX-172** (measured by restoring production to `8ffed33a`, rebuilding and
+re-running the byte-identical envmap fixture). Same number in both fixtures despite very different
+draw counts, so it is a fixed external initialisation leak, not per-draw and not attributable here.
+
+### Regression gates
+
+`ctest -L WebGPU` serially: **69/70**.
+
+* `WebGPU_Clear_Readback` — the only failure, **A/B-proven pre-existing**: 7/10 with production
+  restored to `8ffed33a` and 7/10 after, its three failures being sprite alpha blending and
+  Wrap/Mirror address modes, none of which this task touches.
+* `WebGPU_BoundTargetLifetime` crashed leg E1 under `ctest -j2` and passes **18/18** standalone and
+  under `ctest -j1`. That was GPU contention between two concurrent WebGPU processes, not a
+  regression; the serial run is the reported one.
+
+Green throughout: `WebGPU_StockEffectSamplerContract` (GFX-169), `WebGPU_TextureFilterOrdinalContract`
+(GFX-170), `WebGPU_TextureFilterMipContract` (GFX-175), `WebGPU_DualTexture3D`,
+`WebGPU_GraphicsDevice_OrderedClear` (GFX-156), `WebGPU_DeferredSourceLifetime` (GFX-167),
+`WebGPU_SpriteBatch3DOrder` (GFX-159), `WebGPU_FrontFaceWinding` (GFX-160), plus the viewport
+(GFX-116) and scissor (GFX-146) capture fixtures.
+
+`WebGPUGraphicsBackend.hpp` is included by nine translation units — its own `.cpp`, five WebGPU-only
+example fixtures and three gtest units. All were rebuilt and run; see the new finding below for the
+one pre-existing failure among them.
+
+### Cross-backend controls
+
+Only WebGPU production changed. Every other backend runs the same public fixture unchanged.
+
+| Backend | new DualTexture fixture | Reading |
+|---|---|---|
+| **WEBGPU** | **106/106** | after this task (58/106 before) |
+| **SDL_GPU** | **106/106** | already carries per-command `texture0*`/`texture1*` sampler fields |
+| **VULKAN** | **106/106** | REMED-GFX-169's `GetOrCreateDualTexDescSet(..., sampler0, sampler1)` preserved |
+| **SOFTWARE** | **106/106** | REMED-GFX-182 preserved |
+| **BGFX** | **106/106** | REMED-GFX-181 preserved |
+| **EASYGL** | **106/106** | an independent correct backend |
+| **HEADLESS** | **6/6** | REMED-GFX-127's honest rejection of the readback |
+
+Five independently correct backends reaching the identical 106/106 is what shows the fixture pins a
+public contract rather than a WebGPU implementation detail. D3D9/D3D11/D3D12 runtime controls were not
+run — they need Wine, `:0` is forbidden this session, `:99` was down, and DirectX runtime testing is
+declared optional for a WebGPU-local change; the registrations exist and cross-build.
+
+### False-positive audit
+
+**Five WebGPU-registered fixtures drive `DualTextureEffect` or `EnvironmentMapEffect` and all five
+passed on the unfixed backend.**
+
+| fixture | why it was blind |
+|---|---|
+| `webgpu_dualtexture3d_test` | **never touches `SamplerStates` at all** — both layers observed through one default sampler |
+| `webgpu_envmap3d_test` | sets slot 0 only, never slot 1 |
+| `webgpu_environmentmapeffect_fog_test` | sets slot 0 only, never slot 1 |
+| `webgpu_environmentmapeffect_emissive_test` | sets slot 0 only, never slot 1 |
+| `texture_filter_ordinal_contract_test` | exercises DualTextureEffect on slot 0 only — its single slot-1 write is a reset to LinearWrap |
+
+**None asserts anything false, so none was changed or weakened** — the gap was coverage, and the new
+fixture closes it. The last one is not really a false positive at all: it carries an explicit
+`GFX-172 BOUNDARY` note and prints it at runtime, which is a declared boundary rather than a hidden
+one. `stock_effect_sampler_contract_test` leg M3 was likewise already red and already attributed. The
+same shape REMED-GFX-173 found on SDL_GPU (16 blind fixtures), REMED-GFX-181 on Bgfx (15) and
+REMED-GFX-182 on Software (9).
+
+### Scope kept
+
+`REMED-GFX-180` (the `SdlGpu_RenderState` abort before its first check) was **not** begun and remains
+separate and uninvestigated; so were `REMED-GFX-178`, `REMED-GFX-179`, `REMED-GFX-171`,
+`REMED-GFX-153` and `REMED-GFX-154`. No public API changed. No other backend's production was touched.
+Neither slot was made to use the other's state. No expected pixel was changed to preserve the old
+shared-sampler behaviour. No texture was duplicated and no sampled resource was copied to apply a
+second sampler. No extra draw, pass, submit, frame, wait or readback exists. No second filter-ordinal
+table was created. No pipeline variant per sampler value. Bind-group caching was not disabled — there
+was never any to disable. `audit/` is untouched.
+
+### New findings
+
+**One. REMED-GFX-183** — `IndexedDrawDeferredTest.WebGpuTriangleStripAlternatesWindingBeforeCulling`
+fails on WebGPU: a strip drawn under `CullCounterClockwise` and one under `CullClockwise` return
+INVERTED interior samples, so the odd-indexed triangles of a strip are kept and culled the opposite
+way round from the D3D/XNA convention. Found while running this task's regression gates and
+**A/B-proven pre-existing** — it fails identically with WebGPU production restored to `8ffed33a`, the
+commit before GFX-172 began. It is a gtest unit outside the `ctest -L WebGPU` shard, which is why the
+GFX-160 winding work did not surface it. Recorded against a new ID, not investigated: this task is
+scoped to sampler independence and that is a rasterizer-state question.
