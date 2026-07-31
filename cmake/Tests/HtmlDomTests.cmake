@@ -48,4 +48,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HTML_DOM")
     target_link_options(cna_test_htmldom_stress PRIVATE
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
+
+    # plan_html_dom.md HTMLDOM-95: proves texture/render-target dispose actually shrinks the JS-side
+    # texture registry (Module['cnaDomTextures']) back down, rather than trusting the destructor
+    # chain by code review alone. Driven by the same harness.
+    add_executable(cna_test_htmldom_dispose examples/htmldom_dispose_test.cpp)
+    target_link_libraries(cna_test_htmldom_dispose PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    set_target_properties(cna_test_htmldom_dispose PROPERTIES SUFFIX ".html")
+    target_link_options(cna_test_htmldom_dispose PRIVATE
+        -sALLOW_MEMORY_GROWTH=1
+        -sEXIT_RUNTIME=1)
 endif()

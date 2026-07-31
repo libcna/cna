@@ -18,6 +18,7 @@ together assert against the actual DOM/pixels/timing the backend produced:
 | `cna_test_htmldom_smoke` | DOM surface, sprite pool/recycling, `RenderTarget2D` readback, backbuffer refusal, `SpriteFont`, `TextureAddressMode::Wrap`, `SetScissorRect` (per-batch region isolation), resize + scissor interaction | 32/32 |
 | `cna_test_htmldom_pixel_verification` | Pixel-exact tint/`AlphaBlend`/`Opaque`/`Additive`, multi-glyph `SpriteFont` (kerning/`\n`/scale/flip), `transformMatrix`, render-target-as-`Draw()`-source | 11/11 |
 | `cna_test_htmldom_stress` | Performance benchmark, 300-frame stability run, LRU cache eviction | 3/3 |
+| `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn | 6/6 |
 | `cna_htmldom_visual_demo` | Screenshot-verified visual demo (not a PASS/FAIL page) | — |
 
 Plus 33 GTest cases for everything pure-C++ (blend mapping, address-mode validation, the sprite
