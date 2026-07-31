@@ -61,6 +61,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Stencil test operations for 3D draws (`DepthStencilState.StencilEnable`/`StencilFunction`/`StencilPass`/`StencilFail`/`StencilDepthBufferFail`, masks, reference, two-sided mode) | ✅ | Wired into `Pipeline3DKey`/`Get3DPipeline`; `SpriteBatch` never requests stencil (matches XNA) |
 | `RenderTargetCube` bind/draw/unbind, one face at a time, with per-face colour isolation and a shared depth-stencil buffer | ✅ | `Sokol_RenderTarget_PassBoundary` (C1/C2), `Sokol_RenderTarget_DepthStencilUsage` (U1-U4), plus the cube legs in `Sokol_RenderTarget_FirstUse`/`BackbufferConsumer` |
 | `OcclusionQuery` (real `GL_SAMPLES_PASSED` sample count, GL-only) | ✅ | `Sokol_OcclusionQuery_Cycle`, `Sokol_OcclusionQuery_VisibleQuad`, `Sokol_OcclusionQuery_OccludedQuad` |
+| `RasterizerState.DepthBias`/`SlopeScaleDepthBias` | ✅ | `Sokol_RasterizerState_DepthBias` -- a real coplanar-redraw proof, both constant and slope-scaled bias |
 
 ## What does not work yet
 
@@ -80,7 +81,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Render-target MSAA resolve | not implemented (`multiSampleCount` is clamped, never resolved) | `SOKOL-26` |
 | `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` (Software leaves this unimplemented too) | `SOKOL-27` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
-| `RasterizerState` fill mode and depth bias | accepted and ignored — sokol_gfx exposes no polygon fill mode, and depth bias is not yet wired into any pipeline. Cull mode *is* honoured | `SOKOL-23` |
+| `RasterizerState.FillMode` (`WireFrame`) | accepted and ignored — sokol_gfx exposes no polygon fill mode at all, unlike EasyGL's CPU-side triangle-to-`GL_LINES` re-expansion at draw time (not implemented here). A permanent, not-just-"not yet" gap | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
 | `Viewport.MinDepth` / `MaxDepth` | ignored — `sg_apply_viewport` carries no depth range | `SOKOL-21` |
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
@@ -160,6 +161,7 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_OcclusionQuery_Cycle` | Begin/End/IsComplete/PixelCount plus every invalid-call-sequence and dispose-while-active case | all pass |
 | `Sokol_OcclusionQuery_VisibleQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_OcclusionQuery_OccludedQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
+| `Sokol_RasterizerState_DepthBias` | 4, a real coplanar-redraw proof | all pass |
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
 Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. Most of their

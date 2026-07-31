@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <stdexcept>
 #include <string>
 
@@ -1171,6 +1172,8 @@ namespace CNA::Internal::Backends::Sokol
             && stencilMask == other.stencilMask
             && stencilWriteMask == other.stencilWriteMask
             && referenceStencil == other.referenceStencil
+            && depthBias == other.depthBias
+            && slopeScaleDepthBias == other.slopeScaleDepthBias
             && cullMode == other.cullMode
             && primitiveType == other.primitiveType
             && indexType == other.indexType
@@ -1217,6 +1220,8 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.stencilMask));
         mix(static_cast<std::size_t>(key.stencilWriteMask));
         mix(static_cast<std::size_t>(key.referenceStencil));
+        mix(std::hash<float>{}(key.depthBias));
+        mix(std::hash<float>{}(key.slopeScaleDepthBias));
         mix(static_cast<std::size_t>(key.cullMode));
         mix(static_cast<std::size_t>(key.primitiveType));
         mix(static_cast<std::size_t>(key.indexType));
@@ -1998,12 +2003,16 @@ namespace CNA::Internal::Backends::Sokol
         // unculled, matching what XNA's own SpriteBatch does.
         cullMode_ = cullMode;
         fillMode_ = fillMode;
+        // Real as of SOKOL-23: reaches Get3DPipeline's sg_depth_state.bias/bias_slope_scale, the
+        // same mapping EasyGL/Vulkan use for glPolygonOffset(slopeScaleDepthBias, depthBias).
+        depthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
 
-        // fillMode/depthBias are still accepted and ignored: sokol_gfx exposes no polygon fill
-        // mode at all (WireFrame is a documented gap), and depth bias belongs with the lit 3D
-        // pipeline that has not landed. Recorded in docs/sokol-backend.md rather than throwing,
-        // since GraphicsDevice applies a RasterizerState every frame regardless of what is drawn.
-        (void)depthBias; (void)slopeScaleDepthBias;
+        // fillMode is still accepted and ignored: sokol_gfx exposes no polygon fill mode at all
+        // (WireFrame is a documented gap -- EasyGL emulates it by re-expanding triangles into
+        // GL_LINES at draw time, which this backend does not do). Recorded in
+        // docs/sokol-backend.md rather than throwing, since GraphicsDevice applies a
+        // RasterizerState every frame regardless of what is drawn.
     }
 
     void SokolGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
@@ -2427,6 +2436,11 @@ namespace CNA::Internal::Backends::Sokol
             desc.depth.write_enabled = false;
             desc.stencil.enabled = false;
         }
+        // RasterizerState.DepthBias/SlopeScaleDepthBias -- meaningless with no depth attachment,
+        // but harmless to set regardless (sokol_gfx places no constraint on these two fields when
+        // depth.pixel_format is NONE, unlike compare/write_enabled).
+        desc.depth.bias = key.depthBias;
+        desc.depth.bias_slope_scale = key.slopeScaleDepthBias;
         desc.color_count = 1;
         desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
         desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
@@ -2536,6 +2550,8 @@ namespace CNA::Internal::Backends::Sokol
         key.stencilMask = stencilMask_;
         key.stencilWriteMask = stencilWriteMask_;
         key.referenceStencil = referenceStencil_;
+        key.depthBias = depthBias_;
+        key.slopeScaleDepthBias = slopeScaleDepthBias_;
         key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
         key.indexType = static_cast<int>(
             ib == nullptr ? SG_INDEXTYPE_NONE

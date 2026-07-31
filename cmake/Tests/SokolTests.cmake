@@ -131,4 +131,12 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_occlusion_query_occluded_quad
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 767's own EasyGL-authored (but backend-agnostic) DepthBias/SlopeScaleDepthBias
+    # integration test -- reused here since SOKOL-23 now maps both onto sg_depth_state.bias/
+    # bias_slope_scale, the same glPolygonOffset values EasyGL applies.
+    cna_sokol_test(cna_test_sokol_depth_bias examples/easygl_depth_bias_test.cpp)
+    cna_register_backend_test(NAME Sokol_RasterizerState_DepthBias COMMAND cna_test_sokol_depth_bias
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

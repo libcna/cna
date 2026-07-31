@@ -1351,6 +1351,12 @@ namespace CNA::Internal::Backends::Sokol
             int stencilMask;
             int stencilWriteMask;
             int referenceStencil;
+            /// RasterizerState.DepthBias/SlopeScaleDepthBias -- also baked into sg_depth_state, so
+            /// also part of the key. Compared/hashed as exact bit patterns: both are stored,
+            /// never computed, values straight from RasterizerState, so the same RasterizerState
+            /// always produces bit-identical floats here.
+            float depthBias;
+            float slopeScaleDepthBias;
             int cullMode;
             int primitiveType;
             /// Raw sg_index_type: sokol_gfx bakes the index type into the pipeline, and rejects
@@ -1499,6 +1505,11 @@ namespace CNA::Internal::Backends::Sokol
 
         int cullMode_ = 0;         // CullMode::None
         int fillMode_ = 0;         // FillMode::Solid
+        /// RasterizerState.DepthBias/SlopeScaleDepthBias, mapped straight onto sg_depth_state's
+        /// own bias/bias_slope_scale -- the same values EasyGL/Vulkan pass to
+        /// glPolygonOffset(slopeScaleDepthBias, depthBias), matching FNA's own OpenGL driver.
+        float depthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
 
         /// Per-slot SamplerState, mirroring GraphicsDevice.SamplerStates -- read by the textured/
         /// lit 3D draw paths for texture unit 0. Defaults match XNA's own SamplerState default
