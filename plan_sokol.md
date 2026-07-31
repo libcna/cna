@@ -25,9 +25,23 @@
 > background), and a UINT16-index pipeline cannot serve a non-indexed draw, so the index type is
 > now part of the pipeline key. `GraphicsCapability::ThreeD` now reports true.
 >
-> **Still not implemented: textured/lit/skinned/PBR 3D shading, render targets, cube/volume
-> textures, custom effects and occlusion queries** -- all fail loudly rather than silently
-> no-opping. Do not describe this backend as having EasyGL/Vulkan-level parity. See
+> **Update (2026-07-31, later still): `SOKOL-21` (textured + lit `BasicEffect` draws) has
+> landed.** `textured3d.glsl` (texture + vertex colour + alpha test + fog) and `lit3d.glsl`
+> (ambient + up to 3 real per-pixel Blinn-Phong directional lights + specular + emissive + alpha
+> test + fog, always sampling a texture -- a real one, or a 1x1 white fallback when
+> `TextureEnabled` is false, mirroring EasyGL's own default-white-texture convention) join
+> `colored3d.glsl`. `Sokol_Lit3D` (10/10, all real pixel read-backs) proves texture placement,
+> `DiffuseColor`/vertex-colour multiplies, real alpha blending, ambient-only lighting, a
+> head-on-vs-facing-away directional light (proving the `N.L` clamp, not negative light),
+> `EmissiveColor`, and a fully-fogged draw. Two real bugs were caught along the way: the test's
+> own first draft used `BlendState::AlphaBlend` (premultiplied factors) against straight-alpha
+> texture data, and the backend's default white fallback texture was destroyed after
+> `sg_shutdown()` had already invalidated the sokol context (member destruction order), aborting
+> on `sg_destroy_view`'s own internal assert.
+>
+> **Still not implemented: skinned/dual-texture/environment-mapped/PBR shading, custom effects,
+> render targets, cube/volume textures and occlusion queries** -- all fail loudly rather than
+> silently no-opping. Do not describe this backend as having EasyGL/Vulkan-level parity. See
 > `docs/sokol-backend.md` for the capability boundary and the complete list of known gaps.
 
 ---
@@ -152,12 +166,12 @@ That makes it valuable to CNA in two specific ways:
 | SOKOL-18 | `SokolVertexBufferBackend`/`SokolIndexBufferBackend` (16- and 32-bit) | ✅ | See design decision 6 |
 | SOKOL-19 | `docs/sokol-backend.md` capability boundary | ✅ | |
 
-### Phase 4 — 3D pipeline (SOKOL-20 landed)
+### Phase 4 — 3D pipeline (SOKOL-20/21 landed)
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
 | SOKOL-20 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` + a colored-3D shader | ✅ | `Sokol_3D` 10/10, incl. depth-occlusion and culling proofs |
-| SOKOL-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: `BasicEffect` variants (textured, lit, fog) | ⬜ | Needs the stride-dispatched pipeline cache every other backend has |
+| SOKOL-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: `BasicEffect` variants (textured, lit, fog) | ✅ | `Sokol_Lit3D` 10/10; dual-texture/env-map/skinned/PBR still throw |
 | SOKOL-22 | Honour every `SetVertexDeclaration()` element, not just Position/Color usage index 0 | 🟨 | The colored-3D pipeline is keyed on the real declaration; other usages still ignored |
 | SOKOL-23 | Full `ApplyRasterizerState` (fill mode, depth bias) and stencil in the pipeline key | ⬜ | Cull mode landed with `SOKOL-20`; fill/bias/stencil still accepted-and-ignored |
 | SOKOL-24 | Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ⬜ | Measure once a 3D path exists to measure with |

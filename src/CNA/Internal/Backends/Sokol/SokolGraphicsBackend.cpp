@@ -697,7 +697,8 @@ namespace CNA::Internal::Backends::Sokol
 
     bool SokolGraphicsBackend::Pipeline3DKey::operator==(const Pipeline3DKey& other) const
     {
-        return colorSrcBlend == other.colorSrcBlend
+        return kind == other.kind
+            && colorSrcBlend == other.colorSrcBlend
             && alphaSrcBlend == other.alphaSrcBlend
             && colorDstBlend == other.colorDstBlend
             && alphaDstBlend == other.alphaDstBlend
@@ -715,7 +716,11 @@ namespace CNA::Internal::Backends::Sokol
             && positionOffset == other.positionOffset
             && positionFormat == other.positionFormat
             && colorOffset == other.colorOffset
-            && colorFormat == other.colorFormat;
+            && colorFormat == other.colorFormat
+            && texCoordOffset == other.texCoordOffset
+            && texCoordFormat == other.texCoordFormat
+            && normalOffset == other.normalOffset
+            && normalFormat == other.normalFormat;
     }
 
     std::size_t SokolGraphicsBackend::Pipeline3DKeyHash::operator()(const Pipeline3DKey& key) const
@@ -724,6 +729,7 @@ namespace CNA::Internal::Backends::Sokol
         auto mix = [&hash](std::size_t value) {
             hash ^= value + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2);
         };
+        mix(static_cast<std::size_t>(key.kind));
         mix(static_cast<std::size_t>(key.colorSrcBlend));
         mix(static_cast<std::size_t>(key.alphaSrcBlend));
         mix(static_cast<std::size_t>(key.colorDstBlend));
@@ -743,6 +749,10 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.positionFormat));
         mix(static_cast<std::size_t>(key.colorOffset + 1));
         mix(static_cast<std::size_t>(key.colorFormat));
+        mix(static_cast<std::size_t>(key.texCoordOffset + 1));
+        mix(static_cast<std::size_t>(key.texCoordFormat));
+        mix(static_cast<std::size_t>(key.normalOffset + 1));
+        mix(static_cast<std::size_t>(key.normalFormat));
         return hash;
     }
 
@@ -806,6 +816,11 @@ namespace CNA::Internal::Backends::Sokol
             sg_end_pass();
             passActive_ = false;
         }
+        // Explicitly released before sg_shutdown(): its destructor calls sg_destroy_view()/
+        // sg_destroy_image(), which assert if the sokol_gfx context is no longer valid by the time
+        // this member's own destructor runs (member destruction happens after this body, in
+        // reverse declaration order -- after sg_shutdown() below, not before it).
+        defaultWhiteTexture_.reset();
         if (sg_isvalid()) sg_shutdown();
         if (glContext_ != nullptr)
         {
@@ -925,6 +940,14 @@ namespace CNA::Internal::Backends::Sokol
         colored3dShaderId_ = sg_make_shader(cna_colored3d_shader_desc(sg_query_backend())).id;
         if (sg_query_shader_state(MakeShaderHandle(colored3dShaderId_)) != SG_RESOURCESTATE_VALID)
             throw std::runtime_error("Sokol backend: colored-3D shader creation failed");
+
+        textured3dShaderId_ = sg_make_shader(cna_textured3d_shader_desc(sg_query_backend())).id;
+        if (sg_query_shader_state(MakeShaderHandle(textured3dShaderId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: textured-3D shader creation failed");
+
+        lit3dShaderId_ = sg_make_shader(cna_lit3d_shader_desc(sg_query_backend())).id;
+        if (sg_query_shader_state(MakeShaderHandle(lit3dShaderId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: lit-3D shader creation failed");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1306,11 +1329,14 @@ namespace CNA::Internal::Backends::Sokol
     void SokolGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                                  int maxAnisotropy)
     {
-        // Sampler state reaches the GPU through the per-flush sampler the SpriteBatch path selects
-        // (DrawSpriteRunEXT), which receives its filter/address values straight from
-        // SpriteBatch::Begin's SamplerState. There is no other draw path on this backend yet, so
-        // there is nothing here to bind a slot-indexed sampler to.
-        (void)slot; (void)filter; (void)addressU; (void)addressV; (void)maxAnisotropy;
+        // SpriteBatch does not read this: DrawSpriteRunEXT receives its filter/address values
+        // directly from SpriteBatch::Begin's own SamplerState. The textured/lit 3D draw paths read
+        // slot 0 from here, mirroring GraphicsDevice.SamplerStates.
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        samplerSlots_[slot].filter = filter;
+        samplerSlots_[slot].addressU = addressU;
+        samplerSlots_[slot].addressV = addressV;
+        samplerSlots_[slot].maxAnisotropy = maxAnisotropy;
     }
 
     void SokolGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
@@ -1578,26 +1604,73 @@ namespace CNA::Internal::Backends::Sokol
 #endif
     }
 
-    std::uint32_t SokolGraphicsBackend::GetColored3DPipeline(const Pipeline3DKey& key)
+    std::uint32_t SokolGraphicsBackend::Get3DPipeline(const Pipeline3DKey& key)
     {
         if (const auto found = pipeline3dCache_.find(key); found != pipeline3dCache_.end())
             return found->second;
 
         sg_pipeline_desc desc = {};
-        desc.shader = MakeShaderHandle(colored3dShaderId_);
-        desc.layout.buffers[0].stride = key.stride;
-        desc.layout.attrs[ATTR_cna_colored3d_position].format =
-            static_cast<sg_vertex_format>(key.positionFormat);
-        desc.layout.attrs[ATTR_cna_colored3d_position].offset = key.positionOffset;
-        if (key.colorOffset >= 0)
+        switch (key.kind)
         {
-            desc.layout.attrs[ATTR_cna_colored3d_color0].format =
-                static_cast<sg_vertex_format>(key.colorFormat);
-            desc.layout.attrs[ATTR_cna_colored3d_color0].offset = key.colorOffset;
+            case Shader3DKind::Colored:
+                desc.shader = MakeShaderHandle(colored3dShaderId_);
+                desc.layout.attrs[ATTR_cna_colored3d_position].format =
+                    static_cast<sg_vertex_format>(key.positionFormat);
+                desc.layout.attrs[ATTR_cna_colored3d_position].offset = key.positionOffset;
+                if (key.colorOffset >= 0)
+                {
+                    desc.layout.attrs[ATTR_cna_colored3d_color0].format =
+                        static_cast<sg_vertex_format>(key.colorFormat);
+                    desc.layout.attrs[ATTR_cna_colored3d_color0].offset = key.colorOffset;
+                }
+                // When the declaration carries no Color element the slot is left INVALID, which
+                // sokol_gfx permits because the remaining attribute slots stay continuous. The
+                // shader still reads color0, but flags.x is 0 for that case, so the unbound
+                // attribute is multiplied out.
+                break;
+
+            case Shader3DKind::Textured:
+                desc.shader = MakeShaderHandle(textured3dShaderId_);
+                desc.layout.attrs[ATTR_cna_textured3d_position].format =
+                    static_cast<sg_vertex_format>(key.positionFormat);
+                desc.layout.attrs[ATTR_cna_textured3d_position].offset = key.positionOffset;
+                desc.layout.attrs[ATTR_cna_textured3d_texcoord0].format =
+                    static_cast<sg_vertex_format>(key.texCoordFormat);
+                desc.layout.attrs[ATTR_cna_textured3d_texcoord0].offset = key.texCoordOffset;
+                if (key.colorOffset >= 0)
+                {
+                    desc.layout.attrs[ATTR_cna_textured3d_color0].format =
+                        static_cast<sg_vertex_format>(key.colorFormat);
+                    desc.layout.attrs[ATTR_cna_textured3d_color0].offset = key.colorOffset;
+                }
+                break;
+
+            case Shader3DKind::Lit:
+                // Normal and TexCoord are both required in the declaration for this kind (checked
+                // in DrawColored3D before a key is ever built) -- every built-in vertex type that
+                // carries a Normal also carries a TexCoord, so this is not a real restriction on
+                // any of them, and it keeps attribute slots 0..2 always continuous. Only color0
+                // (slot 3, the trailing one) may legitimately be absent: sokol_gfx only rejects a
+                // VALID slot following an INVALID one, and a trailing gap is not that.
+                desc.shader = MakeShaderHandle(lit3dShaderId_);
+                desc.layout.attrs[ATTR_cna_lit3d_position].format =
+                    static_cast<sg_vertex_format>(key.positionFormat);
+                desc.layout.attrs[ATTR_cna_lit3d_position].offset = key.positionOffset;
+                desc.layout.attrs[ATTR_cna_lit3d_normal].format =
+                    static_cast<sg_vertex_format>(key.normalFormat);
+                desc.layout.attrs[ATTR_cna_lit3d_normal].offset = key.normalOffset;
+                desc.layout.attrs[ATTR_cna_lit3d_texcoord0].format =
+                    static_cast<sg_vertex_format>(key.texCoordFormat);
+                desc.layout.attrs[ATTR_cna_lit3d_texcoord0].offset = key.texCoordOffset;
+                if (key.colorOffset >= 0)
+                {
+                    desc.layout.attrs[ATTR_cna_lit3d_color0].format =
+                        static_cast<sg_vertex_format>(key.colorFormat);
+                    desc.layout.attrs[ATTR_cna_lit3d_color0].offset = key.colorOffset;
+                }
+                break;
         }
-        // When the declaration carries no Color element the slot is left INVALID, which sokol_gfx
-        // permits because the remaining attribute slots stay continuous. The shader still reads
-        // color0, but flags.x is 0 for that case, so the unbound attribute is multiplied out.
+        desc.layout.buffers[0].stride = key.stride;
 
         desc.index_type = static_cast<sg_index_type>(key.indexType);
         desc.primitive_type = static_cast<sg_primitive_type>(key.primitiveType);
@@ -1623,14 +1696,28 @@ namespace CNA::Internal::Backends::Sokol
         desc.blend_color.g = blendFactor_[1];
         desc.blend_color.b = blendFactor_[2];
         desc.blend_color.a = blendFactor_[3];
-        desc.label = "cna_colored3d_pipeline";
+        desc.label = "cna_3d_pipeline";
 
         const std::uint32_t pipelineId = sg_make_pipeline(&desc).id;
         if (sg_query_pipeline_state(MakePipelineHandle(pipelineId)) != SG_RESOURCESTATE_VALID)
-            throw std::runtime_error("Sokol backend: colored-3D pipeline creation failed");
+            throw std::runtime_error("Sokol backend: 3D pipeline creation failed");
 
         pipeline3dCache_.emplace(key, pipelineId);
         return pipelineId;
+    }
+
+    SokolTextureBackend& SokolGraphicsBackend::GetDefaultWhiteTexture()
+    {
+        if (!defaultWhiteTexture_)
+        {
+            ImageData white{};
+            white.width = 1;
+            white.height = 1;
+            white.mipLevels = 1;
+            white.pixels = {255, 255, 255, 255};
+            defaultWhiteTexture_ = std::make_unique<SokolTextureBackend>(white);
+        }
+        return *defaultWhiteTexture_;
     }
 
     void SokolGraphicsBackend::DrawColored3D(const IVertexBufferBackend& vbIn,
@@ -1645,13 +1732,14 @@ namespace CNA::Internal::Backends::Sokol
         if (primitiveCount <= 0) return;
 
         // Everything this backend cannot shade yet is refused here rather than rendered as an
-        // untextured, unlit approximation that would look plausible and be wrong.
-        if (params.textureEnabled || params.lightingEnabled || params.dualTexture
-            || params.envMapping || params.skinned || params.pbr)
+        // untextured, unlit approximation that would look plausible and be wrong. Plain texturing
+        // (SOKOL-21) and lighting (SOKOL-21) are real below; dual-texture, environment mapping,
+        // skinning and PBR are each a distinct stock effect with their own vertex/uniform contract
+        // this backend does not implement yet.
+        if (params.dualTexture || params.envMapping || params.skinned || params.pbr)
         {
             NotYetImplemented(kBackendName,
-                "textured/lit/dual-texture/environment-mapped/skinned/PBR 3D draws "
-                "(only vertex-coloured geometry is implemented)");
+                "dual-texture/environment-mapped/skinned/PBR 3D draws");
         }
         if (params.customEffectBackend != nullptr)
             NotYetImplemented(kBackendName, "custom ShaderEffect draws");
@@ -1676,7 +1764,12 @@ namespace CNA::Internal::Backends::Sokol
             if (ib->GetBufferIdEXT() == 0 || ib->GetIndexCount() <= 0) return;
         }
 
+        const Shader3DKind kind = params.lightingEnabled ? Shader3DKind::Lit
+                                 : params.textureEnabled  ? Shader3DKind::Textured
+                                                           : Shader3DKind::Colored;
+
         Pipeline3DKey key{};
+        key.kind = kind;
         key.colorSrcBlend = blendColorSrc_;
         key.alphaSrcBlend = blendAlphaSrc_;
         key.colorDstBlend = blendColorDst_;
@@ -1698,26 +1791,41 @@ namespace CNA::Internal::Backends::Sokol
         key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
         key.colorOffset = -1;
         key.colorFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
+        key.texCoordOffset = -1;
+        key.texCoordFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
+        key.normalOffset = -1;
+        key.normalFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
 
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
         for (const VertexElement& element : declaration->GetVertexElements())
         {
             const sg_vertex_format format = ToVertexFormat(element.getVertexElementFormatProperty());
             if (format == SG_VERTEXFORMAT_INVALID) continue;
-            // Only usage index 0 participates: the colored-3D program declares exactly one
-            // position and one colour input, so a second set would have nowhere to go.
+            // Only usage index 0 participates: every shader here declares at most one input per
+            // usage, so a second set (e.g. a second TEXCOORD for lightmapping) would have nowhere
+            // to go.
             if (element.getUsageIndexProperty() != 0) continue;
 
-            if (element.getVertexElementUsageProperty() == Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position
-                && key.positionOffset < 0)
+            const VertexElementUsage usage = element.getVertexElementUsageProperty();
+            if (usage == VertexElementUsage::Position && key.positionOffset < 0)
             {
                 key.positionOffset = element.getOffsetProperty();
                 key.positionFormat = static_cast<int>(format);
             }
-            else if (element.getVertexElementUsageProperty() == Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color
-                     && key.colorOffset < 0)
+            else if (usage == VertexElementUsage::Color && key.colorOffset < 0)
             {
                 key.colorOffset = element.getOffsetProperty();
                 key.colorFormat = static_cast<int>(format);
+            }
+            else if (usage == VertexElementUsage::TextureCoordinate && key.texCoordOffset < 0)
+            {
+                key.texCoordOffset = element.getOffsetProperty();
+                key.texCoordFormat = static_cast<int>(format);
+            }
+            else if (usage == VertexElementUsage::Normal && key.normalOffset < 0)
+            {
+                key.normalOffset = element.getOffsetProperty();
+                key.normalFormat = static_cast<int>(format);
             }
         }
 
@@ -1726,36 +1834,189 @@ namespace CNA::Internal::Backends::Sokol
             NotYetImplemented(kBackendName,
                 "a 3D draw from a VertexDeclaration with no usable Position element");
         }
+        if (kind == Shader3DKind::Textured && key.texCoordOffset < 0)
+        {
+            NotYetImplemented(kBackendName,
+                "a textured 3D draw from a VertexDeclaration with no TextureCoordinate element");
+        }
+        if (kind == Shader3DKind::Lit && (key.normalOffset < 0 || key.texCoordOffset < 0))
+        {
+            // Both are required, not just Normal: see Get3DPipeline's own comment on why the Lit
+            // attribute slots (position, normal, texcoord0, color0) must stay a continuous prefix,
+            // and why this is not a real restriction on any of CNA's built-in vertex types.
+            NotYetImplemented(kBackendName,
+                "a lit 3D draw from a VertexDeclaration with no Normal or no TextureCoordinate "
+                "element");
+        }
+
+        // Resolved before the pass begins: a Textured draw needs a real texture, and a Lit draw
+        // needs one only when actually textured (the white fallback otherwise).
+        const SokolTextureBackend* texture = nullptr;
+        if (kind == Shader3DKind::Textured || (kind == Shader3DKind::Lit && params.textureEnabled))
+        {
+            if (params.texture0 != nullptr)
+            {
+                texture = dynamic_cast<const SokolTextureBackend*>(params.texture0);
+                if (texture == nullptr)
+                {
+                    throw std::runtime_error(
+                        "Sokol backend: a textured 3D draw was handed a foreign texture backend");
+                }
+            }
+            else if (kind == Shader3DKind::Textured)
+            {
+                throw std::runtime_error(
+                    "Sokol backend: TextureEnabled draw with no texture bound");
+            }
+        }
+        if (texture == nullptr && kind == Shader3DKind::Lit)
+            texture = &GetDefaultWhiteTexture();
 
         BeginPassIfNeeded();
 
-        const Matrix worldViewProjection = world * view * projection;
-        cna_colored3d_vs_params_t uniforms{};
-        worldViewProjection.ToColumnMajor(uniforms.mvp);
-        uniforms.diffuse[0] = params.diffuseColor[0];
-        uniforms.diffuse[1] = params.diffuseColor[1];
-        uniforms.diffuse[2] = params.diffuseColor[2];
-        uniforms.diffuse[3] = params.diffuseColor[3];
-        // A declaration without a Color element cannot supply vertex colours no matter what the
-        // effect asked for, so the flag is the conjunction of "wanted" and "available".
-        uniforms.flags[0] = (params.vertexColorEnabled && key.colorOffset >= 0) ? 1.0f : 0.0f;
-
-        sg_apply_pipeline(MakePipelineHandle(GetColored3DPipeline(key)));
+        sg_apply_pipeline(MakePipelineHandle(Get3DPipeline(key)));
 
         sg_bindings bindings = {};
         bindings.vertex_buffers[0] = MakeBufferHandle(vb.GetBufferIdEXT());
         // baseVertex is folded into the buffer offset rather than passed to sg_draw_ex, so the
         // same code path serves both the indexed and non-indexed shapes.
         bindings.vertex_buffer_offsets[0] = params.baseVertex * key.stride;
-
         if (ib != nullptr)
             bindings.index_buffer = MakeBufferHandle(ib->GetBufferIdEXT());
+        if (texture != nullptr)
+        {
+            const SamplerSlotState& sampler = samplerSlots_[0];
+            bindings.views[VIEW_cna_tex] = MakeViewHandle(texture->GetViewIdEXT());
+            bindings.samplers[SMP_cna_smp] = MakeSamplerHandle(
+                GetSampler(sampler.filter, sampler.addressU, sampler.addressV,
+                          sampler.maxAnisotropy));
+        }
         sg_apply_bindings(&bindings);
 
-        sg_range uniformRange{};
-        uniformRange.ptr = &uniforms;
-        uniformRange.size = sizeof(uniforms);
-        sg_apply_uniforms(UB_cna_colored3d_vs_params, &uniformRange);
+        const Matrix worldViewProjection = world * view * projection;
+        const bool vertexColorActive = params.vertexColorEnabled && key.colorOffset >= 0;
+
+        switch (kind)
+        {
+            case Shader3DKind::Colored:
+            {
+                cna_colored3d_vs_params_t uniforms{};
+                worldViewProjection.ToColumnMajor(uniforms.mvp);
+                uniforms.diffuse[0] = params.diffuseColor[0];
+                uniforms.diffuse[1] = params.diffuseColor[1];
+                uniforms.diffuse[2] = params.diffuseColor[2];
+                uniforms.diffuse[3] = params.diffuseColor[3];
+                uniforms.flags[0] = vertexColorActive ? 1.0f : 0.0f;
+
+                sg_range range{&uniforms, sizeof(uniforms)};
+                sg_apply_uniforms(UB_cna_colored3d_vs_params, &range);
+                break;
+            }
+            case Shader3DKind::Textured:
+            {
+                cna_textured3d_vs_params_t vsUniforms{};
+                worldViewProjection.ToColumnMajor(vsUniforms.mvp);
+                vsUniforms.diffuse[0] = params.diffuseColor[0];
+                vsUniforms.diffuse[1] = params.diffuseColor[1];
+                vsUniforms.diffuse[2] = params.diffuseColor[2];
+                vsUniforms.diffuse[3] = params.diffuseColor[3];
+                vsUniforms.flags[0] = vertexColorActive ? 1.0f : 0.0f;
+                vsUniforms.alphaTest[0] = params.alphaTest[0];
+                vsUniforms.alphaTest[1] = params.alphaTest[1];
+                vsUniforms.alphaTest[2] = params.alphaTest[2];
+                vsUniforms.alphaTest[3] = params.alphaTest[3];
+                vsUniforms.fogVector[0] = params.fogVector[0];
+                vsUniforms.fogVector[1] = params.fogVector[1];
+                vsUniforms.fogVector[2] = params.fogVector[2];
+                vsUniforms.fogVector[3] = params.fogVector[3];
+
+                sg_range vsRange{&vsUniforms, sizeof(vsUniforms)};
+                sg_apply_uniforms(UB_cna_textured3d_vs_params, &vsRange);
+
+                cna_textured3d_fs_params_t fsUniforms{};
+                fsUniforms.fogColor[0] = params.fogColor[0];
+                fsUniforms.fogColor[1] = params.fogColor[1];
+                fsUniforms.fogColor[2] = params.fogColor[2];
+
+                sg_range fsRange{&fsUniforms, sizeof(fsUniforms)};
+                sg_apply_uniforms(UB_cna_textured3d_fs_params, &fsRange);
+                break;
+            }
+            case Shader3DKind::Lit:
+            {
+                const Matrix normalMatrix = Matrix::Transpose(Matrix::Invert(world));
+
+                cna_lit3d_vs_params_t vsUniforms{};
+                worldViewProjection.ToColumnMajor(vsUniforms.mvp);
+                world.ToColumnMajor(vsUniforms.world);
+                normalMatrix.ToColumnMajor(vsUniforms.normalMatrix);
+                vsUniforms.flags[0] = vertexColorActive ? 1.0f : 0.0f;
+                vsUniforms.alphaTest[0] = params.alphaTest[0];
+                vsUniforms.alphaTest[1] = params.alphaTest[1];
+                vsUniforms.alphaTest[2] = params.alphaTest[2];
+                vsUniforms.alphaTest[3] = params.alphaTest[3];
+                vsUniforms.fogVector[0] = params.fogVector[0];
+                vsUniforms.fogVector[1] = params.fogVector[1];
+                vsUniforms.fogVector[2] = params.fogVector[2];
+                vsUniforms.fogVector[3] = params.fogVector[3];
+
+                sg_range vsRange{&vsUniforms, sizeof(vsUniforms)};
+                sg_apply_uniforms(UB_cna_lit3d_vs_params, &vsRange);
+
+                cna_lit3d_fs_params_t fsUniforms{};
+                fsUniforms.diffuse[0] = params.diffuseColor[0];
+                fsUniforms.diffuse[1] = params.diffuseColor[1];
+                fsUniforms.diffuse[2] = params.diffuseColor[2];
+                fsUniforms.diffuse[3] = params.diffuseColor[3];
+                fsUniforms.ambient[0] = params.ambientColor[0];
+                fsUniforms.ambient[1] = params.ambientColor[1];
+                fsUniforms.ambient[2] = params.ambientColor[2];
+                fsUniforms.light0Dir[0] = params.light0Dir[0];
+                fsUniforms.light0Dir[1] = params.light0Dir[1];
+                fsUniforms.light0Dir[2] = params.light0Dir[2];
+                fsUniforms.light0Diffuse[0] = params.light0Diffuse[0];
+                fsUniforms.light0Diffuse[1] = params.light0Diffuse[1];
+                fsUniforms.light0Diffuse[2] = params.light0Diffuse[2];
+                fsUniforms.light0Specular[0] = params.light0Specular[0];
+                fsUniforms.light0Specular[1] = params.light0Specular[1];
+                fsUniforms.light0Specular[2] = params.light0Specular[2];
+                fsUniforms.light1Dir[0] = params.light1Dir[0];
+                fsUniforms.light1Dir[1] = params.light1Dir[1];
+                fsUniforms.light1Dir[2] = params.light1Dir[2];
+                fsUniforms.light1Diffuse[0] = params.light1Diffuse[0];
+                fsUniforms.light1Diffuse[1] = params.light1Diffuse[1];
+                fsUniforms.light1Diffuse[2] = params.light1Diffuse[2];
+                fsUniforms.light1Specular[0] = params.light1Specular[0];
+                fsUniforms.light1Specular[1] = params.light1Specular[1];
+                fsUniforms.light1Specular[2] = params.light1Specular[2];
+                fsUniforms.light2Dir[0] = params.light2Dir[0];
+                fsUniforms.light2Dir[1] = params.light2Dir[1];
+                fsUniforms.light2Dir[2] = params.light2Dir[2];
+                fsUniforms.light2Diffuse[0] = params.light2Diffuse[0];
+                fsUniforms.light2Diffuse[1] = params.light2Diffuse[1];
+                fsUniforms.light2Diffuse[2] = params.light2Diffuse[2];
+                fsUniforms.light2Specular[0] = params.light2Specular[0];
+                fsUniforms.light2Specular[1] = params.light2Specular[1];
+                fsUniforms.light2Specular[2] = params.light2Specular[2];
+                fsUniforms.specularColorAndPower[0] = params.specularColor[0];
+                fsUniforms.specularColorAndPower[1] = params.specularColor[1];
+                fsUniforms.specularColorAndPower[2] = params.specularColor[2];
+                fsUniforms.specularColorAndPower[3] = params.specularPower;
+                fsUniforms.eyePosition[0] = params.eyePositionWorld[0];
+                fsUniforms.eyePosition[1] = params.eyePositionWorld[1];
+                fsUniforms.eyePosition[2] = params.eyePositionWorld[2];
+                fsUniforms.emissiveColor[0] = params.emissiveColor[0];
+                fsUniforms.emissiveColor[1] = params.emissiveColor[1];
+                fsUniforms.emissiveColor[2] = params.emissiveColor[2];
+                fsUniforms.fogColor[0] = params.fogColor[0];
+                fsUniforms.fogColor[1] = params.fogColor[1];
+                fsUniforms.fogColor[2] = params.fogColor[2];
+
+                sg_range fsRange{&fsUniforms, sizeof(fsUniforms)};
+                sg_apply_uniforms(UB_cna_lit3d_fs_params, &fsRange);
+                break;
+            }
+        }
 
         const int elementCount = ElementCountForPrimitives(primitive, primitiveCount);
         const int baseElement = (ib != nullptr) ? params.startIndex : params.vertexStart;

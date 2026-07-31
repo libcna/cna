@@ -6,8 +6,9 @@ WebGPU. CNA keeps ownership of the SDL window and the game loop; this backend cr
 context inside it (`sokol_app` is deliberately unused). The implementation plan, task list and
 design rationale live in [`../plan_sokol.md`](../plan_sokol.md).
 
-**This backend is experimental.** It covers 2D in full and vertex-coloured 3D geometry; it is not
-comparable to EasyGL/Vulkan/D3D11 and must not be described as having XNA 3D parity. Everything outside the boundary below fails loudly —
+**This backend is experimental.** It covers 2D in full plus vertex-coloured, textured and lit 3D
+geometry; it is not comparable to EasyGL/Vulkan/D3D11 and must not be described as having XNA 3D
+parity. Everything outside the boundary below fails loudly —
 either a `std::runtime_error` naming the missing capability, or a `System::NotSupportedException`
 raised by the shared layer because the backend creates no resource — never a silent no-op.
 
@@ -48,21 +49,26 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `BasicEffect.DiffuseColor` and `VertexColorEnabled` | ✅ | `Sokol_3D` checks C, D — a real per-channel multiply |
 | Depth testing and depth writes (`DepthStencilState.DepthBufferEnable`/`WriteEnable`/`Function`) | ✅ | `Sokol_3D` check E — a real occlusion proof, both with and without the test |
 | Face culling (`RasterizerState.CullMode`) | ✅ | `Sokol_3D` check G — a clockwise triangle survives and a counter-clockwise one vanishes |
-| Arbitrary vertex layouts via `VertexDeclaration` (Position + Color, usage index 0) | ✅ | The 3D pipeline is keyed on the real declaration, not on a fixed stride |
+| Arbitrary vertex layouts via `VertexDeclaration` (Position/Color/TextureCoordinate/Normal, usage index 0) | ✅ | The 3D pipeline is keyed on the real declaration, not on a fixed stride |
+| Textured 3D draws (`BasicEffect.TextureEnabled`) with `DiffuseColor`/vertex-colour tint, alpha test, fog | ✅ | `Sokol_Lit3D` checks A-D |
+| Lit 3D draws (`BasicEffect.LightingEnabled`): ambient + up to 3 real per-pixel Blinn-Phong directional lights, specular, emissive, alpha test, fog | ✅ | `Sokol_Lit3D` checks E-I -- real per-pixel lighting, not per-vertex |
+| `SamplerState` for the 3D texture unit (`GraphicsDevice.SamplerStates[0]`) | ✅ | Read at draw time, same as every other backend |
 | Virtual resolution / presentation scaling / window↔logical transforms | ✅ | Same geometry as EasyGL's `FixedHeightDynamicWidth` |
 
 ## What does not work yet
 
 | Feature | Behaviour today | Tracked as |
 |---|---|---|
-| Textured, lit, dual-texture, environment-mapped, skinned or PBR 3D shading | throws, naming the unsupported combination | `SOKOL-21` |
-| Instanced draws | throws | `SOKOL-21` |
+| Dual-texture, environment-mapped, skinned or PBR 3D shading | throws, naming the unsupported combination | Phase 5 |
+| Instanced draws | throws | Phase 5 |
+| Per-vertex (Gouraud) lighting (`BasicEffect.PreferPerPixelLighting = false`) | ignored -- always renders per-pixel, matching every CNA backend except D3D9 | not planned |
+| A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
 | Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |
 | `RenderTarget2D`, `RenderTargetCube`, MRT | `SetRenderTargets` with any target throws; `CreateRenderTarget2D` returns null, so the shared layer raises `NotSupportedException` | `SOKOL-25`/`SOKOL-26` |
 | `TextureCube`, `Texture3D` | no resource created; `SetData`/`GetData` raise `NotSupportedException` | `SOKOL-27` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `OcclusionQuery` | `CreateOcclusionQuery` returns null — sokol_gfx exposes no query API at all | `SOKOL-29` |
-| `RasterizerState` fill mode and depth bias | accepted and ignored — sokol_gfx exposes no polygon fill mode, and depth bias belongs with the lit pipeline. Cull mode *is* honoured | `SOKOL-23` |
+| `RasterizerState` fill mode and depth bias | accepted and ignored — sokol_gfx exposes no polygon fill mode, and depth bias is not yet wired into any pipeline. Cull mode *is* honoured | `SOKOL-23` |
 | Stencil test operations | `ApplyDepthStencilState` records the depth half only; stencil is not in the pipeline key | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
 | `Viewport.MinDepth` / `MaxDepth` | ignored — `sg_apply_viewport` carries no depth range | `SOKOL-21` |
@@ -107,6 +113,7 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_Smoke` | 13 | all pass |
 | `Sokol_2D` | 15, every one a real pixel read-back | all pass |
 | `Sokol_3D` | 10, nine of them real pixel read-backs | all pass |
+| `Sokol_Lit3D` | 10, every one a real pixel read-back | all pass |
 
 The full `CnaTests` suite also runs under this backend. Note that the shared suite gates several
 capability-dependent expectations on an explicit list of backend macros (`kCubeStorageSupported`

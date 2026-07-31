@@ -876,14 +876,33 @@ namespace CNA::Internal::Backends::Sokol
         };
 
         /**
-         * @brief Identity of a colored-3D pipeline: the shared render state plus the exact vertex
-         * layout and topology it was built for.
+         * @brief Which of the three 3D shader programs a Pipeline3DKey targets.
+         *
+         * Each kind has its own attribute set (see Pipeline3DKey), so the pipeline object -- and
+         * therefore the cache key -- must name which shader it was built against, not just the
+         * vertex layout.
+         */
+        enum class Shader3DKind
+        {
+            /** @brief colored3d.glsl -- vertex colour only, no texture, no lighting. */
+            Colored,
+            /** @brief textured3d.glsl -- texture + vertex colour, no lighting. */
+            Textured,
+            /** @brief lit3d.glsl -- ambient + up to 3 directional lights, always samples a texture
+             *  (a real one, or the backend's 1x1 white fallback). */
+            Lit
+        };
+
+        /**
+         * @brief Identity of a 3D pipeline: which shader, the shared render state, and the exact
+         * vertex layout and topology it was built for.
          *
          * The layout has to be part of the key because sokol_gfx bakes it into the pipeline
          * object, unlike the sprite path where every draw shares one fixed vertex format.
          */
         struct Pipeline3DKey
         {
+            Shader3DKind kind;
             int colorSrcBlend;
             int alphaSrcBlend;
             int colorDstBlend;
@@ -907,6 +926,13 @@ namespace CNA::Internal::Backends::Sokol
             /// Byte offset of the Color element, or -1 when the declaration has none.
             int colorOffset;
             int colorFormat;
+            /// Byte offset of the TextureCoordinate element, or -1 when absent (Colored kind
+            /// never reads this; Lit kind only needs it when a real texture is bound).
+            int texCoordOffset;
+            int texCoordFormat;
+            /// Byte offset of the Normal element, or -1 when absent (only Lit kind reads this).
+            int normalOffset;
+            int normalFormat;
 
             bool operator==(const Pipeline3DKey& other) const;
         };
@@ -947,7 +973,8 @@ namespace CNA::Internal::Backends::Sokol
                            PrimitiveType primitive,
                            int primitiveCount,
                            const GpuDrawParams& params);
-        [[nodiscard]] std::uint32_t GetColored3DPipeline(const Pipeline3DKey& key);
+        [[nodiscard]] std::uint32_t Get3DPipeline(const Pipeline3DKey& key);
+        [[nodiscard]] SokolTextureBackend& GetDefaultWhiteTexture();
         [[nodiscard]] std::uint32_t GetSpritePipeline();
         [[nodiscard]] std::uint32_t GetSampler(int filter, int addressU, int addressV,
                                                int maxAnisotropy);
@@ -994,10 +1021,31 @@ namespace CNA::Internal::Backends::Sokol
         int cullMode_ = 0;         // CullMode::None
         int fillMode_ = 0;         // FillMode::Solid
 
+        /// Per-slot SamplerState, mirroring GraphicsDevice.SamplerStates -- read by the textured/
+        /// lit 3D draw paths for texture unit 0. Defaults match XNA's own SamplerState default
+        /// (equivalent to LinearWrap, MaxAnisotropy 4). SpriteBatch does not read this array: it
+        /// receives its filter/address values directly from SpriteBatch.Begin's own SamplerState.
+        struct SamplerSlotState
+        {
+            int filter = 0;         // TextureFilter::Linear
+            int addressU = 0;       // TextureAddressMode::Wrap
+            int addressV = 0;       // TextureAddressMode::Wrap
+            int maxAnisotropy = 4;
+        };
+        static constexpr int kMaxSamplerSlots = 16;
+        SamplerSlotState samplerSlots_[kMaxSamplerSlots];
+
         std::uint32_t spriteShaderId_ = 0;
         std::uint32_t spriteVertexBufferId_ = 0;
         std::uint32_t spriteIndexBufferId_ = 0;
         std::uint32_t colored3dShaderId_ = 0;
+        std::uint32_t textured3dShaderId_ = 0;
+        std::uint32_t lit3dShaderId_ = 0;
+        /// Lazily created 1x1 opaque-white texture, bound by the Lit shader whenever
+        /// GpuDrawParams::textureEnabled is false -- lets one shader serve both "textured and lit"
+        /// and "vertex-coloured and lit" (the multiply is then a no-op), the same convention the
+        /// EasyGL backend's own default-white-texture fallback uses.
+        std::unique_ptr<SokolTextureBackend> defaultWhiteTexture_;
         std::unordered_map<PipelineKey, std::uint32_t, PipelineKeyHash> pipelineCache_;
         std::unordered_map<Pipeline3DKey, std::uint32_t, Pipeline3DKeyHash> pipeline3dCache_;
         std::unordered_map<SamplerKey, std::uint32_t, SamplerKeyHash> samplerCache_;
