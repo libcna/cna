@@ -1866,7 +1866,8 @@ namespace CNA::Internal::Backends::Sokol
 
     int SokolGraphicsBackend::CurrentPassSampleCountEXT() const
     {
-        // RenderTargetCube is never multisampled yet (plan_sokol.md SOKOL-26's remaining item).
+        // RenderTargetCube is never multisampled -- sokol_gfx's own validation layer hard-rejects
+        // a CUBE image with sample_count > 1 (see CreateRenderTargetCube's comment).
         if (currentRenderTargetCube_ != nullptr) return 1;
         if (currentRenderTarget_ != nullptr)
         {
@@ -2089,7 +2090,11 @@ namespace CNA::Internal::Backends::Sokol
     std::unique_ptr<IRenderTargetCubeBackend> SokolGraphicsBackend::CreateRenderTargetCube(
         int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        // See CreateRenderTarget2D's identical reasoning for preserveContents/multiSampleCount.
+        // See CreateRenderTarget2D's identical reasoning for preserveContents. multiSampleCount is
+        // always ignored here, unlike RenderTarget2D's real MSAA support (plan_sokol.md SOKOL-26):
+        // sokol_gfx's own validation layer hard-rejects a CUBE image with sample_count > 1
+        // (VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE) -- a permanent API boundary, not a
+        // "not implemented yet" gap, matching WebGPU's/D3D9's own declared cube-MSAA boundaries.
         (void)preserveContents;
         if (mipMap)
             NotYetImplemented(kBackendName, "a mipmapped RenderTargetCube");

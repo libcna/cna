@@ -196,6 +196,14 @@ namespace
     // D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY view per face.
     constexpr Contract kContract{"D3D12", true, Support::Exact, true,
                                  Support::Exact, false, false};
+#elif defined(CNA_BACKEND_SOKOL)
+    // `msaaEngages` false: sokol_gfx's own validation layer hard-rejects a CUBE image with
+    // sample_count > 1 (VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE) -- a permanent API boundary
+    // this backend cannot cross, unlike RenderTarget2D's real MSAA support. `readback` Unsupported:
+    // SokolRenderTargetCubeBackend does not override ITextureCubeBackend::GetData (same
+    // NotSupportedException boundary as RenderTarget2D::GetData).
+    constexpr Contract kContract{"SOKOL", true, Support::Unsupported, false,
+                                 Support::Unsupported, false, false};
 #else
 #error "REMED-GFX-141: this backend has no declared multisampled RenderTargetCube contract."
 #endif

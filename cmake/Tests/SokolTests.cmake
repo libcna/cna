@@ -148,4 +148,16 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_rendertarget2d_msaa
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-141: a multisampled RenderTargetCube must give each face its own multisample colour
+    # state, not one shared attachment all six faces point at -- SokolRenderTargetCubeBackend
+    # allocates a real 6-face CUBE image for the MSAA colour attachment (per-face sg_view via
+    # .slice), the same "real six-slice array" shape this oracle credits D3D11/D3D12 with, rather
+    # than the single shared scratch attachment three other backends originally shipped.
+    cna_sokol_test(cna_test_sokol_rendertargetcube_msaa_face
+                    examples/rendertargetcube_msaa_face_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTargetCube_MsaaFace
+        COMMAND cna_test_sokol_rendertargetcube_msaa_face
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

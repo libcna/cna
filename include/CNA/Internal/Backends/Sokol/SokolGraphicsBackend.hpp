@@ -295,6 +295,13 @@ namespace CNA::Internal::Backends::Sokol
      * rendertarget_depthstencil_usage_test.cpp's U2 check), not per-face: it is a plain 2D
      * depth-stencil image, reused as the pass's depth attachment regardless of which face is
      * currently the colour attachment.
+     *
+     * Unlike `SokolRenderTargetBackend`, this class never attempts MSAA: sokol_gfx's own validation
+     * layer hard-rejects a CUBE image with `sample_count > 1`
+     * (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), so a multisampled `RenderTargetCube` is a
+     * permanent sokol_gfx API boundary, not a "not implemented yet" gap -- `multiSampleCount` is
+     * always silently clamped to 1 (`GetMultiSampleCount()` always answers 0), the same declared
+     * boundary `WebGPUGraphicsBackend`/`D3D9RenderTargetCubeBackend` report for their own reasons.
      */
     class SokolRenderTargetCubeBackend : public IRenderTargetCubeBackend
     {
@@ -1580,9 +1587,10 @@ namespace CNA::Internal::Backends::Sokol
         /// Returns the real sample count of whatever is currently the draw target: a bound
         /// RenderTarget2D's own (device-clamped) MultiSampleCount when it is multisampled, 1 when
         /// it is bound but not, and the swapchain's sampleCount_ otherwise. A RenderTargetCube face
-        /// is never multisampled yet (plan_sokol.md SOKOL-26's remaining item), so it always
-        /// answers 1. Shared by GetSpritePipeline and DrawColored3D's Pipeline3DKey construction,
-        /// mirroring CurrentPassHasDepthStencilAttachmentEXT's rationale.
+        /// is never multisampled -- sokol_gfx's own validation layer hard-rejects a CUBE image with
+        /// sample_count > 1 -- so it always answers 1. Shared by GetSpritePipeline and
+        /// DrawColored3D's Pipeline3DKey construction, mirroring
+        /// CurrentPassHasDepthStencilAttachmentEXT's rationale.
         [[nodiscard]] int CurrentPassSampleCountEXT() const;
 
         SDL_Window* window_ = nullptr;
