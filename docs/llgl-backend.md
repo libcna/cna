@@ -33,7 +33,10 @@ module**:
 * **occlusion queries**: real `LLGL::QueryHeap`-backed `OcclusionQuery`. See "Occlusion queries"
   below for how `IsComplete()`/`PixelCount()` behave on this backend;
 * **custom `ShaderEffect`s**, scoped to `SpriteBatch` draws. See "Custom effects" below for the
-  runtime compile path and the uniform contract.
+  runtime compile path and the uniform contract;
+* **a real window resize** through `GraphicsDeviceManager.ApplyChanges()`, and **MSAA on the back
+  buffer**, construction-time only and module-dependent — see the `MultiSampleAntiAliasing` row in
+  "Capability boundary" below.
 
 **Not implemented:** `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
 `RenderTargetCube`, multiple render targets (MRT), MSAA/mip-mapped render targets, cube and
@@ -260,9 +263,14 @@ custom GLSL shader genuinely tinting a sprite by its own uniform, against a stoc
 case that must not show the tint. `Llgl_Resize` covers a real window resize driven through
 `GraphicsDeviceManager.ApplyChanges()` (growing, shrinking, and a `Letterbox` presentation rect
 recomputing from the resized window), settled with `SDL_SyncWindow()` before each post-resize read
-since `SDL_SetWindowSize()` is not guaranteed synchronous under X11.
+since `SDL_SetWindowSize()` is not guaranteed synchronous under X11. `Llgl_Msaa` covers a genuinely
+antialiased diagonal edge against a hard, unblended one with MSAA off, using two raw
+`GraphicsDevice` objects constructed directly (MSAA is construction-time only on this backend, so
+neither `Game`'s eagerly-constructed device nor `ApplyChanges()` can reach it) — the sample-count-
+dependent checks report `[SKIP]` on a module that does not apply MSAA to the default framebuffer at
+all (the OpenGL module, on this project's own test environment) rather than failing.
 Every one of them is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All twenty-two
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All twenty-four
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
@@ -278,7 +286,7 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | Capability | Supported | Why |
 | --- | --- | --- |
 | `DepthStencilBuffer` | yes | The swap chain really has both attachments and all seven clear paths work. |
-| `MultiSampleAntiAliasing` | yes | Forwarded to the swap chain; not yet pixel-verified (`LLGL-22`). |
+| `MultiSampleAntiAliasing` | module-dependent | `MultiSampleCount` is honoured only at swap-chain CONSTRUCTION time (no way to enable it after the fact via `GraphicsDeviceManager.ApplyChanges()` — a `Game`'s eagerly-constructed device is always built with `MultiSampleCount=0`). On this project's own test environment the Vulkan module (lavapipe) applies it and produces a genuinely antialiased edge; the OpenGL module (llvmpipe/GLX) does not apply it at any sample count. Pixel-verified, including the module-dependent behaviour itself, by `Llgl_Msaa` (`LLGL-23`). |
 | `AnisotropicFiltering` | device-dependent | From LLGL's reported `limits.maxAnisotropy`. |
 | `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog, the alpha test, and per-pixel lighting (textured or untextured-with-vertex-colours); the remaining stock effects are not implemented. |
 | `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |
