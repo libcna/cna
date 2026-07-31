@@ -503,6 +503,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
         examples/rendertarget_msaa_mip_readback_test.cpp)
     cna_register_backend_test(NAME SdlGpu_MsaaMipReadback COMMAND cna_test_sdlgpu_msaa_mip_readback
         TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # REMED-GFX-189 cross-backend control: the same PUBLIC invalid-mip-level contract on this
+    # backend. The fabrication was Vulkan-only and only Vulkan production changed; this backend
+    # adopted the identical guard in REMED-GFX-186, so running the same fixture here is what keeps
+    # both claims falsifiable.
+    cna_sdlgpu_test(cna_test_sdlgpu_invalid_mip_level
+        examples/rendertarget_invalid_mip_level_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_InvalidMipLevel COMMAND cna_test_sdlgpu_invalid_mip_level
+        TIMEOUT 1200 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     # REMED-GFX-157: a stock 3D draw issued AFTER a SpriteBatch inside ONE render-target bind cycle
     # must execute after it rather than be dropped. REMED-GFX-155's leg I0 measured the region it
     # drew into still holding the cycle's clear colour on BGFX, VULKAN, SOFTWARE and EASYGL, with

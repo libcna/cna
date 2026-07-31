@@ -93,6 +93,37 @@ namespace CNA::Internal::Backends::Vulkan
             std::fflush(stderr);
         }
 
+        /// REMED-GFX-189: the render-target readback trace. Set CNA_VULKAN_TARGET_READBACK_TRACE=1
+        /// to emit one line per public RenderTarget2D readback that reaches this backend, carrying
+        /// the target's public dimensions and DECLARED level count beside the level actually asked
+        /// for, the native image and subresource selected to satisfy it, the copy extent, the
+        /// staging size and the first texel handed back. Printing the declaration beside the
+        /// request is the whole point: every individual handle, extent and staging size can be
+        /// perfectly plausible while the requested level does not exist at all, which is exactly
+        /// how an out-of-range read escaped detection here -- it returned normally, wrote the
+        /// caller's buffer, and every number in the copy looked right on its own. Off (and free
+        /// beyond one already-resolved bool test) unless the variable is set.
+        bool VulkanTargetReadbackTraceOnEXT()
+        {
+            static const bool on = [] {
+                const char* v = std::getenv("CNA_VULKAN_TARGET_READBACK_TRACE");
+                return v != nullptr && v[0] != '\0' && v[0] != '0';
+            }();
+            return on;
+        }
+
+        void VkTargetReadbackTraceEXT(const char* fmt, ...)
+        {
+            if (!VulkanTargetReadbackTraceOnEXT()) return;
+            std::fputs("[VKRB] ", stderr);
+            va_list ap;
+            va_start(ap, fmt);
+            std::vfprintf(stderr, fmt, ap);
+            va_end(ap);
+            std::fputc('\n', stderr);
+            std::fflush(stderr);
+        }
+
         /// REMED-GFX-166: which deferred 3D command family a draw belongs to, for the trace.
         /// The flags are mutually exclusive by construction at every enqueue site; the order here
         /// mirrors the recorder's own pipeline-selection order so the two cannot disagree.
@@ -971,6 +1002,13 @@ namespace CNA::Internal::Backends::Vulkan
     bool VulkanRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                             void* data, int dataLength) const
     {
+        static unsigned long long readbackCallEXT = 0;
+        const unsigned long long callIndex = ++readbackCallEXT;
+        VkTargetReadbackTraceEXT("rt2d.read.enter  call=%llu backend=%p target=%dx%d LevelCount=%d "
+                                 "requestedLevel=%d region=(%d,%d %dx%d) dataLength=%d",
+                                 callIndex, static_cast<const void*>(this), width_, height_,
+                                 levelCount_, level, x, y, w, h, dataLength);
+
         // REMED-GFX-127: reporting false here is what makes the shared layer raise the missing
         // capability instead of handing the caller its own zero-initialized scratch buffer.
         if (!owner_ || colorImage_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
@@ -996,6 +1034,29 @@ namespace CNA::Internal::Backends::Vulkan
         region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
         region.imageOffset      = { x, y, 0 };
         region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        // The staging allocation as it stands BEFORE the copy. Printing it is what separates "the
+        // copy read the wrong subresource" from "the copy wrote nothing and the caller was handed
+        // whatever this fresh host-visible allocation already contained": if the pre- and post-copy
+        // bytes are identical, no image content reached the caller at all.
+        const auto* preSrc = static_cast<const uint8_t*>(mapped);
+        VkTargetReadbackTraceEXT("rt2d.read.native call=%llu image=0x%llx mipLevel=%u baseLayer=%u "
+                                 "layerCount=%u srcLayout=TRANSFER_SRC_OPTIMAL offset=(%d,%d,0) "
+                                 "extent=(%u,%u,%u) stagingBytes=%d preCopyStaging=(%u,%u,%u,%u) "
+                                 "cb=%p",
+                                 callIndex,
+                                 static_cast<unsigned long long>(
+                                     reinterpret_cast<std::uintptr_t>(colorImage_)),
+                                 region.imageSubresource.mipLevel,
+                                 region.imageSubresource.baseArrayLayer,
+                                 region.imageSubresource.layerCount,
+                                 region.imageOffset.x, region.imageOffset.y,
+                                 region.imageExtent.width, region.imageExtent.height,
+                                 region.imageExtent.depth, dataLength,
+                                 dataLength >= 4 ? static_cast<unsigned>(preSrc[0]) : 0u,
+                                 dataLength >= 4 ? static_cast<unsigned>(preSrc[1]) : 0u,
+                                 dataLength >= 4 ? static_cast<unsigned>(preSrc[2]) : 0u,
+                                 dataLength >= 4 ? static_cast<unsigned>(preSrc[3]) : 0u,
+                                 static_cast<void*>(cb));
         vkCmdCopyImageToBuffer(cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                 stagingBuf, 1, &region);
         owner_->EndOneTimeCommands(cb);
@@ -1013,6 +1074,14 @@ namespace CNA::Internal::Backends::Vulkan
             if (isBGRA) { dst[o+0] = src[o+2]; dst[o+1] = src[o+1]; dst[o+2] = src[o+0]; dst[o+3] = src[o+3]; }
             else        { dst[o+0] = src[o+0]; dst[o+1] = src[o+1]; dst[o+2] = src[o+2]; dst[o+3] = src[o+3]; }
         }
+
+        VkTargetReadbackTraceEXT("rt2d.read.exit   call=%llu elementsWritten=%d "
+                                 "firstTexel=(%u,%u,%u,%u) result=true",
+                                 callIndex, pixels,
+                                 pixels > 0 ? static_cast<unsigned>(dst[0]) : 0u,
+                                 pixels > 0 ? static_cast<unsigned>(dst[1]) : 0u,
+                                 pixels > 0 ? static_cast<unsigned>(dst[2]) : 0u,
+                                 pixels > 0 ? static_cast<unsigned>(dst[3]) : 0u);
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);

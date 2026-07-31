@@ -238,6 +238,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         examples/rendertarget_msaa_mip_readback_test.cpp)
     cna_register_backend_test(NAME Software_MsaaMipReadback COMMAND cna_test_software_msaa_mip_readback
         TIMEOUT 1200 LABELS "Software")
+    # REMED-GFX-189 cross-backend control: the same PUBLIC invalid-mip-level contract on this
+    # backend. The fabrication was Vulkan-only and only Vulkan production changed; running the
+    # identical fixture here is what makes that claim falsifiable rather than asserted.
+    cna_software_test(cna_test_software_invalid_mip_level
+        examples/rendertarget_invalid_mip_level_test.cpp)
+    cna_register_backend_test(NAME Software_InvalidMipLevel COMMAND cna_test_software_invalid_mip_level
+        TIMEOUT 1200 LABELS "Software")
     # REMED-GFX-165 cross-backend control: the authoritative-backbuffer-dimension GetBackBufferData
     # contract. Software's backbuffer is a CPU buffer that genuinely resizes, so it is also where the
     # post-resize pixel oracle is meaningful. Software already honoured the contract (its viewport

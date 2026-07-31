@@ -231,6 +231,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
         examples/rendertarget_msaa_mip_readback_test.cpp)
     cna_register_backend_test(NAME Headless_MsaaMipReadback COMMAND cna_test_headless_msaa_mip_readback
         TIMEOUT 1200 LABELS "Headless")
+    # REMED-GFX-189 cross-backend control: the same PUBLIC invalid-mip-level contract on this
+    # backend. The fabrication was Vulkan-only and only Vulkan production changed; running the
+    # identical fixture here is what makes that claim falsifiable rather than asserted.
+    cna_headless_test(cna_test_headless_invalid_mip_level
+        examples/rendertarget_invalid_mip_level_test.cpp)
+    cna_register_backend_test(NAME Headless_InvalidMipLevel COMMAND cna_test_headless_invalid_mip_level
+        TIMEOUT 1200 LABELS "Headless")
     # REMED-GFX-165 cross-backend control: Headless does not rasterize, so the pixel oracle is a
     # declared boundary; the run still exercises the shared dimension/rectangle-validation path.
     cna_headless_test(cna_test_headless_backbuffer_readback_dimension

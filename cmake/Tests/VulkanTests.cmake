@@ -1363,6 +1363,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             examples/rendertarget_msaa_mip_readback_test.cpp)
         cna_register_backend_test(NAME Vulkan_MsaaMipReadback COMMAND cna_test_vulkan_msaa_mip_readback
             TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-189: a RenderTarget2D mip level outside [0, LevelCount) must be REFUSED before
+        # any native call, with the caller's destination left completely untouched. This backend is
+        # where the defect lived -- GetData range-checked nothing, so an out-of-range level reached
+        # vkCmdCopyImageToBuffer as undefined behaviour and the caller was handed a texel that looks
+        # like content. Every sibling route here (Texture3D, TextureCube, RenderTargetCube) already
+        # had the guard; the 2D target was the one that did not.
+        cna_vulkan_test(cna_test_vulkan_invalid_mip_level
+            examples/rendertarget_invalid_mip_level_test.cpp)
+        cna_register_backend_test(NAME Vulkan_InvalidMipLevel COMMAND cna_test_vulkan_invalid_mip_level
+            TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # REMED-GFX-165 cross-backend control: Vulkan already honoured the authoritative-dimension
         # GetBackBufferData contract (its swapchain extent equals the backbuffer); this run establishes
         # that the shared fix left it byte-unchanged and that only WebGPU/SDL_GPU production changed.

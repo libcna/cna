@@ -656,6 +656,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         examples/rendertarget_msaa_mip_readback_test.cpp)
     cna_register_backend_test(NAME WebGPU_MsaaMipReadback COMMAND cna_test_webgpu_msaa_mip_readback
         TIMEOUT 1200 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    # REMED-GFX-189 cross-backend control: the same PUBLIC invalid-mip-level contract on this
+    # backend. The fabrication was Vulkan-only and only Vulkan production changed; running the
+    # identical fixture here is what makes that claim falsifiable rather than asserted.
+    cna_webgpu_test(cna_test_webgpu_invalid_mip_level
+        examples/rendertarget_invalid_mip_level_test.cpp)
+    cna_register_backend_test(NAME WebGPU_InvalidMipLevel COMMAND cna_test_webgpu_invalid_mip_level
+        TIMEOUT 1200 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     # REMED-GFX-155 cross-backend control: a render target produced and unbound earlier in a public
     # frame must be visible to a consumer that draws on the BACKBUFFER later in that same frame. The
     # defect was bgfx-local (it radix-sorts a frame's draws by their view's sort position, which

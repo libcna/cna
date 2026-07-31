@@ -1229,6 +1229,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_MsaaMipReadback COMMAND cna_test_bgfx_msaa_mip_readback
         TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-189 cross-backend control: the same PUBLIC invalid-mip-level contract on this
+    # backend. The fabrication was Vulkan-only and only Vulkan production changed; running the
+    # identical fixture here is what makes that claim falsifiable rather than asserted.
+    cna_bgfx_test(cna_test_bgfx_invalid_mip_level
+        examples/rendertarget_invalid_mip_level_test.cpp)
+    cna_register_backend_test(NAME Bgfx_InvalidMipLevel COMMAND cna_test_bgfx_invalid_mip_level
+        TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-165 cross-backend control: Bgfx already honoured the authoritative-dimension
     # GetBackBufferData contract; this run establishes that the shared fix left it byte-unchanged.
     cna_bgfx_test(cna_test_bgfx_backbuffer_readback_dimension
