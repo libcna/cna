@@ -368,6 +368,60 @@ namespace CNA::Internal::Backends::SdlGpu
             return enabled;
         }
 
+        /**
+         * REMED-GFX-187: traces the exact per-level GPU blits used to regenerate a 2D target.
+         */
+        [[nodiscard]] bool TargetMipTraceEnabled()
+        {
+            static const bool enabled = std::getenv("CNA_SDLGPU_TRACE_TARGET_MIPS") != nullptr;
+            return enabled;
+        }
+
+        /**
+         * Regenerates exactly the allocated 2D target mip chain with the FNA/XNA level extents.
+         *
+         * SDL3's Vulkan `GenerateMipmaps` path does not clamp an axis after right-shifting it,
+         * unlike SDL3's D3D12 path. Calling SDL's public blit operation for each declared level
+         * keeps the correction inside CNA's SDL_GPU integration while retaining GPU generation,
+         * the existing command buffer, and the existing post-resolve ordering.
+         */
+        void GenerateRenderTargetMipChain(SDL_GPUCommandBuffer* commandBuffer,
+                                          SDL_GPUTexture* texture,
+                                          int width, int height, int levelCount)
+        {
+            for (int level = 1; level < levelCount; ++level)
+            {
+                SDL_GPUBlitInfo blit{};
+                blit.source.texture = texture;
+                blit.source.mip_level = static_cast<Uint32>(level - 1);
+                blit.source.w = static_cast<Uint32>(std::max(1, width >> (level - 1)));
+                blit.source.h = static_cast<Uint32>(std::max(1, height >> (level - 1)));
+
+                blit.destination.texture = texture;
+                blit.destination.mip_level = static_cast<Uint32>(level);
+                blit.destination.w = static_cast<Uint32>(std::max(1, width >> level));
+                blit.destination.h = static_cast<Uint32>(std::max(1, height >> level));
+
+                blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+                blit.filter = SDL_GPU_FILTER_LINEAR;
+
+                if (TargetMipTraceEnabled())
+                {
+                    std::fprintf(stderr,
+                                 "[cna-sdlgpu-target-mips] texture=%p base=%dx%d levels=%d "
+                                 "source=%u:%ux%u destination=%u:%ux%u\n",
+                                 static_cast<void*>(texture), width, height, levelCount,
+                                 static_cast<unsigned>(blit.source.mip_level), blit.source.w,
+                                 blit.source.h,
+                                 static_cast<unsigned>(blit.destination.mip_level),
+                                 blit.destination.w, blit.destination.h);
+                    std::fflush(stderr);
+                }
+
+                SDL_BlitGPUTexture(commandBuffer, &blit);
+            }
+        }
+
         // REMED-GFX-170: XNA's SamplerState.MaxAnisotropy default. ISpriteBatchBackend carries the
         // filter ordinal and the two address modes and nothing else, so a sprite cannot express a
         // non-default anisotropy on ANY backend.
@@ -1841,15 +1895,18 @@ namespace CNA::Internal::Backends::SdlGpu
             extra->clearStencilPending = false;
         }
 
-        // Per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass --
-        // matches FNA3D's OPENGL_ResolveTarget semantics (mip chain regenerated once this target's
-        // contents are final for the frame). Per segment, since each segment's result is what any
-        // LATER segment or the swapchain pass may sample.
+        // REMED-GFX-187: regenerate through clamped per-level GPU blits outside the pass. This
+        // matches FNA3D's OPENGL_ResolveTarget semantics (the chain is regenerated once this
+        // target's contents are final for the segment) and keeps the existing resolve-before-mips
+        // ordering. Per segment, since each segment's result is what a LATER segment or the
+        // swapchain pass may sample.
         if (target->mipMap && target->levelCount > 1)
-            SDL_GenerateMipmapsForGPUTexture(cmd, target->colorTexture);
+            GenerateRenderTargetMipChain(cmd, target->colorTexture, target->width,
+                                         target->height, target->levelCount);
         for (const auto& extra : segment.extraAttachments)
             if (extra->mipMap && extra->levelCount > 1)
-                SDL_GenerateMipmapsForGPUTexture(cmd, extra->colorTexture);
+                GenerateRenderTargetMipChain(cmd, extra->colorTexture, extra->width,
+                                             extra->height, extra->levelCount);
     }
 
     void SdlGpuGraphicsBackend::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd,
@@ -6284,7 +6341,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // the multisample attachment with one level. The two jobs are then ordered by
         // FNA3D_ResolveTarget at unbind -- resolve into level 0, then regenerate the chain from it
         // -- which is precisely what RenderToTarget already does here (the render pass' own
-        // resolve_texture store action, then SDL_GenerateMipmapsForGPUTexture after the pass ends).
+        // resolve_texture store action, then GenerateRenderTargetMipChain after the pass ends).
         mipMap_ = mipMap;
         state_->mipMap = mipMap_;
 

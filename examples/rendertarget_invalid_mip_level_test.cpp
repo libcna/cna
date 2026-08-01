@@ -176,22 +176,6 @@ namespace
 #endif
 
     /**
-     * @brief Whether a level whose halved extent reaches zero on an axis is GENERATED here.
-     *
-     * False on SDL_GPU, which is **REMED-GFX-187**: SDL3 3.5.0's `VULKAN_GenerateMipmaps` blits into
-     * `dim >> level` with no `max(1, ...)` clamp, so such a level is never written. That is a
-     * separate, open ticket about mip CONTENT; this file must not silently absorb it, so the
-     * affected levels have their content left unasserted while their TRANSFER contract -- and every
-     * invalid-level rejection -- is asserted exactly as everywhere else.
-     */
-    constexpr bool kMipGeneratorTruncatesUnevenChains =
-#if defined(CNA_BACKEND_SDL_GPU)
-        true;
-#else
-        false;
-#endif
-
-    /**
      * @brief Whether `SetRenderTargets` with more than one attachment is executed here.
      *
      * False on SOFTWARE and HEADLESS. Leg H1 declares the refusal rather than skipping, so an MRT
@@ -203,13 +187,6 @@ namespace
 #else
         true;
 #endif
-
-    /** @brief True when @p level is one REMED-GFX-187 leaves unwritten on this backend. */
-    bool TruncatedGeneratedLevel(int w0, int h0, int level)
-    {
-        if (!kMipGeneratorTruncatesUnevenChains || level < 1) return false;
-        return (w0 >> level) == 0 || (h0 >> level) == 0;
-    }
 
     // ---- the asymmetric pattern -------------------------------------------------------------
     //
@@ -641,7 +618,7 @@ class RenderTargetInvalidMipLevelTest : public Game
         const int w0 = rt.getWidthProperty();
         const int h0 = rt.getHeightProperty();
         return ReadLevelRect(rt, level, 0, 0, LevelDim(w0, level), LevelDim(h0, level), w0, h0,
-                             label, contentAsserted && !TruncatedGeneratedLevel(w0, h0, level));
+                             label, contentAsserted);
     }
 
     /** @brief Builds a target, or declares this backend's catchable refusal and returns null. */
@@ -991,16 +968,21 @@ class RenderTargetInvalidMipLevelTest : public Game
     }
 
     /**
-     * @brief D1 -- every valid level of seven chains stays exact, and each chain's own N is refused.
+     * @brief D1 -- every valid level of eleven chains stays exact, and each chain's own N is refused.
      *
+     * The narrow 1x13/13x1 and 2x13/13x2 pairs make each axis-bottoming orientation explicit;
      * 1x1, 2x2, 3x2, 5x3, 8x4, 13x7 and 16x16 cover single-level chains, exact powers of two, odd
-     * widths, odd heights and both axes reaching 1 at different levels. The invalid index is derived
-     * from each target's OWN declaration, so this cannot silently test the same number twice.
+     * widths, odd heights and both axes reaching 1 at different levels. The invalid index is
+     * derived from each target's OWN declaration, so this cannot silently test the same number
+     * twice.
      */
     void LegD1()
     {
         auto& dev = getGraphicsDeviceProperty();
-        const int dims[][2] = { {1,1}, {2,2}, {3,2}, {5,3}, {8,4}, {13,7}, {16,16} };
+        const int dims[][2] = {
+            {1,1}, {1,13}, {13,1}, {2,2}, {2,13}, {13,2},
+            {3,2}, {5,3}, {8,4}, {13,7}, {16,16}
+        };
         for (const auto& d : dims)
         {
             const std::string label = "D1 " + std::to_string(d[0]) + "x" + std::to_string(d[1]);

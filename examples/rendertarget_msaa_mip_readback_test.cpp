@@ -93,6 +93,9 @@
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -232,46 +235,6 @@ namespace
 #else
         true;
 #endif
-
-    /**
-     * @brief Whether this backend's mip GENERATOR truncates a chain whose axes bottom out unevenly.
-     *
-     * TRUE on SDL_GPU, and read straight out of the vendored SDL3 3.5.0 tree rather than guessed:
-     * `VULKAN_GenerateMipmaps` (`src/gpu/vulkan/SDL_gpu_vulkan.c`) sets its blit destination extent
-     * to `info.width >> level` and `info.height >> level` with NO `max(1, ...)` clamp, so as soon
-     * as one axis reaches a level where `dim >> level == 0` the `vkCmdBlitImage` destination region
-     * is ZERO-sized and that level is never written. The very same file's D3D12 sibling
-     * (`src/gpu/d3d12/SDL_gpu_d3d12.c`) writes `SDL_max(info.width >> (level-1), 1)`, so this is
-     * the Vulkan driver specifically, not an SDL-wide contract.
-     *
-     * That makes it a THIRD-PARTY defect on a DIFFERENT mechanism from REMED-GFX-186 (which is
-     * about selecting and validating the level to READ). It is recorded as **REMED-GFX-187**, and
-     * it is not fixed here: nothing CNA can do to `SdlGpuRenderTargetBackend` changes what
-     * `SDL_GenerateMipmapsForGPUTexture` writes, and shortening the public `LevelCount` to hide it
-     * would reintroduce exactly the contract violation REMED-GFX-186 exists to remove.
-     *
-     * SQUARE resources are immune -- both axes reach 1 at the same level -- which is why
-     * `RenderTargetCube`, `TextureCube` and every square `RenderTarget2D` are unaffected.
-     */
-    constexpr bool kMipGeneratorTruncatesUnevenChains =
-#if defined(CNA_BACKEND_SDL_GPU)
-        true;
-#else
-        false;
-#endif
-
-    /**
-     * @brief True when @p level is one REMED-GFX-187 leaves unwritten on this backend.
-     *
-     * Exactly the predicate the defective arithmetic implies: a zero destination extent on either
-     * axis. Deriving it from the mechanism rather than from a list of observed failures is what
-     * makes it a boundary rather than a set of tolerated results.
-     */
-    bool TruncatedGeneratedLevel(int w0, int h0, int level)
-    {
-        if (!kMipGeneratorTruncatesUnevenChains || level < 1) return false;
-        return (w0 >> level) == 0 || (h0 >> level) == 0;
-    }
 
     // ---- the asymmetric pattern -------------------------------------------------------------
     //
@@ -677,26 +640,6 @@ class RenderTargetMsaaMipReadbackTest : public Game
                      " texels exactly (0,0,0,0), " + std::to_string(exactWrong) + "/" +
                      std::to_string(exactChecked) + " derivable texels wrong, first " +
                      (firstMismatch.empty() ? std::string("none") : firstMismatch));
-            return std::vector<Color>(buf.begin() + kGuard, buf.begin() + kGuard + count);
-        }
-
-        // REMED-GFX-187: a level the native mip GENERATOR leaves unwritten. The transfer contract
-        // above is still fully asserted -- the read must complete, fill its window and respect its
-        // guards -- and the boundary is stated as the exact result it currently produces, so a
-        // fixed SDL3 turns this check RED and names the ticket instead of passing silently. It is
-        // deliberately not weakened into a skip: a skipped level outlives its defect.
-        if (TruncatedGeneratedLevel(w0, h0, level))
-        {
-            const Color first = buf[static_cast<std::size_t>(kGuard)];
-            boundary(label + ": REMED-GFX-187 -- SDL3's Vulkan VULKAN_GenerateMipmaps blits into a "
-                             "destination extent of " + std::to_string(w0 >> level) + "x" +
-                     std::to_string(h0 >> level) + " (unclamped dim>>level), so this level is never "
-                     "written; measured " + ColorText(first));
-            check(zeroed == count,
-                  label + ": REMED-GFX-187's boundary still reproduces exactly -- all " +
-                      std::to_string(count) + " texels of this ungenerated level are (0,0,0,0) (" +
-                      std::to_string(zeroed) + " are). If this FAILS, the generator was fixed and "
-                      "the declaration must be removed");
             return std::vector<Color>(buf.begin() + kGuard, buf.begin() + kGuard + count);
         }
 
@@ -1243,27 +1186,34 @@ class RenderTargetMsaaMipReadbackTest : public Game
 
     // ================================================================ Group G: lifetime
 
-    /** @brief G1 -- dispose the target immediately after its level-1 read. */
+    /** @brief G1 -- dispose an uneven target immediately after its final-level read. */
     void LegG1()
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto rt = ShapeTarget(dev, "G1");
+        auto rt = MakeTarget(dev, 13, 7, true, 4, DepthFormat::None,
+                             RenderTargetUsage::DiscardContents, "G1 13x7");
         if (!rt) return;
-        ReadWholeLevel(*rt, 1, "G1 level 1 before disposal");
+        RenderPattern(dev, *rt);
+        ReadWholeLevel(*rt, rt->getLevelCountProperty() - 1,
+                       "G1 13x7 final level before disposal");
         step("G1: Dispose() immediately after the read");
         rt->Dispose();
         rt.reset();
-        check(true, "G1: disposing the target straight after a level-1 read is clean");
+        check(true, "G1: disposing the uneven target straight after its final-level read is clean");
     }
 
-    /** @brief G2 -- hold the target to device teardown after its level-1 read. */
+    /** @brief G2 -- hold an uneven target to device teardown after its final-level read. */
     void LegG2()
     {
         auto& dev = getGraphicsDeviceProperty();
-        heldToTeardown_ = ShapeTarget(dev, "G2");
+        heldToTeardown_ = MakeTarget(dev, 13, 7, true, 4, DepthFormat::None,
+                                     RenderTargetUsage::DiscardContents, "G2 13x7");
         if (!heldToTeardown_) return;
-        ReadWholeLevel(*heldToTeardown_, 1, "G2 level 1, target then held to teardown");
-        check(true, "G2: the target survives to GraphicsDevice teardown after a level-1 read");
+        RenderPattern(dev, *heldToTeardown_);
+        ReadWholeLevel(*heldToTeardown_, heldToTeardown_->getLevelCountProperty() - 1,
+                       "G2 13x7 final level, target then held to teardown");
+        check(true, "G2: the uneven target survives to GraphicsDevice teardown after its "
+                    "final-level read");
     }
 
     /** @brief G3 -- six create / render / read-level-1 / dispose cycles in one process. */
@@ -1282,21 +1232,23 @@ class RenderTargetMsaaMipReadbackTest : public Game
         }
     }
 
-    /** @brief G4 -- A, B, then A again: re-rendering a target must regenerate its chain. */
+    /** @brief G4 -- A, B, then A again: uneven targets must regenerate their complete chains. */
     void LegG4()
     {
         auto& dev = getGraphicsDeviceProperty();
-        auto a = MakeTarget(dev, kRT, kRT, true, 4, DepthFormat::None,
-                            RenderTargetUsage::DiscardContents, "G4 target A");
+        auto a = MakeTarget(dev, 13, 7, true, 4, DepthFormat::None,
+                            RenderTargetUsage::DiscardContents, "G4 target A 13x7");
         if (!a) return;
-        auto b = MakeTarget(dev, 8, 8, true, 4, DepthFormat::None,
-                            RenderTargetUsage::DiscardContents, "G4 target B");
+        auto b = MakeTarget(dev, 8, 4, true, 4, DepthFormat::None,
+                            RenderTargetUsage::DiscardContents, "G4 target B 8x4");
         if (!b) return;
         RenderPattern(dev, *a);
         RenderPattern(dev, *b);
         RenderPattern(dev, *a);   // A -> B -> A: A's chain must reflect the LAST render into it
-        ReadWholeLevel(*a, 1, "G4 A level 1 after A->B->A");
-        ReadWholeLevel(*b, 1, "G4 B level 1 after A->B->A");
+        for (int level = 0; level < a->getLevelCountProperty(); ++level)
+            ReadWholeLevel(*a, level, "G4 A level " + std::to_string(level) + " after A->B->A");
+        for (int level = 0; level < b->getLevelCountProperty(); ++level)
+            ReadWholeLevel(*b, level, "G4 B level " + std::to_string(level) + " after A->B->A");
     }
 
     /** @brief G5 -- an exception thrown by a refused read must not damage the next real one. */
@@ -1349,9 +1301,8 @@ class RenderTargetMsaaMipReadbackTest : public Game
     void LegH6()  { ChainLeg("H6", 13,  7); }
 
     // The same three UNEVEN chains without multisampling at all. REMED-GFX-187 is a property of
-    // the mip GENERATOR's arithmetic, not of the resolve, so if these behave identically to
-    // H4/H5/H6 the boundary is proven independent of MSAA and cannot be blamed on REMED-GFX-186's
-    // subject. If they ever diverge, the two findings are entangled after all and this says so.
+    // mip-generation arithmetic, not resolve, so matching H4/H5/H6 proves the corrected contract
+    // on both routes while keeping REMED-GFX-186's resolve subject independently covered.
     void LegH7()  { ChainLeg("H7",  5,  3, 0); }
     void LegH8()  { ChainLeg("H8",  8,  4, 0); }
     void LegH9()  { ChainLeg("H9", 13,  7, 0); }
@@ -1359,6 +1310,19 @@ class RenderTargetMsaaMipReadbackTest : public Game
     // generated descendant".  A 1x1 target therefore has one public/native level whether or
     // not MSAA applies.  H1 above is the MSAA route; this is its non-MSAA counterpart.
     void LegH10() { ChainLeg("H10", 1, 1, 0); }
+
+    // REMED-GFX-187: the axes that reach one first are covered in BOTH orientations and on both
+    // the real-MSAA-resolve and non-MSAA routes. Every ChainLeg reads every intermediate level,
+    // the final 1x1 level, and then proves that LevelCount itself is not a fabricated level.
+    void LegH11() { ChainLeg("H11",  1, 13, 4); }
+    void LegH12() { ChainLeg("H12", 13,  1, 4); }
+    void LegH13() { ChainLeg("H13",  2, 13, 4); }
+    void LegH14() { ChainLeg("H14", 13,  2, 4); }
+    void LegH15() { ChainLeg("H15",  1, 13, 0); }
+    void LegH16() { ChainLeg("H16", 13,  1, 0); }
+    void LegH17() { ChainLeg("H17",  2, 13, 0); }
+    void LegH18() { ChainLeg("H18", 13,  2, 0); }
+    void LegH19() { ChainLeg("H19",  3,  2, 0); }
 
     // ================================================================ Group I: other routes
 
@@ -1503,6 +1467,72 @@ class RenderTargetMsaaMipReadbackTest : public Game
         GuardsIntact(buf, count, "I2");
     }
 
+    /** @brief Samples the final 1x1 mip of a 13x7 target after two independent generations. */
+    void SampleFinalMipLeg(const char* id, int samples)
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        const std::string label = std::string(id) + " 13x7 MSAA=" + std::to_string(samples);
+        auto source = MakeTarget(dev, 13, 7, true, samples, DepthFormat::None,
+                                 RenderTargetUsage::DiscardContents, label + " source");
+        if (!source) return;
+        auto sampled = MakeTarget(dev, 1, 1, false, 0, DepthFormat::None,
+                                  RenderTargetUsage::DiscardContents, label + " destination");
+        if (!sampled) return;
+
+        SpriteBatch batch(dev);
+        SamplerState linear = SamplerState::LinearClamp;
+        for (int cycle = 0; cycle < 2; ++cycle)
+        {
+            const std::string cycleLabel = label + " cycle " + std::to_string(cycle);
+            RenderPattern(dev, *source);
+
+            step(cycleLabel + ": sample the whole 13x7 source into a 1x1 destination");
+            dev.SetRenderTarget(sampled.get());
+            dev.Clear(kSentinel);
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &linear, nullptr, nullptr);
+            batch.Draw(*source, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 13, 7), Color::White);
+            batch.End();
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            const int finalLevel = source->getLevelCountProperty() - 1;
+            const std::vector<Color> final =
+                ReadWholeLevel(*source, finalLevel, cycleLabel + " direct final-level read");
+
+            std::vector<Color> sample = SentinelBuffer(1);
+            const Rectangle one(0, 0, 1, 1);
+            step(cycleLabel + ": read the 1x1 sampling destination");
+            if (!IssueRead([&] { sampled->GetData(0, &one, sample.data(), kGuard, 1); },
+                           sample, cycleLabel + " sampled pixel"))
+                continue;
+            check(!Exact(sample[static_cast<std::size_t>(kGuard)], kSentinel),
+                  cycleLabel + ": sampling overwrote the destination's sentinel");
+            GuardsIntact(sample, 1, cycleLabel + " sampled pixel");
+
+            if (kTargetMipReadbackSupported)
+            {
+                const Color got = sample[static_cast<std::size_t>(kGuard)];
+                check(Near(got, final.front()),
+                      cycleLabel + ": extreme minification samples the declared final 1x1 mip "
+                          "(got " + ColorText(got) + ", direct final " +
+                          ColorText(final.front()) + ")");
+            }
+            else
+            {
+                boundary(cycleLabel + ": this backend refuses nonzero target-mip readback, so the "
+                         "sampled pixel is measured but cannot be compared to a direct final mip");
+                check(true, cycleLabel + ": sampling completed without inventing a direct-mip "
+                            "claim on this backend");
+            }
+        }
+
+        source->Dispose();
+        sampled->Dispose();
+        check(true, label + ": repeated generation, sampling, readback and disposal completed");
+    }
+
+    void LegI3() { SampleFinalMipLeg("I3", 4); }
+    void LegI4() { SampleFinalMipLeg("I4", 0); }
+
     // ================================================================ the runner
 
     template <typename M>
@@ -1579,9 +1609,20 @@ protected:
         runLeg("H8", &RenderTargetMsaaMipReadbackTest::LegH8);
         runLeg("H9", &RenderTargetMsaaMipReadbackTest::LegH9);
         runLeg("H10", &RenderTargetMsaaMipReadbackTest::LegH10);
+        runLeg("H11", &RenderTargetMsaaMipReadbackTest::LegH11);
+        runLeg("H12", &RenderTargetMsaaMipReadbackTest::LegH12);
+        runLeg("H13", &RenderTargetMsaaMipReadbackTest::LegH13);
+        runLeg("H14", &RenderTargetMsaaMipReadbackTest::LegH14);
+        runLeg("H15", &RenderTargetMsaaMipReadbackTest::LegH15);
+        runLeg("H16", &RenderTargetMsaaMipReadbackTest::LegH16);
+        runLeg("H17", &RenderTargetMsaaMipReadbackTest::LegH17);
+        runLeg("H18", &RenderTargetMsaaMipReadbackTest::LegH18);
+        runLeg("H19", &RenderTargetMsaaMipReadbackTest::LegH19);
 
         runLeg("I1", &RenderTargetMsaaMipReadbackTest::LegI1);
         runLeg("I2", &RenderTargetMsaaMipReadbackTest::LegI2);
+        runLeg("I3", &RenderTargetMsaaMipReadbackTest::LegI3);
+        runLeg("I4", &RenderTargetMsaaMipReadbackTest::LegI4);
 
         Finish();
     }
@@ -1620,7 +1661,8 @@ namespace
         "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10",
         "G1", "G2", "G3", "G4", "G5",
         "H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9", "H10",
-        "I1", "I2",
+        "H11", "H12", "H13", "H14", "H15", "H16", "H17", "H18", "H19",
+        "I1", "I2", "I3", "I4",
     };
 
 #if CNA_GFX186_CAN_FORK
