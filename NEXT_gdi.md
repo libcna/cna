@@ -15,10 +15,11 @@
 - GDI-071's explicit shared-core source/archive boundary is committed in `47268263`. Its
   native-MSVC workflow result remains pending, so the plan status is 🟨.
 - GDI-073's narrowed 4x-MSAA contract is committed in `91d8cf38`.
-- GDI-074's framebuffer/`Texture2D`/`RenderTarget2D` extraction is pushed in `b2fa93b0`; backend
-  state is the current verified follow-up. Those CPU sources now compile independently, while the
-  remaining 2D-only wrapper retains SpriteBatch/raster implementation. The native-MSVC workflow
-  remains an external final validation gate.
+- GDI-074's framebuffer/`Texture2D`/`RenderTarget2D` extraction is pushed in `b2fa93b0`, and its
+  backend-state follow-up is pushed in `216ca5ef`. SpriteBatch is the current verified follow-up.
+  Those CPU sources now compile independently, while the remaining 2D-only wrapper retains only
+  the shared triangle raster bridge/helpers. The native-MSVC workflow remains an external final
+  validation gate.
 
 ## Completed in the current working tree
 
@@ -85,12 +86,14 @@
 - GDI-074 (partial): `SoftwareFramebuffer.cpp`, `SoftwareTexture2D.cpp`, and
   `SoftwareRenderTarget2D.cpp` now own independently compiled reusable resource definitions,
   sharing a small allocation-error helper. `SoftwareGraphicsBackend2DState.cpp` owns backend
-  lifecycle, target binding, readback, and 2D state application. `SoftwareGraphicsBackend2D.cpp`
-  defines `CNA_SOFTWARE_2D_ONLY` for the remaining 2D raster/SpriteBatch core. It excludes Software
-  vertex/index buffers, cubes and their sampling, programmable effects, and general-3D draw bodies;
-  necessary virtual-table entries throw clear `System::NotSupportedException` diagnostics. The GDI
-  archive consequently has no Software cube implementation or cube-allocation warning. SOFTWARE
-  continues to compile the unguarded source plus the shared resource units.
+  lifecycle, target binding, readback, and 2D state application. `SoftwareSpriteBatch.cpp` owns
+  the public SpriteBatch geometry/transform/effect path and calls the private shared triangle-raster
+  bridge. `SoftwareGraphicsBackend2D.cpp` defines `CNA_SOFTWARE_2D_ONLY` for that remaining raster
+  core. It excludes Software vertex/index buffers, cubes and their sampling, programmable effects,
+  and general-3D draw bodies; necessary virtual-table entries throw clear
+  `System::NotSupportedException` diagnostics. The GDI archive consequently has no Software cube
+  implementation or cube-allocation warning. SOFTWARE continues to compile the unguarded source
+  plus the shared 2D units.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -122,11 +125,11 @@ baseline. All later tasks use one task per commit.
   target mip levels. Current production code and `plan_software.md` say those levels are generated
   on unbind; the representative 4x level-zero oracle passes, but the full supervisor fails its
   obsolete refusal assertions. This is outside GDI-067 and should be reconciled in Software scope.
-- `SoftwareGraphicsBackend.cpp` still contains the 2D raster/SpriteBatch and all 3D/cube source
-  text. Framebuffer, `Texture2D`, `RenderTarget2D`, and backend state definitions have moved to
-  owned files; GDI no longer compiles unrelated cube/general-3D bodies or the GCC
-  `-Wstringop-overflow` warning.
-  GDI-074 remains 🟨 until SpriteBatch/raster helper extraction and native-MSVC validation complete.
+- `SoftwareGraphicsBackend.cpp` still contains the shared 2D triangle raster helpers/bridge and all
+  3D/cube source text. Framebuffer, `Texture2D`, `RenderTarget2D`, backend state, and SpriteBatch
+  definitions have moved to owned files; GDI no longer compiles unrelated cube/general-3D bodies or
+  the GCC `-Wstringop-overflow` warning. GDI-074 remains 🟨 until raster-helper extraction and
+  native-MSVC validation complete.
 - Do not edit `NEXT.md`.
 
 ## Decisions
@@ -141,12 +144,12 @@ baseline. All later tasks use one task per commit.
   values warn once at construction and fall back individually to nearest/disabled policy.
 - 2026-08-01: GDI's runtime contract uses composition, not inheritance from the full Software
   backend.
-- 2026-08-01: GDI uses one backend archive with an explicit six-file CPU-2D source list.
+- 2026-08-01: GDI uses one backend archive with an explicit seven-file CPU-2D source list.
 - 2026-08-01: `SoftwareGraphicsBackend2D.cpp` is a deliberately narrow transitional build unit:
-  it compiles the remaining shared raster/SpriteBatch source with `CNA_SOFTWARE_2D_ONLY`, retaining
+  it compiles the remaining shared triangle-raster source with `CNA_SOFTWARE_2D_ONLY`, retaining
   virtual stubs only because `GdiSoftware2DCore` needs the base class's complete virtual table.
-  Full SOFTWARE compiles the same source without that macro. The actual SpriteBatch/raster-helper
-  ownership split stays within GDI-074.
+  Full SOFTWARE compiles the same source without that macro. The actual raster-helper ownership
+  split stays within GDI-074.
 - 2026-08-01: GDI's 4x claim is limited to filled backbuffer triangles with four colour samples;
   wireframe has no subpixel line AA and stencil/depth are not per sample.
 - Preserve XNA/FNA public API compatibility; backend-specific unsupported behavior must fail
@@ -208,8 +211,8 @@ baseline. All later tasks use one task per commit.
   single-sampled-target, and disable assertions pass under Wine/Xvfb.
 - GDI-074 focused MinGW build: CNA, all fourteen GDI correctness executables, benchmark, and demo
   build at `-j8` from a GDI archive containing independently compiled framebuffer/`Texture2D`/
-  `RenderTarget2D`/backend-state units plus `SoftwareGraphicsBackend2D.cpp`, rather than the full
-  Software implementation. `x86_64-w64-mingw32-ar`/`nm -C` inspection finds no
+  `RenderTarget2D`/backend-state/SpriteBatch units plus `SoftwareGraphicsBackend2D.cpp`, rather
+  than the full Software implementation. `x86_64-w64-mingw32-ar`/`nm -C` inspection finds no
   `SoftwareTextureCubeBackend`, Software vertex/index-buffer implementation, or normal 3D
   rasterizer bodies; only small throwing virtual stubs remain. All thirteen ordinary executables
   plus the default, dirty, and halftone presentation configurations pass in one Wine/Xvfb session.
@@ -254,7 +257,7 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Finish GDI-074 by extracting `SpriteBatch` and the reusable 2D raster helpers into owned source
-files without changing either backend's behavior. Keep the current GDI 2D-only compilation
-boundary intact throughout. GDI-071 remains provisional until its manual native-MSVC workflow
-passes; GDI-061 and GDI-062 remain native visible-Windows gates.
+Finish GDI-074 by extracting the reusable 2D triangle-raster helpers into owned source files
+without changing either backend's behavior. Keep the current GDI 2D-only compilation boundary
+intact throughout. GDI-071 remains provisional until its manual native-MSVC workflow passes;
+GDI-061 and GDI-062 remain native visible-Windows gates.

@@ -2600,149 +2600,41 @@ namespace CNA::Internal::Backends::Software
 
 #endif
 
-    // ---- SoftwareSpriteBatchBackend ----
-    // Phase S6 (SOFTWARE-51): a SpriteBatch::Draw() call is just a textured quad (2 triangles)
-    // placed directly in screen-pixel space (SpriteBatch never goes through World*View*Projection,
-    // unlike 3D draws) -- reuses RasterizeTriangleShaded, the same rasterizer core DrawPrimitivesEx
-    // uses. The quad-corner construction (destinationRectangle/sourceRectangle/origin/rotation/
-    // SpriteEffects) mirrors EasyGLGraphicsBackend::EasyGLSpriteBatchBackend::Draw()'s own proven
-    // formula, adapted to feed this backend's rasterizer directly instead of a GPU vertex buffer.
-
-    SoftwareSpriteBatchBackend::SoftwareSpriteBatchBackend(SoftwareGraphicsBackend& owner) : owner_(owner) {}
-
-    void SoftwareSpriteBatchBackend::Begin()
+    void SoftwareGraphicsBackend::RasterizeSpriteQuad(
+        const ITextureBackend& texture,
+        const Vector2& c0, const Vector2& c1, const Vector2& c2, const Vector2& c3,
+        float layerDepth, float r, float g, float b, float a,
+        float u1, float v1, float u2, float v2,
+        Effect* customEffect, const SoftwareSamplerState& spriteSampler)
     {
-        if (begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::Begin: Begin() called without a matching End()");
-        begun_ = true;
-    }
-
-    void SoftwareSpriteBatchBackend::End()
-    {
-        if (!begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::End: End() called without a matching Begin()");
-        begun_ = false;
-    }
-
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
-    {
-        Draw(texture, Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
-             Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()), Color(255, 255, 255, 255),
-             0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, 0.0f);
-    }
-
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
-                                          const Rectangle& sourceRectangle, const Color& color)
-    {
-        Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0.0f, 0.0f),
-             SpriteEffects::None, 0.0f);
-    }
-
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
-                                          const Rectangle& sourceRectangle, const Color& color, float rotation,
-                                          const Vector2& origin, SpriteEffects effects, float layerDepth)
-    {
-        if (!begun_)
-            throw std::runtime_error("SoftwareSpriteBatchBackend::Draw: Draw() called before Begin()");
-
-        const float texW = static_cast<float>(std::max(1, texture.GetWidth()));
-        const float texH = static_cast<float>(std::max(1, texture.GetHeight()));
-        float u1 = static_cast<float>(sourceRectangle.X) / texW;
-        float v1 = static_cast<float>(sourceRectangle.Y) / texH;
-        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) / texW;
-        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / texH;
-        if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0) std::swap(u1, u2);
-        if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0) std::swap(v1, v2);
-
-        const float r = color.getRProperty() / 255.0f;
-        const float g = color.getGProperty() / 255.0f;
-        const float b = color.getBProperty() / 255.0f;
-        const float a = color.getAProperty() / 255.0f;
-
-        const float dx = static_cast<float>(destinationRectangle.X);
-        const float dy = static_cast<float>(destinationRectangle.Y);
-        const float dw = static_cast<float>(destinationRectangle.Width);
-        const float dh = static_cast<float>(destinationRectangle.Height);
-        const float sw = static_cast<float>(std::max(1, sourceRectangle.Width));
-        const float sh = static_cast<float>(std::max(1, sourceRectangle.Height));
-        const float ox = origin.X;
-        const float oy = origin.Y;
-        const float scaleX = dw / sw;
-        const float scaleY = dh / sh;
-
-        const float p0x = (0.0f - ox) * scaleX, p0y = (0.0f - oy) * scaleY;
-        const float p1x = (sw - ox) * scaleX, p1y = (0.0f - oy) * scaleY;
-        const float p2x = (sw - ox) * scaleX, p2y = (sh - oy) * scaleY;
-        const float p3x = (0.0f - ox) * scaleX, p3y = (sh - oy) * scaleY;
-
-        const float cosR = std::cos(rotation);
-        const float sinR = std::sin(rotation);
-
-        SoftwareFramebuffer& fb = owner_.CurrentFramebuffer();
-
-        // REMED-GFX-073: SpriteBatch coordinates are VIEWPORT-LOCAL. FNA builds the sprite ortho
-        // from Viewport.Width/Height (sprite (0,0) = the viewport's top-left), and the rasterizer
-        // viewport then positions the [-1,1] result at Viewport.X/Y. The Software backend places
-        // quads directly in pixel space, so the equivalent is: build the viewport-local corner
-        // (destinationRectangle/origin/rotation/scale + the SpriteBatch transformMatrix, all in
-        // viewport-local space), then add the Viewport origin. Viewport.X/Y are NOT transformed by
-        // transformMatrix (they position the already-transformed result), and pixels outside the
-        // viewport are clipped by RasterizeTriangleShaded via `clip` below.
+        SoftwareFramebuffer& fb = CurrentFramebuffer();
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
-        owner_.GetActiveViewport(vpX, vpY, vpW, vpH);
-
-        const auto placeCorner = [&](float px, float py) -> Vector2 {
-            const float rx = dx + px * cosR - py * sinR;
-            const float ry = dy + px * sinR + py * cosR;
-            // SpriteBatch::SetTransformMatrix()'s optional 2D transform, applied as a point
-            // transform (z=0) on the viewport-local corner...
-            const Vector3 transformed = Vector3::Transform(Vector3(rx, ry, 0.0f), transformMatrix_);
-            // ...then position at the viewport origin (added AFTER transformMatrix).
-            return Vector2(transformed.X + static_cast<float>(vpX),
-                           transformed.Y + static_cast<float>(vpY));
-        };
-
-        const Vector2 c0 = placeCorner(p0x, p0y);
-        const Vector2 c1 = placeCorner(p1x, p1y);
-        const Vector2 c2 = placeCorner(p2x, p2y);
-        const Vector2 c3 = placeCorner(p3x, p3y);
-
-        // A non-finite transform cannot cover a defined framebuffer pixel. Reject it before both
-        // damage calculation and raster edge math, keeping huge/invalid matrices deterministic.
-        if (!std::isfinite(c0.X) || !std::isfinite(c0.Y) ||
-            !std::isfinite(c1.X) || !std::isfinite(c1.Y) ||
-            !std::isfinite(c2.X) || !std::isfinite(c2.Y) ||
-            !std::isfinite(c3.X) || !std::isfinite(c3.Y))
-        {
-            return;
-        }
-
+        GetActiveViewport(vpX, vpY, vpW, vpH);
         const RasterVertex rv0 = MakeScreenSpaceVertex(c0.X, c0.Y, layerDepth, r, g, b, a, u1, v1);
         const RasterVertex rv1 = MakeScreenSpaceVertex(c1.X, c1.Y, layerDepth, r, g, b, a, u2, v1);
         const RasterVertex rv2 = MakeScreenSpaceVertex(c2.X, c2.Y, layerDepth, r, g, b, a, u2, v2);
         const RasterVertex rv3 = MakeScreenSpaceVertex(c3.X, c3.Y, layerDepth, r, g, b, a, u1, v2);
 
         // REMED-GFX-030: snapshot the complete depth tuple for this submitted sprite draw.
-        const RasterDepthState depthState{owner_.IsDepthTestEnabled(),
-                                          owner_.IsDepthWriteEnabled(),
-                                          owner_.GetDepthCompareFunction()};
+        const RasterDepthState depthState{IsDepthTestEnabled(),
+                                          IsDepthWriteEnabled(), GetDepthCompareFunction()};
         const RasterStencilState stencilState{
-            owner_.IsStencilTestEnabled(), owner_.GetStencilCompareFunction(),
-            owner_.GetStencilPassOperation(), owner_.GetStencilFailOperation(),
-            owner_.GetStencilDepthFailOperation(),
-            static_cast<std::uint8_t>(owner_.GetStencilReadMask()),
-            static_cast<std::uint8_t>(owner_.GetStencilWriteMask()),
-            static_cast<std::uint8_t>(owner_.GetReferenceStencil())};
-        const SoftwareBlendState blendState = owner_.GetBlendState();
-        const std::array<float, 4> blendFactor = owner_.GetBlendFactor();
-        const int cullMode = owner_.GetCullMode();
+            IsStencilTestEnabled(), GetStencilCompareFunction(),
+            GetStencilPassOperation(), GetStencilFailOperation(),
+            GetStencilDepthFailOperation(),
+            static_cast<std::uint8_t>(GetStencilReadMask()),
+            static_cast<std::uint8_t>(GetStencilWriteMask()),
+            static_cast<std::uint8_t>(GetReferenceStencil())};
+        const SoftwareBlendState blendState = GetBlendState();
+        const std::array<float, 4> blendFactor = GetBlendFactor();
+        const int cullMode = GetCullMode();
         // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
         // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
         int scX = 0, scY = 0, scW = 0, scH = 0;
-        owner_.GetActiveScissor(scX, scY, scW, scH);
+        GetActiveScissor(scX, scY, scW, scH);
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
-                                                owner_.IsScissorTestEnabled(), scX, scY, scW, scH);
+                                                IsScissorTestEnabled(), scX, scY, scW, scH);
         const float quadMinX = std::min({c0.X, c1.X, c2.X, c3.X});
         const float quadMinY = std::min({c0.Y, c1.Y, c2.Y, c3.Y});
         const float quadMaxX = std::max({c0.X, c1.X, c2.X, c3.X});
@@ -2751,7 +2643,7 @@ namespace CNA::Internal::Backends::Software
         if (CalculateRasterBounds(quadMinX, quadMinY, quadMaxX, quadMaxY, clip,
                                   damageMinX, damageMinY, damageMaxX, damageMaxY))
         {
-            owner_.OnSpriteRasterBounds(damageMinX, damageMinY, damageMaxX, damageMaxY);
+            OnSpriteRasterBounds(damageMinX, damageMinY, damageMaxX, damageMaxY);
         }
         GpuDrawParams spriteParams;
         // REMED-GFX-124: hand the sprite's texture on as the plain backend handle and let
@@ -2764,34 +2656,33 @@ namespace CNA::Internal::Backends::Software
         // ShaderEffect stays rejected by GDI; every unrelated Effect keeps the regular sprite
         // path rather than being misidentified as a programmable shader.
         if (const auto* colorMatrix =
-                dynamic_cast<const Microsoft::Xna::Framework::Graphics::ColorMatrixEffect*>(customEffect_))
+                dynamic_cast<const Microsoft::Xna::Framework::Graphics::ColorMatrixEffect*>(customEffect))
             colorMatrix->FillSpriteDrawParams(spriteParams);
         // REMED-GFX-082: honor RasterizerState.FillMode for the sprite's two quad triangles too. Each
         // draws ALL THREE of its edges (kEdgeAll), so a wireframe sprite shows its quad outline plus
         // the internal triangle-split diagonal -- real submitted geometry, matching D3D11/FNA (not
         // suppressed like the 3D near-plane clip diagonal). Passed THROUGH SpriteBatch.Begin's
         // RasterizerState via GraphicsDevice (REMED-GFX-081).
-        const bool wire = (owner_.GetFillMode() == 1);
+        const bool wire = (GetFillMode() == 1);
         // REMED-GFX-083: SpriteBatch's two quad triangles honor RasterizerState.DepthBias /
         // SlopeScaleDepthBias too (a bias supplied through SpriteBatch.Begin's RasterizerState, GFX-081).
         // A quad is flat (constant layerDepth -> zero depth slope), so only the constant term applies.
-        const float depthBias = owner_.GetDepthBias();
-        const float slopeScaleDepthBias = owner_.GetSlopeScaleDepthBias();
+        const float depthBias = GetDepthBias();
+        const float slopeScaleDepthBias = GetSlopeScaleDepthBias();
         // REMED-GFX-150: the sprite quad samples through the SamplerState SpriteBatch.Begin
         // resolved for THIS batch, not the device's 3D slot state -- SpriteBatch has its own sampler
         // channel (SetSamplerFilter/SetSamplerAddressMode), exactly as it does on every GPU backend.
         // Begin always re-applies it, so it cannot leak in from a previous batch, and passing it
         // here rather than through the device slots means a sprite batch cannot leak it out either.
-        const SoftwareSamplerState spriteSampler = GetSamplerState();
         RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
-                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
+                                GetColorWriteMask(), GetMultiSampleMask(),
                                 spriteSampler, spriteSampler, wire, kEdgeAll, kEdgeV2V0);
         RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
-                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
+                                GetColorWriteMask(), GetMultiSampleMask(),
                                 spriteSampler, spriteSampler, wire, kEdgeAll);
     }
 

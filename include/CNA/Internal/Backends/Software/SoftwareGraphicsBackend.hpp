@@ -798,6 +798,18 @@ namespace CNA::Internal::Backends::Software
     private:
         friend class SoftwareSpriteBatchBackend;
 
+        /// Submits one already-transformed SpriteBatch quad to the shared CPU triangle rasterizer.
+        /// Keeping this narrow bridge private lets SoftwareSpriteBatchBackend own the public draw
+        /// geometry/transform path in its own translation unit while all CPU 2D and 3D triangles
+        /// continue to share one fragment implementation.
+        void RasterizeSpriteQuad(const ITextureBackend& texture,
+                                 const Vector2& c0, const Vector2& c1,
+                                 const Vector2& c2, const Vector2& c3,
+                                 float layerDepth, float r, float g, float b, float a,
+                                 float u1, float v1, float u2, float v2,
+                                 Effect* customEffect,
+                                 const SoftwareSamplerState& spriteSampler);
+
         /// XNA exposes 16 texture sampler slots; ApplySamplerState validates against this.
         static constexpr int kMaxSamplerSlots = 16;
         /// REMED-GFX-150: the per-slot SamplerState the rasterizer's sampler consults. Previously
