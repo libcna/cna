@@ -31,6 +31,17 @@ cmake -S . -B cmake-build-glide -G Ninja \
 cmake --build cmake-build-glide --target cna_glide_smoke -j2
 ```
 
+The loader ABI can be checked independently of CNA, SDL, sharp-runtime and dgVoodoo:
+
+```bash
+cmake --build cmake-build-glide --target cna_glide_abi_loader_test -j2
+cd cmake-build-glide && wine cna_glide_abi_loader_test.exe
+```
+
+That target builds a deliberately tiny x86 fake DLL and verifies undecorated and MinGW stdcall
+export lookup, plus the error path for a missing export. It is a loader-contract test, not a
+replacement for the full fake-DLL render-call capture or a visual runtime test.
+
 Copy a compatible 32-bit `glide3x.dll` (and its required dgVoodoo companion files) beside
 `cna_glide_smoke.exe`, configure dgVoodoo for the machine, then run the executable under Windows
 or Wine. Alternatively, set `CNA_GLIDE3X_DLL` before launching. The smoke program verifies a green

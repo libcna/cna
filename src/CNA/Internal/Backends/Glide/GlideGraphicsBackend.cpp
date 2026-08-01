@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Glide/GlideGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Glide/GlideAbiLoader.hpp"
 #include "CNA/Internal/Backends/Glide/GlideVertexLayout.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 
@@ -522,30 +523,7 @@ namespace CNA::Internal::Backends::Glide
             template <typename T>
             [[nodiscard]] T Required(const char* name, unsigned int stdcallBytes) const
             {
-                FARPROC procedure = GetProcAddress(module_, name);
-#if !defined(_WIN64)
-                // dgVoodoo2's native x86 Glide DLL exports the historical stdcall spelling
-                // (_grFunction@N), whereas other Glide runtimes expose undecorated aliases.
-                // Resolve both forms so a real x86 runtime is accepted without bundling its SDK.
-                if (procedure == nullptr)
-                {
-                    const std::string decorated = "_" + std::string(name) + "@" + std::to_string(stdcallBytes);
-                    procedure = GetProcAddress(module_, decorated.c_str());
-                }
-                if (procedure == nullptr)
-                {
-                    const std::string decorated = std::string(name) + "@" + std::to_string(stdcallBytes);
-                    procedure = GetProcAddress(module_, decorated.c_str());
-                }
-#else
-                static_cast<void>(stdcallBytes);
-#endif
-                if (procedure == nullptr)
-                {
-                    throw std::runtime_error(
-                        std::string("The loaded glide3x.dll does not export required Glide 3.x function '") + name + "'.");
-                }
-                return reinterpret_cast<T>(procedure);
+                return reinterpret_cast<T>(ResolveGlideExport(module_, name, stdcallBytes));
             }
 
             HMODULE module_ = nullptr;
