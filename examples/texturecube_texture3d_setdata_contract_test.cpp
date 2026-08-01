@@ -167,6 +167,12 @@ namespace
     constexpr Contract kContract{"SDL_GPU", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
+#elif defined(CNA_BACKEND_SKIA)
+    // Bounded CPU storage implements plain cube/volume transfers exactly. RenderTargetCube and
+    // every shader sampling route remain unsupported and are not implied by this storage result.
+    constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
+                                 true, Support::Exact, Support::Exact,
+                                 Support::Unsupported, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     // 2D-only by design: CreateTextureCube()/CreateTexture3D()/CreateRenderTargetCube() all keep
     // IGraphicsBackend's own nullptr-returning defaults, so no cube/volume storage exists at all

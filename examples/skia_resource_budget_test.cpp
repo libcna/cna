@@ -132,7 +132,9 @@ private:
     [[nodiscard]] static bool IsEmpty(const SkiaResourceStats& stats)
     {
         return stats.textureBackends == 0 && stats.textureImageViews == 0 && stats.renderTargets == 0
+            && stats.cpuTextureCubeBackends == 0 && stats.cpuTexture3DBackends == 0
             && stats.targetSnapshots == 0 && stats.textureImageBytes == 0
+            && stats.cpuTextureStorageBytes == 0
             && stats.targetSurfaceBytes == 0 && stats.targetSnapshotBytes == 0;
     }
 

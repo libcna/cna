@@ -9,7 +9,7 @@ The four categories are deliberately exclusive:
 
 - `2d-direct`: Skia canvas/image/target/presentation primitives can express the contract;
 - `2d-emulation`: the contract needs bounded runtime-effect, replay, or CPU emulation;
-- `3d`: the fixture requires vertex/index, cube/volume, depth/stencil, stock-3D, or model paths;
+- `3d`: the fixture requires vertex/index, cube/volume sampling, depth/stencil, stock-3D, or model paths;
 - `device-dependent`: the result depends on a probed surface/driver/display capability.
 
 Run `python3 scripts/validate_skia_test_matrix.py`. It compares this file to live CMake
@@ -105,6 +105,14 @@ registrations and both asset directories, and rejects every unclassified or stal
 | `ctest:EasyGL_BlendState_SeparateFunctions` | `ctest` | `2d-emulation` | Bounded runtime blender route; SKIA-53–55. |
 | `ctest:EasyGL_BlendState_SeparateFactors` | `ctest` | `2d-emulation` | Bounded runtime blender route; SKIA-53–55. |
 | `ctest:EasyGL_BlendState_BlendFactor` | `ctest` | `2d-emulation` | Needs a proven source-alpha/constant-factor mapping; SKIA-53–55. |
+| `ctest:EasyGL_TextureCube_ContentLoad` | `ctest` | `2d-emulation` | Bounded CPU cube storage; shared DDS fixture passes as `Skia_TextureCube_ContentLoad`; SKIA-80–84. |
+| `ctest:EasyGL_TextureCube_Faces_RoundTrip` | `ctest` | `2d-emulation` | Six-face CPU storage fixture passes on Skia; SKIA-80–84. |
+| `ctest:EasyGL_TextureCube_Mip_RoundTrip` | `ctest` | `2d-emulation` | Bounded cube mip storage fixture passes on Skia; SKIA-80–84. |
+| `ctest:EasyGL_TextureCube_PartialRect_RoundTrip` | `ctest` | `2d-emulation` | Exact CPU face-region transfer fixture passes on Skia; SKIA-80–84. |
+| `ctest:EasyGL_Texture3D_Slices_RoundTrip` | `ctest` | `2d-emulation` | Bounded CPU volume slice fixture passes on Skia; SKIA-82–84. |
+| `ctest:EasyGL_Texture3D_Mip_RoundTrip` | `ctest` | `2d-emulation` | Bounded volume mip fixture passes on Skia; SKIA-82–84. |
+| `ctest:EasyGL_Texture3D_PartialBox_RoundTrip` | `ctest` | `2d-emulation` | Exact CPU sub-volume transfer fixture passes on Skia; SKIA-82–84. |
+| `ctest:EasyGL_Texture3D_PartialBox_Readback` | `ctest` | `2d-emulation` | Exact front-to-back CPU box readback fixture passes on Skia; SKIA-82–84. |
 
 ## 3D registrations
 
@@ -191,7 +199,6 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_ModelJsonReader_Quad` | `ctest` | `3d` | Loaded model geometry draw. |
 | `ctest:EasyGL_ModelJsonReader_32BitIndices` | `ctest` | `3d` | Model 32-bit index pipeline. |
 | `ctest:EasyGL_ModelJsonReader_Texture` | `ctest` | `3d` | Textured model draw. |
-| `ctest:EasyGL_TextureCube_ContentLoad` | `ctest` | `3d` | Cube texture resource path. |
 | `ctest:EasyGL_ModelJsonReader_BoneHierarchy` | `ctest` | `3d` | Model skeleton hierarchy. |
 | `ctest:EasyGL_ModelJsonReader_Skeleton` | `ctest` | `3d` | Model skeleton/skinning path. |
 | `ctest:EasyGL_Model_SkinnedAnimationPlayback` | `ctest` | `3d` | Animated skinned model draw. |
@@ -201,13 +208,6 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_BasicEffect_MultiLightEmissive` | `ctest` | `3d` | Stock lighting geometry. |
 | `ctest:EasyGL_BasicEffect_Specular` | `ctest` | `3d` | Stock specular geometry. |
 | `ctest:EasyGL_BasicEffect_PreferPerPixelLighting` | `ctest` | `3d` | Stock shader variant. |
-| `ctest:EasyGL_TextureCube_Faces_RoundTrip` | `ctest` | `3d` | Cube storage transfer. |
-| `ctest:EasyGL_TextureCube_Mip_RoundTrip` | `ctest` | `3d` | Cube mip storage transfer. |
-| `ctest:EasyGL_TextureCube_PartialRect_RoundTrip` | `ctest` | `3d` | Cube face region transfer. |
-| `ctest:EasyGL_Texture3D_Slices_RoundTrip` | `ctest` | `3d` | Volume storage transfer. |
-| `ctest:EasyGL_Texture3D_Mip_RoundTrip` | `ctest` | `3d` | Volume mip storage transfer. |
-| `ctest:EasyGL_Texture3D_PartialBox_RoundTrip` | `ctest` | `3d` | Volume box transfer. |
-| `ctest:EasyGL_Texture3D_PartialBox_Readback` | `ctest` | `3d` | Volume box readback. |
 | `ctest:EasyGL_DrawNoVertexBuffer` | `ctest` | `3d` | 3D missing-binding validation. |
 | `ctest:EasyGL_DrawNoIndexBuffer` | `ctest` | `3d` | 3D missing-binding validation. |
 | `ctest:EasyGL_DrawRangeValidation` | `ctest` | `3d` | Vertex/index range validation. |

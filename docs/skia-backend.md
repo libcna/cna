@@ -4,7 +4,7 @@
 
 `CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create an OpenGL context and does not call the EasyGL backend.
 
-The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, `Begin`'s 2D affine transform, viewport and scissor clipping, point/linear sampling, and independent Clamp/Wrap/Mirror U/V addressing, as well as `BlendState::{Opaque, AlphaBlend, NonPremultiplied, Additive}`. A newly created or resized backbuffer starts transparent black, so a zero-draw `Present` never exposes allocator data. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. A requested `DepthFormat` remains public construction metadata for API compatibility, but `HasRealDepthBuffer` stays false and depth/stencil-only clears have no colour effect. Mipmaps, effects, MRT, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
+The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, `Begin`'s 2D affine transform, viewport and scissor clipping, point/linear sampling, and independent Clamp/Wrap/Mirror U/V addressing, as well as `BlendState::{Opaque, AlphaBlend, NonPremultiplied, Additive}`. A newly created or resized backbuffer starts transparent black, so a zero-draw `Present` never exposes allocator data. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. A requested `DepthFormat` remains public construction metadata for API compatibility, but `HasRealDepthBuffer` stays false and depth/stencil-only clears have no colour effect. Plain `TextureCube` and `Texture3D` now have bounded CPU-only face/voxel storage for exact transfer, readback, mip, and DDS-loading contracts; they cannot be sampled. The complete storage/sampling boundary and 256 MiB policy are in [`skia-texture-storage.md`](skia-texture-storage.md). Effects, MRT, render-target cubes, and all 3D draw APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
 
 The complete API-level comparison with EasyGL is maintained in
 [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md). Its 247 rows cover every current
@@ -197,10 +197,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers 78 SKIA-only CTests: seven window-independent raster
-   tests and 71 display-required public tests. The raster tests pass without a
-   display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
-   still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
+6. `cmake/Tests/SkiaTests.cmake` registers 91 SKIA-only CTests: eight window-independent raster
+   tests, 81 display-required public tests, and two display-free source audits. The raster tests
+   pass without a display. The capability test verifies only storage-only `Texture3D` is true and
+   every GPU/3D capability remains false; 3D calls still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
    three frames in Xvfb.
 7. `Skia_Texture2D_Constraints` verifies the successful `Color` path, all 26 unsupported
@@ -433,5 +433,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     exactly one route to each item: 75 2D-direct, 19 2D-emulation, 228 3D, and 25 device-dependent.
     The validator discovers registrations and directory contents rather than trusting recorded
     totals, so a newly added or removed EasyGL test/asset requires an explicit Skia decision.
+61. `Skia_TextureStorage_Policy` proves the 16384-axis and 256 MiB per-resource limits, checked
+    cube/volume mip accounting, zero initialization, exact row/slice order, atomic short-transfer
+    rejection, and counter release. Nine shared public transfer fixtures plus the DDS content-load
+    fixture cover every cube face, mip, rectangle, volume slice/box, start index, disposal, and
+    unchanged-destination contract. The exhaustive shared read and write audits pass 56/56 each.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaTextureStorageBackends.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include "include/core/SkData.h"
@@ -451,6 +452,25 @@ namespace CNA::Internal::Backends::Skia
         return std::make_unique<SkiaTextureBackend>(data, resourceCounters_);
     }
 
+    std::unique_ptr<ITextureCubeBackend> SkiaGraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
+    {
+        AssertOwnership("CreateTextureCube");
+        if (surfaceFormat != 0)
+            throw System::NotSupportedException("Skia CPU TextureCube storage supports only RGBA8 Color.");
+        return std::make_unique<SkiaTextureCubeBackend>(size, mipMap, resourceCounters_);
+    }
+
+    std::unique_ptr<ITexture3DBackend> SkiaGraphicsBackend::CreateTexture3D(
+        int width, int height, int depth, bool mipMap, int surfaceFormat)
+    {
+        AssertOwnership("CreateTexture3D");
+        if (surfaceFormat != 0)
+            throw System::NotSupportedException("Skia CPU Texture3D storage supports only RGBA8 Color.");
+        return std::make_unique<SkiaTexture3DBackend>(
+            width, height, depth, mipMap, resourceCounters_);
+    }
+
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
         AssertOwnership("CreateSpriteBatch");
@@ -632,10 +652,10 @@ namespace CNA::Internal::Backends::Skia
         rasterState_.viewportHeight = height;
     }
 
-    bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability) const
+    bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         AssertOwnership("SupportsCapability");
-        return false;
+        return capability == CNA::GraphicsCapability::Texture3D;
     }
 
     void SkiaGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }

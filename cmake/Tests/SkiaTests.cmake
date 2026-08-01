@@ -98,6 +98,47 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_graphics_capability examples/skia_graphics_capability_test.cpp)
     cna_register_skia_display_test(Skia_GraphicsCapability cna_test_skia_graphics_capability)
 
+    # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
+    # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
+    # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.
+    cna_skia_test(cna_test_skia_texture_storage_policy examples/skia_texture_storage_policy_test.cpp)
+    cna_register_skia_raster_test(Skia_TextureStorage_Policy cna_test_skia_texture_storage_policy)
+
+    cna_skia_test(cna_test_skia_texturecube_faces examples/easygl_texturecube_faces_test.cpp)
+    cna_register_skia_display_test(Skia_TextureCube_Faces_RoundTrip cna_test_skia_texturecube_faces)
+
+    cna_skia_test(cna_test_skia_texturecube_partial_rect examples/easygl_texturecube_partial_rect_test.cpp)
+    cna_register_skia_display_test(Skia_TextureCube_PartialRect_RoundTrip cna_test_skia_texturecube_partial_rect)
+
+    cna_skia_test(cna_test_skia_texturecube_mip examples/easygl_texturecube_mip_test.cpp)
+    cna_register_skia_display_test(Skia_TextureCube_Mip_RoundTrip cna_test_skia_texturecube_mip)
+
+    cna_skia_test(cna_test_skia_texturecube_content_load
+                  examples/easygl_texturecube_content_load_test.cpp)
+    cna_register_skia_display_test(Skia_TextureCube_ContentLoad cna_test_skia_texturecube_content_load)
+
+    cna_skia_test(cna_test_skia_texture3d_slices examples/easygl_texture3d_slices_test.cpp)
+    cna_register_skia_display_test(Skia_Texture3D_Slices_RoundTrip cna_test_skia_texture3d_slices)
+
+    cna_skia_test(cna_test_skia_texture3d_partial_box examples/easygl_texture3d_partial_box_test.cpp)
+    cna_register_skia_display_test(Skia_Texture3D_PartialBox_RoundTrip cna_test_skia_texture3d_partial_box)
+
+    cna_skia_test(cna_test_skia_texture3d_partial_box_readback examples/easygl_texture3d_partial_box_readback_test.cpp)
+    cna_register_skia_display_test(Skia_Texture3D_PartialBox_Readback cna_test_skia_texture3d_partial_box_readback)
+
+    cna_skia_test(cna_test_skia_texture3d_mip examples/easygl_texture3d_mip_test.cpp)
+    cna_register_skia_display_test(Skia_Texture3D_Mip_RoundTrip cna_test_skia_texture3d_mip)
+
+    cna_skia_test(cna_test_skia_texture_storage_getdata_contract
+                  examples/texturecube_texture3d_getdata_contract_test.cpp)
+    cna_register_skia_display_test(Skia_TextureStorage_GetDataContract
+                                   cna_test_skia_texture_storage_getdata_contract)
+
+    cna_skia_test(cna_test_skia_texture_storage_setdata_contract
+                  examples/texturecube_texture3d_setdata_contract_test.cpp)
+    cna_register_skia_display_test(Skia_TextureStorage_SetDataContract
+                                   cna_test_skia_texture_storage_setdata_contract)
+
     cna_skia_test(cna_test_skia_texture2d_getdata_contract examples/texture2d_getdata_contract_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_GetDataContract cna_test_skia_texture2d_getdata_contract)
 

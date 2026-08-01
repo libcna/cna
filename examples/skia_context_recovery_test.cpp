@@ -47,9 +47,12 @@ namespace
     {
         return left.textureBackends == right.textureBackends
             && left.textureImageViews == right.textureImageViews
+            && left.cpuTextureCubeBackends == right.cpuTextureCubeBackends
+            && left.cpuTexture3DBackends == right.cpuTexture3DBackends
             && left.renderTargets == right.renderTargets
             && left.targetSnapshots == right.targetSnapshots
             && left.textureImageBytes == right.textureImageBytes
+            && left.cpuTextureStorageBytes == right.cpuTextureStorageBytes
             && left.targetSurfaceBytes == right.targetSurfaceBytes
             && left.targetSnapshotBytes == right.targetSnapshotBytes;
     }

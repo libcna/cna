@@ -8,17 +8,21 @@ namespace CNA::Internal::Backends::Skia
      * Debug-visible accounting for resources owned by the raster backend.
      *
      * These are live backend-owned objects, not Skia allocator totals: a public Texture2D owns two
-     * alpha-labelled SkImages, a public RenderTarget2D owns one raster surface, and each target is
-     * allowed at most one cached immutable sampling snapshot. That bounded cache is released on
-     * the next target write and with its target wrapper.
+     * alpha-labelled SkImages, CPU-only cube/volume resources report their exact RGBA8 vectors, a
+     * public RenderTarget2D owns one raster surface, and each target is allowed at most one cached
+     * immutable sampling snapshot. That bounded cache is released on the next target write and
+     * with its target wrapper.
      */
     struct SkiaResourceStats final
     {
         std::size_t textureBackends = 0;
         std::size_t textureImageViews = 0;
+        std::size_t cpuTextureCubeBackends = 0;
+        std::size_t cpuTexture3DBackends = 0;
         std::size_t renderTargets = 0;
         std::size_t targetSnapshots = 0;
         std::size_t textureImageBytes = 0;
+        std::size_t cpuTextureStorageBytes = 0;
         std::size_t targetSurfaceBytes = 0;
         std::size_t targetSnapshotBytes = 0;
     };
@@ -39,6 +43,30 @@ namespace CNA::Internal::Backends::Skia
             --stats_.textureBackends;
             stats_.textureImageViews -= 2;
             stats_.textureImageBytes -= RgbaBytes(width, height) * 2;
+        }
+
+        void AddCpuTextureCube(std::size_t bytes) noexcept
+        {
+            ++stats_.cpuTextureCubeBackends;
+            stats_.cpuTextureStorageBytes += bytes;
+        }
+
+        void RemoveCpuTextureCube(std::size_t bytes) noexcept
+        {
+            --stats_.cpuTextureCubeBackends;
+            stats_.cpuTextureStorageBytes -= bytes;
+        }
+
+        void AddCpuTexture3D(std::size_t bytes) noexcept
+        {
+            ++stats_.cpuTexture3DBackends;
+            stats_.cpuTextureStorageBytes += bytes;
+        }
+
+        void RemoveCpuTexture3D(std::size_t bytes) noexcept
+        {
+            --stats_.cpuTexture3DBackends;
+            stats_.cpuTextureStorageBytes -= bytes;
         }
 
         void AddRenderTarget(int width, int height) noexcept

@@ -35,11 +35,11 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IOcclusionQueryBackend::End/0` | Ends the active GL query. | No raster visibility-query surface. | `unsupported` | SKIA-104–105 |
 | `IOcclusionQueryBackend::IsComplete/0` | Polls GL query availability. | Query construction is refused. | `unsupported` | SKIA-104–105 |
 | `IOcclusionQueryBackend::PixelCount/0` | Returns EasyGL's boolean samples-passed result. | No semantically sound count is invented. | `unsupported` | SKIA-104–105 |
-| `ITextureCubeBackend::SetData/8` | Uploads one GL cube-face region; cube transfer tests. | Skia images are 2D; no cube storage yet. | `unsupported` | SKIA-80–84 |
-| `ITextureCubeBackend::GetData/8` | Reads one cube-face region; cube readback tests. | No fabricated cube pixels. | `unsupported` | SKIA-80–84 |
+| `ITextureCubeBackend::SetData/8` | Uploads one GL cube-face region; cube transfer tests. | Exact bounded CPU face/mip/rectangle storage. | `implemented` | SKIA-80–84; shared 56-check write audit |
+| `ITextureCubeBackend::GetData/8` | Reads one cube-face region; cube readback tests. | Exact bounded CPU readback; no fabricated pixels. | `implemented` | SKIA-80–84; shared 56-check read audit |
 | `ITextureCubeBackend::BindGL/0` | Binds the cube GL target. | No GL/native cube handle exists. | `unsupported` | SKIA-80–84 |
-| `ITexture3DBackend::SetData/9` | Uploads a GL volume region; Texture3D tests. | Skia has no volume image primitive. | `unsupported` | SKIA-82–84 |
-| `ITexture3DBackend::GetData/9` | Reads a GL volume region; Texture3D tests. | No fabricated volume pixels. | `unsupported` | SKIA-82–84 |
+| `ITexture3DBackend::SetData/9` | Uploads a GL volume region; Texture3D tests. | Exact bounded CPU mip/sub-volume storage. | `implemented` | SKIA-82–84; shared 56-check write audit |
+| `ITexture3DBackend::GetData/9` | Reads a GL volume region; Texture3D tests. | Exact bounded CPU readback; no fabricated voxels. | `implemented` | SKIA-82–84; shared 56-check read audit |
 | `ITexture3DBackend::BindGL/0` | Binds the GL volume target. | No GL/native volume handle exists. | `unsupported` | SKIA-82–84 |
 | `ITextureBackend::GetWidth/0` | Reports GL texture width; Texture2D tests. | Reports the CPU image width. | `implemented` | SKIA-22, SKIA-26 |
 | `ITextureBackend::GetHeight/0` | Reports GL texture height; Texture2D tests. | Reports the CPU image height. | `implemented` | SKIA-22, SKIA-26 |
@@ -103,8 +103,8 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateSpriteBatch/0` | Allocates EasyGL sprite renderer state. | Allocates checked SkCanvas adapter. | `implemented` | SKIA-31–40 |
 | `IGraphicsBackend::ReadBackbuffer/5` | Reads GL framebuffer top-left RGBA. | Exact active-surface RGBA8 readback. | `implemented` | SKIA-7, SKIA-62 |
 | `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Returns unsupported through common wrapper. | `unsupported` | SKIA-104–105 |
-| `IGraphicsBackend::CreateTexture3D/5` | Allocates GL volume texture/mips. | Returns unsupported; capability false. | `unsupported` | SKIA-82–84 |
-| `IGraphicsBackend::CreateTextureCube/3` | Allocates GL cube texture/mips. | Returns unsupported. | `unsupported` | SKIA-80–81 |
+| `IGraphicsBackend::CreateTexture3D/5` | Allocates GL volume texture/mips. | Creates bounded CPU voxel/mip storage only. | `bounded` | SKIA-82–84; `Skia_TextureStorage_Policy` |
+| `IGraphicsBackend::CreateTextureCube/3` | Allocates GL cube texture/mips. | Creates six bounded CPU faces/mips only. | `bounded` | SKIA-80–84; `Skia_TextureStorage_Policy` |
 | `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Level-zero color target only. | `bounded` | SKIA-61–79 |
 | `IGraphicsBackend::SetRenderTarget2D/1` | Binds/unbinds one EasyGL FBO. | Binds checked raster target/backbuffer. | `implemented` | SKIA-61, SKIA-69 |
 | `IGraphicsBackend::CreateRenderTargetCube/5` | Allocates cube-face FBO target. | Returns unsupported. | `unsupported` | SKIA-85–86 |
@@ -138,7 +138,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::DrawIndexedPrimitivesEx/8` | Draws indexed stock/custom EasyGL 3D. | Reaches explicit no-3D indexed refusal. | `unsupported` | SKIA-96, SKIA-99–103 |
 | `IGraphicsBackend::DrawInstancedPrimitivesEx/9` | Draws hardware-instanced EasyGL geometry. | No raster instancing pipeline. | `unsupported` | SKIA-103 |
 | `IGraphicsBackend::SetContextRecoveryEnabled/1` | Controls EasyGL CPU restoration shadows. | Raster resources stay CPU-owned across presenter rebuild. | `internal` | SKIA-16, SKIA-28 |
-| `IGraphicsBackend::SupportsCapability/1` | Reports EasyGL compile/device features. | Returns false for every current capability. | `implemented` | SKIA-17, capability rows below |
+| `IGraphicsBackend::SupportsCapability/1` | Reports EasyGL compile/device features. | True only for storage-only Texture3D; GPU/3D entries false. | `implemented` | SKIA-17, SKIA-84, capability rows below |
 | `IGraphicsBackend::GetMaxTextureDimension/0` | Reports GL maximum texture axis. | Reports bounded raster maximum. | `implemented` | SKIA-26 |
 | `IGraphicsBackend::SetStringMarkerEXT/1` | Inserts GL debug marker where available. | Intentional no-op without GPU stream. | `internal` | SKIA-60 |
 | `IGraphicsBackend::DebugSimulateContextLoss/0` | Drives EasyGL recovery seam. | Rebuilds SDL presenter, retains raster resources. | `implemented` | SKIA-16, SKIA-65 |
@@ -159,7 +159,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsCapability::WireFrame` | EasyGL supports GL line polygon mode where available. | Raster backend reports false and rejects wireframe. | `unsupported` | SKIA-58, SKIA-97 |
 | `GraphicsCapability::OcclusionQuery` | EasyGL reports query API availability. | Raster backend reports false. | `unsupported` | SKIA-104–105 |
 | `GraphicsCapability::CustomEffects` | EasyGL compiles custom GLSL effects. | Raster backend reports false. | `unsupported` | SKIA-89–94 |
-| `GraphicsCapability::Texture3D` | EasyGL exposes GL volume textures. | Raster backend reports false. | `unsupported` | SKIA-82–84 |
+| `GraphicsCapability::Texture3D` | EasyGL exposes GL volume textures. | True for persistent CPU transfer/readback storage only; no sampling claim. | `bounded` | SKIA-82–84; `Skia_GraphicsCapability` |
 
 ## Public GraphicsDevice calls
 
@@ -270,7 +270,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::GetBackend/0` | Exposes selected EasyGL backend internally. | Exposes selected Skia backend internally. | `internal` | SKIA-10–11 |
 | `GraphicsDevice::GetGraphicsBackendType/0` | Reports compile-time EasyGL type. | Reports `GraphicsBackendType::Skia`. | `implemented` | SKIA-11 |
 | `GraphicsDevice::GetGraphicsBackendName/0` | Reports compile-time `EASYGL`. | Reports compile-time `SKIA`. | `implemented` | SKIA-11 |
-| `GraphicsDevice::SupportsCapability/1` | Forwards EasyGL capability/device query. | Forwards false for all nine current capabilities. | `implemented` | SKIA-17, capability rows above |
+| `GraphicsDevice::SupportsCapability/1` | Forwards EasyGL capability/device query. | Forwards true only for storage-only Texture3D. | `implemented` | SKIA-17, SKIA-84, capability rows above |
 | `GraphicsDevice::GetMaxTextureDimension/0` | Forwards EasyGL hardware limit. | Returns enforced raster axis limit. | `implemented` | SKIA-26 |
 | `GraphicsDevice::SetCurrentEffect/1` | Stores stock/custom effect for EasyGL 3D draws. | Common pointer can be stored; raster 3D draws reject. | `unsupported` | SKIA-89–103 |
 | `GraphicsDevice::Indices/0` | Alias returning EasyGL index binding. | No usable raster index buffer. | `unsupported` | SKIA-95 |

@@ -75,6 +75,10 @@ namespace CNA::Internal::Backends::Skia
         NOXNA void DebugClearPresentationOutputSizeEXT();
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(
+            int width, int height, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int width, int height, int depthFormat,
                                                                     bool preserveContents = false,

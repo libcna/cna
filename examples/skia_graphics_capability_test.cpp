@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Verifies that the raster-only SKIA backend advertises no unavailable GPU/3D capability and
-// keeps the corresponding calls as deterministic failures.
+// Verifies that raster-only SKIA advertises only its real CPU Texture3D storage capability while
+// keeping unavailable GPU/3D calls as deterministic failures.
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -45,7 +45,8 @@ protected:
         Check(!device.SupportsCapability(GraphicsCapability::WireFrame), "wireframe is not advertised");
         Check(!device.SupportsCapability(GraphicsCapability::OcclusionQuery), "occlusion queries are not advertised");
         Check(!device.SupportsCapability(GraphicsCapability::CustomEffects), "custom effects are not advertised");
-        Check(!device.SupportsCapability(GraphicsCapability::Texture3D), "Texture3D is not advertised");
+        Check(device.SupportsCapability(GraphicsCapability::Texture3D),
+              "Texture3D CPU storage is advertised independently from 3D sampling");
         Check(Throws([&] { device.SetDepthTestEnabled(true); }), "3D state call throws deterministically");
         Check(Throws([&] { VertexBuffer vertexBuffer(device, 4); (void)vertexBuffer; }),
               "VertexBuffer construction throws deterministically");

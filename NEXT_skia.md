@@ -4,13 +4,15 @@
 
 - Branch: `feature/skia`; commits are pushed through the SSH `origin` remote.
 - Scope: experimental CPU-raster `CNA_GRAPHICS_BACKEND=SKIA`, progressing toward pixel-verified
-  2D parity with the observable EasyGL/CNA contracts.  Do not claim 3D, GPU presentation, depth,
-  MSAA, mipmaps, MRT, or arbitrary effects until their individual `plan_skia.md` evidence exists.
+  2D parity with the observable EasyGL/CNA contracts. Do not claim 3D drawing, GPU presentation,
+  depth, MSAA, renderable/Texture2D mipmaps, MRT, cube/volume sampling, or arbitrary effects until
+  their individual `plan_skia.md` evidence exists. Plain cube/volume CPU transfer storage is now
+  separately proven by SKIA-80–84.
 - Repository policy for this work: leave the unrelated historical `NEXT.md` unchanged.  Record
   Skia continuity only in this file.
 - Build policy: configure persistent in-repository Skia builds in `cmake-build-skia*`; every build
-  uses at most two jobs (`--parallel 2`).  No subagents are used, so the global two-core limit is
-  preserved.  Windowed tests run with `xvfb-run -a` when a real display is unavailable.
+  uses at most eight jobs (`--parallel 8`). No subagents are used, so the global eight-core pool is
+  never shared concurrently. Windowed tests run with `xvfb-run -a` when a real display is unavailable.
 
 ## Completed baseline
 
@@ -19,9 +21,40 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 80 Skia CTests: seven raster-only, 71 display-required, and two
+- `docs/skia-backend.md` records 91 Skia CTests: eight raster-only, 81 display-required, and two
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
+
+## Completed in this session: SKIA-80 through SKIA-84
+
+- Added bounded CPU-only `TextureCube` and `Texture3D` backends. Cube storage owns six independent
+  zeroed RGBA8 faces at every declared mip; volume storage follows CNA/FNA's width/height-driven
+  level count while halving all three allocated axes. Rectangle/box transfers copy top-row-first
+  and volume slices front-to-back without retaining caller memory.
+- Every axis must be positive and at most 16384; each resource is capped at 256 MiB across all
+  faces/levels using checked multiplication and addition. Backend transfers allocate no second
+  resource shadow. Live cube/volume counts and exact bytes are exposed in `SkiaResourceStats` and
+  return to zero on destruction.
+- `GraphicsCapability::Texture3D` now reports true for its documented persistent-storage contract.
+  `ThreeD`, `CustomEffects`, and every other GPU capability remain false. Cube/volume sampling is
+  explicitly outside the result: there is no native/`BindGL` handle and no supported Skia effect
+  or 3D consumer. The decision matrix and peak-storage policy are in
+  `docs/skia-texture-storage.md`.
+- Added eleven CTests: one direct Raster policy test and ten public Display fixtures. Face, partial
+  rectangle, mip, DDS load (7/7), volume slice/box/mip, and the shared exhaustive GetData/SetData
+  audits (56/56 each) pass under Xvfb. The complete Debug suite passes 91/91 in 11.76 seconds with
+  `--parallel 8` after configuring `CNA_TEST_DISPLAY` to the wrapper's assigned display; the cache
+  was restored to `:0` afterward. Both source audits pass with the updated 247-row parity ledger
+  and 347-entry matrix (75 direct, 27 emulation, 220 3D, 25 device-dependent).
+- Debug, Release, and ASan selected binaries compile with `--parallel 8`. The direct policy and both
+  56-check public audits pass in Release and with AddressSanitizer (`detect_leaks=0`, required for
+  the existing display-stack baseline). A `detect_leaks=1` run cannot complete in this environment:
+  in-sandbox LSan reports that ptrace is unsupported and the escalated invocation hangs before test
+  output; exact internal counters independently prove all storage vectors release to zero.
+- Next autonomous task after the SKIA-80–84 commit is SKIA-85/86: prototype six draw-to-face raster
+  surfaces for `RenderTargetCube`, then retain the implementation only if face isolation, binding,
+  transfer/readback, preserve/discard, disposal, depth/MSAA/mip boundaries, and sampling claims are
+  all honest.
 
 ## Completed in this session: SKIA-21
 
