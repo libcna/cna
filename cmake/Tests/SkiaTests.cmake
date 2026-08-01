@@ -97,6 +97,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_sprite_effects examples/sdlrenderer_sprite_effects_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_Effects cna_test_skia_sprite_effects)
 
+    cna_skia_test(cna_test_skia_spritebatch_deferred_order examples/sdlrenderer_spritebatch_deferred_order_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_DeferredOrder cna_test_skia_spritebatch_deferred_order)
+
+    cna_skia_test(cna_test_skia_spritebatch_immediate_flush examples/sdlrenderer_spritebatch_immediate_flush_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_ImmediateFlush cna_test_skia_spritebatch_immediate_flush)
+
+    cna_skia_test(cna_test_skia_spritebatch_layerdepth examples/sdlrenderer_spritebatch_layerdepth_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_LayerDepth cna_test_skia_spritebatch_layerdepth)
+
+    cna_skia_test(cna_test_skia_spritebatch_texture_sort examples/sdlrenderer_spritebatch_texture_sort_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_TextureSort cna_test_skia_spritebatch_texture_sort)
+
     if(TARGET cna_demo_2d)
         cna_register_skia_display_test(Skia_Demo2D_Smoke cna_demo_2d --smoke 3)
     endif()
