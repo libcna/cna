@@ -266,7 +266,7 @@ listed contract, including depth/stencil and stock-effect tests, passes.
 
 | ID | Task | Status | Acceptance evidence |
 |---|---|---|---|
-| SKIA-95 | Build a complete EasyGL 3D call/effect matrix: vertex layouts, primitive types, index sizes, transformations, textures, states, lights, fog, skins, instancing, and queries. | ⬜ | Every existing EasyGL 3D test maps to a required renderer feature or a documented rejection. |
+| SKIA-95 | Build a complete EasyGL 3D call/effect matrix: vertex layouts, primitive types, index sizes, transformations, textures, states, lights, fog, skins, instancing, and queries. | ✅ | `docs/skia-3d-call-effect-matrix.md` defines 37 stable contract IDs with current results and decision tasks. The extended `Skia_TestMatrix_Audit` maps all 216/216 primary 3D entries plus 16 exact device-dependent depth/MSAA/anisotropy/query cross-cuts, rejects an unmapped live entry or unused/undocumented feature, and `--dump-3d` emits the full entry-to-feature expansion. |
 | SKIA-96 | Prototype projected `SkVertices` rendering for one `VertexPositionColorTexture` triangle list; compare interpolation, clipping, winding, and transform semantics to EasyGL. | ⬜ | Controlled test demonstrates exactness or records the first observable mismatch. |
 | SKIA-97 | Prototype a CPU depth buffer plus triangle rasterization only if SKIA-96 shows a feasible bounded bridge; define its compositing handoff to Skia. | ⬜ | Depth ordering, clear, and target-switch spike with memory/performance measurements. |
 | SKIA-98 | Prototype stencil compare/operations/masks and colour-write interaction only if the depth bridge passes. | ⬜ | Full stencil micro-suite matches EasyGL reference or records a hard blocker. |

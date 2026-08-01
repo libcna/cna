@@ -588,8 +588,8 @@
 
 ## Current task
 
-SKIA-94 implementation and validation are complete. Commit/push this checkpoint, then begin
-SKIA-95's complete 3D call/effect matrix.
+SKIA-95 implementation and validation are complete. Commit/push this checkpoint, then begin the
+strictly bounded SKIA-96 projected `SkVertices` spike; do not connect it to public 3D entry points.
 
 ## Completed in this session: SKIA-93
 
@@ -646,11 +646,32 @@ SKIA-95's complete 3D call/effect matrix.
   (10 Raster, 91 Display, two Audit). All Debug/Release/ASan display caches were restored to `:0`.
   `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-95
+
+- Added `docs/skia-3d-call-effect-matrix.md` with 37 stable requirement IDs covering fixed/custom
+  vertex layouts, vertex/index buffers, 16/32-bit indices, DrawUser, triangle/strip/line topology,
+  instancing, transformation/clipping/interpolation, 2D/cube/volume sampling, sampler/mip/
+  anisotropy behavior, depth/stencil/cull/fill/blend/MRT/MSAA/order state, viewport/scissor, every
+  stock/custom effect family, lighting, fog, model/skinning, queries, resource validation and
+  target passes. Each row records the current raster boundary and responsible SKIA-96–105 task.
+- Extended `scripts/validate_skia_test_matrix.py` without a generic fallback. It maps the stable
+  entry name plus its adjacent evidence, requires every feature ID to be documented and exercised,
+  and fails an unrecognized `3d` entry. `--dump-3d` emits the exact live expansion for review.
+- The audit covers all 216/216 primary `3d` matrix entries plus a closed set of 16 relevant
+  device-dependent cross-cuts: occlusion, depth formats, depth/MSAA, resolves/cube MSAA and
+  anisotropic sampling. Presentation/reset/window/handle tests and DXT1 remain deliberately in
+  their own phases.
+- `python3 -m py_compile scripts/validate_skia_test_matrix.py`, the direct validator and both
+  registered Skia audits pass. The validator reports 347 total entries and 232 SKIA-95 mappings
+  across all 37 features. No product code or capability changed; `ThreeD` stays false.
+  `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-95: build the complete EasyGL 3D call/effect matrix before selecting any projected-
-   geometry prototype.
-2. SKIA-96: prototype projected SkVertices only after the matrix defines one exact bounded slice.
+1. SKIA-96: prototype only one projected `VertexPositionColorTexture` TriangleList with controlled
+   interpolation, clipping, winding and transform comparisons; keep it below public API support.
+2. If the first observable mismatch makes the bridge unsound, record it precisely and feed that
+   result into SKIA-101 instead of weakening the oracle.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

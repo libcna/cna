@@ -14,6 +14,9 @@ The four categories are deliberately exclusive:
 
 Run `python3 scripts/validate_skia_test_matrix.py`. It compares this file to live CMake
 registrations and both asset directories, and rejects every unclassified or stale entry.
+For the exact SKIA-95 expansion of every 3D row into renderer requirements, run
+`python3 scripts/validate_skia_test_matrix.py --dump-3d`; the feature vocabulary and current
+dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 
 ## 2D-direct registrations
 
