@@ -64,7 +64,13 @@ The current public texture-format policy is intentionally the existing CNA-wide 
 `SurfaceFormat::Color` is the only accepted format. Every other `SurfaceFormat` value is rejected
 by shared validation before a Skia allocation is attempted. Raster textures accept one-pixel and
 NPOT dimensions, report the shared 16384 maximum single axis, and reject a dimension above that
-limit before allocation. Mipmapped texture construction is also rejected before data is accepted.
+limit before allocation. Mipmapped `Texture2D` construction is also rejected with
+`System::NotSupportedException` before data is accepted; `mipMap=true` `RenderTarget2D`
+construction raises the same exception. This is a deliberate raster policy: the pinned Skia
+checkout does contain a mip builder under private `src/core`, but the public raster `SkImage`
+creation path used by CNA accepts a level-0 pixmap only and supplies no stable public contract for
+CNA-owned level upload/readback. CNA will not bind Skia's internal cache implementation merely to
+imply a mip-chain contract it cannot fully expose.
 
 ## Verification recorded for the initial slice
 
@@ -73,8 +79,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers forty-six SKIA-only CTests: two window-independent raster
-   surface pixel tests and forty-four display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers forty-seven SKIA-only CTests: two window-independent raster
+   surface pixel tests and forty-five display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -138,5 +144,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 24. `Skia_SpriteBatch_Stress` reuses twelve textures and two preserve-content targets for 64 actual
     frames. Each frame switches A → B → backbuffer and makes 26 independent SpriteBatch sessions;
     the two target anchor pixels and a complete-backbuffer FNV-1a hash must remain stable.
+25. `Skia_Texture2D_MipmapPolicy` pins the raster decision after the Skia API audit: mipmapped
+    texture and render-target construction both raise `System::NotSupportedException`, while a
+    subsequent level-0 upload and Point sprite draw remain correct.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

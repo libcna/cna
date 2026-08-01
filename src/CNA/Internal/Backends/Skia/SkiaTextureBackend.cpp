@@ -2,6 +2,7 @@
 
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -33,7 +34,9 @@ namespace CNA::Internal::Backends::Skia
         if (rawPixels_.size() != requiredBytes)
             throw std::runtime_error("Skia Texture2D requires exactly width * height * 4 RGBA8 bytes.");
         if (data.mipLevels != 1)
-            throw std::runtime_error("Skia raster Texture2D does not implement mip chains yet.");
+            throw System::NotSupportedException(
+                "Skia raster Texture2D does not implement public mip chains; mipMap=true is rejected "
+                "before texture data can be uploaded.");
         RebuildImage();
     }
 

@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -184,7 +185,8 @@ namespace CNA::Internal::Backends::Skia
         if (width <= 0 || height <= 0)
             throw std::runtime_error("Skia RenderTarget2D dimensions must be positive.");
         if (mipMap)
-            throw std::runtime_error("Skia raster RenderTarget2D mip chains are not implemented yet.");
+            throw System::NotSupportedException(
+                "Skia raster RenderTarget2D does not implement public mip chains; mipMap=true is rejected.");
         if (multiSampleCount != 0)
             throw std::runtime_error("Skia raster RenderTarget2D multisampling is not implemented yet.");
         return std::make_unique<SkiaRenderTargetBackend>(width, height, preserveContents);
