@@ -104,6 +104,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_texture_storage_policy examples/skia_texture_storage_policy_test.cpp)
     cna_register_skia_raster_test(Skia_TextureStorage_Policy cna_test_skia_texture_storage_policy)
 
+    cna_skia_test(cna_test_skia_rendertargetcube_policy
+                  examples/skia_rendertargetcube_policy_test.cpp)
+    target_include_directories(cna_test_skia_rendertargetcube_policy PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_RenderTargetCube_Policy
+                                  cna_test_skia_rendertargetcube_policy)
+
     cna_skia_test(cna_test_skia_texturecube_faces examples/easygl_texturecube_faces_test.cpp)
     cna_register_skia_display_test(Skia_TextureCube_Faces_RoundTrip cna_test_skia_texturecube_faces)
 
@@ -323,6 +329,31 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     cna_skia_test(cna_test_skia_rendertarget_lifetime examples/skia_rendertarget_lifetime_test.cpp)
     cna_register_skia_display_test(Skia_RenderTarget2D_Lifetime cna_test_skia_rendertarget_lifetime)
+
+    # SKIA-85--SKIA-86: RenderTargetCube is a six-surface CPU-raster emulation. These shared
+    # contracts cover every face, rendered/uploaded readback, generated mips, Preserve/Discard,
+    # truthful zero-sample MSAA clamping, public properties, rebinding, and disposal.
+    cna_skia_test(cna_test_skia_rendertargetcube_getdata
+                  examples/rendertargetcube_getdata_contract_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTargetCube_GetDataContract
+                                   cna_test_skia_rendertargetcube_getdata)
+
+    cna_skia_test(cna_test_skia_rendertargetcube_usage
+                  examples/rendertargetcube_usage_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTargetCube_Usage
+                                   cna_test_skia_rendertargetcube_usage)
+
+    cna_skia_test(cna_test_skia_rendertargetcube_properties
+                  examples/easygl_rendertargetcube_properties_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTargetCube_Properties
+                                   cna_test_skia_rendertargetcube_properties)
+
+    cna_skia_test(cna_test_skia_rendertargetcube_plural_binding
+                  examples/rendertargetcube_plural_binding_test.cpp)
+    target_compile_definitions(cna_test_skia_rendertargetcube_plural_binding PRIVATE
+                               CNA_GFX096_CUBE_GETDATA=1)
+    cna_register_skia_display_test(Skia_RenderTargetCube_PluralBinding
+                                   cna_test_skia_rendertargetcube_plural_binding)
 
     cna_skia_test(cna_test_skia_resize_presentation examples/skia_resize_presentation_test.cpp)
     cna_register_skia_display_test(Skia_Resize_Presentation cna_test_skia_resize_presentation)

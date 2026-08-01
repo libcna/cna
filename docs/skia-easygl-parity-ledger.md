@@ -54,13 +54,13 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IRenderTargetBackend::GetColorGLHandle/0` | Returns the FBO color texture name. | Returns zero; sampling uses snapshots. | `internal` | SKIA-63, SKIA-74 |
 | `IRenderTargetBackend::GetMultiSampleCount/0` | Reports device-clamped target samples. | Reports zero; real MSAA requests reject. | `bounded` | SKIA-73, SKIA-76 |
 | `IRenderTargetBackend::HasRealDepthBuffer/1` | Reports the actual GL depth attachment. | Always false for raster targets. | `unsupported` | SKIA-67 |
-| `IRenderTargetCubeBackend::GetSize/0` | Reports GL cube-face size. | Cube target creation is unsupported. | `unsupported` | SKIA-85–86 |
-| `IRenderTargetCubeBackend::BindAsRenderTargetFace/1` | Selects one cube FBO face. | No 2D-equivalent face target is claimed. | `unsupported` | SKIA-85–86 |
-| `IRenderTargetCubeBackend::UnbindAsRenderTarget/0` | Resolves/unbinds a cube face. | Cube target creation is unsupported. | `unsupported` | SKIA-85–86 |
-| `IRenderTargetCubeBackend::GetGLHandle/0` | Returns the cube texture name. | No native cube handle exists. | `unsupported` | SKIA-85–86 |
-| `IRenderTargetCubeBackend::GetMultiSampleCount/0` | Reports cube-face sample count. | No cube target exists. | `unsupported` | SKIA-85–86 |
-| `IRenderTargetCubeBackend::HasRealDepthBuffer/1` | Reports cube depth attachment. | No cube target exists. | `unsupported` | SKIA-85–86 |
-| `IRenderTargetCubeBackend::SetData/8` | Cube render targets reject direct CPU upload by contract. | No cube target exists. | `unsupported` | SKIA-85–86 |
+| `IRenderTargetCubeBackend::GetSize/0` | Reports GL cube-face size. | Reports the exact raster face extent. | `implemented` | SKIA-85–86; shared properties contract |
+| `IRenderTargetCubeBackend::BindAsRenderTargetFace/1` | Selects one cube FBO face. | Selects one of six stable level-zero SkSurfaces. | `implemented` | SKIA-85–86; plural binding contract |
+| `IRenderTargetCubeBackend::UnbindAsRenderTarget/0` | Resolves/unbinds a cube face. | Generates dirty face mips and restores the backbuffer. | `implemented` | SKIA-85–86; mip/readback contracts |
+| `IRenderTargetCubeBackend::GetGLHandle/0` | Returns the cube texture name. | Returns zero; cube sampling remains unavailable. | `unsupported` | SKIA-85–86; `skia-texture-storage.md` |
+| `IRenderTargetCubeBackend::GetMultiSampleCount/0` | Reports cube-face sample count. | Reports the honestly applied raster count of zero. | `bounded` | SKIA-85–86; policy/usage contracts |
+| `IRenderTargetCubeBackend::HasRealDepthBuffer/1` | Reports cube depth attachment. | Always false; requested depth remains metadata. | `unsupported` | SKIA-85–86; direct policy test |
+| `IRenderTargetCubeBackend::SetData/8` | Uploads one rendered cube-face region where supported. | Exact bounded face/mip/rectangle upload. | `implemented` | SKIA-85–86; shared GetData contract |
 | `IEffectBackend::CompileProgram/2` | Compiles GLSL vertex/fragment programs; shader tests. | Arbitrary GLSL is not SkSL-compatible. | `unsupported` | SKIA-89–92 |
 | `IEffectBackend::Bind/0` | Binds an EasyGL program. | Effect backend construction returns unsupported. | `unsupported` | SKIA-89–92 |
 | `IEffectBackend::Unbind/0` | Restores EasyGL program state. | Effect backend construction returns unsupported. | `unsupported` | SKIA-89–92 |
@@ -107,10 +107,10 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateTextureCube/3` | Allocates GL cube texture/mips. | Creates six bounded CPU faces/mips only. | `bounded` | SKIA-80–84; `Skia_TextureStorage_Policy` |
 | `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Level-zero color target only. | `bounded` | SKIA-61–79 |
 | `IGraphicsBackend::SetRenderTarget2D/1` | Binds/unbinds one EasyGL FBO. | Binds checked raster target/backbuffer. | `implemented` | SKIA-61, SKIA-69 |
-| `IGraphicsBackend::CreateRenderTargetCube/5` | Allocates cube-face FBO target. | Returns unsupported. | `unsupported` | SKIA-85–86 |
+| `IGraphicsBackend::CreateRenderTargetCube/5` | Allocates cube-face FBO target. | Creates bounded six-face raster/mip storage; no depth/MSAA/sampler. | `bounded` | SKIA-85–86; four public contracts |
 | `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Returns unsupported. | `unsupported` | SKIA-89–92 |
-| `IGraphicsBackend::SetRenderTargetCubeFace/2` | Binds selected cube face. | Explicitly rejected by normalized target path. | `unsupported` | SKIA-85–86 |
-| `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Zero/one 2D target only; MRT/cube reject. | `bounded` | SKIA-68, SKIA-87–88 |
+| `IGraphicsBackend::SetRenderTargetCubeFace/2` | Binds selected cube face. | Binds one checked raster face and resets target-local state. | `implemented` | SKIA-85–86; plural binding contract |
+| `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Empty/one 2D/one cube face work; MRT rejects. | `bounded` | SKIA-68, SKIA-85–88 |
 | `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | Five proven blend routes and channel masks only. | `bounded` | SKIA-47–57 |
 | `IGraphicsBackend::ApplyDepthStencilState/16` | Applies complete GL depth/stencil state. | No raster depth/stencil attachment. | `unsupported` | SKIA-97–98 |
 | `IGraphicsBackend::ApplyRasterizerState/5` | Applies GL cull/fill/scissor/bias. | 2D solid/scissor only; wireframe rejects. | `bounded` | SKIA-41, SKIA-58 |
@@ -213,9 +213,9 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::GetBackBufferData/3` | Reads complete EasyGL backbuffer with destination offset. | Same validated common conversion from RGBA8. | `implemented` | SKIA-23, SKIA-62 |
 | `GraphicsDevice::GetBackBufferData/4` | Reads EasyGL rectangle with destination range. | Same top-left rectangular raster readback. | `implemented` | SKIA-23, SKIA-62 |
 | `GraphicsDevice::SetRenderTarget/1` | Binds one EasyGL RenderTarget2D or backbuffer. | Binds checked raster target or backbuffer. | `implemented` | SKIA-61, SKIA-69 |
-| `GraphicsDevice::SetRenderTarget/2` | Binds EasyGL cube target face. | Deterministically rejected. | `unsupported` | SKIA-85–86 |
-| `GraphicsDevice::SetRenderTargets/1` | Validates and binds EasyGL MRT/cube sets. | Empty/one 2D works; MRT/cube reject. | `bounded` | SKIA-68, SKIA-87–88 |
-| `GraphicsDevice::GetRenderTargets/0` | Returns common active EasyGL binding vector. | Returns empty/one raster binding accurately. | `bounded` | SKIA-61, SKIA-68 |
+| `GraphicsDevice::SetRenderTarget/2` | Binds EasyGL cube target face. | Binds an exact six-surface raster cube face. | `implemented` | SKIA-85–86; shared readback contract |
+| `GraphicsDevice::SetRenderTargets/1` | Validates and binds EasyGL MRT/cube sets. | Empty/one 2D/one cube work; MRT rejects before drawing. | `bounded` | SKIA-68, SKIA-85–88 |
+| `GraphicsDevice::GetRenderTargets/0` | Returns common active EasyGL binding vector. | Returns empty/one 2D/cube-face binding accurately. | `bounded` | SKIA-61, SKIA-68, SKIA-85–86 |
 | `GraphicsDevice::SetVertexBuffer/1` | Binds EasyGL vertex buffer slot zero. | No raster vertex buffer exists. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::SetVertexBuffer/2` | Binds EasyGL vertex buffer with offset. | No raster vertex buffer exists. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::SetVertexBuffers/1` | Binds multiple EasyGL vertex streams/instances. | Common cache exists; Skia draws reject. | `unsupported` | SKIA-95, SKIA-103 |

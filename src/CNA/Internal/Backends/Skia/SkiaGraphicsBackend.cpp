@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaBlendMapping.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaRenderTargetCubeBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
@@ -176,8 +177,8 @@ namespace CNA::Internal::Backends::Skia
         AssertOwnership("active-surface access");
         targetBinding_->AssertConsistent(&surface_);
         SkiaSurface* activeSurface = targetBinding_->ActiveSurface();
-        SkiaRenderTargetBackend* activeTarget = targetBinding_->ActiveTarget();
-        if (activeTarget && activeSurface != &activeTarget->Surface())
+        SkiaRasterTarget* activeTarget = targetBinding_->ActiveTarget();
+        if (activeTarget && activeSurface != activeTarget->BoundSurfaceEXT())
             throw std::runtime_error("Skia active target does not own the selected raster surface.");
         return *activeSurface;
     }
@@ -187,8 +188,8 @@ namespace CNA::Internal::Backends::Skia
         AssertOwnership("active-surface access");
         targetBinding_->AssertConsistent(&surface_);
         SkiaSurface* activeSurface = targetBinding_->ActiveSurface();
-        const SkiaRenderTargetBackend* activeTarget = targetBinding_->ActiveTarget();
-        if (activeTarget && activeSurface != &activeTarget->Surface())
+        const SkiaRasterTarget* activeTarget = targetBinding_->ActiveTarget();
+        if (activeTarget && activeSurface != activeTarget->BoundSurfaceEXT())
             throw std::runtime_error("Skia active target does not own the selected raster surface.");
         return *activeSurface;
     }
@@ -315,8 +316,8 @@ namespace CNA::Internal::Backends::Skia
     {
         AssertOwnership("Clear");
         RefreshDynamicBackbufferIfNeeded();
-        if (SkiaRenderTargetBackend* target = targetBinding_->ActiveTarget())
-            target->InvalidateSnapshot();
+        if (SkiaRasterTarget* target = targetBinding_->ActiveTarget())
+            target->BeforeWriteEXT();
         ActiveSurface().Clear(r, g, b, a);
     }
 
@@ -495,9 +496,21 @@ namespace CNA::Internal::Backends::Skia
                                                          targetBinding_, resourceCounters_);
     }
 
+    std::unique_ptr<IRenderTargetCubeBackend> SkiaGraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        AssertOwnership("CreateRenderTargetCube");
+        (void)depthFormat;
+        (void)multiSampleCount; // Raster applies zero samples and reports that exact clamp.
+        return std::make_unique<SkiaRenderTargetCubeBackend>(
+            size, preserveContents, mipMap, targetBinding_, resourceCounters_);
+    }
+
     void SkiaGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* renderTarget)
     {
         AssertOwnership("SetRenderTarget2D");
+        if (SkiaRasterTarget* activeTarget = targetBinding_->ActiveTarget())
+            activeTarget->FinalizeWriteEXT();
         if (!renderTarget)
         {
             targetBinding_->UnbindToBackbuffer();
@@ -514,6 +527,25 @@ namespace CNA::Internal::Backends::Skia
         skiaTarget->PrepareForBind();
         targetBinding_->Bind(skiaTarget, &skiaTarget->Surface());
         TraceSkiaState("surface=render-target id=%llu size=%dx%d",
+                       static_cast<unsigned long long>(ActiveSurface().Identity()),
+                       ActiveSurface().Width(), ActiveSurface().Height());
+    }
+
+    void SkiaGraphicsBackend::SetRenderTargetCubeFace(
+        IRenderTargetCubeBackend* renderTarget, int face)
+    {
+        AssertOwnership("SetRenderTargetCubeFace");
+        if (!renderTarget)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        auto* skiaTarget = dynamic_cast<SkiaRenderTargetCubeBackend*>(renderTarget);
+        if (!skiaTarget)
+            throw std::runtime_error("Skia cannot bind a cube target created by a different backend.");
+        skiaTarget->BindAsRenderTargetFace(face);
+        TraceSkiaState("surface=render-target-cube face=%d id=%llu size=%dx%d",
+                       face,
                        static_cast<unsigned long long>(ActiveSurface().Identity()),
                        ActiveSurface().Width(), ActiveSurface().Height());
     }
@@ -542,7 +574,11 @@ namespace CNA::Internal::Backends::Skia
         if (count != 1)
             throw std::runtime_error("Skia raster backend does not implement multiple render targets.");
         if (renderTargets[0].IsRenderTargetCubeFace())
-            throw std::runtime_error("Skia raster backend does not implement RenderTargetCube faces.");
+        {
+            SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                    renderTargets[0].GetCubeFace());
+            return;
+        }
         SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
     }
 

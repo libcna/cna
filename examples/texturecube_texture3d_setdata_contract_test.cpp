@@ -23,8 +23,8 @@
 //   * NO RESOURCE -- SDL_Renderer, ASCII, Canvas and DX3 keep IGraphicsBackend::CreateTextureCube's
 //     nullptr default, so `backend_` is null and the upload is dropped by the `if` itself;
 //   * NO STORAGE -- Headless's cube backend validates its arguments, records a trace entry and
-//     stores nothing, and every RenderTargetCube except EasyGL's inherits
-//     IRenderTargetCubeBackend::SetData's `{}` no-op body;
+//     stores nothing, and RenderTargetCube backends without an explicit upload override inherit
+//     IRenderTargetCubeBackend::SetData's deterministic refusal;
 //   * NO LEVEL -- Software's cube backend returns early for any `level != 0`, because it allocated
 //     storage for level 0 only while TextureCube still reports the full LevelCount.
 //
@@ -146,8 +146,7 @@ namespace
                                  false, Support::Unsupported, Support::Unsupported,
                                  Support::Unsupported, false};
 #elif defined(CNA_BACKEND_EASYGL)
-    // The only backend whose RenderTargetCube overrides SetData with a real upload into the shared
-    // GL cube texture; every other RenderTargetCube inherits the interface refusal.
+    // EasyGL uploads into the shared GL cube texture and normalizes its differing row convention.
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
                                  Support::AcceptedRowMirrored, false};
@@ -168,11 +167,11 @@ namespace
                                  true, Support::Exact, Support::Exact,
                                  Support::Unsupported, false};
 #elif defined(CNA_BACKEND_SKIA)
-    // Bounded CPU storage implements plain cube/volume transfers exactly. RenderTargetCube and
-    // every shader sampling route remain unsupported and are not implied by this storage result.
+    // Bounded CPU storage implements plain cube/volume transfers exactly. SKIA-85/86 additionally
+    // gives RenderTargetCube exact six-surface upload/readback; shader sampling remains unsupported.
     constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact,
-                                 Support::Unsupported, false};
+                                 Support::Exact, false};
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     // 2D-only by design: CreateTextureCube()/CreateTexture3D()/CreateRenderTargetCube() all keep
     // IGraphicsBackend's own nullptr-returning defaults, so no cube/volume storage exists at all

@@ -133,9 +133,11 @@ private:
     {
         return stats.textureBackends == 0 && stats.textureImageViews == 0 && stats.renderTargets == 0
             && stats.cpuTextureCubeBackends == 0 && stats.cpuTexture3DBackends == 0
+            && stats.renderTargetCubes == 0
             && stats.targetSnapshots == 0 && stats.textureImageBytes == 0
             && stats.cpuTextureStorageBytes == 0
-            && stats.targetSurfaceBytes == 0 && stats.targetSnapshotBytes == 0;
+            && stats.targetSurfaceBytes == 0 && stats.cubeTargetStorageBytes == 0
+            && stats.targetSnapshotBytes == 0;
     }
 
     void DrawTarget(Texture2D& target)

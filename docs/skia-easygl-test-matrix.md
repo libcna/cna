@@ -113,6 +113,10 @@ registrations and both asset directories, and rejects every unclassified or stal
 | `ctest:EasyGL_Texture3D_Mip_RoundTrip` | `ctest` | `2d-emulation` | Bounded volume mip fixture passes on Skia; SKIA-82–84. |
 | `ctest:EasyGL_Texture3D_PartialBox_RoundTrip` | `ctest` | `2d-emulation` | Exact CPU sub-volume transfer fixture passes on Skia; SKIA-82–84. |
 | `ctest:EasyGL_Texture3D_PartialBox_Readback` | `ctest` | `2d-emulation` | Exact front-to-back CPU box readback fixture passes on Skia; SKIA-82–84. |
+| `ctest:EasyGL_RenderTargetCube_PluralBinding` | `ctest` | `2d-emulation` | Shared six-face singular/plural binding and explicit MRT-refusal fixture passes through CPU raster readback; SKIA-85–86. |
+| `ctest:EasyGL_RenderTargetCube_Properties` | `ctest` | `2d-emulation` | Shared public property fixture passes with real mips and truthful zero-sample clamping; SKIA-85–86. |
+| `ctest:EasyGL_RenderTargetCube_GetDataContract` | `ctest` | `2d-emulation` | Shared asymmetric rendered/uploaded face, mip, depth-interaction, lifetime, and readback contract passes; SKIA-85–86. |
+| `ctest:EasyGL_RenderTargetCube_Usage` | `ctest` | `2d-emulation` | Shared Preserve/Discard and switching contract passes on six raster surfaces; SKIA-85–86. |
 
 ## 3D registrations
 
@@ -194,7 +198,6 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_SkinnedEffect_TwoBoneBlend` | `ctest` | `3d` | Bone blend vertex pipeline. |
 | `ctest:EasyGL_SkinnedEffect_Combined` | `ctest` | `3d` | Combined skinned effect states. |
 | `ctest:EasyGL_RenderTargetCube_SampleAfterUnbind` | `ctest` | `3d` | Cube-face target/sampling path. |
-| `ctest:EasyGL_RenderTargetCube_PluralBinding` | `ctest` | `3d` | Cube-face normalized target binding. |
 | `ctest:EasyGL_ModelDraw_RedQuad` | `ctest` | `3d` | Model mesh vertex/index draw. |
 | `ctest:EasyGL_ModelJsonReader_Quad` | `ctest` | `3d` | Loaded model geometry draw. |
 | `ctest:EasyGL_ModelJsonReader_32BitIndices` | `ctest` | `3d` | Model 32-bit index pipeline. |
@@ -264,7 +267,6 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_RasterizerState_CullMode_IndexedBasicEffect` | `ctest` | `3d` | Indexed stock-effect culling. |
 | `ctest:EasyGL_FillMode_Solid` | `ctest` | `3d` | Polygon fill mode. |
 | `ctest:EasyGL_DepthBias` | `ctest` | `3d` | Depth rasterization bias. |
-| `ctest:EasyGL_RenderTargetCube_Properties` | `ctest` | `3d` | Cube render-target resource. |
 | `ctest:EasyGL_Sample_MovingQuad3D` | `ctest` | `3d` | 3D sample geometry. |
 | `ctest:EasyGL_Sample_DualTextureSwap` | `ctest` | `3d` | DualTextureEffect sample. |
 | `ctest:EasyGL_Sample_KeyboardCube3D` | `ctest` | `3d` | Cube 3D sample. |
@@ -289,8 +291,6 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_SpriteBatch3DOrder` | `ctest` | `3d` | Explicit SpriteBatch/3D ordering. |
 | `ctest:EasyGL_FrontFaceWinding` | `ctest` | `3d` | Triangle front-face convention. |
 | `ctest:EasyGL_CubeVolume_GetDataContract` | `ctest` | `3d` | Cube and volume readback. |
-| `ctest:EasyGL_RenderTargetCube_GetDataContract` | `ctest` | `3d` | Cube-target face readback. |
-| `ctest:EasyGL_RenderTargetCube_Usage` | `ctest` | `3d` | Cube-target preserve/discard. |
 | `ctest:EasyGL_RenderTarget_DepthStencilUsage` | `ctest` | `3d` | Real target depth/stencil lifecycle. |
 | `ctest:EasyGL_GraphicsDevice_OrderedClear` | `ctest` | `3d` | Shared sequence contains 3D clear/draw legs. |
 | `ctest:EasyGL_Backbuffer_PassOrder` | `ctest` | `3d` | Shared sequence contains 3D pass legs. |

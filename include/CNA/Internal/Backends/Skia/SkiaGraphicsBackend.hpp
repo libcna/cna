@@ -84,7 +84,11 @@ namespace CNA::Internal::Backends::Skia
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false,
+            bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* renderTarget) override;
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* renderTarget, int face) override;
         void ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,

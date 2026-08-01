@@ -50,10 +50,12 @@ namespace
             && left.cpuTextureCubeBackends == right.cpuTextureCubeBackends
             && left.cpuTexture3DBackends == right.cpuTexture3DBackends
             && left.renderTargets == right.renderTargets
+            && left.renderTargetCubes == right.renderTargetCubes
             && left.targetSnapshots == right.targetSnapshots
             && left.textureImageBytes == right.textureImageBytes
             && left.cpuTextureStorageBytes == right.cpuTextureStorageBytes
             && left.targetSurfaceBytes == right.targetSurfaceBytes
+            && left.cubeTargetStorageBytes == right.cubeTargetStorageBytes
             && left.targetSnapshotBytes == right.targetSnapshotBytes;
     }
 }

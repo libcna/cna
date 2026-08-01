@@ -6,8 +6,9 @@
 - Scope: experimental CPU-raster `CNA_GRAPHICS_BACKEND=SKIA`, progressing toward pixel-verified
   2D parity with the observable EasyGL/CNA contracts. Do not claim 3D drawing, GPU presentation,
   depth, MSAA, renderable/Texture2D mipmaps, MRT, cube/volume sampling, or arbitrary effects until
-  their individual `plan_skia.md` evidence exists. Plain cube/volume CPU transfer storage is now
-  separately proven by SKIA-80–84.
+  their individual `plan_skia.md` evidence exists. Plain cube/volume CPU transfer storage is
+  separately proven by SKIA-80–84, and six-face 2D RenderTargetCube emulation by SKIA-85/86 does
+  not widen the sampling/depth/MSAA claims.
 - Repository policy for this work: leave the unrelated historical `NEXT.md` unchanged.  Record
   Skia continuity only in this file.
 - Build policy: configure persistent in-repository Skia builds in `cmake-build-skia*`; every build
@@ -21,7 +22,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 91 Skia CTests: eight raster-only, 81 display-required, and two
+- `docs/skia-backend.md` records 96 Skia CTests: nine raster-only, 85 display-required, and two
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -51,10 +52,35 @@
   the existing display-stack baseline). A `detect_leaks=1` run cannot complete in this environment:
   in-sandbox LSan reports that ptrace is unsupported and the escalated invocation hangs before test
   output; exact internal counters independently prove all storage vectors release to zero.
-- Next autonomous task after the SKIA-80–84 commit is SKIA-85/86: prototype six draw-to-face raster
-  surfaces for `RenderTargetCube`, then retain the implementation only if face isolation, binding,
-  transfer/readback, preserve/discard, disposal, depth/MSAA/mip boundaries, and sampling claims are
-  all honest.
+- The SKIA-85/86 follow-up is complete below.
+
+## Completed in this session: SKIA-85 and SKIA-86
+
+- Added a common `SkiaRasterTarget` boundary and a bounded `SkiaRenderTargetCubeBackend`. Every
+  declared mip owns six stable CPU `SkSurface` faces; Clear and SpriteBatch route to the selected
+  level-zero face, leaving a dirty face synchronizes its bytes and regenerates only that face's
+  remaining levels with a deterministic 2x2 RGBA box filter.
+- Each surface also owns one canonical straight-RGBA transfer shadow. The complete-suite run found
+  that relying on premultiplied SkSurface storage made arbitrary translucent `SetData` round-trip
+  only 10/64 exact texels. The final implementation updates both stores, returns the canonical
+  bytes, and reuses preallocated shadows during rendered-face/mip synchronization. Surfaces and
+  shadows together are checked against the 16384-axis and 256 MiB per-resource limits; live count
+  and exact combined bytes return to zero on destruction.
+- Singular and normalized plural cube-face binding are pixel-equivalent. Empty bindings restore
+  the backbuffer, one 2D or one cube face works, Preserve/Discard affects exactly the selected
+  face, viewport/scissor reset to its extent, and multiple attachments still reject before any
+  draw. Requested depth remains public metadata with `HasRealDepthBuffer=false`; all MSAA requests
+  truthfully apply/report zero. No native cube handle or supported sampler was added.
+- Added `Skia_RenderTargetCube_Policy` plus four shared public fixtures for GetData, usage,
+  properties, and plural binding. The existing exhaustive transfer SetData contract is now 56/56
+  with byte-exact RenderTargetCube upload. Final Debug validation passes 96/96 Skia CTests in
+  12.55 seconds with `--parallel 8`; Release and ASan (`detect_leaks=0`) pass all six focused
+  RenderTargetCube/SetData tests. The source audits pass with 247 ledger rows and 347 matrix entries
+  (75 direct, 31 emulation, 216 3D, 25 device-dependent). CTest display caches were restored to
+  `:0` after Xvfb runs.
+- No `NEXT.md` content was read or changed. The next autonomous task is SKIA-87/88: determine
+  whether exact MRT replay is possible without double-applying draw side effects; otherwise retain
+  and strengthen the current pre-draw rejection.
 
 ## Completed in this session: SKIA-21
 

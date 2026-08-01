@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaRasterTarget.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
@@ -11,7 +12,9 @@
 namespace CNA::Internal::Backends::Skia
 {
     /** CPU raster off-screen target that can be sampled as a Texture2D after it is unbound. */
-    class SkiaRenderTargetBackend final : public IRenderTargetBackend, public SkiaImageSource
+    class SkiaRenderTargetBackend final : public IRenderTargetBackend,
+                                          public SkiaImageSource,
+                                          public SkiaRasterTarget
     {
     public:
         SkiaRenderTargetBackend(int width, int height, bool preserveContents,
@@ -33,6 +36,10 @@ namespace CNA::Internal::Backends::Skia
 
         [[nodiscard]] SkiaSurface& Surface() noexcept { return surface_; }
         [[nodiscard]] const SkiaSurface& Surface() const noexcept { return surface_; }
+        [[nodiscard]] SkiaSurface* BoundSurfaceEXT() noexcept override { return &surface_; }
+        [[nodiscard]] const SkiaSurface* BoundSurfaceEXT() const noexcept override { return &surface_; }
+        void BeforeWriteEXT() noexcept override { InvalidateSnapshot(); }
+        void FinalizeWriteEXT() override {}
         void PrepareForBind();
         /// Drops this target's one-entry sampling cache before a canvas or upload write.
         void InvalidateSnapshot() noexcept;

@@ -156,6 +156,12 @@ namespace
 #elif defined(CNA_BACKEND_EASYGL)
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
+#elif defined(CNA_BACKEND_SKIA)
+    // Skia's 2D emulation owns six independent CPU raster surfaces at every requested mip level.
+    // Rendering and uploads are byte-exact; leaving a rendered face regenerates its mip chain.
+    // It deliberately clamps MSAA to zero because these SkSurface targets are single-sample.
+    constexpr Contract kContract{"SKIA", true, Support::Exact, Support::Exact,
+                                 true, false, Support::Exact, MipTargets::Real, true, true, true, false, false};
 #elif defined(CNA_BACKEND_BGFX)
     // REMED-GFX-138: GFX-154's ordered completion now exposes both bgfx's resolved cube level 0
     // and every auto-generated mip before the readback blit. The combined MSAA+mip path is exact
@@ -1183,15 +1189,10 @@ class RenderTargetCubeGetDataContractTest : public Game
      * @brief W1 -- how a face UPLOADED through the inherited TextureCube::SetData relates to the
      *        same face read back.
      *
-     * Only EasyGL's RenderTargetCube implements SetData (REMED-GFX-135); every other one inherits
-     * `IRenderTargetCubeBackend::SetData`'s refusal, which is asserted here instead. Where it IS
-     * implemented, the round trip is measured rather than assumed, because the two writers of a
-     * rendered cube face need not agree: EasyGL's rasterizer fills the face bottom-up (which is
-     * why GetData normalizes, see EasyGLRenderTargetCubeBackend::GetData) while glTexSubImage2D
-     * writes source row 0 into texel row 0 like every other backend's upload. Recording that
-     * asymmetry as an enforced fact keeps it from being silently "fixed" in either direction --
-     * flipping the upload would only move the divergence onto the cube SAMPLING path, where the
-     * real difference lives.
+     * EasyGL and Skia implement this upload; other backends inherit the deterministic refusal.
+     * Where it is implemented, the round trip is measured rather than assumed because rendered
+     * and uploaded writers need not share row orientation. EasyGL intentionally records a mirrored
+     * upload/readback relationship; Skia's canonical CPU transfer shadow records the same order.
      */
     void RunUploadRoundTrip(GraphicsDevice& dev)
     {
@@ -1238,7 +1239,7 @@ class RenderTargetCubeGetDataContractTest : public Game
               "W1 upload: an uploaded face reads back " +
               std::string(kContract.rtCubeUploadMirrored ? "vertically mirrored"
                                                          : "in the same row order") +
-              " -- this backend's rasterizer and its CPU upload write opposite row orders "
+              " -- the measured relationship must match this backend's declared row convention "
               "[sameOrder=" + std::to_string(p.exact) + "/" + std::to_string(p.window) +
               " mirrored=" + std::to_string(mirrored) + "/" + std::to_string(p.window) +
               " refused=" + std::string(refused ? "1" : "0") + "]");
