@@ -487,5 +487,17 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     Debug suite passes 101/101 in 16.22 seconds with eight-way parallelism; both SkSL tests pass in
     Release and ASan (`detect_leaks=0`), and 37 related supported ShaderEffect/Texture2D unit tests
     pass under Xvfb.
+68. `Skia_Effect_Emulation_Spike` separates three fragment-like operations from their stock 3D
+    wrappers. A binary `clipShader` preserves failed alpha-test pixels for all eight compare modes
+    at below/equal/above reference values; a transparent-source control proves a one-pass colour
+    substitute is not discard under source replacement. A single runtime shader matches the
+    dual-texture RGB-doubling formula while its two child images use independent Repeat/Mirror
+    addressing, and a single-pass color filter matches two asymmetric swizzle/scale/bias pixels.
+    Alpha coverage samples the source twice and pushes one clip, while the other candidates need
+    no intermediate target; all final output is quantized once to premultiplied RGBA8. This proves
+    reusable composition pieces only, not matrices, triangle coverage, fog, depth or the stock
+    effect types. The focused headless raster test passes 8/8 in Debug, Release and under
+    ASan/LSan with leak detection enabled. The complete Debug suite passes 102/102 in 16.32 seconds
+    with eight-way parallelism (10 Raster, 90 Display and two Audit tests).
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

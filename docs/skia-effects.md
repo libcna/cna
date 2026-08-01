@@ -67,6 +67,31 @@ unbound/disposed children and compile errors deterministically.
 5. SKIA-93/94 evaluate stock effects separately. A runtime colour operation does not provide XNA
    vertex processing, depth, alpha-test coverage, dual-texture addressing or environment sampling.
 
+## SKIA-93 composition spike
+
+`Skia_Effect_Emulation_Spike` evaluates the fragment-like pieces independently from CNA's public
+stock-effect draw route. This distinction is mandatory: proving a pixel equation on an axis-
+aligned raster rectangle does not prove an effect whose public input is transformed triangles.
+
+| Candidate piece | Exact Skia composition | Visual oracle | Public conclusion |
+|---|---|---|---|
+| `AlphaTestEffect` comparison/colour coverage | A runtime shader samples the source and returns a binary coverage mask to `SkCanvas::clipShader`; the real colour draw then uses the requested blender. | Alpha bytes 127/128/129 against reference 128 match all 24 results across the eight `CompareFunction` values. Failed pixels retain an opaque non-black sentinel even with source replacement. A control draw proves that returning transparent instead would erase the sentinel under `Opaque`/`kSrc`, so it is not discard. | Exact for a colour-only 2D draw. It does not suppress a missing depth/stencil write, define triangle edge coverage, provide vertex colour/fog interpolation, or process world/view/projection matrices; do not promote the stock effect yet. |
+| `DualTextureEffect` fragment formula | One runtime shader evaluates two independently constructed image children, doubles only texture 0 RGB, then multiplies texture 1 and tint. | Four pixels combine texture-0 `Repeat` with texture-1 `Mirror` and produce the expected approximately 32/193/96/64 grayscale sequence. | The fragment equation and independent child sampler objects are feasible in one draw. The stock effect still requires a primitive route, two public sampler slots, matrices, vertex colour and vertex-derived fog. |
+| Uniform colour transform | A runtime color filter composes with the image shader in the same paint. | Two asymmetric input pixels match a channel swizzle plus independent scale/bias values. | Sprite tint and explicit SkSL transforms remain viable single-pass 2D operations. A stock effect's per-vertex fog factor is not a uniform colour transform. |
+
+The selected candidates allocate no intermediate render target, so there is no extra RGBA8
+round-trip between stages. Dual texture performs two child samples in one paint; the colour filter
+performs one source sample plus one filter evaluation. Alpha test is the expensive case: the source
+is evaluated once for binary clip coverage and again for the colour draw, and a clip-stack entry is
+created per draw. The raster backend executes all of this on the owner CPU thread.
+
+Runtime arithmetic uses Skia's float/half pipeline, while input/output surfaces remain
+premultiplied RGBA8. The alpha oracle uses CNA's `0.5/255` threshold construction and exact stored
+alpha bytes; the final target clamps/rounds once to RGBA8. Any future design that introduces an
+intermediate surface would add another clamp, premultiplication and eight-bit quantization boundary
+and therefore needs new oracles. These costs and precision limits are acceptable evidence for the
+components, not evidence that the stock 3D effect types are complete.
+
 ## Explicit SkSL SpriteBatch ABI v1
 
 The SKIA-91 prototype deliberately reuses the two opaque `ShaderEffect` payload slots without

@@ -588,16 +588,41 @@
 
 ## Current task
 
-SKIA-92 implementation and validation are complete. Commit/push this checkpoint, then start
-SKIA-93 by auditing stock 2D-like effects against the proven Skia composition primitives.
+SKIA-93 implementation and validation are complete. Commit/push this checkpoint, then execute
+SKIA-94's explicit stock-effect promotion decision.
+
+## Completed in this session: SKIA-93
+
+- Added the display-free `Skia_Effect_Emulation_Spike`, deliberately below the public stock-effect
+  route. Its binary runtime clip samples alpha bytes 127/128/129 against reference 128 and matches
+  all 24 decisions from the eight `CompareFunction` modes. Failed pixels retain an opaque sentinel
+  under source replacement; an explicit transparent-source control erases it, proving that a
+  returned zero colour cannot stand in for discard.
+- The same fixture performs DualTextureEffect's `texture0.rgb *= 2; texture0 * texture1 * tint`
+  equation in one runtime shader. Independent texture-0 Repeat and texture-1 Mirror child shaders
+  produce the discriminating 32/193/96/64 four-pixel oracle. A composed color filter independently
+  proves two asymmetric swizzle/scale/bias outputs.
+- No intermediate target is needed. Dual texture samples two children once in one paint and colour
+  transform is one source sample plus one filter. Alpha test evaluates the source for its binary
+  clip and again for colour, and creates one clip entry per draw. The final raster is quantized once
+  to premultiplied RGBA8; an intermediate design would add another clamp/round/premultiplication
+  boundary and is not accepted without separate evidence.
+- These are reusable fragment/coverage components, not stock-effect support. AlphaTestEffect and
+  DualTextureEffect still require public primitive geometry, world/view/projection, vertex colour,
+  vertex-derived fog, sampler-slot state, triangle coverage and depth semantics. SKIA-94 must keep
+  them unsupported unless its complete property/oracle audit proves otherwise.
+- The focused raster test passes 8/8 in Debug and Release. Its escalated ASan/LSan run passes 8/8
+  with `detect_leaks=1`; the first sandboxed LSan invocation stopped before assertions with the
+  environment's explicit ptrace diagnostic. The full Debug build succeeds and all 102 Skia CTests
+  pass under Xvfb in 16.32 seconds with `--parallel 8` (10 Raster, 90 Display, two Audit). The
+  temporary display cache was restored to `:0`. `NEXT.md` was not read or changed.
 
 ## Next candidates
 
-1. SKIA-93: inventory AlphaTestEffect, DualTextureEffect and other colour/2D-like stock effects,
-   identify which public properties require vertex/depth/coverage semantics, and build only exact
-   Skia shader/blender multipass prototypes with visual oracles.
-2. SKIA-94: promote a stock effect only if every relevant property combination matches; otherwise
+1. SKIA-94: promote a stock effect only if every relevant property combination matches; otherwise
    retain explicit unsupported status and record the first observable blocker.
+2. SKIA-95: build the complete EasyGL 3D call/effect matrix before selecting any projected-
+   geometry prototype.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

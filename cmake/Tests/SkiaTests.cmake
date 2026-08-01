@@ -123,6 +123,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_SkSL_UniformTexture
                                    cna_test_skia_sksl_uniform_texture)
 
+    # SKIA-93: headless component spike. Alpha-test failure is coverage (clipShader), not a
+    # transparent source; dual texture and colour transforms compose in one raster draw. This does
+    # not promote their stock 3D Effect types, whose vertex/fog/depth contracts remain absent.
+    cna_skia_test(cna_test_skia_effect_emulation_spike
+                  examples/skia_effect_emulation_spike_test.cpp)
+    target_include_directories(cna_test_skia_effect_emulation_spike PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_Effect_Emulation_Spike
+                                  cna_test_skia_effect_emulation_spike)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.
