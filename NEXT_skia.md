@@ -17,8 +17,8 @@
 - The raster backbuffer, SDL presentation, `Texture2D`, `SpriteBatch`, SpriteFont atlas path,
   scissor/viewport, point/linear Clamp/Wrap/Mirror sampling, the four standard blend presets,
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
-- Recent relevant pushed commits include `d26920f5` (raster presenter recovery) and `d42e485b`
-  (stable startup capability report).
+- Recent relevant pushed commits include `d42e485b` (stable startup capability report) and
+  `3811d0a0` (transactional backend construction).
 - `docs/skia-backend.md` records 74 Skia CTests: seven raster-only and 67 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
@@ -204,6 +204,17 @@
   all three points, an immediately usable retry after each, and 16 complete create/Clear/readback/
   Present/destroy cycles with renderer and registry absence checked after every teardown.
 
+## Completed in this session: SKIA-10 and SKIA-11
+
+- Confirmed the selected `SKIA` branch constructs and links the dedicated backend only after
+  resolving the six-archive external Skia dependency. An isolated negative configuration with
+  intentionally absent source/build paths stops at configure time with the documented
+  `CNA_SKIA_ROOT` error instead of substituting another backend.
+- Found and fixed a stale generic test omission: `ExactlyOneGraphicsBackendIsSelected` counted
+  every current `CNA_BACKEND_*` macro except `CNA_BACKEND_SKIA`, so the real Skia build would
+  report zero selected backends. Added the missing count plus an explicit assertion that the macro
+  maps to public type `GraphicsBackendType::Skia` and exact name `SKIA`.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -263,10 +274,14 @@
   `detect_leaks=0`. With leak detection enabled and the existing narrow suppression file, all
   assertions complete before LSan reports the byte-identical known external X11 residual:
   2,864 bytes in 2,696 + 128 + 40 byte allocations. No broader suppression was added.
+- SKIA-10/SKIA-11: the positive persistent Skia configuration remains valid; the missing-
+  dependency configuration fails with the expected actionable CMake diagnostic. The monolithic
+  `CnaTests` target compiles successfully with two jobs, and the six backend-type plus two compile-
+  definition tests pass 8/8 in 1.37 seconds.
 
 ## Current task
 
-Audit the remaining early lifecycle rows SKIA-10, SKIA-11, SKIA-13 through SKIA-15, and SKIA-18 against the actual raster
+Audit the remaining early lifecycle rows SKIA-13 through SKIA-15 and SKIA-18 against the actual raster
 implementation. Several predate the completed vertical slice and may already be fulfilled by
 current code/tests; validate each claim before correcting a stale status or selecting a missing
 safe implementation task.

@@ -339,5 +339,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     the renderer/texture/registry entry, preserves the caller window, and permits an immediately
     usable backend. Sixteen further create/present/destroy cycles leave no renderer or registry
     state; ASan is clean, while LSan sees only the known 2,864-byte external X11 exit residual.
+52. The Skia selection audit proves configuration requires the resolved external dependency and
+    never substitutes a fallback backend. The common compile-definition test now includes the
+    previously omitted `CNA_BACKEND_SKIA` count and explicitly checks it maps to
+    `GraphicsBackendType::Skia` and the exact public name `SKIA`; all eight focused identity tests
+    pass in the Skia build.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
