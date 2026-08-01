@@ -39,6 +39,14 @@ cmake --build build-skia --parallel 2
 
 `cmake/ThirdPartySkia.cmake` exports `CNA::Skia`, including the header root, all six static archives in a linker group, threads, and `dl` where needed. It is intentionally limited to the tested GNU/Clang ELF raster configuration until platform-specific adapters are added.
 
+## Diagnostic state trace
+
+Set `CNA_SKIA_STATE_TRACE=1` when launching a Skia executable to emit backend-only state lines
+to standard error. The trace reports backbuffer/render-target selection and size, blend preset and
+source-alpha convention, sampler filter/address modes, and scissor rectangle updates. It is off by
+default (and also off when set to `0`), does not change raster state, and is intended for diagnosing
+state leakage rather than application logging.
+
 ## Execution modes and capability policy
 
 | Mode | Status | Presentation | 3D/depth/stencil |
@@ -168,5 +176,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     public reset expands it to the full backbuffer, verifies that `Clear` is unconditional without
     discarding the raster state, and checks both rejected `Begin` recovery and custom-viewport
     preservation across a same-size `Present`.
+31. Running `Skia_StateTransition` with `CNA_SKIA_STATE_TRACE=1` emits readable surface, blend,
+    sampler, and scissor transitions while preserving all eleven pixel assertions; without the
+    flag it emits none of those diagnostic lines.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

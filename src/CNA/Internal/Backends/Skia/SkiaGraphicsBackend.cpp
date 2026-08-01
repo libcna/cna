@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -76,6 +77,7 @@ namespace CNA::Internal::Backends::Skia
         if (width <= 0) width = std::max(outputWidth, 1);
 
         surface_.Resize(width, height);
+        TraceSkiaState("surface=backbuffer size=%dx%d", width, height);
         if (presentTexture_)
         {
             SDL_DestroyTexture(presentTexture_);
@@ -197,6 +199,7 @@ namespace CNA::Internal::Backends::Skia
         if (!renderTarget)
         {
             activeSurface_ = &surface_;
+            TraceSkiaState("surface=backbuffer size=%dx%d", surface_.Width(), surface_.Height());
             return;
         }
 
@@ -205,6 +208,7 @@ namespace CNA::Internal::Backends::Skia
             throw std::runtime_error("Skia cannot bind a render target created by a different backend.");
         skiaTarget->PrepareForBind();
         activeSurface_ = &skiaTarget->Surface();
+        TraceSkiaState("surface=render-target size=%dx%d", activeSurface_->Width(), activeSurface_->Height());
     }
 
     void SkiaGraphicsBackend::ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels)
@@ -269,15 +273,18 @@ namespace CNA::Internal::Backends::Skia
 
         SkBlendMode mappedMode;
         SkiaSourceAlphaConvention mappedSourceConvention;
+        const char* mappingName = nullptr;
         if (opaque)
         {
             mappedMode = SkBlendMode::kSrc;
             mappedSourceConvention = SkiaSourceAlphaConvention::Premultiplied;
+            mappingName = "Opaque";
         }
         else if (alphaBlend)
         {
             mappedMode = SkBlendMode::kSrcOver;
             mappedSourceConvention = SkiaSourceAlphaConvention::Premultiplied;
+            mappingName = "AlphaBlend";
         }
         else if (nonPremultiplied)
         {
@@ -286,6 +293,7 @@ namespace CNA::Internal::Backends::Skia
             // image above, preventing an accidental second premultiplication.
             mappedMode = SkBlendMode::kSrcOver;
             mappedSourceConvention = SkiaSourceAlphaConvention::Straight;
+            mappingName = "NonPremultiplied";
         }
         else if (additive)
         {
@@ -293,6 +301,7 @@ namespace CNA::Internal::Backends::Skia
             // texture representation performs the XNA SourceAlpha source factor first.
             mappedMode = SkBlendMode::kPlus;
             mappedSourceConvention = SkiaSourceAlphaConvention::Straight;
+            mappingName = "Additive";
         }
         else
         {
@@ -306,6 +315,12 @@ namespace CNA::Internal::Backends::Skia
             spriteBlendMode_ = mappedMode;
             spriteSourceAlphaConvention_ = mappedSourceConvention;
         }
+        TraceSkiaState("blend preset=%s mode=%d source-alpha=%s enabled=%s", mappingName,
+                       static_cast<int>(mappedMode),
+                       mappedSourceConvention == SkiaSourceAlphaConvention::Premultiplied
+                           ? "premultiplied"
+                           : "straight",
+                       blendEnabled_ ? "true" : "false");
     }
 
     void SkiaGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
@@ -336,6 +351,7 @@ namespace CNA::Internal::Backends::Skia
         rasterState_.scissorY = y;
         rasterState_.scissorWidth = width;
         rasterState_.scissorHeight = height;
+        TraceSkiaState("scissor x=%d y=%d width=%d height=%d", x, y, width, height);
     }
 
     void SkiaGraphicsBackend::SetViewport(int x, int y, int width, int height,
@@ -373,6 +389,7 @@ namespace CNA::Internal::Backends::Skia
         {
             spriteBlendMode_ = configuredSpriteBlendMode_;
             spriteSourceAlphaConvention_ = configuredSpriteSourceAlphaConvention_;
+            TraceSkiaState("blend enabled=true mode=%d", static_cast<int>(spriteBlendMode_));
             return;
         }
 
@@ -381,6 +398,7 @@ namespace CNA::Internal::Backends::Skia
         // already-tested opaque path rather than a new alpha convention.
         spriteBlendMode_ = SkBlendMode::kSrc;
         spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
+        TraceSkiaState("blend enabled=false mode=%d", static_cast<int>(spriteBlendMode_));
     }
     void SkiaGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
     std::unique_ptr<IVertexBufferBackend> SkiaGraphicsBackend::CreateVertexBuffer(int) { ThrowNo3D("CreateVertexBuffer"); }

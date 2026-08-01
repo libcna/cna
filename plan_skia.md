@@ -200,7 +200,7 @@ public CNA API.
 | SKIA-57 | Implement a native or emulated colour-write-mask path only for combinations proven by SKIA-56. | ⬜ | RGBA-mask matrix passes on backbuffer and RenderTarget2D. |
 | SKIA-58 | Audit RasterizerState fields that can affect the 2D implementation and ensure ignored 3D-only fields cannot falsely advertise support. | ✅ | `Skia_RasterizerState_Policy` shows that only scissor has a SpriteBatch effect; cull/depth-bias/MSAA state remains constructible but does not change a solid sprite, while `FillMode::WireFrame` is unadvertised and rejected with an actionable error. The test also proves the rejected Begin leaves a subsequent solid draw usable; `Skia_GraphicsCapability` covers 3D buffer construction failure. |
 | SKIA-59 | Audit all state changes across surface switches, Clear, Present, and exceptions. | ✅ | `Skia_StateTransition` exercises target-local scissor followed by unbind reset, unconditional Clear without state loss, rejected WireFrame Begin recovery, and custom viewport preservation over same-size Present; all pixel assertions pass. |
-| SKIA-60 | Add a backend-facing state trace enabled only by a diagnostic flag. | ⬜ | Trace identifies surface, sampler, blend, and scissor transitions without changing rendering. |
+| SKIA-60 | Add a backend-facing state trace enabled only by a diagnostic flag. | ✅ | `CNA_SKIA_STATE_TRACE=1` emits readable surface, sampler, blend, and scissor transitions from the Skia backend; the same `Skia_StateTransition` pixel suite passes with and without it, and default runs emit no trace. |
 
 ## Phase S5 — RenderTarget2D, readback, and presentation robustness
 

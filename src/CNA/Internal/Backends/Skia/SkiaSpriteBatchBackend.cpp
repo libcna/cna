@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
@@ -44,6 +45,17 @@ namespace CNA::Internal::Backends::Skia
             return textureFilter >= 3 && textureFilter <= 8;
         }
 
+        [[nodiscard]] const char* SamplerFilterName(int textureFilter)
+        {
+            switch (textureFilter)
+            {
+                case 0: return "Linear";
+                case 1: return "Point";
+                case 2: return "Anisotropic";
+                default: return "invalid";
+            }
+        }
+
         [[nodiscard]] bool IsFlipped(SpriteEffects effects, SpriteEffects flag)
         {
             return (static_cast<int>(effects) & static_cast<int>(flag)) != 0;
@@ -57,6 +69,17 @@ namespace CNA::Internal::Backends::Skia
                 case 1: return SkTileMode::kClamp;  // TextureAddressMode::Clamp
                 case 2: return SkTileMode::kMirror; // TextureAddressMode::Mirror
                 default: throw std::runtime_error("Skia SpriteBatch received an invalid texture address mode.");
+            }
+        }
+
+        [[nodiscard]] const char* AddressModeName(int textureAddressMode)
+        {
+            switch (textureAddressMode)
+            {
+                case 0: return "Wrap";
+                case 1: return "Clamp";
+                case 2: return "Mirror";
+                default: return "invalid";
             }
         }
 
@@ -149,6 +172,7 @@ namespace CNA::Internal::Backends::Skia
                 "are unavailable; use Linear, Point, or Anisotropic.");
         (void)ToSampling(textureFilter);
         textureFilter_ = textureFilter;
+        TraceSkiaState("sampler filter=%s", SamplerFilterName(textureFilter));
     }
 
     void SkiaSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
@@ -160,6 +184,8 @@ namespace CNA::Internal::Backends::Skia
         (void)ToTileMode(addressV);
         addressU_ = addressU;
         addressV_ = addressV;
+        TraceSkiaState("sampler address-u=%s address-v=%s", AddressModeName(addressU),
+                       AddressModeName(addressV));
     }
 
     void SkiaSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
