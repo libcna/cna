@@ -10,6 +10,9 @@ The complete API-level comparison with EasyGL is maintained in
 [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md). Its 247 rows cover every current
 backend/resource method, capability value, and public `GraphicsDevice` declaration; the registered
 `Skia_ParityLedger_Audit` test prevents those headers and their classifications from drifting.
+The companion [`skia-easygl-test-matrix.md`](skia-easygl-test-matrix.md) classifies all 347 current
+EasyGL test registrations, manual tools, golden images, and XNA-oracle scenes by their most
+demanding Skia route; `Skia_TestMatrix_Audit` keeps CMake and both asset directories synchronized.
 
 ## Dependency policy
 
@@ -425,5 +428,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     and tests, the bounded Skia result/plan, final status, and evidence. Missing, stale, duplicate,
     malformed, empty, or unknown-status rows fail the display-free audit instead of allowing the
     parity inventory to drift silently.
+60. `Skia_TestMatrix_Audit` inventories all 289 live EasyGL CTest registrations, two manual
+    comparison executables, 17 golden PNGs, and 39 XNA-oracle scenes. The 347-entry matrix assigns
+    exactly one route to each item: 75 2D-direct, 19 2D-emulation, 228 3D, and 25 device-dependent.
+    The validator discovers registrations and directory contents rather than trusting recorded
+    totals, so a newly added or removed EasyGL test/asset requires an explicit Skia decision.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

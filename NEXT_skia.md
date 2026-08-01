@@ -19,8 +19,8 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 79 Skia CTests: seven raster-only, 71 display-required, and one
-  display-free source audit. Validation uses the persistent in-repository `cmake-build-skia`
+- `docs/skia-backend.md` records 80 Skia CTests: seven raster-only, 71 display-required, and two
+  display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-21
@@ -49,6 +49,18 @@
 - Registered the validator as display-free `Skia_ParityLedger_Audit`, distinct from raster pixel
   tests. This brings the selected configuration to 79 Skia tests: seven Raster, 71 Display, and
   one Audit.
+
+## Completed in this session: SKIA-2
+
+- Added `docs/skia-easygl-test-matrix.md` with every current EasyGL graphics-suite input: 289 CTest
+  registrations, two manually run comparison tools, 17 checked-in golden PNGs, and all 39
+  XNA-oracle scenes. Classification follows the fixture's most demanding mandatory leg, so a mixed
+  SpriteBatch/stock-effect fixture is 3D rather than overstating raster portability.
+- The exact distribution is 75 2D-direct, 19 2D-emulation, 228 3D, and 25 device-dependent items.
+  The matrix records the applicable existing Skia evidence or follow-up task for each.
+- Added display-free `Skia_TestMatrix_Audit`. It extracts live EasyGL registrations and directory
+  contents, then rejects missing, stale, duplicate, malformed, or unclassified entries. Together
+  with SKIA-1 this makes two source audits and 80 selected Skia CTests total.
 
 ## Completed in this session: SKIA-69
 
@@ -391,12 +403,12 @@
 
 ## Current task
 
-Use the completed SKIA-1 ledger to inventory and classify every EasyGL-specific or backend-neutral
-graphics test registration for SKIA-2, with a validator that prevents unclassified additions.
+Audit SKIA-20's non-Skia compile matrix and the remaining stale integration/release rows against
+the now machine-checked SKIA-1/SKIA-2 inventories, without beginning accelerated-only work.
 
 ## Next candidates
 
-1. Complete SKIA-2's machine-checkable EasyGL test matrix without duplicating the API ledger.
+1. Execute SKIA-20's clean non-Skia configuration/target matrix with at most two build jobs.
 2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
    probe; the selected raster path has no truthful capability to expose there.
 3. Keep the recovery boundary precise: raster resources survive SDL presenter reconstruction;
