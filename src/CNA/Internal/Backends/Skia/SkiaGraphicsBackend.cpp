@@ -102,7 +102,8 @@ namespace CNA::Internal::Backends::Skia
 
     SkiaGraphicsBackend::SkiaGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                                              CnaPresentationMode presentationMode, int swapInterval,
-                                             std::function<void(BackendDeviceEvent)> deviceEventCallback)
+                                             std::function<void(BackendDeviceEvent)> deviceEventCallback,
+                                             SkiaInitializationFailurePointEXT failurePoint)
         : window_(window)
         , deviceEventCallback_(std::move(deviceEventCallback))
         , presentationMode_(presentationMode)
@@ -111,14 +112,44 @@ namespace CNA::Internal::Backends::Skia
         if (!window_)
             throw std::runtime_error("SkiaGraphicsBackend initialized with null window.");
 
-        renderer_ = SDL_CreateRenderer(window_, nullptr);
-        if (!renderer_)
-            throw std::runtime_error(std::string("Skia SDL_CreateRenderer failed: ") + SDL_GetError());
+        bool registered = false;
+        try
+        {
+            const auto failAt = [failurePoint](SkiaInitializationFailurePointEXT point,
+                                                const char* stage)
+            {
+                if (failurePoint == point)
+                    throw std::runtime_error(std::string("Skia injected initialization failure after ") + stage);
+            };
 
-        SetSwapInterval(swapInterval);
-        RecreateBackbuffer(virtualWidth, virtualHeight);
-        IGraphicsBackend::RegisterForWindow(window_, this);
-        std::cout << kSkiaStartupDiagnostic << std::endl;
+            renderer_ = SDL_CreateRenderer(window_, nullptr);
+            if (!renderer_)
+                throw std::runtime_error(std::string("Skia SDL_CreateRenderer failed: ") + SDL_GetError());
+            failAt(SkiaInitializationFailurePointEXT::AfterRenderer, "renderer creation");
+
+            SetSwapInterval(swapInterval);
+            RecreateBackbuffer(virtualWidth, virtualHeight);
+            failAt(SkiaInitializationFailurePointEXT::AfterBackbuffer, "backbuffer creation");
+
+            IGraphicsBackend::RegisterForWindow(window_, this);
+            registered = true;
+            failAt(SkiaInitializationFailurePointEXT::AfterRegistration, "backend registration");
+            std::cout << kSkiaStartupDiagnostic << std::endl;
+        }
+        catch (...)
+        {
+            // A throwing constructor never reaches ~SkiaGraphicsBackend(). Unwind every acquired
+            // SDL/registry resource here so the caller-owned window can host a succeeding backend.
+            if (registered)
+                IGraphicsBackend::UnregisterForWindow(window_);
+            DestroyPresentationTexture();
+            if (renderer_)
+            {
+                SDL_DestroyRenderer(renderer_);
+                renderer_ = nullptr;
+            }
+            throw;
+        }
     }
 
     SkiaGraphicsBackend::~SkiaGraphicsBackend()

@@ -334,5 +334,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     revision, raster surface mode, exact RGBA/premultiplied storage, zero samples, and unsupported
     anisotropy. It also enforces one-line static storage with no pointer-shaped value; a real Xvfb
     backend run emits that line once at construction.
+51. `Skia_Lifecycle` injects constructor failures after SDL renderer creation, backbuffer/streaming-
+    texture creation, and window registration. Every failure keeps its stage diagnostic, releases
+    the renderer/texture/registry entry, preserves the caller window, and permits an immediately
+    usable backend. Sixteen further create/present/destroy cycles leave no renderer or registry
+    state; ASan is clean, while LSan sees only the known 2,864-byte external X11 exit residual.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

@@ -17,6 +17,15 @@
 
 namespace CNA::Internal::Backends::Skia
 {
+    /// Deterministic internal constructor-failure seams used to prove transactional cleanup.
+    enum class SkiaInitializationFailurePointEXT
+    {
+        None,
+        AfterRenderer,
+        AfterBackbuffer,
+        AfterRegistration
+    };
+
     /**
      * First functional SKIA backend slice: an SDL-presented Skia raster backbuffer.
      *
@@ -28,7 +37,9 @@ namespace CNA::Internal::Backends::Skia
     public:
         SkiaGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                             CnaPresentationMode presentationMode, int swapInterval,
-                            std::function<void(BackendDeviceEvent)> deviceEventCallback = {});
+                            std::function<void(BackendDeviceEvent)> deviceEventCallback = {},
+                            SkiaInitializationFailurePointEXT failurePoint =
+                                SkiaInitializationFailurePointEXT::None);
         ~SkiaGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;

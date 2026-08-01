@@ -17,9 +17,9 @@
 - The raster backbuffer, SDL presentation, `Texture2D`, `SpriteBatch`, SpriteFont atlas path,
   scissor/viewport, point/linear Clamp/Wrap/Mirror sampling, the four standard blend presets,
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
-- Recent relevant pushed commits include `cbded7d7` (shared RenderTarget2D golden across Skia,
-  EasyGL, and SDL_Renderer) and `d26920f5` (raster presenter recovery).
-- `docs/skia-backend.md` records 73 Skia CTests: seven raster-only and 66 display-required tests.
+- Recent relevant pushed commits include `d26920f5` (raster presenter recovery) and `d42e485b`
+  (stable startup capability report).
+- `docs/skia-backend.md` records 74 Skia CTests: seven raster-only and 67 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -191,6 +191,19 @@
   pass. A real Xvfb backend run prints exactly the expected single line and retains all 13 context-
   recovery assertions.
 
+## Completed in this session: SKIA-12
+
+- Made `SkiaGraphicsBackend` construction transactional. A constructor exception now removes a
+  committed window-registry entry, destroys any streaming texture, destroys the SDL renderer, and
+  preserves the caller-owned window before rethrowing the original stage diagnostic. Successful
+  destruction uses the same idempotent texture cleanup helper.
+- Added three deterministic internal failure points after renderer creation, backbuffer creation,
+  and backend registration. They are constructor-only test seams and do not alter the production
+  factory path.
+- Added `Skia_Lifecycle` (11 checks): null-window diagnostic, exact failure diagnostic/rollback at
+  all three points, an immediately usable retry after each, and 16 complete create/Clear/readback/
+  Present/destroy cycles with renderer and registry absence checked after every teardown.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -246,17 +259,21 @@
   first sandboxed launch stopped before the test with LSan's explicit ptrace diagnostic, while
   the unrestricted rerun completed cleanly. `Skia_ContextRecovery` confirms the line is emitted
   once during a real Xvfb backend startup.
+- SKIA-12: `Skia_Lifecycle` passes all 11 checks under Xvfb normally and under ASan with
+  `detect_leaks=0`. With leak detection enabled and the existing narrow suppression file, all
+  assertions complete before LSan reports the byte-identical known external X11 residual:
+  2,864 bytes in 2,696 + 128 + 40 byte allocations. No broader suppression was added.
 
 ## Current task
 
-Audit the remaining early lifecycle rows SKIA-10 through SKIA-18 against the actual raster
+Audit the remaining early lifecycle rows SKIA-10, SKIA-11, SKIA-13 through SKIA-15, and SKIA-18 against the actual raster
 implementation. Several predate the completed vertical slice and may already be fulfilled by
 current code/tests; validate each claim before correcting a stale status or selecting a missing
 safe implementation task.
 
 ## Next candidates
 
-1. Audit SKIA-10 through SKIA-18 in dependency order, update stale plan evidence, and implement
+1. Audit the remaining incomplete SKIA-10 through SKIA-18 rows in dependency order, update stale plan evidence, and implement
    only the independently observable gaps found by that audit.
 2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
    probe; the selected raster path has no truthful capability to expose there.
