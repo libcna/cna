@@ -588,9 +588,9 @@
 
 ## Current task
 
-SKIA-96 implementation and validation are complete. Commit/push this checkpoint, then begin
-SKIA-97 only as an isolated CPU raster/depth/compositing spike; do not connect it to public 3D
-entry points.
+SKIA-97 implementation and validation are complete. Commit/push this checkpoint, then begin
+SKIA-98 only as an isolated CPU stencil micro-suite; do not connect it to public depth/stencil or
+3D entry points.
 
 ## Completed in this session: SKIA-93
 
@@ -694,13 +694,36 @@ entry points.
   17.07 seconds with `--parallel 8` (11 Raster, 91 Display, two Audit). The Debug display cache was
   restored to `:0`.
 
+## Completed in this session: SKIA-97
+
+- Added the internal headless `Skia_CpuDepthRaster_Spike`. A bounded CPU target owns top-row-first
+  RGBA8 plus float depth at exactly eight bytes/pixel, accepts axes 1..16384 and refuses combined
+  storage above 256 MiB before allocation. No product code or capability changed.
+- LessEqual/write is order-independent for opaque far/near triangles. Colour+depth clear and a
+  separate depth-only clear behave independently. Retaining reciprocal W recovers byte 30 for the
+  SKIA-96 sample instead of SkVertices' affine 88.
+- A→B→A switching preserves differently sized targets' colour and depth. Whole-target RGBA8
+  `WritePixels` handoff reaches matching Skia surfaces exactly; a size mismatch leaves the Skia
+  sentinel unchanged.
+- The 640×360 target owns exactly 1,843,200 B. For a single-threaded workload of 128 overlapping
+  triangles, Debug measured 6,452/1,244,666/537 µs for clear/raster/handoff, Release measured
+  64/193,043/616 µs, and ASan+LSan measured 32,178/2,206,201/534 µs. The escalated leak-enabled
+  run passed.
+- `docs/skia-cpu-depth-spike.md` records the handoff and limitations: opaque-only, already-clipped
+  triangles, incomplete shared-edge rules, float rather than declared depth formats, no stencil,
+  states, textures, effects or mixed 2D/3D ordering. The depth prerequisite permits only an
+  isolated SKIA-98 stencil spike. `ThreeD` and depth capabilities remain false; `NEXT.md` was not
+  read or changed.
+- The focused test passes in Debug and Release and in an escalated leak-enabled ASan/LSan run.
+  The complete Debug Skia suite passes 105/105 under Xvfb in 13.14 seconds with `--parallel 8`
+  (12 Raster, 91 Display, two Audit). Debug, Release and ASan display caches are `:0`.
+
 ## Next candidates
 
-1. SKIA-97: prototype a bounded CPU colour+depth triangle buffer with depth ordering, clear and
-   target switching, perspective-correct varyings and a measured Skia image handoff. It replaces,
-   rather than extends, SkVertices rasterization.
-2. Stop the CPU route and feed a precise rejection into SKIA-101 if memory, performance or
-   compositing semantics are not bounded; do not weaken the EasyGL oracle.
+1. SKIA-98: extend only the isolated CPU target with stencil compare/operations/read-write masks,
+   two-sided face selection and colour-write interaction; cover the complete micro-matrix.
+2. Stop the CPU route and feed a precise rejection into SKIA-101 if stencil state or handoff
+   semantics are not bounded; do not weaken the EasyGL oracle.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

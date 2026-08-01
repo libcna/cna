@@ -149,6 +149,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_ProjectedVertices_Spike
                                   cna_test_skia_projected_vertices_spike)
 
+    # SKIA-97: a bounded CPU RGBA8+float-depth target owns triangle coverage, reciprocal-W
+    # interpolation and depth ordering, then copies only the completed image to Skia. This remains
+    # an internal feasibility/performance measurement, not public 3D support.
+    cna_skia_test(cna_test_skia_cpu_depth_raster_spike
+                  examples/skia_cpu_depth_raster_spike_test.cpp)
+    target_include_directories(cna_test_skia_cpu_depth_raster_spike PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_CpuDepthRaster_Spike
+                                  cna_test_skia_cpu_depth_raster_spike)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

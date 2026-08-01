@@ -525,5 +525,14 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     perspective varyings, coverage and depth may proceed to SKIA-97. The focused Raster test passes
     in Debug, Release and ASan/LSan, and the complete Debug suite passes 104/104 in 17.07 seconds
     (11 Raster, 91 Display, two Audit). `ThreeD` remains false.
+72. `Skia_CpuDepthRaster_Spike` closes SKIA-97 as an internal alternative to the failed direct
+    SkVertices route. RGBA8+float depth costs exactly eight bytes/pixel and is capped at 256 MiB;
+    LessEqual/write ordering, depth clear, reciprocal-W interpolation, two-target switching and
+    an exact same-size whole-image Skia handoff pass. The 640×360 target owns 1,843,200 bytes;
+    Release measured 64 µs clear, 193,043 µs for 128 overlapping triangles and 616 µs handoff.
+    This already-clipped, opaque scalar spike is not production coverage/state/effect support;
+    only the isolated stencil prerequisite advances to SKIA-98. The focused test passes in Debug,
+    Release and ASan/LSan; the complete Debug suite passes 105/105 in 13.14 seconds (12 Raster,
+    91 Display, two Audit).
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
