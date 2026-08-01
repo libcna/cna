@@ -172,10 +172,12 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   completion, and lazily re-upload them on reuse. Make eviction deterministic and observable in
   diagnostics; if recovery cannot allocate an atomically complete tiled mip chain, fail the draw
   rather than render a partially resident texture.
-- [ ] **GLIDE-FUT-014 — Replace pointer-array batches with the contiguous vertex-array path.**
+- [x] **GLIDE-FUT-014 — Replace pointer-array batches with the contiguous vertex-array path.**
   Load and ABI-test `grDrawVertexArrayContiguous`, then use it for compatible triangle batches if
-  its byte-stride and FIFO behaviour match the existing pointer-array implementation. Preserve
-  the 1024-triangle state/tile flush boundaries and retain the established path as a fallback.
+  its byte-stride and FIFO behaviour match the existing pointer-array implementation. Compatible
+  triangle batches now pass their contiguous `GlideVertex` storage and `sizeof(GlideVertex)`
+  directly; the 1024-triangle state/tile flush boundaries are unchanged. The x86 fake-DLL build
+  resolves the 16-byte stdcall export; runtime FIFO/image validation remains in GLIDE-AUD-007.
 - [ ] **GLIDE-FUT-015 — Batch SpriteBatch without changing its ordering contract.** Profile the
   native immediate sprite path, then add a bounded queue for adjacent sprites with identical
   texture/sampler/blend/scissor state. Flush at every observable ordering/state boundary and

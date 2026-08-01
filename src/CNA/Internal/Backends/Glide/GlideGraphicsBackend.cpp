@@ -380,6 +380,7 @@ namespace CNA::Internal::Backends::Glide
             using VertexLayoutFn = void (WINAPI*)(FxU32, FxI32, FxU32);
             using DrawTriangleFn = void (WINAPI*)(const void*, const void*, const void*);
             using DrawVertexArrayFn = void (WINAPI*)(FxI32, FxU32, void**);
+            using DrawVertexArrayContiguousFn = void (WINAPI*)(FxI32, FxU32, void*, FxU32);
             using ColorCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxBool);
             using AlphaCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxBool);
             using AlphaTestFunctionFn = void (WINAPI*)(FxI32);
@@ -463,6 +464,7 @@ namespace CNA::Internal::Backends::Glide
                 grVertexLayout = Required<VertexLayoutFn>("grVertexLayout", 12);
                 grDrawTriangle = Required<DrawTriangleFn>("grDrawTriangle", 12);
                 grDrawVertexArray = Required<DrawVertexArrayFn>("grDrawVertexArray", 12);
+                grDrawVertexArrayContiguous = Required<DrawVertexArrayContiguousFn>("grDrawVertexArrayContiguous", 16);
                 grColorCombine = Required<ColorCombineFn>("grColorCombine", 20);
                 grAlphaCombine = Required<AlphaCombineFn>("grAlphaCombine", 20);
                 grAlphaTestFunction = Required<AlphaTestFunctionFn>("grAlphaTestFunction", 4);
@@ -501,6 +503,7 @@ namespace CNA::Internal::Backends::Glide
             VertexLayoutFn grVertexLayout = nullptr;
             DrawTriangleFn grDrawTriangle = nullptr;
             DrawVertexArrayFn grDrawVertexArray = nullptr;
+            DrawVertexArrayContiguousFn grDrawVertexArrayContiguous = nullptr;
             ColorCombineFn grColorCombine = nullptr;
             AlphaCombineFn grAlphaCombine = nullptr;
             AlphaTestFunctionFn grAlphaTestFunction = nullptr;
@@ -2436,13 +2439,9 @@ namespace CNA::Internal::Backends::Glide
             {
                 return;
             }
-            std::vector<void*> pointers;
-            pointers.reserve(pendingTriangles.size());
-            for (GlideVertex& vertex : pendingTriangles)
-            {
-                pointers.push_back(&vertex);
-            }
-            impl_->api.grDrawVertexArray(kPrimitiveTriangles, static_cast<FxU32>(pointers.size()), pointers.data());
+            impl_->api.grDrawVertexArrayContiguous(
+                kPrimitiveTriangles, static_cast<FxU32>(pendingTriangles.size()), pendingTriangles.data(),
+                static_cast<FxU32>(sizeof(GlideVertex)));
             pendingTriangles.clear();
         };
         const auto drawFan = [&](const std::vector<CpuVertex>& polygon, const GlideTextureBackend::Tile* tile)

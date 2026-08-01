@@ -56,6 +56,7 @@ extern "C" __declspec(dllexport) void WINAPI grCullMode(int) {}
 extern "C" __declspec(dllexport) void WINAPI grVertexLayout(std::uint32_t, int, std::uint32_t) { g_callMask |= kVertexLayout; }
 extern "C" __declspec(dllexport) void WINAPI grDrawTriangle(const void*, const void*, const void*) {}
 extern "C" __declspec(dllexport) void WINAPI grDrawVertexArray(int, std::uint32_t, void**) {}
+extern "C" __declspec(dllexport) void WINAPI grDrawVertexArrayContiguous(int, std::uint32_t, void*, std::uint32_t) {}
 extern "C" __declspec(dllexport) void WINAPI grColorCombine(int, int, int, int, std::uint32_t) { g_callMask |= kColorCombine; }
 extern "C" __declspec(dllexport) void WINAPI grAlphaCombine(int, int, int, int, std::uint32_t) {}
 extern "C" __declspec(dllexport) void WINAPI grAlphaTestFunction(int) {}

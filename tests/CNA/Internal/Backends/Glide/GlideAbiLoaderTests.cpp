@@ -23,6 +23,7 @@ int main()
         using ClearFn = void (WINAPI*)(std::uint32_t, std::uint8_t, std::uint16_t);
         using ReadbackFn = std::uint32_t (WINAPI*)(int, std::uint32_t, std::uint32_t,
                                                     std::uint32_t, std::uint32_t, std::uint32_t, void*);
+        using DrawContiguousFn = void (WINAPI*)(int, std::uint32_t, void*, std::uint32_t);
         using MaskFn = unsigned int (WINAPI*)();
         const auto plain = reinterpret_cast<PlainFn>(
             CNA::Internal::Backends::Glide::ResolveGlideExport(module, "GlideAbiPlainProbe", 0));
@@ -48,6 +49,7 @@ int main()
         reinterpret_cast<VertexLayoutFn>(resolve("grVertexLayout", 12))(1, 0, 1);
         reinterpret_cast<ColorCombineFn>(resolve("grColorCombine", 20))(1, 0, 0, 2, 0);
         reinterpret_cast<TexSourceFn>(resolve("grTexSource", 16))(0, 0, 3, nullptr);
+        reinterpret_cast<DrawContiguousFn>(resolve("grDrawVertexArrayContiguous", 16))(6, 0, nullptr, 48);
         reinterpret_cast<ClearFn>(resolve("grBufferClear", 12))(0, 0, 0);
         if (reinterpret_cast<ReadbackFn>(resolve("grLfbReadRegion", 28))(0, 0, 0, 1, 1, 2, nullptr) != 1)
         {
