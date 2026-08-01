@@ -23,7 +23,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 122 Skia CTests: 16 raster-only, 103 display-required, and three
+- `docs/skia-backend.md` records 123 Skia CTests: 16 raster-only, 104 display-required, and three
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -902,12 +902,34 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   original EasyGL configuration. Debug, Release, ASan and EasyGL display caches are restored to
   `:0`; `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-107
+
+- Added `docs/skia-verification-boundary.md`, mapping surface ownership, presenter/context loss,
+  execution-mode policy, alpha conversion, state leakage and capability diagnostics to the direct
+  observable assertion and targeted defect for each boundary. Existing tests already cover the
+  ownership/alpha/state matrices; the new test closes the missing cross-boundary coherence check.
+- Added `Skia_RasterMode_Coherence`. It proves the runtime diagnostic names `surface=raster`, its
+  alpha/sample/filter fields agree with the exact capability set, a semi-transparent public
+  backbuffer pixel normalizes byte-exactly to straight RGBA8, an ordered presenter reset preserves
+  that pixel, and recovery cannot mutate mode/capabilities/diagnostics.
+- The first focused run intentionally checked for no current GL context and disproved that
+  assumption: SDL may internally choose an OpenGL renderer to present the already completed CPU
+  image. The final contract correctly distinguishes this platform-dependent SDL presenter from a
+  Skia Ganesh/Graphite/GPU mode. `docs/skia-backend.md` no longer overstates that boundary.
+- CPU/GPU image parity remains explicitly unclaimed because no Skia GPU mode exists in the pinned
+  build. Any future accelerated mode must reopen SKIA-107 and run the documented Clear, texture,
+  SpriteBatch/font, state, target and readback corpus across both modes before advertising parity
+  or fallback.
+- The focused test passes in Debug, Release and ASan (`detect_leaks=0`). The complete Debug Skia
+  suite passes 123/123 under Xvfb in 15.88 seconds with `--parallel 8` (16 Raster, 104 Display,
+  three Audit). Debug, Release and ASan display caches are restored to `:0`; `NEXT.md` was not read
+  or changed.
+
 ## Next candidates
 
-1. SKIA-107: reconcile the requested Skia-specific ownership/recovery/alpha/state/capability tests
-   with the large existing suite and add only missing sabotage-sensitive coverage.
-2. SKIA-108: define the 2D XNA-oracle corpus and explicit antialiasing tolerance policy after the
-   SKIA-107 diagnostic/state boundary is closed.
+1. SKIA-108: define the 2D XNA-oracle corpus and explicit antialiasing tolerance policy now that
+   the SKIA-107 diagnostic/state boundary is closed.
+2. SKIA-109: register and compare backend-independent public API contract fixtures under Skia.
 3. Reassess earlier open architecture rows (especially SKIA-5/6/76/77) against the accepted
    raster-only ADR before doing the final release-gate tasks.
 

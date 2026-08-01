@@ -98,6 +98,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_include_directories(cna_test_skia_ownership PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_display_test(Skia_Ownership cna_test_skia_ownership)
 
+    # SKIA-107: correlate the one selected raster mode's runtime diagnostic and capability set
+    # with alpha-normalized pixels before/after SDL presenter recovery. This explicitly guards
+    # against a silent Skia GPU/fallback mode; there is no fabricated CPU/GPU parity claim. SDL
+    # may independently use an accelerated presentation renderer for the completed CPU image.
+    cna_skia_test(cna_test_skia_raster_mode_coherence
+                  examples/skia_raster_mode_coherence_test.cpp)
+    target_include_directories(cna_test_skia_raster_mode_coherence PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_RasterMode_Coherence
+                                   cna_test_skia_raster_mode_coherence)
+
     cna_skia_test(cna_test_skia_present_interval examples/skia_present_interval_test.cpp)
     target_include_directories(cna_test_skia_present_interval PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_display_test(Skia_PresentInterval cna_test_skia_present_interval)

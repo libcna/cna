@@ -2,7 +2,7 @@
 
 ## Current status
 
-`CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create an OpenGL context and does not call the EasyGL backend.
+`CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create or use a Skia OpenGL/GPU context and does not call the EasyGL backend. SDL may internally choose an accelerated renderer solely to present the completed CPU image; that platform-dependent presenter is not a Skia GPU execution mode.
 
 The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, `Begin`'s 2D affine transform, viewport and scissor clipping, point/linear sampling, and independent Clamp/Wrap/Mirror U/V addressing, as well as `BlendState::{Opaque, AlphaBlend, NonPremultiplied, Additive}`. A newly created or resized backbuffer starts transparent black, so a zero-draw `Present` never exposes allocator data. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. A requested `DepthFormat` remains public construction metadata for API compatibility, but `HasRealDepthBuffer` stays false and depth/stencil-only clears have no colour effect. Plain `TextureCube` and `Texture3D` have bounded CPU-only face/voxel storage for exact transfer, readback, mip, and DDS-loading contracts; they cannot be sampled. `RenderTargetCube` additionally has a bounded six-surface 2D emulation with exact face rendering, uploads/readback, Preserve/Discard, and generated mip levels. It has no cube sampler, real depth, or real MSAA. The complete storage/sampling boundary and 256 MiB policy are in [`skia-texture-storage.md`](skia-texture-storage.md). Effects, cube/volume sampling, and all 3D draw APIs currently report a deterministic exception rather than being silently ignored. MRT also rejects atomically: a `SkCanvas` draw has one result colour and cannot reproduce distinct `ShaderEffect` outputs for slots 0–3. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
 
@@ -604,5 +604,15 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     The full Debug suite passes 122/122 in 16.29 seconds (16 Raster, 103 Display, three Audit); all
     eleven focused tests pass in Release and ASan (`detect_leaks=0`), and all four modified shared
     sources pass in EasyGL. See `docs/skia-2d-easygl-registration.md`.
+80. `docs/skia-verification-boundary.md` closes SKIA-107 by mapping ownership, presenter recovery,
+    mode policy, alpha conversion, state leakage and capability diagnostics to direct observable
+    assertions and the exact defect each catches. `Skia_RasterMode_Coherence` adds the missing
+    cross-boundary check: runtime `surface=raster`, the closed capability set and exact translucent
+    straight-RGBA8 bytes remain unchanged through an ordered SDL presenter reset. There is no Skia
+    GPU mode to compare; adding one must reopen the parity gate. SDL may internally accelerate
+    presentation (including with OpenGL), but it receives a completed CPU image and does not change
+    the Skia execution-mode claim. The focused test passes in Debug, Release and ASan
+    (`detect_leaks=0`); the complete Debug suite passes 123/123 in 15.88 seconds (16 Raster,
+    104 Display, three Audit).
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
