@@ -24,16 +24,43 @@ compatibility applications, UI, retro games and modest-resolution 2D workloads. 
 targets, extensive alpha blending/rotation, high resolutions or a hard 60/120 FPS requirement are
 better served by `SDL_RENDERER`, `SDL_GPU`, or a Direct3D backend.
 
+The bundled `cna_demo_2d` automatically uses a GDI compatibility profile (12–20 animated
+sprites at 30 FPS).  Its normal profile is a 50–100-sprite, 60-FPS GPU stress scene, which is not
+a useful default workload for a CPU rasterizer.  This keeps the manual display check responsive;
+it is not a replacement for the benchmark work described in `plan_gdi.md`.
+
 ## Build
 
 ```bash
 cmake -S . -B build-gdi \
   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
   -DCNA_GRAPHICS_BACKEND=GDI \
-  -DCNA_BUILD_TESTS=ON
-cmake --build build-gdi --target CNA cna_test_gdi_smoke
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_BUILD_EXAMPLES=ON \
+  -DCNA_MAX_VENDORED_BUILD_JOBS=2
+CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
+  --target cna_test_gdi_smoke cna_demo_2d -j2
 ```
 
 The backend is hard-gated to Windows targets. `cna_test_gdi_smoke` runs automatically as `GDI_Smoke`
 on native Windows; for MinGW cross-builds, run the produced executable under a Wine setup with an
-available display.
+available display:
+
+```bash
+# Native Windows
+build-gdi\\cna_test_gdi_smoke.exe
+build-gdi\\cna_demo_2d.exe
+
+# Linux host, MinGW cross-build, with a real graphical Wine display
+wine build-gdi/cna_test_gdi_smoke.exe
+wine build-gdi/cna_demo_2d.exe
+```
+
+The smoke executable creates a hidden SDL `HWND`, clears and reads an RGBA pixel, calls GDI
+`Present()`, and verifies that 3D stays unavailable.  It exits with status zero on success.  The
+2D demo is the manual visual check: animated sprites should display, resizing should remain
+correct, and the window should close normally.
+
+On MinGW, the build stages SDL plus the needed GCC/C++ and threading runtime DLLs beside the
+executables, so Wine does not rely on a compiler-specific `PATH`.  Keep both the configure-time
+vendored-dependency limit and every top-level build at two jobs or fewer as shown above.

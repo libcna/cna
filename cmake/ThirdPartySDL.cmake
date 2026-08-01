@@ -2,6 +2,16 @@ include_guard(GLOBAL)
 
 option(CNA_USE_SYSTEM_SDL "Use system SDL packages instead of vendored submodules" OFF)
 
+# Keep configure-time vendored builds bounded as well as the top-level `cmake --build` invocation.
+# A bare `cmake --build --parallel` defers to the build tool's unrestricted default and can exceed
+# the requested CPU limit even when the caller passed `-j2` to the parent build.
+set(CNA_MAX_VENDORED_BUILD_JOBS "2" CACHE STRING
+    "Maximum parallel jobs for configure-time vendored dependency builds")
+if(NOT CNA_MAX_VENDORED_BUILD_JOBS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR
+        "CNA_MAX_VENDORED_BUILD_JOBS must be a positive integer; got '${CNA_MAX_VENDORED_BUILD_JOBS}'.")
+endif()
+
 # SDL is configured and installed into this directory at cmake-configure time.
 # The directory lives OUTSIDE any cmake build tree, so cmake --build --clean-first
 # (or deleting the build directory entirely) does NOT remove SDL artefacts.
@@ -206,7 +216,8 @@ function(_cna_build_sdl_dep)
 
     message(STATUS "CNA: Building ${_A_NAME} (one-time step)...")
     execute_process(
-        COMMAND ${CMAKE_COMMAND} --build "${_A_BUILDDIR}" --parallel
+        COMMAND ${CMAKE_COMMAND} --build "${_A_BUILDDIR}"
+            --parallel "${CNA_MAX_VENDORED_BUILD_JOBS}"
         RESULT_VARIABLE _rc
     )
     if(_rc)
@@ -269,6 +280,41 @@ function(cna_copy_mingw_runtime target_name)
                 "The executable may fail to run on machines without MinGW installed.")
         endif()
     endif()
+endfunction()
+
+# Copy the GCC and C++ runtime DLLs for a MinGW executable that intentionally
+# uses the dynamic C++ runtime.  This is separate from cna_copy_mingw_runtime:
+# test targets can still statically link libgcc/libstdc++ and only need the
+# threading DLL, while application targets with large RTTI graphs may not be
+# compatible with -static-libstdc++.
+function(cna_copy_mingw_cxx_runtime target_name)
+    if(NOT MINGW OR EMSCRIPTEN OR ANDROID)
+        return()
+    endif()
+
+    foreach(_runtime_dll IN ITEMS libgcc_s_seh-1.dll libstdc++-6.dll)
+        execute_process(
+            COMMAND "${CMAKE_CXX_COMPILER}" "-print-file-name=${_runtime_dll}"
+            OUTPUT_VARIABLE _runtime_dll_path
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        if(_runtime_dll_path AND _runtime_dll_path MATCHES "[/\\\\]" AND EXISTS "${_runtime_dll_path}")
+            file(TO_CMAKE_PATH "${_runtime_dll_path}" _runtime_dll_path)
+            add_custom_command(TARGET ${target_name} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${_runtime_dll_path}"
+                    $<TARGET_FILE_DIR:${target_name}>
+                COMMENT "Copying ${_runtime_dll} next to ${target_name}"
+                VERBATIM)
+        else()
+            message(WARNING
+                "cna_copy_mingw_cxx_runtime: could not locate ${_runtime_dll}. "
+                "The executable may fail to run on machines without MinGW installed.")
+        endif()
+    endforeach()
+
+    cna_copy_mingw_runtime(${target_name})
 endfunction()
 
 # ---------------------------------------------------------------------------

@@ -1,15 +1,17 @@
 # Win32 GDI Graphics Backend — Plan
 
-> **Current state: baseline implemented, not yet demonstrated on a real display.**
+> **Current state: baseline compiled and smoke-tested; the real-display 2D demo is ready for
+> manual inspection with its GDI compatibility profile.**
 > `CNA_GRAPHICS_BACKEND=GDI` selects a Windows-only backend that uses the shared CPU
 > rasterizer for 2D content and displays its RGBA8 backbuffer through Win32 GDI
-> `StretchDIBits`.  The source code and a smoke-test target exist, but the full CMake build and
-> the visible `cna_demo_2d` run are pending because this checkout's SDL submodules were not
-> initialized when the first build was attempted.
+> `StretchDIBits`.  A MinGW GDI build has completed with at most two jobs, and its hidden-window
+> smoke executable completed successfully under Wine.  The visible `cna_demo_2d` window remains
+> the manual visual gate and is deliberately not kept open while unattended.
 >
 > **Status legend:** ✅ implemented; 🟨 code exists but the stated end-to-end verification is
 > still missing; ⬜ not started; ⏸ blocked by an external prerequisite; 🚫 intentionally outside
-> the current 2D-only scope.  No ⬜ task in this plan has been started.
+> the current 2D-only scope.  GDI-001 through GDI-003 are complete; GDI-004 awaits manual
+> confirmation using the GDI compatibility profile.
 
 ---
 
@@ -34,11 +36,11 @@ All builds and test commands for this plan must use at most two parallel jobs (`
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | GDI-001 | Keep `GDI` selectable through `CNA_GRAPHICS_BACKEND`, Windows-gated, and linked with `gdi32`; retain one unambiguous GDI factory. | ✅ | Source integration exists in `cmake/BackendSelection.cmake`, `cmake/BackendLibraries.cmake` and `GdiGraphicsBackend.cpp`. |
-| GDI-002 | Keep the CPU 2D framebuffer and the real `StretchDIBits` presentation path. | 🟨 | Code exists in `GdiGraphicsBackend`; prove it by a built executable presenting into an actual `HWND`. |
-| GDI-003 | Build the GDI smoke target and run its hidden-window checks. | ⏸ | Initialize the required vendored SDL submodules, configure a MinGW GDI build, build with at most two jobs, then run `cna_test_gdi_smoke.exe` under a display-capable Wine setup or natively on Windows. |
-| GDI-004 | Build and launch `cna_demo_2d` with `CNA_GRAPHICS_BACKEND=GDI` on a real display for manual inspection. | ⏸ | The visible window shows animated sprites, reacts to resize, and closes normally.  This is the first manual visual gate; it must not use `--smoke` if a human is inspecting it. |
+| GDI-002 | Keep the CPU 2D framebuffer and the real `StretchDIBits` presentation path. | ✅ | The completed GDI smoke executable creates an SDL `HWND`, clears/readbacks a pixel and calls `Present()` through GDI. |
+| GDI-003 | Build the GDI smoke target and run its hidden-window checks. | ✅ | Vendored SDL is initialized; the MinGW GDI build completed with at most two jobs and `cna_test_gdi_smoke.exe` returned success under Wine. |
+| GDI-004 | Build and launch `cna_demo_2d` with `CNA_GRAPHICS_BACKEND=GDI` on a real display for manual inspection. | 🟨 | The first full-load run was stopped because the GPU-oriented demo profile saturated CPU. Re-inspect the built GDI compatibility profile (12–20 sprites, 30 FPS), confirming animation, resize behaviour and normal closing without `--smoke`. |
 | GDI-005 | Add deterministic 2D regression coverage for GDI: texture upload, source rectangle, tint/alpha, rotation, flip, sampler address modes, render-target sampling, resize and presentation transforms. | ⬜ | A GDI-labelled test executable covers each listed operation and checks pixels/readback where possible; a separate visible run covers the final GDI display step. |
-| GDI-006 | Record a reproducible Windows-native and MinGW+Wine test procedure in `docs/gdi-backend.md`. | ⬜ | Documentation names exact configure/build/run commands, display prerequisite, expected result and the two-job limit. |
+| GDI-006 | Record a reproducible Windows-native and MinGW+Wine test procedure in `docs/gdi-backend.md`. | ✅ | Documentation gives exact configure/build/run commands, display prerequisite, expected result, staged DLL policy and the two-job limit. |
 
 ---
 
@@ -110,8 +112,8 @@ explicit, not forgotten.
 
 ## Recommended execution order
 
-1. Complete GDI-003 through GDI-006 first.  No performance or feature claim is trustworthy until
-   the actual 2D demo is built and observed on a real Windows/Wine display.
+1. Finish the manual visual confirmation for GDI-004, then begin GDI-005.  No performance or
+   feature claim is trustworthy until the actual 2D demo is observed on a real Windows/Wine display.
 2. Use GDI-010 before optimizing.  Then choose GDI-011, GDI-012 and GDI-015 only where the
    measurements show a bottleneck.
 3. For compatibility value, implement GDI-020 (full blend semantics) before visual extras.

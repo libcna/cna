@@ -53,6 +53,12 @@ if(CNA_BUILD_EXAMPLES)
             set_target_properties(cna_demo_2d PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_2d)
         endif()
+        # The 2D demo is the cross-backend visual verification target.  Stage
+        # MinGW's dynamic runtimes so it runs under Wine/a clean Windows
+        # installation without relying on a compiler-specific PATH.
+        if(MINGW)
+            cna_copy_mingw_cxx_runtime(cna_demo_2d)
+        endif()
     endif()
 
     # ---- Audio demo (works with all backends) --------------------------------
