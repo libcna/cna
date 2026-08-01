@@ -46,6 +46,7 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebuffer.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareTexture2D.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareRenderTarget2D.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2DState.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2D.cpp"
     )
 endif()

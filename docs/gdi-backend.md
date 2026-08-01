@@ -94,13 +94,14 @@ compatibility backend under validation, not yet as a release baseline.
   and forcibly disables depth state on every application. A `DepthStencilState` therefore cannot
   change SpriteBatch's ordinary submission order, while its independent stencil fields can still
   clip/mask a later 2D draw. New Software 3D methods cannot enter GDI through inheritance.
-- The GDI backend archive uses an explicit five-file CPU-2D dependency list
+- The GDI backend archive uses an explicit six-file CPU-2D dependency list
   (`SoftwareFramebufferAllocation.cpp`, `SoftwareFramebuffer.cpp`, `SoftwareTexture2D.cpp`,
-  `SoftwareRenderTarget2D.cpp`, and `SoftwareGraphicsBackend2D.cpp`); it does not glob the
+  `SoftwareRenderTarget2D.cpp`, `SoftwareGraphicsBackend2DState.cpp`, and
+  `SoftwareGraphicsBackend2D.cpp`); it does not glob the
   Software directory and has no intermediate `software_core` archive. This prevents future
-  Software files from silently entering the Windows build. The first three resource sources are
-  independently compiled by GDI and SOFTWARE; the latter wrapper compiles the shared 2D
-  raster/SpriteBatch core with `CNA_SOFTWARE_2D_ONLY`. Software cube/resources, programmable
+  Software files from silently entering the Windows build. The first three resource sources plus
+  the backend state unit are independently compiled by GDI and SOFTWARE; the latter wrapper
+  compiles the shared 2D raster/SpriteBatch core with `CNA_SOFTWARE_2D_ONLY`. Software cube/resources, programmable
   effects, and general-3D draw bodies are not compiled into GDI. The full SOFTWARE build retains
   them through `SoftwareGraphicsBackend.cpp`. GDI-074 still tracks extracting SpriteBatch and
   shared raster helpers from that remaining source-text monolith.
