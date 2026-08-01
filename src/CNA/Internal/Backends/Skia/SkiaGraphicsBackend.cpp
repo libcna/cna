@@ -7,6 +7,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaTextureStorageBackends.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaUnsupported3D.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include "include/core/SkData.h"
@@ -21,15 +22,14 @@ namespace CNA::Internal::Backends::Skia
 {
     namespace
     {
-        [[noreturn]] void ThrowUnavailable(const char* method)
+        class SkiaUnsupportedOcclusionQuery final : public IOcclusionQueryBackend
         {
-            throw std::runtime_error(std::string("Skia backend does not implement this path yet: ") + method);
-        }
-
-        [[noreturn]] void ThrowNo3D(const char* method)
-        {
-            throw std::runtime_error(std::string("Skia (raster 2D) does not support 3D: ") + method);
-        }
+        public:
+            void Begin() override { ThrowSkiaUnsupported3D("OcclusionQuery::Begin"); }
+            void End() override { ThrowSkiaUnsupported3D("OcclusionQuery::End"); }
+            [[nodiscard]] bool IsComplete() const override { return false; }
+            [[nodiscard]] int PixelCount() const override { return 0; }
+        };
 
         [[nodiscard]] SDL_RendererLogicalPresentation ToSdlPresentation(CnaPresentationMode mode)
         {
@@ -664,8 +664,7 @@ namespace CNA::Internal::Backends::Skia
         constexpr int kFillModeSolid = 0;
         if (fillMode != kFillModeSolid)
         {
-            throw std::runtime_error(
-                "Skia raster backend does not implement RasterizerState::FillMode::WireFrame.");
+            ThrowSkiaUnsupported3D("RasterizerState::FillMode::WireFrame");
         }
 
         // Skia's SpriteBatch route is intrinsically filled 2D canvas geometry, without a depth
@@ -713,13 +712,38 @@ namespace CNA::Internal::Backends::Skia
         return capability == CNA::GraphicsCapability::Texture3D;
     }
 
-    void SkiaGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
-    void SkiaGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
-    void SkiaGraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
-    void SkiaGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
-    void SkiaGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
-    void SkiaGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
-    void SkiaGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D("SetDepthTestEnabled"); }
+    void SkiaGraphicsBackend::Ensure3DSupported(const char* operation) const
+    {
+        AssertOwnership(operation);
+        ThrowSkiaUnsupported3D(operation);
+    }
+
+    void SkiaGraphicsBackend::ApplyDepthStencilState(
+        bool depthEnable, bool depthWriteEnable, int,
+        bool stencilEnable, int, int, int, int, int, int, int,
+        bool, int, int, int, int)
+    {
+        // DepthStencilState.None is part of the normal SpriteBatch 2D contract. It describes the
+        // absence of a depth/stencil operation, so accepting it does not claim an attachment.
+        if (depthEnable || depthWriteEnable || stencilEnable)
+            ThrowSkiaUnsupported3D("ApplyDepthStencilState");
+    }
+
+    void SkiaGraphicsBackend::SetReferenceStencil(int value)
+    {
+        // Zero accompanies the accepted disabled state. A nonzero reference would only have
+        // meaning in the unsupported stencil pipeline.
+        if (value != 0)
+            ThrowSkiaUnsupported3D("SetReferenceStencil");
+    }
+
+    void SkiaGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowSkiaUnsupported3D("ClearColorAndDepth"); }
+    void SkiaGraphicsBackend::ClearDepth(float) { ThrowSkiaUnsupported3D("ClearDepth"); }
+    void SkiaGraphicsBackend::ClearStencil(int) { ThrowSkiaUnsupported3D("ClearStencil"); }
+    void SkiaGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowSkiaUnsupported3D("ClearDepthAndStencil"); }
+    void SkiaGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowSkiaUnsupported3D("ClearColorAndStencil"); }
+    void SkiaGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowSkiaUnsupported3D("ClearColorDepthAndStencil"); }
+    void SkiaGraphicsBackend::SetDepthTestEnabled(bool) { ThrowSkiaUnsupported3D("SetDepthTestEnabled"); }
     void SkiaGraphicsBackend::SetBlendEnabled(bool enabled)
     {
         AssertOwnership("SetBlendEnabled");
@@ -742,11 +766,19 @@ namespace CNA::Internal::Backends::Skia
         spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
         TraceSkiaState("blend enabled=false mode=%d", static_cast<int>(spriteBlendMode_));
     }
-    void SkiaGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
-    std::unique_ptr<IVertexBufferBackend> SkiaGraphicsBackend::CreateVertexBuffer(int) { ThrowNo3D("CreateVertexBuffer"); }
-    std::unique_ptr<IIndexBufferBackend> SkiaGraphicsBackend::CreateIndexBuffer16(int) { ThrowNo3D("CreateIndexBuffer16"); }
-    void SkiaGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
-    void SkiaGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
+    void SkiaGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowSkiaUnsupported3D("SetDepthWriteEnabled"); }
+    std::unique_ptr<IVertexBufferBackend> SkiaGraphicsBackend::CreateVertexBuffer(int) { ThrowSkiaUnsupported3D("CreateVertexBuffer"); }
+    std::unique_ptr<IIndexBufferBackend> SkiaGraphicsBackend::CreateIndexBuffer16(int) { ThrowSkiaUnsupported3D("CreateIndexBuffer16"); }
+    std::unique_ptr<IIndexBufferBackend> SkiaGraphicsBackend::CreateIndexBuffer32(int) { ThrowSkiaUnsupported3D("CreateIndexBuffer32"); }
+    std::unique_ptr<IOcclusionQueryBackend> SkiaGraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<SkiaUnsupportedOcclusionQuery>();
+    }
+    void SkiaGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int) { ThrowSkiaUnsupported3D("DrawColoredPrimitives"); }
+    void SkiaGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int) { ThrowSkiaUnsupported3D("DrawIndexedColoredPrimitives"); }
+    void SkiaGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int, const GpuDrawParams&) { ThrowSkiaUnsupported3D("DrawPrimitivesEx"); }
+    void SkiaGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int, const GpuDrawParams&) { ThrowSkiaUnsupported3D("DrawIndexedPrimitivesEx"); }
+    void SkiaGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int, int, const GpuDrawParams&) { ThrowSkiaUnsupported3D("DrawInstancedPrimitivesEx"); }
 } // namespace CNA::Internal::Backends::Skia
 
 namespace CNA::Internal::Backends

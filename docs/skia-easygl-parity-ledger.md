@@ -75,8 +75,8 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IEffectBackend::SetUniformFloatArray/3` | Sets a GL scalar array. | Exact reflected float-array count/data write. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
 | `IEffectBackend::SetUniformVec2Array/3` | Sets a GL vec2 array. | Exact reflected float2-array count/data write. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
 | `IEffectBackend::BindTexture/2` | Binds an extra 2D sampler. | Units 1–7 weakly bind declared cnaTexture1–7 children; draw snapshots current live pixels. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
-| `IEffectBackend::BindTextureCube/2` | Binds an extra cube sampler. | Cube/effect paths unsupported. | `unsupported` | SKIA-80, SKIA-89 |
-| `IEffectBackend::BindTexture3D/2` | Binds an extra volume sampler. | Volume/effect paths unsupported. | `unsupported` | SKIA-82, SKIA-89 |
+| `IEffectBackend::BindTextureCube/2` | Binds an extra cube sampler. | Rejects with the shared stable no-3D diagnostic. | `unsupported` | SKIA-80, SKIA-89, SKIA-102 |
+| `IEffectBackend::BindTexture3D/2` | Binds an extra volume sampler. | Rejects with the shared stable no-3D diagnostic. | `unsupported` | SKIA-82, SKIA-89, SKIA-102 |
 | `ISpriteBatchBackend::Begin/0` | Starts EasyGL sprite submission. | Starts checked immediate canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::End/0` | Flushes/ends sprite submission. | Ends checked canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::SetTransformMatrix/1` | Applies sprite transform in GL shader. | Applies equivalent SkCanvas transform. | `implemented` | SKIA-35 |
@@ -102,7 +102,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates level-zero CPU Skia images. | `bounded` | SKIA-22–30 |
 | `IGraphicsBackend::CreateSpriteBatch/0` | Allocates EasyGL sprite renderer state. | Allocates checked SkCanvas adapter. | `implemented` | SKIA-31–40 |
 | `IGraphicsBackend::ReadBackbuffer/5` | Reads GL framebuffer top-left RGBA. | Exact active-surface RGBA8 readback. | `implemented` | SKIA-7, SKIA-62 |
-| `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Returns unsupported through common wrapper. | `unsupported` | SKIA-104–105 |
+| `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Creates a refusal object: safe false/zero properties; Begin/End throw. | `unsupported` | SKIA-102, SKIA-104–105 |
 | `IGraphicsBackend::CreateTexture3D/5` | Allocates GL volume texture/mips. | Creates bounded CPU voxel/mip storage only. | `bounded` | SKIA-82–84; `Skia_TextureStorage_Policy` |
 | `IGraphicsBackend::CreateTextureCube/3` | Allocates GL cube texture/mips. | Creates six bounded CPU faces/mips only. | `bounded` | SKIA-80–84; `Skia_TextureStorage_Policy` |
 | `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Level-zero color target only. | `bounded` | SKIA-61–79 |
@@ -112,14 +112,15 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::SetRenderTargetCubeFace/2` | Binds selected cube face. | Binds one checked raster face and resets target-local state. | `implemented` | SKIA-85–86; plural binding contract |
 | `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Empty/one 2D/one cube face work; 2–4 targets reject atomically because SkCanvas cannot express distinct slot outputs. | `bounded` | SKIA-68, SKIA-85–88; `Skia_MRT_Rejection` |
 | `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | Five proven blend routes and channel masks only. | `bounded` | SKIA-47–57 |
-| `IGraphicsBackend::ApplyDepthStencilState/16` | Applies complete GL depth/stencil state. | No raster depth/stencil attachment. | `unsupported` | SKIA-97–98 |
+| `IGraphicsBackend::ApplyDepthStencilState/16` | Applies complete GL depth/stencil state. | Disabled None is valid 2D state; any active depth/write/stencil mode rejects. | `unsupported` | SKIA-97–98, SKIA-102 |
 | `IGraphicsBackend::ApplyRasterizerState/5` | Applies GL cull/fill/scissor/bias. | 2D solid/scissor only; wireframe rejects. | `bounded` | SKIA-41, SKIA-58 |
 | `IGraphicsBackend::ApplySamplerState/5` | Applies per-slot GL filter/address/anisotropy. | Sprite slot point/linear/address only. | `bounded` | SKIA-43–46, SKIA-79 |
 | `IGraphicsBackend::SetBlendFactor/4` | Sets GL constant blend color. | Stored state has no accepted constant-factor route. | `bounded` | SKIA-53–55 |
-| `IGraphicsBackend::SetReferenceStencil/1` | Updates GL stencil reference. | No raster stencil buffer. | `unsupported` | SKIA-98 |
+| `IGraphicsBackend::SetReferenceStencil/1` | Updates GL stencil reference. | Zero accompanies disabled 2D state; nonzero rejects. | `unsupported` | SKIA-98, SKIA-102 |
 | `IGraphicsBackend::SetScissorRect/4` | Updates GL scissor. | Updates active top-left Skia clip state. | `implemented` | SKIA-41, SKIA-59 |
 | `IGraphicsBackend::SetViewport/6` | Updates GL viewport and depth range. | 2D rectangle works; depth range has no effect. | `bounded` | SKIA-42, SKIA-97 |
 | `IGraphicsBackend::SupportsDepthStencil/0` | True for EasyGL depth/stencil surfaces. | False for raster backbuffer. | `unsupported` | SKIA-67, SKIA-97 |
+| `IGraphicsBackend::Ensure3DSupported/1` | Default boundary is a no-op on 3D backends. | Public draw/model calls fail before consuming input or state. | `internal` | SKIA-102; `Skia_3D_Refusal` |
 | `IGraphicsBackend::ClearColorAndDepth/5` | Clears EasyGL color and depth. | Rejects because depth cannot be honored. | `unsupported` | SKIA-67, SKIA-97 |
 | `IGraphicsBackend::ClearDepth/1` | Clears EasyGL depth only. | Rejects because no depth buffer exists. | `unsupported` | SKIA-67, SKIA-97 |
 | `IGraphicsBackend::ClearStencil/1` | Clears EasyGL stencil only. | Rejects because no stencil buffer exists. | `unsupported` | SKIA-67, SKIA-98 |
@@ -131,12 +132,12 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::SetDepthWriteEnabled/1` | Toggles GL depth writes. | Explicit 3D refusal. | `unsupported` | SKIA-97 |
 | `IGraphicsBackend::CreateVertexBuffer/1` | Creates an EasyGL VBO/VAO. | Throws actionable no-3D error. | `unsupported` | SKIA-95 |
 | `IGraphicsBackend::CreateIndexBuffer16/1` | Creates 16-bit EasyGL IBO. | Throws actionable no-3D error. | `unsupported` | SKIA-95 |
-| `IGraphicsBackend::CreateIndexBuffer32/1` | Creates 32-bit EasyGL IBO. | Default returns unsupported. | `unsupported` | SKIA-95 |
+| `IGraphicsBackend::CreateIndexBuffer32/1` | Creates 32-bit EasyGL IBO. | Explicitly names and rejects the 32-bit route. | `unsupported` | SKIA-95, SKIA-102 |
 | `IGraphicsBackend::DrawColoredPrimitives/6` | Draws EasyGL colored vertices. | Throws actionable no-3D error. | `unsupported` | SKIA-96 |
 | `IGraphicsBackend::DrawIndexedColoredPrimitives/7` | Draws indexed EasyGL colored vertices. | Throws actionable no-3D error. | `unsupported` | SKIA-96 |
-| `IGraphicsBackend::DrawPrimitivesEx/7` | Draws stock/custom EasyGL 3D parameters. | Reaches explicit no-3D primitive refusal. | `unsupported` | SKIA-96, SKIA-99–103 |
-| `IGraphicsBackend::DrawIndexedPrimitivesEx/8` | Draws indexed stock/custom EasyGL 3D. | Reaches explicit no-3D indexed refusal. | `unsupported` | SKIA-96, SKIA-99–103 |
-| `IGraphicsBackend::DrawInstancedPrimitivesEx/9` | Draws hardware-instanced EasyGL geometry. | No raster instancing pipeline. | `unsupported` | SKIA-103 |
+| `IGraphicsBackend::DrawPrimitivesEx/7` | Draws stock/custom EasyGL 3D parameters. | Explicit stable no-3D primitive refusal. | `unsupported` | SKIA-96, SKIA-99–102 |
+| `IGraphicsBackend::DrawIndexedPrimitivesEx/8` | Draws indexed stock/custom EasyGL 3D. | Explicit stable no-3D indexed refusal. | `unsupported` | SKIA-96, SKIA-99–102 |
+| `IGraphicsBackend::DrawInstancedPrimitivesEx/9` | Draws hardware-instanced EasyGL geometry. | Explicit stable no-3D instanced refusal. | `unsupported` | SKIA-102–103 |
 | `IGraphicsBackend::SetContextRecoveryEnabled/1` | Controls EasyGL CPU restoration shadows. | Raster resources stay CPU-owned across presenter rebuild. | `internal` | SKIA-16, SKIA-28 |
 | `IGraphicsBackend::SupportsCapability/1` | Reports EasyGL compile/device features. | True only for storage-only Texture3D; GPU/3D entries false. | `implemented` | SKIA-17, SKIA-84, capability rows below |
 | `IGraphicsBackend::GetMaxTextureDimension/0` | Reports GL maximum texture axis. | Reports bounded raster maximum. | `implemented` | SKIA-26 |
@@ -182,7 +183,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::setBlendStateProperty/1` | Applies complete EasyGL blend/write state. | Five blend tuples and target-zero write masks work. | `bounded` | SKIA-47–57 |
 | `GraphicsDevice::getBlendStateProperty/0#2` | Const cached EasyGL blend state. | Returns the common cached Skia state. | `implemented` | SKIA-47–57 |
 | `GraphicsDevice::getDepthStencilStateProperty/0#1` | Mutable cached EasyGL depth/stencil state. | State can be inspected but has no raster attachment. | `unsupported` | SKIA-97–98 |
-| `GraphicsDevice::setDepthStencilStateProperty/1` | Applies full EasyGL depth/stencil state. | No raster depth/stencil effect is claimed. | `unsupported` | SKIA-97–98 |
+| `GraphicsDevice::setDepthStencilStateProperty/1` | Applies full EasyGL depth/stencil state. | None remains a 2D no-op; active modes reject without changing cache. | `unsupported` | SKIA-97–98, SKIA-102 |
 | `GraphicsDevice::getDepthStencilStateProperty/0#2` | Const cached EasyGL depth/stencil state. | Cache remains common metadata only. | `unsupported` | SKIA-97–98 |
 | `GraphicsDevice::getRasterizerStateProperty/0#1` | Mutable cached EasyGL rasterizer state. | Returns cached 2D-bounded state. | `bounded` | SKIA-41, SKIA-58 |
 | `GraphicsDevice::setRasterizerStateProperty/1` | Applies EasyGL cull/fill/scissor/bias. | Solid/scissor work; wireframe rejects; 3D fields inert. | `bounded` | SKIA-41, SKIA-58 |
@@ -196,7 +197,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::getMultiSampleMaskProperty/0` | Returns EasyGL coverage mask. | Returns common cache on a zero-sample raster. | `unsupported` | SKIA-56, SKIA-76 |
 | `GraphicsDevice::setMultiSampleMaskProperty/1` | Stores EasyGL coverage mask for draws. | Non-default draw use rejects; no sample mask is invented. | `unsupported` | SKIA-56, SKIA-76 |
 | `GraphicsDevice::getReferenceStencilProperty/0` | Returns EasyGL stencil reference. | Returns common cache without raster stencil. | `unsupported` | SKIA-98 |
-| `GraphicsDevice::setReferenceStencilProperty/1` | Applies EasyGL stencil reference. | Stores metadata only; capability is false. | `unsupported` | SKIA-98 |
+| `GraphicsDevice::setReferenceStencilProperty/1` | Applies EasyGL stencil reference. | Nonzero rejects before committing the public cache. | `unsupported` | SKIA-98, SKIA-102 |
 | `GraphicsDevice::getIndicesProperty/0` | Returns current EasyGL index buffer. | No Skia index buffer can be created. | `unsupported` | SKIA-95 |
 | `GraphicsDevice::setIndicesProperty/1` | Binds EasyGL index buffer. | Common binding cannot produce a Skia 3D draw. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::Clear/1` | Clears EasyGL target to `Color`. | Clears active raster surface exactly. | `implemented` | SKIA-13, SKIA-61 |
@@ -223,10 +224,10 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::SetIndexBuffer/1` | Binds EasyGL index buffer. | No raster index buffer exists. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::GetVertexBuffer/0` | Returns EasyGL slot-zero binding. | No usable raster vertex buffer. | `unsupported` | SKIA-95 |
 | `GraphicsDevice::GetIndexBuffer/0` | Returns EasyGL index binding. | No usable raster index buffer. | `unsupported` | SKIA-95 |
-| `GraphicsDevice::DrawPrimitives/3` | Draws bound EasyGL non-indexed geometry. | Reaches actionable no-3D refusal. | `unsupported` | SKIA-96 |
-| `GraphicsDevice::DrawIndexedPrimitives/6` | Draws bound EasyGL indexed geometry. | Reaches actionable no-3D refusal. | `unsupported` | SKIA-96 |
-| `GraphicsDevice::DrawInstancedPrimitives/7` | Draws EasyGL instanced indexed geometry. | No raster instancing pipeline. | `unsupported` | SKIA-103 |
-| `GraphicsDevice::DrawUserPrimitives/4#1` | Draws raw default-layout EasyGL vertices. | Temporary Skia vertex backend creation rejects. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawPrimitives/3` | Draws bound EasyGL non-indexed geometry. | Rejects at the public Skia guard before binding validation. | `unsupported` | SKIA-96, SKIA-102 |
+| `GraphicsDevice::DrawIndexedPrimitives/6` | Draws bound EasyGL indexed geometry. | Rejects at the public Skia guard before binding validation. | `unsupported` | SKIA-96, SKIA-102 |
+| `GraphicsDevice::DrawInstancedPrimitives/7` | Draws EasyGL instanced indexed geometry. | Rejects at the public Skia guard before binding validation. | `unsupported` | SKIA-102–103 |
+| `GraphicsDevice::DrawUserPrimitives/4#1` | Draws raw default-layout EasyGL vertices. | Rejects before inspecting or packing caller input. | `unsupported` | SKIA-95–96, SKIA-102 |
 | `GraphicsDevice::DrawUserPrimitives/5#1` | Draws raw explicitly declared EasyGL vertices. | No raster declared-vertex pipeline. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::DrawUserPrimitives/5#2` | Draws declared `VertexPositionColor` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::DrawUserPrimitives/5#3` | Draws declared `VertexPositionTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
@@ -236,7 +237,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::DrawUserPrimitives/4#3` | Draws `VertexPositionColorTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::DrawUserPrimitives/4#4` | Draws `VertexPositionTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::DrawUserPrimitives/4#5` | Draws `VertexPositionNormalTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
-| `GraphicsDevice::DrawUserIndexedPrimitives/7#1` | Draws raw default-layout EasyGL indexed data. | Temporary Skia buffers reject. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#1` | Draws raw default-layout EasyGL indexed data. | Rejects before inspecting or packing caller input. | `unsupported` | SKIA-95–96, SKIA-102 |
 | `GraphicsDevice::DrawUserIndexedPrimitives/7#2` | Draws 16-bit indexed `VertexPositionColor`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::DrawUserIndexedPrimitives/7#3` | Draws 16-bit indexed `VertexPositionColorTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::DrawUserIndexedPrimitives/7#4` | Draws 16-bit indexed `VertexPositionTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |

@@ -98,12 +98,13 @@ No additional stock effect is promoted. `SpriteEffect` remains the sole exact st
 its observable CNA/EasyGL route is already the built-in SpriteBatch paint. `AlphaTestEffect` and
 `DualTextureEffect` expose working CPU-side properties and `GpuDrawParams`, but their public draw
 contract begins with a transformed vertex stream. On raster Skia, `DrawUserPrimitives` therefore
-reaches the explicit `CreateVertexBuffer` no-3D refusal before any candidate fragment operation.
+reaches the explicit public 3D guard before inspecting or packing that stream and before any
+candidate fragment operation.
 
 `Skia_StockEffect_Boundary` makes the decision observable rather than relying on capability prose:
 
 - all eight alpha compare modes forward the same 24 below/equal/above decisions proven by the
-  SKIA-93 clip spike, while every public draw still rejects at `CreateVertexBuffer`;
+  SKIA-93 clip spike, while every public draw rejects at `GraphicsDevice::DrawUserPrimitives`;
 - all 16 combinations of dual texture availability, fog and vertex-colour enablement reject at the
   same boundary; a separate assertion proves both texture backends, premultiplied diffuse/alpha,
   fog and vertex-colour state were forwarded rather than absent;

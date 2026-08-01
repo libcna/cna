@@ -1425,6 +1425,14 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual bool SupportsDepthStencil() const { return true; }
 
         /**
+         * Backend boundary used by common public draw/model entry points before they inspect,
+         * pack, allocate, bind, or otherwise consume 3D input. Fully 3D-capable backends retain
+         * the no-op default; a deliberately 2D-only backend overrides this with its stable
+         * unsupported-operation diagnostic.
+         */
+        virtual void Ensure3DSupported(const char* /*operation*/) const {}
+
+        /**
          * @brief Clears color and depth buffers in a single call.
          *
          * @param r,g,b,a    Clear color in range 0..1.

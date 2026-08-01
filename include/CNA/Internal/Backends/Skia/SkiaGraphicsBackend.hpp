@@ -104,7 +104,17 @@ namespace CNA::Internal::Backends::Skia
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        void Ensure3DSupported(const char* operation) const override;
 
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                    int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+        void SetReferenceStencil(int value) override;
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;
@@ -116,12 +126,28 @@ namespace CNA::Internal::Backends::Skia
         void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertexCapacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int indexCapacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int indexCapacity) override;
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb, const Matrix& world,
                                    const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb,
+                                     const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
+                                       const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                       const GpuDrawParams& params) override;
 
     private:
         void RecreateBackbuffer(int requestedWidth, int requestedHeight);

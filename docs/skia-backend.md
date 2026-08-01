@@ -503,7 +503,7 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     AlphaTestEffect compare modes forward the expected 24 threshold decisions, and 16
     DualTextureEffect texture-availability/fog/vertex-colour combinations preserve their CPU
     parameters, yet public `DrawUserPrimitives` consistently rejects at the raster backend's
-    missing `CreateVertexBuffer` before changing a sentinel pixel. SpriteBatch now distinguishes
+    public 3D guard before inspecting input or changing a sentinel pixel. SpriteBatch distinguishes
     the missing stock-3D primitive route from the explicit tagged-SkSL custom route, and remains
     reusable after both refusals. The focused test and the earlier generic effect diagnostic test
     pass together; 78 existing AlphaTest/DualTexture property/clone/forwarding tests also pass
@@ -573,7 +573,17 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     `Skia_3DDecision_Audit` now fails any missing, duplicate, stale or unclassified ADR row and
     requires an explicit SKIA-102 consequence. All three audits pass, and the complete Debug suite
     passes 109/109 in 12.92 seconds (15 Raster, 91 Display, three Audit). SKIA-103 is obsolete;
-    SKIA-102 must now make public 3D refusal exhaustive and atomic. All 3D/depth/stencil/wireframe
-    capability values remain false.
+    SKIA-102 subsequently makes public 3D refusal exhaustive and atomic. All
+    3D/depth/stencil/wireframe capability values remain false.
+77. `Skia_3D_Refusal` closes SKIA-102 with one stable diagnostic prefix and an early backend guard
+    used by all public GraphicsDevice draws and ModelMesh. It covers static/dynamic buffers, both
+    index widths, raw/typed/indexed/instanced draws, all backend draw and attachment-clear entries,
+    active depth/stencil state, wireframe, seven stock effects, cube/volume SkSL binding and query
+    Begin/End. A preserve-contents sentinel target remains byte-exact after every failure; disabled
+    depth state, masked public clears, CPU cube/volume transfers and SpriteBatch remain functional.
+    Occlusion properties safely report false/zero, 32-bit index refusal names its real route, and a
+    rejected reference-stencil update no longer corrupts the public cache. The fixture passes
+    25/25 in Debug, Release and ASan; the complete Debug Skia suite passes 110/110 in 13.47 seconds
+    (15 Raster, 92 Display, three Audit). See `docs/skia-3d-refusal.md`.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

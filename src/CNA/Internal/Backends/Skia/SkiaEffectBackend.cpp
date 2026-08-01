@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Skia/SkiaEffectBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaUnsupported3D.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 
 #include "include/core/SkData.h"
@@ -330,12 +331,12 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaEffectBackend::BindTextureCube(int, ITextureCubeBackend*)
     {
-        throw std::runtime_error("Skia SkSL effects do not support TextureCube children.");
+        ThrowSkiaUnsupported3D("ShaderEffect::SetTexture(TextureCube)");
     }
 
     void SkiaEffectBackend::BindTexture3D(int, ITexture3DBackend*)
     {
-        throw std::runtime_error("Skia SkSL effects do not support Texture3D children.");
+        ThrowSkiaUnsupported3D("ShaderEffect::SetTexture(Texture3D)");
     }
 
     void SkiaEffectBackend::ValidateSpriteBindingsEXT() const

@@ -242,7 +242,8 @@ private:
         catch (const std::exception& exception)
         {
             return std::string(exception.what()).find(
-                "Skia (raster 2D) does not support 3D: CreateVertexBuffer") != std::string::npos;
+                "Skia (raster 2D) does not support 3D: GraphicsDevice::DrawUserPrimitives")
+                != std::string::npos;
         }
         return false;
     }

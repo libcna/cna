@@ -189,6 +189,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_CpuStockEffect_Spike
                                   cna_test_skia_cpu_stock_effect_spike)
 
+    # SKIA-102: accepted 2D-only ADR enforcement. One target-atomic fixture covers every backend
+    # 3D family and the public buffer/draw/effect/model/query routes, then proves retained 2D and
+    # CPU cube/volume transfer behavior still works.
+    cna_skia_test(cna_test_skia_3d_refusal examples/skia_3d_refusal_test.cpp)
+    cna_register_skia_display_test(Skia_3D_Refusal cna_test_skia_3d_refusal)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

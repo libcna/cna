@@ -623,12 +623,12 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
 
 - No stock effect was promoted. AlphaTestEffect and DualTextureEffect have valid shared CPU-side
   properties and the SKIA-93 fragment pieces are feasible, but their public route begins with a
-  transformed vertex stream. Skia rejects `DrawUserPrimitives` at `CreateVertexBuffer` before
-  fragment work; matrices, triangle coverage, per-vertex fog/colour and depth are not optional
-  properties that can be silently dropped.
+  transformed vertex stream. Skia now rejects `DrawUserPrimitives` at the shared early public 3D
+  guard before fragment work; matrices, triangle coverage, per-vertex fog/colour and depth are not
+  optional properties that can be silently dropped.
 - Added `Skia_StockEffect_Boundary`. It checks all eight alpha compare modes and the 24
   below/equal/above forwarded decisions, then proves every corresponding public draw refuses with
-  the no-3D `CreateVertexBuffer` diagnostic. It also checks forwarded dual textures,
+  the stable no-3D `GraphicsDevice::DrawUserPrimitives` diagnostic. It also checks forwarded dual textures,
   premultiplied tint, fog and vertex colour plus all 16 texture-availability/fog/vertex-colour
   combinations. Every failure leaves an opaque sentinel pixel byte-exactly unchanged.
 - SpriteBatch's fallback diagnostic now separates stock 3D effects (unsupported primitive route)
@@ -827,15 +827,43 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   (15 Raster, 91 Display, three Audit). The Debug display cache is restored to `:0`; `NEXT.md` was
   not read or changed.
 
+## Completed in this session: SKIA-102
+
+- Added one stable `Skia (raster 2D) does not support 3D: ` diagnostic helper and a default-no-op
+  backend guard. Skia invokes it before public buffered/indexed/instanced and all raw/typed
+  DrawUser paths inspect bindings, pack input or allocate buffers; `ModelMesh::Draw` rejects before
+  walking even an empty/partial mesh. Other backends retain their existing behavior.
+- Explicit Skia overrides now distinguish both index widths and all backend draw entry points.
+  Enabled depth/write/stencil state, nonzero stencil reference, wireframe, direct depth toggles and
+  all six attachment-bearing backend clears reject through the same contract. Disabled
+  `DepthStencilState::None`, stencil reference zero and public clears masked to the target's actual
+  colour attachment remain valid 2D operations.
+- Tagged SkSL cube/volume sampling also uses the stable boundary while proven CPU SetData/GetData
+  storage stays usable. An unsupported occlusion-query object exposes safe nonblocking
+  `IsComplete=false`/`PixelCount=0`; Begin and End reject deterministically. Capability values for
+  3D, depth/stencil, wireframe, queries, MRT, MSAA and anisotropy remain false.
+- Added `Skia_3D_Refusal` with 25 checks spanning static/dynamic buffers, 16/32-bit indices, every
+  draw family, backend draws, state/clear paths, all seven stock effect families, models, storage,
+  tagged bindings and query lifecycle. A preserve-contents sentinel proves rejected work is atomic,
+  combined public clears degrade only to colour, and SpriteBatch recovers afterward. A rejected
+  reference-stencil update now leaves the public cache unchanged.
+- Debug and Release builds succeed. Focused Debug/Release tests pass; ASan passes with
+  `detect_leaks=0`, matching the documented display-stack baseline. Enabling LSan reports the
+  existing process-exit `fontconfig`/X11/DRM allocations rather than a new symbolized CNA/Skia
+  failure. The complete Debug Skia suite passes 110/110 under Xvfb in 13.47 seconds with
+  `--parallel 8` (15 Raster, 92 Display, three Audit). The parity ledger has 248 entries and all
+  three source audits pass. Debug, Release and ASan display caches are restored to `:0`;
+  `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-102: inventory every public 3D entry point and current exception/capability behavior, then
-   add an exhaustive negative fixture proving uniform, atomic refusal across buffers, Draw/DrawUser,
-   depth/stencil clears, effects/models, cube/volume bindings and queries.
-2. Preserve positive 2D and transfer-only behavior beside the negative matrix. A failed 3D call
-   must not clear, dirty, rebind, dispose or otherwise alter the current raster target/state.
-3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
-   never widen the tagged contract merely to silence a fixture.
+1. SKIA-104: determine whether Begin/End/nonblocking/PixelCount occlusion semantics can be correct
+   without a 3D submission bridge; document counterexamples if framebuffer-difference emulation is
+   unsound.
+2. SKIA-105: retain the deterministic refusal object if SKIA-104 rejects emulation, and align the
+   capability ledger, tests and user-facing documentation with that final decision.
+3. SKIA-106: audit and register genuinely reusable 2D EasyGL examples under the Skia label without
+   pulling GPU-only or 3D paths into this backend.
 
 ## Known boundaries / assumptions
 
