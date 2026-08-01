@@ -1061,10 +1061,12 @@ namespace CNA::Internal::Backends::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
 
-        // colorImage_ level 0 is always in SHADER_READ_ONLY_OPTIMAL outside a render pass (the RT
-        // render pass finalLayout, and the constructor's init barrier for a never-rendered target).
+        // Every colorImage_ level is in SHADER_READ_ONLY_OPTIMAL outside a render pass (the RT
+        // render pass finalLayout plus mip generation, or the constructor's init barrier for a
+        // never-rendered target). Transition only the level this copy addresses.
         owner_->TransitionImageLayout(colorImage_,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            static_cast<uint32_t>(level));
 
         VkCommandBuffer cb = owner_->BeginOneTimeCommands();
         VkBufferImageCopy region{};
@@ -1099,7 +1101,8 @@ namespace CNA::Internal::Backends::Vulkan
         owner_->EndOneTimeCommands(cb);
 
         owner_->TransitionImageLayout(colorImage_,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            static_cast<uint32_t>(level));
 
         const bool isBGRA = (owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
                              owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
@@ -7250,7 +7253,8 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     void VulkanGraphicsBackend::TransitionImageLayout(VkImage img,
-                                                       VkImageLayout from, VkImageLayout to)
+                                                       VkImageLayout from, VkImageLayout to,
+                                                       uint32_t baseMipLevel)
     {
         VkCommandBuffer cb = BeginOneTimeCommands();
         VkImageMemoryBarrier barrier{};
@@ -7260,7 +7264,7 @@ namespace CNA::Internal::Backends::Vulkan
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image               = img;
-        barrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        barrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT, baseMipLevel, 1, 0, 1 };
 
         VkPipelineStageFlags srcStage, dstStage;
         if (from == VK_IMAGE_LAYOUT_UNDEFINED && to == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {

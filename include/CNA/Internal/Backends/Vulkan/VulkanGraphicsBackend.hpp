@@ -2397,7 +2397,8 @@ namespace CNA::Internal::Backends::Vulkan
                               VkBuffer& buf, VkDeviceMemory& mem, void** mapped = nullptr);
         VkCommandBuffer BeginOneTimeCommands();
         void            EndOneTimeCommands(VkCommandBuffer cb);
-        void TransitionImageLayout(VkImage img, VkImageLayout from, VkImageLayout to);
+        void TransitionImageLayout(VkImage img, VkImageLayout from, VkImageLayout to,
+                                   uint32_t baseMipLevel = 0);
         void CopyBufferToImage(VkBuffer buf, VkImage img, uint32_t w, uint32_t h);
         VkShaderModule  CreateShaderModule(const uint32_t* spv, size_t byteSize);
 

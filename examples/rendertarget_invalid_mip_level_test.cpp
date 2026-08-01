@@ -1075,8 +1075,7 @@ class RenderTargetInvalidMipLevelTest : public Game
             auto rt = MakeRenderedTarget(dev, 16, 16, true, samples, label);
             if (!rt) continue;
             AssertChain(*rt, true, label);
-            ReadWholeLevel(*rt, 0, label + " level 0");
-            ReadWholeLevel(*rt, 1, label + " level 1");
+            ReadEveryValidLevel(*rt, label);
 
             const int n = rt->getLevelCountProperty();
             const Rectangle one(0, 0, 1, 1);
@@ -1400,6 +1399,12 @@ public:
         gdm_->setPreferredBackBufferHeightProperty(kBBH);
         gdm_->setPreferredDepthStencilFormatProperty(DepthFormat::Depth24Stencil8);
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
+        // REMED-GFX-191: Vulkan's render-target sample count follows the device-wide count. F1
+        // must therefore engage multisampling before device creation; target constructor requests
+        // alone would all report applied 0 and leave the nominal MSAA matrix on the single-sample
+        // path. F1 still requests 0 and 1 as explicit non-MSAA controls, and now reads every valid
+        // mip for both those targets and each actually multisampled target the backend supports.
+        if (onlyLeg_ == "F1") gdm_->setPreferMultiSamplingProperty(true);
     }
 
     /** @brief 0 when every check passed, 1 otherwise. */
