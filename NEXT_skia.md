@@ -20,7 +20,7 @@
 - The most recent pushed commits are `50670060` (detach a destroyed bound render target),
   `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
   `SetData`).
-- `docs/skia-backend.md` records 69 Skia CTests: six raster-only and 63 display-required tests.
+- `docs/skia-backend.md` records 70 Skia CTests: six raster-only and 64 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -142,6 +142,19 @@
   actual output/window scale. Xvfb reports 1×; the test's conversion checks use SDL's shared
   DPI-aware path on hardware displays too.
 
+## Completed in this session: SKIA-74
+
+- Added a one-entry immutable sampling-snapshot cache to each live `RenderTarget2D`. It is
+  invalidated before Clear, SpriteBatch target drawing, target `SetData`, or discard-on-bind, so
+  repeated sampling does not allocate unbounded snapshots and never returns stale target pixels.
+- Added `SkiaResourceCounters` and `SkiaGraphicsBackend::GetResourceStatsEXT()` for debug
+  diagnostics: live textures (two alpha-labelled images each), target surfaces, target snapshots,
+  and their estimated RGBA8 byte counts. Resources share the backend counter safely even if a
+  wrapper outlives the backend.
+- `Skia_ResourceBudget` verifies snapshot reuse/invalidation and 64 create/sample/release target
+  cycles, with all tracked counters returning to zero. Existing RenderTarget sample and 64-frame
+  SpriteBatch stress regressions still pass after cache introduction.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -180,19 +193,24 @@
 - SKIA-72 debug/ASan: `Skia_DisplayScale` passes all 10 checks under Xvfb in normal and
   AddressSanitizer builds; its diagnostic records `logical=40x30`, `window=120x60`, and 1× output
   scale in this virtual display.
+- SKIA-74 debug/ASan: `Skia_ResourceBudget` passes all nine checks under Xvfb in normal and
+  AddressSanitizer builds. Existing `Skia_RenderTarget2D_SampleAfterUnbind` and
+  `Skia_SpriteBatch_Stress` also pass after snapshot caching (the latter reports 64 stable frames,
+  1,664 Begin/Draw/End blocks, and 192 target changes).
 
 ## Current task
 
-Reassess the next incomplete 2D task after SKIA-72. Blend, write-mask, target-mipmap disposition,
-resize/presentation, display scaling, and raster state work are bounded and documented; choose the
-next plan row with an independently testable public contract.
+Reassess the next incomplete 2D task after SKIA-74. Blend, write-mask, target-mipmap disposition,
+resize/presentation, display scaling, and bounded target snapshot ownership are documented; choose
+the next plan row with an independently testable public contract.
 
 ## Next candidates
 
-1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely bounded
-   target/snapshot cache work (SKIA-74) or RenderTarget2D parity goldens (SKIA-75).
-2. SKIA-74: inspect current snapshot/resource ownership before introducing any cache policy; SKIA-75:
-   compare stable target/readback cases against EasyGL and SDL_Renderer without claiming GPU parity.
+1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely
+   RenderTarget2D parity goldens (SKIA-75).
+2. SKIA-75: compare stable target/readback cases against EasyGL and SDL_Renderer without claiming
+   GPU parity. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface
+   exists to probe.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to
    SKIA-16/SKIA-28 and is not yet implemented.
 

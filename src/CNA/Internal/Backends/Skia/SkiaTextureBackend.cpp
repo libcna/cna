@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
+#include <utility>
 
 namespace CNA::Internal::Backends::Skia
 {
@@ -23,10 +24,12 @@ namespace CNA::Internal::Backends::Skia
         }
     }
 
-    SkiaTextureBackend::SkiaTextureBackend(const ImageData& data)
+    SkiaTextureBackend::SkiaTextureBackend(const ImageData& data,
+                                           std::shared_ptr<SkiaResourceCounters> resourceCounters)
         : width_(data.width)
         , height_(data.height)
         , rawPixels_(data.pixels)
+        , resourceCounters_(std::move(resourceCounters))
     {
         if (width_ <= 0 || height_ <= 0)
             throw std::runtime_error("Skia Texture2D dimensions must be positive.");
@@ -38,6 +41,17 @@ namespace CNA::Internal::Backends::Skia
                 "Skia raster Texture2D does not implement public mip chains; mipMap=true is rejected "
                 "before texture data can be uploaded.");
         RebuildImage();
+        if (resourceCounters_)
+        {
+            resourceCounters_->AddTexture(width_, height_);
+            resourceRegistered_ = true;
+        }
+    }
+
+    SkiaTextureBackend::~SkiaTextureBackend()
+    {
+        if (resourceRegistered_)
+            resourceCounters_->RemoveTexture(width_, height_);
     }
 
     void SkiaTextureBackend::UpdatePixels(const std::uint8_t* rgba, int stride)

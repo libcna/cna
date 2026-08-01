@@ -7,12 +7,16 @@
 namespace CNA::Internal::Backends::Skia
 {
     SkiaRenderTargetBackend::SkiaRenderTargetBackend(int width, int height, bool preserveContents,
-                                                     std::weak_ptr<SkiaRenderTargetBinding> binding)
+                                                     std::weak_ptr<SkiaRenderTargetBinding> binding,
+                                                     std::shared_ptr<SkiaResourceCounters> resourceCounters)
         : surface_(width, height)
         , preserveContents_(preserveContents)
         , binding_(std::move(binding))
+        , resourceCounters_(std::move(resourceCounters))
     {
         surface_.Clear(0.0f, 0.0f, 0.0f, 0.0f);
+        if (resourceCounters_)
+            resourceCounters_->AddRenderTarget(width, height);
     }
 
     SkiaRenderTargetBackend::~SkiaRenderTargetBackend()
@@ -23,12 +27,16 @@ namespace CNA::Internal::Backends::Skia
         // binding intentionally expires when the graphics backend has already been destroyed.
         if (const auto binding = binding_.lock())
             binding->Detach(this);
+        InvalidateSnapshot();
+        if (resourceCounters_)
+            resourceCounters_->RemoveRenderTarget(GetWidth(), GetHeight());
     }
 
     void SkiaRenderTargetBackend::UpdatePixels(const std::uint8_t* rgba, int stride)
     {
         if (!surface_.WritePixels(0, 0, GetWidth(), GetHeight(), rgba, stride))
             throw std::runtime_error("Skia RenderTarget2D failed to replace level-0 RGBA pixels.");
+        InvalidateSnapshot();
     }
 
     bool SkiaRenderTargetBackend::GetData(int level, int x, int y, int width, int height,
@@ -56,14 +64,33 @@ namespace CNA::Internal::Backends::Skia
     sk_sp<SkImage> SkiaRenderTargetBackend::SnapshotImage(
         SkiaSourceAlphaConvention /*alphaConvention*/) const
     {
-        // An SkSurface snapshot is already premultiplied.  Render-target source-convention
-        // conversion needs its own explicit probe before it can claim straight-alpha support.
-        return surface_.SnapshotImage();
+        // An SkSurface snapshot is already premultiplied.  Keep only one immutable image per
+        // target; any target write explicitly releases it before the canvas mutates, so callers
+        // never sample stale pixels and repeated sprite draws cannot grow a hidden cache.
+        if (!snapshot_)
+        {
+            snapshot_ = surface_.SnapshotImage();
+            if (snapshot_ && resourceCounters_)
+                resourceCounters_->AddTargetSnapshot(GetWidth(), GetHeight());
+        }
+        return snapshot_;
     }
 
     void SkiaRenderTargetBackend::PrepareForBind()
     {
         if (!preserveContents_)
+        {
+            InvalidateSnapshot();
             surface_.Clear(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+    }
+
+    void SkiaRenderTargetBackend::InvalidateSnapshot() noexcept
+    {
+        if (!snapshot_)
+            return;
+        snapshot_.reset();
+        if (resourceCounters_)
+            resourceCounters_->RemoveTargetSnapshot(GetWidth(), GetHeight());
     }
 } // namespace CNA::Internal::Backends::Skia

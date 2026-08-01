@@ -3,6 +3,7 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkBlender.h"
@@ -17,10 +18,11 @@ namespace CNA::Internal::Backends::Skia
         SkiaSpriteBatchBackend(SkiaSurface*& activeSurface, const SkBlendMode& blendMode,
                                const sk_sp<SkBlender>& customBlender,
                                const SkiaSourceAlphaConvention& sourceAlphaConvention,
-                               const SkiaRasterState& rasterState)
+                               const SkiaRasterState& rasterState,
+                               SkiaRenderTargetBinding* targetBinding)
             : activeSurface_(&activeSurface), blendMode_(&blendMode)
             , customBlender_(&customBlender), sourceAlphaConvention_(&sourceAlphaConvention)
-            , rasterState_(&rasterState) {}
+            , rasterState_(&rasterState), targetBinding_(targetBinding) {}
 
         void Begin() override;
         void End() override;
@@ -42,6 +44,7 @@ namespace CNA::Internal::Backends::Skia
         const sk_sp<SkBlender>* customBlender_ = nullptr;
         const SkiaSourceAlphaConvention* sourceAlphaConvention_ = nullptr;
         const SkiaRasterState* rasterState_ = nullptr;
+        SkiaRenderTargetBinding* targetBinding_ = nullptr;
         bool begun_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         int textureFilter_ = 0;

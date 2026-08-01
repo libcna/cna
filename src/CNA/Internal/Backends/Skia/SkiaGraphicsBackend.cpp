@@ -168,6 +168,8 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::Clear(float r, float g, float b, float a)
     {
+        if (SkiaRenderTargetBackend* target = targetBinding_->ActiveTarget())
+            target->InvalidateSnapshot();
         ActiveSurface().Clear(r, g, b, a);
     }
 
@@ -230,14 +232,14 @@ namespace CNA::Internal::Backends::Skia
 
     std::unique_ptr<ITextureBackend> SkiaGraphicsBackend::CreateTexture(const ImageData& data)
     {
-        return std::make_unique<SkiaTextureBackend>(data);
+        return std::make_unique<SkiaTextureBackend>(data, resourceCounters_);
     }
 
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<SkiaSpriteBatchBackend>(targetBinding_->ActiveSurfaceRef(), spriteBlendMode_,
                                                         spriteCustomBlender_, spriteSourceAlphaConvention_,
-                                                        rasterState_);
+                                                        rasterState_, targetBinding_.get());
     }
 
     std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(
@@ -251,7 +253,8 @@ namespace CNA::Internal::Backends::Skia
                 "Skia raster RenderTarget2D does not implement public mip chains; mipMap=true is rejected.");
         if (multiSampleCount != 0)
             throw std::runtime_error("Skia raster RenderTarget2D multisampling is not implemented yet.");
-        return std::make_unique<SkiaRenderTargetBackend>(width, height, preserveContents, targetBinding_);
+        return std::make_unique<SkiaRenderTargetBackend>(width, height, preserveContents,
+                                                         targetBinding_, resourceCounters_);
     }
 
     void SkiaGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* renderTarget)

@@ -42,11 +42,11 @@ namespace CNA::Internal::Backends::Skia
 
         [[nodiscard]] SkiaSurface* ActiveSurface() const noexcept { return activeSurface_; }
         [[nodiscard]] SkiaSurface*& ActiveSurfaceRef() noexcept { return activeSurface_; }
-        [[nodiscard]] const SkiaRenderTargetBackend* ActiveTarget() const noexcept { return activeTarget_; }
+        [[nodiscard]] SkiaRenderTargetBackend* ActiveTarget() const noexcept { return activeTarget_; }
 
     private:
         SkiaSurface* backbuffer_ = nullptr;
         SkiaSurface* activeSurface_ = nullptr;
-        const SkiaRenderTargetBackend* activeTarget_ = nullptr;
+        SkiaRenderTargetBackend* activeTarget_ = nullptr;
     };
 } // namespace CNA::Internal::Backends::Skia

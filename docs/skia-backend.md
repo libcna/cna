@@ -300,5 +300,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     coordinate conversion delegates to SDL's DPI- and offset-aware renderer APIs rather than
     manually mixing output pixels with window points. The Xvfb validation ratio is 1×; a real
     high-DPI display follows the same SDL conversion path.
+47. `Skia_ResourceBudget` validates the bounded raster resource policy through the internal
+    debug-facing `SkiaGraphicsBackend::GetResourceStatsEXT()` counters: a texture retains exactly
+    two alpha-labelled images; a target retains one surface and at most one immutable sampling
+    snapshot. A target write drops the old snapshot, and 64 create/sample/release cycles return
+    target, snapshot, and byte counters to zero. There is no unbounded hidden image/snapshot cache.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

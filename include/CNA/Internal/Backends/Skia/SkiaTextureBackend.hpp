@@ -2,10 +2,12 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
 
 #include "include/core/SkImage.h"
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace CNA::Internal::Backends::Skia
@@ -20,7 +22,9 @@ namespace CNA::Internal::Backends::Skia
     class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource
     {
     public:
-        explicit SkiaTextureBackend(const ImageData& data);
+        explicit SkiaTextureBackend(const ImageData& data,
+                                    std::shared_ptr<SkiaResourceCounters> resourceCounters = {});
+        ~SkiaTextureBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -42,5 +46,7 @@ namespace CNA::Internal::Backends::Skia
         std::vector<std::uint8_t> rawPixels_;
         sk_sp<SkImage> straightImage_;
         sk_sp<SkImage> premultipliedImage_;
+        std::shared_ptr<SkiaResourceCounters> resourceCounters_;
+        bool resourceRegistered_ = false;
     };
 } // namespace CNA::Internal::Backends::Skia

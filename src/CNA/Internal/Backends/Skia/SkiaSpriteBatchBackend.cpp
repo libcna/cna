@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -213,6 +214,12 @@ namespace CNA::Internal::Backends::Skia
         {
             return;
         }
+
+        // SkSurface snapshots remain valid images after a later write. Invalidate the bounded
+        // target cache before mutating the current canvas so the next target sampling draw sees
+        // exactly these new pixels rather than a prior frame's immutable snapshot.
+        if (targetBinding_ && targetBinding_->ActiveTarget())
+            targetBinding_->ActiveTarget()->InvalidateSnapshot();
 
         const auto* skiaImageSource = dynamic_cast<const SkiaImageSource*>(&texture);
         const SkiaSourceAlphaConvention sourceAlphaConvention = sourceAlphaConvention_

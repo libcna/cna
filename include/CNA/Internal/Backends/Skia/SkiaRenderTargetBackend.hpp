@@ -3,6 +3,7 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include <memory>
@@ -14,7 +15,8 @@ namespace CNA::Internal::Backends::Skia
     {
     public:
         SkiaRenderTargetBackend(int width, int height, bool preserveContents,
-                                std::weak_ptr<SkiaRenderTargetBinding> binding);
+                                std::weak_ptr<SkiaRenderTargetBinding> binding,
+                                std::shared_ptr<SkiaResourceCounters> resourceCounters = {});
         ~SkiaRenderTargetBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return surface_.Width(); }
@@ -32,10 +34,14 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] SkiaSurface& Surface() noexcept { return surface_; }
         [[nodiscard]] const SkiaSurface& Surface() const noexcept { return surface_; }
         void PrepareForBind();
+        /// Drops this target's one-entry sampling cache before a canvas or upload write.
+        void InvalidateSnapshot() noexcept;
 
     private:
         SkiaSurface surface_;
         bool preserveContents_ = false;
         std::weak_ptr<SkiaRenderTargetBinding> binding_;
+        std::shared_ptr<SkiaResourceCounters> resourceCounters_;
+        mutable sk_sp<SkImage> snapshot_;
     };
 } // namespace CNA::Internal::Backends::Skia

@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include <SDL3/SDL.h>
@@ -40,6 +41,11 @@ namespace CNA::Internal::Backends::Skia
 
         SDL_Window* GetWindowInternal() const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return renderer_; }
+        /// Returns bounded live-resource counters for raster-backend diagnostics and debug tests.
+        NOXNA [[nodiscard]] SkiaResourceStats GetResourceStatsEXT() const noexcept
+        {
+            return resourceCounters_ ? resourceCounters_->GetStats() : SkiaResourceStats{};
+        }
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
@@ -93,6 +99,7 @@ namespace CNA::Internal::Backends::Skia
         SDL_Texture* presentTexture_ = nullptr;
         SkiaSurface surface_;
         std::shared_ptr<SkiaRenderTargetBinding> targetBinding_ = std::make_shared<SkiaRenderTargetBinding>();
+        std::shared_ptr<SkiaResourceCounters> resourceCounters_ = std::make_shared<SkiaResourceCounters>();
         SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
         sk_sp<SkBlender> spriteCustomBlender_;
         SkiaSourceAlphaConvention spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
