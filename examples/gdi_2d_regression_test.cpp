@@ -63,13 +63,13 @@ namespace
               const Rectangle& destination, const Rectangle& source, const Color& color,
               float rotation = 0.0f, const Vector2& origin = Vector2(0.0f, 0.0f),
               SpriteEffects effects = SpriteEffects::None, int filter = 1,
-              int addressU = 1, int addressV = 1)
+              int addressU = 1, int addressV = 1, float layerDepth = 0.0f)
     {
         std::unique_ptr<ISpriteBatchBackend> spriteBatch = backend.CreateSpriteBatch();
         spriteBatch->Begin();
         spriteBatch->SetSamplerFilter(filter); // Point for stable byte-exact sampling.
         spriteBatch->SetSamplerAddressMode(addressU, addressV);
-        spriteBatch->Draw(texture, destination, source, color, rotation, origin, effects, 0.0f);
+        spriteBatch->Draw(texture, destination, source, color, rotation, origin, effects, layerDepth);
         spriteBatch->End();
     }
 
@@ -191,6 +191,22 @@ namespace
 
         backend.SetBlendFactor(1.0f, 1.0f, 1.0f, 1.0f);
         SetOpaque(backend);
+
+        // GDI is a 2D-only backend. The Software base owns a 3D depth buffer, but applying a
+        // DepthStencilState must never let it accidentally alter SpriteBatch layering. With an
+        // active LessEqual test, blue at 0.75 would normally fail behind red at 0.25; GDI instead
+        // keeps its declared 2D draw-order contract and shows the later blue draw.
+        backend.ApplyDepthStencilState(
+            /*depthEnable*/ true, /*depthWriteEnable*/ true, /*LessEqual*/ 3,
+            /*stencilEnable*/ false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        Draw(backend, *atlas, Rectangle(2, 2, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
+             0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, /*Point*/ 1,
+             /*Clamp*/ 1, /*Clamp*/ 1, /*layerDepth*/ 0.25f);
+        Draw(backend, *atlas, Rectangle(2, 2, 1, 1), Rectangle(0, 1, 1, 1), Color::White,
+             0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, /*Point*/ 1,
+             /*Clamp*/ 1, /*Clamp*/ 1, /*layerDepth*/ 0.75f);
+        ok &= ExpectPixel("GDI ignores 2D depth state", ReadPixel(backend, 2, 2), blue);
 
         // Horizontal flip maps the 2-pixel source row in reverse order.
         backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);

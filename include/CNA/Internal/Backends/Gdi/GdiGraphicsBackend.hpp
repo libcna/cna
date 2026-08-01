@@ -29,6 +29,13 @@ namespace CNA::Internal::Backends::Gdi
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc, int stencilPass,
+                                    int stencilFail, int stencilDepthFail, int stencilMask,
+                                    int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode, int ccwStencilFunc,
+                                    int ccwStencilPass, int ccwStencilFail,
+                                    int ccwStencilDepthFail) override;
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY,

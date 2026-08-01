@@ -23,6 +23,10 @@ create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
 - Not supported: vertex/index buffers, 3D draw calls, depth/stencil, MSAA, cube/3D textures,
   occlusion queries and arbitrary custom effects. `SupportsCapability()` returns `false` and
   direct 3D API calls throw rather than silently rendering through the inherited CPU 3D code.
+- The shared Software core has an internal 3D depth buffer, but GDI forcibly disables its
+  depth/stencil state on every application. A `DepthStencilState` therefore cannot change
+  SpriteBatch's ordinary submission order; this avoids exposing an incomplete, accidental 2D
+  depth feature while `DepthStencilBuffer` remains unsupported.
 - A custom `ShaderEffect` is deliberately invalid on GDI (`CreateEffectBackend()` returns null).
   GDI does not accept shader source or uniforms and then ignore them. `ColorMatrixEffect` is the
   sole fixed non-shader exception; every other custom `SpriteBatch` effect is rejected.

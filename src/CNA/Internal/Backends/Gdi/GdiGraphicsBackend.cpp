@@ -379,6 +379,19 @@ namespace CNA::Internal::Backends::Gdi
         return 0;
     }
 
+    void GdiGraphicsBackend::ApplyDepthStencilState(bool, bool, int, bool, int, int, int, int,
+                                                     int, int, int, bool, int, int, int, int)
+    {
+        // The Software base also powers 3D backends and owns an internal depth buffer. GDI is
+        // intentionally 2D-only, so let no inherited depth state leak into SpriteBatch ordering:
+        // a later 2D draw must remain visible regardless of layerDepth. This no-depth state must
+        // still be installed rather than merely ignoring the call, because GraphicsDevice applies
+        // DepthStencilState::Default while it constructs every backend.
+        Software::SoftwareGraphicsBackend::ApplyDepthStencilState(
+            /*depthEnable*/ false, /*depthWriteEnable*/ false, /*LessEqual*/ 3,
+            /*stencilEnable*/ false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+    }
+
     bool GdiGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
                                                        float& logX, float& logY) const
     {
