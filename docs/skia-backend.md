@@ -47,6 +47,19 @@ pinned Skia revision, `surface=raster`, `colour=RGBA_8888/premultiplied`, `sampl
 repeated per frame. It describes only the selected raster mode; a future accelerated mode must
 replace these fields with its probed device results rather than inheriting them.
 
+## Initialization and fallback policy
+
+The current `SKIA` selection is unconditionally CPU raster; it does not probe an accelerated Skia
+surface and therefore cannot silently fall back from one. Missing source headers or any of the six
+required archives stop CMake configuration. Failure to create the SDL renderer or streaming
+presentation texture aborts backend construction, releases every partially acquired object, and
+preserves the caller's window for a retry. A successful construction emits the immutable raster
+capability line above. There is no capability change or implementation swap during a frame.
+
+A future accelerated mode must expose its selection at construction, report its own capabilities,
+and define a tested reset/fallback policy before it can be enabled. It must not inherit the current
+raster diagnostic or turn a runtime device loss into an unannounced CPU-mode switch.
+
 ## Diagnostic state trace
 
 Set `CNA_SKIA_STATE_TRACE=1` when launching a Skia executable to emit backend-only state lines
@@ -377,5 +390,11 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     active surfaces without mutation and proves both backend/target destruction orders. Both pass
     under AddressSanitizer; the display-free binding test also passes LeakSanitizer with leak
     detection enabled.
+56. A persistent `cmake-build-skia-release` GNU 14/C++23 configuration builds the selected Skia
+    backend and links the full CNA static library plus `Skia_Surface_Raster` against the six pinned
+    archives using two jobs. The Release executable passes all ten raster surface, orientation,
+    stride, alpha-conversion, bounds, and resize checks; Debug and ASan/LSan variants pass the same
+    boundary. Together with the missing-dependency and constructor-unwind probes, this closes the
+    initial raster compile/presentation/fallback spikes without implying accelerated support.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

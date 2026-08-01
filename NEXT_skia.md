@@ -256,6 +256,20 @@
   enabled outside the ptrace sandbox. Lifecycle, context recovery, target lifetime, and
   SpriteBatch Begin/End regressions also pass under ASan.
 
+## Completed in this session: SKIA-4, SKIA-7, and SKIA-9
+
+- Added persistent `cmake-build-skia-release` with GNU 14, C++23, ccache disabled, and the same
+  pinned six-archive raster dependency. `cna_backend_graphics_skia`, the complete CNA static
+  library, and `Skia_Surface_Raster` compile/link with two jobs; the Release raster test passes all
+  ten surface/orientation/stride/alpha/bounds/resize checks.
+- The existing display-free surface/alpha tests plus windowed presentation-modes, target golden,
+  and 2D demo evidence now close the initial raster presentation spike (SKIA-7). No channel, row,
+  stride, or one-pixel transfer remains merely inferred.
+- Documented the selected-mode failure policy (SKIA-9): the current backend is explicitly raster,
+  never attempts an implicit GPU fallback, fails configure on absent/mismatched archives, unwinds
+  SDL presenter construction failures transactionally, and emits one immutable raster capability
+  diagnostic on success. A future accelerated path must be selected observably at construction.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -328,6 +342,9 @@
 - Full normal Skia milestone: all 77 labelled tests pass on one Xvfb server with CTest parallelism
   2 (70 Display, seven Raster; 46.56 seconds real time). The temporary test display cache value was
   restored to the repository's prior `:0` setting after the run.
+- SKIA-4 Release: `cmake-build-skia-release` configured successfully with ccache disabled; the
+  two-job build completed 479 initial steps for the backend, full CNA static library, and raster
+  smoke. Release `Skia_Surface_Raster` passes all ten checks.
 
 ## Current task
 
