@@ -212,13 +212,14 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Twenty further binaries are the real-device pixel proofs (83 checks total): `Diligent_2D` (6),
+Twenty-one further binaries are the real-device pixel proofs (84 checks total): `Diligent_2D` (6),
 `Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (6), `Diligent_Skinned` (4),
 `Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4),
 `Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4), `Diligent_VertexLit` (4),
 `Diligent_Pbr` (5), `Diligent_DepthBias` (4), `Diligent_ReferenceStencil` (1),
-`Diligent_FillMode` (3), `Diligent_Anisotropic` (1) and `Diligent_SpriteFont` (4). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
+`Diligent_FillMode` (3), `Diligent_Anisotropic` (1), `Diligent_SpriteFont` (4) and
+`Diligent_Model` (1). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
 into off-screen 2D/cube targets, and assert on pixels (or query results) read back through
 `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData` /
 `OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential (binary transition with MSAA
@@ -263,9 +264,14 @@ clamp, does not crash and still produces a genuinely sampled result. `Diligent_S
 inside plus all four edge midpoints), per-glyph advance, newline line-drop+x-reset, and
 `SpriteEffects::FlipVertically` genuinely flipping an asymmetric glyph — the same shared
 `SpriteFont`/`SpriteBatch` code already pixel-verified on EasyGL/D3D11/D3D12, now confirmed working
-through this backend too. 82 of the 83 checks pass against a real Vulkan device; the one known
-failure (`Diligent_DepthBias`'s constant-bias sub-case) is left visible rather than masked. On a
-machine with no usable device the
+through this backend too. `Diligent_Model` (`DILIGENT-54`) is a direct port of D3D12's own `DX-148`
+Check KK6: a real 2-bone hierarchy (root → child) drives `Model::Draw()`'s full orchestration
+(bone transform → `SetVertexBuffer`/`setIndicesProperty`/`DrawIndexedPrimitives`/`EffectPass.Apply`)
+end to end — D3D12's own version of this test previously caught a real crash from unimplemented
+state-setter stubs nothing else in that backend's suite exercised, but Diligent has no equivalent
+gap. 83 of the 84 checks pass against a real Vulkan device; the one known failure
+(`Diligent_DepthBias`'s constant-bias sub-case) is left visible rather than masked. On a machine
+with no usable device the
 binaries exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a
 pass with nothing rendered would be dishonest.
 
