@@ -3,8 +3,9 @@
 `CNA_GRAPHICS_BACKEND=GDI` selects CNA's Windows-only, 2D-only GDI presentation backend.
 
 It uses the CPU SpriteBatch/textures/render-target path shared with `SOFTWARE`, then presents the
-main RGBA8 backbuffer into SDL's native Win32 `HWND` with GDI `StretchDIBits`.  This is a real GDI
-display path; it does not create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
+main RGBA8 backbuffer into SDL's native Win32 `HWND` with GDI DIB APIs (`SetDIBitsToDevice` for a
+1:1 blit and `StretchDIBits` when scaling is needed). This is a real GDI display path; it does not
+create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
 
 ## Scope
 
@@ -39,6 +40,23 @@ The bundled `cna_demo_2d` automatically uses a GDI compatibility profile (12–2
 sprites at 30 FPS).  Its normal profile is a 50–100-sprite, 60-FPS GPU stress scene, which is not
 a useful default workload for a CPU rasterizer.  This keeps the manual display check responsive;
 it is not a replacement for the benchmark work described in `plan_gdi.md`.
+
+Final-window scaling defaults to nearest-neighbour (`COLORONCOLOR`) so pixel-art stays crisp.
+This is separate from `SamplerState`: it never changes the CPU rasterizer's point/linear texture
+sampling. For non-pixel-art applications that prefer smoother resizing, opt in before launching:
+
+```bash
+# Windows cmd.exe
+set CNA_GDI_PRESENT_FILTER=halftone
+build-gdi\cna_demo_2d.exe
+
+# Linux host running a MinGW build under Wine
+CNA_GDI_PRESENT_FILTER=halftone wine build-gdi/cna_demo_2d.exe
+```
+
+Only the exact value `halftone` selects GDI's `HALFTONE` stretch mode; absent or any other value
+keeps the nearest-neighbour default. The option has no effect when the backbuffer is already
+presented 1:1.
 
 ## Build
 

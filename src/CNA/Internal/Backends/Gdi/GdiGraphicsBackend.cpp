@@ -10,10 +10,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace CNA::Internal::Backends::Gdi
@@ -59,6 +61,19 @@ namespace CNA::Internal::Backends::Gdi
             const int width = std::max(1, static_cast<int>(std::lround(sourceWidth * scale)));
             const int height = std::max(1, static_cast<int>(std::lround(sourceHeight * scale)));
             return { (clientWidth - width) / 2, (clientHeight - height) / 2, width, height };
+        }
+
+        /// Selects only the final GDI blit's resampling mode. Texture sampling remains entirely
+        /// in the shared CPU SpriteBatch rasterizer, so this must never change SamplerState
+        /// semantics. COLORONCOLOR is deliberately the default because it preserves crisp
+        /// pixel-art edges. HALFTONE is opt-in for applications that prefer a smoother window
+        /// resize: `CNA_GDI_PRESENT_FILTER=halftone`.
+        [[nodiscard]] int GetPresentationStretchMode()
+        {
+            const char* value = std::getenv("CNA_GDI_PRESENT_FILTER");
+            if (value != nullptr && std::string_view(value) == "halftone")
+                return HALFTONE;
+            return COLORONCOLOR;
         }
 
         [[noreturn]] void ThrowNo3D(const char* methodName)
@@ -278,7 +293,10 @@ namespace CNA::Internal::Backends::Gdi
             }
             else
             {
-                const int oldStretchMode = SetStretchBltMode(deviceContext, COLORONCOLOR);
+                const int stretchMode = GetPresentationStretchMode();
+                const int oldStretchMode = SetStretchBltMode(deviceContext, stretchMode);
+                if (stretchMode == HALFTONE)
+                    SetBrushOrgEx(deviceContext, 0, 0, nullptr);
                 const int copiedLines = StretchDIBits(
                     deviceContext, destination.x, destination.y, destination.width, destination.height,
                     0, 0, backbuffer.width, backbuffer.height, backbuffer.color.data(),
