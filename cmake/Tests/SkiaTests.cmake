@@ -116,6 +116,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_SkSL_Effect_Prototype
                                    cna_test_skia_sksl_effect_prototype)
 
+    # SKIA-92: reflected scalar/vector/matrix/array writes and one weak live additional 2D child.
+    # The fixture also exercises every deterministic validation boundary and clone isolation.
+    cna_skia_test(cna_test_skia_sksl_uniform_texture
+                  examples/skia_sksl_uniform_texture_test.cpp)
+    cna_register_skia_display_test(Skia_SkSL_UniformTexture
+                                   cna_test_skia_sksl_uniform_texture)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

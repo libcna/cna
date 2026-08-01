@@ -474,8 +474,18 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     a real fragment-only runtime shader through reserved `cnaTexture0` and `cnaTint` inputs. The
     adapter retains Skia compiler text and deterministic ABI/size errors, limits source to 64 KiB
     and reflected uniforms to 16 KiB, and never interprets untagged GLSL as SkSL. A failed tagged
-    Begin cannot retain the prior shader. General uniforms/additional children remain SKIA-92 work,
-    so `CustomEffects` truthfully remains false. The complete Debug suite passes 100/100 in 12.99
+    Begin cannot retain the prior shader. General uniforms/additional children were deferred to
+    SKIA-92, so this checkpoint did not advertise `CustomEffects`. The complete Debug suite passes 100/100 in 12.99
     seconds; the focused effect passes in Release and ASan (`detect_leaks=0`).
+67. `Skia_SkSL_UniformTexture` covers the complete promoted v1 parameter subset: float, int,
+    float2/3/4, a deliberately non-symmetric column-major float4x4 element, float arrays and
+    float2 arrays all participate in one exact pixel result. Units 1–7 map to named 2D shader
+    children through weak lifetime-tracked backends, so a post-bind texture update is visible and
+    disposal rejects before Begin rather than retaining stale memory. The test also proves tint,
+    source rectangle, transform, PointClamp, clone uniform/binding isolation, missing/type/count/
+    null/unit diagnostics, and explicit cube/volume/unsupported-reflection refusal. The complete
+    Debug suite passes 101/101 in 16.22 seconds with eight-way parallelism; both SkSL tests pass in
+    Release and ASan (`detect_leaks=0`), and 37 related supported ShaderEffect/Texture2D unit tests
+    pass under Xvfb.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

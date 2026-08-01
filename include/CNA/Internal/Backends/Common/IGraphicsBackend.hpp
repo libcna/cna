@@ -323,7 +323,11 @@ namespace CNA::Internal::Backends
         virtual void BindGL() const {}
     };
 
-    class ITextureBackend
+    /**
+     * Backend texture handle. Shared lifetime identity lets bounded consumers retain weak
+     * bindings without keeping disposed public Texture2D resources alive or storing raw pointers.
+     */
+    class ITextureBackend : public std::enable_shared_from_this<ITextureBackend>
     {
     public:
         virtual ~ITextureBackend() = default;

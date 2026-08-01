@@ -557,17 +557,47 @@
   General reflected setters and additional 2D children remain SKIA-92 work. `NEXT.md` was not read
   or changed.
 
+## Completed in this session: SKIA-92
+
+- Expanded tagged v1 ABI validation to 1–64 uniforms in at most 16 KiB and one to eight unique
+  shader children. Reserved `cnaTexture0`/`cnaTint` remain mandatory. Supported user shapes are
+  non-array float, int, float2/3/4 and float4x4 plus float/float2 arrays; unsupported types,
+  half/layout flags, wrong child names/types and `cnaTexture8+` reject before the effect is valid.
+- All eight `ShaderEffect` setter entry points now validate effect/name/type/array flag/count/data/
+  reflected byte range and copy the exact packed bytes. `cnaTint` is draw-reserved. The test reads
+  a caller column-major array's index 9 as SkSL `matrix[2][1]`, proving non-symmetric layout rather
+  than relying on identity-matrix coincidence.
+- `SetTexture(1..7, Texture2D)` maps only to a declared `cnaTexture1..7`; unit 0, undeclared,
+  out-of-range, null, cube and volume bindings throw actionable errors. `ITextureBackend` now has
+  `enable_shared_from_this`, allowing the effect to retain a weak backend instead of a raw pointer
+  or stale SkImage. Draw locks and snapshots current pixels, so post-bind `SetData` is visible and
+  Dispose expires safely before Begin without hidden image memory or resource-counter drift.
+- Added `Skia_SkSL_UniformTexture`: one pixel equation consumes every setter, cnaTint, a post-bind
+  additional-texture update, source rectangle, transform and PointClamp. It also covers every
+  negative boundary, disposed binding, missing clone binding, zero-initialized clone uniforms and
+  original/clone isolation. The earlier SKIA-91 prototype remains green.
+- Full Debug build succeeds and all 101 Skia tests pass under Xvfb in 16.22 seconds with
+  `--parallel 8` (9 Raster, 90 Display, 2 Audit). Both SkSL tests pass in Release and ASan with
+  `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1`; all display caches were restored to `:0`.
+- The supported related GTest filter (`ShaderEffectTest.*:Texture2DTest.*`) passes 37/37 under
+  Xvfb. A deliberately broader 41-test probe passed 40 and hit the pre-existing expected Skia
+  boundary in `Texture2DMipLevelValidationTest.EveryValidMip...`: it constructs `mipMap=true`,
+  which Skia rejects by policy; the registered Skia mip-policy tests remain green.
+- `CustomEffects` stays false: the implementation is an explicit fragment-only SkSL extension,
+  not arbitrary EasyGL GLSL/vertex-stage/cube/volume compatibility. `NEXT.md` remained untouched.
+
 ## Current task
 
-SKIA-91 implementation and broad validation are complete. Commit/push the coherent checkpoint,
-then start SKIA-92 with reflected setters and additional bounded 2D children.
+SKIA-92 implementation and validation are complete. Commit/push this checkpoint, then start
+SKIA-93 by auditing stock 2D-like effects against the proven Skia composition primitives.
 
 ## Next candidates
 
-1. SKIA-92: implement exact reflected float/int/vector/matrix/array setters and bounded additional
-   2D child bindings for the tagged SkSL route, with deterministic missing/type/count/unit errors.
-2. Prove custom tint, source rectangles, transforms/sampler modes, a second Texture2D child, clone
-   isolation, and failure recovery in Debug/Release/ASan before changing capability reporting.
+1. SKIA-93: inventory AlphaTestEffect, DualTextureEffect and other colour/2D-like stock effects,
+   identify which public properties require vertex/depth/coverage semantics, and build only exact
+   Skia shader/blender multipass prototypes with visual oracles.
+2. SKIA-94: promote a stock effect only if every relevant property combination matches; otherwise
+   retain explicit unsupported status and record the first observable blocker.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

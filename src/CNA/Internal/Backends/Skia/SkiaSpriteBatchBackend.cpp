@@ -205,6 +205,7 @@ namespace CNA::Internal::Backends::Skia
         auto* skiaEffect = dynamic_cast<SkiaEffectBackend*>(effect->GetEffectBackendPtr());
         if (skiaEffect && skiaEffect->IsValid())
         {
+            skiaEffect->ValidateSpriteBindingsEXT();
             customEffect_ = skiaEffect;
             return;
         }

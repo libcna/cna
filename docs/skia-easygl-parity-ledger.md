@@ -66,21 +66,21 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IEffectBackend::Unbind/0` | Restores EasyGL program state. | Clears adapter binding state; stock SpriteBatch selection remains explicit. | `bounded` | SKIA-91–92 |
 | `IEffectBackend::IsValid/0` | Reports GL link success. | Reports tagged SkSL compile plus reserved-ABI validation. | `bounded` | SKIA-91–92 |
 | `IEffectBackend::GetCompileError/0` | Exposes GL compile/link diagnostics. | Retains compiler, source-limit, and reflected-ABI diagnostics for tagged effects. | `bounded` | SKIA-91–92 |
-| `IEffectBackend::SetUniformFloat/2` | Sets a scalar GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::SetUniformInt/2` | Sets an integer GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::SetUniformVec2/3` | Sets a vec2 GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::SetUniformVec3/4` | Sets a vec3 GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::SetUniformVec4/5` | Sets a vec4 GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::SetUniformMat4/2` | Sets a matrix GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::SetUniformFloatArray/3` | Sets a GL scalar array. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::SetUniformVec2Array/3` | Sets a GL vec2 array. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::BindTexture/2` | Binds an extra 2D sampler. | Custom-effect sampler binding unsupported. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformFloat/2` | Sets a scalar GL uniform. | Exact reflected non-array float write in tagged SkSL. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
+| `IEffectBackend::SetUniformInt/2` | Sets an integer GL uniform. | Exact reflected 32-bit int write in tagged SkSL. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
+| `IEffectBackend::SetUniformVec2/3` | Sets a vec2 GL uniform. | Exact reflected float2 write in tagged SkSL. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
+| `IEffectBackend::SetUniformVec3/4` | Sets a vec3 GL uniform. | Exact reflected float3 write in tagged SkSL. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
+| `IEffectBackend::SetUniformVec4/5` | Sets a vec4 GL uniform. | Exact reflected float4 write; reserved cnaTint rejects public writes. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
+| `IEffectBackend::SetUniformMat4/2` | Sets a matrix GL uniform. | Exact column-major reflected float4x4 write. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
+| `IEffectBackend::SetUniformFloatArray/3` | Sets a GL scalar array. | Exact reflected float-array count/data write. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
+| `IEffectBackend::SetUniformVec2Array/3` | Sets a GL vec2 array. | Exact reflected float2-array count/data write. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
+| `IEffectBackend::BindTexture/2` | Binds an extra 2D sampler. | Units 1–7 weakly bind declared cnaTexture1–7 children; draw snapshots current live pixels. | `bounded` | SKIA-92; `Skia_SkSL_UniformTexture` |
 | `IEffectBackend::BindTextureCube/2` | Binds an extra cube sampler. | Cube/effect paths unsupported. | `unsupported` | SKIA-80, SKIA-89 |
 | `IEffectBackend::BindTexture3D/2` | Binds an extra volume sampler. | Volume/effect paths unsupported. | `unsupported` | SKIA-82, SKIA-89 |
 | `ISpriteBatchBackend::Begin/0` | Starts EasyGL sprite submission. | Starts checked immediate canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::End/0` | Flushes/ends sprite submission. | Ends checked canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::SetTransformMatrix/1` | Applies sprite transform in GL shader. | Applies equivalent SkCanvas transform. | `implemented` | SKIA-35 |
-| `ISpriteBatchBackend::SetCustomEffect/1` | Selects a custom EasyGL effect. | Null/exact stock SpriteEffect use built-in paint; derived/custom effects reject. | `bounded` | SKIA-89–94; `Skia_SpriteEffect_Alias` |
+| `ISpriteBatchBackend::SetCustomEffect/1` | Selects a custom EasyGL effect. | Null/exact stock SpriteEffect use built-in paint; valid tagged SkSL uses runtime shader; all other custom effects reject. | `bounded` | SKIA-89–94; both SkSL tests; `Skia_SpriteEffect_Alias` |
 | `ISpriteBatchBackend::SetSamplerFilter/1` | Selects GL point/linear/mip filtering. | Point/linear work; mip filters reject. | `bounded` | SKIA-43, SKIA-70 |
 | `ISpriteBatchBackend::SetSamplerAddressMode/2` | Selects GL clamp/wrap/mirror axes. | Both axes implemented in Skia shader. | `implemented` | SKIA-44–46 |
 | `ISpriteBatchBackend::Draw/3` | Draws a texture at point position. | Direct canvas image draw. | `implemented` | SKIA-32 |

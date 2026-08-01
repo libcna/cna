@@ -32,23 +32,22 @@ makes exact-type `SpriteEffect` recognition a compatibility alias, not a new pro
 
 ## Parameter and texture mapping
 
-| CNA API | EasyGL behavior | Public Skia representation | Status for a future explicit SkSL subset |
+| CNA API | EasyGL behavior | Public Skia representation | Status in the explicit SkSL subset |
 |---|---|---|---|
-| `SetUniformFloat` | Named `float`. | Reflected `kFloat`. | Direct after exact name/type validation. |
-| `SetUniformInt` | Named `int`. | Reflected `kInt`. | Direct after exact name/type validation. |
-| `SetUniformVec2/3/4` | Named vectors. | Reflected `kFloat2/3/4`. | Direct after exact name/type validation. |
-| `SetUniformMat4` | Column-major 4x4 upload. | Reflected `kFloat4x4` in a packed uniform block. | Viable only with tested matrix byte layout and coordinate convention. |
-| `SetUniformFloatArray` | Scalar array; caller supplies scalar count. | Reflected array flag/count. | Viable with non-null data, non-negative count and exact declared-count checks. |
-| `SetUniformVec2Array` | Vec2 array; caller supplies element count. | Reflected array flag/count. | Same bounded validation; byte count is `count * 2 * sizeof(float)`. |
-| `SetTexture(unit, Texture2D)` | Binds a numeric sampler unit; GLSL separately names a sampler uniform. | Named `uniform shader` child, no numeric sampler-unit API. | Not source-compatible. An explicit name-to-child ABI or new API is required. |
-| Primary SpriteBatch texture | Implicit unit 0 (`texture1` by convention in current tests). | Child image shader with chosen sampling/tile matrix. | Viable only through a documented reserved child name and the active SamplerState. |
+| `SetUniformFloat` | Named `float`. | Reflected `kFloat`. | Implemented with exact name, non-array type, offset and byte-size validation. |
+| `SetUniformInt` | Named `int`. | Reflected `kInt`. | Implemented as one checked 32-bit SkSL integer. |
+| `SetUniformVec2/3/4` | Named vectors. | Reflected `kFloat2/3/4`. | Implemented; a scalar/vector type mismatch throws rather than no-opping. |
+| `SetUniformMat4` | Column-major 4x4 upload. | Reflected `kFloat4x4` in a packed uniform block. | Implemented; the column-2/row-1 byte position is exercised from caller array through SkSL pixel output. |
+| `SetUniformFloatArray` | Scalar array; caller supplies scalar count. | Reflected array flag/count. | Implemented with non-null data, non-negative count and exact declared-count checks. |
+| `SetUniformVec2Array` | Vec2 array; caller supplies element count. | Reflected array flag/count. | Implemented with the same checks and `count * 2 * sizeof(float)` byte validation. |
+| `SetTexture(unit, Texture2D)` | Binds a numeric sampler unit; GLSL separately names a sampler uniform. | Named `uniform shader` child, no numeric sampler-unit API. | Units 1–7 map exactly to optional `cnaTexture1`–`cnaTexture7`; undeclared/out-of-range/null bindings throw. A weak backend binding observes updates and expires safely on dispose. |
+| Primary SpriteBatch texture | Implicit unit 0 (`texture1` by convention in current tests). | Child image shader with chosen sampling/tile matrix. | Reserved `cnaTexture0`; it inherits the active SpriteBatch sampler and source-coordinate mapping. |
 | `SetTexture(unit, TextureCube/Texture3D)` | GLSL `samplerCube`/`sampler3D`. | Runtime-effect children are 2D shader/filter/blender objects. | Unsupported; CPU transfer storage does not create cube/volume samplers. |
 
-The current `IEffectBackend` uniform methods have default no-op implementations, and
-`ShaderEffect` silently skips every setter when backend construction returned null. Skia must not
-use those no-ops as evidence of support. Any accepted explicit SkSL effect must instead report
-missing names, wrong reflected types, invalid pointers/counts, unsupported children and compile
-errors deterministically.
+`IEffectBackend` has compatibility no-op defaults and `ShaderEffect` skips setters when backend
+construction returned null. `SkiaEffectBackend` overrides every applicable method: an accepted
+tagged effect reports missing names, wrong reflected types, invalid pointers/counts/units,
+unbound/disposed children and compile errors deterministically.
 
 ## Safe implementation sequence
 
@@ -62,9 +61,9 @@ errors deterministically.
    before accepting the compiled effect; retain existing texture-dimension/allocation bounds.
    `SkRuntimeEffect::Options` provides a language-version ceiling but no public compile-time/memory
    budget.
-4. SKIA-92 may implement only reflected scalar/vector/matrix/array writes and named 2D child
+4. SKIA-92 implements only the reflected scalar/vector/matrix/array writes and named 2D child
    shaders proven by pixels. GLSL, SPIR-V, vertex stages, cube/volume sampling and unsupported
-   SkSL must return actionable errors, never a successful no-op.
+   SkSL return actionable errors, never a successful no-op.
 5. SKIA-93/94 evaluate stock effects separately. A runtime colour operation does not provide XNA
    vertex processing, depth, alpha-test coverage, dual-texture addressing or environment sampling.
 
@@ -85,10 +84,15 @@ ShaderEffect effect(device, "CNA_SKIA_SKSL_V1", R"(
 
 - The first string must be exactly `CNA_SKIA_SKSL_V1`; there is no user vertex stage. The second
   string is compiled by `SkRuntimeEffect::MakeForShader` with the public default SkSL 100 ceiling.
-- The prototype accepts exactly one `uniform shader cnaTexture0` child and exactly one non-array
-  `uniform float4 cnaTint`. The child inherits SpriteBatch's filter, independent U/V address mode,
-  source rectangle, origin and geometry transforms. `cnaTint` uses the same proven alpha-convention
-  scale as the stock tint filter.
+- Every effect requires `uniform shader cnaTexture0` and non-array `uniform float4 cnaTint`.
+  `cnaTexture0` inherits SpriteBatch's filter, independent U/V address mode, source rectangle,
+  origin and geometry transforms. `cnaTint` uses the stock path's proven alpha-convention scale.
+  Optional children are uniquely named `cnaTexture1` through `cnaTexture7`; they are weakly bound
+  by the matching `SetTexture` unit and sampled as current premultiplied LinearClamp images.
+- Up to 64 reflected uniforms may occupy the 16 KiB block. Besides reserved `cnaTint`, accepted
+  types are non-array float/int/float2/float3/float4/float4x4 plus float and float2 arrays. Setters
+  require the exact reflected name/type/count and valid data. Half/layout-colour flags and every
+  unrepresentable vector/matrix/array type reject during ABI validation.
 - Source is non-empty and at most 65,536 bytes; the reflected uniform block is at most 16,384
   bytes. Texture/target dimensions retain the backend-wide 16,384-axis and 256 MiB limits. Skia
   exposes no public compile-time or compiler-memory budget, so this prototype makes no stronger
@@ -96,10 +100,12 @@ ShaderEffect effect(device, "CNA_SKIA_SKSL_V1", R"(
 - Wrong markers stay on the historical null-backend path. Tagged syntax errors preserve Skia's
   compiler text; wrong children/uniforms and size violations keep an invalid backend with a
   deterministic adapter diagnostic. A failed `Begin` clears pending custom state.
-- General uniforms, additional 2D children and all cube/volume children remain unsupported until
-  SKIA-92 proves their reflection, storage and pixel semantics. `CustomEffects` therefore remains
-  false: this opt-in is not arbitrary EasyGL GLSL compatibility.
+- Cube/volume children remain unsupported. `CustomEffects` remains false because the bounded
+  fragment-only opt-in is not arbitrary EasyGL GLSL compatibility.
 
 `Skia_Effect_Boundary` covers the unchanged untagged route. `Skia_SkSL_Effect_Prototype` proves
 real compile and pixel output through `cnaTexture0`, compiler/ABI/size diagnostics, and immediate
 stock-path reuse after a rejected tagged effect.
+`Skia_SkSL_UniformTexture` proves every accepted setter in one pixel equation, column-major matrix
+layout, `cnaTint`, updated additional-texture sampling, source rectangle/transform/PointClamp,
+deterministic negative cases, weak disposal safety and clone state/binding isolation.
