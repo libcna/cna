@@ -131,6 +131,10 @@ include(cmake/Tests/OpenGL1Tests.cmake)
 # running it requires a user-supplied, separately licensed glide3x.dll (e.g. dgVoodoo2).
 include(cmake/Tests/GlideTests.cmake)
 
+# Win32 GDI 2D backend tests. Native Windows registers them directly; cross-built executables
+# remain available for an explicit Wine/display invocation.
+include(cmake/Tests/GdiTests.cmake)
+
 include(cmake/Tests/BgfxTests.cmake)
 
 include(cmake/Tests/WebGpuTests.cmake)

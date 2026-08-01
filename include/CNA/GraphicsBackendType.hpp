@@ -114,7 +114,10 @@ namespace CNA
         Diligent,
 
         /** @brief 3dfx Glide 3.x, dynamically loaded from glide3x.dll. */
-        Glide
+        Glide,
+
+        /** @brief Classic Win32 GDI with private CPU 2D rasterization. */
+        Gdi
     };
 
     /**
@@ -206,6 +209,8 @@ namespace CNA
         return GraphicsBackendType::Diligent;
 #elif defined(CNA_BACKEND_GLIDE)
         return GraphicsBackendType::Glide;
+#elif defined(CNA_BACKEND_GDI)
+        return GraphicsBackendType::Gdi;
 #else
 #error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
 #endif
@@ -261,6 +266,7 @@ namespace CNA
             case GraphicsBackendType::Sokol:         return "SOKOL";
             case GraphicsBackendType::Diligent:      return "DILIGENT";
             case GraphicsBackendType::Glide:         return "GLIDE";
+            case GraphicsBackendType::Gdi:           return "GDI";
         }
         return "UNKNOWN";
     }

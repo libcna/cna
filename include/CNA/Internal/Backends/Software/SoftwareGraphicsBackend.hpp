@@ -260,7 +260,8 @@ namespace CNA::Internal::Backends::Software
     class SoftwareRenderTargetBackend final : public IRenderTargetBackend, public SoftwareColorSurface
     {
     public:
-        SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap, int multiSampleCount);
+        SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
+                                    bool hasRealDepthBuffer = true);
 
         [[nodiscard]] int GetWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
@@ -312,7 +313,7 @@ namespace CNA::Internal::Backends::Software
         void UnbindAsRenderTarget() override { bound_ = false; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
-        { return depthFormatWasRequested; }
+        { return hasRealDepthBuffer_ && depthFormatWasRequested; }
 
         // SoftwareColorSurface -- the SAME storage the rasterizer writes into. A finished target is
         // sampleable with no resolve, no shadow copy and no extra allocation; there is no second
@@ -331,6 +332,7 @@ namespace CNA::Internal::Backends::Software
         int depthFormat_ = 0;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
+        bool hasRealDepthBuffer_ = true;
         bool bound_ = false;
         mutable std::size_t readbackCallCount_ = 0;
     };
@@ -535,7 +537,7 @@ namespace CNA::Internal::Backends::Software
      * ReadBackbuffer() return genuinely correct pixels, with no GPU, display server, or driver
      * involved at all.
      */
-    class SoftwareGraphicsBackend final : public IGraphicsBackend
+    class SoftwareGraphicsBackend : public IGraphicsBackend
     {
     public:
         SoftwareGraphicsBackend(int virtualWidth, int virtualHeight);
@@ -708,6 +710,12 @@ namespace CNA::Internal::Backends::Software
             if (slot < 0 || slot >= kMaxSamplerSlots) return SoftwareSamplerState{};
             return samplerSlots_[static_cast<std::size_t>(slot)];
         }
+
+    protected:
+        /// The real backbuffer, independently of any currently bound render target. Presentation
+        /// backends layered on this CPU rasterizer use it rather than accidentally displaying an
+        /// off-screen target that happens to be active when Present() is called.
+        [[nodiscard]] const SoftwareFramebuffer& BackbufferFramebuffer() const { return backbuffer_; }
 
     private:
         /// XNA exposes 16 texture sampler slots; ApplySamplerState validates against this.

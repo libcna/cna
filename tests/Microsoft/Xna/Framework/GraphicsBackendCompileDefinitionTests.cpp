@@ -131,6 +131,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_DILIGENT
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_GDI
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

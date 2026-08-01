@@ -510,7 +510,7 @@ namespace CNA::Internal::Backends
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and the backends
-        // that create no cube render target at all (Software, SDL_Renderer, ASCII, Canvas, DX3)
+        // that create no cube render target at all (Software, SDL_Renderer, ASCII, Canvas, DX3, GDI)
         // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
         // `TextureCube::GetData` refuses a null backend one step earlier. Every remaining boundary
         // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
@@ -1739,7 +1739,7 @@ namespace CNA::Internal::Backends
         /// Returns whether this backend (and, for device-dependent entries, the current runtime
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
         /// returns true for everything -- most backends are fully 3D-capable, so only backends
-        /// with a genuine, known gap (SDL_Renderer/DX3/Canvas's 2D-only design, or a specific
+        /// with a genuine, known gap (SDL_Renderer/DX3/Canvas/GDI's 2D-only design, or a specific
         /// device-dependent feature like anisotropic filtering) need to override this.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
         {

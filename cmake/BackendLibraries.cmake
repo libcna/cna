@@ -34,6 +34,16 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_include_directories(cna_backend_graphics_sdl_renderer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
+# GDI presents the Software backend's CPU framebuffer through classic Win32 GDI. Its own source
+# provides the factory while this core contributes only shared 2D rasterization; the SOFTWARE
+# factory is compile-definition guarded, so this does not introduce a second factory definition.
+if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
+    file(GLOB CNA_GDI_SOFTWARE_CORE_SOURCES "src/CNA/Internal/Backends/Software/*.cpp")
+    add_library(cna_backend_graphics_software_core STATIC ${CNA_GDI_SOFTWARE_CORE_SOURCES})
+    target_link_libraries(cna_backend_graphics_software_core PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
+    target_include_directories(cna_backend_graphics_software_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endif()
+
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
 
@@ -75,6 +85,8 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "GLIDE")
     # Glide itself is dynamically loaded at runtime (glide3x.dll); SDL is used only to obtain the
     # application's existing Win32 HWND. Do not link or vendor a particular Glide emulator here.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 gdi32 cna_backend_graphics_software_core)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2")
     target_link_libraries(${BACKEND_TARGET} PRIVATE easy-gl SDL3::SDL3)

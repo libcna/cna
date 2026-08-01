@@ -15,8 +15,8 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). Several backends, including SDL_Renderer, DX3, Canvas, and the Skia
-         * raster backend, are intentionally 2D-only and lack this entirely. Query the selected
+         * clears and state). Several backends, including SDL_Renderer, DX3, Canvas, GDI, and the
+         * Skia raster backend, are intentionally 2D-only and lack this entirely. Query the selected
          * backend rather than inferring support from its name.
          */
         ThreeD,

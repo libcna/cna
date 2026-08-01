@@ -2435,8 +2435,9 @@ namespace CNA::Internal::Backends::Software
     // ---- SoftwareRenderTargetBackend ----
 
     SoftwareRenderTargetBackend::SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap,
-                                                             int multiSampleCount)
+                                                             int multiSampleCount, bool hasRealDepthBuffer)
         : depthFormat_(depthFormat), mipMap_(mipMap), multiSampleCount_(multiSampleCount)
+        , hasRealDepthBuffer_(hasRealDepthBuffer)
     {
         framebuffer_.Resize(w, h);
     }
@@ -3479,8 +3480,10 @@ namespace CNA::Internal::Backends::Software
 
 namespace CNA::Internal::Backends
 {
+#ifdef CNA_BACKEND_SOFTWARE
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
         return std::make_unique<Software::SoftwareGraphicsBackend>(args.virtualWidth, args.virtualHeight);
     }
+#endif
 }
