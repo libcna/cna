@@ -15,10 +15,10 @@
 - GDI-071's explicit shared-core source/archive boundary is committed in `47268263`. Its
   native-MSVC workflow result remains pending, so the plan status is 🟨.
 - GDI-073's narrowed 4x-MSAA contract is committed in `91d8cf38`.
-- GDI-074's framebuffer/`Texture2D`/`RenderTarget2D` extraction is pushed in `b2fa93b0`, and its
-  backend-state follow-up is pushed in `216ca5ef`. SpriteBatch is the current verified follow-up.
-  Those CPU sources now compile independently, while the remaining 2D-only wrapper retains only
-  the shared triangle raster bridge/helpers. The native-MSVC workflow remains an external final
+- GDI-074's framebuffer/`Texture2D`/`RenderTarget2D` extraction is pushed in `b2fa93b0`, its
+  backend-state follow-up in `216ca5ef`, and the SpriteBatch frontend split in `726c6f7d`. Those
+  CPU sources now compile independently, while the remaining 2D-only wrapper retains only the
+  shared triangle raster bridge/helpers. The native-MSVC workflow remains an external final
   validation gate.
 
 ## Completed in the current working tree
@@ -130,6 +130,10 @@ baseline. All later tasks use one task per commit.
   definitions have moved to owned files; GDI no longer compiles unrelated cube/general-3D bodies or
   the GCC `-Wstringop-overflow` warning. GDI-074 remains 🟨 until raster-helper extraction and
   native-MSVC validation complete.
+- The full SOFTWARE build still emits that cube-allocation warning. The audit traced it to
+  `TextureCube` lacking the general pre-allocation dimension validation that `Texture2D` has; a
+  real correction would define a cross-backend public cube-size contract and belongs to Software
+  planning, not to the GDI-only archive boundary.
 - Do not edit `NEXT.md`.
 
 ## Decisions
@@ -150,6 +154,9 @@ baseline. All later tasks use one task per commit.
   virtual stubs only because `GdiSoftware2DCore` needs the base class's complete virtual table.
   Full SOFTWARE compiles the same source without that macro. The actual raster-helper ownership
   split stays within GDI-074.
+- 2026-08-01: `SoftwareSpriteBatch.cpp` owns SpriteBatch's public quad geometry, transform, and
+  fixed-effect preparation. Its private `RasterizeSpriteQuad` bridge deliberately retains one
+  shared triangle/fragment implementation so GDI and SOFTWARE cannot drift at the pixel boundary.
 - 2026-08-01: GDI's 4x claim is limited to filled backbuffer triangles with four colour samples;
   wireframe has no subpixel line AA and stencil/depth are not per sample.
 - Preserve XNA/FNA public API compatibility; backend-specific unsupported behavior must fail
@@ -216,8 +223,10 @@ baseline. All later tasks use one task per commit.
   `SoftwareTextureCubeBackend`, Software vertex/index-buffer implementation, or normal 3D
   rasterizer bodies; only small throwing virtual stubs remain. All thirteen ordinary executables
   plus the default, dirty, and halftone presentation configurations pass in one Wine/Xvfb session.
+  The current SpriteBatch split reran the complete sixteen-case Wine/Xvfb matrix successfully.
   The full native GCC SOFTWARE build also succeeds at `-j8`; it retains the known cube allocation
-  warning, while `Software_Smoke` and `Software_Rasterizer` pass.
+  warning, while `Software_Smoke`, `Software_Rasterizer`, `Software_SpriteBatch_CustomViewport`,
+  and `Software_SpriteBatch_RasterizerState` pass.
 - GDI-071 independent SOFTWARE gate: the full native GCC build links after centrally declaring
   `CNA` ↔ SOFTWARE, including the formerly failing `cna_xnb_audio_metadata_dump`; its test link
   line is portable repeated archives with no `--start-group`. The 57-test `Software` label has
