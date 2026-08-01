@@ -1,8 +1,7 @@
 name: 32-bit Arithmetic Coverage
 
-# REMED-MEDIA-001 (32-bit CI coverage, BUILD_TEST_CI Wave 2): compiles and RUNS
-# AudioTagParser.cpp's own width-dependent std::size_t bounds check
-# (ExceedsBound()) at a genuine 32-bit std::size_t width, on a real i386
+# REMED-MEDIA-001 / GDI-067: compiles and RUNS AudioTagParser and SoftwareFramebuffer
+# width-dependent std::size_t bounds checks at a genuine 32-bit width, on a real i386
 # GitHub-hosted runner target via gcc-multilib/g++-multilib -- not a
 # uint32_t-arithmetic simulation on a 64-bit host, which is what
 # AudioTagParserTests.cpp's own Id3v23FrameSizeOverflowIsCaughtOnANarrow32BitSizeT
@@ -15,8 +14,8 @@ name: 32-bit Arithmetic Coverage
 # directory's own CMakeLists.txt header comment for why it is not part of the
 # main build), not the full CNA library/CnaTests. The main build's SDL3/
 # SDL3_image/SDL3_mixer/FFmpeg dependencies are not available for a 32-bit
-# target in this project's toolchain, and AudioTagParser.cpp/
-# ContentLoadException.cpp need none of them.
+# target in this project's toolchain. The standalone project compiles only the implementation
+# files and harnesses needed by these pure checks.
 #
 # If a future width-dependent-arithmetic finding needs the same treatment
 # (e.g. another size_t-bounds-check class), extend
@@ -32,6 +31,9 @@ on:
       - 'src/Microsoft/Xna/Framework/Content/ContentLoadException.cpp'
       - 'include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp'
       - 'tools/media/**'
+      - 'tools/graphics/framebuffer_allocation_32bit_check.cpp'
+      - 'include/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp'
+      - 'src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp'
       - '.github/workflows/32bit-arithmetic-ci.yml'
   pull_request:
     paths:
@@ -40,6 +42,9 @@ on:
       - 'src/Microsoft/Xna/Framework/Content/ContentLoadException.cpp'
       - 'include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp'
       - 'tools/media/**'
+      - 'tools/graphics/framebuffer_allocation_32bit_check.cpp'
+      - 'include/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp'
+      - 'src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp'
       - '.github/workflows/32bit-arithmetic-ci.yml'
   workflow_dispatch: {}
 
@@ -62,8 +67,10 @@ jobs:
                 -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32
 
       - name: Build
-        run: cmake --build cmake-build-32bit-arithmetic --parallel
+        run: cmake --build cmake-build-32bit-arithmetic --parallel 2
 
       - name: Run (must genuinely be a 32-bit binary -- the check's own first
               assertion fails loudly otherwise, see the harness source)
-        run: ./cmake-build-32bit-arithmetic/cna_audio_tag_parser_32bit_overflow_check
+        run: |
+          ./cmake-build-32bit-arithmetic/cna_audio_tag_parser_32bit_overflow_check
+          ./cmake-build-32bit-arithmetic/cna_framebuffer_allocation_32bit_overflow_check

@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
+#include "CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp"
 
 #include <array>
 #include <cstddef>
@@ -20,6 +21,13 @@ namespace CNA::Internal::Backends::Software
      */
     struct SoftwareFramebuffer
     {
+        explicit SoftwareFramebuffer(bool allocateDepth = true,
+                                     bool allocateStencil = true)
+            : allocateDepthStorage(allocateDepth),
+              allocateStencilStorage(allocateStencil)
+        {
+        }
+
         int width = 0;
         int height = 0;
         std::vector<std::uint8_t> color;  ///< RGBA8, width*height*4 bytes.
@@ -30,11 +38,15 @@ namespace CNA::Internal::Backends::Software
         /// unresolved sample plane.
         std::vector<std::uint8_t> multiSampleColor;
         int multiSampleCount = 0; ///< 0 = single sampled; the CPU implementation supports 4 only.
+        bool allocateDepthStorage = true;
+        bool allocateStencilStorage = true;
 
         void Resize(int w, int h);
         void SetMultiSampleCount(int sampleCount);
         [[nodiscard]] bool HasMultiSampleColor() const { return multiSampleCount == 4; }
         [[nodiscard]] int EffectiveSampleCount() const { return HasMultiSampleColor() ? 4 : 1; }
+        /// Copies every resolved RGBA pixel into all active samples. A no-op when MSAA is off.
+        void CopyResolvedColorToMultiSample();
         /// Resolves the per-sample colour plane into `color`. A no-op for single-sample targets.
         void ResolveColor();
         void ClearColor(float r, float g, float b, float a);
@@ -580,7 +592,9 @@ namespace CNA::Internal::Backends::Software
     class SoftwareGraphicsBackend : public IGraphicsBackend
     {
     public:
-        SoftwareGraphicsBackend(int virtualWidth, int virtualHeight);
+        SoftwareGraphicsBackend(int virtualWidth, int virtualHeight,
+                                bool allocateDepthBuffer = true,
+                                bool allocateStencilBuffer = true);
         ~SoftwareGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;

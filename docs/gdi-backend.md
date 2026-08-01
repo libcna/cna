@@ -46,10 +46,12 @@ compatibility backend under validation, not yet as a release baseline.
   `DepthFormat::None` answer does not hide the independent stencil plane, which is queried through
   `GraphicsCapability::StencilBuffer` as described below.
 - The feature is intentionally opt-in because it adds 16 bytes/pixel of sample colour storage in
-  addition to the ordinary resolved RGBA8 image. At 800×600 this is 7.32 MiB extra (11.44 MiB for
-  the complete colour/depth/stencil framebuffer), and at 1280×720 it is 14.06 MiB extra (21.97
-  MiB complete). `cna_bench_gdi_2d --frames 1` measures 0x and 4x side by side; the current Wine
-  reference run changed 800×600/12 rotating sprites from 7.64 ms to 18.04 ms per frame and
+  addition to the ordinary resolved RGBA8 image and standalone stencil plane. GDI allocates no
+  unused float-depth plane: its baseline is 5 bytes/pixel and 4x MSAA is 21 bytes/pixel total. At
+  800×600 the baseline is 2.29 MiB and MSAA adds 7.32 MiB (9.61 MiB total); at 1280×720 the baseline
+  is 4.39 MiB and MSAA adds 14.06 MiB (18.46 MiB total). `cna_bench_gdi_2d --frames 1` measures 0x
+  and 4x side by side; the current Wine reference run changed 800×600/12 rotating sprites from
+  7.64 ms to 18.04 ms per frame and
   1280×720/20 from 13.08 ms to 31.04 ms. Native Windows hardware/compositor measurements remain
   the decision point for a shipping application.
 - `TextureFilter::Anisotropic` intentionally maps to the same CPU Linear+mip-linear sampler as
@@ -68,15 +70,21 @@ compatibility backend under validation, not yet as a release baseline.
   `StencilDepthBufferFail` have no 2D meaning because GDI always disables depth and has no front/
   back-facing 3D primitives. `DepthStencilBuffer` deliberately remains unsupported: that
   capability means a complete depth+stencil attachment, not this stencil-only clipping feature.
+- Every CPU framebuffer is planned before allocation. Width and height must each be in
+  `[1, 16384]`, and resolved colour, selected depth/stencil/sample planes, and a requested generated
+  mip chain share a 512 MiB per-resource pixel-storage budget. All `size_t` products/additions and
+  the Win32 `DWORD` DIB byte boundary are checked first. Invalid or over-budget requests throw
+  `System::ArgumentOutOfRangeException`; an allocator failure throws `System::OutOfMemoryException`.
+  A failed resize or 4x-MSAA change retains the previous framebuffer and pixels.
 - A GDI `RenderTarget2D` accepts only `SurfaceFormat::Color` (other formats fail construction),
   reports `DepthStencilFormat=None` and `MultiSampleCount=0`, and still owns the independent stencil
   plane. `PreserveContents` and `PlatformContents` both retain color/stencil on rebind;
   `DiscardContents` deterministically replaces them with black/zero. Mipmap and usage properties
   therefore describe the actual CPU storage rather than the original unsupported request.
-- The shared Software core has an internal 3D depth buffer, but GDI forcibly disables only its
-  depth state on every application. A `DepthStencilState` therefore cannot change SpriteBatch's
-  ordinary submission order, while its independent stencil fields can still clip/mask a later 2D
-  draw.
+- The shared Software core can own an internal 3D depth buffer, but GDI constructs its surfaces
+  without that plane and forcibly disables depth state on every application. A `DepthStencilState`
+  therefore cannot change SpriteBatch's ordinary submission order, while its independent stencil
+  fields can still clip/mask a later 2D draw.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`
@@ -184,10 +192,11 @@ CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
            cna_test_gdi_presentation_oracle \
            cna_test_gdi_presentation_configuration \
            cna_test_gdi_window_metrics \
+           cna_test_gdi_framebuffer_allocation \
            cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
-The backend is hard-gated to Windows targets. A native Windows build registers fourteen `GDI` CTest
+The backend is hard-gated to Windows targets. A native Windows build registers fifteen `GDI` CTest
 cases, including separate default, dirty and halftone configurations; run them with
 `ctest -L GDI --output-on-failure`.
 
@@ -212,6 +221,7 @@ build-gdi\cna_test_gdi_dirty_damage.exe
 build-gdi\cna_test_gdi_repaint_invalidation.exe
 build-gdi\cna_test_gdi_presentation_oracle.exe
 build-gdi\cna_test_gdi_window_metrics.exe
+build-gdi\cna_test_gdi_framebuffer_allocation.exe
 build-gdi\cna_bench_gdi_2d.exe --frames 4
 build-gdi\cna_demo_2d.exe
 
@@ -227,6 +237,7 @@ wine build-gdi/cna_test_gdi_dirty_damage.exe
 wine build-gdi/cna_test_gdi_repaint_invalidation.exe
 wine build-gdi/cna_test_gdi_presentation_oracle.exe
 wine build-gdi/cna_test_gdi_window_metrics.exe
+wine build-gdi/cna_test_gdi_framebuffer_allocation.exe
 wine build-gdi/cna_bench_gdi_2d.exe --frames 4
 wine build-gdi/cna_demo_2d.exe
 ```
@@ -293,6 +304,12 @@ session permits it, and retained pixels across minimize/restore. These automated
 replace GDI-061's visible multi-DPI Windows inspection. The configuration executable then proves
 that the registered environment cases select NativeFull, None and Stretch with the requested
 filter through backend telemetry.
+
+`cna_test_gdi_framebuffer_allocation` verifies exact 5-byte and 21-byte GDI layouts, absence of
+unused depth storage on both the backbuffer and render targets, optional 4x sample allocation and
+release, mip accounting, dimension/budget rejection, and transactional resize failure. Its pure
+planner is also compiled and run by the standalone genuine-32-bit arithmetic workflow, which
+distinguishes `size_t` overflow from a multiplication-safe request above the byte budget.
 
 `cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
 CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run

@@ -82,7 +82,8 @@ jobs:
             cna_test_gdi_repaint_invalidation \
             cna_test_gdi_presentation_oracle \
             cna_test_gdi_presentation_configuration \
-            cna_test_gdi_window_metrics
+            cna_test_gdi_window_metrics \
+            cna_test_gdi_framebuffer_allocation
 
       - name: Run focused GDI CTest suite
         working-directory: cna_graphics

@@ -1,17 +1,16 @@
 # SPDX-License-Identifier: MS-PL
 #
-# REMED-MEDIA-001 / 32-bit CI coverage (BUILD_TEST_CI Wave 2): a small, deliberately STANDALONE
-# CMake project (not add_subdirectory()'d into the main build) that compiles and runs
-# AudioTagParser.cpp's own width-dependent std::size_t bounds check at a genuine 32-bit width.
+# REMED-MEDIA-001 / GDI-067 32-bit CI coverage: a small, deliberately STANDALONE CMake project
+# (not add_subdirectory()'d into the main build) that compiles and runs width-dependent std::size_t
+# checks at a genuine 32-bit width.
 #
 # Kept entirely separate from the main project's CMakeLists.txt/CMakePresets.json on purpose:
 # the main build's CnaLibrary.cmake unconditionally requires SDL3/SDL3_image/SDL3_mixer and (on
 # every non-MinGW/Emscripten/Android platform, which includes a plain `-m32` Linux build)
 # FFmpeg -- none of which this project vendors or has installed for a 32-bit target, and none of
-# which AudioTagParser.cpp or ContentLoadException.cpp actually need (confirmed by reading both
-# files' own #include lists: standard library only). Reusing the main CMakeLists.txt here would
-# mean cross-building the entire SDL3/FFmpeg stack for `-m32` just to test a handful of pure
-# arithmetic functions -- a much larger, slower undertaking for no additional real coverage.
+# which either checked subsystem needs. Reusing the main CMakeLists.txt here would mean
+# cross-building the entire SDL3/FFmpeg stack for `-m32` just to test pure arithmetic functions --
+# a much larger, slower undertaking for no additional real coverage.
 #
 # Usage (see .github/workflows/32bit-arithmetic-ci.yml for the CI invocation):
 #   sudo apt-get install -y gcc-multilib g++-multilib
@@ -42,6 +41,23 @@ target_include_directories(cna_audio_tag_parser_32bit_overflow_check PRIVATE
     "${CNA_ROOT}/include"
 )
 
+add_executable(cna_framebuffer_allocation_32bit_overflow_check
+    "${CNA_ROOT}/tools/graphics/framebuffer_allocation_32bit_check.cpp"
+    "${CNA_ROOT}/src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp"
+)
+target_include_directories(cna_framebuffer_allocation_32bit_overflow_check PRIVATE
+    "${CNA_ROOT}/include"
+)
+
+if(MINGW)
+    target_link_options(cna_audio_tag_parser_32bit_overflow_check PRIVATE
+        -static-libgcc -static-libstdc++)
+    target_link_options(cna_framebuffer_allocation_32bit_overflow_check PRIVATE
+        -static-libgcc -static-libstdc++)
+endif()
+
 enable_testing()
 add_test(NAME AudioTagParser32BitOverflowCheck
          COMMAND cna_audio_tag_parser_32bit_overflow_check)
+add_test(NAME FramebufferAllocation32BitOverflowCheck
+         COMMAND cna_framebuffer_allocation_32bit_overflow_check)

@@ -38,6 +38,18 @@ namespace CNA::Internal::Backends::Gdi
             return static_cast<CnaPresentationMode>(mode);
         }
 
+        [[nodiscard]] int ValidateGdiFramebufferDimension(const char* parameterName, int value)
+        {
+            if (value <= 0 || value > Software::SoftwareFramebufferMaxDimension)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    parameterName, std::to_string(value),
+                    "GDI framebuffer dimensions must be positive and no greater than " +
+                        std::to_string(Software::SoftwareFramebufferMaxDimension) + ".");
+            }
+            return value;
+        }
+
         [[nodiscard]] std::string FormatWin32Error(DWORD error)
         {
             std::string message = "Win32 error " + std::to_string(error);
@@ -214,7 +226,10 @@ namespace CNA::Internal::Backends::Gdi
 
     GdiGraphicsBackend::GdiGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                                            CnaPresentationMode presentationMode)
-        : Software::SoftwareGraphicsBackend(std::max(1, virtualWidth), std::max(1, virtualHeight))
+        : Software::SoftwareGraphicsBackend(
+              ValidateGdiFramebufferDimension("virtualWidth", virtualWidth),
+              ValidateGdiFramebufferDimension("virtualHeight", virtualHeight),
+              false, true)
         , window_(window)
         , requestedVirtualWidth_(virtualWidth)
         , requestedVirtualHeight_(virtualHeight)
@@ -222,6 +237,12 @@ namespace CNA::Internal::Backends::Gdi
     {
         if (window_ == nullptr)
             throw std::runtime_error("GDI graphics backend requires an SDL window.");
+
+        // GDI owns no depth storage. Establish that invariant even for direct backend users;
+        // GraphicsDevice later applies its public default state, but focused/internal callers can
+        // create a SpriteBatch immediately after construction.
+        Software::SoftwareGraphicsBackend::SetDepthTestEnabled(false);
+        Software::SoftwareGraphicsBackend::SetDepthWriteEnabled(false);
 
         nativeWindow_ = SDL_GetPointerProperty(
             SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
@@ -449,9 +470,22 @@ namespace CNA::Internal::Backends::Gdi
 
     void GdiGraphicsBackend::SetVirtualResolution(int width, int height)
     {
+        (void)ValidateGdiFramebufferDimension("width", width);
+        (void)ValidateGdiFramebufferDimension("height", height);
+        const int previousWidth = requestedVirtualWidth_;
+        const int previousHeight = requestedVirtualHeight_;
         requestedVirtualWidth_ = width;
         requestedVirtualHeight_ = height;
-        SynchronizeBackbufferSize();
+        try
+        {
+            SynchronizeBackbufferSize();
+        }
+        catch (...)
+        {
+            requestedVirtualWidth_ = previousWidth;
+            requestedVirtualHeight_ = previousHeight;
+            throw;
+        }
         MarkBackbufferFullyDirty();
     }
 
@@ -650,6 +684,17 @@ namespace CNA::Internal::Backends::Gdi
     {
         telemetry = lastPresentationTelemetry_;
         return lastPresentationTelemetry_.valid;
+    }
+
+    GdiFramebufferStorageTelemetry GdiGraphicsBackend::DebugGetBackbufferStorage() const
+    {
+        const Software::SoftwareFramebuffer& framebuffer = BackbufferFramebuffer();
+        return {
+            framebuffer.color.size(),
+            framebuffer.depthBuffer.size() * sizeof(float),
+            framebuffer.stencilBuffer.size(),
+            framebuffer.multiSampleColor.size(),
+        };
     }
 
     std::unique_ptr<IRenderTargetBackend> GdiGraphicsBackend::CreateRenderTarget2D(

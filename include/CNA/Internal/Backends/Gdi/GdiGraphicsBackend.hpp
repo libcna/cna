@@ -10,6 +10,19 @@
 
 namespace CNA::Internal::Backends::Gdi
 {
+    struct GdiFramebufferStorageTelemetry
+    {
+        std::size_t colorBytes = 0;
+        std::size_t depthBytes = 0;
+        std::size_t stencilBytes = 0;
+        std::size_t multiSampleBytes = 0;
+
+        [[nodiscard]] std::size_t TotalBytes() const
+        {
+            return colorBytes + depthBytes + stencilBytes + multiSampleBytes;
+        }
+    };
+
     /**
      * @brief Win32 GDI presentation backend for CNA's 2D API.
      *
@@ -65,6 +78,8 @@ namespace CNA::Internal::Backends::Gdi
         /** @brief Returns the most recent presentation plan/result telemetry. */
         [[nodiscard]] bool DebugGetLastPresentationTelemetry(
             GdiPresentationTelemetry& telemetry) const;
+        /** @brief Reports actual vector storage for GDI-067 allocation-contract tests. */
+        [[nodiscard]] GdiFramebufferStorageTelemetry DebugGetBackbufferStorage() const;
 
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(

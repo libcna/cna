@@ -5,6 +5,7 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/OutOfMemoryException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,9 +13,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace CNA::Internal::Backends::Software
 {
@@ -172,7 +175,12 @@ namespace CNA::Internal::Backends::Software
             // As on the correct EasyGL/D3D paths, disabling the depth test disables the complete
             // depth operation even if a custom state happens to retain writeEnable=true.
             if (state.testEnabled && state.writeEnabled)
+            {
+                if (fb.depthBuffer.empty())
+                    throw std::logic_error(
+                        "Software rasterizer received enabled depth state without depth storage.");
                 fb.depthBuffer[pixelIndex] = depth;
+            }
         }
 
         bool StencilComparisonPasses(std::uint8_t reference, std::uint8_t stored,
@@ -218,6 +226,9 @@ namespace CNA::Internal::Backends::Software
         void WriteStencil(SoftwareFramebuffer& fb, const RasterStencilState& state,
                           std::size_t pixelIndex, int operation)
         {
+            if (fb.stencilBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled stencil state without stencil storage.");
             const std::uint8_t oldValue = fb.stencilBuffer[pixelIndex];
             const std::uint8_t operationValue =
                 ApplyStencilOperation(oldValue, state.reference, operation);
@@ -1422,8 +1433,14 @@ namespace CNA::Internal::Backends::Software
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
             // REMED-GFX-030: comparison precedes every color/depth write.
-            if (!DepthFragmentPasses(depthState, depth, fb.depthBuffer[pixelIndex]))
-                return;
+            if (depthState.testEnabled)
+            {
+                if (fb.depthBuffer.empty())
+                    throw std::logic_error(
+                        "Software rasterizer received enabled depth state without depth storage.");
+                if (!DepthFragmentPasses(depthState, depth, fb.depthBuffer[pixelIndex]))
+                    return;
+            }
             const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
             // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
             // ColorWriteChannels controls only colour writes, never depth). REMED-GFX-030: a
@@ -1800,6 +1817,9 @@ namespace CNA::Internal::Backends::Software
             { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
+            if (ctx.stencilState.testEnabled && fb.stencilBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled stencil state without stencil storage.");
             // Stencil runs before depth and shading, matching the GPU fragment-test order.  A
             // failed stencil test updates only StencilFail and must not reach depth or colour.
             if (ctx.stencilState.testEnabled && !StencilComparisonPasses(
@@ -1810,7 +1830,11 @@ namespace CNA::Internal::Backends::Software
                 return;
             }
             // REMED-GFX-030: comparison precedes shading and every color/depth write.
-            if (!DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
+            if (ctx.depthState.testEnabled && fb.depthBuffer.empty())
+                throw std::logic_error(
+                    "Software rasterizer received enabled depth state without depth storage.");
+            if (ctx.depthState.testEnabled &&
+                !DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
             {
                 if (ctx.stencilState.testEnabled)
                     WriteStencil(fb, ctx.stencilState, pixelIndex,
@@ -2348,17 +2372,70 @@ namespace CNA::Internal::Backends::Software
 
     // ---- SoftwareFramebuffer ----
 
+    namespace
+    {
+        [[noreturn]] void ThrowInvalidFramebufferLayout(
+            const SoftwareFramebufferAllocationRequest& request,
+            SoftwareFramebufferAllocationError error)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "dimensions", std::to_string(request.width) + "x" +
+                                  std::to_string(request.height),
+                std::string("Software framebuffer rejected the requested layout: ") +
+                    SoftwareFramebufferAllocationErrorName(error) +
+                    "; maximum dimension is " +
+                    std::to_string(SoftwareFramebufferMaxDimension) +
+                    " and maximum committed storage is " +
+                    std::to_string(SoftwareFramebufferMaxBytes) + " bytes.");
+        }
+
+        [[noreturn]] void ThrowFramebufferAllocationFailure(
+            const SoftwareFramebufferAllocationRequest& request,
+            const SoftwareFramebufferAllocationLayout& layout)
+        {
+            throw System::OutOfMemoryException(
+                "Software framebuffer could not allocate " +
+                std::to_string(layout.totalBytes) + " bytes for " +
+                std::to_string(request.width) + "x" + std::to_string(request.height) +
+                (request.multiSampleCount == 4 ? " with 4x MSAA." : "."));
+        }
+    }
+
     void SoftwareFramebuffer::Resize(int w, int h)
     {
+        const SoftwareFramebufferAllocationRequest request{
+            w, h, allocateDepthStorage, allocateStencilStorage, multiSampleCount};
+        const SoftwareFramebufferAllocationLayout layout =
+            PlanSoftwareFramebufferAllocation(request);
+        if (!layout.IsValid())
+            ThrowInvalidFramebufferLayout(request, layout.error);
+
+        std::vector<std::uint8_t> newColor;
+        std::vector<float> newDepth;
+        std::vector<std::uint8_t> newStencil;
+        std::vector<std::uint8_t> newMultiSampleColor;
+        try
+        {
+            newColor.assign(layout.colorBytes, 0u);
+            newDepth.assign(layout.depthElementCount, 1.0f);
+            newStencil.assign(layout.stencilBytes, 0u);
+            newMultiSampleColor.assign(layout.multiSampleBytes, 0u);
+        }
+        catch (const std::bad_alloc&)
+        {
+            ThrowFramebufferAllocationFailure(request, layout);
+        }
+        catch (const std::length_error&)
+        {
+            ThrowFramebufferAllocationFailure(request, layout);
+        }
+
         width = w;
         height = h;
-        color.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u, 0u);
-        depthBuffer.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 1.0f);
-        stencilBuffer.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 0u);
-        if (HasMultiSampleColor())
-            multiSampleColor.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
-                                        static_cast<std::size_t>(multiSampleCount) * 4u,
-                                    0u);
+        color = std::move(newColor);
+        depthBuffer = std::move(newDepth);
+        stencilBuffer = std::move(newStencil);
+        multiSampleColor = std::move(newMultiSampleColor);
     }
 
     void SoftwareFramebuffer::SetMultiSampleCount(int sampleCount)
@@ -2376,16 +2453,43 @@ namespace CNA::Internal::Backends::Software
             // back off at reset time; otherwise the unresolved colour plane would be discarded.
             ResolveColor();
             multiSampleCount = 0;
-            multiSampleColor.clear();
-            multiSampleColor.shrink_to_fit();
+            std::vector<std::uint8_t>().swap(multiSampleColor);
             return;
         }
 
+        const SoftwareFramebufferAllocationRequest request{
+            width, height, allocateDepthStorage, allocateStencilStorage, appliedCount};
+        const SoftwareFramebufferAllocationLayout layout =
+            PlanSoftwareFramebufferAllocation(request);
+        if (!layout.IsValid())
+            ThrowInvalidFramebufferLayout(request, layout.error);
+
+        std::vector<std::uint8_t> newMultiSampleColor;
+        try
+        {
+            newMultiSampleColor.resize(layout.multiSampleBytes);
+        }
+        catch (const std::bad_alloc&)
+        {
+            ThrowFramebufferAllocationFailure(request, layout);
+        }
+        catch (const std::length_error&)
+        {
+            ThrowFramebufferAllocationFailure(request, layout);
+        }
+
+        multiSampleColor = std::move(newMultiSampleColor);
         multiSampleCount = appliedCount;
+        CopyResolvedColorToMultiSample();
+    }
+
+    void SoftwareFramebuffer::CopyResolvedColorToMultiSample()
+    {
+        if (!HasMultiSampleColor())
+            return;
 
         const std::size_t pixelCount = static_cast<std::size_t>(width) *
                                        static_cast<std::size_t>(height);
-        multiSampleColor.resize(pixelCount * 4u * 4u);
         for (std::size_t pixel = 0; pixel < pixelCount; ++pixel)
         {
             const std::size_t resolvedIndex = pixel * 4u;
@@ -2722,11 +2826,24 @@ namespace CNA::Internal::Backends::Software
     SoftwareRenderTargetBackend::SoftwareRenderTargetBackend(
         int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
         bool hasRealDepthBuffer, bool hasStandaloneStencilBuffer)
-        : depthFormat_(depthFormat), mipMap_(mipMap), multiSampleCount_(multiSampleCount)
+        : framebuffer_(hasRealDepthBuffer,
+                       hasStandaloneStencilBuffer || hasRealDepthBuffer)
+        , depthFormat_(depthFormat), mipMap_(mipMap), multiSampleCount_(multiSampleCount)
         , hasRealDepthBuffer_(hasRealDepthBuffer)
         , hasStandaloneStencilBuffer_(hasStandaloneStencilBuffer)
     {
+        const SoftwareFramebufferAllocationRequest request{
+            w, h, hasRealDepthBuffer,
+            hasStandaloneStencilBuffer || hasRealDepthBuffer,
+            multiSampleCount == 4 ? 4 : 0, mipMap};
+        const SoftwareFramebufferAllocationLayout layout =
+            PlanSoftwareFramebufferAllocation(request);
+        if (!layout.IsValid())
+            ThrowInvalidFramebufferLayout(request, layout.error);
+
         framebuffer_.Resize(w, h);
+        framebuffer_.SetMultiSampleCount(multiSampleCount_);
+        multiSampleCount_ = framebuffer_.multiSampleCount;
         if (mipMap_)
         {
             int levelWidth = framebuffer_.width;
@@ -2737,7 +2854,18 @@ namespace CNA::Internal::Backends::Software
                 levelHeight = std::max(1, levelHeight / 2);
                 ++levelCount_;
             }
-            mipLevels_.resize(static_cast<std::size_t>(levelCount_ - 1));
+            try
+            {
+                mipLevels_.resize(static_cast<std::size_t>(levelCount_ - 1));
+            }
+            catch (const std::bad_alloc&)
+            {
+                ThrowFramebufferAllocationFailure(request, layout);
+            }
+            catch (const std::length_error&)
+            {
+                ThrowFramebufferAllocationFailure(request, layout);
+            }
         }
     }
 
@@ -2747,6 +2875,7 @@ namespace CNA::Internal::Backends::Software
         const std::size_t byteCount = static_cast<std::size_t>(framebuffer_.width) *
                                        static_cast<std::size_t>(framebuffer_.height) * 4u;
         framebuffer_.color.assign(rgba, rgba + byteCount);
+        framebuffer_.CopyResolvedColorToMultiSample();
         mipLevelsReady_ = false;
         // A direct CPU upload is already complete unless this target is actively being rendered.
         // Generate now so an uploaded, unbound RenderTarget2D never exposes stale lower levels.
@@ -2792,43 +2921,67 @@ namespace CNA::Internal::Backends::Software
         if (!mipMap_ || levelCount_ <= 1)
             return;
 
-        const std::vector<std::uint8_t>* source = &framebuffer_.color;
-        int sourceWidth = framebuffer_.width;
-        int sourceHeight = framebuffer_.height;
-        for (int level = 1; level < levelCount_; ++level)
-        {
-            const int destinationWidth = MipWidth(level);
-            const int destinationHeight = MipHeight(level);
-            std::vector<std::uint8_t>& destination =
-                mipLevels_[static_cast<std::size_t>(level - 1)];
-            destination.resize(static_cast<std::size_t>(destinationWidth) *
-                               static_cast<std::size_t>(destinationHeight) * 4u);
+        const SoftwareFramebufferAllocationRequest request{
+            framebuffer_.width, framebuffer_.height,
+            framebuffer_.allocateDepthStorage, framebuffer_.allocateStencilStorage,
+            framebuffer_.multiSampleCount, true};
+        const SoftwareFramebufferAllocationLayout layout =
+            PlanSoftwareFramebufferAllocation(request);
+        if (!layout.IsValid())
+            ThrowInvalidFramebufferLayout(request, layout.error);
 
-            // Match the CPU box-filter convention used by the D3D12 render-target backend: a
-            // 2x2 average with the second source coordinate clamped for odd dimensions.
-            for (int y = 0; y < destinationHeight; ++y)
+        try
+        {
+            const std::vector<std::uint8_t>* source = &framebuffer_.color;
+            int sourceWidth = framebuffer_.width;
+            int sourceHeight = framebuffer_.height;
+            for (int level = 1; level < levelCount_; ++level)
             {
-                const int sy0 = std::min(sourceHeight - 1, y * 2);
-                const int sy1 = std::min(sourceHeight - 1, y * 2 + 1);
-                for (int x = 0; x < destinationWidth; ++x)
+                const int destinationWidth = MipWidth(level);
+                const int destinationHeight = MipHeight(level);
+                std::vector<std::uint8_t>& destination =
+                    mipLevels_[static_cast<std::size_t>(level - 1)];
+                destination.resize(static_cast<std::size_t>(destinationWidth) *
+                                   static_cast<std::size_t>(destinationHeight) * 4u);
+
+                // Match the CPU box-filter convention used by the D3D12 render-target backend: a
+                // 2x2 average with the second source coordinate clamped for odd dimensions.
+                for (int y = 0; y < destinationHeight; ++y)
                 {
-                    const int sx0 = std::min(sourceWidth - 1, x * 2);
-                    const int sx1 = std::min(sourceWidth - 1, x * 2 + 1);
-                    for (int channel = 0; channel < 4; ++channel)
+                    const int sy0 = std::min(sourceHeight - 1, y * 2);
+                    const int sy1 = std::min(sourceHeight - 1, y * 2 + 1);
+                    for (int x = 0; x < destinationWidth; ++x)
                     {
-                        const int sum = (*source)[(static_cast<std::size_t>(sy0) * sourceWidth + sx0) * 4u + channel]
-                                      + (*source)[(static_cast<std::size_t>(sy0) * sourceWidth + sx1) * 4u + channel]
-                                      + (*source)[(static_cast<std::size_t>(sy1) * sourceWidth + sx0) * 4u + channel]
-                                      + (*source)[(static_cast<std::size_t>(sy1) * sourceWidth + sx1) * 4u + channel];
-                        destination[(static_cast<std::size_t>(y) * destinationWidth + x) * 4u + channel] =
-                            static_cast<std::uint8_t>(sum / 4);
+                        const int sx0 = std::min(sourceWidth - 1, x * 2);
+                        const int sx1 = std::min(sourceWidth - 1, x * 2 + 1);
+                        for (int channel = 0; channel < 4; ++channel)
+                        {
+                            const int sum = (*source)[(static_cast<std::size_t>(sy0) * sourceWidth + sx0) * 4u + channel]
+                                          + (*source)[(static_cast<std::size_t>(sy0) * sourceWidth + sx1) * 4u + channel]
+                                          + (*source)[(static_cast<std::size_t>(sy1) * sourceWidth + sx0) * 4u + channel]
+                                          + (*source)[(static_cast<std::size_t>(sy1) * sourceWidth + sx1) * 4u + channel];
+                            destination[(static_cast<std::size_t>(y) * destinationWidth + x) * 4u + channel] =
+                                static_cast<std::uint8_t>(sum / 4);
+                        }
                     }
                 }
-            }
 
-            source = &destination;
-            sourceWidth = destinationWidth;
-            sourceHeight = destinationHeight;
+                source = &destination;
+                sourceWidth = destinationWidth;
+                sourceHeight = destinationHeight;
+            }
+        }
+        catch (const std::bad_alloc&)
+        {
+            for (std::vector<std::uint8_t>& level : mipLevels_)
+                std::vector<std::uint8_t>().swap(level);
+            ThrowFramebufferAllocationFailure(request, layout);
+        }
+        catch (const std::length_error&)
+        {
+            for (std::vector<std::uint8_t>& level : mipLevels_)
+                std::vector<std::uint8_t>().swap(level);
+            ThrowFramebufferAllocationFailure(request, layout);
         }
         mipLevelsReady_ = true;
     }
@@ -2845,6 +2998,9 @@ namespace CNA::Internal::Backends::Software
     {
         if (!bound_)
             return;
+        // Multisampled rendering writes the per-sample plane. Resolve it before consumers observe
+        // level zero and before mip generation derives lower levels from the resolved image.
+        framebuffer_.ResolveColor();
         GenerateMipMaps();
         bound_ = false;
     }
@@ -3117,8 +3273,11 @@ namespace CNA::Internal::Backends::Software
 
     // ---- SoftwareGraphicsBackend ----
 
-    SoftwareGraphicsBackend::SoftwareGraphicsBackend(int virtualWidth, int virtualHeight)
-        : virtualWidth_(virtualWidth), virtualHeight_(virtualHeight)
+    SoftwareGraphicsBackend::SoftwareGraphicsBackend(
+        int virtualWidth, int virtualHeight,
+        bool allocateDepthBuffer, bool allocateStencilBuffer)
+        : backbuffer_(allocateDepthBuffer, allocateStencilBuffer)
+        , virtualWidth_(virtualWidth), virtualHeight_(virtualHeight)
     {
         backbuffer_.Resize(virtualWidth > 0 ? virtualWidth : 1024, virtualHeight > 0 ? virtualHeight : 768);
     }
@@ -3151,10 +3310,10 @@ namespace CNA::Internal::Backends::Software
 
     void SoftwareGraphicsBackend::SetVirtualResolution(int width, int height)
     {
-        virtualWidth_ = width;
-        virtualHeight_ = height;
         if (currentRenderTarget_ == nullptr)
             backbuffer_.Resize(width, height);
+        virtualWidth_ = width;
+        virtualHeight_ = height;
     }
 
     void SoftwareGraphicsBackend::SetPresentationMode(int) {}
