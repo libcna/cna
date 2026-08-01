@@ -110,7 +110,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateRenderTargetCube/5` | Allocates cube-face FBO target. | Creates bounded six-face raster/mip storage; no depth/MSAA/sampler. | `bounded` | SKIA-85–86; four public contracts |
 | `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Returns unsupported. | `unsupported` | SKIA-89–92 |
 | `IGraphicsBackend::SetRenderTargetCubeFace/2` | Binds selected cube face. | Binds one checked raster face and resets target-local state. | `implemented` | SKIA-85–86; plural binding contract |
-| `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Empty/one 2D/one cube face work; MRT rejects. | `bounded` | SKIA-68, SKIA-85–88 |
+| `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Empty/one 2D/one cube face work; 2–4 targets reject atomically because SkCanvas cannot express distinct slot outputs. | `bounded` | SKIA-68, SKIA-85–88; `Skia_MRT_Rejection` |
 | `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | Five proven blend routes and channel masks only. | `bounded` | SKIA-47–57 |
 | `IGraphicsBackend::ApplyDepthStencilState/16` | Applies complete GL depth/stencil state. | No raster depth/stencil attachment. | `unsupported` | SKIA-97–98 |
 | `IGraphicsBackend::ApplyRasterizerState/5` | Applies GL cull/fill/scissor/bias. | 2D solid/scissor only; wireframe rejects. | `bounded` | SKIA-41, SKIA-58 |
@@ -154,7 +154,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsCapability::ThreeD` | EasyGL advertises its GL primitive pipeline. | Raster backend reports false. | `unsupported` | SKIA-95–103 |
 | `GraphicsCapability::DepthStencilBuffer` | EasyGL advertises real depth/stencil storage. | Raster backend reports false. | `unsupported` | SKIA-67, SKIA-97–98 |
 | `GraphicsCapability::MultiSampleAntiAliasing` | EasyGL reports probed MSAA support. | Raster backend reports false and zero samples. | `unsupported` | SKIA-76–77 |
-| `GraphicsCapability::MultipleRenderTargets` | EasyGL advertises normalized MRT binding. | Raster backend reports false; one target only. | `unsupported` | SKIA-87–88 |
+| `GraphicsCapability::MultipleRenderTargets` | EasyGL advertises normalized MRT binding. | Raster backend reports false; single-colour replay cannot implement distinct MRT slot outputs. | `unsupported` | SKIA-87–88; `Skia_MRT_Rejection` |
 | `GraphicsCapability::AnisotropicFiltering` | EasyGL reports device anisotropy. | Raster backend reports false. | `unsupported` | SKIA-78–79 |
 | `GraphicsCapability::WireFrame` | EasyGL supports GL line polygon mode where available. | Raster backend reports false and rejects wireframe. | `unsupported` | SKIA-58, SKIA-97 |
 | `GraphicsCapability::OcclusionQuery` | EasyGL reports query API availability. | Raster backend reports false. | `unsupported` | SKIA-104–105 |
@@ -214,7 +214,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::GetBackBufferData/4` | Reads EasyGL rectangle with destination range. | Same top-left rectangular raster readback. | `implemented` | SKIA-23, SKIA-62 |
 | `GraphicsDevice::SetRenderTarget/1` | Binds one EasyGL RenderTarget2D or backbuffer. | Binds checked raster target or backbuffer. | `implemented` | SKIA-61, SKIA-69 |
 | `GraphicsDevice::SetRenderTarget/2` | Binds EasyGL cube target face. | Binds an exact six-surface raster cube face. | `implemented` | SKIA-85–86; shared readback contract |
-| `GraphicsDevice::SetRenderTargets/1` | Validates and binds EasyGL MRT/cube sets. | Empty/one 2D/one cube work; MRT rejects before drawing. | `bounded` | SKIA-68, SKIA-85–88 |
+| `GraphicsDevice::SetRenderTargets/1` | Validates and binds EasyGL MRT/cube sets. | Empty/one 2D/one cube work; MRT rejects before state, clear, or draw side effects. | `bounded` | SKIA-68, SKIA-85–88; `Skia_MRT_Rejection` |
 | `GraphicsDevice::GetRenderTargets/0` | Returns common active EasyGL binding vector. | Returns empty/one 2D/cube-face binding accurately. | `bounded` | SKIA-61, SKIA-68, SKIA-85–86 |
 | `GraphicsDevice::SetVertexBuffer/1` | Binds EasyGL vertex buffer slot zero. | No raster vertex buffer exists. | `unsupported` | SKIA-95–96 |
 | `GraphicsDevice::SetVertexBuffer/2` | Binds EasyGL vertex buffer with offset. | No raster vertex buffer exists. | `unsupported` | SKIA-95–96 |

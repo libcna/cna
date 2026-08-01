@@ -572,7 +572,11 @@ namespace CNA::Internal::Backends::Skia
         if (!renderTargets)
             throw std::runtime_error("Skia SetRenderTargets received null descriptors with a positive count.");
         if (count != 1)
-            throw std::runtime_error("Skia raster backend does not implement multiple render targets.");
+        {
+            throw std::runtime_error(
+                "Skia raster backend cannot emulate multiple render targets: SkCanvas has one "
+                "color output, so the active target set was not changed.");
+        }
         if (renderTargets[0].IsRenderTargetCubeFace())
         {
             SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),

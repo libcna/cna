@@ -355,6 +355,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_RenderTargetCube_PluralBinding
                                    cna_test_skia_rendertargetcube_plural_binding)
 
+    # SKIA-87--SKIA-88: SkCanvas cannot represent distinct fragment outputs for MRT slots 0--3.
+    # Verify that every valid 2--4 target set rejects before mutating target/state/pixels and that
+    # shared validation errors retain their deterministic precedence.
+    cna_skia_test(cna_test_skia_mrt_rejection examples/skia_mrt_rejection_test.cpp)
+    cna_register_skia_display_test(Skia_MRT_Rejection cna_test_skia_mrt_rejection)
+
     cna_skia_test(cna_test_skia_resize_presentation examples/skia_resize_presentation_test.cpp)
     cna_register_skia_display_test(Skia_Resize_Presentation cna_test_skia_resize_presentation)
 

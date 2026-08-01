@@ -207,7 +207,7 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_Model_SkinnedAnimationPlayback` | `ctest` | `3d` | Animated skinned model draw. |
 | `ctest:EasyGL_Model_TwoMeshesEffects` | `ctest` | `3d` | Multi-mesh effect draws. |
 | `ctest:EasyGL_Model_HierarchyChildMesh` | `ctest` | `3d` | Hierarchical model draw. |
-| `ctest:EasyGL_MRT_TwoAttachments` | `ctest` | `3d` | Requires multiple render targets. |
+| `ctest:EasyGL_MRT_TwoAttachments` | `ctest` | `3d` | Distinct ShaderEffect outputs cannot be represented by one SkCanvas colour; `Skia_MRT_Rejection` proves atomic 2–4 target refusal, SKIA-87–88. |
 | `ctest:EasyGL_BasicEffect_MultiLightEmissive` | `ctest` | `3d` | Stock lighting geometry. |
 | `ctest:EasyGL_BasicEffect_Specular` | `ctest` | `3d` | Stock specular geometry. |
 | `ctest:EasyGL_BasicEffect_PreferPerPixelLighting` | `ctest` | `3d` | Stock shader variant. |

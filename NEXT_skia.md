@@ -22,7 +22,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 96 Skia CTests: nine raster-only, 85 display-required, and two
+- `docs/skia-backend.md` records 97 Skia CTests: nine raster-only, 86 display-required, and two
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -78,9 +78,28 @@
   RenderTargetCube/SetData tests. The source audits pass with 247 ledger rows and 347 matrix entries
   (75 direct, 31 emulation, 216 3D, 25 device-dependent). CTest display caches were restored to
   `:0` after Xvfb runs.
-- No `NEXT.md` content was read or changed. The next autonomous task is SKIA-87/88: determine
-  whether exact MRT replay is possible without double-applying draw side effects; otherwise retain
-  and strengthen the current pre-draw rejection.
+- No `NEXT.md` content was read or changed. SKIA-87/88 was the next task at this checkpoint and is
+  now complete below.
+
+## Completed in this session: SKIA-87 and SKIA-88
+
+- The MRT spike is closed as an evidence-backed refusal rather than a partial emulation. A
+  `SkCanvas` draw exposes one destination colour, but CNA's observable MRT contract includes
+  `ShaderEffect` programs with distinct fragment outputs at locations 0--3 and independent
+  `ColorWriteChannels0--3`. Replaying or duplicating the one raster output would therefore be
+  wrong as soon as those public effects are used; command recording cannot recover values that
+  were never produced.
+- Added `Skia_MRT_Rejection`. Otherwise-valid 2D/cube sets of two, three, and four attachments all
+  reject with the active target, viewport, scissor, and pixels unchanged. Dimension, duplicate,
+  null, and public >4 errors retain their validation precedence. Failed submission does not clear
+  a `DiscardContents` candidate or partially write either cube face; a subsequent premultiplied
+  AlphaBlend draw reaches only the prior target. The capability remains false.
+- The complete Debug suite builds with `--parallel 8` and passes 97/97 under Xvfb in 12.63 seconds
+  (nine Raster, 86 Display, two Audit). The focused MRT contract also passes in Release and with
+  AddressSanitizer (`detect_leaks=0`). Both source audits remain clean at 247 ledger rows and 347
+  matrix entries (75 direct, 31 emulation, 216 3D, 25 device-dependent); every display cache was
+  restored to `:0`. The next task is SKIA-89: audit the stock/custom effect surface and source-
+  language expectations without widening the currently unsupported capability.
 
 ## Completed in this session: SKIA-21
 
