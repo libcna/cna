@@ -7,6 +7,7 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
 #include "include/core/SkData.h"
+#include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/effects/SkRuntimeEffect.h"
@@ -36,6 +37,20 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] bool IsFlipped(SpriteEffects effects, SpriteEffects flag)
         {
             return (static_cast<int>(effects) & static_cast<int>(flag)) != 0;
+        }
+
+        [[nodiscard]] SkMatrix ToSkMatrix(const Matrix& matrix)
+        {
+            // CNA/XNA uses row vectors: Vector2::Transform(x, y, matrix) computes
+            // (x * M11 + y * M21 + M41, x * M12 + y * M22 + M42). Skia stores the
+            // equivalent affine transform for column vectors in its 3x3 matrix. This is
+            // deliberately limited to the same six members that the public Vector2 helper
+            // uses, so unrelated 3D members cannot change a SpriteBatch's 2D geometry.
+            SkMatrix result;
+            result.setAll(matrix.M11, matrix.M21, matrix.M41,
+                          matrix.M12, matrix.M22, matrix.M42,
+                          0.0f,       0.0f,       1.0f);
+            return result;
         }
 
         struct TintScale
@@ -141,8 +156,6 @@ namespace CNA::Internal::Backends::Skia
     {
         if (!begun_)
             throw std::runtime_error("Skia SpriteBatch Draw() was called before Begin().");
-        if (transformMatrix_ != Matrix::getIdentityProperty())
-            throw std::runtime_error("Skia raster SpriteBatch transform matrices are not implemented yet.");
         if (sourceRectangle.Width <= 0 || sourceRectangle.Height <= 0
             || destinationRectangle.Width == 0 || destinationRectangle.Height == 0)
         {
@@ -178,6 +191,10 @@ namespace CNA::Internal::Backends::Skia
         const float sourceWidth = static_cast<float>(sourceRectangle.Width);
         const float sourceHeight = static_cast<float>(sourceRectangle.Height);
         SkAutoCanvasRestore restore(canvas, true);
+        // SkCanvas::concat pre-concatenates the matrix, making each following local sprite
+        // transform run first and this Begin transform run second. That is XNA's ordering:
+        // generate the sprite corner, then pass it through Vector2::Transform(matrix).
+        canvas->concat(ToSkMatrix(transformMatrix_));
         canvas->translate(static_cast<float>(destinationRectangle.X), static_cast<float>(destinationRectangle.Y));
         canvas->rotate(rotation * 180.0f / 3.14159265358979323846f);
         canvas->scale(static_cast<float>(destinationRectangle.Width) / sourceWidth,
