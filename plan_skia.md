@@ -249,7 +249,7 @@ public CNA API.
 
 | ID | Task | Status | Acceptance evidence |
 |---|---|---|---|
-| SKIA-89 | Audit CNA's stock `SpriteEffect`, custom `ShaderEffect`, uniform setters, texture bindings, and EasyGL GLSL expectations. | ⬜ | Parameter/type/source-language compatibility table. |
+| SKIA-89 | Audit CNA's stock `SpriteEffect`, custom `ShaderEffect`, uniform setters, texture bindings, and EasyGL GLSL expectations. | ✅ | `docs/skia-effects.md` records the stage/language/coordinate and parameter/texture table: untagged GLSL/SPIR-V strings cannot be guessed as SkSL, runtime effects have no vertex stage, numeric samplers differ from named 2D children, and cube/volume sampling remains unavailable. `Skia_Effect_Boundary` proves the invalid custom route cannot silently draw or poison the next stock batch. |
 | SKIA-90 | Prototype a built-in SpriteBatch Skia paint/shader path that preserves default sprite output before accepting any custom effect. | ⬜ | Default SpriteBatch goldens are unchanged when the effect plumbing exists. |
 | SKIA-91 | Investigate a restricted GLSL-to-SkSL path or an explicit SkSL-only extension, including diagnostics, uniform layout, texture child shaders, and security/resource limits. | ⬜ | At least one real CNA effect compiles/renders or the incompatibility is demonstrated with a clear error. |
 | SKIA-92 | Implement only the custom-effect subset proven in SKIA-91, with exact compile errors for unsupported shader stages/features. | ⬜ | Uniform/texture/custom-sprite tests pass; arbitrary GLSL is never silently accepted then ignored. |

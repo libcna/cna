@@ -22,7 +22,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 97 Skia CTests: nine raster-only, 86 display-required, and two
+- `docs/skia-backend.md` records 98 Skia CTests: nine raster-only, 87 display-required, and two
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -100,6 +100,22 @@
   matrix entries (75 direct, 31 emulation, 216 3D, 25 device-dependent); every display cache was
   restored to `:0`. The next task is SKIA-89: audit the stock/custom effect surface and source-
   language expectations without widening the currently unsupported capability.
+
+## Completed in this session: SKIA-89
+
+- Added `docs/skia-effects.md`, mapping stock `SpriteEffect`, untagged/backend-specific
+  `ShaderEffect` strings, both stages, coordinate/alpha rules, every uniform setter, numeric 2D
+  sampler units, named SkSL child shaders, cube/volume sampling, content descriptors, diagnostics,
+  and bounded-compilation requirements. The decisive mismatches are structural: runtime SkSL has
+  no user vertex stage, accepts one premultiplied fragment result, and binds 2D image shaders by
+  child name rather than GLSL sampler unit. Existing GLSL/SPIR-V strings must never be guessed as
+  SkSL.
+- Added `Skia_Effect_Boundary`: invalid untagged GLSL retains source/clone identity, does not
+  fabricate `CustomEffects`, tolerates the existing no-backend setters without drawing, rejects
+  custom SpriteBatch Begin, and leaves the same batch reusable on its proven stock path. The
+  focused test builds with `--parallel 8` and passes in Debug, Release, and AddressSanitizer
+  (`detect_leaks=0`) under Xvfb; all display caches were restored to `:0`. SKIA-90 is the next
+  implementation task after this checkpoint.
 
 ## Completed in this session: SKIA-21
 

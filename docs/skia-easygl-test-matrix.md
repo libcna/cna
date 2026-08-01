@@ -86,8 +86,8 @@ registrations and both asset directories, and rejects every unclassified or stal
 
 | Entry | Kind | Category | Skia route or evidence |
 |---|---|---|---|
-| `ctest:EasyGL_ShaderEffect_GLSL` | `ctest` | `2d-emulation` | Needs a deliberately mapped SkSL subset; SKIA-89–92. |
-| `ctest:EasyGL_ShaderEffect_SpriteBatch_Uniform` | `ctest` | `2d-emulation` | SpriteBatch custom-effect subset; SKIA-93–94. |
+| `ctest:EasyGL_ShaderEffect_GLSL` | `ctest` | `2d-emulation` | Untagged GLSL cannot be passed to fragment-only SkSL; explicit opt-in/subset tracked by SKIA-91–92 and `docs/skia-effects.md`. |
+| `ctest:EasyGL_ShaderEffect_SpriteBatch_Uniform` | `ctest` | `2d-emulation` | Reflected scalar/vector writes are viable only behind an explicit SkSL ABI; SKIA-89–92. |
 | `ctest:EasyGL_Bloom_Extract` | `ctest` | `2d-emulation` | Candidate SkSL/CPU image filter pass; SKIA-89–94. |
 | `ctest:EasyGL_Bloom_GaussianBlur` | `ctest` | `2d-emulation` | Candidate Skia image filter or bounded convolution. |
 | `ctest:EasyGL_Bloom_Combine` | `ctest` | `2d-emulation` | Candidate SkSL/CPU compositing pass. |

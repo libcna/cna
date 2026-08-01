@@ -108,7 +108,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Level-zero color target only. | `bounded` | SKIA-61–79 |
 | `IGraphicsBackend::SetRenderTarget2D/1` | Binds/unbinds one EasyGL FBO. | Binds checked raster target/backbuffer. | `implemented` | SKIA-61, SKIA-69 |
 | `IGraphicsBackend::CreateRenderTargetCube/5` | Allocates cube-face FBO target. | Creates bounded six-face raster/mip storage; no depth/MSAA/sampler. | `bounded` | SKIA-85–86; four public contracts |
-| `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Returns unsupported. | `unsupported` | SKIA-89–92 |
+| `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Returns null: untagged vertex/fragment strings cannot safely mean SkSL. | `unsupported` | SKIA-89–92; `docs/skia-effects.md` |
 | `IGraphicsBackend::SetRenderTargetCubeFace/2` | Binds selected cube face. | Binds one checked raster face and resets target-local state. | `implemented` | SKIA-85–86; plural binding contract |
 | `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Empty/one 2D/one cube face work; 2–4 targets reject atomically because SkCanvas cannot express distinct slot outputs. | `bounded` | SKIA-68, SKIA-85–88; `Skia_MRT_Rejection` |
 | `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | Five proven blend routes and channel masks only. | `bounded` | SKIA-47–57 |

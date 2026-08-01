@@ -98,6 +98,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_graphics_capability examples/skia_graphics_capability_test.cpp)
     cna_register_skia_display_test(Skia_GraphicsCapability cna_test_skia_graphics_capability)
 
+    # SKIA-89: keep untagged backend-specific ShaderEffect strings outside the SkSL path and prove
+    # that rejection cannot poison the following built-in SpriteBatch session.
+    cna_skia_test(cna_test_skia_effect_boundary examples/skia_effect_boundary_test.cpp)
+    cna_register_skia_display_test(Skia_Effect_Boundary cna_test_skia_effect_boundary)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.
