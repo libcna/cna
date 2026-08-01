@@ -123,6 +123,13 @@ namespace
         const ImageData blendSourceData = MakeImage(1, 1, { 255, 100, 0, 255 });
         std::unique_ptr<ITextureBackend> blendSource = backend.CreateTexture(blendSourceData);
 
+        // GDI is deliberately a fixed-function 2D backend. It must reject a custom shader instead
+        // of returning a dummy object whose source/uniforms are silently ignored by the CPU path.
+        std::unique_ptr<IEffectBackend> customEffect =
+            backend.CreateEffectBackend("void main() {}", "void main() {}");
+        ok &= Expect(customEffect == nullptr,
+                     "GDI must explicitly reject custom ShaderEffect programs.");
+
         // Upload + source rectangle: top-right texel is green.
         SetOpaque(backend);
         backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);

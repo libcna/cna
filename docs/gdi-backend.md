@@ -17,6 +17,9 @@ display path; it does not create an SDL renderer, D3D device, OpenGL context or 
 - Not supported: vertex/index buffers, 3D draw calls, depth/stencil, MSAA, cube/3D textures,
   occlusion queries and custom effects. `SupportsCapability()` returns `false` and direct 3D API
   calls throw rather than silently rendering through the inherited CPU 3D code.
+- A custom `ShaderEffect` is deliberately invalid on GDI (`CreateEffectBackend()` returns null).
+  GDI does not accept shader source or uniforms and then ignore them; only a future separately
+  documented fixed CPU 2D effect API could extend this boundary.
 - `PresentInterval` is ignored because GDI has no swap-chain interval control. The backbuffer is
   single-sampled.
 
@@ -70,8 +73,9 @@ The smoke executable creates a hidden SDL `HWND`, clears and reads an RGBA pixel
 both flips, Clamp/Wrap/Mirror sampling, render-target sampling and generated mips, resize and
 presentation-coordinate transforms. It also covers Opaque, premultiplied `AlphaBlend`, straight-alpha
 `NonPremultiplied`, Additive saturation, independent colour/alpha equations and a dynamic
-`BlendFactor`. The 2D demo is the manual visual check: animated sprites should display, resizing
-should remain correct, and the window should close normally.
+`BlendFactor`, plus the explicit custom-`ShaderEffect` rejection. The 2D demo is the manual visual
+check: animated sprites should display, resizing should remain correct, and the window should close
+normally.
 
 `cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
 CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run
