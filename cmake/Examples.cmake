@@ -51,6 +51,14 @@ if(CNA_BUILD_EXAMPLES)
         endif()
         if(WIN32)
             set_target_properties(cna_demo_2d PROPERTIES WIN32_EXECUTABLE TRUE)
+            # The cross-compiled demo is a distributable Windows GUI executable, just like the
+            # Windows backend smoke tests.  Keep libgcc/libstdc++ self-contained and copy the
+            # remaining MinGW thread runtime so a clean Proton/Windows prefix can load it.
+            if(MINGW)
+                target_link_options(cna_demo_2d PRIVATE -static-libgcc -static-libstdc++)
+                target_link_options(cna_demo_2d PRIVATE -Wl,--allow-multiple-definition)
+                cna_copy_mingw_runtime(cna_demo_2d)
+            endif()
             cna_copy_sdl_runtime(cna_demo_2d)
         endif()
         # The 2D demo is the cross-backend visual verification target.  Stage

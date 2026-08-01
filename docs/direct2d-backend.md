@@ -35,10 +35,13 @@ does not grow a parallel 3D implementation.
   shadow; render targets are reallocated as transparent, so their former contents are invalid.
 
 The routine test pair is `Direct2D_Smoke` and `Direct2D_2DParity`. The latter validates partial
-and full RT readback plus mip readback under Wine through the `CopyFromBitmap` fallback. WineD3D
-does not register the built-in `ColorMatrix` effect and ignores `PLUS`/`SOURCE_COPY` image
-composite modes, so only those decorated and Additive/Opaque pixel probes remain native-Windows
-branches.
+and full RT readback plus mip readback under Wine through the `CopyFromBitmap` fallback. A Linux
+cross-build can use the default `-DCNA_DIRECT2D_TEST_RUNTIME=WINE`, or the opt-in
+`-DCNA_DIRECT2D_TEST_RUNTIME=PROTON`; the latter calls `scripts/run-proton-direct2d.sh`, detects
+Steam's Proton Experimental installation (including Debian's `~/.steam/debian-installation`), and
+uses a dedicated compat-data directory. WineD3D and Proton's Wine Direct2D do not register the
+built-in `ColorMatrix`/`Premultiply` effects and ignore `PLUS`/`SOURCE_COPY` image composite modes,
+so only those decorated and Additive/Opaque pixel probes remain native-Windows branches.
 
 ## Explicit limits
 
