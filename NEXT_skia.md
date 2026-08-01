@@ -17,9 +17,9 @@
 - The raster backbuffer, SDL presentation, `Texture2D`, `SpriteBatch`, SpriteFont atlas path,
   scissor/viewport, point/linear Clamp/Wrap/Mirror sampling, the four standard blend presets,
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
-- Recent relevant pushed commits include `d42e485b` (stable startup capability report) and
-  `3811d0a0` (transactional backend construction).
-- `docs/skia-backend.md` records 74 Skia CTests: seven raster-only and 67 display-required tests.
+- Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
+  `40fdb6ce` (Skia compile-selection identity coverage).
+- `docs/skia-backend.md` records 75 Skia CTests: seven raster-only and 68 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -215,6 +215,16 @@
   report zero selected backends. Added the missing count plus an explicit assertion that the macro
   maps to public type `GraphicsBackendType::Skia` and exact name `SKIA`.
 
+## Completed in this session: SKIA-15
+
+- Exposed the actual selected SDL presenter interval through a read-only internal diagnostic.
+  Immediate applies 0; One and Default apply 1; Two first requests 2 and records either 2 or the
+  existing documented driver fallback to 1. Presenter reconstruction reapplies that actual value.
+- Added `Skia_PresentInterval` (15 checks) for all four public Reset requests, public parameter
+  round trips, actual backend values, recovery persistence, and exact Clear/readback/Present after
+  all transitions. This closes the selected raster policy only; a future accelerated mode needs
+  an independent native-surface probe.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -278,10 +288,12 @@
   dependency configuration fails with the expected actionable CMake diagnostic. The monolithic
   `CnaTests` target compiles successfully with two jobs, and the six backend-type plus two compile-
   definition tests pass 8/8 in 1.37 seconds.
+- SKIA-15: `Skia_PresentInterval` passes all 15 checks under Xvfb in normal and AddressSanitizer
+  builds (`detect_leaks=0` for the known display-stack exit baseline).
 
 ## Current task
 
-Audit the remaining early lifecycle rows SKIA-13 through SKIA-15 and SKIA-18 against the actual raster
+Audit the remaining early lifecycle rows SKIA-13, SKIA-14, and SKIA-18 against the actual raster
 implementation. Several predate the completed vertical slice and may already be fulfilled by
 current code/tests; validate each claim before correcting a stale status or selecting a missing
 safe implementation task.

@@ -65,6 +65,12 @@ state leakage rather than application logging.
 
 Raster uses premultiplied RGBA8888 inside Skia and normalizes readback into top-row-first RGBA8 bytes for SDL. A future GPU path must preserve that contract and pass the same pixel tests; it may not silently change reported capabilities mid-frame.
 
+The raster present-interval policy delegates to SDL: Immediate requests 0, One/Default request 1,
+and Two requests 2 with a deterministic fallback to 1 only if the current renderer rejects 2.
+The backend records the actual applied value and reapplies it when the SDL presenter is rebuilt.
+This is not evidence for a future accelerated Skia surface, which must probe its own native swap
+or submit policy.
+
 The raster images and `SkSurface` objects are CPU-owned, so they have no GPU context handle to
 recreate. The test-only recovery seam therefore rebuilds the SDL renderer and its streaming
 presentation texture while retaining live raster textures, render targets, and their snapshots.
@@ -344,5 +350,9 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     previously omitted `CNA_BACKEND_SKIA` count and explicitly checks it maps to
     `GraphicsBackendType::Skia` and the exact public name `SKIA`; all eight focused identity tests
     pass in the Skia build.
+53. `Skia_PresentInterval` cycles Immediate, One, Two, and Default through public device resets,
+    checks each stored request and the actual SDL interval (Two may clamp from 2 to 1), rebuilds the
+    presenter and verifies the selected value persists, then proves exact Clear/readback/Present.
+    All fifteen checks pass in normal and AddressSanitizer builds.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

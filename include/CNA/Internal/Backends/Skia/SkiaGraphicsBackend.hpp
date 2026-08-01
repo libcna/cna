@@ -67,6 +67,8 @@ namespace CNA::Internal::Backends::Skia
         {
             return kSkiaStartupDiagnostic;
         }
+        /// Actual SDL presenter interval after any supported-driver clamp (2 may become 1).
+        NOXNA [[nodiscard]] int GetSwapIntervalEXT() const noexcept { return swapInterval_; }
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
