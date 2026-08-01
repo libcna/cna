@@ -5,7 +5,6 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
-#include "System/OutOfMemoryException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -237,6 +236,7 @@ namespace CNA::Internal::Backends::Software
                 (operationValue & state.writeMask));
         }
 
+#ifndef CNA_SOFTWARE_2D_ONLY
         /// One vertex in clip space (before the perspective divide), attributes NOT premultiplied
         /// by W (SOFTWARE-83). Clip space is still linear -- position and attributes can both be
         /// interpolated with a plain lerp here, unlike the post-divide RasterVertex above.
@@ -376,6 +376,7 @@ namespace CNA::Internal::Backends::Software
             out.nz = cv.nz * invW;
             return out;
         }
+#endif
 
         float EdgeFunction(float ax, float ay, float bx, float by, float px, float py)
         {
@@ -1005,6 +1006,7 @@ namespace CNA::Internal::Backends::Software
             return (lambda > 0.0f) ? lambda : 0.0f;
         }
 
+#ifndef CNA_SOFTWARE_2D_ONLY
         /// SOFTWARE-82: applies a column-major 4x4 matrix (GpuDrawParams::worldColMajor's own
         /// layout, and SkinnedEffect's boneTransforms per-bone entries) to a vector using the
         /// standard column-vector convention `v' = M*v` -- deliberately NOT going through CNA's
@@ -1305,6 +1307,7 @@ namespace CNA::Internal::Backends::Software
                          static_cast<int>(std::clamp(outG, 0.0f, 1.0f) * 255.0f),
                          static_cast<int>(std::clamp(outB, 0.0f, 1.0f) * 255.0f));
         }
+#endif
 
         /// SOFTWARE-81: whether a triangle with the given signed screen-space `area` should be
         /// culled under the given raw CullMode ordinal (0=None, 1=CullClockwiseFace,
@@ -1417,6 +1420,7 @@ namespace CNA::Internal::Backends::Software
         /// byte-identical for the Solid fill and reused verbatim by the WireFrame line walk. The clip
         /// guard is a no-op for the fill loop (its bounding box is already clamped to `clip`) and the
         /// safety net for the line walk.
+#ifndef CNA_SOFTWARE_2D_ONLY
         inline void WriteColoredFragment(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
                                          const RasterClipRect& clip, int x, int y,
                                          float depth, float invW, float pr, float pg, float pb, float pa,
@@ -1553,9 +1557,11 @@ namespace CNA::Internal::Backends::Software
                 }
             }
         }
+#endif
 
         // ---- Phase S5/S6: generalized (textured/blended/effect-driven) rasterization ----
 
+#ifndef CNA_SOFTWARE_2D_ONLY
         /// Transforms a vertex whose byte layout is inferred from `stride` (plan_software.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
         /// 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (SOFTWARE-82,
@@ -1686,6 +1692,7 @@ namespace CNA::Internal::Backends::Software
             }
             return out;
         }
+#endif
 
         /// Builds a RasterVertex directly from already-final screen-space pixel coordinates, with
         /// no perspective divide needed (invW=1) -- used by SpriteBatch's own 2D quads, which are
@@ -1909,6 +1916,7 @@ namespace CNA::Internal::Backends::Software
                 a = transform(3);
             }
 
+#ifndef CNA_SOFTWARE_2D_ONLY
             if (ctx.useEnvMap)
             {
                 // EnvironmentMapEffect (SOFTWARE-82), FNA's PSEnvMap/PSEnvMapSpecular formula, minus
@@ -1949,6 +1957,7 @@ namespace CNA::Internal::Backends::Software
 
                 if (g_cubeTrace.enabled) PrintCubeTraceLine(r, g, b);   // REMED-GFX-182
             }
+#endif
 
             // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
             // ColorWriteChannels never gates depth — only the colour channels below).
@@ -2038,9 +2047,17 @@ namespace CNA::Internal::Backends::Software
             // resolve here. A foreign backend still resolves to nullptr exactly as before.
             const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
+#ifndef CNA_SOFTWARE_2D_ONLY
             const auto* envMap = dynamic_cast<const SoftwareTextureCubeBackend*>(params.envMap);
+#else
+            const SoftwareTextureCubeBackend* envMap = nullptr;
+#endif
             const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
+#ifndef CNA_SOFTWARE_2D_ONLY
             const bool useEnvMap = params.envMapping && envMap != nullptr;
+#else
+            constexpr bool useEnvMap = false;
+#endif
             const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
             // REMED-GFX-150: classify magnification once per triangle per bound texture. Only XNA
             // filters 5..8 distinguish the two halves, so this is inert for Point, Linear and
@@ -2060,10 +2077,14 @@ namespace CNA::Internal::Backends::Software
             const bool magnify1 = !(rho1 > 1.0f);
             // REMED-GFX-182: the cube's own footprint, resolved once per triangle from the SAME
             // reflection expression the fragment path uses and only when a cube is actually bound.
+#ifndef CNA_SOFTWARE_2D_ONLY
             const float rhoCube = useEnvMap
                 ? TriangleCubeTexelRate(v0, v1, v2, params.eyePositionWorld,
                                         std::max(1, envMap->GetSize()))
                 : 1.0f;
+#else
+            constexpr float rhoCube = 1.0f;
+#endif
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
                                     depthState, stencilState, colorWriteMask, multiSampleMask,
@@ -2079,6 +2100,7 @@ namespace CNA::Internal::Backends::Software
             if (g_samplerTrace.enabled) ++g_samplerTrace.triangles;
             // REMED-GFX-182: stamp BOTH captured slot descriptions, so the cube trace can print the
             // public state this draw carried beside the description its cube sample really ran under.
+#ifndef CNA_SOFTWARE_2D_ONLY
             if (g_cubeTrace.enabled)
             {
                 g_cubeTrace.slot0Filter = sampler0.filter;
@@ -2088,6 +2110,7 @@ namespace CNA::Internal::Backends::Software
                 g_cubeTrace.slot1AddrU = sampler1.addressU;
                 g_cubeTrace.slot1AddrV = sampler1.addressV;
             }
+#endif
 
             // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling). hasBias is
             // 0 for the common zero-bias case, so the depth expressions below stay byte-identical then.
@@ -2208,6 +2231,7 @@ namespace CNA::Internal::Backends::Software
             }
         }
 
+#ifndef CNA_SOFTWARE_2D_ONLY
         // ---- REMED-GFX-110: indexed addressing and bounds ----
         //
         // Shared by both CPU indexed raster paths so they cannot drift apart again. The public
@@ -2375,203 +2399,12 @@ namespace CNA::Internal::Backends::Software
                         std::to_string(availableVertexCount) + " vertices.");
             }
         }
-    }
-
-    // ---- SoftwareFramebuffer ----
-
-    namespace
-    {
-        [[noreturn]] void ThrowInvalidFramebufferLayout(
-            const SoftwareFramebufferAllocationRequest& request,
-            SoftwareFramebufferAllocationError error)
-        {
-            throw System::ArgumentOutOfRangeException(
-                "dimensions", std::to_string(request.width) + "x" +
-                                  std::to_string(request.height),
-                std::string("Software framebuffer rejected the requested layout: ") +
-                    SoftwareFramebufferAllocationErrorName(error) +
-                    "; maximum dimension is " +
-                    std::to_string(SoftwareFramebufferMaxDimension) +
-                    " and maximum committed storage is " +
-                    std::to_string(SoftwareFramebufferMaxBytes) + " bytes.");
-        }
-
-        [[noreturn]] void ThrowFramebufferAllocationFailure(
-            const SoftwareFramebufferAllocationRequest& request,
-            const SoftwareFramebufferAllocationLayout& layout)
-        {
-            throw System::OutOfMemoryException(
-                "Software framebuffer could not allocate " +
-                std::to_string(layout.totalBytes) + " bytes for " +
-                std::to_string(request.width) + "x" + std::to_string(request.height) +
-                (request.multiSampleCount == 4 ? " with 4x MSAA." : "."));
-        }
-    }
-
-    void SoftwareFramebuffer::Resize(int w, int h)
-    {
-        const SoftwareFramebufferAllocationRequest request{
-            w, h, allocateDepthStorage, allocateStencilStorage, multiSampleCount};
-        const SoftwareFramebufferAllocationLayout layout =
-            PlanSoftwareFramebufferAllocation(request);
-        if (!layout.IsValid())
-            ThrowInvalidFramebufferLayout(request, layout.error);
-
-        std::vector<std::uint8_t> newColor;
-        std::vector<float> newDepth;
-        std::vector<std::uint8_t> newStencil;
-        std::vector<std::uint8_t> newMultiSampleColor;
-        try
-        {
-            newColor.assign(layout.colorBytes, 0u);
-            newDepth.assign(layout.depthElementCount, 1.0f);
-            newStencil.assign(layout.stencilBytes, 0u);
-            newMultiSampleColor.assign(layout.multiSampleBytes, 0u);
-        }
-        catch (const std::bad_alloc&)
-        {
-            ThrowFramebufferAllocationFailure(request, layout);
-        }
-        catch (const std::length_error&)
-        {
-            ThrowFramebufferAllocationFailure(request, layout);
-        }
-
-        width = w;
-        height = h;
-        color = std::move(newColor);
-        depthBuffer = std::move(newDepth);
-        stencilBuffer = std::move(newStencil);
-        multiSampleColor = std::move(newMultiSampleColor);
-    }
-
-    void SoftwareFramebuffer::SetMultiSampleCount(int sampleCount)
-    {
-        // CPU MSAA deliberately has one high-quality, predictable option: a rotated-independent
-        // 2x2 grid. Treat every other request as unsupported rather than silently claiming an
-        // arbitrary count with a different number of actual samples.
-        const int appliedCount = sampleCount == 4 ? 4 : 0;
-        if (multiSampleCount == appliedCount)
-            return;
-
-        if (appliedCount == 0)
-        {
-            // Preserve the last rendered image when an application turns the optional feature
-            // back off at reset time; otherwise the unresolved colour plane would be discarded.
-            ResolveColor();
-            multiSampleCount = 0;
-            std::vector<std::uint8_t>().swap(multiSampleColor);
-            return;
-        }
-
-        const SoftwareFramebufferAllocationRequest request{
-            width, height, allocateDepthStorage, allocateStencilStorage, appliedCount};
-        const SoftwareFramebufferAllocationLayout layout =
-            PlanSoftwareFramebufferAllocation(request);
-        if (!layout.IsValid())
-            ThrowInvalidFramebufferLayout(request, layout.error);
-
-        std::vector<std::uint8_t> newMultiSampleColor;
-        try
-        {
-            newMultiSampleColor.resize(layout.multiSampleBytes);
-        }
-        catch (const std::bad_alloc&)
-        {
-            ThrowFramebufferAllocationFailure(request, layout);
-        }
-        catch (const std::length_error&)
-        {
-            ThrowFramebufferAllocationFailure(request, layout);
-        }
-
-        multiSampleColor = std::move(newMultiSampleColor);
-        multiSampleCount = appliedCount;
-        CopyResolvedColorToMultiSample();
-    }
-
-    void SoftwareFramebuffer::CopyResolvedColorToMultiSample()
-    {
-        if (!HasMultiSampleColor())
-            return;
-
-        const std::size_t pixelCount = static_cast<std::size_t>(width) *
-                                       static_cast<std::size_t>(height);
-        for (std::size_t pixel = 0; pixel < pixelCount; ++pixel)
-        {
-            const std::size_t resolvedIndex = pixel * 4u;
-            for (int sample = 0; sample < 4; ++sample)
-            {
-                const std::size_t sampleIndex = (pixel * 4u + static_cast<std::size_t>(sample)) * 4u;
-                multiSampleColor[sampleIndex + 0] = color[resolvedIndex + 0];
-                multiSampleColor[sampleIndex + 1] = color[resolvedIndex + 1];
-                multiSampleColor[sampleIndex + 2] = color[resolvedIndex + 2];
-                multiSampleColor[sampleIndex + 3] = color[resolvedIndex + 3];
-            }
-        }
-    }
-
-    void SoftwareFramebuffer::ResolveColor()
-    {
-        if (!HasMultiSampleColor())
-            return;
-
-        const std::size_t pixelCount = static_cast<std::size_t>(width) *
-                                       static_cast<std::size_t>(height);
-        for (std::size_t pixel = 0; pixel < pixelCount; ++pixel)
-        {
-            const std::size_t resolvedIndex = pixel * 4u;
-            for (int channel = 0; channel < 4; ++channel)
-            {
-                unsigned int sum = 0;
-                for (int sample = 0; sample < 4; ++sample)
-                    sum += multiSampleColor[(pixel * 4u + static_cast<std::size_t>(sample)) * 4u +
-                                            static_cast<std::size_t>(channel)];
-                color[resolvedIndex + static_cast<std::size_t>(channel)] =
-                    static_cast<std::uint8_t>(sum / 4u);
-            }
-        }
-    }
-
-    void SoftwareFramebuffer::ClearColor(float r, float g, float b, float a)
-    {
-        const std::uint8_t rb = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t gb = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t bb = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
-        const std::uint8_t ab = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
-        const std::size_t pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
-        for (std::size_t i = 0; i < pixelCount; ++i)
-        {
-            color[i * 4 + 0] = rb;
-            color[i * 4 + 1] = gb;
-            color[i * 4 + 2] = bb;
-            color[i * 4 + 3] = ab;
-            if (HasMultiSampleColor())
-            {
-                for (int sample = 0; sample < 4; ++sample)
-                {
-                    const std::size_t sampleIndex = (i * 4u + static_cast<std::size_t>(sample)) * 4u;
-                    multiSampleColor[sampleIndex + 0] = rb;
-                    multiSampleColor[sampleIndex + 1] = gb;
-                    multiSampleColor[sampleIndex + 2] = bb;
-                    multiSampleColor[sampleIndex + 3] = ab;
-                }
-            }
-        }
-    }
-
-    void SoftwareFramebuffer::ClearDepthValue(float depthValue)
-    {
-        std::fill(depthBuffer.begin(), depthBuffer.end(), depthValue);
-    }
-
-    void SoftwareFramebuffer::ClearStencilValue(int stencilValue)
-    {
-        std::fill(stencilBuffer.begin(), stencilBuffer.end(),
-                  static_cast<std::uint8_t>(std::clamp(stencilValue, 0, 255)));
+#endif
     }
 
     // ---- SoftwareVertexBufferBackend ----
+
+#ifndef CNA_SOFTWARE_2D_ONLY
 
     SoftwareVertexBufferBackend::SoftwareVertexBufferBackend(int vertexCapacity)
         : capacity_(vertexCapacity)
@@ -2624,88 +2457,11 @@ namespace CNA::Internal::Backends::Software
     void SoftwareIndexBufferBackend::SetData32WithOptions(const void* data, int index_count, SetDataOptions)
     { Upload(data, index_count, true); }
 
-    // ---- SoftwareTextureBackend ----
-
-    SoftwareTextureBackend::SoftwareTextureBackend(const ImageData& data)
-        : width_(data.width), height_(data.height)
-        , declaredLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
-    {
-        pixels_.assign(data.pixels.begin(), data.pixels.end());
-    }
-
-    SoftwareTextureBackend::SoftwareTextureBackend(int width, int height)
-        : width_(width), height_(height)
-    {
-        pixels_.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u, 0u);
-    }
-
-    void SoftwareTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
-    {
-        if (rgba == nullptr)
-            throw std::runtime_error("SoftwareTextureBackend::UpdatePixels: rgba must not be null");
-        const std::size_t rowBytes = static_cast<std::size_t>(width_) * 4u;
-        const std::size_t effectiveStride = stride > 0 ? static_cast<std::size_t>(stride) : rowBytes;
-        pixels_.resize(rowBytes * static_cast<std::size_t>(height_));
-        for (int y = 0; y < height_; ++y)
-        {
-            std::copy(rgba + static_cast<std::size_t>(y) * effectiveStride,
-                     rgba + static_cast<std::size_t>(y) * effectiveStride + rowBytes,
-                     pixels_.begin() + static_cast<std::ptrdiff_t>(y) * static_cast<std::ptrdiff_t>(rowBytes));
-        }
-    }
-
-    // REMED-GFX-175: mip levels above 0 used to be dropped on the floor here, which is why NO
-    // TextureFilter ordinal could mip-filter on this backend -- not merely ordinals 0 and 1. The
-    // level a caller supplies is now STORED, exactly as given: nothing is downsampled, nothing is
-    // generated, and a level the caller never writes is never invented. `storedLevels_` counts only
-    // the levels held CONTIGUOUSLY from 0, so a chain written out of order, or abandoned half way,
-    // bounds the sampler at the last level that really exists instead of exposing a gap.
-    void SoftwareTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba,
-                                                   int levelW, int levelH)
-    {
-        if (level <= 0 || rgba == nullptr) return;
-        if (level >= declaredLevels_) return;
-        if (levelW <= 0 || levelH <= 0) return;
-
-        if (static_cast<int>(mipLevels_.size()) < level)
-            mipLevels_.resize(static_cast<std::size_t>(level));
-
-        MipLevel& dst = mipLevels_[static_cast<std::size_t>(level - 1)];
-        dst.width = levelW;
-        dst.height = levelH;
-        const std::size_t bytes = static_cast<std::size_t>(levelW) *
-                                  static_cast<std::size_t>(levelH) * 4u;
-        dst.pixels.assign(rgba, rgba + bytes);
-
-        // Recount from level 1 upward: a level only counts once every level below it is present.
-        int contiguous = 1;
-        for (std::size_t i = 0; i < mipLevels_.size(); ++i)
-        {
-            if (mipLevels_[i].pixels.empty()) break;
-            ++contiguous;
-        }
-        storedLevels_ = contiguous;
-    }
-
-    int SoftwareTextureBackend::ColorWidth(int level) const
-    {
-        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return width_;
-        return mipLevels_[static_cast<std::size_t>(level - 1)].width;
-    }
-
-    int SoftwareTextureBackend::ColorHeight(int level) const
-    {
-        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return height_;
-        return mipLevels_[static_cast<std::size_t>(level - 1)].height;
-    }
-
-    const std::vector<std::uint8_t>& SoftwareTextureBackend::ColorPixels(int level) const
-    {
-        if (level <= 0 || level > static_cast<int>(mipLevels_.size())) return pixels_;
-        return mipLevels_[static_cast<std::size_t>(level - 1)].pixels;
-    }
+#endif
 
     // ---- SoftwareTextureCubeBackend (SOFTWARE-82) ----
+
+#ifndef CNA_SOFTWARE_2D_ONLY
 
     // REMED-GFX-135: mirrors TextureCube.cpp's CalculateMipLevels(size,size) -- cube faces are
     // square, so the chain length is driven by a single edge.
@@ -2828,252 +2584,11 @@ namespace CNA::Internal::Backends::Software
         return true;
     }
 
-    // ---- SoftwareRenderTargetBackend ----
-
-    SoftwareRenderTargetBackend::SoftwareRenderTargetBackend(
-        int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
-        bool hasRealDepthBuffer, bool hasStandaloneStencilBuffer)
-        : framebuffer_(hasRealDepthBuffer,
-                       hasStandaloneStencilBuffer || hasRealDepthBuffer)
-        , depthFormat_(depthFormat), mipMap_(mipMap), multiSampleCount_(multiSampleCount)
-        , hasRealDepthBuffer_(hasRealDepthBuffer)
-        , hasStandaloneStencilBuffer_(hasStandaloneStencilBuffer)
-    {
-        const SoftwareFramebufferAllocationRequest request{
-            w, h, hasRealDepthBuffer,
-            hasStandaloneStencilBuffer || hasRealDepthBuffer,
-            multiSampleCount == 4 ? 4 : 0, mipMap};
-        const SoftwareFramebufferAllocationLayout layout =
-            PlanSoftwareFramebufferAllocation(request);
-        if (!layout.IsValid())
-            ThrowInvalidFramebufferLayout(request, layout.error);
-
-        framebuffer_.Resize(w, h);
-        framebuffer_.SetMultiSampleCount(multiSampleCount_);
-        multiSampleCount_ = framebuffer_.multiSampleCount;
-        if (mipMap_)
-        {
-            int levelWidth = framebuffer_.width;
-            int levelHeight = framebuffer_.height;
-            while (levelWidth > 1 || levelHeight > 1)
-            {
-                levelWidth = std::max(1, levelWidth / 2);
-                levelHeight = std::max(1, levelHeight / 2);
-                ++levelCount_;
-            }
-            try
-            {
-                mipLevels_.resize(static_cast<std::size_t>(levelCount_ - 1));
-            }
-            catch (const std::bad_alloc&)
-            {
-                ThrowFramebufferAllocationFailure(request, layout);
-            }
-            catch (const std::length_error&)
-            {
-                ThrowFramebufferAllocationFailure(request, layout);
-            }
-        }
-    }
-
-    void SoftwareRenderTargetBackend::UpdatePixels(const uint8_t* rgba, int)
-    {
-        if (rgba == nullptr) return;
-        const std::size_t byteCount = static_cast<std::size_t>(framebuffer_.width) *
-                                       static_cast<std::size_t>(framebuffer_.height) * 4u;
-        framebuffer_.color.assign(rgba, rgba + byteCount);
-        framebuffer_.CopyResolvedColorToMultiSample();
-        mipLevelsReady_ = false;
-        // A direct CPU upload is already complete unless this target is actively being rendered.
-        // Generate now so an uploaded, unbound RenderTarget2D never exposes stale lower levels.
-        if (!bound_)
-            GenerateMipMaps();
-    }
-
-    int SoftwareRenderTargetBackend::MipWidth(int level) const
-    {
-        int width = framebuffer_.width;
-        for (int i = 0; i < level; ++i)
-            width = std::max(1, width / 2);
-        return width;
-    }
-
-    int SoftwareRenderTargetBackend::MipHeight(int level) const
-    {
-        int height = framebuffer_.height;
-        for (int i = 0; i < level; ++i)
-            height = std::max(1, height / 2);
-        return height;
-    }
-
-    int SoftwareRenderTargetBackend::ColorWidth(int level) const
-    {
-        return level > 0 && level < ColorLevelCount() ? MipWidth(level) : framebuffer_.width;
-    }
-
-    int SoftwareRenderTargetBackend::ColorHeight(int level) const
-    {
-        return level > 0 && level < ColorLevelCount() ? MipHeight(level) : framebuffer_.height;
-    }
-
-    const std::vector<std::uint8_t>& SoftwareRenderTargetBackend::ColorPixels(int level) const
-    {
-        if (level > 0 && level < ColorLevelCount())
-            return mipLevels_[static_cast<std::size_t>(level - 1)];
-        return framebuffer_.color;
-    }
-
-    void SoftwareRenderTargetBackend::GenerateMipMaps()
-    {
-        if (!mipMap_ || levelCount_ <= 1)
-            return;
-
-        const SoftwareFramebufferAllocationRequest request{
-            framebuffer_.width, framebuffer_.height,
-            framebuffer_.allocateDepthStorage, framebuffer_.allocateStencilStorage,
-            framebuffer_.multiSampleCount, true};
-        const SoftwareFramebufferAllocationLayout layout =
-            PlanSoftwareFramebufferAllocation(request);
-        if (!layout.IsValid())
-            ThrowInvalidFramebufferLayout(request, layout.error);
-
-        try
-        {
-            const std::vector<std::uint8_t>* source = &framebuffer_.color;
-            int sourceWidth = framebuffer_.width;
-            int sourceHeight = framebuffer_.height;
-            for (int level = 1; level < levelCount_; ++level)
-            {
-                const int destinationWidth = MipWidth(level);
-                const int destinationHeight = MipHeight(level);
-                std::vector<std::uint8_t>& destination =
-                    mipLevels_[static_cast<std::size_t>(level - 1)];
-                destination.resize(static_cast<std::size_t>(destinationWidth) *
-                                   static_cast<std::size_t>(destinationHeight) * 4u);
-
-                // Match the CPU box-filter convention used by the D3D12 render-target backend: a
-                // 2x2 average with the second source coordinate clamped for odd dimensions.
-                for (int y = 0; y < destinationHeight; ++y)
-                {
-                    const int sy0 = std::min(sourceHeight - 1, y * 2);
-                    const int sy1 = std::min(sourceHeight - 1, y * 2 + 1);
-                    for (int x = 0; x < destinationWidth; ++x)
-                    {
-                        const int sx0 = std::min(sourceWidth - 1, x * 2);
-                        const int sx1 = std::min(sourceWidth - 1, x * 2 + 1);
-                        for (int channel = 0; channel < 4; ++channel)
-                        {
-                            const int sum = (*source)[(static_cast<std::size_t>(sy0) * sourceWidth + sx0) * 4u + channel]
-                                          + (*source)[(static_cast<std::size_t>(sy0) * sourceWidth + sx1) * 4u + channel]
-                                          + (*source)[(static_cast<std::size_t>(sy1) * sourceWidth + sx0) * 4u + channel]
-                                          + (*source)[(static_cast<std::size_t>(sy1) * sourceWidth + sx1) * 4u + channel];
-                            destination[(static_cast<std::size_t>(y) * destinationWidth + x) * 4u + channel] =
-                                static_cast<std::uint8_t>(sum / 4);
-                        }
-                    }
-                }
-
-                source = &destination;
-                sourceWidth = destinationWidth;
-                sourceHeight = destinationHeight;
-            }
-        }
-        catch (const std::bad_alloc&)
-        {
-            for (std::vector<std::uint8_t>& level : mipLevels_)
-                std::vector<std::uint8_t>().swap(level);
-            ThrowFramebufferAllocationFailure(request, layout);
-        }
-        catch (const std::length_error&)
-        {
-            for (std::vector<std::uint8_t>& level : mipLevels_)
-                std::vector<std::uint8_t>().swap(level);
-            ThrowFramebufferAllocationFailure(request, layout);
-        }
-        mipLevelsReady_ = true;
-    }
-
-    void SoftwareRenderTargetBackend::BindAsRenderTarget()
-    {
-        // Lower levels describe the prior completed pass and must never be sampled while this
-        // target is being changed again. They become available only after UnbindAsRenderTarget.
-        mipLevelsReady_ = false;
-        bound_ = true;
-    }
-
-    void SoftwareRenderTargetBackend::UnbindAsRenderTarget()
-    {
-        if (!bound_)
-            return;
-        // Multisampled rendering writes the per-sample plane. Resolve it before consumers observe
-        // level zero and before mip generation derives lower levels from the resolved image.
-        framebuffer_.ResolveColor();
-        GenerateMipMaps();
-        bound_ = false;
-    }
-
-    bool SoftwareRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
-                                              void* data, int dataLength) const
-    {
-        ++readbackCallCount_;
-        if (data == nullptr)
-            throw System::ArgumentNullException("data");
-        if (level < 0)
-            throw System::ArgumentOutOfRangeException(
-                "level", std::to_string(level), "level must not be negative.");
-        if (level >= levelCount_)
-            throw System::NotSupportedException(
-                "SoftwareRenderTargetBackend::GetData: this render target has " +
-                std::to_string(levelCount_) + " mip level(s); level " +
-                std::to_string(level) + " was requested.");
-        if (level > 0 && !mipLevelsReady_)
-            throw System::NotSupportedException(
-                "SoftwareRenderTargetBackend::GetData: generated mip levels are unavailable "
-                "until the active render-target pass is unbound.");
-        if (w <= 0 || h <= 0)
-            throw System::ArgumentOutOfRangeException(
-                "w", std::to_string(w) + "x" + std::to_string(h),
-                "The requested rectangle must have a positive width and height.");
-        const int levelWidth = MipWidth(level);
-        const int levelHeight = MipHeight(level);
-        // 64-bit throughout, so a rectangle near INT_MAX cannot wrap into an apparently valid one.
-        const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
-        const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
-        if (x < 0 || y < 0 ||
-            right > static_cast<std::int64_t>(levelWidth) ||
-            bottom > static_cast<std::int64_t>(levelHeight))
-            throw System::ArgumentOutOfRangeException(
-                "rect",
-                std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
-                    std::to_string(h),
-                "The requested rectangle leaves mip level " + std::to_string(level) + " (" +
-                    std::to_string(levelWidth) + "x" + std::to_string(levelHeight) + ").");
-        const std::int64_t requiredBytes =
-            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
-        if (static_cast<std::int64_t>(dataLength) < requiredBytes)
-            throw System::ArgumentOutOfRangeException(
-                "dataLength", std::to_string(dataLength),
-                "The destination holds fewer than the " + std::to_string(requiredBytes) +
-                    " bytes the requested rectangle needs.");
-
-        // The colour attachment is the ONLY storage read here -- framebuffer_.depthBuffer is never
-        // consulted, so depth/stencil content can never leak through a colour readback.
-        const std::vector<std::uint8_t>& source = ColorPixels(level);
-        auto* dst = static_cast<std::uint8_t*>(data);
-        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
-        for (int row = 0; row < h; ++row)
-        {
-            const std::size_t srcOffset =
-                (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(levelWidth) +
-                 static_cast<std::size_t>(x)) * 4u;
-            std::copy(source.begin() + static_cast<std::ptrdiff_t>(srcOffset),
-                      source.begin() + static_cast<std::ptrdiff_t>(srcOffset + rowBytes),
-                      dst + static_cast<std::size_t>(row) * rowBytes);
-        }
-        return true;
-    }
+#endif
 
     // ---- SoftwareEffectBackend ----
+
+#ifndef CNA_SOFTWARE_2D_ONLY
 
     bool SoftwareEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
@@ -3082,6 +2597,8 @@ namespace CNA::Internal::Backends::Software
         compiled_ = true;
         return true;
     }
+
+#endif
 
     // ---- SoftwareSpriteBatchBackend ----
     // Phase S6 (SOFTWARE-51): a SpriteBatch::Draw() call is just a textured quad (2 triangles)
@@ -3366,9 +2883,16 @@ namespace CNA::Internal::Backends::Software
 
     std::unique_ptr<ITextureCubeBackend> SoftwareGraphicsBackend::CreateTextureCube(int size, bool mipMap, int)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)size;
+        (void)mipMap;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include TextureCube resources.");
+#else
         // REMED-GFX-135: `mipMap` used to be discarded here, so a mipmapped TextureCube reported a
         // LevelCount whose storage did not exist and every mip upload was dropped in silence.
         return std::make_unique<SoftwareTextureCubeBackend>(size, mipMap);
+#endif
     }
 
     bool SoftwareGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
@@ -3438,9 +2962,16 @@ namespace CNA::Internal::Backends::Software
     std::unique_ptr<IEffectBackend> SoftwareGraphicsBackend::CreateEffectBackend(const std::string& vertSrc,
                                                                                 const std::string& fragSrc)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)vertSrc;
+        (void)fragSrc;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include programmable effect resources.");
+#else
         auto effect = std::make_unique<SoftwareEffectBackend>();
         effect->CompileProgram(vertSrc, fragSrc);
         return effect;
+#endif
     }
 
     void SoftwareGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -3662,22 +3193,41 @@ namespace CNA::Internal::Backends::Software
 
     std::unique_ptr<IVertexBufferBackend> SoftwareGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)vertex_capacity;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include vertex buffers.");
+#else
         return std::make_unique<SoftwareVertexBufferBackend>(vertex_capacity);
+#endif
     }
 
     std::unique_ptr<IIndexBufferBackend> SoftwareGraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)index_capacity;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include index buffers.");
+#else
         return std::make_unique<SoftwareIndexBufferBackend>(index_capacity, false);
+#endif
     }
 
     std::unique_ptr<IIndexBufferBackend> SoftwareGraphicsBackend::CreateIndexBuffer32(int index_capacity)
     {
+#ifdef CNA_SOFTWARE_2D_ONLY
+        (void)index_capacity;
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include index buffers.");
+#else
         return std::make_unique<SoftwareIndexBufferBackend>(index_capacity, true);
+#endif
     }
 
     // Phase S4 (SOFTWARE-30..34): real transform/rasterize/depth-test pipeline. TriangleList only
     // in v1 (the owner's own stated minimal first-version scope) -- other PrimitiveType values
     // throw rather than silently misrendering.
+#ifndef CNA_SOFTWARE_2D_ONLY
     void SoftwareGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb, const Matrix& world,
                                                         const Matrix& view, const Matrix& projection,
                                                         PrimitiveType primitive, int primitiveCount)
@@ -4127,6 +3677,38 @@ namespace CNA::Internal::Backends::Software
                                         GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
+#else
+    void SoftwareGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&, const Matrix&,
+                                                         const Matrix&, const Matrix&, PrimitiveType, int)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include 3D primitive drawing.");
+    }
+
+    void SoftwareGraphicsBackend::DrawIndexedColoredPrimitives(
+        const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&,
+        const Matrix&, PrimitiveType, int)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include indexed 3D primitive drawing.");
+    }
+
+    void SoftwareGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&, const Matrix&,
+                                                    const Matrix&, const Matrix&, PrimitiveType, int,
+                                                    const GpuDrawParams&)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include effect-aware 3D drawing.");
+    }
+
+    void SoftwareGraphicsBackend::DrawIndexedPrimitivesEx(
+        const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&,
+        const Matrix&, PrimitiveType, int, const GpuDrawParams&)
+    {
+        throw System::NotSupportedException(
+            "Software's GDI 2D compilation unit does not include indexed effect-aware 3D drawing.");
+    }
+#endif
 }
 
 namespace CNA::Internal::Backends

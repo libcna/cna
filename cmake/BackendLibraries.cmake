@@ -34,23 +34,30 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_include_directories(cna_backend_graphics_sdl_renderer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
-# GDI presents the Software backend's CPU framebuffer through classic Win32 GDI. Keep this
-# dependency explicit: future Software translation units must not enter the 2D-only GDI build
-# without review. SoftwareGraphicsBackend.cpp is currently a monolith containing the required
-# framebuffer, texture, SpriteBatch and RenderTarget2D services as well as Software-only 3D/cube
-# code; there is no independently removable 3D translation unit. The SOFTWARE factory at its end
-# is guarded by CNA_BACKEND_SOFTWARE, so compiling it into the GDI backend adds no second factory
-# definition.
+# GDI presents the Software backend's CPU framebuffer through classic Win32 GDI. Keep this dependency
+# explicit: future Software translation units must not enter the 2D-only GDI build without review.
+# GDI consumes the CPU 2D implementation through a dedicated translation unit. It deliberately
+# compiles neither the Software 3D/cube resource implementations nor the 3D draw entry points;
+# the full SOFTWARE backend compiles the remaining general implementation plus the shared 2D units.
 set(CNA_GDI_SOFTWARE_SOURCES)
 if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
     set(CNA_GDI_SOFTWARE_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebuffer.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareTexture2D.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareRenderTarget2D.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2D.cpp"
     )
 endif()
 
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
+if(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
+    # This wrapper includes SoftwareGraphicsBackend.cpp with CNA_SOFTWARE_2D_ONLY for the GDI
+    # archive. The complete SOFTWARE archive compiles the implementation directly, once.
+    list(REMOVE_ITEM BACKEND_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2D.cpp")
+endif()
 list(APPEND BACKEND_SOURCES ${CNA_GDI_SOFTWARE_SOURCES})
 
 # plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectBackend.cpp calls
