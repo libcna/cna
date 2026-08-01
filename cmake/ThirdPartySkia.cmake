@@ -44,15 +44,18 @@ function(cna_configure_skia)
         endif()
     endforeach()
 
+    # Do not add --start-group/--end-group as independent link items. CMake may reorder them
+    # away from their archives while flattening an INTERFACE dependency into an executable.
+    # LINK_GROUP preserves the relationship through all consuming targets.
+    string(JOIN "," _cna_skia_link_group_members ${_cna_skia_archives})
+
     find_package(Threads REQUIRED)
 
     add_library(cna_third_party_skia INTERFACE)
     add_library(CNA::Skia ALIAS cna_third_party_skia)
     target_include_directories(cna_third_party_skia INTERFACE "${CNA_SKIA_ROOT}")
     target_link_libraries(cna_third_party_skia INTERFACE
-        "-Wl,--start-group"
-        ${_cna_skia_archives}
-        "-Wl,--end-group"
+        "$<LINK_GROUP:RESCAN,${_cna_skia_link_group_members}>"
         Threads::Threads
         "${CMAKE_DL_LIBS}"
     )
