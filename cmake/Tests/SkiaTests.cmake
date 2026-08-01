@@ -108,6 +108,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spriteeffect_alias examples/skia_spriteeffect_alias_test.cpp)
     cna_register_skia_display_test(Skia_SpriteEffect_Alias cna_test_skia_spriteeffect_alias)
 
+    # SKIA-91: only the exact CNA_SKIA_SKSL_V1 marker opts a ShaderEffect into the bounded
+    # fragment-only runtime-shader ABI. Pixel checks prove its reserved texture child, while bad
+    # source/ABI/size cases retain actionable diagnostics and cannot poison the stock path.
+    cna_skia_test(cna_test_skia_sksl_effect_prototype
+                  examples/skia_sksl_effect_prototype_test.cpp)
+    cna_register_skia_display_test(Skia_SkSL_Effect_Prototype
+                                   cna_test_skia_sksl_effect_prototype)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

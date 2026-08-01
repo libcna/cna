@@ -61,11 +61,11 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IRenderTargetCubeBackend::GetMultiSampleCount/0` | Reports cube-face sample count. | Reports the honestly applied raster count of zero. | `bounded` | SKIA-85–86; policy/usage contracts |
 | `IRenderTargetCubeBackend::HasRealDepthBuffer/1` | Reports cube depth attachment. | Always false; requested depth remains metadata. | `unsupported` | SKIA-85–86; direct policy test |
 | `IRenderTargetCubeBackend::SetData/8` | Uploads one rendered cube-face region where supported. | Exact bounded face/mip/rectangle upload. | `implemented` | SKIA-85–86; shared GetData contract |
-| `IEffectBackend::CompileProgram/2` | Compiles GLSL vertex/fragment programs; shader tests. | Arbitrary GLSL is not SkSL-compatible. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::Bind/0` | Binds an EasyGL program. | Effect backend construction returns unsupported. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::Unbind/0` | Restores EasyGL program state. | Effect backend construction returns unsupported. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::IsValid/0` | Reports GL link success. | No arbitrary shader program is created. | `unsupported` | SKIA-89–92 |
-| `IEffectBackend::GetCompileError/0` | Exposes GL compile/link diagnostics. | Creation refusal is the diagnostic boundary. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::CompileProgram/2` | Compiles GLSL vertex/fragment programs; shader tests. | Exact `CNA_SKIA_SKSL_V1` marker compiles one bounded SkSL 100 SpriteBatch shader ABI; arbitrary GLSL remains unsupported. | `bounded` | SKIA-89–92; `Skia_SkSL_Effect_Prototype` |
+| `IEffectBackend::Bind/0` | Binds an EasyGL program. | Valid tagged runtime effect accepts Apply/Bind; SpriteBatch composes it per draw. | `bounded` | SKIA-91–92 |
+| `IEffectBackend::Unbind/0` | Restores EasyGL program state. | Clears adapter binding state; stock SpriteBatch selection remains explicit. | `bounded` | SKIA-91–92 |
+| `IEffectBackend::IsValid/0` | Reports GL link success. | Reports tagged SkSL compile plus reserved-ABI validation. | `bounded` | SKIA-91–92 |
+| `IEffectBackend::GetCompileError/0` | Exposes GL compile/link diagnostics. | Retains compiler, source-limit, and reflected-ABI diagnostics for tagged effects. | `bounded` | SKIA-91–92 |
 | `IEffectBackend::SetUniformFloat/2` | Sets a scalar GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
 | `IEffectBackend::SetUniformInt/2` | Sets an integer GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
 | `IEffectBackend::SetUniformVec2/3` | Sets a vec2 GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
@@ -108,7 +108,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Level-zero color target only. | `bounded` | SKIA-61–79 |
 | `IGraphicsBackend::SetRenderTarget2D/1` | Binds/unbinds one EasyGL FBO. | Binds checked raster target/backbuffer. | `implemented` | SKIA-61, SKIA-69 |
 | `IGraphicsBackend::CreateRenderTargetCube/5` | Allocates cube-face FBO target. | Creates bounded six-face raster/mip storage; no depth/MSAA/sampler. | `bounded` | SKIA-85–86; four public contracts |
-| `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Returns null: untagged vertex/fragment strings cannot safely mean SkSL. | `unsupported` | SKIA-89–92; `docs/skia-effects.md` |
+| `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Untagged strings return null; exact `CNA_SKIA_SKSL_V1` constructs the bounded fragment-only SkSL adapter. | `bounded` | SKIA-89–92; `docs/skia-effects.md`; `Skia_SkSL_Effect_Prototype` |
 | `IGraphicsBackend::SetRenderTargetCubeFace/2` | Binds selected cube face. | Binds one checked raster face and resets target-local state. | `implemented` | SKIA-85–86; plural binding contract |
 | `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Empty/one 2D/one cube face work; 2–4 targets reject atomically because SkCanvas cannot express distinct slot outputs. | `bounded` | SKIA-68, SKIA-85–88; `Skia_MRT_Rejection` |
 | `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | Five proven blend routes and channel masks only. | `bounded` | SKIA-47–57 |
@@ -158,7 +158,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsCapability::AnisotropicFiltering` | EasyGL reports device anisotropy. | Raster backend reports false. | `unsupported` | SKIA-78–79 |
 | `GraphicsCapability::WireFrame` | EasyGL supports GL line polygon mode where available. | Raster backend reports false and rejects wireframe. | `unsupported` | SKIA-58, SKIA-97 |
 | `GraphicsCapability::OcclusionQuery` | EasyGL reports query API availability. | Raster backend reports false. | `unsupported` | SKIA-104–105 |
-| `GraphicsCapability::CustomEffects` | EasyGL compiles custom GLSL effects. | Raster backend reports false. | `unsupported` | SKIA-89–94 |
+| `GraphicsCapability::CustomEffects` | EasyGL compiles custom GLSL effects. | False: the explicit bounded SkSL SpriteBatch extension is not arbitrary GLSL compatibility. | `unsupported` | SKIA-89–94 |
 | `GraphicsCapability::Texture3D` | EasyGL exposes GL volume textures. | True for persistent CPU transfer/readback storage only; no sampling claim. | `bounded` | SKIA-82–84; `Skia_GraphicsCapability` |
 
 ## Public GraphicsDevice calls

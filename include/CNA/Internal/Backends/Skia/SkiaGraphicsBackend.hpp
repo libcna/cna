@@ -80,6 +80,8 @@ namespace CNA::Internal::Backends::Skia
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(
             int width, int height, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(
+            const std::string& vertSrc, const std::string& fragSrc) override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int width, int height, int depthFormat,
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,

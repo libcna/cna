@@ -535,19 +535,41 @@
   smoke. The current `Skia_Surface_Raster` passes all 14 checks and the target-binding companion
   passes 10/10 in Release.
 
+## Completed in this session: SKIA-91
+
+- Added a dedicated `SkiaEffectBackend`. Only the exact opaque-source marker
+  `CNA_SKIA_SKSL_V1` constructs it; existing untagged GLSL/SPIR-V payloads keep their prior null
+  result. The fragment source compiles through public raster `SkRuntimeEffect::MakeForShader`.
+- The v1 prototype ABI is deliberately exact: one `uniform shader cnaTexture0`, one non-array
+  `uniform float4 cnaTint`, source-pixel local coordinates, and the active SpriteBatch sampling,
+  addressing, source-rectangle, transform, blend, viewport and scissor paths. The per-draw tint
+  uses the stock path's already-proven premultiplied/straight convention.
+- Source is bounded to 65,536 bytes and reflected uniforms to 16,384 bytes. Tagged compiler,
+  child/uniform ABI, and limit failures retain actionable diagnostics. Pinned Skia exposes no
+  public compile-time/compiler-memory budget; this limitation is explicit in `docs/skia-effects.md`.
+- `Skia_SkSL_Effect_Prototype`, `Skia_Effect_Boundary`, and `Skia_SpriteEffect_Alias` pass together
+  under Xvfb. The new test proves a real red/green channel transform, bad compiler text, wrong ABI,
+  pre-compile source-size refusal, and stock-path reuse after failure. Both audit validators pass.
+- The complete Debug Skia suite passes 100/100 in 12.99 seconds with `--parallel 8` (9 Raster,
+  89 Display, 2 Audit). The focused prototype also passes in Release and under AddressSanitizer
+  (`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1`); all three build caches were restored to `:0`.
+- `CustomEffects` remains false because this fragment-only opt-in is not arbitrary EasyGL GLSL.
+  General reflected setters and additional 2D children remain SKIA-92 work. `NEXT.md` was not read
+  or changed.
+
 ## Current task
 
-SKIA-20 is complete. Work is paused after its commit/push at the user's request; do not begin the
-next plan item until the user explicitly asks to continue.
+SKIA-91 implementation and broad validation are complete. Commit/push the coherent checkpoint,
+then start SKIA-92 with reflected setters and additional bounded 2D children.
 
 ## Next candidates
 
-1. Audit the remaining stale integration/release rows against the machine-checked SKIA-1/SKIA-2
-   inventories when work resumes.
-2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
-   probe; the selected raster path has no truthful capability to expose there.
-3. Keep the recovery boundary precise: raster resources survive SDL presenter reconstruction;
-   only a future accelerated Skia mode may acquire a genuine context-loss lifecycle.
+1. SKIA-92: implement exact reflected float/int/vector/matrix/array setters and bounded additional
+   2D child bindings for the tagged SkSL route, with deterministic missing/type/count/unit errors.
+2. Prove custom tint, source rectangles, transforms/sampler modes, a second Texture2D child, clone
+   isolation, and failure recovery in Debug/Release/ASan before changing capability reporting.
+3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
+   never widen the tagged contract merely to silence a fixture.
 
 ## Known boundaries / assumptions
 

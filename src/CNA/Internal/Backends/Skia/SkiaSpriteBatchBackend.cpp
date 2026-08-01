@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaEffectBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterTarget.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
@@ -107,6 +108,23 @@ namespace CNA::Internal::Backends::Skia
             float alpha;
         };
 
+        [[nodiscard]] TintScale MakeTintScale(
+            const Color& color, SkiaSourceAlphaConvention alphaConvention)
+        {
+            const float alpha = static_cast<float>(color.getAProperty()) / 255.0f;
+            // Skia has already premultiplied a straight-alpha image when the shader/filter sees
+            // it; XNA's NonPremultiplied equation still needs that source alpha after tinting.
+            const float straightAlphaScale = alphaConvention == SkiaSourceAlphaConvention::Straight
+                ? alpha
+                : 1.0f;
+            return {
+                static_cast<float>(color.getRProperty()) / 255.0f * straightAlphaScale,
+                static_cast<float>(color.getGProperty()) / 255.0f * straightAlphaScale,
+                static_cast<float>(color.getBProperty()) / 255.0f * straightAlphaScale,
+                alpha,
+            };
+        }
+
         [[nodiscard]] const sk_sp<SkRuntimeEffect>& TintEffect()
         {
             // SkColorFilters::Blend(..., kModulate) uses premultiplied tint RGB, which would
@@ -130,18 +148,7 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] sk_sp<SkColorFilter> MakeTintFilter(const Color& color,
                                                             SkiaSourceAlphaConvention alphaConvention)
         {
-            const float alpha = static_cast<float>(color.getAProperty()) / 255.0f;
-            // Skia has already premultiplied a straight-alpha image when the filter sees it;
-            // XNA's NonPremultiplied equation still needs that source alpha after tinting.
-            const float straightAlphaScale = alphaConvention == SkiaSourceAlphaConvention::Straight
-                ? alpha
-                : 1.0f;
-            const TintScale scale {
-                static_cast<float>(color.getRProperty()) / 255.0f * straightAlphaScale,
-                static_cast<float>(color.getGProperty()) / 255.0f * straightAlphaScale,
-                static_cast<float>(color.getBProperty()) / 255.0f * straightAlphaScale,
-                alpha,
-            };
+            const TintScale scale = MakeTintScale(color, alphaConvention);
             return TintEffect()->makeColorFilter(SkData::MakeWithCopy(&scale, sizeof(scale)));
         }
     }
@@ -185,6 +192,7 @@ namespace CNA::Internal::Backends::Skia
     void SkiaSpriteBatchBackend::SetCustomEffect(Effect* effect)
     {
         (void)LockBinding("SpriteBatch::SetCustomEffect");
+        customEffect_ = nullptr;
         if (!effect || effect->IsExactStockSpriteEffectEXT())
         {
             // CNA's exact stock SpriteEffect owns no backend program; EasyGL also falls back to
@@ -192,6 +200,19 @@ namespace CNA::Internal::Backends::Skia
             // path already implements that output. Exact type identity is intentional: silently
             // accepting a derived effect could discard an overridden OnApply() contract.
             return;
+        }
+
+        auto* skiaEffect = dynamic_cast<SkiaEffectBackend*>(effect->GetEffectBackendPtr());
+        if (skiaEffect && skiaEffect->IsValid())
+        {
+            customEffect_ = skiaEffect;
+            return;
+        }
+        if (skiaEffect)
+        {
+            throw std::runtime_error(
+                "Skia raster SpriteBatch rejected an invalid explicit SkSL effect: "
+                + skiaEffect->GetCompileError());
         }
         throw std::runtime_error(
             "Skia raster SpriteBatch supports only the exact stock SpriteEffect; custom Effects "
@@ -280,7 +301,7 @@ namespace CNA::Internal::Backends::Skia
             paint.setBlender(*customBlender_);
         else
             paint.setBlendMode(blendMode_ ? *blendMode_ : SkBlendMode::kSrcOver);
-        if (color != Color::White)
+        if (!customEffect_ && color != Color::White)
             paint.setColorFilter(MakeTintFilter(color, sourceAlphaConvention));
 
         const float sourceWidth = static_cast<float>(sourceRectangle.Width);
@@ -340,6 +361,30 @@ namespace CNA::Internal::Backends::Skia
                                                 sourceWidth, sourceHeight);
         const SkRect destination = SkRect::MakeXYWH(-origin.X, -origin.Y, sourceWidth, sourceHeight);
         const SkSamplingOptions sampling = ToSampling(textureFilter_);
+        if (customEffect_)
+        {
+            // The child shader uses the same source-pixel coordinate mapping and public sampler
+            // state as the already-proven tiled stock path. The runtime shader itself receives
+            // local source-pixel coordinates; cnaTexture0.eval(p) therefore reaches the matching
+            // texture coordinate even for transformed/flipped/extended source rectangles.
+            const SkMatrix shaderMatrix = SkMatrix::Translate(
+                -static_cast<float>(sourceRectangle.X) - origin.X,
+                -static_cast<float>(sourceRectangle.Y) - origin.Y);
+            sk_sp<SkShader> primary = image->makeShader(
+                ToTileMode(addressU_), ToTileMode(addressV_), sampling, shaderMatrix);
+            if (!primary)
+                throw std::runtime_error("Skia failed to create the custom effect's cnaTexture0 child.");
+
+            const TintScale tint = MakeTintScale(color, sourceAlphaConvention);
+            const float tintValues[4] = {tint.red, tint.green, tint.blue, tint.alpha};
+            sk_sp<SkShader> shader = customEffect_->MakeSpriteShaderEXT(
+                std::move(primary), tintValues);
+            if (!shader)
+                throw std::runtime_error("Skia failed to instantiate the explicit SkSL SpriteBatch effect.");
+            paint.setShader(std::move(shader));
+            canvas->drawRect(destination, paint);
+            return;
+        }
         if (sourceInBounds && addressU_ == 1 && addressV_ == 1)
         {
             // Strict source clipping is more precise than a clamp shader for atlas sub-rectangles:

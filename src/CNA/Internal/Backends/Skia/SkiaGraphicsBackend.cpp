@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaBlendMapping.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaEffectBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetCubeBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
@@ -478,6 +479,20 @@ namespace CNA::Internal::Backends::Skia
         return std::make_unique<SkiaSpriteBatchBackend>(targetBinding_->ActiveSurfaceRef(), spriteBlendMode_,
                                                          spriteCustomBlender_, spriteSourceAlphaConvention_,
                                                          rasterState_, targetBinding_);
+    }
+
+    std::unique_ptr<IEffectBackend> SkiaGraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        AssertOwnership("CreateEffectBackend");
+        // Existing ShaderEffect payloads are untagged GLSL/HLSL or even binary SPIR-V. Preserve
+        // the historical null result for those rather than asking SkSL to guess their language.
+        if (vertSrc != kSkiaSkslSpriteEffectMarkerEXT)
+            return nullptr;
+
+        auto backend = std::make_unique<SkiaEffectBackend>();
+        (void)backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
     }
 
     std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(

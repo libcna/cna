@@ -13,6 +13,8 @@
 
 namespace CNA::Internal::Backends::Skia
 {
+    class SkiaEffectBackend;
+
     /** Immediate SkCanvas implementation of the level-0 SpriteBatch path. */
     class SkiaSpriteBatchBackend final : public ISpriteBatchBackend
     {
@@ -55,5 +57,6 @@ namespace CNA::Internal::Backends::Skia
         int textureFilter_ = 0;
         int addressU_ = 1;
         int addressV_ = 1;
+        SkiaEffectBackend* customEffect_ = nullptr;
     };
 } // namespace CNA::Internal::Backends::Skia

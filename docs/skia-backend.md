@@ -470,5 +470,12 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     and the batch remains immediately reusable. This does not advertise `CustomEffects`. The
     complete Debug suite passes 99/99 in 12.84 seconds; both effect tests pass in Release and ASan,
     and the three existing SpriteEffect/ShaderEffect unit tests pass under Xvfb.
+66. `Skia_SkSL_Effect_Prototype` proves the explicit `CNA_SKIA_SKSL_V1` route compiles and renders
+    a real fragment-only runtime shader through reserved `cnaTexture0` and `cnaTint` inputs. The
+    adapter retains Skia compiler text and deterministic ABI/size errors, limits source to 64 KiB
+    and reflected uniforms to 16 KiB, and never interprets untagged GLSL as SkSL. A failed tagged
+    Begin cannot retain the prior shader. General uniforms/additional children remain SKIA-92 work,
+    so `CustomEffects` truthfully remains false. The complete Debug suite passes 100/100 in 12.99
+    seconds; the focused effect passes in Release and ASan (`detect_leaks=0`).
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
