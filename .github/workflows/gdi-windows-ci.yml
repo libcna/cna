@@ -81,7 +81,8 @@ jobs:
             cna_test_gdi_dirty_damage \
             cna_test_gdi_repaint_invalidation \
             cna_test_gdi_presentation_oracle \
-            cna_test_gdi_presentation_configuration
+            cna_test_gdi_presentation_configuration \
+            cna_test_gdi_window_metrics
 
       - name: Run focused GDI CTest suite
         working-directory: cna_graphics

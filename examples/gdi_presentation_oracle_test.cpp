@@ -163,6 +163,18 @@ int main()
                             CnaPresentationMode::Stretch, 0, 9, 3, 5), {}),
                  "non-drawable client produces an empty destination");
 
+    const GdiPresentationSize dynamicSize = ResolveGdiLogicalSize(
+        CnaPresentationMode::FixedHeightDynamicWidth,
+        180, 101, 23, 17, 23, 17);
+    ok &= Expect(dynamicSize.width == 30 && dynamicSize.height == 17,
+                 "dynamic-width mode derives logical width from drawable-pixel aspect");
+    const GdiPresentationSize minimizedSize = ResolveGdiLogicalSize(
+        CnaPresentationMode::FixedHeightDynamicWidth,
+        0, 0, 23, 17, dynamicSize.width, dynamicSize.height);
+    ok &= Expect(minimizedSize.width == dynamicSize.width &&
+                     minimizedSize.height == dynamicSize.height,
+                 "zero-size minimize transition retains the last logical backbuffer dimensions");
+
     const GdiPresentationPlan noDamage = BuildGdiPresentationPlan(
         CnaPresentationMode::Stretch, 4, 4, 4, 4,
         true, false, false, false, {});
@@ -210,6 +222,63 @@ int main()
     ok &= Expect(!MapGdiLogicalToWindow(CnaPresentationMode::Letterbox,
                                         7, 9, 3, 5, 3.0f, 0.0f, windowX, windowY),
                  "logical-to-window excludes logical right edge");
+
+    struct DensityCase
+    {
+        int drawableWidth;
+        int drawableHeight;
+        const char* label;
+    };
+    constexpr DensityCase densityCases[]{
+        {120, 80, "100%"},
+        {180, 120, "150%"},
+        {240, 160, "200%"},
+    };
+    for (const DensityCase& density : densityCases)
+    {
+        logicalX = logicalY = -1.0f;
+        const bool forward = MapGdiSdlWindowToLogical(
+            CnaPresentationMode::Stretch, 120, 80,
+            density.drawableWidth, density.drawableHeight,
+            60, 40, 60.0f, 40.0f, logicalX, logicalY);
+        char forwardMessage[160]{};
+        std::snprintf(forwardMessage, sizeof(forwardMessage),
+                      "%s scale maps SDL-window center through drawable pixels", density.label);
+        ok &= Expect(forward && std::fabs(logicalX - 30.0f) < 0.001f &&
+                         std::fabs(logicalY - 20.0f) < 0.001f,
+                     forwardMessage);
+
+        windowX = windowY = -1.0f;
+        const bool inverse = MapGdiLogicalToSdlWindow(
+            CnaPresentationMode::Stretch, 120, 80,
+            density.drawableWidth, density.drawableHeight,
+            60, 40, 30.0f, 20.0f, windowX, windowY);
+        char inverseMessage[160]{};
+        std::snprintf(inverseMessage, sizeof(inverseMessage),
+                      "%s scale maps logical center back to SDL-window coordinates", density.label);
+        ok &= Expect(inverse && std::fabs(windowX - 60.0f) < 0.001f &&
+                         std::fabs(windowY - 40.0f) < 0.001f,
+                     inverseMessage);
+
+        // A square drawable letterboxes the 2:1 logical image into its middle half. SDL event
+        // coordinates must hit the same bars at every drawable density.
+        logicalX = logicalY = -1.0f;
+        char barMessage[160]{};
+        std::snprintf(barMessage, sizeof(barMessage),
+                      "%s scale rejects the same SDL-coordinate letterbox bar", density.label);
+        ok &= Expect(!MapGdiSdlWindowToLogical(
+                         CnaPresentationMode::Letterbox, 100, 100,
+                         density.drawableWidth, density.drawableWidth,
+                         80, 40, 50.0f, 24.99f, logicalX, logicalY),
+                     barMessage);
+    }
+    ok &= Expect(!MapGdiSdlWindowToLogical(
+                     CnaPresentationMode::Stretch, 0, 80, 120, 80,
+                     60, 40, 1.0f, 1.0f, logicalX, logicalY) &&
+                     !MapGdiLogicalToSdlWindow(
+                         CnaPresentationMode::Stretch, 120, 80, 0, 80,
+                         60, 40, 1.0f, 1.0f, windowX, windowY),
+                 "SDL/drawable coordinate wrappers reject zero-sized metrics");
 
     try
     {

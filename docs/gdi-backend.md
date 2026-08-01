@@ -131,6 +131,18 @@ zero-line DIB transfer. Geometry/path selection lives in a pure planner shared w
 pixel oracle; this is what verifies channel order, top-down rows, scaling, bars/cropping and exact
 non-zero-Y dirty bands independently of CPU backbuffer readback.
 
+`SDL_GetWindowSizeInPixels()` is the single source of truth for GDI backbuffer sizing and final
+client geometry. SDL mouse events and `SDL_WarpMouseInWindow`, however, use SDL window-coordinate
+space, so the GDI coordinate transforms explicitly scale between `SDL_GetWindowSize()` and the
+drawable-pixel size before applying presentation bars/cropping. This keeps input and display
+aligned when pixel density is not 1. Caller-provided SDL windows are published to `Mouse` and
+`TextInputEXT` for the lifetime of their `GraphicsDevice`, but remain caller-owned.
+
+A minimized window is treated as temporarily non-drawable even if SDL/Win32 retains or synthesizes
+a non-zero cached pixel size. In particular, Wine can report a different minimized aspect ratio.
+GDI therefore retains the last logical dimensions and pixel storage until a valid restored
+drawable exists; it does not reallocate or clear during that transition.
+
 The current path deliberately does **not** use a persistent `DIBSection`: the CPU rasterizer owns
 the authoritative RGBA8 vector and submits it directly. Whether a mapped DIBSection should instead
 become authoritative storage remains GDI-066 and requires native visible measurements; hidden-Wine
@@ -171,10 +183,11 @@ CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
            cna_test_gdi_dirty_damage cna_test_gdi_repaint_invalidation \
            cna_test_gdi_presentation_oracle \
            cna_test_gdi_presentation_configuration \
+           cna_test_gdi_window_metrics \
            cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
-The backend is hard-gated to Windows targets. A native Windows build registers thirteen `GDI` CTest
+The backend is hard-gated to Windows targets. A native Windows build registers fourteen `GDI` CTest
 cases, including separate default, dirty and halftone configurations; run them with
 `ctest -L GDI --output-on-failure`.
 
@@ -198,6 +211,7 @@ build-gdi\cna_test_gdi_unsupported_features.exe
 build-gdi\cna_test_gdi_dirty_damage.exe
 build-gdi\cna_test_gdi_repaint_invalidation.exe
 build-gdi\cna_test_gdi_presentation_oracle.exe
+build-gdi\cna_test_gdi_window_metrics.exe
 build-gdi\cna_bench_gdi_2d.exe --frames 4
 build-gdi\cna_demo_2d.exe
 
@@ -212,6 +226,7 @@ wine build-gdi/cna_test_gdi_unsupported_features.exe
 wine build-gdi/cna_test_gdi_dirty_damage.exe
 wine build-gdi/cna_test_gdi_repaint_invalidation.exe
 wine build-gdi/cna_test_gdi_presentation_oracle.exe
+wine build-gdi/cna_test_gdi_window_metrics.exe
 wine build-gdi/cna_bench_gdi_2d.exe --frames 4
 wine build-gdi/cna_demo_2d.exe
 ```
@@ -270,9 +285,14 @@ verifies window-specific lifecycle invalidation, a real SDL-validated Win32 `WM_
 minimize/restore round-trip, no-draw retained repaint, zero-line DIB failure diagnostics, damage
 retention and successful retry. `cna_test_gdi_presentation_oracle` uses a real memory DC/DIBSection
 to verify RGBA channel order, top-down rows, both filters and DIB paths, presentation geometry,
-bars/cropping, clipping and an exact non-zero-Y dirty band. The configuration executable then proves
-that the registered environment cases select NativeFull, None and Stretch with the requested filter
-through backend telemetry.
+bars/cropping, clipping, an exact non-zero-Y dirty band, and deterministic SDL/drawable coordinate
+conversion at 100%, 150%, and 200% pixel-density ratios. `cna_test_gdi_window_metrics` adds a live
+SDL/Win32 client: it checks external-window input ownership, repeated odd resizes, all presentation
+mode round-trips and bars, drawable/client agreement, fullscreen entry/exit where the display
+session permits it, and retained pixels across minimize/restore. These automated checks do not
+replace GDI-061's visible multi-DPI Windows inspection. The configuration executable then proves
+that the registered environment cases select NativeFull, None and Stretch with the requested
+filter through backend telemetry.
 
 `cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
 CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run

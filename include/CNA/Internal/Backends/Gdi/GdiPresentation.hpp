@@ -17,6 +17,22 @@ namespace CNA::Internal::Backends::Gdi
         int height = 0;
     };
 
+    struct GdiPresentationSize
+    {
+        int width = 0;
+        int height = 0;
+    };
+
+    /**
+     * Resolves logical backbuffer dimensions from the current drawable-pixel metrics.
+     * A missing/zero drawable retains the last valid dynamic-width storage across minimize.
+     */
+    [[nodiscard]] GdiPresentationSize ResolveGdiLogicalSize(
+        CnaPresentationMode presentationMode,
+        int drawablePixelWidth, int drawablePixelHeight,
+        int requestedVirtualWidth, int requestedVirtualHeight,
+        int retainedWidth, int retainedHeight);
+
     enum class GdiBlitPath
     {
         None,
@@ -75,6 +91,25 @@ namespace CNA::Internal::Backends::Gdi
     [[nodiscard]] bool MapGdiLogicalToWindow(
         CnaPresentationMode presentationMode,
         int clientWidth, int clientHeight, int logicalWidth, int logicalHeight,
+        float logicalX, float logicalY, float& windowX, float& windowY);
+
+    /**
+     * Maps SDL window-coordinate input through the drawable-pixel presentation geometry.
+     * SDL window coordinates and drawable pixels can differ when pixel density is not 1.
+     */
+    [[nodiscard]] bool MapGdiSdlWindowToLogical(
+        CnaPresentationMode presentationMode,
+        int windowCoordinateWidth, int windowCoordinateHeight,
+        int drawablePixelWidth, int drawablePixelHeight,
+        int logicalWidth, int logicalHeight,
+        float windowX, float windowY, float& logicalX, float& logicalY);
+
+    /** Inverse of MapGdiSdlWindowToLogical(), returning SDL window coordinates. */
+    [[nodiscard]] bool MapGdiLogicalToSdlWindow(
+        CnaPresentationMode presentationMode,
+        int windowCoordinateWidth, int windowCoordinateHeight,
+        int drawablePixelWidth, int drawablePixelHeight,
+        int logicalWidth, int logicalHeight,
         float logicalX, float logicalY, float& windowX, float& windowY);
 
     /**

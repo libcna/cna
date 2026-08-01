@@ -1371,14 +1371,15 @@ namespace CNA::Internal::Backends
         }
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
-        /// Converts a point from physical window coordinates to logical (virtual)
-        /// game coordinates. Returns true on success. Default: no-op (returns false).
+        /// Converts a point from SDL window-coordinate space to logical (virtual) game
+        /// coordinates. A backend whose drawable pixel size differs from SDL_GetWindowSize()
+        /// must account for that density internally. Returns true on success. Default: no-op.
         virtual bool TransformWindowToLogical(float windowX, float windowY,
                                               float& logX, float& logY) const { return false; }
-        /// Converts a point from logical (virtual) game coordinates to physical window
-        /// coordinates — the inverse of TransformWindowToLogical. Returns true on success.
-        /// Default: no-op (returns false), i.e. window == logical (no scaling). Used by
-        /// Mouse::SetPosition to place the OS cursor correctly on a scaled/letterboxed window.
+        /// Converts a point from logical (virtual) game coordinates to SDL window-coordinate
+        /// space — the inverse of TransformWindowToLogical. Returns true on success. Default:
+        /// no-op (returns false), i.e. window == logical (no scaling). Used by Mouse::SetPosition
+        /// to place the OS cursor correctly on a scaled/letterboxed window.
         virtual bool TransformLogicalToWindow(float logX, float logY,
                                               float& windowX, float& windowY) const { return false; }
         // TODO: SDL dependency should be abstracted later

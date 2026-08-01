@@ -2213,6 +2213,15 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             window_ = reinterpret_cast<SDL_Window*>(requestedHandle);
             ownsWindow_ = false;
+
+            // An attached window is just as much the active input surface as a CNA-owned one.
+            // Publishing only windows created below left Mouse::SetPosition and TextInputEXT
+            // targeting an older/focused window, and could leave that stale handle behind after
+            // the GraphicsDevice was destroyed.
+            Microsoft::Xna::Framework::Input::TextInputEXT::setWindowHandleProperty(
+                reinterpret_cast<std::uintptr_t>(window_));
+            Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(
+                reinterpret_cast<std::uintptr_t>(window_));
             return;
         }
 
@@ -2352,10 +2361,10 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         backend_.reset();
 
-        if (window_ != nullptr && ownsWindow_)
+        if (window_ != nullptr)
         {
-            // Clear the text-input window handle if it points at this window
-            // (mirrors FNA DisposeWindow, SDL3_FNAPlatform.cs:463-466).
+            // Clear shared input handles for both owned and caller-provided windows when they
+            // still point at this device. The ownership flag controls only SDL_DestroyWindow.
             if (Microsoft::Xna::Framework::Input::TextInputEXT::getWindowHandleProperty()
                 == reinterpret_cast<std::uintptr_t>(window_))
             {
@@ -2366,7 +2375,8 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 Microsoft::Xna::Framework::Input::Mouse::setWindowHandleProperty(0);
             }
-            SDL_DestroyWindow(window_);
+            if (ownsWindow_)
+                SDL_DestroyWindow(window_);
         }
 
         window_ = nullptr;

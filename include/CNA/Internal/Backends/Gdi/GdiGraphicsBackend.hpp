@@ -129,7 +129,8 @@ namespace CNA::Internal::Backends::Gdi
         void RecordNativeClientInvalidation();
         void SynchronizeBackbufferSize();
         void GetLogicalSize(int& width, int& height) const;
-        bool GetClientSize(int& width, int& height) const;
+        bool GetDrawablePixelSize(int& width, int& height) const;
+        bool GetWindowCoordinateSize(int& width, int& height) const;
         void MarkBackbufferDirty(const Rectangle& rectangle);
         void MarkBackbufferFullyDirty();
         void ResetBackbufferDamage();

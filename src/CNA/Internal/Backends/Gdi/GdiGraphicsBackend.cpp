@@ -299,69 +299,50 @@ namespace CNA::Internal::Backends::Gdi
         nativeInvalidationGeneration_.fetch_add(1, std::memory_order_release);
     }
 
-    bool GdiGraphicsBackend::GetClientSize(int& width, int& height) const
+    bool GdiGraphicsBackend::GetDrawablePixelSize(int& width, int& height) const
     {
-        RECT rect{};
-        if (nativeWindow_ == nullptr || !GetClientRect(static_cast<HWND>(nativeWindow_), &rect))
+        // SDL's drawable-pixel query is the single size authority for both CPU backbuffer sizing
+        // and GDI destination geometry. It is paired with SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED and
+        // describes the real client area that the HWND's HDC presents. Mixing it with
+        // GetClientRect made the event/input and presentation sides use different abstractions.
+        // Some Win32 implementations retain or synthesize a non-zero SDL pixel size while the
+        // HWND is minimized (Wine can report a different aspect entirely). Treat minimized state
+        // as non-drawable before consulting those cached metrics, so dynamic-width storage is not
+        // reallocated and cleared during the transition.
+        if (window_ == nullptr ||
+            (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED) != 0 ||
+            !SDL_GetWindowSizeInPixels(window_, &width, &height))
         {
             width = 0;
             height = 0;
             return false;
         }
-        width = std::max(0L, rect.right - rect.left);
-        height = std::max(0L, rect.bottom - rect.top);
+        return width > 0 && height > 0;
+    }
+
+    bool GdiGraphicsBackend::GetWindowCoordinateSize(int& width, int& height) const
+    {
+        if (window_ == nullptr || !SDL_GetWindowSize(window_, &width, &height))
+        {
+            width = 0;
+            height = 0;
+            return false;
+        }
         return width > 0 && height > 0;
     }
 
     void GdiGraphicsBackend::GetLogicalSize(int& width, int& height) const
     {
-        int clientWidth = 0;
-        int clientHeight = 0;
-        const bool hasClientSize = GetClientSize(clientWidth, clientHeight);
-
-        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth &&
-            requestedVirtualHeight_ > 0)
-        {
-            if (hasClientSize)
-            {
-                height = requestedVirtualHeight_;
-                width = std::max(1, static_cast<int>(std::lround(
-                    static_cast<double>(clientWidth) * height / clientHeight)));
-                return;
-            }
-
-            // Minimize/transition can temporarily remove a drawable client size. Preserve the
-            // last valid dynamic logical dimensions instead of reallocating to the originally
-            // requested width and reallocating again on restore.
-            const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
-            if (backbuffer.width > 0 && backbuffer.height > 0)
-            {
-                width = backbuffer.width;
-                height = backbuffer.height;
-                return;
-            }
-            width = std::max(1, requestedVirtualWidth_);
-            height = requestedVirtualHeight_;
-            return;
-        }
-
-        if (requestedVirtualWidth_ > 0 && requestedVirtualHeight_ > 0)
-        {
-            width = requestedVirtualWidth_;
-            height = requestedVirtualHeight_;
-            return;
-        }
-
-        if (hasClientSize)
-        {
-            width = clientWidth;
-            height = clientHeight;
-            return;
-        }
-
+        int drawableWidth = 0;
+        int drawableHeight = 0;
+        (void)GetDrawablePixelSize(drawableWidth, drawableHeight);
         const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
-        width = backbuffer.width;
-        height = backbuffer.height;
+        const GdiPresentationSize size = ResolveGdiLogicalSize(
+            presentationMode_, drawableWidth, drawableHeight,
+            requestedVirtualWidth_, requestedVirtualHeight_,
+            backbuffer.width, backbuffer.height);
+        width = size.width;
+        height = size.height;
     }
 
     void GdiGraphicsBackend::SynchronizeBackbufferSize()
@@ -398,7 +379,7 @@ namespace CNA::Internal::Backends::Gdi
 
         int clientWidth = 0;
         int clientHeight = 0;
-        if (!GetClientSize(clientWidth, clientHeight))
+        if (!GetDrawablePixelSize(clientWidth, clientHeight))
             return; // A minimized window has no drawable client area.
 
         const std::uint64_t invalidationSnapshot =
@@ -528,13 +509,17 @@ namespace CNA::Internal::Backends::Gdi
     {
         int clientWidth = 0;
         int clientHeight = 0;
+        int windowCoordinateWidth = 0;
+        int windowCoordinateHeight = 0;
         int logicalWidth = 0;
         int logicalHeight = 0;
-        if (!GetClientSize(clientWidth, clientHeight))
+        if (!GetDrawablePixelSize(clientWidth, clientHeight) ||
+            !GetWindowCoordinateSize(windowCoordinateWidth, windowCoordinateHeight))
             return false;
         GetLogicalSize(logicalWidth, logicalHeight);
-        return MapGdiWindowToLogical(
-            presentationMode_, clientWidth, clientHeight, logicalWidth, logicalHeight,
+        return MapGdiSdlWindowToLogical(
+            presentationMode_, windowCoordinateWidth, windowCoordinateHeight,
+            clientWidth, clientHeight, logicalWidth, logicalHeight,
             windowX, windowY, logX, logY);
     }
 
@@ -543,13 +528,17 @@ namespace CNA::Internal::Backends::Gdi
     {
         int clientWidth = 0;
         int clientHeight = 0;
+        int windowCoordinateWidth = 0;
+        int windowCoordinateHeight = 0;
         int logicalWidth = 0;
         int logicalHeight = 0;
-        if (!GetClientSize(clientWidth, clientHeight))
+        if (!GetDrawablePixelSize(clientWidth, clientHeight) ||
+            !GetWindowCoordinateSize(windowCoordinateWidth, windowCoordinateHeight))
             return false;
         GetLogicalSize(logicalWidth, logicalHeight);
-        return MapGdiLogicalToWindow(
-            presentationMode_, clientWidth, clientHeight, logicalWidth, logicalHeight,
+        return MapGdiLogicalToSdlWindow(
+            presentationMode_, windowCoordinateWidth, windowCoordinateHeight,
+            clientWidth, clientHeight, logicalWidth, logicalHeight,
             logX, logY, windowX, windowY);
     }
 

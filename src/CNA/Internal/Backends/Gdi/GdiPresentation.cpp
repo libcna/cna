@@ -71,6 +71,37 @@ namespace CNA::Internal::Backends::Gdi
         }
     }
 
+    GdiPresentationSize ResolveGdiLogicalSize(
+        CnaPresentationMode presentationMode,
+        int drawablePixelWidth, int drawablePixelHeight,
+        int requestedVirtualWidth, int requestedVirtualHeight,
+        int retainedWidth, int retainedHeight)
+    {
+        const bool hasDrawableSize = drawablePixelWidth > 0 && drawablePixelHeight > 0;
+        if (presentationMode == CnaPresentationMode::FixedHeightDynamicWidth &&
+            requestedVirtualHeight > 0)
+        {
+            if (hasDrawableSize)
+            {
+                return {
+                    std::max(1, SaturatingRoundToInt(
+                        static_cast<double>(drawablePixelWidth) * requestedVirtualHeight /
+                        drawablePixelHeight)),
+                    requestedVirtualHeight,
+                };
+            }
+            if (retainedWidth > 0 && retainedHeight > 0)
+                return {retainedWidth, retainedHeight};
+            return {std::max(1, requestedVirtualWidth), requestedVirtualHeight};
+        }
+
+        if (requestedVirtualWidth > 0 && requestedVirtualHeight > 0)
+            return {requestedVirtualWidth, requestedVirtualHeight};
+        if (hasDrawableSize)
+            return {drawablePixelWidth, drawablePixelHeight};
+        return {retainedWidth, retainedHeight};
+    }
+
     GdiPresentationRect CalculateGdiPresentationDestination(
         CnaPresentationMode presentationMode, int clientWidth, int clientHeight,
         int sourceWidth, int sourceHeight)
@@ -178,6 +209,58 @@ namespace CNA::Internal::Backends::Gdi
         windowY = static_cast<float>(
             destination.y + static_cast<double>(logicalY) * destination.height / logicalHeight);
         return true;
+    }
+
+    bool MapGdiSdlWindowToLogical(
+        CnaPresentationMode presentationMode,
+        int windowCoordinateWidth, int windowCoordinateHeight,
+        int drawablePixelWidth, int drawablePixelHeight,
+        int logicalWidth, int logicalHeight,
+        float windowX, float windowY, float& logicalX, float& logicalY)
+    {
+        if (windowCoordinateWidth <= 0 || windowCoordinateHeight <= 0 ||
+            drawablePixelWidth <= 0 || drawablePixelHeight <= 0 ||
+            !std::isfinite(windowX) || !std::isfinite(windowY))
+        {
+            return false;
+        }
+
+        const float pixelX = static_cast<float>(
+            static_cast<double>(windowX) * drawablePixelWidth / windowCoordinateWidth);
+        const float pixelY = static_cast<float>(
+            static_cast<double>(windowY) * drawablePixelHeight / windowCoordinateHeight);
+        return MapGdiWindowToLogical(
+            presentationMode, drawablePixelWidth, drawablePixelHeight,
+            logicalWidth, logicalHeight, pixelX, pixelY, logicalX, logicalY);
+    }
+
+    bool MapGdiLogicalToSdlWindow(
+        CnaPresentationMode presentationMode,
+        int windowCoordinateWidth, int windowCoordinateHeight,
+        int drawablePixelWidth, int drawablePixelHeight,
+        int logicalWidth, int logicalHeight,
+        float logicalX, float logicalY, float& windowX, float& windowY)
+    {
+        if (windowCoordinateWidth <= 0 || windowCoordinateHeight <= 0 ||
+            drawablePixelWidth <= 0 || drawablePixelHeight <= 0)
+        {
+            return false;
+        }
+
+        float pixelX = 0.0f;
+        float pixelY = 0.0f;
+        if (!MapGdiLogicalToWindow(
+                presentationMode, drawablePixelWidth, drawablePixelHeight,
+                logicalWidth, logicalHeight, logicalX, logicalY, pixelX, pixelY))
+        {
+            return false;
+        }
+
+        windowX = static_cast<float>(
+            static_cast<double>(pixelX) * windowCoordinateWidth / drawablePixelWidth);
+        windowY = static_cast<float>(
+            static_cast<double>(pixelY) * windowCoordinateHeight / drawablePixelHeight);
+        return std::isfinite(windowX) && std::isfinite(windowY);
     }
 
     GdiBlitResult BlitGdiRgbaToDeviceContext(

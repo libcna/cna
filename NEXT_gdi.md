@@ -8,10 +8,10 @@
 
 ## Current focus
 
-- GDI-050 through GDI-059 are complete. The approved catch-up baseline is commit `48826e0b`,
+- GDI-050 through GDI-060 are complete. The approved catch-up baseline is commit `48826e0b`,
   GDI-055 is `4c512245`, and the manual workflow is `01873ca9`.
-- Next audit the automatable DPI/resize/input-transform portion of GDI-060, leaving real multi-DPI
-  and visible lifecycle observations explicitly human-gated.
+- GDI-061 and GDI-062 require native visible Windows work. The next safe autonomous task is
+  GDI-067's framebuffer allocation and overflow audit.
 
 ## Completed in the current working tree
 
@@ -25,8 +25,8 @@
   sampling, 4x and rejected 2x MSAA resets, resize and backbuffer readback. Public stencil coverage
   remains in its focused companion test.
 - GDI-056: distinct native CTest cases for default, dirty and halftone presentation policies.
-- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the eleven
-  focused GDI executables at `--parallel 2`, runs all thirteen `GDI` CTest cases, and uploads native
+- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the twelve
+  focused GDI executables at `--parallel 2`, runs all fourteen `GDI` CTest cases, and uploads native
   diagnostics on failure. It intentionally does not claim the visible GDI-061 gate.
 - GDI-058: applied backbuffer format/depth/MSAA are normalized on construction, reset, and the
   store-only update path; invalid presentation modes throw transactionally. Render targets expose
@@ -38,6 +38,13 @@
   cube render targets, shader effects, occlusion queries and static/dynamic buffers. The focused
   public test also covers depth state and indexed/non-indexed user draws without allowing inherited
   Software 3D behavior to escape.
+- GDI-060: presentation and dynamic backbuffer sizing now use `SDL_GetWindowSizeInPixels()` as
+  their one pixel-size authority. Input transforms explicitly bridge SDL window coordinates and
+  drawable pixels. Caller-provided SDL windows are published to Mouse/TextInputEXT and detached
+  without destroying caller ownership. Deterministic 100/150/200% ratio tests and a live
+  SDL/Win32 integration cover all modes, odd resizes, fullscreen, edge/bar transforms and retained
+  pixels across minimize/restore. The test exposed and fixed Wine's misleading non-zero minimized
+  pixel size, which previously reallocated and erased the dynamic-width backbuffer.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -53,20 +60,27 @@ baseline. All later tasks use one task per commit.
   (`CNA_USE_SYSTEM_SDL=ON`) without deleting or rewriting that unrelated cache.
 - `CnaTests` still compiles Net tests when `CNA_ENABLE_NET=OFF`, but then omits ENet include paths.
   The HEADLESS validation was reconfigured with `CNA_ENABLE_NET=ON` to complete the test binary;
-  this is a pre-existing build-system inconsistency, not a GDI regression.
+  this is a pre-existing build-system inconsistency, not a GDI regression. It was reconfirmed when
+  an intentionally broad GDI all-target build reached `ENetBackendTests.cpp`; the exact GDI target
+  build remains green.
+- The broad HEADLESS `GraphicsDeviceValidationTest.*` filter has one pre-existing contract mismatch:
+  `SetRenderTargets_FourTargets_DoesNotThrow` expects four MRTs while HEADLESS explicitly rejects
+  simultaneous render targets. The 57 device-state/parameter tests relevant to this change pass.
 - Do not edit `NEXT.md`.
 
 ## Decisions
 
 - 2026-08-01: project owner approved one catch-up commit for GDI-050–054/056.
 - 2026-08-01: project owner approved a new GDI-specific, manual `workflow_dispatch` MSVC workflow.
+- 2026-08-01: `SDL_GetWindowSizeInPixels()` is the GDI presentation/backbuffer pixel authority;
+  backend transforms bridge SDL window coordinates explicitly rather than assuming density 1.
 - Preserve XNA/FNA public API compatibility; backend-specific unsupported behavior must fail
   clearly without broadening the GDI 2D contract.
 
 ## Validation status
 
 - Fresh MinGW-w64 Release configure in `cmake-build-gdi/`: pass.
-- `CNA`, all eleven focused GDI correctness executables, the presentation benchmark and 2D demo:
+- `CNA`, all twelve focused GDI correctness executables, the presentation benchmark and 2D demo:
   build pass at `-j2`.
 - Wine/Xvfb: smoke, 2D regression, ColorMatrix, public stencil/API/applied-state,
   unsupported-feature, dirty-damage, repaint/failure and presentation-oracle executables pass.
@@ -86,11 +100,20 @@ baseline. All later tasks use one task per commit.
   the three updated regression executables; the exception family and diagnostics are verified.
 - Post-GDI-059 full Wine/Xvfb milestone: all eleven correctness executables and all three
   presentation configurations pass in one shared display session.
+- GDI-060 focused MinGW build: CNA, presentation oracle, repaint invalidation, and window-metrics
+  executables compile/link at `-j2`. Wine/Xvfb passes deterministic 100/150/200% coordinate ratios,
+  external-window ownership, three odd resizes, every presentation mode, fullscreen entry/exit,
+  and exact minimize/restore storage retention.
+- Post-GDI-060 full Wine/Xvfb milestone: all twelve correctness executables and all three
+  presentation configurations pass in one shared display session. The exact focused build also
+  includes the benchmark and 2D demo and passes at `-j2`.
 - Native HEADLESS/system-SDL build: `CNA` and `CnaTests` link successfully at `-j2`.
+- Native HEADLESS shared-interface validation: 57 GraphicsDevice backend/default/status,
+  PresentationParameters, and GraphicsDeviceInformation tests pass.
 - `GraphicsDeviceCapabilityTest.SupportsStencilBuffer`: pass under HEADLESS. The complete
   `GraphicsDeviceCapabilityTest.*` filter is 9 pass / 1 pre-existing configuration mismatch:
   `DoesNotSupportWireFrame` assumes EasyGL, while HEADLESS truthfully reports wireframe support.
-- `git diff --check`: pass for the GDI-059 change set.
+- `git diff --check`: pass for the GDI-060 change set.
 
 ## Useful commands
 
@@ -115,6 +138,6 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Start GDI-060 with a source-of-truth audit of Win32 client pixels versus SDL pixel coordinates,
-then extend deterministic resize/coordinate tests. Keep real 100/150/200% DPI and visible
-fullscreen observations for GDI-061's native-Windows gate.
+Commit the validated GDI-060 change, then begin GDI-067 by auditing `SoftwareFramebuffer` allocation
+and every GDI-facing dimension/byte conversion. Keep physical multi-DPI/visible observations in
+GDI-061 and native performance decisions in GDI-062.
