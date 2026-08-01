@@ -73,8 +73,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers twenty-three SKIA-only CTests: one window-independent raster
-   surface pixel test and twenty-two display-required public tests. The raster test passes without a
+6. `cmake/Tests/SkiaTests.cmake` registers twenty-five SKIA-only CTests: one window-independent raster
+   surface pixel test and twenty-four display-required public tests. The raster test passes without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -99,5 +99,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
     `Skia_SpriteBatch_LayerDepth`, and `Skia_SpriteBatch_TextureSort` prove the common
     SpriteBatch queue preserves deferred/immediate, layer-depth, and texture sort order through
     real Skia canvas submission.
+12. `Skia_TextureFilter_PointVsLinear` and `Skia_TextureFilter_Minification` prove the
+    `SamplerState` mapping distinguishes Point from Linear in both magnification and minification
+    rather than selecting a fixed sampling mode.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

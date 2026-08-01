@@ -109,6 +109,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spritebatch_texture_sort examples/sdlrenderer_spritebatch_texture_sort_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_TextureSort cna_test_skia_spritebatch_texture_sort)
 
+    cna_skia_test(cna_test_skia_texture_filter_point_linear examples/sdlrenderer_texture_filter_point_vs_linear_test.cpp)
+    cna_register_skia_display_test(Skia_TextureFilter_PointVsLinear cna_test_skia_texture_filter_point_linear)
+
+    cna_skia_test(cna_test_skia_texture_filter_minification examples/skia_texture_filter_minification_test.cpp)
+    cna_register_skia_display_test(Skia_TextureFilter_Minification cna_test_skia_texture_filter_minification)
+
     if(TARGET cna_demo_2d)
         cna_register_skia_display_test(Skia_Demo2D_Smoke cna_demo_2d --smoke 3)
     endif()

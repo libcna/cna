@@ -183,7 +183,7 @@ public CNA API.
 |---|---|---|---|
 | SKIA-41 | Implement viewport and top-left coordinate normalization for backbuffer and every off-screen `SkSurface`. | ⬜ | Identical source/target orientation and `Project`/`Unproject` 2D checks. |
 | SKIA-42 | Implement `SetScissorRect` with save/restore discipline so a changed scissor cannot leak between draws or targets. | ⬜ | Nested scissor/target/sprite pixel tests pass. |
-| SKIA-43 | Map `SamplerState` point/linear filters to Skia sampling options and prove magnification/minification behavior. | ⬜ | Point-vs-linear checkerboard golden test passes. |
+| SKIA-43 | Map `SamplerState` point/linear filters to Skia sampling options and prove magnification/minification behavior. | ✅ | `Skia_TextureFilter_PointVsLinear` proves the texel-boundary difference under magnification; `Skia_TextureFilter_Minification` proves the same Point/Linear distinction when 2 source texels cover one destination pixel. |
 | SKIA-44 | Map `TextureAddressMode::Clamp`, `Wrap`, and `Mirror` independently on U/V, including negative coordinates and partial source rectangles. | ⬜ | Clamp/wrap/mirror edge and seam pixel suite passes. |
 | SKIA-45 | Investigate mip filter modes and LOD selection on the selected Skia surface; implement only paths whose mip availability is established by SKIA-27. | ⬜ | Mip-filter matrix test either passes or rejects unsupported mode before draw. |
 | SKIA-46 | Establish the exact treatment of `SamplerState` changes within and between Begin blocks, including state cache invalidation. | ⬜ | Per-draw-switch test proves the next draw sees the requested sampler. |
