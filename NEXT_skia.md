@@ -23,7 +23,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 109 Skia CTests: 15 raster-only, 91 display-required, and three
+- `docs/skia-backend.md` records 122 Skia CTests: 16 raster-only, 103 display-required, and three
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -880,12 +880,34 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   under Xvfb in 13.74 seconds with `--parallel 8` (16 Raster, 92 Display, three Audit). Debug,
   Release and ASan display caches are `:0`; `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-106
+
+- Registered eleven exact EasyGL 2D sources under Skia: textured-quad readback; SpriteBatch
+  rotation, source-rectangle and layer-depth behavior; one SpriteFont glyph; Wrap/Clamp and Mirror
+  addressing; Clear overloads; RenderTarget2D readback; disposal guards; and grow/shrink
+  backbuffer readback. The existing Skia-native/shared fixtures remain the broader edge-case
+  matrices for every requested category, including blend and scissor contracts whose historical
+  EasyGL implementations inherently use 3D geometry.
+- Replaced four incidental direct `SetDepthTestEnabled(false)` calls in otherwise-2D shared
+  sources with `DepthStencilState::None`. The same sources compile for both Skia and EasyGL and
+  retain their public meaning without widening Skia's rejected 3D boundary.
+- The exact resize fixture exposed a real Skia race on X11: after a window shrink,
+  FixedHeightDynamicWidth could derive its raster width from SDL's stale pre-resize output, while
+  `PresentationParameters` already exposed the requested dimensions. Skia now calls SDL's
+  documented `SDL_SyncWindow` barrier before recreating the backbuffer; timeouts remain non-fatal
+  and retain the existing eventual dynamic-refresh fallback.
+- The complete Debug build succeeds and the Skia suite passes 122/122 under Xvfb in 16.29 seconds
+  with `--parallel 8` (16 Raster, 103 Display, three Audit). All eleven focused exact-source tests
+  pass in Release and ASan (`detect_leaks=0`). The four modified sources also pass in their
+  original EasyGL configuration. Debug, Release, ASan and EasyGL display caches are restored to
+  `:0`; `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-106: audit and register genuinely reusable 2D EasyGL examples under the Skia label without
-   pulling GPU-only or 3D paths into this backend.
-2. SKIA-107: reconcile the requested Skia-specific ownership/recovery/alpha/state/capability tests
+1. SKIA-107: reconcile the requested Skia-specific ownership/recovery/alpha/state/capability tests
    with the large existing suite and add only missing sabotage-sensitive coverage.
+2. SKIA-108: define the 2D XNA-oracle corpus and explicit antialiasing tolerance policy after the
+   SKIA-107 diagnostic/state boundary is closed.
 3. Reassess earlier open architecture rows (especially SKIA-5/6/76/77) against the accepted
    raster-only ADR before doing the final release-gate tasks.
 

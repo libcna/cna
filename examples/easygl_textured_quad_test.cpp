@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 86: EasyGL integration test — textured quad pixel readback.
+// Task 86 / SKIA-106: backend-neutral textured-quad pixel readback, first used by EasyGL.
 //
 // Renders a 1×1 solid-red texture as a full-screen sprite, reads back the
 // centre pixel with GetBackBufferData, and asserts R=255, G=0, B=0.
@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
@@ -49,7 +50,9 @@ protected:
 
         // Clear to solid red so we can check clear+readback before adding SpriteBatch.
         device.Clear(Color(255, 0, 0, 255));
-        device.SetDepthTestEnabled(false);
+        // Express the absence of depth work through the public state object. This is equivalent
+        // on 3D backends and remains valid on deliberately 2D-only backends.
+        device.setDepthStencilStateProperty(DepthStencilState::None);
 
         // Read back the centre pixel — should be the clear colour.
         const Rectangle region(W / 2, H / 2, 1, 1);

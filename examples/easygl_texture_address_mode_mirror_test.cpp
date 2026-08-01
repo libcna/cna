@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -95,7 +96,7 @@ protected:
         if (done_) return;
         done_ = true;
 
-        getGraphicsDeviceProperty().SetDepthTestEnabled(false);
+        getGraphicsDeviceProperty().setDepthStencilStateProperty(DepthStencilState::None);
 
         SamplerState pointMirror;
         pointMirror.setFilterProperty(TextureFilter::Point);

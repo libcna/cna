@@ -205,6 +205,66 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_OcclusionQuery_Feasibility
                                   cna_test_skia_occlusion_query_feasibility)
 
+    # SKIA-106: register exact EasyGL sources whose asserted paths are genuinely 2D. Keep EasyGL
+    # fixtures containing BasicEffect/DrawUser outside the raster suite despite historical names;
+    # their 2D sampler/blend/clip contracts remain covered by Skia-native shared pixel fixtures.
+    cna_skia_test(cna_test_skia_textured_quad_readback
+                  examples/easygl_textured_quad_test.cpp)
+    cna_register_skia_display_test(Skia_TexturedQuad_Readback
+                                   cna_test_skia_textured_quad_readback)
+
+    # Reuse representative exact EasyGL sources for every remaining category whose source itself
+    # is genuinely 2D. Existing Skia-native/shared fixtures retain the exhaustive edge matrices.
+    cna_skia_test(cna_test_skia_easygl_spritebatch_rotation
+                  examples/easygl_spritebatch_rotation_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_SpriteBatch_Rotation
+                                   cna_test_skia_easygl_spritebatch_rotation)
+
+    cna_skia_test(cna_test_skia_easygl_spritebatch_sourcerect
+                  examples/easygl_spritebatch_sourcerect_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_SpriteBatch_SourceRect
+                                   cna_test_skia_easygl_spritebatch_sourcerect)
+
+    cna_skia_test(cna_test_skia_easygl_spritebatch_layerdepth
+                  examples/easygl_spritebatch_layerdepth_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_SpriteBatch_LayerDepth
+                                   cna_test_skia_easygl_spritebatch_layerdepth)
+
+    cna_skia_test(cna_test_skia_easygl_spritefont_single
+                  examples/easygl_spritefont_single_glyph_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_SpriteFont_SingleGlyph
+                                   cna_test_skia_easygl_spritefont_single)
+
+    cna_skia_test(cna_test_skia_easygl_address_mode
+                  examples/easygl_texture_address_mode_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_TextureAddressMode
+                                   cna_test_skia_easygl_address_mode)
+
+    cna_skia_test(cna_test_skia_easygl_address_mode_mirror
+                  examples/easygl_texture_address_mode_mirror_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_TextureAddressMode_Mirror
+                                   cna_test_skia_easygl_address_mode_mirror)
+
+    cna_skia_test(cna_test_skia_easygl_clear_overloads
+                  examples/easygl_clear_overloads_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_ClearOverloads
+                                   cna_test_skia_easygl_clear_overloads)
+
+    cna_skia_test(cna_test_skia_easygl_render_target
+                  examples/easygl_render_target_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_RenderTarget2D_Readback
+                                   cna_test_skia_easygl_render_target)
+
+    cna_skia_test(cna_test_skia_easygl_disposed_resource
+                  examples/easygl_disposed_resource_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_DisposedResource
+                                   cna_test_skia_easygl_disposed_resource)
+
+    cna_skia_test(cna_test_skia_easygl_backbuffer_readback_dimension
+                  examples/backbuffer_readback_dimension_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_BackbufferReadbackDimension
+                                   cna_test_skia_easygl_backbuffer_readback_dimension)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

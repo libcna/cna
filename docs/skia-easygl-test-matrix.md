@@ -2,8 +2,11 @@
 
 This is the SKIA-2 inventory. It covers every CTest registered by `EasyGLTests.cmake`, its two
 manual comparison executables, every checked-in EasyGL golden PNG, and every XNA-oracle scene.
-Classification is based on the fixture's most demanding required path: a mixed test with a required
-3D leg is `3d`, even if it also contains SpriteBatch controls.
+Classification is based on the most demanding path required to preserve the fixture's asserted
+contract. Incidental BasicEffect/DrawUser geometry in an EasyGL-only implementation does not make a
+sampler/blend/clip result 3D when a public SpriteBatch fixture observes the same result without
+loss; `docs/skia-2d-easygl-registration.md` records those substitutions. A mixed test with an
+assertion that inherently requires a 3D leg is `3d`, even if it also contains SpriteBatch controls.
 
 The four categories are deliberately exclusive:
 
@@ -24,21 +27,21 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 |---|---|---|---|
 | `ctest:EasyGL_PixelTestGame_Smoke` | `ctest` | `2d-direct` | Reuse the backend-neutral pixel fixture; SKIA-7. |
 | `ctest:EasyGL_GoldenImage_Smoke` | `ctest` | `2d-direct` | Reuse golden comparison on raster output; SKIA-7. |
-| `ctest:EasyGL_TexturedQuad_Readback` | `ctest` | `2d-direct` | Despite its historical name, the source uses only SpriteBatch plus backbuffer readback; SKIA-32, SKIA-62, registration tracked by SKIA-106. |
+| `ctest:EasyGL_TexturedQuad_Readback` | `ctest` | `2d-direct` | Exact source also runs as `Skia_TexturedQuad_Readback`; it uses only Clear, SpriteBatch, level-zero Texture2D and backbuffer readback; SKIA-32, SKIA-62, SKIA-106. |
 | `ctest:EasyGL_SpriteBatch_Rotation_Golden` | `ctest` | `2d-direct` | Existing Skia rotation/origin pixel coverage; SKIA-34. |
 | `ctest:EasyGL_TextureFilter_Linear_Golden` | `ctest` | `2d-direct` | Existing point/linear Skia sampling coverage; SKIA-43. |
 | `ctest:EasyGL_BlendState_Additive_Golden` | `ctest` | `2d-direct` | Existing Skia Additive route; SKIA-50. |
-| `ctest:EasyGL_RenderTarget2D_Readback` | `ctest` | `2d-direct` | Existing target readback path; SKIA-61–62. |
+| `ctest:EasyGL_RenderTarget2D_Readback` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_RenderTarget2D_Readback`; SKIA-61–62, SKIA-106. |
 | `ctest:EasyGL_RenderTarget2D_Golden` | `ctest` | `2d-direct` | Shared zero-tolerance target golden already runs on Skia; SKIA-75. |
 | `ctest:EasyGL_RenderTarget2D_MipComplete` | `ctest` | `2d-direct` | Direct 2D feature with explicit raster mip refusal; SKIA-70. |
 | `ctest:EasyGL_RenderTarget_ViewportScissorReset` | `ctest` | `2d-direct` | Existing target-local viewport/scissor coverage; SKIA-41–42. |
 | `ctest:EasyGL_SpriteFont_Properties` | `ctest` | `2d-direct` | Common atlas metrics; Skia glyph fixtures cover rendering; SKIA-38. |
 | `ctest:EasyGL_SpriteEffects_Flip` | `ctest` | `2d-direct` | Existing flip coverage; SKIA-34. |
-| `ctest:EasyGL_SpriteBatch_RotationAroundOrigin` | `ctest` | `2d-direct` | Existing rotation/origin coverage; SKIA-34. |
+| `ctest:EasyGL_SpriteBatch_RotationAroundOrigin` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_SpriteBatch_Rotation`; SKIA-34, SKIA-106. |
 | `ctest:EasyGL_SpriteBatch_ScaleOverloads` | `ctest` | `2d-direct` | Existing overload and scale coverage; SKIA-32, SKIA-39. |
 | `ctest:EasyGL_SpriteBatch_RenderTargetSize` | `ctest` | `2d-direct` | Active raster target dimensions are direct; SKIA-61. |
-| `ctest:EasyGL_SpriteBatch_SourceRectangleCropping` | `ctest` | `2d-direct` | Existing source-rectangle edge coverage; SKIA-32, SKIA-37. |
-| `ctest:EasyGL_SpriteBatch_LayerDepthOrder` | `ctest` | `2d-direct` | Existing sort/depth ordering coverage; SKIA-36. |
+| `ctest:EasyGL_SpriteBatch_SourceRectangleCropping` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_SpriteBatch_SourceRect`; SKIA-32, SKIA-37, SKIA-106. |
+| `ctest:EasyGL_SpriteBatch_LayerDepthOrder` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_SpriteBatch_LayerDepth`; SKIA-36, SKIA-106. |
 | `ctest:EasyGL_TransformMatrix_Translation` | `ctest` | `2d-direct` | Existing affine transform coverage; SKIA-35. |
 | `ctest:EasyGL_Texture2D_PartialRect_RoundTrip` | `ctest` | `2d-direct` | Existing exact transfer-range coverage; SKIA-24. |
 | `ctest:EasyGL_Texture2D_Mip_RoundTrip` | `ctest` | `2d-direct` | Direct 2D feature with explicit raster mip refusal; SKIA-27. |
@@ -46,11 +49,11 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_RenderTargetUsage` | `ctest` | `2d-direct` | Preserve/discard is directly testable; SKIA-64. |
 | `ctest:EasyGL_RT_Roundtrip` | `ctest` | `2d-direct` | Existing bind/read/sample round trip; SKIA-61–63. |
 | `ctest:EasyGL_DeviceValidation` | `ctest` | `2d-direct` | Reuse common argument validation before native work. |
-| `ctest:EasyGL_ClearOverloads` | `ctest` | `2d-direct` | Color routes direct; absent attachments use bounded policy; SKIA-13, SKIA-67. |
+| `ctest:EasyGL_ClearOverloads` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_ClearOverloads`; absent attachments use bounded policy; SKIA-13, SKIA-67, SKIA-106. |
 | `ctest:EasyGL_ViewportState` | `ctest` | `2d-direct` | Existing Skia viewport state coverage; SKIA-42. |
 | `ctest:EasyGL_Scissor` | `ctest` | `2d-direct` | Existing Skia clip coverage; SKIA-41. |
 | `ctest:EasyGL_Viewport_Subregion` | `ctest` | `2d-direct` | Direct active-canvas viewport placement; SKIA-42. |
-| `ctest:EasyGL_DisposedResource` | `ctest` | `2d-direct` | Shared disposed-resource guards already run on Skia; SKIA-29. |
+| `ctest:EasyGL_DisposedResource` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_DisposedResource`; SKIA-29, SKIA-106. |
 | `ctest:EasyGL_DoubleDispose` | `ctest` | `2d-direct` | Shared idempotent disposal already runs on Skia; SKIA-29. |
 | `ctest:EasyGL_BoundResourceDispose` | `ctest` | `2d-direct` | Checked target/batch lifetime route; SKIA-69. |
 | `ctest:EasyGL_MoveSemantics` | `ctest` | `2d-direct` | Shared wrapper ownership contract; SKIA-29. |
@@ -59,9 +62,9 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_ResourceLeak` | `ctest` | `2d-direct` | Raster resources are measurable under ASan/LSan; SKIA-29, SKIA-74. |
 | `ctest:EasyGL_ViewportResetAfterResize` | `ctest` | `2d-direct` | Existing resize/viewport tests; SKIA-8, SKIA-13. |
 | `ctest:EasyGL_NpotTexture` | `ctest` | `2d-direct` | Shared NPOT fixture already runs on Skia; SKIA-26. |
-| `ctest:EasyGL_TextureAddressMode` | `ctest` | `2d-direct` | Existing Clamp/Wrap axis coverage; SKIA-44–46. |
-| `ctest:EasyGL_TextureAddressMode_Mirror` | `ctest` | `2d-direct` | Existing Mirror axis coverage; SKIA-46. |
-| `ctest:EasyGL_SpriteFont_SingleGlyph` | `ctest` | `2d-direct` | Shared fixture already runs on Skia; SKIA-38. |
+| `ctest:EasyGL_TextureAddressMode` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_TextureAddressMode`; SKIA-44–46, SKIA-106. |
+| `ctest:EasyGL_TextureAddressMode_Mirror` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_TextureAddressMode_Mirror`; SKIA-46, SKIA-106. |
+| `ctest:EasyGL_SpriteFont_SingleGlyph` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_SpriteFont_SingleGlyph`; SKIA-38, SKIA-106. |
 | `ctest:EasyGL_SpriteFont_MultiGlyphSpacing` | `ctest` | `2d-direct` | Shared fixture already runs on Skia; SKIA-38. |
 | `ctest:EasyGL_SpriteFont_Newline` | `ctest` | `2d-direct` | Shared fixture already runs on Skia; SKIA-38. |
 | `ctest:EasyGL_SpriteFont_DefaultChar` | `ctest` | `2d-direct` | Shared fixture already runs on Skia; SKIA-38. |
@@ -79,7 +82,7 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_SpriteBatch_CustomViewport` | `ctest` | `2d-direct` | Direct canvas viewport path; SKIA-42. |
 | `ctest:EasyGL_SpriteBatch_ViewportSwitch` | `ctest` | `2d-direct` | Direct target-local viewport reset; SKIA-42, SKIA-61. |
 | `ctest:EasyGL_InvalidMipLevel` | `ctest` | `2d-direct` | Explicit invalid/raster-mip refusal; SKIA-27, SKIA-70. |
-| `ctest:EasyGL_BackbufferReadbackDimension` | `ctest` | `2d-direct` | Direct normalized RGBA8 readback; SKIA-7, SKIA-62. |
+| `ctest:EasyGL_BackbufferReadbackDimension` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_BackbufferReadbackDimension`, including immediate grow/shrink readback; SKIA-7, SKIA-62, SKIA-106. |
 | `ctest:EasyGL_BackbufferFirstRead` | `ctest` | `2d-direct` | Deterministic initialized raster backbuffer; SKIA-13. |
 | `ctest:EasyGL_BackbufferReject` | `ctest` | `2d-direct` | Existing bounds/unchanged-destination contract; SKIA-21, SKIA-62. |
 | `ctest:EasyGL_Texture2D_GetDataContract` | `ctest` | `2d-direct` | Shared fixture already runs on Skia; SKIA-23. |

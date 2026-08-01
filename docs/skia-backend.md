@@ -594,5 +594,15 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     `docs/skia-occlusion-query-feasibility.md`. The seven-check spike passes in Debug, Release and
     leak-enabled ASan/LSan; the complete Debug suite passes 111/111 in 13.74 seconds (16 Raster,
     92 Display, three Audit).
+79. SKIA-106 registers eleven exact EasyGL 2D sources under Skia: textured-quad readback; rotation,
+    source-rectangle and layer-depth SpriteBatch draws; one SpriteFont glyph; Wrap/Clamp and Mirror
+    addressing; Clear overloads; RenderTarget2D readback; disposal; and immediate grow/shrink
+    backbuffer readback. Four otherwise-2D sources now express disabled depth through the public
+    `DepthStencilState::None` object, retaining their EasyGL behavior without invoking a 3D-only
+    backend entry point. The shrink fixture exposed SDL's asynchronous X11 resize: Skia now uses
+    `SDL_SyncWindow` before deriving FixedHeightDynamicWidth and recreating the raster backbuffer.
+    The full Debug suite passes 122/122 in 16.29 seconds (16 Raster, 103 Display, three Audit); all
+    eleven focused tests pass in Release and ASan (`detect_leaks=0`), and all four modified shared
+    sources pass in EasyGL. See `docs/skia-2d-easygl-registration.md`.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

@@ -360,6 +360,16 @@ namespace CNA::Internal::Backends::Skia
         AssertOwnership("SetVirtualResolution");
         preferredVirtualWidth_ = width;
         preferredVirtualHeight_ = height;
+
+        // GraphicsDevice::Reset() requests the matching SDL window size immediately before this
+        // call. SDL documents that request as asynchronous on some window systems (notably X11),
+        // while FixedHeightDynamicWidth derives the raster width from the renderer's live output.
+        // Synchronize the pending request so a shrinking window cannot recreate a transiently
+        // narrower backbuffer from the old aspect ratio. A timeout is deliberately non-fatal: the
+        // existing dynamic refresh path will still converge when SDL reports the new output size.
+        if (!SDL_SyncWindow(window_))
+            SDL_ClearError();
+
         RecreateBackbuffer(width, height);
     }
 
