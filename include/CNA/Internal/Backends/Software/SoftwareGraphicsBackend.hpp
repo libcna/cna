@@ -328,6 +328,10 @@ namespace CNA::Internal::Backends::Software
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int) const override
+        {
+            return hasRealDepthBuffer_ ? depthFormat_ : 0;
+        }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         { return hasRealDepthBuffer_ && depthFormatWasRequested; }
         [[nodiscard]] bool HasRealStencilBuffer(bool stencilFormatWasRequested) const override

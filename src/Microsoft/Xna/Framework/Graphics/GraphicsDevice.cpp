@@ -83,6 +83,18 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
+        void NormalizeAppliedPresentationFormats(
+            CNA::Internal::Backends::IGraphicsBackend& backend,
+            PresentationParameters& parameters)
+        {
+            parameters.setBackBufferFormatProperty(static_cast<SurfaceFormat>(
+                backend.GetAppliedBackBufferFormatEXT(
+                    static_cast<int>(parameters.getBackBufferFormatProperty()))));
+            parameters.setDepthStencilFormatProperty(static_cast<DepthFormat>(
+                backend.GetAppliedDepthStencilFormatEXT(
+                    static_cast<int>(parameters.getDepthStencilFormatProperty()))));
+        }
+
         [[nodiscard]] bool hasClearFlag(ClearOptions options, ClearOptions flag)
         {
             return (static_cast<int>(options) & static_cast<int>(flag)) != 0;
@@ -512,7 +524,10 @@ namespace Microsoft::Xna::Framework::Graphics
 
         DeviceResetting.Raise(this, System::EventArgs::Empty);
 
-        presentationParameters_ = presentationParameters;
+        PresentationParameters appliedPresentationParameters = presentationParameters.Clone();
+        if (backend_ != nullptr)
+            NormalizeAppliedPresentationFormats(*backend_, appliedPresentationParameters);
+        presentationParameters_ = appliedPresentationParameters;
         if (adapter != nullptr)
         {
             adapter_ = adapter;
@@ -2137,9 +2152,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetPresentationParameters(const PresentationParameters& pp)
     {
-        presentationParameters_ = pp;
+        PresentationParameters applied = pp.Clone();
         if (backend_)
+        {
+            NormalizeAppliedPresentationFormats(*backend_, applied);
+#ifdef CNA_BACKEND_GDI
+            // This NOXNA store-only path does not reconfigure MSAA. Keep reporting the currently
+            // active GDI sample storage instead of echoing a request that was never applied.
+            applied.setMultiSampleCountProperty(backend_->GetMultiSampleCount());
+#endif
             backend_->SetSwapInterval(toSwapInterval(pp.getPresentationIntervalProperty()));
+        }
+        presentationParameters_ = applied;
     }
 
     void GraphicsDevice::RecreateBackendForMultiSampleCount(int multiSampleCount)
@@ -2307,6 +2331,14 @@ namespace Microsoft::Xna::Framework::Graphics
         if (backend_ != nullptr)
         {
             backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
+            NormalizeAppliedPresentationFormats(*backend_, presentationParameters_);
+#ifdef CNA_BACKEND_GDI
+            // The GDI factory clamps to its one real optional mode (4x) during construction.
+            // Surface that result immediately; Reset() already performs the same write-back via
+            // ApplyMultiSampleCount(), but direct construction previously retained 2x/8x requests.
+            presentationParameters_.setMultiSampleCountProperty(
+                backend_->GetMultiSampleCount());
+#endif
             if (!backendStartupNameLogged_)
             {
                 std::cout << "CNA: graphics backend: "

@@ -36,6 +36,8 @@ namespace CNA::Internal::Backends::Gdi
         void SetSwapInterval(int interval) override;
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         [[nodiscard]] int GetMultiSampleCount() const override;
+        [[nodiscard]] int GetAppliedBackBufferFormatEXT(int) const override { return 0; }
+        [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int) const override { return 0; }
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc, int stencilPass,
                                     int stencilFail, int stencilDepthFail, int stencilMask,

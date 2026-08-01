@@ -441,6 +441,22 @@ namespace CNA::Internal::Backends
         /// RenderTarget2D.MultiSampleCount reflects the real clamped value, not the raw
         /// constructor request (FNA3D_GetMaxMultiSampleCount).
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
+        /**
+         * @brief Returns the depth/stencil format actually backing this target.
+         *
+         * The default preserves the requested ordinal because most render-target backends create
+         * exactly that attachment. A backend that normalizes or rejects attachment types can
+         * override this so RenderTarget2D.DepthStencilFormat never reports storage that does not
+         * exist. The integer convention avoids coupling this backend interface to the XNA enum.
+         *
+         * @param requestedDepthStencilFormat Requested DepthFormat ordinal.
+         * @return Applied DepthFormat ordinal.
+         */
+        [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(
+            int requestedDepthStencilFormat) const
+        {
+            return requestedDepthStencilFormat;
+        }
         /// Returns whether this specific target instance actually has a real depth
         /// buffer backing it, as opposed to merely being requested via DepthFormat at
         /// construction time. Most backends honor whatever DepthFormat was requested, so the
@@ -1337,6 +1353,22 @@ namespace CNA::Internal::Backends
         /// (immediately reconstructing a device from inside this call is not required).
         virtual void UpdatePresentationFormatEXT(int /*backBufferFormat*/, int /*depthStencilFormat*/,
                                                   bool /*isFullScreen*/) {}
+        /**
+         * @brief Maps a requested backbuffer format ordinal to the backend's applied format.
+         *
+         * Backends that honor the request use the identity default. Fixed-format backends override
+         * this so GraphicsDevice can expose the real format after construction/reset without
+         * coupling this interface to SurfaceFormat.
+         */
+        [[nodiscard]] virtual int GetAppliedBackBufferFormatEXT(int requestedFormat) const
+        {
+            return requestedFormat;
+        }
+        /** @brief Depth/stencil counterpart of GetAppliedBackBufferFormatEXT(). */
+        [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(int requestedFormat) const
+        {
+            return requestedFormat;
+        }
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
         /// Converts a point from physical window coordinates to logical (virtual)

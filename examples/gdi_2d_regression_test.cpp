@@ -3,6 +3,7 @@
 
 #include "CNA/GraphicsBackendType.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -508,6 +509,50 @@ namespace
                      "window-to-logical letterbox transform is wrong.");
         ok &= Expect(!backend.TransformWindowToLogical(1.0f, 1.0f, logicalX, logicalY),
                      "letterbox bar must not map to a logical coordinate.");
+
+        bool acceptedEveryPresentationMode = true;
+        for (int mode = static_cast<int>(CnaPresentationMode::Letterbox);
+             mode <= static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth); ++mode)
+        {
+            try
+            {
+                backend.SetPresentationMode(mode);
+            }
+            catch (const std::exception&)
+            {
+                acceptedEveryPresentationMode = false;
+            }
+        }
+        ok &= Expect(acceptedEveryPresentationMode,
+                     "GDI accepts every defined presentation-mode ordinal.");
+
+        // Restore a geometry with observable bars, then prove both invalid boundaries fail before
+        // changing it. A blind enum cast used to accept these impossible values and leave later
+        // presentation/coordinate switches with undefined policy.
+        backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Letterbox));
+        bool rejectedNegativeMode = false;
+        bool rejectedPastEndMode = false;
+        try
+        {
+            backend.SetPresentationMode(-1);
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            rejectedNegativeMode = true;
+        }
+        try
+        {
+            backend.SetPresentationMode(
+                static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth) + 1);
+        }
+        catch (const System::ArgumentOutOfRangeException&)
+        {
+            rejectedPastEndMode = true;
+        }
+        ok &= Expect(rejectedNegativeMode && rejectedPastEndMode,
+                     "GDI rejects presentation-mode ordinals outside [0,4].");
+        ok &= Expect(!backend.TransformWindowToLogical(1.0f, 1.0f, logicalX, logicalY),
+                     "rejected presentation modes leave the previous Letterbox state active.");
 
         backend.Present();
 

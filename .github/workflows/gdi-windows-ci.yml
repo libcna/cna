@@ -76,6 +76,7 @@ jobs:
             cna_test_gdi_colormatrix_effect \
             cna_test_gdi_public_stencil \
             cna_test_gdi_public_api \
+            cna_test_gdi_applied_state \
             cna_test_gdi_dirty_damage \
             cna_test_gdi_repaint_invalidation \
             cna_test_gdi_presentation_oracle \

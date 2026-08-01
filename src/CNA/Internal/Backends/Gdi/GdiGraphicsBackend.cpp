@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -24,6 +25,18 @@ namespace CNA::Internal::Backends::Gdi
 {
     namespace
     {
+        [[nodiscard]] CnaPresentationMode ValidatePresentationMode(int mode)
+        {
+            if (mode < static_cast<int>(CnaPresentationMode::Letterbox) ||
+                mode > static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth))
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "mode", std::to_string(mode),
+                    "GDI presentation mode must be an ordinal from 0 through 4.");
+            }
+            return static_cast<CnaPresentationMode>(mode);
+        }
+
         [[nodiscard]] std::string FormatWin32Error(DWORD error)
         {
             std::string message = "Win32 error " + std::to_string(error);
@@ -203,7 +216,7 @@ namespace CNA::Internal::Backends::Gdi
         , window_(window)
         , requestedVirtualWidth_(virtualWidth)
         , requestedVirtualHeight_(virtualHeight)
-        , presentationMode_(presentationMode)
+        , presentationMode_(ValidatePresentationMode(static_cast<int>(presentationMode)))
     {
         if (window_ == nullptr)
             throw std::runtime_error("GDI graphics backend requires an SDL window.");
@@ -461,7 +474,9 @@ namespace CNA::Internal::Backends::Gdi
 
     void GdiGraphicsBackend::SetPresentationMode(int mode)
     {
-        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        // Validate before mutating any state: a failed request leaves the previous presentation
+        // geometry active and cannot flow into switch statements as an impossible enum value.
+        presentationMode_ = ValidatePresentationMode(mode);
         SynchronizeBackbufferSize();
         MarkBackbufferFullyDirty();
     }

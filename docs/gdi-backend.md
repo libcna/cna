@@ -35,6 +35,12 @@ compatibility backend under validation, not yet as a release baseline.
   single-sampled and reports 0. `SupportsCapability(MultiSampleAntiAliasing)` is true because the
   backbuffer path is real, but applications that require multisampled off-screen targets should
   use another backend.
+- The applied GDI backbuffer is always `SurfaceFormat::Color` with
+  `PresentationParameters.DepthStencilFormat=None`; unsupported format/depth requests are
+  normalized before the device exposes its active parameters. Direct construction, store-only
+  parameter updates, and `Reset()` all report the backend's actual 0x/4x sample count. This
+  `DepthFormat::None` answer does not hide the independent stencil plane, which is queried through
+  `GraphicsCapability::StencilBuffer` as described below.
 - The feature is intentionally opt-in because it adds 16 bytes/pixel of sample colour storage in
   addition to the ordinary resolved RGBA8 image. At 800×600 this is 7.32 MiB extra (11.44 MiB for
   the complete colour/depth/stencil framebuffer), and at 1280×720 it is 14.06 MiB extra (21.97
@@ -58,6 +64,11 @@ compatibility backend under validation, not yet as a release baseline.
   `StencilDepthBufferFail` have no 2D meaning because GDI always disables depth and has no front/
   back-facing 3D primitives. `DepthStencilBuffer` deliberately remains unsupported: that
   capability means a complete depth+stencil attachment, not this stencil-only clipping feature.
+- A GDI `RenderTarget2D` accepts only `SurfaceFormat::Color` (other formats fail construction),
+  reports `DepthStencilFormat=None` and `MultiSampleCount=0`, and still owns the independent stencil
+  plane. `PreserveContents` and `PlatformContents` both retain color/stencil on rebind;
+  `DiscardContents` deterministically replaces them with black/zero. Mipmap and usage properties
+  therefore describe the actual CPU storage rather than the original unsupported request.
 - The shared Software core has an internal 3D depth buffer, but GDI forcibly disables only its
   depth state on every application. A `DepthStencilState` therefore cannot change SpriteBatch's
   ordinary submission order, while its independent stencil fields can still clip/mask a later 2D
@@ -150,13 +161,14 @@ CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
   --target cna_test_gdi_smoke cna_test_gdi_2d_regression \
            cna_test_gdi_colormatrix_effect cna_test_gdi_public_stencil \
            cna_test_gdi_public_api \
+           cna_test_gdi_applied_state \
            cna_test_gdi_dirty_damage cna_test_gdi_repaint_invalidation \
            cna_test_gdi_presentation_oracle \
            cna_test_gdi_presentation_configuration \
            cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
-The backend is hard-gated to Windows targets. A native Windows build registers eleven `GDI` CTest
+The backend is hard-gated to Windows targets. A native Windows build registers twelve `GDI` CTest
 cases, including separate default, dirty and halftone configurations; run them with
 `ctest -L GDI --output-on-failure`.
 
@@ -175,6 +187,7 @@ build-gdi\cna_test_gdi_2d_regression.exe
 build-gdi\cna_test_gdi_colormatrix_effect.exe
 build-gdi\cna_test_gdi_public_stencil.exe
 build-gdi\cna_test_gdi_public_api.exe
+build-gdi\cna_test_gdi_applied_state.exe
 build-gdi\cna_test_gdi_dirty_damage.exe
 build-gdi\cna_test_gdi_repaint_invalidation.exe
 build-gdi\cna_test_gdi_presentation_oracle.exe
@@ -187,6 +200,7 @@ wine build-gdi/cna_test_gdi_2d_regression.exe
 wine build-gdi/cna_test_gdi_colormatrix_effect.exe
 wine build-gdi/cna_test_gdi_public_stencil.exe
 wine build-gdi/cna_test_gdi_public_api.exe
+wine build-gdi/cna_test_gdi_applied_state.exe
 wine build-gdi/cna_test_gdi_dirty_damage.exe
 wine build-gdi/cna_test_gdi_repaint_invalidation.exe
 wine build-gdi/cna_test_gdi_presentation_oracle.exe
@@ -231,6 +245,11 @@ clears on both the backbuffer and a depthless `RenderTarget2D`. It also checks t
 properties and the complete capability matrix, texture upload/readback, SpriteBatch source
 selection, viewport/scissor clipping, render-target binding/preservation/sampling, 4x MSAA reset
 and resolve, rejected 2x write-back, resize, and backbuffer readback at the new edge.
+
+`cna_test_gdi_applied_state` deliberately requests unsupported backbuffer/RT format, depth and
+sample combinations, then compares the normalized public properties with real readback, mip and
+rebind behavior. The low-level 2D regression separately checks all five presentation-mode ordinals,
+both invalid boundaries, and transactional rejection that leaves the prior mode active.
 
 `cna_test_gdi_dirty_damage` verifies the raster-derived rectangle after origin, viewport, scissor,
 transform and rotation, plus negative, off-screen and overflow-sized geometry. The repaint test

@@ -190,6 +190,27 @@ namespace
                                   "single-colour Clear resets a depthless GDI RenderTarget2D stencil");
         return ok;
     }
+
+    bool ExerciseRenderTargetUsage(GraphicsDevice& device, SpriteBatch& sprites,
+                                   Texture2D& texture, RenderTargetUsage usage,
+                                   bool expectPreserved, const char* message)
+    {
+        RenderTarget2D target(device, kWidth, kHeight, false, SurfaceFormat::Color,
+                              DepthFormat::None, 0, usage);
+        device.SetRenderTarget(&target);
+        StampMask(device, sprites, texture);
+        device.SetRenderTarget(nullptr);
+
+        // Rebinding is the usage-policy boundary. Replace colour only, then ask whether the
+        // stencil mask survived that boundary. DiscardContents must have reset it during bind;
+        // PreserveContents and PlatformContents must retain it.
+        device.SetRenderTarget(&target);
+        device.Clear(ClearOptions::Target, Color::Black, 1.0f, 0);
+        DepthStencilState test = StencilTestState();
+        Draw(sprites, texture, kFull, test);
+        device.SetRenderTarget(nullptr);
+        return ReadTargetAndExpect(target, expectPreserved, message);
+    }
 }
 
 int main()
@@ -235,6 +256,15 @@ int main()
 
         ok &= ExerciseBackbuffer(device, sprites, texture);
         ok &= ExerciseRenderTarget(device, sprites, texture);
+        ok &= ExerciseRenderTargetUsage(
+            device, sprites, texture, RenderTargetUsage::PreserveContents, true,
+            "PreserveContents retains the standalone GDI stencil plane across rebind");
+        ok &= ExerciseRenderTargetUsage(
+            device, sprites, texture, RenderTargetUsage::PlatformContents, true,
+            "PlatformContents retains the standalone GDI stencil plane across rebind");
+        ok &= ExerciseRenderTargetUsage(
+            device, sprites, texture, RenderTargetUsage::DiscardContents, false,
+            "DiscardContents resets the standalone GDI stencil plane on rebind");
         result = ok ? 0 : 1;
     }
     catch (const std::exception& error)

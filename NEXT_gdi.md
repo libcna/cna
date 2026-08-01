@@ -8,10 +8,10 @@
 
 ## Current focus
 
-- GDI-050 through GDI-057 are complete. The approved catch-up baseline is commit `48826e0b`, and
-  GDI-055's final public API matrix is commit `4c512245`.
-- Next implement honest applied presentation/resource state in GDI-058, then continue through the
-  safe, automatable GDI roadmap in dependency order.
+- GDI-050 through GDI-058 are complete. The approved catch-up baseline is commit `48826e0b`,
+  GDI-055 is `4c512245`, and the manual workflow is `01873ca9`.
+- Next normalize GDI's unsupported-feature failures in GDI-059, then continue through the safe,
+  automatable GDI roadmap in dependency order.
 
 ## Completed in the current working tree
 
@@ -25,9 +25,14 @@
   sampling, 4x and rejected 2x MSAA resets, resize and backbuffer readback. Public stencil coverage
   remains in its focused companion test.
 - GDI-056: distinct native CTest cases for default, dirty and halftone presentation policies.
-- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the nine
-  focused GDI executables at `--parallel 2`, runs all eleven `GDI` CTest cases, and uploads native
+- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the ten
+  focused GDI executables at `--parallel 2`, runs all twelve `GDI` CTest cases, and uploads native
   diagnostics on failure. It intentionally does not claim the visible GDI-061 gate.
+- GDI-058: applied backbuffer format/depth/MSAA are normalized on construction, reset, and the
+  store-only update path; invalid presentation modes throw transactionally. Render targets expose
+  actual RGBA8/depthless/single-sample storage, reject other color formats, and have verified
+  Preserve/Platform/Discard rebind behavior. The always-present stencil remains a separate
+  capability and focused public stencil contract.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -56,21 +61,28 @@ baseline. All later tasks use one task per commit.
 ## Validation status
 
 - Fresh MinGW-w64 Release configure in `cmake-build-gdi/`: pass.
-- `CNA`, all eight focused GDI correctness executables, the presentation benchmark and 2D demo:
+- `CNA`, all ten focused GDI correctness executables, the presentation benchmark and 2D demo:
   build pass at `-j2`.
-- Wine/Xvfb: smoke, 2D regression, ColorMatrix, public stencil, dirty damage, repaint/failure and
-  presentation-oracle executables pass.
+- Wine/Xvfb: smoke, 2D regression, ColorMatrix, public stencil/API/applied-state, dirty damage,
+  repaint/failure and presentation-oracle executables pass.
 - Wine/Xvfb presentation configuration: default, dirty and halftone variants all pass with
   `CNA_GDI_DWM_FLUSH=0`.
 - GDI-055 `cna_test_gdi_public_api`: MinGW compile/link pass and all 33 public-path assertions pass
   under Wine/Xvfb, including exact scissor, RT, 4x resolve and resized-edge pixels.
 - GDI-057 workflow: static YAML/action structure inspected locally; it cannot be executed until a
   human manually dispatches it on GitHub. The first native MSVC result therefore remains pending.
+- GDI-058 `cna_test_gdi_applied_state`: MinGW compile/link and all applied-state/readback/mip/usage
+  assertions pass under Wine/Xvfb. Updated 2D presentation-mode regression, public API matrix and
+  public stencil tests also pass; stencil Preserve/Platform/Discard rebind behavior is explicit.
+- GDI-058 shared-interface gate: native HEADLESS `CNA` and `CnaTests` rebuild pass at `-j2`; 35
+  focused PresentationParameters/GraphicsDeviceInformation unit tests pass.
+- Post-GDI-058 full Wine/Xvfb milestone: all ten correctness executables and all three presentation
+  configurations pass in one shared display session.
 - Native HEADLESS/system-SDL build: `CNA` and `CnaTests` link successfully at `-j2`.
 - `GraphicsDeviceCapabilityTest.SupportsStencilBuffer`: pass under HEADLESS. The complete
   `GraphicsDeviceCapabilityTest.*` filter is 9 pass / 1 pre-existing configuration mismatch:
   `DoesNotSupportWireFrame` assumes EasyGL, while HEADLESS truthfully reports wireframe support.
-- `git diff --check`: pending immediately before commit.
+- `git diff --check`: pass for the GDI-058 change set.
 
 ## Useful commands
 
@@ -95,5 +107,5 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Commit the approved GDI-057 workflow, then begin GDI-058 with presentation-mode validation and
-tests for constructor/reset/resource properties versus actually created GDI storage.
+Commit GDI-058, then implement one early `System::NotSupportedException` policy and public tests for
+every resource/query/buffer/draw family listed in GDI-059.

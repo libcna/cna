@@ -112,6 +112,15 @@ namespace Microsoft::Xna::Framework::Graphics
         , usage_(usage)
     {
         rtBackend_ = static_cast<IRenderTargetBackend*>(GetBackendRaw());
+        // GDI-058: the public property describes the attachment that was actually created, not a
+        // request the backend normalized away. The interface default is identity for backends that
+        // honor the requested format; GDI's shared CPU target reports DepthFormat::None.
+        if (rtBackend_)
+        {
+            depthFormat_ = static_cast<DepthFormat>(
+                rtBackend_->GetAppliedDepthStencilFormatEXT(
+                    static_cast<int>(preferredDepthFormat)));
+        }
         // MultiSampleCount reflects the backend's real, device-clamped value (matching FNA's
         // FNA3D_GetMaxMultiSampleCount), not the raw constructor argument.
         if (rtBackend_) multiSampleCount_ = rtBackend_->GetMultiSampleCount();
