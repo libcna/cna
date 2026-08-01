@@ -9,6 +9,8 @@
 #include "include/core/SkBlender.h"
 #include "include/core/SkBlendMode.h"
 
+#include <memory>
+
 namespace CNA::Internal::Backends::Skia
 {
     /** Immediate SkCanvas implementation of the level-0 SpriteBatch path. */
@@ -19,14 +21,14 @@ namespace CNA::Internal::Backends::Skia
                                const sk_sp<SkBlender>& customBlender,
                                const SkiaSourceAlphaConvention& sourceAlphaConvention,
                                const SkiaRasterState& rasterState,
-                               SkiaRenderTargetBinding* targetBinding)
+                               const std::shared_ptr<SkiaRenderTargetBinding>& targetBinding)
             : activeSurface_(&activeSurface), blendMode_(&blendMode)
             , customBlender_(&customBlender), sourceAlphaConvention_(&sourceAlphaConvention)
             , rasterState_(&rasterState), targetBinding_(targetBinding) {}
 
         void Begin() override;
         void End() override;
-        void SetTransformMatrix(const Matrix& matrix) override { transformMatrix_ = matrix; }
+        void SetTransformMatrix(const Matrix& matrix) override;
         void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
@@ -39,12 +41,15 @@ namespace CNA::Internal::Backends::Skia
                   const Vector2& origin, SpriteEffects effects, float layerDepth) override;
 
     private:
+        [[nodiscard]] std::shared_ptr<SkiaRenderTargetBinding> LockBinding(
+            const char* operation) const;
+
         SkiaSurface** activeSurface_ = nullptr;
         const SkBlendMode* blendMode_ = nullptr;
         const sk_sp<SkBlender>* customBlender_ = nullptr;
         const SkiaSourceAlphaConvention* sourceAlphaConvention_ = nullptr;
         const SkiaRasterState* rasterState_ = nullptr;
-        SkiaRenderTargetBinding* targetBinding_ = nullptr;
+        std::weak_ptr<SkiaRenderTargetBinding> targetBinding_;
         bool begun_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         int textureFilter_ = 0;

@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaOwnership.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
@@ -116,8 +117,9 @@ namespace CNA::Internal::Backends::Skia
         void RecreatePresentationTexture();
         void DestroyPresentationTexture() noexcept;
         void ApplyLogicalPresentation();
-        [[nodiscard]] SkiaSurface& ActiveSurface() noexcept { return *targetBinding_->ActiveSurface(); }
-        [[nodiscard]] const SkiaSurface& ActiveSurface() const noexcept { return *targetBinding_->ActiveSurface(); }
+        void AssertOwnership(const char* operation) const;
+        [[nodiscard]] SkiaSurface& ActiveSurface();
+        [[nodiscard]] const SkiaSurface& ActiveSurface() const;
         [[nodiscard]] int LogicalWidth() const noexcept { return surface_.Width(); }
         [[nodiscard]] int LogicalHeight() const noexcept { return surface_.Height(); }
 
@@ -126,7 +128,9 @@ namespace CNA::Internal::Backends::Skia
         SDL_Texture* presentTexture_ = nullptr;
         std::function<void(BackendDeviceEvent)> deviceEventCallback_;
         SkiaSurface surface_;
-        std::shared_ptr<SkiaRenderTargetBinding> targetBinding_ = std::make_shared<SkiaRenderTargetBinding>();
+        std::shared_ptr<SkiaOwnership> ownership_ = std::make_shared<SkiaOwnership>();
+        std::shared_ptr<SkiaRenderTargetBinding> targetBinding_
+            = std::make_shared<SkiaRenderTargetBinding>(ownership_);
         std::shared_ptr<SkiaResourceCounters> resourceCounters_ = std::make_shared<SkiaResourceCounters>();
         SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
         sk_sp<SkBlender> spriteCustomBlender_;

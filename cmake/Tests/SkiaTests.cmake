@@ -69,6 +69,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_include_directories(cna_test_skia_lifecycle PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_display_test(Skia_Lifecycle cna_test_skia_lifecycle)
 
+    cna_skia_test(cna_test_skia_ownership examples/skia_ownership_test.cpp)
+    target_include_directories(cna_test_skia_ownership PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Ownership cna_test_skia_ownership)
+
     cna_skia_test(cna_test_skia_present_interval examples/skia_present_interval_test.cpp)
     target_include_directories(cna_test_skia_present_interval PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_display_test(Skia_PresentInterval cna_test_skia_present_interval)

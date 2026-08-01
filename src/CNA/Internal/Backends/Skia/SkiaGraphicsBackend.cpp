@@ -160,6 +160,38 @@ namespace CNA::Internal::Backends::Skia
         if (renderer_) SDL_DestroyRenderer(renderer_);
     }
 
+    void SkiaGraphicsBackend::AssertOwnership(const char* operation) const
+    {
+        ownership_->AssertOwnerThread(operation);
+        if (!window_ || !renderer_ || SDL_GetRenderer(window_) != renderer_)
+        {
+            throw std::runtime_error(
+                std::string("Skia presenter ownership violation during ") + operation + ".");
+        }
+    }
+
+    SkiaSurface& SkiaGraphicsBackend::ActiveSurface()
+    {
+        AssertOwnership("active-surface access");
+        targetBinding_->AssertConsistent(&surface_);
+        SkiaSurface* activeSurface = targetBinding_->ActiveSurface();
+        SkiaRenderTargetBackend* activeTarget = targetBinding_->ActiveTarget();
+        if (activeTarget && activeSurface != &activeTarget->Surface())
+            throw std::runtime_error("Skia active target does not own the selected raster surface.");
+        return *activeSurface;
+    }
+
+    const SkiaSurface& SkiaGraphicsBackend::ActiveSurface() const
+    {
+        AssertOwnership("active-surface access");
+        targetBinding_->AssertConsistent(&surface_);
+        SkiaSurface* activeSurface = targetBinding_->ActiveSurface();
+        const SkiaRenderTargetBackend* activeTarget = targetBinding_->ActiveTarget();
+        if (activeTarget && activeSurface != &activeTarget->Surface())
+            throw std::runtime_error("Skia active target does not own the selected raster surface.");
+        return *activeSurface;
+    }
+
     void SkiaGraphicsBackend::RecreateBackbuffer(int requestedWidth, int requestedHeight)
     {
         int outputWidth = 0;
@@ -270,6 +302,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::Clear(float r, float g, float b, float a)
     {
+        AssertOwnership("Clear");
         RefreshDynamicBackbufferIfNeeded();
         if (SkiaRenderTargetBackend* target = targetBinding_->ActiveTarget())
             target->InvalidateSnapshot();
@@ -278,6 +311,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::Present()
     {
+        AssertOwnership("Present");
         surface_.Flush();
         const auto pixels = surface_.SnapshotRgba();
         if (!SDL_UpdateTexture(presentTexture_, nullptr, pixels.data(), LogicalWidth() * 4))
@@ -302,6 +336,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::GetViewportSize(int& width, int& height)
     {
+        AssertOwnership("GetViewportSize");
         RefreshDynamicBackbufferIfNeeded();
         width = ActiveSurface().Width();
         height = ActiveSurface().Height();
@@ -309,6 +344,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::SetVirtualResolution(int width, int height)
     {
+        AssertOwnership("SetVirtualResolution");
         preferredVirtualWidth_ = width;
         preferredVirtualHeight_ = height;
         RecreateBackbuffer(width, height);
@@ -316,6 +352,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::SetPresentationMode(int mode)
     {
+        AssertOwnership("SetPresentationMode");
         if (mode < static_cast<int>(CnaPresentationMode::Letterbox)
             || mode > static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth))
         {
@@ -327,6 +364,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::SetSwapInterval(int interval)
     {
+        AssertOwnership("SetSwapInterval");
         if (!SDL_SetRenderVSync(renderer_, interval))
         {
             if (interval > 1 && SDL_SetRenderVSync(renderer_, 1))
@@ -341,6 +379,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::DebugSimulateContextLoss()
     {
+        AssertOwnership("DebugSimulateContextLoss");
         // A CPU-raster Skia surface cannot incur a real GPU context loss. The useful equivalent
         // is loss of the SDL presenter: reconstruct its renderer/streaming texture while leaving
         // CPU-owned Texture2D and RenderTarget2D data live. Report only a reset pair, rather than
@@ -354,6 +393,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::DebugRestoreContext()
     {
+        AssertOwnership("DebugRestoreContext");
         // Desktop recovery is immediate, exactly like EasyGL's existing debug restore path.
         DebugSimulateContextLoss();
     }
@@ -361,6 +401,7 @@ namespace CNA::Internal::Backends::Skia
     bool SkiaGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
                                                         float& logX, float& logY) const
     {
+        AssertOwnership("TransformWindowToLogical");
         // Window coordinates are SDL window-space points, whereas GetRenderOutputSize() reports
         // physical renderer pixels. Scaling against the latter halves a coordinate on a 2x HiDPI
         // display and also loses Letterbox/Overscan offsets. SDL owns both conversions for its
@@ -372,24 +413,28 @@ namespace CNA::Internal::Backends::Skia
     bool SkiaGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
                                                         float& windowX, float& windowY) const
     {
+        AssertOwnership("TransformLogicalToWindow");
         return renderer_ && SDL_RenderCoordinatesToWindow(renderer_, logX, logY, &windowX, &windowY);
     }
 
     std::unique_ptr<ITextureBackend> SkiaGraphicsBackend::CreateTexture(const ImageData& data)
     {
+        AssertOwnership("CreateTexture");
         return std::make_unique<SkiaTextureBackend>(data, resourceCounters_);
     }
 
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
+        AssertOwnership("CreateSpriteBatch");
         return std::make_unique<SkiaSpriteBatchBackend>(targetBinding_->ActiveSurfaceRef(), spriteBlendMode_,
-                                                        spriteCustomBlender_, spriteSourceAlphaConvention_,
-                                                        rasterState_, targetBinding_.get());
+                                                         spriteCustomBlender_, spriteSourceAlphaConvention_,
+                                                         rasterState_, targetBinding_);
     }
 
     std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(
         int width, int height, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
+        AssertOwnership("CreateRenderTarget2D");
         (void)depthFormat;
         if (width <= 0 || height <= 0)
             throw std::runtime_error("Skia RenderTarget2D dimensions must be positive.");
@@ -404,6 +449,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* renderTarget)
     {
+        AssertOwnership("SetRenderTarget2D");
         if (!renderTarget)
         {
             targetBinding_->UnbindToBackbuffer();
@@ -422,6 +468,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels)
     {
+        AssertOwnership("ReadBackbuffer");
         ActiveSurface().Flush();
         if (!ActiveSurface().ReadPixels(x, y, width, height, pixels, width * 4))
             throw std::runtime_error("Skia ReadBackbuffer request is outside the raster backbuffer.");
@@ -430,6 +477,7 @@ namespace CNA::Internal::Backends::Skia
     void SkiaGraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
+        AssertOwnership("SetRenderTargets");
         if (count < 0)
             throw std::runtime_error("Skia SetRenderTargets count must not be negative.");
         if (count == 0)
@@ -451,6 +499,7 @@ namespace CNA::Internal::Backends::Skia
                                                int colorBlendFunc, int alphaBlendFunc,
                                                const BlendWriteState& writeState)
     {
+        AssertOwnership("ApplyBlendState");
         // This table contains all and only public XNA tuples with a pixel-proven source-alpha
         // convention. The one runtime-blender probe remains deliberately narrow until a general
         // convention-preserving factor/function generator has public target/readback evidence.
@@ -504,6 +553,7 @@ namespace CNA::Internal::Backends::Skia
     void SkiaGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                                    float depthBias, float slopeScaleDepthBias)
     {
+        AssertOwnership("ApplyRasterizerState");
         constexpr int kFillModeSolid = 0;
         if (fillMode != kFillModeSolid)
         {
@@ -525,6 +575,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::SetScissorRect(int x, int y, int width, int height)
     {
+        AssertOwnership("SetScissorRect");
         rasterState_.scissorX = x;
         rasterState_.scissorY = y;
         rasterState_.scissorWidth = width;
@@ -535,6 +586,7 @@ namespace CNA::Internal::Backends::Skia
     void SkiaGraphicsBackend::SetViewport(int x, int y, int width, int height,
                                           float minDepth, float maxDepth)
     {
+        AssertOwnership("SetViewport");
         // SpriteBatch is a top-left, 2D path. Its coordinates and Begin transform are viewport
         // local; the viewport then positions and clips the resulting canvas geometry. Depth range
         // has no observable meaning without a Skia depth buffer, but retaining this call's spatial
@@ -550,6 +602,7 @@ namespace CNA::Internal::Backends::Skia
 
     bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability) const
     {
+        AssertOwnership("SupportsCapability");
         return false;
     }
 
@@ -562,6 +615,7 @@ namespace CNA::Internal::Backends::Skia
     void SkiaGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D("SetDepthTestEnabled"); }
     void SkiaGraphicsBackend::SetBlendEnabled(bool enabled)
     {
+        AssertOwnership("SetBlendEnabled");
         blendEnabled_ = enabled;
         if (enabled)
         {

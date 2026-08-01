@@ -19,7 +19,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 76 Skia CTests: seven raster-only and 69 display-required tests.
+- `docs/skia-backend.md` records 77 Skia CTests: seven raster-only and 70 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -239,6 +239,23 @@
   window resize after mode switches, surface reallocation, preferred-width restoration, and safe
   rejection of an invalid mode. It passes under Xvfb normally and under AddressSanitizer.
 
+## Completed in this session: SKIA-18
+
+- Added a shared owner-thread token and presenter assertion to the Skia graphics backend. Raster
+  canvas/SDL operations now reject a foreign thread before reading or mutating active state, and
+  validate that the backend's SDL renderer is still the renderer registered for its window.
+- Hardened `SkiaRenderTargetBinding`: null backbuffers/targets/surfaces and attempts to alias the
+  backend backbuffer as a target are rejected without changing the active route. Every active-
+  surface access verifies backbuffer/target consistency and exact target surface ownership.
+- Replaced SpriteBatch's raw target-binding lifetime with a weak binding. A batch that outlives its
+  graphics backend now fails with an actionable destruction-order diagnostic before touching raw
+  blend/raster/surface pointers. Target destruction remains non-throwing and weakly detaches in
+  either backend/target destruction order.
+- `Skia_Ownership` passes 8/8 normally and under ASan; the expanded display-free
+  `Skia_RenderTargetBinding_Raster` passes 10/10 normally and under ASan/LSan with leak detection
+  enabled outside the ptrace sandbox. Lifecycle, context recovery, target lifetime, and
+  SpriteBatch Begin/End regressions also pass under ASan.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -308,19 +325,20 @@
   builds. `Skia_DisplayScale` (10/10), `Skia_Resize_Presentation` (16/16), and
   `Skia_Presentation_Edge` (4/4) also pass in both builds; the 2D demo completes its three-frame
   smoke run from the build directory.
-- Full normal Skia milestone: all 76 labelled tests pass on one Xvfb server with CTest parallelism
-  2 (69 Display, seven Raster; 45.48 seconds real time). The temporary test display cache value was
+- Full normal Skia milestone: all 77 labelled tests pass on one Xvfb server with CTest parallelism
+  2 (70 Display, seven Raster; 46.56 seconds real time). The temporary test display cache value was
   restored to the repository's prior `:0` setting after the run.
 
 ## Current task
 
-Audit SKIA-18's active-surface, owner-thread, and destruction-order requirements against the
-existing weak target-binding lifetime design. Add only guards with independently testable failure
-behavior; do not make a throwing destructor or claim a GPU context for the raster path.
+Audit the remaining unchecked foundational rows (SKIA-1 through SKIA-9, then stale implementation
+rows such as SKIA-21) against the completed raster vertical slice. Correct stale status only with
+existing evidence; implement independently observable gaps in dependency order.
 
 ## Next candidates
 
-1. Complete the bounded SKIA-18 ownership/thread audit and its negative tests.
+1. Audit SKIA-1 through SKIA-9 against code, dependency metadata, and current tests; implement the
+   highest-value safe gap rather than marking aspirational accelerated work complete.
 2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
    probe; the selected raster path has no truthful capability to expose there.
 3. Keep the recovery boundary precise: raster resources survive SDL presenter reconstruction;

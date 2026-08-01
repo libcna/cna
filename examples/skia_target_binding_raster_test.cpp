@@ -31,8 +31,45 @@ int main()
     binding->SetBackbuffer(&backbuffer);
     Check(binding->ActiveSurface() == &backbuffer, "new binding selects its backbuffer");
 
+    bool nullBackbufferRejected = false;
+    try
+    {
+        binding->SetBackbuffer(nullptr);
+    }
+    catch (const std::exception&)
+    {
+        nullBackbufferRejected = true;
+    }
+    Check(nullBackbufferRejected && binding->ActiveSurface() == &backbuffer,
+          "null backbuffer is rejected without changing the active surface");
+
     {
         auto target = std::make_unique<SkiaRenderTargetBackend>(4, 4, true, binding);
+
+        bool nullTargetRejected = false;
+        try
+        {
+            binding->Bind(nullptr, &target->Surface());
+        }
+        catch (const std::exception&)
+        {
+            nullTargetRejected = true;
+        }
+        Check(nullTargetRejected && binding->ActiveSurface() == &backbuffer,
+              "null target is rejected without changing the active surface");
+
+        bool backbufferAliasRejected = false;
+        try
+        {
+            binding->Bind(target.get(), &backbuffer);
+        }
+        catch (const std::exception&)
+        {
+            backbufferAliasRejected = true;
+        }
+        Check(backbufferAliasRejected && binding->ActiveSurface() == &backbuffer,
+              "target cannot claim the backend-owned backbuffer surface");
+
         binding->Bind(target.get(), &target->Surface());
         Check(binding->ActiveSurface() == &target->Surface(), "bound target becomes active surface");
 
@@ -62,6 +99,6 @@ int main()
     lateTarget.reset(); // Must not access the expired backend binding.
     Check(true, "target destruction after backend destruction is safe");
 
-    std::printf("=== %d/%d PASS ===\n", 7 - failures, 7);
+    std::printf("=== %d/%d PASS ===\n", 10 - failures, 10);
     return failures == 0 ? 0 : 1;
 }

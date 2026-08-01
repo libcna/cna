@@ -175,8 +175,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers 76 SKIA-only CTests: seven window-independent raster
-   tests and 69 display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers 77 SKIA-only CTests: seven window-independent raster
+   tests and 70 display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -370,5 +370,12 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     resize after mode switches, preferred-width restoration, and non-mutating invalid-mode
     rejection. It passes normally and under AddressSanitizer together with the existing display-
     scale, resize/reset, and presentation-edge regressions.
+55. `Skia_Ownership` proves the raster/SDL backend is owner-thread bound, its window owns the
+    expected presenter, rejected foreign-thread calls do not change backend or SpriteBatch state,
+    and a SpriteBatch surviving graphics-backend destruction fails before dereferencing its raw
+    drawing-state pointers. The expanded `Skia_RenderTargetBinding_Raster` rejects null/aliased
+    active surfaces without mutation and proves both backend/target destruction orders. Both pass
+    under AddressSanitizer; the display-free binding test also passes LeakSanitizer with leak
+    detection enabled.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

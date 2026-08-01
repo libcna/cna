@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <string>
 
 namespace CNA::Internal::Backends::Skia
 {
@@ -145,8 +146,23 @@ namespace CNA::Internal::Backends::Skia
         }
     }
 
+    std::shared_ptr<SkiaRenderTargetBinding> SkiaSpriteBatchBackend::LockBinding(
+        const char* operation) const
+    {
+        std::shared_ptr<SkiaRenderTargetBinding> binding = targetBinding_.lock();
+        if (!binding)
+        {
+            throw std::runtime_error(
+                std::string("Skia ownership violation: ") + operation
+                + " was attempted after graphics backend destruction.");
+        }
+        binding->AssertOwnerAccess(operation);
+        return binding;
+    }
+
     void SkiaSpriteBatchBackend::Begin()
     {
+        (void)LockBinding("SpriteBatch::Begin");
         if (begun_)
             throw std::runtime_error("Skia SpriteBatch Begin() was called without a matching End().");
         begun_ = true;
@@ -154,19 +170,28 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaSpriteBatchBackend::End()
     {
+        (void)LockBinding("SpriteBatch::End");
         if (!begun_)
             throw std::runtime_error("Skia SpriteBatch End() was called without a matching Begin().");
         begun_ = false;
     }
 
+    void SkiaSpriteBatchBackend::SetTransformMatrix(const Matrix& matrix)
+    {
+        (void)LockBinding("SpriteBatch::SetTransformMatrix");
+        transformMatrix_ = matrix;
+    }
+
     void SkiaSpriteBatchBackend::SetCustomEffect(Effect* effect)
     {
+        (void)LockBinding("SpriteBatch::SetCustomEffect");
         if (effect)
             throw std::runtime_error("Skia raster SpriteBatch custom Effects are not implemented yet.");
     }
 
     void SkiaSpriteBatchBackend::SetSamplerFilter(int textureFilter)
     {
+        (void)LockBinding("SpriteBatch::SetSamplerFilter");
         if (RequiresMipmaps(textureFilter))
             throw System::NotSupportedException(
                 "Skia raster SpriteBatch does not support TextureFilter mip modes because mip chains "
@@ -178,6 +203,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
     {
+        (void)LockBinding("SpriteBatch::SetSamplerAddressMode");
         // Validate up front because the address modes are carried as raw enum ordinals across the
         // shared backend seam. A shader is selected lazily by Draw only when its tiled path is
         // needed, so ordinary in-bounds Clamp sprites retain Skia's stricter source-rect path.
@@ -207,6 +233,7 @@ namespace CNA::Internal::Backends::Skia
                                       const Rectangle& sourceRectangle, const Color& color, float rotation,
                                       const Vector2& origin, SpriteEffects effects, float layerDepth)
     {
+        const std::shared_ptr<SkiaRenderTargetBinding> targetBinding = LockBinding("SpriteBatch::Draw");
         if (!begun_)
             throw std::runtime_error("Skia SpriteBatch Draw() was called before Begin().");
         if (sourceRectangle.Width <= 0 || sourceRectangle.Height <= 0
@@ -218,8 +245,8 @@ namespace CNA::Internal::Backends::Skia
         // SkSurface snapshots remain valid images after a later write. Invalidate the bounded
         // target cache before mutating the current canvas so the next target sampling draw sees
         // exactly these new pixels rather than a prior frame's immutable snapshot.
-        if (targetBinding_ && targetBinding_->ActiveTarget())
-            targetBinding_->ActiveTarget()->InvalidateSnapshot();
+        if (SkiaRenderTargetBackend* target = targetBinding->ActiveTarget())
+            target->InvalidateSnapshot();
 
         const auto* skiaImageSource = dynamic_cast<const SkiaImageSource*>(&texture);
         const SkiaSourceAlphaConvention sourceAlphaConvention = sourceAlphaConvention_
