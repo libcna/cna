@@ -274,7 +274,8 @@ namespace CNA::Internal::Backends::Software
     {
     public:
         SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
-                                    bool hasRealDepthBuffer = true);
+                                    bool hasRealDepthBuffer = true,
+                                    bool hasStandaloneStencilBuffer = false);
 
         [[nodiscard]] int GetWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
@@ -329,6 +330,11 @@ namespace CNA::Internal::Backends::Software
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         { return hasRealDepthBuffer_ && depthFormatWasRequested; }
+        [[nodiscard]] bool HasRealStencilBuffer(bool stencilFormatWasRequested) const override
+        {
+            return hasStandaloneStencilBuffer_ ||
+                   (hasRealDepthBuffer_ && stencilFormatWasRequested);
+        }
 
         // SoftwareColorSurface -- level 0 is the SAME storage the rasterizer writes into. A
         // finished mipmapped target additionally exposes its generated box-filter levels, with no
@@ -362,6 +368,7 @@ namespace CNA::Internal::Backends::Software
         bool mipLevelsReady_ = false;
         int multiSampleCount_ = 0;
         bool hasRealDepthBuffer_ = true;
+        bool hasStandaloneStencilBuffer_ = false;
         bool bound_ = false;
         mutable std::size_t readbackCallCount_ = 0;
     };
@@ -750,6 +757,17 @@ namespace CNA::Internal::Backends::Software
         }
 
     protected:
+        /**
+         * @brief Reports a SpriteBatch quad's clipped inclusive candidate-pixel bounds.
+         *
+         * The Software SpriteBatch invokes this only after applying origin, rotation, its
+         * transform matrix, viewport origin, viewport clipping, and optional scissor clipping.
+         * Presentation backends layered on this rasterizer can therefore track conservative
+         * display damage without maintaining a second copy of the quad geometry.
+         */
+        virtual void OnSpriteRasterBounds(int /*minX*/, int /*minY*/,
+                                          int /*maxX*/, int /*maxY*/) {}
+
         /// The real backbuffer, independently of any currently bound render target. Presentation
         /// backends layered on this CPU rasterizer use it rather than accidentally displaying an
         /// off-screen target that happens to be active when Present() is called.
@@ -757,6 +775,8 @@ namespace CNA::Internal::Backends::Software
         [[nodiscard]] const SoftwareFramebuffer& BackbufferFramebuffer() const { return backbuffer_; }
 
     private:
+        friend class SoftwareSpriteBatchBackend;
+
         /// XNA exposes 16 texture sampler slots; ApplySamplerState validates against this.
         static constexpr int kMaxSamplerSlots = 16;
         /// REMED-GFX-150: the per-slot SamplerState the rasterizer's sampler consults. Previously

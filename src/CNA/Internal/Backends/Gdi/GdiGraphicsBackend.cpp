@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 
 #include <SDL3/SDL.h>
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -22,46 +24,65 @@ namespace CNA::Internal::Backends::Gdi
 {
     namespace
     {
-        struct BlitRect
+        [[nodiscard]] std::string FormatWin32Error(DWORD error)
         {
-            int x = 0;
-            int y = 0;
-            int width = 0;
-            int height = 0;
-        };
+            std::string message = "Win32 error " + std::to_string(error);
+            if (error == ERROR_SUCCESS)
+                return message + " (no extended error was reported)";
 
-        struct RgbaBitmapInfo
-        {
-            BITMAPINFOHEADER header{};
-            DWORD channelMasks[3] = {
-                0x000000FFu, // R occupies the first byte of CNA's RGBA8 CPU pixels.
-                0x0000FF00u, // G
-                0x00FF0000u  // B
-            };
-        };
-
-        [[nodiscard]] BlitRect CalculateBlitRect(CnaPresentationMode presentationMode,
-                                                  int clientWidth, int clientHeight,
-                                                  int sourceWidth, int sourceHeight)
-        {
-            if (clientWidth <= 0 || clientHeight <= 0 || sourceWidth <= 0 || sourceHeight <= 0)
-                return {};
-
-            if (presentationMode == CnaPresentationMode::NativeBackBuffer)
-                return { 0, 0, sourceWidth, sourceHeight };
-            if (presentationMode == CnaPresentationMode::Stretch ||
-                presentationMode == CnaPresentationMode::FixedHeightDynamicWidth)
-                return { 0, 0, clientWidth, clientHeight };
-
-            const double sx = static_cast<double>(clientWidth) / sourceWidth;
-            const double sy = static_cast<double>(clientHeight) / sourceHeight;
-            const double scale = presentationMode == CnaPresentationMode::Overscan
-                ? std::max(sx, sy)
-                : std::min(sx, sy);
-            const int width = std::max(1, static_cast<int>(std::lround(sourceWidth * scale)));
-            const int height = std::max(1, static_cast<int>(std::lround(sourceHeight * scale)));
-            return { (clientWidth - width) / 2, (clientHeight - height) / 2, width, height };
+            char* buffer = nullptr;
+            const DWORD length = FormatMessageA(
+                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+                    FORMAT_MESSAGE_IGNORE_INSERTS,
+                nullptr, error, 0, reinterpret_cast<char*>(&buffer), 0, nullptr);
+            if (length != 0 && buffer != nullptr)
+            {
+                std::string detail(buffer, length);
+                LocalFree(buffer);
+                while (!detail.empty() &&
+                       (detail.back() == '\r' || detail.back() == '\n' || detail.back() == ' '))
+                {
+                    detail.pop_back();
+                }
+                if (!detail.empty())
+                    message += ": " + detail;
+            }
+            return message;
         }
+
+        [[noreturn]] void ThrowWin32Failure(const char* operation, DWORD error = GetLastError())
+        {
+            throw std::runtime_error(std::string("GDI ") + operation + " failed: " +
+                                     FormatWin32Error(error));
+        }
+
+        /// One GetDC/ReleaseDC pair on every return and exception path.
+        class WindowDeviceContext final
+        {
+        public:
+            explicit WindowDeviceContext(HWND window) : window_(window)
+            {
+                SetLastError(ERROR_SUCCESS);
+                context_ = GetDC(window_);
+                if (context_ == nullptr)
+                    ThrowWin32Failure("GetDC");
+            }
+
+            ~WindowDeviceContext()
+            {
+                if (context_ != nullptr)
+                    (void)ReleaseDC(window_, context_);
+            }
+
+            WindowDeviceContext(const WindowDeviceContext&) = delete;
+            WindowDeviceContext& operator=(const WindowDeviceContext&) = delete;
+
+            [[nodiscard]] HDC Get() const { return context_; }
+
+        private:
+            HWND window_ = nullptr;
+            HDC context_ = nullptr;
+        };
 
         /// Selects only the final GDI blit's resampling mode. Texture sampling remains entirely
         /// in the shared CPU SpriteBatch rasterizer, so this must never change SamplerState
@@ -80,14 +101,6 @@ namespace CNA::Internal::Backends::Gdi
         {
             const char* value = std::getenv("CNA_GDI_DIRTY_PRESENTATION");
             return value != nullptr && std::string_view(value) == "1";
-        }
-
-        [[nodiscard]] bool IsIdentityMatrix(const Matrix& matrix)
-        {
-            return matrix.M11 == 1.0f && matrix.M12 == 0.0f && matrix.M13 == 0.0f && matrix.M14 == 0.0f &&
-                   matrix.M21 == 0.0f && matrix.M22 == 1.0f && matrix.M23 == 0.0f && matrix.M24 == 0.0f &&
-                   matrix.M31 == 0.0f && matrix.M32 == 0.0f && matrix.M33 == 1.0f && matrix.M34 == 0.0f &&
-                   matrix.M41 == 0.0f && matrix.M42 == 0.0f && matrix.M43 == 0.0f && matrix.M44 == 1.0f;
         }
 
         /// DwmFlush is a compositor pacing hint, not a swap interval. Keep it strictly opt-in:
@@ -126,13 +139,9 @@ namespace CNA::Internal::Backends::Gdi
         {
         public:
             explicit GdiSpriteBatchBackend(std::unique_ptr<ISpriteBatchBackend> inner,
-                                           std::function<void()> synchronizeBackbuffer,
-                                           std::function<void(const Rectangle&)> markDirty,
-                                           std::function<void()> markFullyDirty)
+                                           std::function<void()> synchronizeBackbuffer)
                 : inner_(std::move(inner))
                 , synchronizeBackbuffer_(std::move(synchronizeBackbuffer))
-                , markDirty_(std::move(markDirty))
-                , markFullyDirty_(std::move(markFullyDirty))
             {
                 if (!inner_)
                     throw std::runtime_error("GDI failed to create its CPU SpriteBatch backend.");
@@ -146,7 +155,6 @@ namespace CNA::Internal::Backends::Gdi
             void End() override { inner_->End(); }
             void SetTransformMatrix(const Matrix& matrix) override
             {
-                transformIsIdentity_ = IsIdentityMatrix(matrix);
                 inner_->SetTransformMatrix(matrix);
             }
             void SetCustomEffect(Effect* effect) override
@@ -166,15 +174,12 @@ namespace CNA::Internal::Backends::Gdi
             void Draw(const ITextureBackend& texture, float x, float y) override
             {
                 synchronizeBackbuffer_();
-                MarkDraw(Rectangle(static_cast<int>(x), static_cast<int>(y),
-                                   texture.GetWidth(), texture.GetHeight()), 0.0f);
                 inner_->Draw(texture, x, y);
             }
             void Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
                       const Rectangle& sourceRectangle, const Color& color) override
             {
                 synchronizeBackbuffer_();
-                MarkDraw(destinationRectangle, 0.0f);
                 inner_->Draw(texture, destinationRectangle, sourceRectangle, color);
             }
             void Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
@@ -182,31 +187,13 @@ namespace CNA::Internal::Backends::Gdi
                       const Vector2& origin, SpriteEffects effects, float layerDepth) override
             {
                 synchronizeBackbuffer_();
-                MarkDraw(destinationRectangle, rotation);
                 inner_->Draw(texture, destinationRectangle, sourceRectangle, color, rotation,
                              origin, effects, layerDepth);
             }
 
         private:
-            void MarkDraw(const Rectangle& destination, float rotation)
-            {
-                // The supplied destination is a complete damage bound only for an axis-aligned,
-                // untransformed sprite. Rotation and a SpriteBatch matrix can move pixels outside
-                // it, so they deliberately select the safe full-frame fallback.
-                if (!transformIsIdentity_ || rotation != 0.0f ||
-                    destination.Width < 0 || destination.Height < 0)
-                {
-                    markFullyDirty_();
-                    return;
-                }
-                markDirty_(destination);
-            }
-
             std::unique_ptr<ISpriteBatchBackend> inner_;
             std::function<void()> synchronizeBackbuffer_;
-            std::function<void(const Rectangle&)> markDirty_;
-            std::function<void()> markFullyDirty_;
-            bool transformIsIdentity_ = true;
         };
     } // namespace
 
@@ -226,13 +213,75 @@ namespace CNA::Internal::Backends::Gdi
         if (nativeWindow_ == nullptr)
             throw std::runtime_error("GDI graphics backend could not obtain an HWND from the SDL window.");
 
-        IGraphicsBackend::RegisterForWindow(window_, this);
+        windowId_ = SDL_GetWindowID(window_);
+        if (windowId_ == 0)
+            throw std::runtime_error("GDI graphics backend could not obtain the SDL window ID.");
+
         SynchronizeBackbufferSize();
+        IGraphicsBackend::RegisterForWindow(window_, this);
+        if (!SDL_AddEventWatch(&GdiGraphicsBackend::WindowEventWatch, this))
+        {
+            const char* error = SDL_GetError();
+            IGraphicsBackend::UnregisterForWindow(window_);
+            throw std::runtime_error(
+                std::string("GDI graphics backend could not watch window repaint events: ") +
+                (error != nullptr ? error : "unknown SDL error"));
+        }
+        eventWatchRegistered_ = true;
     }
 
     GdiGraphicsBackend::~GdiGraphicsBackend()
     {
+        if (eventWatchRegistered_)
+        {
+            SDL_RemoveEventWatch(&GdiGraphicsBackend::WindowEventWatch, this);
+            eventWatchRegistered_ = false;
+        }
         IGraphicsBackend::UnregisterForWindow(window_);
+    }
+
+    bool SDLCALL GdiGraphicsBackend::WindowEventWatch(void* userdata, SDL_Event* event)
+    {
+        auto* backend = static_cast<GdiGraphicsBackend*>(userdata);
+        if (backend == nullptr || event == nullptr)
+            return true;
+
+        // A foreground transition is process-wide and can invalidate every retained window.
+        if (event->type == SDL_EVENT_DID_ENTER_FOREGROUND)
+        {
+            backend->RecordNativeClientInvalidation();
+            return true;
+        }
+
+        switch (event->type)
+        {
+            case SDL_EVENT_WINDOW_SHOWN:
+            case SDL_EVENT_WINDOW_EXPOSED:
+            case SDL_EVENT_WINDOW_RESIZED:
+            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            case SDL_EVENT_WINDOW_MINIMIZED:
+            case SDL_EVENT_WINDOW_MAXIMIZED:
+            case SDL_EVENT_WINDOW_RESTORED:
+            case SDL_EVENT_WINDOW_FOCUS_GAINED:
+            case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+            case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+            case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
+            case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+            case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+                if (event->window.windowID == backend->windowId_)
+                    backend->RecordNativeClientInvalidation();
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    void GdiGraphicsBackend::RecordNativeClientInvalidation()
+    {
+        // Event watches may run on another thread. A generation (rather than one bool) prevents a
+        // repaint event arriving during Present() from being cleared by that older present.
+        nativeInvalidationGeneration_.fetch_add(1, std::memory_order_release);
     }
 
     bool GdiGraphicsBackend::GetClientSize(int& width, int& height) const
@@ -256,11 +305,28 @@ namespace CNA::Internal::Backends::Gdi
         const bool hasClientSize = GetClientSize(clientWidth, clientHeight);
 
         if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth &&
-            requestedVirtualHeight_ > 0 && hasClientSize)
+            requestedVirtualHeight_ > 0)
         {
+            if (hasClientSize)
+            {
+                height = requestedVirtualHeight_;
+                width = std::max(1, static_cast<int>(std::lround(
+                    static_cast<double>(clientWidth) * height / clientHeight)));
+                return;
+            }
+
+            // Minimize/transition can temporarily remove a drawable client size. Preserve the
+            // last valid dynamic logical dimensions instead of reallocating to the originally
+            // requested width and reallocating again on restore.
+            const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
+            if (backbuffer.width > 0 && backbuffer.height > 0)
+            {
+                width = backbuffer.width;
+                height = backbuffer.height;
+                return;
+            }
+            width = std::max(1, requestedVirtualWidth_);
             height = requestedVirtualHeight_;
-            width = std::max(1, static_cast<int>(std::lround(
-                static_cast<double>(clientWidth) * height / clientHeight)));
             return;
         }
 
@@ -320,111 +386,57 @@ namespace CNA::Internal::Backends::Gdi
         if (!GetClientSize(clientWidth, clientHeight))
             return; // A minimized window has no drawable client area.
 
-        HDC deviceContext = GetDC(static_cast<HWND>(nativeWindow_));
-        if (deviceContext == nullptr)
-            throw std::runtime_error("GDI graphics backend failed to acquire the window device context.");
+        const std::uint64_t invalidationSnapshot =
+            nativeInvalidationGeneration_.load(std::memory_order_acquire);
 
-        try
+        // The explicit SDL-watch generation is authoritative; GetUpdateRect remains only an
+        // additional native hint because SDL may already have validated WM_PAINT before CNA
+        // receives SDL_EVENT_WINDOW_EXPOSED.
+        const bool clientNeedsRepair =
+            invalidationSnapshot != presentedNativeInvalidationGeneration_ ||
+            GetUpdateRect(static_cast<HWND>(nativeWindow_), nullptr, FALSE) != FALSE;
+        const GdiPresentationRect dirtyRectangle{
+            backbufferDirtyX_, backbufferDirtyY_,
+            backbufferDirtyWidth_, backbufferDirtyHeight_};
+        const GdiPresentationPlan plan = BuildGdiPresentationPlan(
+            presentationMode_, clientWidth, clientHeight, backbuffer.width, backbuffer.height,
+            IsDirtyPresentationRequested(), clientNeedsRepair,
+            backbufferFullyDirty_, backbufferDirtyValid_, dirtyRectangle);
+        const int stretchMode = GetPresentationStretchMode();
+        lastPresentationTelemetry_ = {
+            true, plan, stretchMode, {true, 0, 0, "none"}};
+        if (plan.path == GdiBlitPath::None)
+            return; // No damage: do not acquire a window DC.
+
+        WindowDeviceContext windowDc(static_cast<HWND>(nativeWindow_));
+        const HDC deviceContext = windowDc.Get();
+        const bool forceFailure = debugForceNextDibBlitFailure_;
+        debugForceNextDibBlitFailure_ = false;
+        const GdiBlitResult blitResult = BlitGdiRgbaToDeviceContext(
+            deviceContext, clientWidth, clientHeight,
+            backbuffer.width, backbuffer.height,
+            backbuffer.color.data(), backbuffer.color.size(),
+            plan, stretchMode, forceFailure);
+        lastPresentationTelemetry_.result = blitResult;
+        if (!blitResult.success)
+            ThrowWin32Failure(blitResult.operation, blitResult.win32Error);
+
+        SetLastError(ERROR_SUCCESS);
+        if (!GdiFlush())
         {
-            const BlitRect destination = CalculateBlitRect(
-                presentationMode_, clientWidth, clientHeight, backbuffer.width, backbuffer.height);
-            if (destination.width <= 0 || destination.height <= 0)
-            {
-                ReleaseDC(static_cast<HWND>(nativeWindow_), deviceContext);
-                return;
-            }
-
-            // Partial display is valid only for an unchanged 1:1 presentation. Any scaling,
-            // invalidated native client region, clear, resize, rotation or unknown draw damage
-            // falls back to a complete blit so stale pixels can never survive.
-            const bool clientNeedsRepair =
-                GetUpdateRect(static_cast<HWND>(nativeWindow_), nullptr, FALSE) != FALSE;
-            const bool canPresentPartial = IsDirtyPresentationRequested() && !clientNeedsRepair &&
-                !backbufferFullyDirty_ && backbufferDirtyValid_ &&
-                destination.width == backbuffer.width && destination.height == backbuffer.height;
-            const bool mustPresentFull = !IsDirtyPresentationRequested() || clientNeedsRepair ||
-                backbufferFullyDirty_ ||
-                destination.width != backbuffer.width || destination.height != backbuffer.height;
-
-            if (!mustPresentFull && !canPresentPartial)
-            {
-                // The CPU backbuffer and client area are already synchronized. Avoid a redundant
-                // GDI call when opt-in dirty presentation sees no new CPU damage.
-                ReleaseDC(static_cast<HWND>(nativeWindow_), deviceContext);
-                return;
-            }
-
-            if (mustPresentFull)
-            {
-                // Make letterbox bars and unused NativeBackBuffer space deterministic. Overscan
-                // and Stretch cover the full client area, so this is just an inexpensive fill.
-                const RECT clientRect{ 0, 0, clientWidth, clientHeight };
-                FillRect(deviceContext, &clientRect, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
-            }
-
-            RgbaBitmapInfo bitmapInfo{};
-            bitmapInfo.header.biSize = sizeof(BITMAPINFOHEADER);
-            bitmapInfo.header.biWidth = backbuffer.width;
-            bitmapInfo.header.biHeight = -backbuffer.height; // CNA rows are top-first.
-            bitmapInfo.header.biPlanes = 1;
-            bitmapInfo.header.biBitCount = 32;
-            bitmapInfo.header.biCompression = BI_BITFIELDS;
-            bitmapInfo.header.biSizeImage = static_cast<DWORD>(
-                static_cast<std::size_t>(backbuffer.width) * backbuffer.height * 4u);
-
-            // A native-size blit needs no GDI scaling. SetDIBitsToDevice avoids the generic
-            // StretchDIBits path in this common case, while retaining exactly the same top-down
-            // RGBA BI_BITFIELDS layout. It also covers aspect-correct letterboxing where the
-            // calculated destination happens to be 1:1.
-            if (canPresentPartial)
-            {
-                const int copiedLines = SetDIBitsToDevice(
-                    deviceContext, destination.x + backbufferDirtyX_, destination.y + backbufferDirtyY_,
-                    backbufferDirtyWidth_, backbufferDirtyHeight_, backbufferDirtyX_, backbufferDirtyY_,
-                    static_cast<UINT>(backbufferDirtyY_), static_cast<UINT>(backbufferDirtyHeight_),
-                    backbuffer.color.data(),
-                    reinterpret_cast<const BITMAPINFO*>(&bitmapInfo), DIB_RGB_COLORS);
-                if (copiedLines != backbufferDirtyHeight_)
-                    throw std::runtime_error(
-                        "GDI SetDIBitsToDevice failed while presenting a dirty 2D rectangle.");
-            }
-            else if (destination.width == backbuffer.width && destination.height == backbuffer.height)
-            {
-                const int copiedLines = SetDIBitsToDevice(
-                    deviceContext, destination.x, destination.y, backbuffer.width, backbuffer.height,
-                    0, 0, 0, static_cast<UINT>(backbuffer.height), backbuffer.color.data(),
-                    reinterpret_cast<const BITMAPINFO*>(&bitmapInfo), DIB_RGB_COLORS);
-                if (copiedLines != backbuffer.height)
-                    throw std::runtime_error(
-                        "GDI SetDIBitsToDevice failed while presenting the 2D framebuffer.");
-            }
-            else
-            {
-                const int stretchMode = GetPresentationStretchMode();
-                const int oldStretchMode = SetStretchBltMode(deviceContext, stretchMode);
-                if (stretchMode == HALFTONE)
-                    SetBrushOrgEx(deviceContext, 0, 0, nullptr);
-                const int copiedLines = StretchDIBits(
-                    deviceContext, destination.x, destination.y, destination.width, destination.height,
-                    0, 0, backbuffer.width, backbuffer.height, backbuffer.color.data(),
-                    reinterpret_cast<const BITMAPINFO*>(&bitmapInfo), DIB_RGB_COLORS, SRCCOPY);
-                if (oldStretchMode != 0)
-                    SetStretchBltMode(deviceContext, oldStretchMode);
-                if (copiedLines == static_cast<int>(GDI_ERROR))
-                    throw std::runtime_error(
-                        "GDI StretchDIBits failed while presenting the scaled 2D framebuffer.");
-            }
-
-            GdiFlush();
-            ApplyOptionalDwmPacing();
-            ResetBackbufferDamage();
-            ReleaseDC(static_cast<HWND>(nativeWindow_), deviceContext);
+            const DWORD error = GetLastError();
+            lastPresentationTelemetry_.result = {
+                false, 0, static_cast<std::uint32_t>(error), "GdiFlush"};
+            ThrowWin32Failure("GdiFlush", error);
         }
-        catch (...)
-        {
-            ReleaseDC(static_cast<HWND>(nativeWindow_), deviceContext);
-            throw;
-        }
+        ApplyOptionalDwmPacing();
+
+        // Commit only after every correctness-relevant native operation succeeds. Any exception
+        // above leaves both CPU damage and the watched invalidation generation pending.
+        ResetBackbufferDamage();
+        // Only acknowledge the generation captured before this blit. An event watch that ran
+        // during the transaction has a newer value and therefore forces the next full repaint.
+        presentedNativeInvalidationGeneration_ = invalidationSnapshot;
     }
 
     void GdiGraphicsBackend::GetViewportSize(int& width, int& height)
@@ -504,17 +516,9 @@ namespace CNA::Internal::Backends::Gdi
         if (!GetClientSize(clientWidth, clientHeight))
             return false;
         GetLogicalSize(logicalWidth, logicalHeight);
-        const BlitRect destination = CalculateBlitRect(
-            presentationMode_, clientWidth, clientHeight, logicalWidth, logicalHeight);
-        if (destination.width <= 0 || destination.height <= 0 ||
-            windowX < destination.x || windowY < destination.y ||
-            windowX >= destination.x + destination.width ||
-            windowY >= destination.y + destination.height)
-            return false;
-
-        logX = (windowX - destination.x) * logicalWidth / destination.width;
-        logY = (windowY - destination.y) * logicalHeight / destination.height;
-        return true;
+        return MapGdiWindowToLogical(
+            presentationMode_, clientWidth, clientHeight, logicalWidth, logicalHeight,
+            windowX, windowY, logX, logY);
     }
 
     bool GdiGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
@@ -527,26 +531,16 @@ namespace CNA::Internal::Backends::Gdi
         if (!GetClientSize(clientWidth, clientHeight))
             return false;
         GetLogicalSize(logicalWidth, logicalHeight);
-        if (logicalWidth <= 0 || logicalHeight <= 0 || logX < 0.0f || logY < 0.0f ||
-            logX >= logicalWidth || logY >= logicalHeight)
-            return false;
-
-        const BlitRect destination = CalculateBlitRect(
-            presentationMode_, clientWidth, clientHeight, logicalWidth, logicalHeight);
-        if (destination.width <= 0 || destination.height <= 0)
-            return false;
-        windowX = destination.x + logX * destination.width / logicalWidth;
-        windowY = destination.y + logY * destination.height / logicalHeight;
-        return true;
+        return MapGdiLogicalToWindow(
+            presentationMode_, clientWidth, clientHeight, logicalWidth, logicalHeight,
+            logX, logY, windowX, windowY);
     }
 
     std::unique_ptr<ISpriteBatchBackend> GdiGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<GdiSpriteBatchBackend>(
             Software::SoftwareGraphicsBackend::CreateSpriteBatch(),
-            [this] { SynchronizeBackbufferSize(); },
-            [this](const Rectangle& rectangle) { MarkBackbufferDirty(rectangle); },
-            [this] { MarkBackbufferFullyDirty(); });
+            [this] { SynchronizeBackbufferSize(); });
     }
 
     void GdiGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* target)
@@ -562,10 +556,15 @@ namespace CNA::Internal::Backends::Gdi
             return;
 
         const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
-        const int left = std::clamp(rectangle.X, 0, backbuffer.width);
-        const int top = std::clamp(rectangle.Y, 0, backbuffer.height);
-        const int right = std::clamp(rectangle.X + rectangle.Width, 0, backbuffer.width);
-        const int bottom = std::clamp(rectangle.Y + rectangle.Height, 0, backbuffer.height);
+        const auto clampEdge = [](long long value, int limit) {
+            return static_cast<int>(std::clamp<long long>(value, 0, limit));
+        };
+        const int left = clampEdge(rectangle.X, backbuffer.width);
+        const int top = clampEdge(rectangle.Y, backbuffer.height);
+        const int right = clampEdge(static_cast<long long>(rectangle.X) + rectangle.Width,
+                                    backbuffer.width);
+        const int bottom = clampEdge(static_cast<long long>(rectangle.Y) + rectangle.Height,
+                                     backbuffer.height);
         if (right <= left || bottom <= top)
             return;
 
@@ -587,6 +586,21 @@ namespace CNA::Internal::Backends::Gdi
         backbufferDirtyHeight_ = unionBottom - backbufferDirtyY_;
     }
 
+    void GdiGraphicsBackend::OnSpriteRasterBounds(int minX, int minY, int maxX, int maxY)
+    {
+        const long long width = static_cast<long long>(maxX) - minX + 1;
+        const long long height = static_cast<long long>(maxY) - minY + 1;
+        if (width <= 0 || height <= 0 ||
+            width > std::numeric_limits<int>::max() ||
+            height > std::numeric_limits<int>::max())
+        {
+            MarkBackbufferFullyDirty();
+            return;
+        }
+        MarkBackbufferDirty(Rectangle(minX, minY, static_cast<int>(width),
+                                      static_cast<int>(height)));
+    }
+
     void GdiGraphicsBackend::MarkBackbufferFullyDirty()
     {
         if (!renderingToBackbuffer_)
@@ -605,6 +619,33 @@ namespace CNA::Internal::Backends::Gdi
         backbufferDirtyHeight_ = 0;
     }
 
+    bool GdiGraphicsBackend::DebugGetBackbufferDamage(Rectangle& rectangle,
+                                                       bool& fullyDirty) const
+    {
+        fullyDirty = backbufferFullyDirty_;
+        rectangle = Rectangle(backbufferDirtyX_, backbufferDirtyY_,
+                              backbufferDirtyWidth_, backbufferDirtyHeight_);
+        return backbufferFullyDirty_ || backbufferDirtyValid_;
+    }
+
+    void GdiGraphicsBackend::DebugResetBackbufferDamage()
+    {
+        ResetBackbufferDamage();
+    }
+
+    bool GdiGraphicsBackend::DebugIsNativeClientInvalidated() const
+    {
+        return nativeInvalidationGeneration_.load(std::memory_order_acquire) !=
+               presentedNativeInvalidationGeneration_;
+    }
+
+    bool GdiGraphicsBackend::DebugGetLastPresentationTelemetry(
+        GdiPresentationTelemetry& telemetry) const
+    {
+        telemetry = lastPresentationTelemetry_;
+        return lastPresentationTelemetry_.valid;
+    }
+
     std::unique_ptr<IRenderTargetBackend> GdiGraphicsBackend::CreateRenderTarget2D(
         int width, int height, int /*depthFormat*/, bool /*preserveContents*/, bool mipMap,
         int /*multiSampleCount*/)
@@ -614,7 +655,7 @@ namespace CNA::Internal::Backends::Gdi
         // MSAA resource. This explicit construction prevents the reusable Software target from
         // reporting a requested depth attachment as if GDI had one.
         return std::make_unique<Software::SoftwareRenderTargetBackend>(
-            width, height, 0, mipMap, 0, false);
+            width, height, 0, mipMap, 0, false, true);
     }
 
     std::unique_ptr<ITextureCubeBackend> GdiGraphicsBackend::CreateTextureCube(int, bool, int)
@@ -641,10 +682,11 @@ namespace CNA::Internal::Backends::Gdi
     bool GdiGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         // Wireframe SpriteBatch quads are genuinely rasterized by the shared CPU 2D path. GDI
-        // also has an opt-in, real 4x CPU-MSAA backbuffer path.
-        // also owns a stencil-only plane for 2D masks, but GraphicsCapability::DepthStencilBuffer
-        // means a complete depth+stencil attachment and remains false because GDI has no depth.
-        return capability == CNA::GraphicsCapability::WireFrame ||
+        // also has an opt-in, real 4x CPU-MSAA backbuffer path and an always-present stencil-only
+        // plane for 2D masks. GraphicsCapability::DepthStencilBuffer means a complete
+        // depth+stencil attachment and remains false because GDI has no depth.
+        return capability == CNA::GraphicsCapability::StencilBuffer ||
+               capability == CNA::GraphicsCapability::WireFrame ||
                capability == CNA::GraphicsCapability::MultiSampleAntiAliasing;
     }
 

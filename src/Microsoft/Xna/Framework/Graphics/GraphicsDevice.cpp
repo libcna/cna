@@ -382,47 +382,46 @@ namespace Microsoft::Xna::Framework::Graphics
                     "'depth' must be between 0.0 and 1.0.");
         }
 
-        // Matches FNA's own GraphicsDevice.Clear(ClearOptions, ...), which masks DepthBuffer/
-        // Stencil out of `options` when the currently active target has no real depth-stencil
-        // buffer, rather than forwarding a clear request the backend cannot honor. Ask the
-        // BACKEND (Task 708's own precedent for RenderTarget2D), not the merely-requested XNA-
-        // level format, since a backend may honor no depth/stencil buffer at all regardless of
-        // what was requested (SDL_Renderer is entirely 2D-only and never has one). Without this,
-        // GraphicsDevice::Clear(const Color&) -- which unconditionally requests
-        // Target|DepthBuffer|Stencil, matching FNA's own single-argument overload -- crashes on
-        // SDL_RENDERER instead of degrading to a color-only clear.
-        bool hasRealDepthBuffer;
-        bool hasRealStencilBuffer;
+        // GDI-050: depth and stencil are independent attachment decisions. Historically this used
+        // one SupportsDepthStencil()/HasRealDepthBuffer() answer and reduced a target with no depth
+        // to ClearOptions::Target, silently deleting Stencil too. That made GDI's real standalone
+        // CPU stencil plane unreachable through the public GraphicsDevice API. Ask for each aspect
+        // independently and mask only the unsupported flag. Combined depth/stencil backends retain
+        // their prior behavior through the interface's compatibility defaults.
+        bool hasRealDepthBuffer = false;
+        bool hasRealStencilBuffer = false;
         if (!currentRenderTargets_.empty())
         {
             // REMED-GFX-142: a bound RenderTargetCube has to be asked too. This branch only ever
-            // recognized RenderTarget2D, so a cube binding fell through to `rt == nullptr` ->
-            // `hasRealDepthBuffer == false` -> `options &= ClearOptions::Target` -- every
-            // ClearOptions::DepthBuffer and ClearOptions::Stencil issued while a cube face was
-            // bound was silently dropped, on every backend, whatever depth format the cube
-            // actually had. SetRenderTargets already asks both target kinds (see its own
-            // `IsRenderTarget2D()` branch); this is the same question at the other call site.
+            // recognized RenderTarget2D, so a cube binding fell through to `rt == nullptr` and
+            // both attachment flags were silently dropped, on every backend, whatever depth
+            // format the cube actually had. SetRenderTargets already asks both target kinds (see
+            // its own `IsRenderTarget2D()` branch); this is the same question at the other call
+            // site.
             Texture* bound = currentRenderTargets_[0].getRenderTargetProperty();
             const auto* rt = dynamic_cast<RenderTarget2D*>(bound);
             const auto* cube = (rt == nullptr) ? dynamic_cast<RenderTargetCube*>(bound) : nullptr;
             if (cube != nullptr)
             {
-                const bool depthFormatRequested =
-                    cube->getDepthStencilFormatProperty() != DepthFormat::None;
+                const DepthFormat depthFormat = cube->getDepthStencilFormatProperty();
+                const bool depthFormatRequested = depthFormat != DepthFormat::None;
+                const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
                 const auto* cubeBackend = cube->GetRenderTargetCubeBackend();
                 hasRealDepthBuffer =
                     cubeBackend && cubeBackend->HasRealDepthBuffer(depthFormatRequested);
-                // Render-target backends currently expose depth as one allocation contract. A
-                // default backbuffer may be depth-only (notably Glide), which is handled by the
-                // independent backend queries below.
-                hasRealStencilBuffer = hasRealDepthBuffer;
+                hasRealStencilBuffer =
+                    cubeBackend && cubeBackend->HasRealStencilBuffer(stencilFormatRequested);
             }
             else
             {
-                const bool depthFormatRequested = rt && rt->getDepthStencilFormatProperty() != DepthFormat::None;
+                const DepthFormat depthFormat =
+                    rt ? rt->getDepthStencilFormatProperty() : DepthFormat::None;
+                const bool depthFormatRequested = depthFormat != DepthFormat::None;
+                const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
                 const auto* rtBackend = rt ? rt->GetRenderTargetBackend() : nullptr;
                 hasRealDepthBuffer = rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
-                hasRealStencilBuffer = hasRealDepthBuffer;
+                hasRealStencilBuffer =
+                    rtBackend && rtBackend->HasRealStencilBuffer(stencilFormatRequested);
             }
         }
         else
@@ -2773,26 +2772,30 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderTarget &&
             renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
-            // Only ask for a depth-buffer clear when the target actually has one. A requested
-            // DepthFormat::None never has one; beyond that, ask the BACKEND (Task 708) rather
-            // than trusting the merely-requested XNA-level format, since a backend may honor no
-            // depth format at all regardless of what was requested (SDL_Renderer's 2D-only
-            // render targets never allocate real depth-buffer storage).
-            const bool depthFormatRequested =
-                renderTarget->getDepthStencilFormatProperty() != DepthFormat::None;
+            // GDI-050: discard every attachment that this target really owns. Depth and stencil
+            // are separate because GDI's 2D render target has a standalone stencil plane but no
+            // depth plane. Other backends preserve their combined-attachment behavior through
+            // HasRealStencilBuffer's compatibility default.
+            const DepthFormat depthFormat = renderTarget->getDepthStencilFormatProperty();
+            const bool depthFormatRequested = depthFormat != DepthFormat::None;
+            const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
             const auto* rtBackend = renderTarget->GetRenderTargetBackend();
             const bool hasDepthBuffer =
                 rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+            const bool hasStencilBuffer =
+                rtBackend && rtBackend->HasRealStencilBuffer(stencilFormatRequested);
             // REMED-GFX-142: ClearOptions::Stencil belongs here. FNA's own SetRenderTargets ends
             // with Clear(Target | DepthBuffer | Stencil, DiscardColor, Viewport.MaxDepth, 0), and
             // FNA3D documents `preserveTargetContents` as storing the "color/depth/stencil"
             // contents -- so DiscardContents has a DETERMINISTIC replacement for all three
             // aspects, not two. Without the flag a DiscardContents target kept its previous
             // stencil for ever, which is neither preservation nor discard.
-            Clear(hasDepthBuffer
-                      ? (ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil)
-                      : ClearOptions::Target,
-                  Color(0, 0, 0, 255), 1.0f, 0);
+            ClearOptions discardOptions = ClearOptions::Target;
+            if (hasDepthBuffer)
+                discardOptions |= ClearOptions::DepthBuffer;
+            if (hasStencilBuffer)
+                discardOptions |= ClearOptions::Stencil;
+            Clear(discardOptions, Color(0, 0, 0, 255), 1.0f, 0);
         }
     }
 
@@ -2937,19 +2940,26 @@ namespace Microsoft::Xna::Framework::Graphics
             first->getWidthProperty(), first->getHeightProperty());
         if (first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
-            // See SetRenderTarget(RenderTarget2D*)'s identical guard for the rationale.
-            const bool depthFormatRequested =
-                first->getDepthStencilFormatProperty() != DepthFormat::None;
+            // See SetRenderTarget(RenderTarget2D*)'s independent attachment rationale.
+            const DepthFormat depthFormat = first->getDepthStencilFormatProperty();
+            const bool depthFormatRequested = depthFormat != DepthFormat::None;
+            const bool stencilFormatRequested = depthFormat == DepthFormat::Depth24Stencil8;
             const auto& firstDescriptor = descriptors[0];
             const bool hasDepthBuffer = firstDescriptor.IsRenderTarget2D()
                 ? firstDescriptor.GetRenderTarget2D()->HasRealDepthBuffer(depthFormatRequested)
                 : firstDescriptor.GetRenderTargetCube()->HasRealDepthBuffer(
                     depthFormatRequested);
+            const bool hasStencilBuffer = firstDescriptor.IsRenderTarget2D()
+                ? firstDescriptor.GetRenderTarget2D()->HasRealStencilBuffer(stencilFormatRequested)
+                : firstDescriptor.GetRenderTargetCube()->HasRealStencilBuffer(
+                    stencilFormatRequested);
             // REMED-GFX-142: see the singular overload's identical Stencil rationale.
-            Clear(hasDepthBuffer
-                      ? (ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil)
-                      : ClearOptions::Target,
-                  Color(0, 0, 0, 255), 1.0f, 0);
+            ClearOptions discardOptions = ClearOptions::Target;
+            if (hasDepthBuffer)
+                discardOptions |= ClearOptions::DepthBuffer;
+            if (hasStencilBuffer)
+                discardOptions |= ClearOptions::Stencil;
+            Clear(discardOptions, Color(0, 0, 0, 255), 1.0f, 0);
         }
     }
 

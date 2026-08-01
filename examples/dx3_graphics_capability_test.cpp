@@ -59,6 +59,7 @@ protected:
         // Phase O6 completes the real 3D pipeline -- both report true now.
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
         check(dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer supported");
+        check(!dev.SupportsCapability(GraphicsCapability::StencilBuffer), "StencilBuffer not supported");
 
         // Genuinely unavailable at this DirectX era.
         check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing not supported");

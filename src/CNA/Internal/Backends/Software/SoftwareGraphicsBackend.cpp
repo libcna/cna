@@ -425,6 +425,38 @@ namespace CNA::Internal::Backends::Software
             int minX = 0, minY = 0, maxX = -1, maxY = -1;
         };
 
+        /**
+         * Converts floating-point geometry bounds into clipped inclusive candidate-pixel bounds.
+         * Comparisons against the framebuffer-sized clip happen before float-to-int conversion,
+         * avoiding undefined casts for huge coordinates and infinities. NaN and empty or wholly
+         * clipped geometry deterministically produce no bounds.
+         */
+        bool CalculateRasterBounds(float minXf, float minYf, float maxXf, float maxYf,
+                                   const RasterClipRect& clip,
+                                   int& minX, int& minY, int& maxX, int& maxY)
+        {
+            if (clip.minX > clip.maxX || clip.minY > clip.maxY ||
+                std::isnan(minXf) || std::isnan(minYf) ||
+                std::isnan(maxXf) || std::isnan(maxYf) ||
+                static_cast<double>(minXf) >= static_cast<double>(clip.maxX) + 1.0 ||
+                static_cast<double>(minYf) >= static_cast<double>(clip.maxY) + 1.0 ||
+                static_cast<double>(maxXf) <= static_cast<double>(clip.minX) - 1.0 ||
+                static_cast<double>(maxYf) <= static_cast<double>(clip.minY) - 1.0)
+            {
+                return false;
+            }
+
+            minX = minXf <= static_cast<float>(clip.minX)
+                ? clip.minX : static_cast<int>(std::floor(minXf));
+            minY = minYf <= static_cast<float>(clip.minY)
+                ? clip.minY : static_cast<int>(std::floor(minYf));
+            maxX = maxXf >= static_cast<float>(clip.maxX)
+                ? clip.maxX : static_cast<int>(std::ceil(maxXf));
+            maxY = maxYf >= static_cast<float>(clip.maxY)
+                ? clip.maxY : static_cast<int>(std::ceil(maxYf));
+            return minX <= maxX && minY <= maxY;
+        }
+
         /// REMED-GFX-150: env-gated sampler trace. This is how the point path's "exactly one texel
         /// fetch per sample" claim is MEASURED rather than asserted from reading the code, and how a
         /// single destination pixel's addressing can be dumped when a result is disputed.
@@ -1462,10 +1494,10 @@ namespace CNA::Internal::Backends::Software
             // active Viewport) instead of the raw framebuffer -- pixels outside the Viewport are
             // never touched. A default full-target viewport yields the pre-GFX-079
             // [0,width-1] x [0,height-1] clamp byte-for-byte.
-            const int minX = std::max(clip.minX, static_cast<int>(std::floor(minXf)));
-            const int maxX = std::min(clip.maxX, static_cast<int>(std::ceil(maxXf)));
-            const int minY = std::max(clip.minY, static_cast<int>(std::floor(minYf)));
-            const int maxY = std::min(clip.maxY, static_cast<int>(std::ceil(maxYf)));
+            int minX = 0, minY = 0, maxX = -1, maxY = -1;
+            if (!CalculateRasterBounds(minXf, minYf, maxXf, maxYf, clip,
+                                       minX, minY, maxX, maxY))
+                return;
 
             for (int y = minY; y <= maxY; ++y)
             {
@@ -2067,10 +2099,10 @@ namespace CNA::Internal::Backends::Software
             // REMED-GFX-073: clamp the raster bounding box to the clip rectangle (framebuffer for
             // the 3D path, framebuffer-intersected Viewport for SpriteBatch) instead of the raw
             // framebuffer -- pixels outside the Viewport are never touched.
-            const int minX = std::max(clip.minX, static_cast<int>(std::floor(minXf)));
-            const int maxX = std::min(clip.maxX, static_cast<int>(std::ceil(maxXf)));
-            const int minY = std::max(clip.minY, static_cast<int>(std::floor(minYf)));
-            const int maxY = std::min(clip.maxY, static_cast<int>(std::ceil(maxYf)));
+            int minX = 0, minY = 0, maxX = -1, maxY = -1;
+            if (!CalculateRasterBounds(minXf, minYf, maxXf, maxYf, clip,
+                                       minX, minY, maxX, maxY))
+                return;
 
             for (int y = minY; y <= maxY; ++y)
             {
@@ -2687,10 +2719,12 @@ namespace CNA::Internal::Backends::Software
 
     // ---- SoftwareRenderTargetBackend ----
 
-    SoftwareRenderTargetBackend::SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap,
-                                                             int multiSampleCount, bool hasRealDepthBuffer)
+    SoftwareRenderTargetBackend::SoftwareRenderTargetBackend(
+        int w, int h, int depthFormat, bool mipMap, int multiSampleCount,
+        bool hasRealDepthBuffer, bool hasStandaloneStencilBuffer)
         : depthFormat_(depthFormat), mipMap_(mipMap), multiSampleCount_(multiSampleCount)
         , hasRealDepthBuffer_(hasRealDepthBuffer)
+        , hasStandaloneStencilBuffer_(hasStandaloneStencilBuffer)
     {
         framebuffer_.Resize(w, h);
         if (mipMap_)
@@ -2993,6 +3027,16 @@ namespace CNA::Internal::Backends::Software
         const Vector2 c2 = placeCorner(p2x, p2y);
         const Vector2 c3 = placeCorner(p3x, p3y);
 
+        // A non-finite transform cannot cover a defined framebuffer pixel. Reject it before both
+        // damage calculation and raster edge math, keeping huge/invalid matrices deterministic.
+        if (!std::isfinite(c0.X) || !std::isfinite(c0.Y) ||
+            !std::isfinite(c1.X) || !std::isfinite(c1.Y) ||
+            !std::isfinite(c2.X) || !std::isfinite(c2.Y) ||
+            !std::isfinite(c3.X) || !std::isfinite(c3.Y))
+        {
+            return;
+        }
+
         const RasterVertex rv0 = MakeScreenSpaceVertex(c0.X, c0.Y, layerDepth, r, g, b, a, u1, v1);
         const RasterVertex rv1 = MakeScreenSpaceVertex(c1.X, c1.Y, layerDepth, r, g, b, a, u2, v1);
         const RasterVertex rv2 = MakeScreenSpaceVertex(c2.X, c2.Y, layerDepth, r, g, b, a, u2, v2);
@@ -3019,6 +3063,16 @@ namespace CNA::Internal::Backends::Software
         owner_.GetActiveScissor(scX, scY, scW, scH);
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 owner_.IsScissorTestEnabled(), scX, scY, scW, scH);
+        const float quadMinX = std::min({c0.X, c1.X, c2.X, c3.X});
+        const float quadMinY = std::min({c0.Y, c1.Y, c2.Y, c3.Y});
+        const float quadMaxX = std::max({c0.X, c1.X, c2.X, c3.X});
+        const float quadMaxY = std::max({c0.Y, c1.Y, c2.Y, c3.Y});
+        int damageMinX = 0, damageMinY = 0, damageMaxX = -1, damageMaxY = -1;
+        if (CalculateRasterBounds(quadMinX, quadMinY, quadMaxX, quadMaxY, clip,
+                                  damageMinX, damageMinY, damageMaxX, damageMaxY))
+        {
+            owner_.OnSpriteRasterBounds(damageMinX, damageMinY, damageMaxX, damageMaxY);
+        }
         GpuDrawParams spriteParams;
         // REMED-GFX-124: hand the sprite's texture on as the plain backend handle and let
         // RasterizeTriangleShaded resolve the colour-storage capability, so this path has no second,

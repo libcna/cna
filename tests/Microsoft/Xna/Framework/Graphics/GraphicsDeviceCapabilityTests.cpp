@@ -147,6 +147,13 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
 }
 #endif
 
+TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
+{
+    GraphicsDevice gd;
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::StencilBuffer),
+              gd.GetBackend().SupportsStencilBuffer());
+}
+
 TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 {
     GraphicsDevice gd;

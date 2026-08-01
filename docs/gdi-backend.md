@@ -7,6 +7,10 @@ main RGBA8 backbuffer into SDL's native Win32 `HWND` with GDI DIB APIs (`SetDIBi
 1:1 blit and `StretchDIBits` when scaling is needed). This is a real GDI display path; it does not
 create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
 
+The focused automated correctness suite passes in the MinGW/Wine configuration documented below,
+but the native visible Windows lifecycle/DPI gate in `plan_gdi.md` is still open. Treat GDI as a
+compatibility backend under validation, not yet as a release baseline.
+
 ## Scope
 
 - Supported: Clear, RGBA textures, SpriteBatch (including source rectangles, transforms, rotation,
@@ -46,8 +50,11 @@ create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
   `--anisotropic` to compare the paths; they use the same sampler implementation (the small Wine
   run-to-run timing variance is not a feature difference).
 - GDI provides a separate, real 8-bit CPU stencil plane for SpriteBatch 2D masks. `ClearStencil`
-  and `ClearColorAndStencil` work; all `StencilOperation` values, compare/read masks, write masks
-  and the clockwise stencil state work. `TwoSidedStencilMode` and
+  and `ClearColorAndStencil` work through both the backend and public `GraphicsDevice::Clear`
+  overloads; all `StencilOperation` values, compare/read masks, write masks and the clockwise
+  stencil state work. The plane is always allocated for the backbuffer and every GDI
+  `RenderTarget2D`, including a target whose public `DepthFormat` is `None`.
+  `SupportsCapability(StencilBuffer)` is therefore true. `TwoSidedStencilMode` and
   `StencilDepthBufferFail` have no 2D meaning because GDI always disables depth and has no front/
   back-facing 3D primitives. `DepthStencilBuffer` deliberately remains unsupported: that
   capability means a complete depth+stencil attachment, not this stencil-only clipping feature.
@@ -91,19 +98,27 @@ keeps the nearest-neighbour default. The option has no effect when the backbuffe
 presented 1:1.
 
 For retained-mode UI-like workloads, `CNA_GDI_DIRTY_PRESENTATION=1` opts into a conservative
-dirty-rectangle blit. It sends only the union of simple axis-aligned SpriteBatch destinations when
-the output is 1:1. A clear, resize, presentation-mode change, scaling, rotation, non-identity
-SpriteBatch transform or an invalidated Win32 client region automatically falls back to a complete
-frame, so no stale pixels remain. It defaults off; use it only after measuring your actual UI:
+dirty-rectangle blit. At 1:1 it sends the union of the actual clipped SpriteBatch raster bounds,
+reported after origin, rotation, batch transform, viewport and scissor are applied. A clear,
+backbuffer resize, presentation-mode change, scaled output, or watched native-client invalidation
+uses a complete frame. Expose, restore, resize, focus, display-scale and fullscreen lifecycle events
+advance a per-window invalidation generation; repaint no longer depends only on Win32's possibly
+already-validated update region. It defaults off; use it only after measuring your actual UI:
 
 ```bash
 CNA_GDI_DIRTY_PRESENTATION=1 wine build-gdi/cna_demo_2d.exe
 ```
 
-GDI-011 was evaluated but deliberately does **not** use a persistent `DIBSection`: the CPU
-rasterizer already owns the RGBA8 vector, so a DIBSection would add a full backbuffer copy before
-every blit. The measured presentation time is tiny compared with CPU rasterization; the 1:1
-`SetDIBitsToDevice` path avoids scaling without that additional copy.
+Presentation is committed transactionally: scoped DC ownership and correctness-relevant GDI calls
+are checked, and CPU damage plus native-client invalidation remain pending after a failed or
+zero-line DIB transfer. Geometry/path selection lives in a pure planner shared with a memory-DC
+pixel oracle; this is what verifies channel order, top-down rows, scaling, bars/cropping and exact
+non-zero-Y dirty bands independently of CPU backbuffer readback.
+
+The current path deliberately does **not** use a persistent `DIBSection`: the CPU rasterizer owns
+the authoritative RGBA8 vector and submits it directly. Whether a mapped DIBSection should instead
+become authoritative storage remains GDI-066 and requires native visible measurements; hidden-Wine
+timings are not a release decision.
 
 GDI has no swap interval. An application that prefers best-effort compositor pacing may opt in to
 one `DwmFlush()` after every GDI present:
@@ -132,27 +147,53 @@ cmake -S . -B build-gdi \
   -DCNA_BUILD_EXAMPLES=ON \
   -DCNA_MAX_VENDORED_BUILD_JOBS=2
 CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
-  --target cna_test_gdi_smoke cna_test_gdi_2d_regression cna_test_gdi_colormatrix_effect cna_bench_gdi_2d cna_demo_2d -j2
+  --target cna_test_gdi_smoke cna_test_gdi_2d_regression \
+           cna_test_gdi_colormatrix_effect cna_test_gdi_public_stencil \
+           cna_test_gdi_dirty_damage cna_test_gdi_repaint_invalidation \
+           cna_test_gdi_presentation_oracle \
+           cna_test_gdi_presentation_configuration \
+           cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
-The backend is hard-gated to Windows targets. `cna_test_gdi_smoke` runs automatically as `GDI_Smoke`
-on native Windows; for MinGW cross-builds, run the produced executable under a Wine setup with an
-available display:
+The backend is hard-gated to Windows targets. A native Windows build registers ten `GDI` CTest
+cases, including separate default, dirty and halftone configurations; run them with
+`ctest -L GDI --output-on-failure`. Cross-built PE files are intentionally not registered as Linux
+CTest commands, so run the produced executables under a Wine setup with an available display:
 
 ```bash
 # Native Windows
-build-gdi\\cna_test_gdi_smoke.exe
-build-gdi\\cna_test_gdi_2d_regression.exe
-build-gdi\\cna_test_gdi_colormatrix_effect.exe
-build-gdi\\cna_bench_gdi_2d.exe --frames 4
-build-gdi\\cna_demo_2d.exe
+build-gdi\cna_test_gdi_smoke.exe
+build-gdi\cna_test_gdi_2d_regression.exe
+build-gdi\cna_test_gdi_colormatrix_effect.exe
+build-gdi\cna_test_gdi_public_stencil.exe
+build-gdi\cna_test_gdi_dirty_damage.exe
+build-gdi\cna_test_gdi_repaint_invalidation.exe
+build-gdi\cna_test_gdi_presentation_oracle.exe
+build-gdi\cna_bench_gdi_2d.exe --frames 4
+build-gdi\cna_demo_2d.exe
 
 # Linux host, MinGW cross-build, with a real graphical Wine display
 wine build-gdi/cna_test_gdi_smoke.exe
 wine build-gdi/cna_test_gdi_2d_regression.exe
 wine build-gdi/cna_test_gdi_colormatrix_effect.exe
+wine build-gdi/cna_test_gdi_public_stencil.exe
+wine build-gdi/cna_test_gdi_dirty_damage.exe
+wine build-gdi/cna_test_gdi_repaint_invalidation.exe
+wine build-gdi/cna_test_gdi_presentation_oracle.exe
 wine build-gdi/cna_bench_gdi_2d.exe --frames 4
 wine build-gdi/cna_demo_2d.exe
+```
+
+The three configuration cases set their process environment explicitly and keep compositor pacing
+out of deterministic tests. Equivalent manual Wine invocations are:
+
+```bash
+CNA_GDI_DIRTY_PRESENTATION=0 CNA_GDI_PRESENT_FILTER=nearest CNA_GDI_DWM_FLUSH=0 \
+  wine build-gdi/cna_test_gdi_presentation_configuration.exe default
+CNA_GDI_DIRTY_PRESENTATION=1 CNA_GDI_PRESENT_FILTER=nearest CNA_GDI_DWM_FLUSH=0 \
+  wine build-gdi/cna_test_gdi_presentation_configuration.exe dirty
+CNA_GDI_DIRTY_PRESENTATION=1 CNA_GDI_PRESENT_FILTER=halftone CNA_GDI_DWM_FLUSH=0 \
+  wine build-gdi/cna_test_gdi_presentation_configuration.exe halftone
 ```
 
 The smoke executable creates a hidden SDL `HWND`, clears and reads an RGBA pixel, calls GDI
@@ -171,14 +212,29 @@ Rec.709 grayscale, arbitrary channel matrix/offset and alpha preservation throug
 also proves the fixed effect did not broaden the contract by checking that `ShaderEffect` is still
 rejected.
 
+`cna_test_gdi_public_stencil` closes the former public-API coverage gap: it creates masks through
+`GraphicsDevice`, `SpriteBatch` and `DepthStencilState`, then proves stencil-only and single-colour
+clears on both the backbuffer and a depthless `RenderTarget2D`. It also checks the separate
+`StencilBuffer=true` and combined `DepthStencilBuffer=false` capability answers.
+
+`cna_test_gdi_dirty_damage` verifies the raster-derived rectangle after origin, viewport, scissor,
+transform and rotation, plus negative, off-screen and overflow-sized geometry. The repaint test
+verifies window-specific lifecycle invalidation, a real SDL-validated Win32 `WM_PAINT`, a real
+minimize/restore round-trip, no-draw retained repaint, zero-line DIB failure diagnostics, damage
+retention and successful retry. `cna_test_gdi_presentation_oracle` uses a real memory DC/DIBSection
+to verify RGBA channel order, top-down rows, both filters and DIB paths, presentation geometry,
+bars/cropping, clipping and an exact non-zero-Y dirty band. The configuration executable then proves
+that the registered environment cases select NativeFull, None and Stretch with the requested filter
+through backend telemetry.
+
 `cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
 CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run
 it from a **Release** build: an empty CMake build type omits `-O3` and is not a valid performance
 measurement. On an AMD Ryzen 7 PRO 7840U, MinGW-w64 14 and hidden-window Wine, the Release
 baseline was 9.169 ms raster + 0.026 ms present for 12 rotating alpha sprites at 800×600; the
 same unoptimised build took 22.248 ms raster. Wine's hidden presentation number is not a
-substitute for a native visible-Windows measurement, but it correctly identifies the CPU
-rasterizer rather than the GDI blit as the dominant cost.
+substitute for a native visible-Windows measurement and cannot establish compositor cost or the
+shipping bottleneck; GDI-062 owns that decision.
 
 On MinGW, the build stages SDL plus the needed GCC/C++ and threading runtime DLLs beside the
 executables, so Wine does not rely on a compiler-specific `PATH`.  Keep both the configure-time

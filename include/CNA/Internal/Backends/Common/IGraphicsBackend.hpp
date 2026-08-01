@@ -441,7 +441,7 @@ namespace CNA::Internal::Backends
         /// RenderTarget2D.MultiSampleCount reflects the real clamped value, not the raw
         /// constructor request (FNA3D_GetMaxMultiSampleCount).
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
-        /// Returns whether this specific target instance actually has a real depth-stencil
+        /// Returns whether this specific target instance actually has a real depth
         /// buffer backing it, as opposed to merely being requested via DepthFormat at
         /// construction time. Most backends honor whatever DepthFormat was requested, so the
         /// default mirrors that (via @p depthFormatWasRequested, computed by the caller from
@@ -449,6 +449,14 @@ namespace CNA::Internal::Backends
         /// 2D-only render targets never allocate real depth-buffer storage regardless of what
         /// format was requested, and overrides this to always return false (Task 708).
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const { return depthFormatWasRequested; }
+        /// Returns whether this target has a real stencil plane. The caller passes true only for
+        /// Depth24Stencil8. Most backends allocate depth and stencil together, so the compatibility
+        /// default delegates to HasRealDepthBuffer(); a backend with standalone stencil storage
+        /// (GDI's CPU 2D extension) overrides this independently.
+        [[nodiscard]] virtual bool HasRealStencilBuffer(bool stencilFormatWasRequested) const
+        {
+            return HasRealDepthBuffer(stencilFormatWasRequested);
+        }
     };
 
     /// Backend handle for a cube-map render target.
@@ -473,6 +481,11 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const
         {
             return depthFormatWasRequested;
+        }
+        /// Cube equivalent of IRenderTargetBackend::HasRealStencilBuffer.
+        [[nodiscard]] virtual bool HasRealStencilBuffer(bool stencilFormatWasRequested) const
+        {
+            return HasRealDepthBuffer(stencilFormatWasRequested);
         }
 
         /**
@@ -1501,7 +1514,7 @@ namespace CNA::Internal::Backends
         // ---- 3D pipeline ----
 
         /**
-         * @brief Whether this backend can maintain a real depth/stencil buffer at all, for the
+         * @brief Whether this backend can maintain a complete depth/stencil buffer at all, for the
          * default back buffer (as opposed to an explicit RenderTarget2D, which has its own
          * per-instance IRenderTargetBackend::HasRealDepthBuffer() query).
          *
@@ -1751,6 +1764,8 @@ namespace CNA::Internal::Backends
         /// device-dependent feature like anisotropic filtering) need to override this.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
         {
+            if (capability == CNA::GraphicsCapability::StencilBuffer)
+                return SupportsStencilBuffer();
             // REMED-GFX-201: MultiStreamVertexInput is the one entry whose default is FALSE. A
             // backend derives its native input elements from a single byte stride, so binding a
             // second per-vertex stream is real work it must opt into by name; defaulting to true

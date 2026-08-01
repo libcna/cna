@@ -51,6 +51,7 @@ protected:
 
         check(!dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD not supported");
         check(!dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer not supported");
+        check(!dev.SupportsCapability(GraphicsCapability::StencilBuffer), "StencilBuffer not supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing not supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets not supported");
         check(!dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering not supported");

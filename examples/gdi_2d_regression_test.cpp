@@ -133,6 +133,8 @@ namespace
                      "GDI must report its real CPU SpriteBatch wireframe support.");
         ok &= Expect(backend.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
                      "GDI must report its optional real CPU 4x MSAA path.");
+        ok &= Expect(backend.SupportsCapability(CNA::GraphicsCapability::StencilBuffer),
+                     "GDI must report its standalone CPU stencil plane.");
         constexpr CNA::GraphicsCapability unsupportedCapabilities[] = {
             CNA::GraphicsCapability::ThreeD,
             CNA::GraphicsCapability::DepthStencilBuffer,

@@ -15,13 +15,14 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). Several backends, including SDL_Renderer, DX3, Canvas, GDI, and the
+         * clears and state). Several backends, including SDL_Renderer, Canvas, GDI, and the
          * Skia raster backend, are intentionally 2D-only and lack this entirely. Query the selected
-         * backend rather than inferring support from its name.
+         * backend rather than inferring support from its name. GDI's separate 2D stencil-mask
+         * extension does not imply a 3D pipeline.
          */
         ThreeD,
 
-        /** @brief A real depth/stencil buffer on the currently active render target. */
+        /** @brief A complete real depth/stencil attachment on the active target. */
         DepthStencilBuffer,
 
         /** @brief Multi-sample anti-aliasing (any sample count above 1). */
@@ -86,6 +87,15 @@ namespace CNA
         /** @brief Hardware instancing (GraphicsDevice.DrawInstancedPrimitives). Device/driver-
          *  dependent on backends that implement it via an optional GL/Vulkan extension rather
          *  than an unconditional core feature. */
-        Instancing
+        Instancing,
+
+        /**
+         * @brief A real stencil plane usable independently of depth.
+         *
+         * This is separate from DepthStencilBuffer so a 2D backend such as GDI can advertise its
+         * CPU stencil-mask extension without falsely claiming a depth attachment or 3D pipeline.
+         * Appended to preserve the numeric values of the existing capability entries.
+         */
+        StencilBuffer
     };
 } // CNA

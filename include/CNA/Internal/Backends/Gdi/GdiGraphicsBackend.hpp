@@ -1,6 +1,12 @@
 #pragma once
 
+#include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
 #include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+
+#include <SDL3/SDL_events.h>
+
+#include <atomic>
+#include <cstdint>
 
 namespace CNA::Internal::Backends::Gdi
 {
@@ -45,6 +51,19 @@ namespace CNA::Internal::Backends::Gdi
         [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
+        /** @brief Test telemetry for the currently accumulated logical backbuffer damage. */
+        [[nodiscard]] bool DebugGetBackbufferDamage(Rectangle& rectangle,
+                                                    bool& fullyDirty) const;
+        /** @brief Clears damage telemetry without issuing a native present; intended for tests. */
+        void DebugResetBackbufferDamage();
+        /** @brief Whether a watched native-window event still requires a complete repaint. */
+        [[nodiscard]] bool DebugIsNativeClientInvalidated() const;
+        /** @brief Makes the next DIB blit report zero lines, exercising failure retention. */
+        void DebugForceNextDibBlitFailure() { debugForceNextDibBlitFailure_ = true; }
+        /** @brief Returns the most recent presentation plan/result telemetry. */
+        [[nodiscard]] bool DebugGetLastPresentationTelemetry(
+            GdiPresentationTelemetry& telemetry) const;
+
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(
             int w, int h, int depthFormat, bool preserveContents = false,
@@ -59,6 +78,7 @@ namespace CNA::Internal::Backends::Gdi
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return true; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
@@ -96,7 +116,12 @@ namespace CNA::Internal::Backends::Gdi
                                        PrimitiveType primitive, int primitiveCount,
                                        int instanceCount, const GpuDrawParams& params) override;
 
+    protected:
+        void OnSpriteRasterBounds(int minX, int minY, int maxX, int maxY) override;
+
     private:
+        static bool SDLCALL WindowEventWatch(void* userdata, SDL_Event* event);
+        void RecordNativeClientInvalidation();
         void SynchronizeBackbufferSize();
         void GetLogicalSize(int& width, int& height) const;
         bool GetClientSize(int& width, int& height) const;
@@ -108,6 +133,10 @@ namespace CNA::Internal::Backends::Gdi
         void* nativeWindow_ = nullptr;
         int requestedVirtualWidth_ = 0;
         int requestedVirtualHeight_ = 0;
+        std::uint32_t windowId_ = 0;
+        bool eventWatchRegistered_ = false;
+        std::atomic<std::uint64_t> nativeInvalidationGeneration_{1};
+        std::uint64_t presentedNativeInvalidationGeneration_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         bool renderingToBackbuffer_ = true;
         bool backbufferFullyDirty_ = true;
@@ -116,5 +145,7 @@ namespace CNA::Internal::Backends::Gdi
         int backbufferDirtyY_ = 0;
         int backbufferDirtyWidth_ = 0;
         int backbufferDirtyHeight_ = 0;
+        bool debugForceNextDibBlitFailure_ = false;
+        GdiPresentationTelemetry lastPresentationTelemetry_{};
     };
 } // namespace CNA::Internal::Backends::Gdi
