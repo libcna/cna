@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Glide/GlideGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Glide/GlideVertexLayout.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
@@ -16,6 +17,7 @@
 #include <cstring>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -1358,15 +1360,18 @@ namespace CNA::Internal::Backends::Glide
 
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override
         {
-            if (data == nullptr || vertexCount < 0 || vertexCount > capacity_ ||
-                (strideInBytes != sizeof(CNA::Internal::Graphics::PositionColorStream) &&
-                 strideInBytes != sizeof(CNA::Internal::Graphics::PositionTextureStream) &&
-                 strideInBytes != sizeof(CNA::Internal::Graphics::PositionColorTextureStream) &&
-                 strideInBytes != sizeof(CNA::Internal::Graphics::PositionNormalTextureStream)))
+            if (data == nullptr || vertexCount < 0 || vertexCount > capacity_)
+            {
+                throw std::runtime_error("GLIDE vertex-buffer upload is outside its declared capacity");
+            }
+            if (!layout_.has_value())
+            {
+                layout_ = KnownGlideVertexLayout(strideInBytes);
+            }
+            if (layout_->stride != strideInBytes)
             {
                 throw std::runtime_error(
-                    "GLIDE 3D accepts only VertexPositionColor, VertexPositionTexture, "
-                    "VertexPositionColorTexture or VertexPositionNormalTexture streams within their declared capacity");
+                    "GLIDE vertex-buffer upload stride does not match its VertexDeclaration");
             }
             bytes_.resize(static_cast<std::size_t>(vertexCount) * strideInBytes);
             std::memcpy(bytes_.data(), data, bytes_.size());
@@ -1376,27 +1381,33 @@ namespace CNA::Internal::Backends::Glide
 
         void SetVertexDeclaration(const VertexDeclaration& declaration) override
         {
-            const int stride = declaration.getVertexStrideProperty();
-            if (stride != static_cast<int>(sizeof(CNA::Internal::Graphics::PositionColorStream)) &&
-                stride != static_cast<int>(sizeof(CNA::Internal::Graphics::PositionTextureStream)) &&
-                stride != static_cast<int>(sizeof(CNA::Internal::Graphics::PositionColorTextureStream)) &&
-                stride != static_cast<int>(sizeof(CNA::Internal::Graphics::PositionNormalTextureStream)))
+            GlideVertexLayout parsed = ParseGlideVertexDeclaration(declaration);
+            if (stride_ != 0 && parsed.stride != stride_)
             {
                 throw std::runtime_error(
-                    "GLIDE 3D supports only VertexPositionColor, VertexPositionTexture, "
-                    "VertexPositionColorTexture and VertexPositionNormalTexture declarations");
+                    "GLIDE VertexDeclaration stride does not match vertex data already uploaded to this buffer");
             }
+            layout_ = std::move(parsed);
         }
 
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
         [[nodiscard]] const std::vector<std::uint8_t>& Bytes() const { return bytes_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
+        [[nodiscard]] const GlideVertexLayout& Layout() const
+        {
+            if (!layout_.has_value())
+            {
+                throw std::runtime_error("GLIDE vertex buffer has no resolved vertex layout");
+            }
+            return *layout_;
+        }
 
     private:
         int capacity_ = 0;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
         std::vector<std::uint8_t> bytes_;
+        std::optional<GlideVertexLayout> layout_;
     };
 
     class GlideIndexBufferBackend final : public IIndexBufferBackend
@@ -2213,12 +2224,10 @@ namespace CNA::Internal::Backends::Glide
             throw std::runtime_error("GLIDE 3D draw reads outside the supplied vertex buffer");
         }
         const std::size_t stride = vb->Stride();
-        const bool streamHasColor = stride == sizeof(CNA::Internal::Graphics::PositionColorStream) ||
-                                    stride == sizeof(CNA::Internal::Graphics::PositionColorTextureStream);
-        const bool streamHasTexture = stride == sizeof(CNA::Internal::Graphics::PositionTextureStream) ||
-                                      stride == sizeof(CNA::Internal::Graphics::PositionColorTextureStream) ||
-                                      stride == sizeof(CNA::Internal::Graphics::PositionNormalTextureStream);
-        const bool streamHasNormal = stride == sizeof(CNA::Internal::Graphics::PositionNormalTextureStream);
+        const GlideVertexLayout& layout = vb->Layout();
+        const bool streamHasColor = layout.HasColor();
+        const bool streamHasTexture = layout.HasTextureCoordinate0();
+        const bool streamHasNormal = layout.HasNormal();
         const bool textured = params.textureEnabled || params.texture0 != nullptr;
         if (textured && (!streamHasTexture || params.texture0 == nullptr))
         {
@@ -2281,37 +2290,26 @@ namespace CNA::Internal::Backends::Glide
             float nx = 0.0f;
             float ny = 0.0f;
             float nz = 1.0f;
-            std::memcpy(&x, bytes + 0, sizeof(float));
-            std::memcpy(&y, bytes + 4, sizeof(float));
-            std::memcpy(&z, bytes + 8, sizeof(float));
-            if (stride == sizeof(CNA::Internal::Graphics::PositionColorStream))
+            std::memcpy(&x, bytes + layout.positionOffset + 0, sizeof(float));
+            std::memcpy(&y, bytes + layout.positionOffset + 4, sizeof(float));
+            std::memcpy(&z, bytes + layout.positionOffset + 8, sizeof(float));
+            if (layout.HasColor())
             {
-                r = static_cast<float>(bytes[12]) / 255.0f;
-                g = static_cast<float>(bytes[13]) / 255.0f;
-                b = static_cast<float>(bytes[14]) / 255.0f;
-                a = static_cast<float>(bytes[15]) / 255.0f;
+                r = static_cast<float>(bytes[layout.colorOffset + 0]) / 255.0f;
+                g = static_cast<float>(bytes[layout.colorOffset + 1]) / 255.0f;
+                b = static_cast<float>(bytes[layout.colorOffset + 2]) / 255.0f;
+                a = static_cast<float>(bytes[layout.colorOffset + 3]) / 255.0f;
             }
-            else if (stride == sizeof(CNA::Internal::Graphics::PositionTextureStream))
+            if (layout.HasTextureCoordinate0())
             {
-                std::memcpy(&u, bytes + 12, sizeof(float));
-                std::memcpy(&v, bytes + 16, sizeof(float));
+                std::memcpy(&u, bytes + layout.textureCoordinate0Offset + 0, sizeof(float));
+                std::memcpy(&v, bytes + layout.textureCoordinate0Offset + 4, sizeof(float));
             }
-            else if (stride == sizeof(CNA::Internal::Graphics::PositionColorTextureStream))
+            if (layout.HasNormal())
             {
-                r = static_cast<float>(bytes[12]) / 255.0f;
-                g = static_cast<float>(bytes[13]) / 255.0f;
-                b = static_cast<float>(bytes[14]) / 255.0f;
-                a = static_cast<float>(bytes[15]) / 255.0f;
-                std::memcpy(&u, bytes + 16, sizeof(float));
-                std::memcpy(&v, bytes + 20, sizeof(float));
-            }
-            else
-            {
-                std::memcpy(&nx, bytes + 12, sizeof(float));
-                std::memcpy(&ny, bytes + 16, sizeof(float));
-                std::memcpy(&nz, bytes + 20, sizeof(float));
-                std::memcpy(&u, bytes + 24, sizeof(float));
-                std::memcpy(&v, bytes + 28, sizeof(float));
+                std::memcpy(&nx, bytes + layout.normalOffset + 0, sizeof(float));
+                std::memcpy(&ny, bytes + layout.normalOffset + 4, sizeof(float));
+                std::memcpy(&nz, bytes + layout.normalOffset + 8, sizeof(float));
             }
             if (!params.vertexColorEnabled || !streamHasColor)
             {

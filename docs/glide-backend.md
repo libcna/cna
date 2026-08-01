@@ -40,11 +40,13 @@ normal CTest because CNA cannot provide or configure the external emulator.
   clamp/wrap/mirror addressing.
 - Fixed-function 3D `VertexPositionColor`, `VertexPositionTexture`,
   `VertexPositionColorTexture`, and vertex-lit `VertexPositionNormalTexture` triangle lists/strips,
-  indexed or non-indexed. CNA CPU-transforms and clips the triangle in homogeneous XNA space;
-  Glide then rasterizes every resulting fan triangle with its native depth, TMU, alpha-test and
-  blending pipeline. Texture parameters are submitted as perspective-correct `s/w`, `t/w`, `1/w`.
-  `Viewport` XY, depth range and the intersection of viewport/scissor are applied before native
-  rasterization.
+  indexed or non-indexed. Compatible custom `VertexDeclaration`s may place `Position0` (Vector3),
+  `Color0` (Color), `Normal0` (Vector3), and `TextureCoordinate0` (Vector2) at arbitrary offsets
+  in the declared stride; all other semantics/formats are rejected rather than misread. CNA
+  CPU-transforms and clips the triangle in homogeneous XNA space; Glide then rasterizes every
+  resulting fan triangle with its native depth, TMU, alpha-test and blending pipeline. Texture
+  parameters are submitted as perspective-correct `s/w`, `t/w`, `1/w`. `Viewport` XY, depth range
+  and the intersection of viewport/scissor are applied before native rasterization.
 - Unlit BasicEffect material/vertex colour, and the documented per-vertex directional-diffuse
   BasicEffect subset (ambient/emissive included). Per-pixel lighting and specular are rejected.
   CNA computes vertex lighting and its `fogVector` on the CPU, then hands the iterated RGB to

@@ -115,7 +115,9 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   known packed structs.** Build a validated declaration/offset reader for position, colour,
   normal, and texture-coordinate 0 at arbitrary legal offsets and strides. Feed it into the
   existing fixed-function paths and reject unsupported semantics deterministically, instead of
-  relying on accidental binary layout compatibility.
+  relying on accidental binary layout compatibility. **Implementation staged:** the parser and
+  portable unit coverage now exist, and the 3D decoder uses the resolved layout; completion still
+  requires the fake-DLL draw capture and dgVoodoo/real-hardware visual checks from GLIDE-AUD-006/007.
 - [ ] **GLIDE-FUT-003 — Complete the feasible `BasicEffect` vertex-lighting subset.** Compute
   the existing FNA-compatible Blinn/Phong specular term on the CPU per vertex (eye position,
   material specular colour/power and all enabled directional lights), add it to the iterated
