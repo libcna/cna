@@ -33,7 +33,10 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
+#include <SDL3/SDL.h>
+
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <exception>
@@ -691,6 +694,45 @@ protected:
         check("Texture2D mip level 1", 8, 0, Color(0, 255, 0, 255));
         check("Texture2D mip level 2", 12, 0, Color(0, 0, 255, 255));
 
+        // Decoration must not silently reset an ordinary Texture2D to level zero. Native
+        // Direct2D uses the image-brush/effect graph here; Wine/Proton fall back to a CPU bitmap
+        // only when the built-in effects are unavailable. Both paths must retain the selected mip.
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(mipTexture, Rectangle(16, 0, 2, 2), Rectangle(0, 0, 4, 4), Color(255, 128, 255, 255));
+        sprites_->Draw(mipTexture, Rectangle(20, 0, 1, 1), Rectangle(0, 0, 4, 4), Color(255, 255, 128, 255));
+        sprites_->End();
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(mipTexture, Rectangle(24, 0, 1, 1), Rectangle(0, 0, 4, 4), Color::White);
+        sprites_->End();
+        check("Texture2D tinted mip level 1", 16, 0, Color(0, 128, 0, 255));
+        check("Texture2D tinted mip level 2", 20, 0, Color(0, 0, 128, 255));
+        check("Texture2D NonPremultiplied mip level 2", 24, 0, Color(0, 0, 255, 255));
+
+        // Generating a mip while the target remains bound ends the Direct2D recording interval.
+        // A subsequent draw in the same bind interval has to invalidate the chain again; otherwise
+        // level one incorrectly keeps the red value read before the green draw below.
+        RenderTarget2D dirtyMipTarget(device, 4, 4, true, SurfaceFormat::Color, DepthFormat::None);
+        device.SetRenderTarget(&dirtyMipTarget);
+        device.Clear(Color(255, 0, 0, 255));
+        Color dirtyMipBefore(0, 0, 0, 0);
+        const Rectangle dirtyMipTexel(0, 0, 1, 1);
+        dirtyMipTarget.GetData(1, &dirtyMipTexel, &dirtyMipBefore, 0, 1);
+        const bool dirtyMipInitialReadMatches = Matches(dirtyMipBefore, Color(255, 0, 0, 255));
+        std::printf("[%s] RenderTarget2D active mip read before a later draw\n",
+                    dirtyMipInitialReadMatches ? "PASS" : "FAIL");
+        passed = passed && dirtyMipInitialReadMatches;
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color(0, 255, 0, 255));
+        sprites_->End();
+        device.SetRenderTarget(nullptr);
+        Color dirtyMipAfter(0, 0, 0, 0);
+        dirtyMipTarget.GetData(1, &dirtyMipTexel, &dirtyMipAfter, 0, 1);
+        const bool dirtyMipRegenerated = Matches(dirtyMipAfter, Color(0, 255, 0, 255));
+        std::printf("[%s] RenderTarget2D regenerates mip after later active-target draw\n",
+                    dirtyMipRegenerated ? "PASS" : "FAIL");
+        passed = passed && dirtyMipRegenerated;
+
         // 11. RenderTarget2D(mipMap=true) owns the same complete Direct2D bitmap chain, generated
         // from level zero when the target is unbound. The solid source makes the required 2x2/1x1
         // output independent of Direct2D's exact linear downsampling kernel, while the three
@@ -725,6 +767,62 @@ protected:
         // must be safely reallocated with transparent contents instead of exposing its old COM
         // bitmap. This uses the public debug hook, exactly like EasyGL's desktop recovery probe.
         auto& direct2dBackend = device.GetBackend();
+
+        // Backend-entry-point hardening: these calls are normally normalized by GraphicsDevice,
+        // but the concrete backend must still reject invalid input without corrupting the next
+        // frame. This is deliberately separate from the public BlendState rejection checks below.
+        const auto expectBackendRejection = [&](const char* label, const auto& action) {
+            bool rejected = false;
+            try
+            {
+                action();
+            }
+            catch (const std::exception&)
+            {
+                rejected = true;
+            }
+            std::printf("[%s] %s\n", rejected ? "PASS" : "FAIL", label);
+            passed = passed && rejected;
+        };
+        expectBackendRejection("Direct2D rejects null MRT array with count one", [&] {
+            direct2dBackend.SetRenderTargets(nullptr, 1);
+        });
+        expectBackendRejection("Direct2D rejects negative MRT count", [&] {
+            direct2dBackend.SetRenderTargets(nullptr, -1);
+        });
+        expectBackendRejection("Direct2D rejects negative scissor dimensions", [&] {
+            direct2dBackend.SetScissorRect(0, 0, -1, 1);
+        });
+        expectBackendRejection("Direct2D rejects negative viewport dimensions", [&] {
+            direct2dBackend.SetViewport(0, 0, 1, -1, 0.0f, 1.0f);
+        });
+        expectBackendRejection("Direct2D rejects unknown presentation mode", [&] {
+            direct2dBackend.SetPresentationMode(99);
+        });
+
+        // GraphicsDevice owns the bind-time clear contract, while Direct2D must preserve the
+        // actual bitmap for PreserveContents and PlatformContents. Check all three public usages
+        // after a real unbind/rebind cycle.
+        const auto verifyRenderTargetUsage = [&](RenderTargetUsage usage, const char* label,
+                                                  const Color& expected) {
+            RenderTarget2D usageTarget(device, 2, 2, false, SurfaceFormat::Color,
+                                       DepthFormat::None, 0, usage);
+            device.SetRenderTarget(&usageTarget);
+            device.Clear(Color(173, 31, 97, 255));
+            device.SetRenderTarget(nullptr);
+            device.SetRenderTarget(&usageTarget);
+            Color actual(0, 0, 0, 0);
+            const Rectangle texel(0, 0, 1, 1);
+            usageTarget.GetData(0, &texel, &actual, 0, 1);
+            const bool matches = Matches(actual, expected);
+            std::printf("[%s] Direct2D RenderTargetUsage %s\n", matches ? "PASS" : "FAIL", label);
+            passed = passed && matches;
+            device.SetRenderTarget(nullptr);
+        };
+        verifyRenderTargetUsage(RenderTargetUsage::DiscardContents, "DiscardContents", Color::Black);
+        verifyRenderTargetUsage(RenderTargetUsage::PreserveContents, "PreserveContents", Color(173, 31, 97, 255));
+        verifyRenderTargetUsage(RenderTargetUsage::PlatformContents, "PlatformContents", Color(173, 31, 97, 255));
+
         auto recoveryTexture = Texture2D::CreateFromPixels(
             device, 1, 1, std::vector<uint8_t>{13, 99, 201, 255});
         RenderTarget2D recoveryTarget(device, 2, 2);
@@ -878,6 +976,60 @@ protected:
             device.setBlendFactorProperty(Color(64, 255, 255, 255));
         });
         device.setBlendFactorProperty(Color::White);
+
+        // 16. Presentation transforms use the physical HWND client size, rather than assuming
+        // GraphicsDeviceManager's virtual dimensions. Run after all exact backbuffer readbacks:
+        // non-1:1 presentation deliberately rejects that public readback contract.
+        auto& backend = device.GetBackend();
+        SDL_Window* const window = backend.GetWindowInternal();
+        SDL_SetWindowSize(window, 80, 24);
+        SDL_SyncWindow(window);
+        int physicalWidth = 0;
+        int physicalHeight = 0;
+        SDL_GetWindowSize(window, &physicalWidth, &physicalHeight);
+        backend.SetVirtualResolution(48, 32);
+        const auto near = [](float actual, float expected) {
+            return std::abs(actual - expected) <= 0.05f;
+        };
+        const auto verifyPresentationTransform = [&](PresentationMode mode, const char* label,
+                                                     float scaleX, float scaleY,
+                                                     float offsetX, float offsetY) {
+            backend.SetPresentationMode(static_cast<int>(mode));
+            device.Clear(Color::Black); // realizes the resized DXGI backbuffer before querying transforms
+            float windowX = 0.0f;
+            float windowY = 0.0f;
+            float logicalX = 0.0f;
+            float logicalY = 0.0f;
+            const bool transformedOut = backend.TransformLogicalToWindow(
+                12.0f, 8.0f, windowX, windowY);
+            const bool transformedBack = transformedOut && backend.TransformWindowToLogical(
+                windowX, windowY, logicalX, logicalY);
+            const bool matches = transformedBack && near(windowX, 12.0f * scaleX + offsetX) &&
+                near(windowY, 8.0f * scaleY + offsetY) && near(logicalX, 12.0f) && near(logicalY, 8.0f);
+            std::printf("[%s] Direct2D presentation %s uses physical client transform\n",
+                        matches ? "PASS" : "FAIL", label);
+            passed = passed && matches;
+        };
+        const float physicalWidthF = static_cast<float>(physicalWidth);
+        const float physicalHeightF = static_cast<float>(physicalHeight);
+        const float virtualWidthF = 48.0f;
+        const float virtualHeightF = 32.0f;
+        const float fitScale = std::min(physicalWidthF / virtualWidthF, physicalHeightF / virtualHeightF);
+        const float fillScale = std::max(physicalWidthF / virtualWidthF, physicalHeightF / virtualHeightF);
+        verifyPresentationTransform(PresentationMode::Letterbox, "Letterbox", fitScale, fitScale,
+                                    (physicalWidthF - virtualWidthF * fitScale) * 0.5f,
+                                    (physicalHeightF - virtualHeightF * fitScale) * 0.5f);
+        verifyPresentationTransform(PresentationMode::Overscan, "Overscan", fillScale, fillScale,
+                                    (physicalWidthF - virtualWidthF * fillScale) * 0.5f,
+                                    (physicalHeightF - virtualHeightF * fillScale) * 0.5f);
+        verifyPresentationTransform(PresentationMode::Stretch, "Stretch",
+                                    physicalWidthF / virtualWidthF, physicalHeightF / virtualHeightF,
+                                    0.0f, 0.0f);
+        verifyPresentationTransform(PresentationMode::NativeBackBuffer, "NativeBackBuffer",
+                                    1.0f, 1.0f, 0.0f, 0.0f);
+        verifyPresentationTransform(PresentationMode::FixedHeightDynamicWidth, "FixedHeightDynamicWidth",
+                                    physicalHeightF / virtualHeightF, physicalHeightF / virtualHeightF,
+                                    0.0f, 0.0f);
 
         std::printf("[%s] Direct2D 2D parity baseline\n", passed ? "PASS" : "FAIL");
         result_ = passed ? 0 : 1;

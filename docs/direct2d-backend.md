@@ -34,9 +34,13 @@ does not grow a parallel 3D implementation.
 - Device recovery for registered 2D resources: ordinary textures are rebuilt from their RGBA CPU
   shadow; render targets are reallocated as transparent, so their former contents are invalid.
 
-The routine test pair is `Direct2D_Smoke` and `Direct2D_2DParity`. The latter validates partial
-and full RT readback plus mip readback under Wine through the `CopyFromBitmap` fallback. A Linux
-cross-build can use the default `-DCNA_DIRECT2D_TEST_RUNTIME=WINE`, or the opt-in
+The routine test trio is `Direct2D_Smoke`, `Direct2D_2DParity`, and `Direct2D_Lifetime`. The
+parity test validates partial and full RT readback plus mip readback under Wine through the
+`CopyFromBitmap` fallback; the lifetime smoke repeats target switches, readback, recovery and
+resize across multiple frames. A Linux cross-build can use the default
+`-DCNA_DIRECT2D_TEST_RUNTIME=WINE`, which calls `scripts/run-wine-direct2d.sh` and defaults to
+Wine's normal prefix (or `CNA_DIRECT2D_WINEPREFIX`), rather than borrowing D3D11's potentially
+Direct2D-incomplete prefix. It can alternatively use the opt-in
 `-DCNA_DIRECT2D_TEST_RUNTIME=PROTON`; the latter calls `scripts/run-proton-direct2d.sh`, detects
 Steam's Proton Experimental installation (including Debian's `~/.steam/debian-installation`), and
 uses a dedicated compat-data directory. WineD3D and Proton's Wine Direct2D do not register the

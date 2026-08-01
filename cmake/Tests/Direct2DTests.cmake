@@ -19,7 +19,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
             # The Direct2D device context creates a D3D11 device. The existing DXVK wrapper also
             # provides the project's configured Windows runtime prefix; its D3D11-only log gate is
             # intentionally skipped because d2d1.dll itself decides how its device is realized.
-            set(_direct2d_smoke_command ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh
+            set(_direct2d_smoke_command bash ${CMAKE_SOURCE_DIR}/scripts/run-wine-direct2d.sh
                 $<TARGET_FILE:cna_test_direct2d_smoke>)
             set(_direct2d_smoke_environment "CNA_D3D11_SKIP_DXVK_GATE=1")
         elseif(CNA_DIRECT2D_TEST_RUNTIME STREQUAL "PROTON")
@@ -43,7 +43,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
     cna_direct2d_test(cna_test_direct2d_2d_parity examples/direct2d_2d_parity_test.cpp)
     if(CMAKE_CROSSCOMPILING)
         if(CNA_DIRECT2D_TEST_RUNTIME STREQUAL "WINE")
-            set(_direct2d_2d_parity_command ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh
+            set(_direct2d_2d_parity_command bash ${CMAKE_SOURCE_DIR}/scripts/run-wine-direct2d.sh
                 $<TARGET_FILE:cna_test_direct2d_2d_parity>)
             set(_direct2d_2d_parity_environment "CNA_D3D11_SKIP_DXVK_GATE=1")
         elseif(CNA_DIRECT2D_TEST_RUNTIME STREQUAL "PROTON")
@@ -65,4 +65,27 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
     endif()
     cna_register_backend_test(NAME Direct2D_2DParity COMMAND ${_direct2d_2d_parity_command}
         TIMEOUT 60 LABELS "Direct2D;2D" ENVIRONMENT "${_direct2d_2d_parity_environment}")
+
+    # D2D-27: transient bitmaps/effects/image brushes must survive and then release correctly at
+    # EndDraw boundaries (readback, target switches, resize and recovery), not only in a one-frame
+    # parity probe. Wine/Proton use the CPU fallback; native runs also exercise effects and image brushes.
+    cna_direct2d_test(cna_test_direct2d_lifetime examples/direct2d_lifetime_test.cpp)
+    if(CMAKE_CROSSCOMPILING)
+        if(CNA_DIRECT2D_TEST_RUNTIME STREQUAL "WINE")
+            set(_direct2d_lifetime_command bash ${CMAKE_SOURCE_DIR}/scripts/run-wine-direct2d.sh
+                $<TARGET_FILE:cna_test_direct2d_lifetime>)
+            set(_direct2d_lifetime_environment "CNA_D3D11_SKIP_DXVK_GATE=1")
+        elseif(CNA_DIRECT2D_TEST_RUNTIME STREQUAL "PROTON")
+            set(_direct2d_lifetime_command ${CMAKE_SOURCE_DIR}/scripts/run-proton-direct2d.sh
+                $<TARGET_FILE:cna_test_direct2d_lifetime>)
+            unset(_direct2d_lifetime_environment)
+        else()
+            message(FATAL_ERROR "CNA_DIRECT2D_TEST_RUNTIME must be WINE or PROTON, got '${CNA_DIRECT2D_TEST_RUNTIME}'.")
+        endif()
+    else()
+        set(_direct2d_lifetime_command $<TARGET_FILE:cna_test_direct2d_lifetime>)
+        unset(_direct2d_lifetime_environment)
+    endif()
+    cna_register_backend_test(NAME Direct2D_Lifetime COMMAND ${_direct2d_lifetime_command}
+        TIMEOUT 60 LABELS "Direct2D;2D;Lifetime" ENVIRONMENT "${_direct2d_lifetime_environment}")
 endif()

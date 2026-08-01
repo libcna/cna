@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace CNA::Internal::Backends::Direct2D
@@ -54,7 +55,7 @@ namespace CNA::Internal::Backends::Direct2D
         /// with no uploaded lower levels deliberately falls back to level zero instead of
         /// sampling black/uninitialized storage during minification.
         [[nodiscard]] int SelectAvailableMipLevel(int preferredLevel) const;
-        [[nodiscard]] const std::vector<uint8_t>& RgbaPixels() const { return rgbaPixels_; }
+        [[nodiscard]] const std::vector<uint8_t>& RgbaPixelsForLevel(int level) const;
 
     private:
         friend class Direct2DGraphicsBackend;
@@ -268,10 +269,14 @@ namespace CNA::Internal::Backends::Direct2D
         [[nodiscard]] D2D1_MATRIX_3X2_F ViewportMatrix() const;
         void ApplyOutputClips();
         void ClearOutputClips();
+        [[nodiscard]] bool SupportsColorMatrixEffect();
+        [[nodiscard]] bool SupportsPremultiplyEffect();
+        void MarkActiveRenderTargetMipLevelsDirty();
         [[nodiscard]] std::vector<uint8_t> MakeSpritePixels(const Direct2DTextureBackend& texture,
                                                              const Rectangle& sourceRectangle,
                                                              const Color& color, SpriteEffects effects,
-                                                             int addressU, int addressV) const;
+                                                             int addressU, int addressV,
+                                                             int mipLevel) const;
         [[nodiscard]] static D2D1_MATRIX_3X2_F ToD2DMatrix(const Matrix& matrix);
         [[nodiscard]] static D2D1_MATRIX_3X2_F Multiply(const D2D1_MATRIX_3X2_F& left,
                                                          const D2D1_MATRIX_3X2_F& right);
@@ -316,6 +321,11 @@ namespace CNA::Internal::Backends::Direct2D
         std::vector<Microsoft::WRL::ComPtr<ID2D1Effect>> transientEffects_;
         std::vector<Microsoft::WRL::ComPtr<ID2D1Image>> transientImages_;
         std::vector<Microsoft::WRL::ComPtr<ID2D1ImageBrush>> transientImageBrushes_;
+        // Wine and Proton's Direct2D expose image brushes but may omit the built-in effects.
+        // Cache capability per device generation so ordinary textures can use the GPU effect path
+        // on native Direct2D while retaining a correct CPU fallback on those runtimes.
+        std::optional<bool> colorMatrixEffectSupported_;
+        std::optional<bool> premultiplyEffectSupported_;
         // Non-owning; only resources constructed while recovery is enabled register here.
         std::vector<Direct2DTextureBackend*> recoverableTextures_;
         std::vector<Direct2DRenderTargetBackend*> recoverableRenderTargets_;

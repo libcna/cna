@@ -5,8 +5,10 @@
 > Pro 3D slouží existující `D3D11` backend.
 >
 > **Stav:** `⬜` znamená neimplementováno, `🟨` znamená rozpracovaný kód bez dokončeného
-> Windows/DXVK pixelového ověření a `🔬` technický spike před implementací. Každá hotová položka
-> musí mít pixelový test na Windows/DXVK.
+> nativního Windows pixelového ověření a `🔬` technický spike před implementací. Wine/Proton-DXVK
+> jsou hodnotné regresní běhy, ale nenahrazují Windows Direct2D pro built-in effects a image
+> composite modes. Každá hotová položka musí mít veřejný pixelový test; položky závislé na těchto
+> funkcích musí navíc projít nativním Windows Direct2D.
 
 ## Co EasyGL umí navíc a co je zde v rozsahu
 
@@ -81,9 +83,27 @@ pasem, protože by se tím stal druhým D3D11 backendem.
 | D2D-20 | Zpřesni a pixelově otestuj nativní mapování Opaque, AlphaBlend, NonPremultiplied a Additive, včetně Color.A, premultiplied textur a render-target zdrojů. | 🟨 | Nedekorované sprite zdroje používají `DrawImage` s explicitním `SOURCE_OVER`/`PLUS`/`SOURCE_COPY`, nikoli `DrawBitmap` závislý na mutable primitive blend state. `Direct2D_2DParity` ve Wine i Proton Experimental/DXVK ověřuje premultiplied AlphaBlend, straight-alpha NonPremultiplied, `Color.A` pro oba a RT jako AlphaBlend zdroj. Proton přesto pro šest Additive/Opaque texture/RT probes vrátil `SOURCE_OVER` hodnotu (např. `(138,20,40,255)` místo `(148,40,80,255)`), a `ColorMatrix`/`Premultiply` effect graph končí `0x88990028`; byte-exact dokončení proto zůstává nativní Windows gate. |
 | D2D-21 | Pro všechny ostatní `BlendState` kombinace, blend factor, color-write channels a multisample mask zaveď deterministickou named exception a popis v dokumentaci. | ✅ | `ApplyBlendState` odmítá ne-Add/symetrické faktory, ColorWriteChannels masky a MultiSampleMask; samostatný nenulový `GraphicsDevice.BlendFactor` také hází named exception. `Direct2D_2DParity` ověřuje všechny čtyři veřejné odmítací cesty, bez tiché aproximace. |
 
+## Fáze D2D-4 — zjištěné opravné mezery a důkaz na nativním Windows
+
+Tato fáze má přednost před rozšiřováním rozsahu backendu. Audit zdroje po D2D-20 potvrdil dvě
+konkrétní regresní hrany: CPU dekorace běžné `Texture2D` dnes obchází vybraný mip level a RT
+mip-chain může po dřívějším vygenerování zůstat označený jako aktuální i po dalším zápisu do stále
+navázaného targetu. Ani jedna z nich se neprojeví v dosavadních testech se solidními mip barvami.
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-22 | Zaveď nativní Windows Direct2D validační bránu pro zbývající built-in effects a image composite modes. Zachovej Wine i Proton jako rychlé kompatibilitní běhy, ale jejich skip proměnné nesmějí znamenat hotovou funkci. | 🟨 | `.github/workflows/d3d-windows-ci.yml` nyní v ručně spouštěné MSVC matici obsahuje `DIRECT2D`; její CTest běh nepředává Wine/Proton skip proměnné, takže nativní `ColorMatrix`, `Premultiply`, `SOURCE_COPY` a `PLUS` jsou skutečná gate. Zbývá první úspěšný běh a artefakt s verzí Windows/D2D a adapterem; GitHub runner není důkazem fyzického displeje/DPI nebo driver-specific parity. |
+| D2D-23 | Doplň pixelovou presentation a DPI matici na fyzickém okně s odlišným poměrem stran. Ověř `Letterbox`, `Overscan`, `Stretch`, `NativeBackBuffer` a `FixedHeightDynamicWidth`, následný resize a obě transformace souřadnic. | 🟨 | `Direct2D_2DParity` nyní provede reálný `SDL_SetWindowSize` + `SDL_SyncWindow`, nechá backend znovu vytvořit DXGI backbuffer a ověří window→logical→window transform proti skutečné velikosti klienta pro všech pět režimů. Wine pixelově prošel. Zbývá nativní Windows test obrazových letterbox pruhů/cropu a nenulového DPI scale; veřejný backbuffer readback je při non-1:1 presentation záměrně nepodporován, takže potřebuje samostatnou fyzickou oracle cestu. |
+| D2D-24 | Oprav volbu mipů pro dekorované běžné `Texture2D` a odstraň zbytečný CPU upload v hotové Direct2D effect cestě. Současný `requiresCpuBitmap` pro tint/NonPremultiplied volí bitmapu levelu 0 dříve, než se počítá minifikace; tím porušuje D2D-11. | 🟨 | Opraveno: mip se vybírá před rozhodnutím GPU/CPU cesty. Nativní Direct2D cacheuje dostupnost `ColorMatrix`/`Premultiply` a pro obyčejné textury používá `ImageBrush`/effect graph; Wine/Proton bez effects použijí CPU fallback z téhož vybraného mip levelu. `Direct2D_2DParity` s rozdílnými levely 0/1/2 pixelově ověřil tint levelů 1/2 i NonPremultiplied levelu 2 ve Wine. Zbývá nativní Windows effect větev z D2D-22. |
+| D2D-25 | Oprav invalidaci a generování RT mip-chain po každém zápisu. `mipLevelsDirty_` se nyní nastaví při bindu, ale po `GetData(level)`/vzorkování může být chain vygenerován ještě před další kresbou do stále aktivního targetu. | ✅ | `Clear` i každý skutečně vydaný SpriteBatch draw nyní invalidují mipy aktivního RT; `UpdatePixels` a bind/recovery už je invalidovaly. `Direct2D_2DParity` pixelově prošel pořadí „clear red → GetData(level 1) → draw green bez unbind → GetData(level 1)“ a prokázal nově vygenerovaný zelený mip. |
+| D2D-26 | Rozšiř unit a veřejnou regresní matici na chybové a hraniční 2D kontrakty, které nelze spolehlivě vyčíst z happy-path pixelů. | 🟨 | Backend nyní odmítá záporný MRT count, null MRT array s nenulovým count, záporné scissor/viewport rozměry a neznámý presentation mode; součty readback/source rectangles používají 64-bit aritmetiku. Veřejný parity test ověřuje tyto named failures a `RenderTargetUsage::{DiscardContents,PreserveContents,PlatformContents}` přes reálný unbind/rebind, potom kreslí další frame. Zbývá systematický fuzz extrémních source rectangle a cizích/disponovaných targetů. |
+| D2D-27 | Zaveď měřitelný smoke pro dlouhý 2D frame a resource-lifetime audit. Direct2D drží transient bitmapy/effects/image brushes do `EndDraw`; je nutné prokázat, že se uvolní na Present, readbacku, resize, target switchi i device recovery. | 🟨 | Přidán `Direct2D_Lifetime` CTest: osm frameů, 256 off-screen sprite writes a 128 wrapped/flipped RT image-brush sprites na frame, střídavý mip readback, target switch, debug recovery a `ApplyChanges` resize; Wine pixel/readback smoke prošel. Zbývá nativní Windows Debug Layer/WARP audit live-object a timing/allocační log. |
+
 ## Pořadí a pravidla ověření
 
 1. Nejprve D2D-1 až D2D-9: nejvyšší 2D přínos bez změny rozsahu backendu.
 2. D2D-10 je brána před skutečnými mip úkoly D2D-11/D2D-12.
 3. D2D-20/D2D-21 uzavírají compositing; plný blend model zůstává úkolem existujícího `D3D11` backendu.
-4. Při každé změně ověř čistý unit test i skutečný Windows/DXVK pixelový CTest. Budoucí kompilace a testy spouštěj nanejvýš se dvěma souběžnými joby (`-j2` / `--parallel 2`).
+4. D2D-22 je release gate pro aktuálně rozpracované D2D-1, D2D-4, D2D-13 a D2D-20; teprve po něm je lze označit `✅`.
+5. D2D-24 a D2D-25 jsou opravné priority před D2D-27, protože jinak benchmark měří i chybnou cestu.
+6. Při každé změně ověř čistý unit test, Wine, Proton a podle rozsahu skutečný nativní Windows pixelový CTest. Budoucí kompilace a testy spouštěj nanejvýš se dvěma souběžnými joby (`-j2` / `--parallel 2`).
