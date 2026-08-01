@@ -262,15 +262,33 @@ namespace CNA::Internal::Backends::Gdi
             bitmapInfo.header.biSizeImage = static_cast<DWORD>(
                 static_cast<std::size_t>(backbuffer.width) * backbuffer.height * 4u);
 
-            const int oldStretchMode = SetStretchBltMode(deviceContext, COLORONCOLOR);
-            const int copiedLines = StretchDIBits(
-                deviceContext, destination.x, destination.y, destination.width, destination.height,
-                0, 0, backbuffer.width, backbuffer.height, backbuffer.color.data(),
-                reinterpret_cast<const BITMAPINFO*>(&bitmapInfo), DIB_RGB_COLORS, SRCCOPY);
-            if (oldStretchMode != 0)
-                SetStretchBltMode(deviceContext, oldStretchMode);
-            if (copiedLines == static_cast<int>(GDI_ERROR))
-                throw std::runtime_error("GDI StretchDIBits failed while presenting the 2D framebuffer.");
+            // A native-size blit needs no GDI scaling. SetDIBitsToDevice avoids the generic
+            // StretchDIBits path in this common case, while retaining exactly the same top-down
+            // RGBA BI_BITFIELDS layout. It also covers aspect-correct letterboxing where the
+            // calculated destination happens to be 1:1.
+            if (destination.width == backbuffer.width && destination.height == backbuffer.height)
+            {
+                const int copiedLines = SetDIBitsToDevice(
+                    deviceContext, destination.x, destination.y, backbuffer.width, backbuffer.height,
+                    0, 0, 0, static_cast<UINT>(backbuffer.height), backbuffer.color.data(),
+                    reinterpret_cast<const BITMAPINFO*>(&bitmapInfo), DIB_RGB_COLORS);
+                if (copiedLines != backbuffer.height)
+                    throw std::runtime_error(
+                        "GDI SetDIBitsToDevice failed while presenting the 2D framebuffer.");
+            }
+            else
+            {
+                const int oldStretchMode = SetStretchBltMode(deviceContext, COLORONCOLOR);
+                const int copiedLines = StretchDIBits(
+                    deviceContext, destination.x, destination.y, destination.width, destination.height,
+                    0, 0, backbuffer.width, backbuffer.height, backbuffer.color.data(),
+                    reinterpret_cast<const BITMAPINFO*>(&bitmapInfo), DIB_RGB_COLORS, SRCCOPY);
+                if (oldStretchMode != 0)
+                    SetStretchBltMode(deviceContext, oldStretchMode);
+                if (copiedLines == static_cast<int>(GDI_ERROR))
+                    throw std::runtime_error(
+                        "GDI StretchDIBits failed while presenting the scaled 2D framebuffer.");
+            }
 
             GdiFlush();
             ReleaseDC(static_cast<HWND>(nativeWindow_), deviceContext);

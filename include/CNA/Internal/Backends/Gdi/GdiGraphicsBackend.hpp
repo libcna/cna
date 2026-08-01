@@ -8,10 +8,11 @@ namespace CNA::Internal::Backends::Gdi
      * @brief Win32 GDI presentation backend for CNA's 2D API.
      *
      * SpriteBatch, textures and 2D render targets are CPU-rasterized by the reusable Software
-     * core. Present() transfers the RGBA8 backbuffer to the SDL window's HWND with StretchDIBits,
-     * which makes the final display operation real Win32 GDI rather than SDL_Renderer or a GPU
-     * API. The 3D-facing Software operations are deliberately overridden to throw: GDI exposes a
-     * 2D-only contract even though its CPU implementation is shared with the software rasterizer.
+     * core. Present() transfers the RGBA8 backbuffer to the SDL window's HWND with Win32 DIB APIs:
+     * SetDIBitsToDevice for a 1:1 blit and StretchDIBits when scaling is necessary. This makes the
+     * final display operation real Win32 GDI rather than SDL_Renderer or a GPU API. The 3D-facing
+     * Software operations are deliberately overridden to throw: GDI exposes a 2D-only contract
+     * even though its CPU implementation is shared with the software rasterizer.
      */
     class GdiGraphicsBackend final : public Software::SoftwareGraphicsBackend
     {
