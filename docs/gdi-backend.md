@@ -149,13 +149,14 @@ cmake -S . -B build-gdi \
 CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
   --target cna_test_gdi_smoke cna_test_gdi_2d_regression \
            cna_test_gdi_colormatrix_effect cna_test_gdi_public_stencil \
+           cna_test_gdi_public_api \
            cna_test_gdi_dirty_damage cna_test_gdi_repaint_invalidation \
            cna_test_gdi_presentation_oracle \
            cna_test_gdi_presentation_configuration \
            cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
-The backend is hard-gated to Windows targets. A native Windows build registers ten `GDI` CTest
+The backend is hard-gated to Windows targets. A native Windows build registers eleven `GDI` CTest
 cases, including separate default, dirty and halftone configurations; run them with
 `ctest -L GDI --output-on-failure`. Cross-built PE files are intentionally not registered as Linux
 CTest commands, so run the produced executables under a Wine setup with an available display:
@@ -166,6 +167,7 @@ build-gdi\cna_test_gdi_smoke.exe
 build-gdi\cna_test_gdi_2d_regression.exe
 build-gdi\cna_test_gdi_colormatrix_effect.exe
 build-gdi\cna_test_gdi_public_stencil.exe
+build-gdi\cna_test_gdi_public_api.exe
 build-gdi\cna_test_gdi_dirty_damage.exe
 build-gdi\cna_test_gdi_repaint_invalidation.exe
 build-gdi\cna_test_gdi_presentation_oracle.exe
@@ -177,6 +179,7 @@ wine build-gdi/cna_test_gdi_smoke.exe
 wine build-gdi/cna_test_gdi_2d_regression.exe
 wine build-gdi/cna_test_gdi_colormatrix_effect.exe
 wine build-gdi/cna_test_gdi_public_stencil.exe
+wine build-gdi/cna_test_gdi_public_api.exe
 wine build-gdi/cna_test_gdi_dirty_damage.exe
 wine build-gdi/cna_test_gdi_repaint_invalidation.exe
 wine build-gdi/cna_test_gdi_presentation_oracle.exe

@@ -22,6 +22,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "GDI")
     cna_add_gdi_test(cna_test_gdi_2d_regression examples/gdi_2d_regression_test.cpp)
     cna_add_gdi_test(cna_test_gdi_colormatrix_effect examples/gdi_colormatrix_effect_test.cpp)
     cna_add_gdi_test(cna_test_gdi_public_stencil examples/gdi_public_stencil_test.cpp)
+    cna_add_gdi_test(cna_test_gdi_public_api examples/gdi_public_api_test.cpp)
     cna_add_gdi_test(cna_test_gdi_dirty_damage examples/gdi_dirty_damage_test.cpp)
     cna_add_gdi_test(cna_test_gdi_repaint_invalidation examples/gdi_repaint_invalidation_test.cpp)
     cna_add_gdi_test(cna_test_gdi_presentation_oracle examples/gdi_presentation_oracle_test.cpp)
@@ -42,6 +43,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "GDI")
         cna_register_backend_test(NAME GDI_ColorMatrixEffect COMMAND cna_test_gdi_colormatrix_effect
             TIMEOUT 30 LABELS "GDI")
         cna_register_backend_test(NAME GDI_PublicStencil COMMAND cna_test_gdi_public_stencil
+            TIMEOUT 30 LABELS "GDI")
+        cna_register_backend_test(NAME GDI_PublicAPI COMMAND cna_test_gdi_public_api
             TIMEOUT 30 LABELS "GDI")
         cna_register_backend_test(NAME GDI_DirtyDamage COMMAND cna_test_gdi_dirty_damage
             TIMEOUT 30 LABELS "GDI")

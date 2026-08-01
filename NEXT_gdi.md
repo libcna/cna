@@ -8,10 +8,10 @@
 
 ## Current focus
 
-- Checkpoint the freshly revalidated GDI-050 through GDI-054 and GDI-056 working tree as one
-  explicitly approved catch-up commit.
-- Then finish GDI-055, add the approved manual MSVC workflow from GDI-057, and continue through the
-  safe, automatable GDI roadmap in dependency order.
+- GDI-050 through GDI-056 are complete. The approved catch-up baseline is commit `48826e0b`;
+  GDI-055 adds the final public API matrix as its own follow-up task.
+- Next add the approved manual MSVC workflow from GDI-057, then continue through the safe,
+  automatable GDI roadmap in dependency order.
 
 ## Completed in the current working tree
 
@@ -20,10 +20,14 @@
 - GDI-052: SDL/Win32 expose, restore and resize invalidation is retained until a successful present.
 - GDI-053: checked/scoped Win32 presentation transaction with failure retention.
 - GDI-054: deterministic presentation planning plus a memory-DC/DIBSection pixel oracle.
+- GDI-055: public coverage now exercises presentation state, the complete capability matrix,
+  texture upload/readback, SpriteBatch, viewport/scissor, render-target binding/preservation/
+  sampling, 4x and rejected 2x MSAA resets, resize and backbuffer readback. Public stencil coverage
+  remains in its focused companion test.
 - GDI-056: distinct native CTest cases for default, dirty and halftone presentation policies.
 
-These changes are not yet committed. The project owner approved one catch-up commit for this
-already interwoven baseline; all later tasks return to one task per commit.
+GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
+baseline. All later tasks use one task per commit.
 
 ## Known limitations and external gates
 
@@ -55,6 +59,8 @@ already interwoven baseline; all later tasks return to one task per commit.
   presentation-oracle executables pass.
 - Wine/Xvfb presentation configuration: default, dirty and halftone variants all pass with
   `CNA_GDI_DWM_FLUSH=0`.
+- GDI-055 `cna_test_gdi_public_api`: MinGW compile/link pass and all 33 public-path assertions pass
+  under Wine/Xvfb, including exact scissor, RT, 4x resolve and resized-edge pixels.
 - Native HEADLESS/system-SDL build: `CNA` and `CnaTests` link successfully at `-j2`.
 - `GraphicsDeviceCapabilityTest.SupportsStencilBuffer`: pass under HEADLESS. The complete
   `GraphicsDeviceCapabilityTest.*` filter is 9 pass / 1 pre-existing configuration mismatch:
@@ -84,5 +90,5 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Run `git diff --check`, commit the approved catch-up baseline, then complete GDI-055's remaining
-public-API matrix.
+Commit the validated GDI-055 public API matrix, then implement the approved manual native-MSVC
+workflow in GDI-057.

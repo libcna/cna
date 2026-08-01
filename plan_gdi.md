@@ -8,12 +8,12 @@
 > was not reliable. Its tests predominantly inspected the CPU framebuffer and did not prove what GDI
 > put in the window.
 >
-> **Implementation update (2026-08-01 working tree):** GDI-050 through GDI-054 and GDI-056 are
-> implemented. The focused MinGW Release build, all eight GDI correctness executables, and all three
-> configuration variants pass under Wine. The new suite includes a real memory-DC/DIBSection pixel
-> oracle, public stencil coverage, exact dirty-damage coverage, event/failure-retention integration,
-> and distinct default/dirty/halftone cases. Native MSVC CI and the visible Windows lifecycle/DPI
-> gate remain open, so the backend is still not a release baseline.
+> **Implementation update (2026-08-01 working tree):** GDI-050 through GDI-056 are implemented.
+> The focused MinGW Release build, all nine GDI correctness executables, and all three configuration
+> variants pass under Wine. The suite includes a real memory-DC/DIBSection pixel oracle, complete
+> public-path coverage for advertised features, exact dirty-damage coverage,
+> event/failure-retention integration, and distinct default/dirty/halftone cases. Native MSVC CI and
+> the visible Windows lifecycle/DPI gate remain open, so the backend is still not a release baseline.
 >
 > **Status legend:** ✅ implemented and adequately verified for its stated scope; 🟨 implemented but
 > incompletely verified or with a provisional conclusion; 🔴 confirmed correctness defect;
@@ -108,10 +108,10 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 ### Existing tests
 
 [`cmake/Tests/GdiTests.cmake`](cmake/Tests/GdiTests.cmake) builds smoke, CPU 2D regression,
-ColorMatrix integration, public-stencil, dirty-damage, repaint/failure, presentation-oracle, and
-presentation-configuration and benchmark executables. It registers ten cases (seven
-original/focused cases plus three environment configurations) as CTests only for a native Windows
-build. No current GitHub workflow configures `CNA_GRAPHICS_BACKEND=GDI`.
+ColorMatrix integration, public-stencil, complete public-API, dirty-damage, repaint/failure,
+presentation-oracle, and presentation-configuration and benchmark executables. It registers eleven
+cases (eight original/focused cases plus three environment configurations) as CTests only for a
+native Windows build. No current GitHub workflow configures `CNA_GRAPHICS_BACKEND=GDI`.
 
 ---
 
@@ -152,12 +152,13 @@ or repaint behavior in a visible native Windows client.
 
 ### Current Phase G5/G6 validation
 
-The working tree builds all eight correctness executables together with MinGW-w64/Ninja at `-j2`.
-Under Wine, smoke, 2D regression, ColorMatrix, public stencil, dirty damage, repaint/failure and the
-memory-DC presentation oracle all pass; the presentation-configuration executable also passes in
-its default, dirty and halftone environments with `CNA_GDI_DWM_FLUSH=0`. Unlike the audited
-baseline, the memory-DC test proves the exact GDI-produced pixels on a deterministic selected
-bitmap. It still does not replace the visible native Windows lifecycle/DPI gate.
+The working tree builds all nine correctness executables together with MinGW-w64/Ninja at `-j2`.
+Under Wine, smoke, 2D regression, ColorMatrix, public stencil, the complete public API matrix, dirty
+damage, repaint/failure and the memory-DC presentation oracle all pass; the
+presentation-configuration executable also passes in its default, dirty and halftone environments
+with `CNA_GDI_DWM_FLUSH=0`. Unlike the audited baseline, the memory-DC test proves the exact
+GDI-produced pixels on a deterministic selected bitmap. It still does not replace the visible
+native Windows lifecycle/DPI gate.
 
 ---
 
@@ -303,7 +304,7 @@ means only the narrowed statement in this table, not overall release readiness.
 |---|---:|---|
 | GDI-001 | ✅ | Windows selection, factory, SDL3/`gdi32` linkage, and MinGW build integration work. |
 | GDI-002 | ✅ | A real GDI display path exists, using `SetDIBitsToDevice` at 1:1 and `StretchDIBits` when scaled. |
-| GDI-003 | ✅ | Focused Release cross-build passed; all eight current GDI correctness executables and three configuration variants pass under Wine. |
+| GDI-003 | ✅ | Focused Release cross-build passed; all nine current GDI correctness executables and three configuration variants pass under Wine. |
 | GDI-004 | 🟨 | Native visible demo/lifecycle inspection is still required and its checklist must be expanded. |
 | GDI-005 | ✅ | CPU 2D raster/readback regression is substantial; it is not a GDI-output regression. |
 | GDI-006 | 🟨 | Build/run and corrected stencil/dirty/test documentation exist; release and native-performance claims still require GDI-061/062. |
@@ -339,7 +340,7 @@ means only the narrowed statement in this table, not overall release readiness.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---:|---|
-| GDI-055 | Add high-level GDI API coverage. | 🟨 | Drive `GraphicsDevice`, `PresentationParameters`, `Texture2D`, `SpriteBatch`, `RenderTarget2D`, viewport/scissor, MSAA reset, stencil, readback, resize, and capabilities. Public stencil/backbuffer/depthless-RT/capability assertions are now present; the remaining advertised API matrix is still open. Keep internal-backend tests for low-level raster details, but every advertised public feature must have at least one public-path assertion. |
+| GDI-055 | Add high-level GDI API coverage. | ✅ | `gdi_public_api_test` drives `GraphicsDevice`, `PresentationParameters`, `Texture2D` upload/readback, `SpriteBatch`, `RenderTarget2D` binding/preservation/sampling, viewport/scissor, 4x and rejected 2x MSAA reset, backbuffer readback, resize, and the complete capability matrix. `gdi_public_stencil_test` covers stencil clear/use on the backbuffer and a depthless target. Low-level raster details remain in `gdi_2d_regression_test`; every advertised feature now has a public-path assertion. |
 | GDI-056 | Register meaningful configuration variants. | ✅ | Native CTest has distinct default, `CNA_GDI_DIRTY_PRESENTATION=1`, and scaled `CNA_GDI_PRESENT_FILTER=halftone` cases. The variants assert NativeFull/None/Stretch and filter selection through GDI-054 telemetry, while the oracle verifies corresponding pixels. Every case explicitly disables `DwmFlush` so CI cannot block on a compositor. |
 | GDI-057 | Add a manual native-Windows GDI workflow. | ⬜ | Create a GDI-specific `workflow_dispatch` MSVC job, respecting the repository's manual-Windows-CI policy and the two-job limit. Build only CNA plus focused GDI tests, run `ctest -L GDI --output-on-failure`, and upload logs on failure. This is a compiler/hidden-surface gate, not a replacement for the visible test. |
 | GDI-058 | Make applied presentation/resource state honest. | ⬜ | Validate presentation-mode ordinals. Reject or normalize unsupported backbuffer/depth formats before public state claims them. Write the actually applied initial MSAA count back just as `Reset()` does. Define RT depth, stencil, MSAA, format, and preservation behavior; tests compare every public property/query with the created storage. No request may silently remain visible as if it were applied. |
@@ -374,7 +375,7 @@ means only the narrowed statement in this table, not overall release readiness.
 1. ✅ **Repair the public contract:** GDI-050.
 2. ✅ **Make retained presentation correct:** GDI-051, GDI-052, and GDI-053.
 3. ✅ **Create the deterministic oracle:** GDI-054.
-4. **Finish public coverage:** complete GDI-055.
+4. ✅ **Finish public coverage:** GDI-055.
 5. ✅ **Register configuration coverage:** GDI-056.
 6. **Establish native repeatability:** GDI-057, followed by GDI-058 through GDI-061.
 7. **Measure a visible client:** GDI-062. Only then choose GDI-063 through GDI-066.
