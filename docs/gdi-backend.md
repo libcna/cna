@@ -11,7 +11,8 @@ create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
 
 - Supported: Clear, RGBA textures, SpriteBatch (including source rectangles, transforms, rotation,
   flips and full XNA 2D `BlendState` factors/equations), 2D render targets, backbuffer/read-target
-  readback, viewport/scissor, and CNA presentation modes. A `RenderTarget2D` created with
+  readback, viewport/scissor, CPU `RasterizerState::WireFrame` SpriteBatch quads, and CNA
+  presentation modes. A `RenderTarget2D` created with
   `mipMap=true` generates an RGBA8 mip chain when it is unbound using a clamped 2×2 box filter;
   its completed levels can then be sampled and read back. Mips are deliberately unavailable while
   that target is actively being rendered.

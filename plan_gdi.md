@@ -80,7 +80,7 @@ changes the `SOFTWARE` backend and run its relevant regression tests.
 | GDI-026 | Add a CPU stencil buffer for 2D clipping/masking. | ⬜ | Stencil clear, comparison, operations and masked sprite rendering are tested; capability reporting changes only when a real buffer exists. |
 | GDI-027 | Decide separately whether a real depth buffer is useful for 2D layering. | ✅ | Formally unsupported: 2D layering uses SpriteBatch submission/sort order, not a depth resource. GDI forcibly installs a disabled depth/stencil state even though the shared Software core owns one for its separate 3D backend; `DepthStencilBuffer` stays false, clears still reject, and the GDI regression proves a later SpriteBatch draw is not depth-occluded. |
 | GDI-028 | Implement anisotropic texture filtering in the CPU sampler, or continue to map it to linear filtering. | ⬜ | Make a measured decision; if implemented, tests demonstrate a different, correct minified/rotated result and document its CPU cost. |
-| GDI-029 | Audit and update `SupportsCapability()` as each optional feature becomes real. | ⬜ | Every `true` result is backed by an executable test; unsupported features stay `false` and fail explicitly rather than silently degrading. |
+| GDI-029 | Audit and update `SupportsCapability()` as each optional feature becomes real. | ✅ | GDI advertises only `WireFrame`, because the shared CPU SpriteBatch rasterizer draws actual wireframe quad edges; the GDI regression pixel-tests it. It explicitly reports false for 3D, depth/stencil, MSAA, MRT, anisotropy, occlusion, arbitrary custom effects and Texture3D; their existing construction/draw paths reject rather than pretend to provide those features. |
 
 ---
 

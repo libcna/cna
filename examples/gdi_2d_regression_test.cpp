@@ -129,6 +129,21 @@ namespace
             backend.CreateEffectBackend("void main() {}", "void main() {}");
         ok &= Expect(customEffect == nullptr,
                      "GDI must explicitly reject custom ShaderEffect programs.");
+        ok &= Expect(backend.SupportsCapability(CNA::GraphicsCapability::WireFrame),
+                     "GDI must report its real CPU SpriteBatch wireframe support.");
+        constexpr CNA::GraphicsCapability unsupportedCapabilities[] = {
+            CNA::GraphicsCapability::ThreeD,
+            CNA::GraphicsCapability::DepthStencilBuffer,
+            CNA::GraphicsCapability::MultiSampleAntiAliasing,
+            CNA::GraphicsCapability::MultipleRenderTargets,
+            CNA::GraphicsCapability::AnisotropicFiltering,
+            CNA::GraphicsCapability::OcclusionQuery,
+            CNA::GraphicsCapability::CustomEffects,
+            CNA::GraphicsCapability::Texture3D,
+        };
+        for (const CNA::GraphicsCapability capability : unsupportedCapabilities)
+            ok &= Expect(!backend.SupportsCapability(capability),
+                         "GDI must not advertise an unsupported graphics capability.");
 
         // Upload + source rectangle: top-right texel is green.
         SetOpaque(backend);
@@ -207,6 +222,19 @@ namespace
              0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, /*Point*/ 1,
              /*Clamp*/ 1, /*Clamp*/ 1, /*layerDepth*/ 0.75f);
         ok &= ExpectPixel("GDI ignores 2D depth state", ReadPixel(backend, 2, 2), blue);
+
+        // GDI's one advertised GraphicsCapability is CPU SpriteBatch wireframe. The middle of a
+        // 5x5 quad is intentionally off the two triangle edges and must remain untouched, while
+        // its outer corner proves edges are actually rasterized instead of merely accepting state.
+        backend.ApplyRasterizerState(/*CullMode::None*/ 0, /*FillMode::WireFrame*/ 1,
+                                     /*scissorTestEnable*/ false, 0.0f, 0.0f);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        Draw(backend, *atlas, Rectangle(1, 1, 5, 5), Rectangle(0, 0, 1, 1), Color::White);
+        ok &= ExpectPixel("GDI wireframe edge", ReadPixel(backend, 1, 1), red);
+        ok &= ExpectPixel("GDI wireframe interior", ReadPixel(backend, 2, 4), black);
+        backend.ApplyRasterizerState(/*CullMode::CullCounterClockwiseFace*/ 2,
+                                     /*FillMode::Solid*/ 0, /*scissorTestEnable*/ false,
+                                     0.0f, 0.0f);
 
         // Horizontal flip maps the 2-pixel source row in reverse order.
         backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);

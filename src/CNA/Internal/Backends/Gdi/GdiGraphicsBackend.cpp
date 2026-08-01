@@ -478,9 +478,13 @@ namespace CNA::Internal::Backends::Gdi
         ThrowNo3D("CreateOcclusionQuery");
     }
 
-    bool GdiGraphicsBackend::SupportsCapability(CNA::GraphicsCapability /*capability*/) const
+    bool GdiGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        return false;
+        // Wireframe SpriteBatch quads are genuinely rasterized by the shared CPU 2D path. It is
+        // the one non-3D capability from this enum that GDI implements end-to-end; every other
+        // entry still requires a resource or programmable/3D feature deliberately outside this
+        // backend's compatibility-2D contract.
+        return capability == CNA::GraphicsCapability::WireFrame;
     }
 
     void GdiGraphicsBackend::ClearColorAndDepth(float, float, float, float, float)
