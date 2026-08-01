@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include <SDL3/SDL.h>
@@ -86,6 +87,7 @@ namespace CNA::Internal::Backends::Skia
         SkiaSurface surface_;
         SkiaSurface* activeSurface_ = &surface_;
         SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
+        SkiaSourceAlphaConvention spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int preferredVirtualHeight_ = 0;
     };

@@ -6,8 +6,10 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorFilter.h"
+#include "include/core/SkData.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSamplingOptions.h"
+#include "include/effects/SkRuntimeEffect.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -34,6 +36,52 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] bool IsFlipped(SpriteEffects effects, SpriteEffects flag)
         {
             return (static_cast<int>(effects) & static_cast<int>(flag)) != 0;
+        }
+
+        struct TintScale
+        {
+            float red;
+            float green;
+            float blue;
+            float alpha;
+        };
+
+        [[nodiscard]] const sk_sp<SkRuntimeEffect>& TintEffect()
+        {
+            // SkColorFilters::Blend(..., kModulate) uses premultiplied tint RGB, which would
+            // multiply a premultiplied XNA source by tint alpha a second time.  This filter works
+            // directly in Skia's premultiplied pipeline and keeps component-wise XNA tint math.
+            static const sk_sp<SkRuntimeEffect> effect = []
+            {
+                auto result = SkRuntimeEffect::MakeForColorFilter(SkString(R"(
+                    uniform float4 tintScale;
+                    half4 main(half4 source) {
+                        return half4(source.rgb * tintScale.rgb, source.a * tintScale.a);
+                    }
+                )"));
+                if (!result.effect)
+                    throw std::runtime_error("Skia failed to compile the SpriteBatch tint color filter.");
+                return std::move(result.effect);
+            }();
+            return effect;
+        }
+
+        [[nodiscard]] sk_sp<SkColorFilter> MakeTintFilter(const Color& color,
+                                                            SkiaSourceAlphaConvention alphaConvention)
+        {
+            const float alpha = static_cast<float>(color.getAProperty()) / 255.0f;
+            // Skia has already premultiplied a straight-alpha image when the filter sees it;
+            // XNA's NonPremultiplied equation still needs that source alpha after tinting.
+            const float straightAlphaScale = alphaConvention == SkiaSourceAlphaConvention::Straight
+                ? alpha
+                : 1.0f;
+            const TintScale scale {
+                static_cast<float>(color.getRProperty()) / 255.0f * straightAlphaScale,
+                static_cast<float>(color.getGProperty()) / 255.0f * straightAlphaScale,
+                static_cast<float>(color.getBProperty()) / 255.0f * straightAlphaScale,
+                alpha,
+            };
+            return TintEffect()->makeColorFilter(SkData::MakeWithCopy(&scale, sizeof(scale)));
         }
     }
 
@@ -102,7 +150,12 @@ namespace CNA::Internal::Backends::Skia
         }
 
         const auto* skiaImageSource = dynamic_cast<const SkiaImageSource*>(&texture);
-        const sk_sp<SkImage> image = skiaImageSource ? skiaImageSource->SnapshotImage() : nullptr;
+        const SkiaSourceAlphaConvention sourceAlphaConvention = sourceAlphaConvention_
+            ? *sourceAlphaConvention_
+            : SkiaSourceAlphaConvention::Premultiplied;
+        const sk_sp<SkImage> image = skiaImageSource
+            ? skiaImageSource->SnapshotImage(sourceAlphaConvention)
+            : nullptr;
         if (!image)
             throw std::runtime_error("Skia SpriteBatch can only draw Skia Texture2D or RenderTarget2D resources.");
         if (sourceRectangle.X < 0 || sourceRectangle.Y < 0
@@ -119,10 +172,8 @@ namespace CNA::Internal::Backends::Skia
 
         SkPaint paint;
         paint.setBlendMode(blendMode_ ? *blendMode_ : SkBlendMode::kSrcOver);
-        const SkColor tint = SkColorSetARGB(color.getAProperty(), color.getRProperty(),
-                                            color.getGProperty(), color.getBProperty());
-        if (tint != SK_ColorWHITE)
-            paint.setColorFilter(SkColorFilters::Blend(tint, SkBlendMode::kModulate));
+        if (color != Color::White)
+            paint.setColorFilter(MakeTintFilter(color, sourceAlphaConvention));
 
         const float sourceWidth = static_cast<float>(sourceRectangle.Width);
         const float sourceHeight = static_cast<float>(sourceRectangle.Height);

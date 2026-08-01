@@ -168,7 +168,7 @@ public CNA API.
 |---|---|---|---|
 | SKIA-31 | Implement `SkiaSpriteBatchBackend` session lifecycle and reject invalid Begin/End state transitions consistently with shared SpriteBatch semantics. | ✅ | `Skia_SpriteBatch_BeginEnd` verifies End/Draw-before-Begin, a duplicate Begin, successful draw, and re-entrant sessions against the real Skia backend. |
 | SKIA-32 | Implement point-position sprite drawing and destination/source-rectangle drawing with XNA's inclusive/exclusive rectangle convention. | ✅ | `Skia_SpriteBatch_SourceRect` and `Skia_SpriteBatch_Overloads` pixel-test native-size point draws, all public destination/source rectangle overloads, cropped corners, and outside-sprite pixels. |
-| SKIA-33 | Implement tint multiplication with exact XNA alpha convention; do not let Skia's native premultiplication alter RGB edges. | ⬜ | Semi-transparent tint oracle tests pass for premultiplied and straight-alpha source cases. |
+| SKIA-33 | Implement tint multiplication with exact XNA alpha convention; do not let Skia's native premultiplication alter RGB edges. | ✅ | `Skia_SpriteBatch_TintAlpha` verifies semi-transparent tint against both a premultiplied `AlphaBlend` source and a straight-alpha `NonPremultiplied` source. |
 | SKIA-34 | Implement rotation, origin, negative/positive scale, and both `SpriteEffects` flips using canvas save/restore and transforms. | ⬜ | Existing sprite rotation/effects goldens match within declared tolerance. |
 | SKIA-35 | Apply the `SpriteBatch::Begin` transform matrix in the same order as EasyGL/XNA, including non-identity affine transforms. | ⬜ | Matrix/order test and golden diagnostic scene pass. |
 | SKIA-36 | Preserve `SpriteSortMode` and `layerDepth` ordering semantics in shared batching/backend submission. | ⬜ | Deferred/front-to-back/back-to-front/texture sort tests have deterministic expected order. |
@@ -187,9 +187,9 @@ public CNA API.
 | SKIA-44 | Map `TextureAddressMode::Clamp`, `Wrap`, and `Mirror` independently on U/V, including negative coordinates and partial source rectangles. | ⬜ | Clamp/wrap/mirror edge and seam pixel suite passes. |
 | SKIA-45 | Investigate mip filter modes and LOD selection on the selected Skia surface; implement only paths whose mip availability is established by SKIA-27. | ⬜ | Mip-filter matrix test either passes or rejects unsupported mode before draw. |
 | SKIA-46 | Establish the exact treatment of `SamplerState` changes within and between Begin blocks, including state cache invalidation. | ⬜ | Per-draw-switch test proves the next draw sees the requested sampler. |
-| SKIA-47 | Map `BlendState::Opaque` and prove it is an overwrite of the affected sprite pixels, not a whole-target clear. | ⬜ | Opaque sprite-over-background pixel test passes. |
-| SKIA-48 | Map `BlendState::AlphaBlend` with correct premultiplied source algebra. | ⬜ | Premultiplied-alpha expected-value test passes. |
-| SKIA-49 | Map `BlendState::NonPremultiplied` without treating it as AlphaBlend. | ⬜ | Straight-alpha expected-value test differs correctly from SKIA-48. |
+| SKIA-47 | Map `BlendState::Opaque` and prove it is an overwrite of the affected sprite pixels, not a whole-target clear. | ✅ | `Skia_BlendState_Opaque` overwrites an affected low-alpha sprite pixel over a coloured background. |
+| SKIA-48 | Map `BlendState::AlphaBlend` with correct premultiplied source algebra. | ✅ | `Skia_BlendState_AlphaBlend` verifies a genuinely premultiplied source; `Skia_SpriteBatch_TintAlpha` verifies it remains correct after a semi-transparent tint. |
+| SKIA-49 | Map `BlendState::NonPremultiplied` without treating it as AlphaBlend. | ✅ | `Skia_BlendState_NonPremultiplied` verifies a straight-alpha source; `Skia_SpriteBatch_TintAlpha` proves its tint result remains distinct from SKIA-48. |
 | SKIA-50 | Map `BlendState::Additive` and establish saturation/colour-space policy compatible with CNA's existing oracle. | ⬜ | Additive golden and over-range edge cases pass. |
 | SKIA-51 | Implement a table-driven conversion of XNA blend factors/functions to a direct Skia mode wherever one exists. | ⬜ | Mapping unit test covers all enum values and gives actionable error text for unmapped combinations. |
 | SKIA-52 | Implement `SetBlendEnabled`/the default blend-state lifecycle and ensure Clear is always an unconditional clear. | ⬜ | Clear-after-blend and state-reset tests pass. |

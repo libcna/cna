@@ -13,9 +13,9 @@ namespace CNA::Internal::Backends::Skia
     /**
      * CPU-backed level-0 Texture2D image for the raster Skia backend.
      *
-     * rawPixels_ stays in CNA's straight-alpha, top-row-first RGBA8 convention. Skia receives a
-     * copy with an explicitly unpremultiplied image info, so its canvas pipeline performs normal
-     * premultiplied compositing without changing the bytes Texture2D::GetData observes.
+     * rawPixels_ stays in CNA's top-row-first RGBA8 convention and is the exact public GetData
+     * shadow.  The two Skia snapshots label those same bytes for the two XNA source-alpha
+     * conventions; the active BlendState selects one at draw time without rewriting public data.
      */
     class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource
     {
@@ -31,8 +31,8 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] bool GetData(int level, int x, int y, int width, int height,
                                    void* data, int dataLength) const override;
 
-        [[nodiscard]] const sk_sp<SkImage>& Image() const noexcept { return image_; }
-        [[nodiscard]] sk_sp<SkImage> SnapshotImage() const override { return image_; }
+        [[nodiscard]] sk_sp<SkImage> SnapshotImage(
+            SkiaSourceAlphaConvention alphaConvention) const override;
 
     private:
         void RebuildImage();
@@ -40,6 +40,7 @@ namespace CNA::Internal::Backends::Skia
         int width_ = 0;
         int height_ = 0;
         std::vector<std::uint8_t> rawPixels_;
-        sk_sp<SkImage> image_;
+        sk_sp<SkImage> straightImage_;
+        sk_sp<SkImage> premultipliedImage_;
     };
 } // namespace CNA::Internal::Backends::Skia

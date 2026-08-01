@@ -40,8 +40,11 @@ namespace CNA::Internal::Backends::Skia
         // See BindAsRenderTarget(). Raster surfaces require no resolve or deferred submission.
     }
 
-    sk_sp<SkImage> SkiaRenderTargetBackend::SnapshotImage() const
+    sk_sp<SkImage> SkiaRenderTargetBackend::SnapshotImage(
+        SkiaSourceAlphaConvention /*alphaConvention*/) const
     {
+        // An SkSurface snapshot is already premultiplied.  Render-target source-convention
+        // conversion needs its own explicit probe before it can claim straight-alpha support.
         return surface_.SnapshotImage();
     }
 

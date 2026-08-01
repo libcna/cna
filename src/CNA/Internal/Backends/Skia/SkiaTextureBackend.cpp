@@ -15,6 +15,11 @@ namespace CNA::Internal::Backends::Skia
         {
             return SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
         }
+
+        [[nodiscard]] SkImageInfo RgbaPremulInfo(int width, int height)
+        {
+            return SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+        }
     }
 
     SkiaTextureBackend::SkiaTextureBackend(const ImageData& data)
@@ -78,11 +83,21 @@ namespace CNA::Internal::Backends::Skia
         return true;
     }
 
+    sk_sp<SkImage> SkiaTextureBackend::SnapshotImage(
+        SkiaSourceAlphaConvention alphaConvention) const
+    {
+        return alphaConvention == SkiaSourceAlphaConvention::Premultiplied
+            ? premultipliedImage_
+            : straightImage_;
+    }
+
     void SkiaTextureBackend::RebuildImage()
     {
-        const SkPixmap pixmap(RgbaUnpremulInfo(width_, height_), rawPixels_.data(), width_ * 4);
-        image_ = SkImages::RasterFromPixmapCopy(pixmap);
-        if (!image_)
+        const SkPixmap straightPixmap(RgbaUnpremulInfo(width_, height_), rawPixels_.data(), width_ * 4);
+        const SkPixmap premultipliedPixmap(RgbaPremulInfo(width_, height_), rawPixels_.data(), width_ * 4);
+        straightImage_ = SkImages::RasterFromPixmapCopy(straightPixmap);
+        premultipliedImage_ = SkImages::RasterFromPixmapCopy(premultipliedPixmap);
+        if (!straightImage_ || !premultipliedImage_)
             throw std::runtime_error("Skia failed to create a raster Texture2D image.");
     }
 } // namespace CNA::Internal::Backends::Skia

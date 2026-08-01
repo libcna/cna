@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include "include/core/SkBlendMode.h"
@@ -11,8 +12,10 @@ namespace CNA::Internal::Backends::Skia
     class SkiaSpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:
-        SkiaSpriteBatchBackend(SkiaSurface*& activeSurface, const SkBlendMode& blendMode)
-            : activeSurface_(&activeSurface), blendMode_(&blendMode) {}
+        SkiaSpriteBatchBackend(SkiaSurface*& activeSurface, const SkBlendMode& blendMode,
+                               const SkiaSourceAlphaConvention& sourceAlphaConvention)
+            : activeSurface_(&activeSurface), blendMode_(&blendMode)
+            , sourceAlphaConvention_(&sourceAlphaConvention) {}
 
         void Begin() override;
         void End() override;
@@ -31,6 +34,7 @@ namespace CNA::Internal::Backends::Skia
     private:
         SkiaSurface** activeSurface_ = nullptr;
         const SkBlendMode* blendMode_ = nullptr;
+        const SkiaSourceAlphaConvention* sourceAlphaConvention_ = nullptr;
         bool begun_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         int textureFilter_ = 0;

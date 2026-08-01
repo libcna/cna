@@ -173,7 +173,8 @@ namespace CNA::Internal::Backends::Skia
 
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
-        return std::make_unique<SkiaSpriteBatchBackend>(activeSurface_, spriteBlendMode_);
+        return std::make_unique<SkiaSpriteBatchBackend>(activeSurface_, spriteBlendMode_,
+                                                        spriteSourceAlphaConvention_);
     }
 
     std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(
@@ -265,13 +266,22 @@ namespace CNA::Internal::Backends::Skia
         if (opaque)
         {
             spriteBlendMode_ = SkBlendMode::kSrc;
+            spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
             return;
         }
-        if (alphaBlend || nonPremultiplied)
+        if (alphaBlend)
         {
-            // Skia normalizes an unpremultiplied image to its native premultiplied pipeline before
-            // applying SourceOver, so this expresses both XNA alpha presets at the canvas boundary.
             spriteBlendMode_ = SkBlendMode::kSrcOver;
+            spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
+            return;
+        }
+        if (nonPremultiplied)
+        {
+            // Skia converts the straight-alpha image into its native premultiplied canvas pipeline
+            // before applying SourceOver.  AlphaBlend selects the separately labelled premultiplied
+            // image above, preventing an accidental second premultiplication.
+            spriteBlendMode_ = SkBlendMode::kSrcOver;
+            spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Straight;
             return;
         }
         throw std::runtime_error("Skia raster backend does not implement this BlendState yet.");
