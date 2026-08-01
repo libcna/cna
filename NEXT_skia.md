@@ -22,7 +22,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 98 Skia CTests: nine raster-only, 87 display-required, and two
+- `docs/skia-backend.md` records 99 Skia CTests: nine raster-only, 88 display-required, and two
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -116,6 +116,28 @@
   focused test builds with `--parallel 8` and passes in Debug, Release, and AddressSanitizer
   (`detect_leaks=0`) under Xvfb; all display caches were restored to `:0`. SKIA-90 is the next
   implementation task after this checkpoint.
+
+## Completed in this session: SKIA-90
+
+- `SkiaSpriteBatchBackend::SetCustomEffect` now accepts only null or the exact runtime type
+  `SpriteEffect`. CNA's stock object has no backend program, so this is an alias for the existing
+  pixel-proven paint path. Runtime type equality, rather than a broad dynamic cast, ensures a
+  derived effect cannot have overridden behavior silently discarded. All other effects retain an
+  actionable error pointing to the required explicit SkSL contract.
+- Added `Skia_SpriteEffect_Alias`: it renders default, explicit stock, and cloned stock routes to
+  separate targets with PointClamp, tint, affine transform, rotation and both flips, then compares
+  every pixel and proves the oracle contains draw and clear regions. A derived type rejects before
+  Begin and the same batch remains reusable.
+- A direct concrete-RTTI check initially linked the Skia backend back into the earlier common
+  static archive and broke generic tools such as `cna_reference_dump`. The final design adds an
+  inline virtual `Effect::IsExactStockSpriteEffectEXT()` query: the base returns false and
+  `SpriteEffect` compares its own dynamic type. Backends no longer reference concrete RTTI, while
+  derived types still return false.
+- The complete Debug build succeeds with `--parallel 8` and the Skia suite passes 99/99 under Xvfb
+  in 12.84 seconds (nine Raster, 88 Display, two Audit). Both effect tests pass in Release and ASan
+  (`detect_leaks=0`). The three existing `SpriteEffectTest`/`ShaderEffectTest` cases require a
+  display and pass 3/3 under Xvfb; their first display-free invocation failed only at expected SDL
+  video initialization. All display caches were restored to `:0`. SKIA-91 follows.
 
 ## Completed in this session: SKIA-21
 

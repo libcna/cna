@@ -199,8 +199,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers 98 SKIA-only CTests: nine window-independent raster
-   tests, 87 display-required public tests, and two display-free source audits. The raster tests
+6. `cmake/Tests/SkiaTests.cmake` registers 99 SKIA-only CTests: nine window-independent raster
+   tests, 88 display-required public tests, and two display-free source audits. The raster tests
    pass without a display. The capability test verifies only storage-only `Texture3D` is true and
    every GPU/3D capability remains false; 3D calls still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -464,5 +464,11 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     samplers. `Skia_Effect_Boundary` proves source/clone retention, false capability reporting,
     non-drawing no-backend setters, deterministic custom-Begin refusal, and immediate reuse of the
     same SpriteBatch on its stock path. The focused test passes in Debug, Release, and ASan.
+65. `Skia_SpriteEffect_Alias` proves the exact stock effect and its clone are full-target pixel-
+    equivalent to a null-effect SpriteBatch across transform, rotation, both flips, tint and point
+    sampling. Only exact runtime identity is accepted; a derived SpriteEffect rejects before Begin
+    and the batch remains immediately reusable. This does not advertise `CustomEffects`. The
+    complete Debug suite passes 99/99 in 12.84 seconds; both effect tests pass in Release and ASan,
+    and the three existing SpriteEffect/ShaderEffect unit tests pass under Xvfb.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

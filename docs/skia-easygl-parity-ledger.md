@@ -80,7 +80,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `ISpriteBatchBackend::Begin/0` | Starts EasyGL sprite submission. | Starts checked immediate canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::End/0` | Flushes/ends sprite submission. | Ends checked canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::SetTransformMatrix/1` | Applies sprite transform in GL shader. | Applies equivalent SkCanvas transform. | `implemented` | SKIA-35 |
-| `ISpriteBatchBackend::SetCustomEffect/1` | Selects a custom EasyGL effect. | Arbitrary SpriteBatch effects reject. | `unsupported` | SKIA-93–94 |
+| `ISpriteBatchBackend::SetCustomEffect/1` | Selects a custom EasyGL effect. | Null/exact stock SpriteEffect use built-in paint; derived/custom effects reject. | `bounded` | SKIA-89–94; `Skia_SpriteEffect_Alias` |
 | `ISpriteBatchBackend::SetSamplerFilter/1` | Selects GL point/linear/mip filtering. | Point/linear work; mip filters reject. | `bounded` | SKIA-43, SKIA-70 |
 | `ISpriteBatchBackend::SetSamplerAddressMode/2` | Selects GL clamp/wrap/mirror axes. | Both axes implemented in Skia shader. | `implemented` | SKIA-44–46 |
 | `ISpriteBatchBackend::Draw/3` | Draws a texture at point position. | Direct canvas image draw. | `implemented` | SKIA-32 |

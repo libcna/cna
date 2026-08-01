@@ -3,6 +3,8 @@
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
+#include <typeinfo>
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     class EffectParameter;
@@ -31,6 +33,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Returns the fully qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+
+        /** @brief Identifies only this exact stock runtime type to 2D backends. */
+        NOXNA [[nodiscard]] bool IsExactStockSpriteEffectEXT() const noexcept override
+        {
+            return typeid(*this) == typeid(SpriteEffect);
+        }
 
     protected:
         /**

@@ -9,7 +9,7 @@ support for one must not be inferred from the other.
 | CNA route | Observable contract | EasyGL route | Current Skia result |
 |---|---|---|---|
 | `SpriteBatch::Begin(..., effect=nullptr)` | Stock textured sprite, vertex tint, transform, sampler, blend, viewport/scissor and ordering semantics. | Built-in GL sprite program. | Direct `SkCanvas` image/paint path; already pixel-proven. It does not construct or compile a `SpriteEffect`. |
-| Explicit `SpriteEffect` | Stock effect type whose `OnApply()` attempts to update `MatrixTransform`; it has no source or backend program. | Falls back to the built-in sprite program because `GetEffectBackendPtr()` is null. | Currently rejected as a non-null custom effect. SKIA-90 may safely recognize this exact stock type and retain the already-proven built-in path. |
+| Explicit `SpriteEffect` | Stock effect type whose `OnApply()` attempts to update `MatrixTransform`; it has no source or backend program. | Falls back to the built-in sprite program because `GetEffectBackendPtr()` is null. | Exact runtime type aliases the already-proven built-in path; clones work identically. Derived types reject so overridden behavior cannot be lost. |
 | `ShaderEffect(device, vert, frag)` | NOXNA pair of backend-specific opaque byte strings retained for cloning and source access. | Treats both as GLSL ES shader source. | `CreateEffectBackend` returns null, so `IsEffectValid()` is false. SKIA-91 must not guess that arbitrary strings are SkSL. |
 | `Effect(device, effectCode)` | Compiled XNA `.fx` bytecode. | Shared constructor throws; no backend receives it. | Same shared, deterministic `NotImplementedException`; outside the SkSL bridge. |
 | `ContentManager` custom `Effect` | `.cnj`/`.shader.json` names separate `vertex` and `fragment` text files. | Files are GLSL source. | Produces the same invalid `ShaderEffect`; the descriptor has no language/backend tag and cannot opt into SkSL safely. |
@@ -52,8 +52,9 @@ errors deterministically.
 
 ## Safe implementation sequence
 
-1. SKIA-90 can recognize only the exact stock `SpriteEffect` and route it to the unchanged built-in
-   SpriteBatch implementation. Default goldens must remain identical.
+1. SKIA-90 recognizes only the exact stock `SpriteEffect` and routes it to the unchanged built-in
+   SpriteBatch implementation. Full-target default/explicit/clone pixels are identical; derived
+   effects reject.
 2. SKIA-91 should prototype an explicitly identified SkSL fragment-only ABI. Reusing untagged
    `ShaderEffect` strings is prohibited; an extension class/descriptor field or another unambiguous
    opt-in is required.

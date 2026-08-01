@@ -185,8 +185,17 @@ namespace CNA::Internal::Backends::Skia
     void SkiaSpriteBatchBackend::SetCustomEffect(Effect* effect)
     {
         (void)LockBinding("SpriteBatch::SetCustomEffect");
-        if (effect)
-            throw std::runtime_error("Skia raster SpriteBatch custom Effects are not implemented yet.");
+        if (!effect || effect->IsExactStockSpriteEffectEXT())
+        {
+            // CNA's exact stock SpriteEffect owns no backend program; EasyGL also falls back to
+            // its built-in sprite shader when this type is supplied explicitly. The Skia paint
+            // path already implements that output. Exact type identity is intentional: silently
+            // accepting a derived effect could discard an overridden OnApply() contract.
+            return;
+        }
+        throw std::runtime_error(
+            "Skia raster SpriteBatch supports only the exact stock SpriteEffect; custom Effects "
+            "require an explicit SkSL contract.");
     }
 
     void SkiaSpriteBatchBackend::SetSamplerFilter(int textureFilter)

@@ -166,6 +166,18 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA [[nodiscard]] virtual CNA::Internal::Backends::IEffectBackend* GetEffectBackendPtr() const;
 
         /**
+         * @brief Returns true only for an exact stock SpriteEffect instance.
+         *
+         * Backend code can recognize the stock sprite alias without linking directly against the
+         * concrete SpriteEffect RTTI. The base answer is false; SpriteEffect's override also
+         * rejects derived runtime types so custom OnApply behavior is never silently discarded.
+         */
+        NOXNA [[nodiscard]] virtual bool IsExactStockSpriteEffectEXT() const noexcept
+        {
+            return false;
+        }
+
+        /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Called by GraphicsDevice before every draw call so the backend can select the
