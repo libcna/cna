@@ -153,11 +153,10 @@ namespace
                                  true, Support::Exact, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
     // REMED-GFX-138: GFX-154's ordered frame completion resolves the cube attachment before the
-    // readback blit, so MSAA readback is exact. REMED-GFX-195 separately records the pre-existing
-    // PreserveContents boundary exposed by that new visibility: Bgfx reloads the other face's
-    // multisample storage after an A -> B -> A sequence. Do not broaden GFX-138 into that fix.
+    // readback blit, so MSAA readback is exact. REMED-GFX-195 then made every cube face's
+    // multisample colour storage independent, closing the A -> B -> A PreserveContents boundary.
     constexpr Contract kContract{"BGFX", true, Support::Exact, true, true,
-                                 true, Support::Exact, false, true, false};
+                                 true, Support::Exact, true, true, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // `msaaCubeTargets` false: a cube target multisamples only when the BACKBUFFER was created
     // multisampled (Task 903's deliberate piggyback on the backend's own sampleCount_), which this

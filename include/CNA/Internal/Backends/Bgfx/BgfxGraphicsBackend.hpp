@@ -444,6 +444,20 @@ namespace CNA::Internal::Backends::Bgfx
             BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE,
             BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE,
         }};
+        /**
+         * @brief One independently preserving multisample colour producer per cube face.
+         *
+         * REMED-GFX-195: bgfx's OpenGL texture object owns exactly one hidden multisample
+         * renderbuffer, even when its resolved image is a six-faced cube. Attaching different
+         * layers of one multisampled cube therefore re-attached that same renderbuffer. These six
+         * 2D targets keep the native multisample storage independent; ordered blits publish their
+         * resolved mip chains into `cubeTex` for sampling and GetData. Invalid on single-sample
+         * targets, whose established direct-to-cube path is unchanged.
+         */
+        std::array<bgfx::TextureHandle, 6> msaaFaceColorTex_ = {{
+            BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE,
+            BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE,
+        }};
         bgfx::TextureHandle cubeTex = BGFX_INVALID_HANDLE;
         // Task 877: single 2D depth/stencil texture shared across all 6 faces (mirrors
         // VulkanRenderTargetCubeBackend's shared depthImage_) -- BGFX_INVALID_HANDLE when the
@@ -462,6 +476,9 @@ namespace CNA::Internal::Backends::Bgfx
         int levelCount_ = 1;
         /// REMED-GFX-181: the `_flags` word passed to bgfx::createTextureCube. Diagnostics only.
         uint64_t creationFlags_ = 0;
+
+        /// REMED-GFX-195: face whose per-face producer is currently bound, or -1.
+        int boundFace_ = -1;
 
         BgfxRenderTargetCubeBackend(BgfxGraphicsBackend* owner, int size, int depthFormat,
                                      bool mipMap = false, int requestedMultiSampleCount = 0);
@@ -626,6 +643,10 @@ namespace CNA::Internal::Backends::Bgfx
         // of always stomping it back to the full window size. See EnsureViewState()'s comment.
         uint16_t currentRtWidth_ = 0;
         uint16_t currentRtHeight_ = 0;
+        // REMED-GFX-195: the active cube face is retained across Present/GetData frame advances so
+        // a later draw while it remains publicly bound can publish another resolve. Target switches
+        // replace/clear it after queueing the outgoing face's ordered copy.
+        BgfxRenderTargetCubeBackend* currentCubeTarget_ = nullptr;
         uint32_t clearRgba = 0x000000ff;
         // REMED-GFX-018: exact clear mask owned by the currently-active ordered view. bgfx clear
         // state is per-view and last-wins until frame(), so this cannot be inferred from the view
@@ -993,6 +1014,7 @@ namespace CNA::Internal::Backends::Bgfx
          */
         void CompleteFrameForResolveEXT()
         {
+            FinalizeCurrentCubeFaceEXT();
             bgfx::frame();
             spriteVpValid_ = false;
             EndFrameSegments();
@@ -1119,6 +1141,16 @@ namespace CNA::Internal::Backends::Bgfx
         // Point the segment tracker at a newly-bound target (base view id + framebuffer), resetting so
         // the next draw starts from that target's base view. Called by SetRenderTarget* and the cube path.
         void ResetSegmentTarget(bgfx::ViewId baseId, bgfx::FrameBufferHandle fbo);
+
+        /**
+         * @brief Publishes the active multisampled cube face into its public cube image.
+         *
+         * REMED-GFX-195: when the current bind cycle recorded work, this queues one ordered view
+         * that first switches away from the producer framebuffer (triggering bgfx's native MSAA
+         * resolve/mip generation) and then blits every resolved level into the selected cube face.
+         * No-op for ordinary cubes, idle binds, and an absent cube target.
+         */
+        void FinalizeCurrentCubeFaceEXT();
         // Recycle the per-frame segment id pool at a frame boundary (after bgfx::frame()).
         void EndFrameSegments();
         // REMED-GFX-155: record that a public command has just committed to @p id. Idempotent: a

@@ -1387,6 +1387,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTargetCube_MsaaFace COMMAND cna_test_bgfx_rendertargetcube_msaa_face
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-195: the GFX-141 oracle is also the focused closure fixture for Bgfx's remaining
+    # per-face multisample-colour alias. It directly requires A -> B -> partial-A preservation,
+    # all six faces, depth-backed configurations, repeated cycles, disposal and public GetData.
+    cna_register_backend_test(NAME Bgfx_GFX195_RenderTargetCube_Preserve
+        COMMAND cna_test_bgfx_rendertargetcube_msaa_face
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-142: RenderTargetUsage's DEPTH and STENCIL half. FNA3D's own header documents
     # `preserveTargetContents` as storing the "color/depth/stencil" contents, and FNA's DiscardContents
     # bind clears all three (Target|DepthBuffer|Stencil, MaxDepth, 0) -- so the enum governs depth and

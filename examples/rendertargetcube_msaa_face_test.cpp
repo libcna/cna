@@ -98,9 +98,6 @@ namespace
     enum class Support
     {
         Exact,
-        /// Readback succeeds and writes real data, while a separately recorded content boundary
-        /// is required to remain observable. Used only for Bgfx's REMED-GFX-195 preservation gap.
-        ReadableBoundary,
         Unsupported,
     };
 
@@ -124,9 +121,8 @@ namespace
          * GetData on a MULTISAMPLED cube target, and therefore this file's whole claim about it:
          * where this is `Exact`, every multisampled preservation check below REQUIRES exact
          * content -- that is REMED-GFX-141's post-fix contract, stated as one falsifiable value per
-         * backend rather than per check. `ReadableBoundary` requires a successful, non-sentinel
-         * result while the canonical checks pin REMED-GFX-195's distinct Bgfx face-aliasing
-         * signature. `Unsupported` remains the honest no-content outcome on other routes.
+         * backend rather than per check. `Unsupported` remains the honest no-content outcome on
+         * other routes.
          */
         Support msaaReadback;
         /**
@@ -153,11 +149,10 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #elif defined(CNA_BACKEND_BGFX)
-    // REMED-GFX-138 makes the resolved readback real. REMED-GFX-195 separately records that Bgfx
-    // does not preserve per-face multisample contents, so this fixture must observe that boundary
-    // rather than pretend readback is unsupported or claim GFX-141 fixed Bgfx.
+    // REMED-GFX-138 makes the resolved readback real. REMED-GFX-195 closes the separately exposed
+    // Bgfx face-aliasing defect, so the same direct oracle now requires exact per-face contents.
     constexpr Contract kContract{"BGFX", true, Support::Exact, true,
-                                 Support::ReadableBoundary, false, false};
+                                 Support::Exact, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // Pre-fix: ONE single-layer TRANSIENT_ATTACHMENT image AND no LOAD variant of the MSAA render
     // pass. Post-fix: a six-layer multisampled image with one per-layer view per face, plus a
@@ -413,11 +408,6 @@ class RenderTargetCubeMsaaFaceTest : public Game
         if (required == Support::Exact)
             check(!p.threwNotSupported && !p.threwSomethingElse && p.exact == p.window,
                   label + " -- exact content required" + facts);
-        else if (required == Support::ReadableBoundary)
-            check(!p.threwNotSupported && !p.threwSomethingElse &&
-                      p.sentinelSurvivors == 0,
-                  label + " -- real resolved data required; REMED-GFX-195 owns the declared "
-                          "preservation boundary" + facts);
         else
             check(p.threwNotSupported && !p.threwSomethingElse && p.sentinelSurvivors == p.window,
                   label + " -- deterministic NotSupportedException with the destination untouched "
@@ -531,11 +521,6 @@ class RenderTargetCubeMsaaFaceTest : public Game
             check(stale == 0,
                   "F1b canonical: not one texel of face 0 came back holding face 1's pattern "
                   "[contaminated texels = " + std::to_string(stale) + "]");
-        else if (MsaaRequired() == Support::ReadableBoundary)
-            check(stale > 0,
-                  "F1b canonical: REMED-GFX-195's cross-face contamination remains observable "
-                  "instead of being hidden as unsupported [contaminated texels = " +
-                  std::to_string(stale) + "]");
         else
             skip("F1b canonical: skipped -- no multisampled cube readback on this backend");
 
@@ -583,10 +568,6 @@ class RenderTargetCubeMsaaFaceTest : public Game
             check(exactFaces == 6,
                   "F4 six faces: all six faces are simultaneously live and independent [exact "
                   "faces = " + std::to_string(exactFaces) + "/6" + detail + "]");
-        else if (MsaaRequired() == Support::ReadableBoundary)
-            check(exactFaces < 6,
-                  "F4 six faces: REMED-GFX-195 remains visible across the full face set [exact "
-                  "faces = " + std::to_string(exactFaces) + "/6]");
         else
             skip("F4 six faces: skipped -- no multisampled cube readback on this backend");
     }
@@ -750,10 +731,22 @@ class RenderTargetCubeMsaaFaceTest : public Game
               "preserves its own faces and inherits nothing");
     }
 
-    /// F14/F15 -- a depth attachment must not corrupt the preserved COLOUR. REMED-GFX-142 owns
+    /// F14/F15/F16 -- every public depth format must leave the preserved COLOUR independent.
+    /// REMED-GFX-142 owns
     /// depth preservation itself; nothing is claimed about depth here.
     void RunDepthBackedControls(GraphicsDevice& dev)
     {
+        {
+            auto cube = MakeCube(dev, RenderTargetUsage::PreserveContents, kMsaaRequest,
+                                 DepthFormat::Depth16);
+            RenderFace(dev, *cube, 2, 0);
+            RenderFace(dev, *cube, 4, 0);
+            MarkFace(dev, *cube, 2);
+            Probe p = ProbeWholeFace(*cube, 2, SentinelA5(), ExpectedFaceMarked(2, 0));
+            Judge(p, MsaaRequired(),
+                  "F14 depth: a Depth16-backed multisampled cube preserves its COLOUR across a "
+                  "face switch and a partial update");
+        }
         {
             auto cube = MakeCube(dev, RenderTargetUsage::PreserveContents, kMsaaRequest,
                                  DepthFormat::Depth24);
@@ -762,7 +755,7 @@ class RenderTargetCubeMsaaFaceTest : public Game
             MarkFace(dev, *cube, 0);
             Probe p = ProbeWholeFace(*cube, 0, SentinelCD(), ExpectedFaceMarked(0, 0));
             Judge(p, MsaaRequired(),
-                  "F14 depth: a Depth24-backed multisampled cube preserves its COLOUR across a "
+                  "F15 depth: a Depth24-backed multisampled cube preserves its COLOUR across a "
                   "face switch and a partial update");
         }
         {
@@ -773,12 +766,12 @@ class RenderTargetCubeMsaaFaceTest : public Game
             MarkFace(dev, *cube, 3);
             Probe p = ProbeWholeFace(*cube, 3, SentinelA5(), ExpectedFaceMarked(3, 0));
             Judge(p, MsaaRequired(),
-                  "F15 depth: a Depth24Stencil8-backed multisampled cube preserves its COLOUR the "
+                  "F16 depth: a Depth24Stencil8-backed multisampled cube preserves its COLOUR the "
                   "same way");
         }
     }
 
-    /// F16 -- repeated readback of the same face is stable, and reading one face neither consumes
+    /// F17 -- repeated readback of the same face is stable, and reading one face neither consumes
     /// nor disturbs another. The resolve must be idempotent, not a one-shot drain.
     void RunReadbackStability(GraphicsDevice& dev)
     {
@@ -789,10 +782,10 @@ class RenderTargetCubeMsaaFaceTest : public Game
         Probe first  = ProbeWholeFace(*cube, 1, SentinelCD(), ExpectedFaceMarked(1, 0));
         Probe other  = ProbeWholeFace(*cube, 4, SentinelA5(), ExpectedFace(4, 0));
         Probe second = ProbeWholeFace(*cube, 1, SentinelA5(), ExpectedFaceMarked(1, 0));
-        Judge(first, MsaaRequired(), "F16a stability: the first read of face 1 is exact");
-        Judge(other, MsaaRequired(), "F16b stability: reading face 4 in between is exact");
+        Judge(first, MsaaRequired(), "F17a stability: the first read of face 1 is exact");
+        Judge(other, MsaaRequired(), "F17b stability: reading face 4 in between is exact");
         Judge(second, MsaaRequired(),
-              "F16c stability: re-reading face 1 after face 4 returns the identical bytes");
+              "F17c stability: re-reading face 1 after face 4 returns the identical bytes");
     }
 
 protected:
@@ -879,7 +872,7 @@ protected:
 
         if (!msaa)
         {
-            skip("F1-F16: skipped -- a multisampled RenderTargetCube does not engage MSAA here "
+            skip("F1-F17: skipped -- a multisampled RenderTargetCube does not engage MSAA here "
                  "(declared capability boundary, see M1)");
         }
         else
