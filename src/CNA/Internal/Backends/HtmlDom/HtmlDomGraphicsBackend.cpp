@@ -38,6 +38,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     Module['cnaDomBoundCtx'] = null;
     Module['cnaDomClearColor'] = null;
     Module['cnaDomScissorRect'] = null;
+    Module['cnaDomViewport'] = null;
     Module['cnaDomMaxRegions'] = 16;
     // plan_html_dom.md HTMLDOM-94: sprites are grouped into per-scissor-rect DOM containers
     // ("regions") instead of one flat pool directly under #cna-dom-root, so a scissor rect active
@@ -55,17 +56,71 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // once when a region is created and again for every region whenever the surface's logical size
     // changes (CNA_HtmlDom_UpdateSurface, below), so a resize re-derives every active clip instead
     // of leaving stale insets applied to boxes that have since changed size (HTMLDOM-93).
+    //
+    // HTMLDOM-98: rect.x/rect.y are in ABSOLUTE render-target pixel space -- the same space
+    // GraphicsDevice.ScissorRectangle and GraphicsDevice.Viewport both share on a real GPU backend
+    // (confirmed by reading EasyGLGraphicsBackend: its scissor forwards straight to glScissor, a
+    // window-space call, independent of whatever glViewport region is active). #cna-dom-root's own
+    // local coordinate space, though, starts at (0,0) wherever the CURRENT viewport's own top-left
+    // was positioned (cnaDomApplyViewport, below) -- so the rect is translated into that local space
+    // by subtracting the viewport's own offset before the insets are derived. With no custom
+    // viewport active the offset is (0,0) and this reduces to exactly the prior behaviour.
     Module['cnaDomApplyRegionClip'] = function (region) {
         if (!region.rect) { region.container.style.clipPath = ""; return; }
         const logicalW = Module['cnaDomLogicalW'] || 0;
         const logicalH = Module['cnaDomLogicalH'] || 0;
-        const rect = region.rect;
-        const top = Math.max(0, rect.y);
-        const left = Math.max(0, rect.x);
-        const right = Math.max(0, logicalW - (rect.x + rect.w));
-        const bottom = Math.max(0, logicalH - (rect.y + rect.h));
+        const offX = Module['cnaDomViewportOffsetX'] || 0;
+        const offY = Module['cnaDomViewportOffsetY'] || 0;
+        const localX = region.rect.x - offX, localY = region.rect.y - offY;
+        const top = Math.max(0, localY);
+        const left = Math.max(0, localX);
+        const right = Math.max(0, logicalW - (localX + region.rect.w));
+        const bottom = Math.max(0, logicalH - (localY + region.rect.h));
         region.container.style.clipPath =
             'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
+    };
+
+    // plan_html_dom.md HTMLDOM-98: positions and sizes #cna-dom-root to the CURRENT viewport
+    // sub-rect (falling back to the full backbuffer when no custom viewport is active, or it exactly
+    // covers the backbuffer -- the overwhelmingly common case, costing nothing extra). Called from
+    // both CNA_HtmlDom_UpdateSurface (a real resize) and CNA_HtmlDom_SetViewport (a game explicitly
+    // changing the viewport, independent of any resize) -- either can change what root's own box
+    // should look like, so both funnel through the one function that knows how to derive it.
+    //
+    // The viewport offset is expressed in LOGICAL pixels (the same space Viewport.X/Y live in), but
+    // root's own left/top are physical/CSS pixels (unscaled, matching how canvas.offsetLeft/Top
+    // already work here) -- transform:scale()'s origin is the box's own top-left corner, so the
+    // box's LAYOUT position is never itself scaled, only its extent. The offset is therefore
+    // pre-multiplied by the logical->physical scale factor here, once, rather than relying on the
+    // transform to do it a second time.
+    Module['cnaDomApplyViewport'] = function () {
+        const root = Module['cnaDomRoot'];
+        if (!root) return;
+        const backbufferW = Module['cnaDomBackbufferW'] || 0;
+        const backbufferH = Module['cnaDomBackbufferH'] || 0;
+        const scale = Module['cnaDomScale'] || 1;
+        const vp = Module['cnaDomViewport'];
+        const useFull = !vp || (vp.x === 0 && vp.y === 0 && vp.w === backbufferW && vp.h === backbufferH);
+        const w = useFull ? backbufferW : vp.w;
+        const h = useFull ? backbufferH : vp.h;
+        const offX = useFull ? 0 : vp.x;
+        const offY = useFull ? 0 : vp.y;
+        root.style.width = w + 'px';
+        root.style.height = h + 'px';
+        Module['cnaDomLogicalW'] = w;
+        Module['cnaDomLogicalH'] = h;
+        Module['cnaDomViewportOffsetX'] = offX;
+        Module['cnaDomViewportOffsetY'] = offY;
+        const canvas = Module['canvas'] ||
+                       (typeof document === 'undefined' ? null : document.querySelector('canvas'));
+        const baseLeft = canvas ? canvas.offsetLeft : 0;
+        const baseTop = canvas ? canvas.offsetTop : 0;
+        root.style.left = (baseLeft + offX * scale) + 'px';
+        root.style.top = (baseTop + offY * scale) + 'px';
+        // The active surface size just changed (backbuffer OR viewport) -- re-derive every region's
+        // clip-path against it, the same reasoning HTMLDOM-93's own resize handling already used.
+        const regions = Module['cnaDomRegions'];
+        if (regions) for (const key in regions) Module['cnaDomApplyRegionClip'](regions[key]);
     };
 
     // Moves `key` to the most-recently-used end of the eviction order. The default 'full' region
@@ -79,18 +134,21 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
 
     // Returns the region that should own sprites drawn under the given scissor rect (an {x,y,w,h}
     // object in logical pixels, or null/undefined for "no scissor rect has been set"). A rect that
-    // currently covers the whole surface -- checked fresh against Module['cnaDomLogicalW'/'H']
-    // every call, so this stays correct across resizes with no special-casing -- collapses to the
-    // SAME default 'full' region as no rect at all, so resetting ScissorRectangle to the full
-    // backbuffer (what GraphicsDevice.UpdateViewportFromWindow does on every resize, and what most
-    // games do explicitly) always lands back on the zero-cost path rather than accumulating a
-    // pointless no-op-clip container.
+    // currently covers the whole ACTIVE viewport (HTMLDOM-98: the backbuffer when no custom viewport
+    // is set, its own sub-rect otherwise) -- checked fresh against Module['cnaDomLogicalW'/'H'] and
+    // the current viewport offset every call, so this stays correct across resizes/viewport changes
+    // with no special-casing -- collapses to the SAME default 'full' region as no rect at all, so
+    // resetting ScissorRectangle to the full backbuffer (what GraphicsDevice.UpdateViewportFromWindow
+    // does on every resize, and what most games do explicitly) always lands back on the zero-cost
+    // path rather than accumulating a pointless no-op-clip container.
     Module['cnaDomGetRegion'] = function (rect) {
         const regions = Module['cnaDomRegions'];
         const logicalW = Module['cnaDomLogicalW'] || 0;
         const logicalH = Module['cnaDomLogicalH'] || 0;
-        const isFull = !rect || (rect.x <= 0 && rect.y <= 0 &&
-                                  rect.x + rect.w >= logicalW && rect.y + rect.h >= logicalH);
+        const offX = Module['cnaDomViewportOffsetX'] || 0;
+        const offY = Module['cnaDomViewportOffsetY'] || 0;
+        const isFull = !rect || (rect.x <= offX && rect.y <= offY &&
+                                  rect.x + rect.w >= offX + logicalW && rect.y + rect.h >= offY + logicalH);
         if (isFull) return regions['full'];
 
         const key = rect.x + ',' + rect.y + ',' + rect.w + ',' + rect.h;
@@ -131,6 +189,7 @@ EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
     Module['cnaDomRegions'] = null;
     Module['cnaDomRegionOrder'] = null;
     Module['cnaDomScissorRect'] = null;
+    Module['cnaDomViewport'] = null;
 });
 
 // plan_html_dom.md HTMLDOM-11 / design decision 9: XNA's Clear overwrites everything drawn so far,
@@ -210,33 +269,28 @@ EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
     }
 });
 
-// Sizes the surface and applies the logical→physical scale. Called only when the geometry actually
-// changed (the backend caches the last values), because these are the backend's only
-// layout-affecting style writes -- doing them every frame would defeat the whole design.
+// Records the backbuffer's own logical/physical geometry and applies the logical→physical scale.
+// Called only when the geometry actually changed (the backend caches the last values), because
+// these are the backend's only layout-affecting style writes -- doing them every frame would defeat
+// the whole design.
 //
-// Stashes the logical size on Module so CNA_HtmlDom_SetScissorRect (below) can compute clip-path
-// insets without re-parsing root.style.width/height's own "NNNpx" string back into a number.
+// HTMLDOM-98: no longer sizes/positions #cna-dom-root directly -- that is cnaDomApplyViewport's job
+// now, since root's own box depends on BOTH the backbuffer's geometry (recorded here) and whichever
+// viewport sub-rect (if any) is currently active. This function just stashes what changed and
+// re-delegates.
 EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH, int physW, int physH), {
     const root = Module['cnaDomRoot'];
     if (!root) return;
-    root.style.width = logicalW + 'px';
-    root.style.height = logicalH + 'px';
-    Module['cnaDomLogicalW'] = logicalW;
-    Module['cnaDomLogicalH'] = logicalH;
-    const scale = logicalH > 0 ? physH / logicalH : 1;
-    root.style.transform = scale !== 1 ? 'scale(' + scale + ')' : "";
-    const canvas = Module['canvas'] ||
-                   (typeof document === 'undefined' ? null : document.querySelector('canvas'));
-    if (canvas) {
-        root.style.left = canvas.offsetLeft + 'px';
-        root.style.top = canvas.offsetTop + 'px';
-    }
-    // HTMLDOM-93/94: the logical size just changed (that is the only reason this function runs at
-    // all -- Present() only calls it when geometry differs from last frame). Re-derive EVERY
-    // region's clip-path against the new size rather than leaving any of them applied at insets
-    // computed for the old one.
-    const regions = Module['cnaDomRegions'];
-    for (const key in regions) Module['cnaDomApplyRegionClip'](regions[key]);
+    Module['cnaDomBackbufferW'] = logicalW;
+    Module['cnaDomBackbufferH'] = logicalH;
+    Module['cnaDomScale'] = logicalH > 0 ? physH / logicalH : 1;
+    root.style.transform = Module['cnaDomScale'] !== 1 ? 'scale(' + Module['cnaDomScale'] + ')' : "";
+    // HTMLDOM-93/94/98: the backbuffer's own geometry just changed (that is the only reason this
+    // function runs at all -- Present() only calls it when geometry differs from last frame).
+    // cnaDomApplyViewport re-sizes/positions root against the new geometry (falling back to it
+    // directly when no custom viewport is active) and re-derives every region's clip-path, the same
+    // reasoning HTMLDOM-93's own resize handling already used.
+    Module['cnaDomApplyViewport']();
 });
 
 // plan_html_dom.md HTMLDOM-80 / design decision 13: real scissor clipping via `clip-path: inset()`.
@@ -266,6 +320,18 @@ EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH, int physW, i
 EM_JS(void, CNA_HtmlDom_SetScissorRect, (int x, int y, int w, int h), {
     if (!Module['cnaDomRoot']) return;
     Module['cnaDomScissorRect'] = { x: x, y: y, w: w, h: h };
+});
+
+// plan_html_dom.md HTMLDOM-98: records the new viewport and re-derives #cna-dom-root's own
+// position/size (and every region's clip-path) against it via cnaDomApplyViewport -- see that
+// function's own comment (CNA_HtmlDom_EnsureRoot) for the full geometry reasoning. Harmless (if
+// momentarily inert) while a render target is bound: #cna-dom-root is not drawn into at all during
+// that time regardless of its own CSS, and GraphicsDevice always calls this again with the
+// backbuffer's own size on unbind, restoring the correct layout automatically.
+EM_JS(void, CNA_HtmlDom_SetViewport, (int x, int y, int w, int h), {
+    if (!Module['cnaDomRoot']) return;
+    Module['cnaDomViewport'] = { x: x, y: y, w: w, h: h };
+    Module['cnaDomApplyViewport']();
 });
 
 // Reads back the currently bound render target. Returns 0 when nothing is bound -- the DOM
@@ -476,6 +542,25 @@ namespace CNA::Internal::Backends::HtmlDom
     {
 #if defined(__EMSCRIPTEN__)
         CNA_HtmlDom_SetScissorRect(x, y, w, h);
+#else
+        (void)x; (void)y; (void)w; (void)h;
+#endif
+    }
+
+    void HtmlDomGraphicsBackend::SetViewport(int x, int y, int w, int h, float /*minDepth*/, float /*maxDepth*/)
+    {
+        // Idempotent, matching Present()'s own "only touch the DOM when geometry actually changed"
+        // rule -- a game that binds/unbinds render targets every frame would otherwise re-derive
+        // every region's clip-path twice a frame for no visible effect.
+        if (x == lastViewportX_ && y == lastViewportY_ &&
+            w == lastViewportWidth_ && h == lastViewportHeight_)
+            return;
+        lastViewportX_ = x;
+        lastViewportY_ = y;
+        lastViewportWidth_ = w;
+        lastViewportHeight_ = h;
+#if defined(__EMSCRIPTEN__)
+        CNA_HtmlDom_SetViewport(x, y, w, h);
 #else
         (void)x; (void)y; (void)w; (void)h;
 #endif

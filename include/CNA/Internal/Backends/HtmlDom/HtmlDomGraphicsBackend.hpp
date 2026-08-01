@@ -151,6 +151,47 @@ namespace CNA::Internal::Backends::HtmlDom
         void SetScissorRect(int x, int y, int w, int h) override;
 
         /**
+         * @brief Restricts rendering to a sub-rectangle of the current render target.
+         *
+         * plan_html_dom.md HTMLDOM-98. Confirmed non-gap against every other 2D-only sibling
+         * (`SDL_RENDERER`/`CANVAS`/`DX3` all leave this as the inherited no-op too), but a real,
+         * closeable one against `EASYGL`, which supports a genuine GL sub-region `Viewport`
+         * (split-screen/sub-panel rendering) -- nothing about DOM/CSS compositing rules that out.
+         *
+         * Implemented by positioning and sizing `#cna-dom-root` itself to the viewport sub-rect
+         * (offset by `x`/`y`, sized to `w`/`h`) instead of always the full logical backbuffer --
+         * XNA/FNA already build `SpriteBatch`'s own projection from `Viewport.Width/Height`, so
+         * sprite-local coordinates need no change here; only the surface's own placement does. A
+         * viewport that covers the whole backbuffer (the overwhelmingly common case, and what
+         * `GraphicsDevice::UpdateViewportFromWindow()` resets to on every detected resize) collapses
+         * to exactly today's full-surface behaviour, so the common case costs nothing extra.
+         *
+         * `SetScissorRect`'s own region clip-path insets (HTMLDOM-94) are computed relative to
+         * whichever viewport is currently active, matching real GL/D3D semantics where a scissor
+         * rect is defined in the same absolute render-target pixel space as the viewport itself, not
+         * relative to the viewport's own local origin -- confirmed by reading `EasyGLGraphicsBackend`
+         * (its scissor forwards straight to `glScissor`, a window-space call, independent of
+         * whatever `glViewport` is currently set), not assumed.
+         *
+         * A bound `RenderTarget2D` already resets `Viewport` to the target's own size at the shared
+         * `GraphicsDevice` layer (confirmed while researching HTMLDOM-93) and back to the backbuffer's
+         * size on unbind, so this call is harmless (if momentarily inert) while a render target is
+         * bound -- `#cna-dom-root` is not drawn into at all during that time regardless of its own
+         * CSS sizing, and unbinding restores the correct backbuffer viewport automatically.
+         *
+         * `minDepth`/`maxDepth` are ignored -- this backend has no depth buffer, matching how it
+         * ignores `RasterizerState`'s own depth-bias fields.
+         *
+         * @param x Left edge of the viewport, in logical pixels.
+         * @param y Top edge of the viewport, in logical pixels.
+         * @param w Width of the viewport, in logical pixels.
+         * @param h Height of the viewport, in logical pixels.
+         * @param minDepth Ignored -- no depth buffer exists on this backend.
+         * @param maxDepth Ignored -- no depth buffer exists on this backend.
+         */
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
+
+        /**
          * @brief Creates a texture from decoded image data.
          *
          * @param data Decoded RGBA8 image.
@@ -313,5 +354,13 @@ namespace CNA::Internal::Backends::HtmlDom
         int lastLogicalHeight_ = -1;
         int lastPhysicalWidth_ = -1;
         int lastPhysicalHeight_ = -1;
+        /// Last viewport pushed to JS (HTMLDOM-98); SetViewport is a no-op when called again with
+        /// the same values, matching the same "only touch the DOM when something actually changed"
+        /// rule the logical/physical size tracking above already follows. -1 sentinel width/height
+        /// guarantees the first real call is never skipped.
+        int lastViewportX_ = 0;
+        int lastViewportY_ = 0;
+        int lastViewportWidth_ = -1;
+        int lastViewportHeight_ = -1;
     };
 }

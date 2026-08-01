@@ -560,4 +560,18 @@ TEST_F(HtmlDom3DSurfaceTest, InertStateSettersAcceptArbitraryValuesWithNoObserva
     EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::NonPremultiplied);
     SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
 }
+
+// plan_html_dom.md HTMLDOM-98: under `node` (no __EMSCRIPTEN__), SetViewport's own EM_JS forwarding
+// call compiles out entirely, so there is no JS-side state for a native GTest to observe -- this
+// verifies the C++-side contract that IS testable here: arbitrary values never throw, a repeated
+// call with the SAME values (the idempotency guard's early-return branch) never throws either, and
+// neither does a subsequent call with genuinely DIFFERENT values (the branch that would forward to
+// JS under Emscripten).
+TEST_F(HtmlDom3DSurfaceTest, SetViewportAcceptsArbitraryValuesAndIsIdempotent)
+{
+    EXPECT_NO_THROW(backend.SetViewport(0, 0, 800, 480, 0.0f, 1.0f));
+    EXPECT_NO_THROW(backend.SetViewport(0, 0, 800, 480, 0.0f, 1.0f));  // same values again
+    EXPECT_NO_THROW(backend.SetViewport(4, 4, 16, 16, 0.25f, 0.75f));  // genuinely different values
+    EXPECT_NO_THROW(backend.SetViewport(4, 4, 16, 16, 0.25f, 0.75f));  // same as the line above
+}
 #endif // CNA_BACKEND_HTML_DOM

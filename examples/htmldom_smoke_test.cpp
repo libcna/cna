@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
 #include "CNA/Internal/Backends/HtmlDom/HtmlDomGraphicsBackend.hpp"
 
@@ -43,7 +44,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 35;
+    constexpr int kExpectedChecks = 38;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -193,6 +194,30 @@ namespace
         return root.children[i].style.backgroundRepeat === UTF8ToString(expected) ? 1 : 0;
     });
 
+    /// plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `width`, in CSS px, or -1.
+    EM_JS(int, JsRootWidth, (), {
+        const root = document.getElementById('cna-dom-root');
+        return root ? parseInt(root.style.width, 10) : -1;
+    });
+
+    /// plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `height`, in CSS px, or -1.
+    EM_JS(int, JsRootHeight, (), {
+        const root = document.getElementById('cna-dom-root');
+        return root ? parseInt(root.style.height, 10) : -1;
+    });
+
+    /// plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `left`, in CSS px (fractional), or -1.
+    EM_JS(double, JsRootLeft, (), {
+        const root = document.getElementById('cna-dom-root');
+        return root ? parseFloat(root.style.left) : -1;
+    });
+
+    /// plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `top`, in CSS px (fractional), or -1.
+    EM_JS(double, JsRootTop, (), {
+        const root = document.getElementById('cna-dom-root');
+        return root ? parseFloat(root.style.top) : -1;
+    });
+
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
         window.__cnaSmokeResult = result;
         window.__cnaSmokePassed = passed;
@@ -211,6 +236,10 @@ namespace
     int JsCanvasHidden() { return 0; }
     int JsSpriteBackgroundRepeat(int) { return 0; }
     int JsSpriteBackgroundRepeatIs(int, const char*) { return 0; }
+    int JsRootWidth() { return -1; }
+    int JsRootHeight() { return -1; }
+    double JsRootLeft() { return -1; }
+    double JsRootTop() { return -1; }
     int JsRegionExists(int, int, int, int) { return 0; }
     int JsRegionClipPathInsetIs(int, int, int, int, int, int, int, int) { return 0; }
     int JsRegionVisibleSpriteCount(int, int, int, int) { return -1; }
@@ -577,6 +606,15 @@ protected:
             SDL_SetWindowSize(backend.GetWindowInternal(), 128, 128);
             backend.Present();
 
+            // HTMLDOM-98: real XNA/FNA Viewport does NOT auto-track a resized backbuffer on its own
+            // -- GraphicsDevice::UpdateViewportFromWindow() is the thing that resets it, and this
+            // test deliberately calls the backend directly instead of dev.Present() (see above), so
+            // it must reproduce that reset by hand, the same way a complete real resize flow would
+            // do both together. Without this call the backend correctly (not a bug) keeps treating
+            // the OLD 64x64 viewport as still active, which is real XNA/FNA-consistent behaviour for
+            // an unreset Viewport, not something this test is checking.
+            backend.SetViewport(0, 0, 128, 128, 0.0f, 1.0f);
+
             // Without CNA_HtmlDom_UpdateSurface re-deriving every region's clip on resize, this
             // region would still carry the OLD (5,49,49,5) insets computed against the pre-resize
             // 64x64 surface, even though the surface itself is now 128x128 -- silently clipping the
@@ -632,6 +670,42 @@ protected:
                   "per-axis values (U=repeat, V=no-repeat), read back via the CSSOM's own "
                   "'repeat-x' shorthand for that exact pair, not a single value derived from one "
                   "axis's mode");
+        }
+
+        // plan_html_dom.md HTMLDOM-98: GraphicsDevice.Viewport (SetViewport), confirmed non-gap
+        // against every other 2D-only sibling but a real one against EASYGL. Verified structurally,
+        // the same way scissor/regions are (JsRootWidth/Height/Left/Top rather than pixels): the
+        // DOM backbuffer itself cannot be read back at all (design decision 11), so there is no
+        // pixel-exact route available here the way htmldom_pixel_verification_test.cpp uses for the
+        // render-target-bound path.
+        //
+        // Surface is 128x128 at this point (frame 8's resize), 1:1 mode (frame 8's own
+        // SetVirtualResolution(0,0)), so the logical->physical scale is exactly 1 -- the expected
+        // "+4" offset below is a real, not-incidentally-1 multiplier check, not a coincidence of
+        // skipping the scale math.
+        if (frame_ == 10)
+        {
+            const double baseLeft = JsRootLeft(), baseTop = JsRootTop();
+
+            dev.setViewportProperty(Viewport(4, 4, 16, 16));
+            check(JsRootWidth() == 16 && JsRootHeight() == 16,
+                  "HTMLDOM-98a: a sub-rectangle Viewport resizes #cna-dom-root itself to the "
+                  "viewport's own width/height, not the full backbuffer");
+            check(JsRootLeft() == baseLeft + 4.0 && JsRootTop() == baseTop + 4.0,
+                  "HTMLDOM-98b: #cna-dom-root is repositioned by the viewport's X/Y offset "
+                  "(scaled by the logical->physical factor, which is exactly 1 here)");
+
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
+            spriteBatch_->End();
+            check(JsSpriteTransformContains(0, "translate(0px,0px)") == 1,
+                  "HTMLDOM-98c: sprite-local coordinates are unaffected by the viewport offset -- "
+                  "positioning comes entirely from #cna-dom-root's own repositioning, matching real "
+                  "XNA/FNA where SpriteBatch's own projection is built from Viewport.Width/Height "
+                  "and needs no per-sprite offset");
+
+            // Restore the full-backbuffer viewport for hygiene before the final publish below.
+            dev.setViewportProperty(Viewport(0, 0, 128, 128));
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);
