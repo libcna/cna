@@ -75,6 +75,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spritebatch_remaining_overloads examples/skia_spritebatch_remaining_overloads_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_RemainingOverloads cna_test_skia_spritebatch_remaining_overloads)
 
+    cna_skia_test(cna_test_skia_spritebatch_stress examples/skia_spritebatch_stress_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_Stress cna_test_skia_spritebatch_stress)
+
     # These three presets establish the alpha convention used by the raster backend:
     # opaque source replacement, premultiplied-alpha source-over, and straight-alpha source-over.
     cna_skia_test(cna_test_skia_blend_opaque examples/sdlrenderer_blendstate_opaque_test.cpp)

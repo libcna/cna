@@ -73,8 +73,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers forty-five SKIA-only CTests: two window-independent raster
-   surface pixel tests and forty-three display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers forty-six SKIA-only CTests: two window-independent raster
+   surface pixel tests and forty-four display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -135,5 +135,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
     public texture `Draw` variants and all six `DrawString` variants. It verifies the final optional
     source-rectangle/flip overload and the string and `StringBuilder` glyph routes at basic,
     scalar, and non-uniform scales.
+24. `Skia_SpriteBatch_Stress` reuses twelve textures and two preserve-content targets for 64 actual
+    frames. Each frame switches A → B → backbuffer and makes 26 independent SpriteBatch sessions;
+    the two target anchor pixels and a complete-backbuffer FNV-1a hash must remain stable.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
