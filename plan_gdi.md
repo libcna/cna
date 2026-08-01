@@ -8,11 +8,11 @@
 > was not reliable. Its tests predominantly inspected the CPU framebuffer and did not prove what GDI
 > put in the window.
 >
-> **Implementation update (2026-08-01 working tree):** GDI-050 through GDI-060 and GDI-067 are
-> implemented. The focused MinGW Release build, all thirteen GDI correctness executables, and all
-> three configuration variants pass under Wine. The suite includes a real memory-DC/DIBSection
-> pixel oracle, complete
-> public-path coverage for advertised features, exact dirty-damage coverage,
+> **Implementation update (2026-08-01 working tree):** GDI-050 through GDI-060, GDI-067, and
+> GDI-072 are implemented. The focused MinGW Release build, all thirteen GDI correctness
+> executables, and all three configuration variants pass under Wine. The suite includes a real
+> memory-DC/DIBSection pixel oracle, complete public-path coverage for advertised features, exact
+> dirty-damage coverage,
 > event/failure-retention integration, DPI-coordinate oracles, live odd-resize/fullscreen/minimize
 > lifecycle coverage, and distinct default/dirty/halftone cases. The first manual
 > native-MSVC workflow result and the visible Windows lifecycle/DPI gate remain open, so the backend
@@ -56,6 +56,7 @@ GraphicsDevice / SpriteBatch public API
                  v
 GdiGraphicsBackend
   - HWND acquisition and presentation policy
+  - typed construction-time environment configuration
   - window/logical coordinate transforms
   - SDL window-event invalidation generation
   - raster-derived damage and 2D-only capability boundary
@@ -110,7 +111,9 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 - Full presentation currently fills the entire client black before every blit, including Stretch
   and Overscan where the following blit already covers the client.
 - Process environment options select `halftone` scaling, dirty presentation, and optional
-  `DwmFlush`; they are re-read during presentation rather than captured as backend configuration.
+  `DwmFlush`. Each backend captures all three once into typed configuration during construction;
+  `Present()` never re-reads mutable process state. Invalid values retain safe defaults and are
+  aggregated into one construction-time diagnostic.
 
 ### Existing tests
 
@@ -328,6 +331,8 @@ answers.
   overhead.
 - Inheriting the entire Software 3D backend and globbing its whole source makes the 2D boundary
   fragile: a newly added virtual path can become reachable unless GDI remembers to override it.
+- Presentation policy was decoded from mutable process environment state inside every `Present()`,
+  so behavior could change during a device's lifetime without an API state change.
 
 **GDI-060 resolution for the lifecycle/coordinate portion:** SDL drawable pixels are now the one
 presentation-size authority, SDL event/warp coordinates are converted through the explicit
@@ -342,7 +347,14 @@ plane only when applied (21 bytes/pixel total). A side-effect-free planner check
 and a 512 MiB per-resource pixel-storage budget before allocation. Allocation failures are translated
 to `System::OutOfMemoryException`, rejected resizes retain the previous framebuffer, and a genuine
 32-bit MinGW harness covers overflow separately from budget rejection. The remaining cost and
-architecture bullets map to GDI-062 through GDI-066 and GDI-070 through GDI-073.
+architecture bullets map to GDI-062 through GDI-066, GDI-070, GDI-071, and GDI-073.
+
+**GDI-072 resolution for the configuration portion:** each backend now owns one const
+`GdiConfiguration` snapshot. A pure parser accepts only `nearest`/`halftone` and `0`/`1`, preserves
+the corresponding safe default for every invalid value, sanitizes values, and combines all errors
+into one diagnostic emitted during construction. The focused configuration executable mutates all
+three environment variables after construction and also injects a contrary typed override; filter,
+dirty policy, and stored DWM choice remain deterministic.
 
 ---
 
@@ -416,7 +428,7 @@ means only the narrowed statement in this table, not overall release readiness.
 |---|---|---:|---|
 | GDI-070 | Replace inheritance from the whole Software 3D backend with an explicit CPU-2D component, or prove a guarded equivalent. | ⬜ | Preferred design is composition around reusable framebuffer/texture/SpriteBatch/RT services. If inheritance remains, add a complete contract test over every virtual 3D/resource entry and a review guard so new methods default to unsupported on GDI. No shared Software behavior may silently broaden GDI. |
 | GDI-071 | Make the shared-core build boundary explicit. | ⬜ | Replace the GDI Software source glob with an explicit 2D-core target/source list, remove unrelated 3D/cube compilation where practical, and simplify the static archive cycle without reintroducing MinGW link failures. Build GDI and SOFTWARE independently with GCC/MinGW and MSVC. |
-| GDI-072 | Capture typed GDI configuration once. | ⬜ | Parse filter/dirty/DWM settings at backend construction into a validated config object with test overrides. Unknown values produce one clear diagnostic. `Present()` does not repeatedly consult mutable process environment state. |
+| GDI-072 | Capture typed GDI configuration once. | ✅ | `GdiConfiguration` captures filter/dirty/DWM once at construction; its pure strict parser aggregates sanitized invalid values into one warning and preserves safe defaults. Typed constructor-override and post-construction environment-mutation tests prove `Present()` uses only the immutable snapshot. |
 | GDI-073 | Finish the advertised 4x MSAA semantics. | ⬜ | Decide and test wireframe coverage, `MultiSampleMask`, and stencil interaction. Either implement sample-correct behavior for every advertised 2D path or explicitly narrow the capability/documentation so users cannot infer per-sample depth/stencil or anti-aliased wire edges. Keep RT MSAA false unless real sample storage is added. |
 
 ---
@@ -431,7 +443,8 @@ means only the narrowed statement in this table, not overall release readiness.
 6. **Establish native repeatability:** ✅ GDI-057 through GDI-060; GDI-061 remains a visible
    native-Windows gate.
 7. **Measure a visible client:** GDI-062. Only then choose GDI-063 through GDI-066.
-8. **Reduce memory and architectural risk:** ✅ GDI-067; GDI-070 through GDI-073 remain.
+8. **Reduce memory and architectural risk:** ✅ GDI-067 and GDI-072; GDI-070, GDI-071, and
+   GDI-073 remain.
 
 The GDI-014 and GDI-026 prerequisites are now satisfied by GDI-050 through GDI-054 and their
 focused automated tests. Dirty presentation remains opt-in until the visible native lifecycle gate

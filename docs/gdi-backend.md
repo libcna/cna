@@ -117,9 +117,9 @@ build-gdi\cna_demo_2d.exe
 CNA_GDI_PRESENT_FILTER=halftone wine build-gdi/cna_demo_2d.exe
 ```
 
-Only the exact value `halftone` selects GDI's `HALFTONE` stretch mode; absent or any other value
-keeps the nearest-neighbour default. The option has no effect when the backbuffer is already
-presented 1:1.
+The accepted values are exactly `nearest` and `halftone`; absence selects `nearest`. An invalid
+value retains that safe default and contributes to one configuration warning. The option has no
+effect on pixels when the backbuffer is already presented 1:1.
 
 For retained-mode UI-like workloads, `CNA_GDI_DIRTY_PRESENTATION=1` opts into a conservative
 dirty-rectangle blit. At 1:1 it sends the union of the actual clipped SpriteBatch raster bounds,
@@ -132,6 +132,9 @@ already-validated update region. It defaults off; use it only after measuring yo
 ```bash
 CNA_GDI_DIRTY_PRESENTATION=1 wine build-gdi/cna_demo_2d.exe
 ```
+
+The accepted switch values are exactly `0` and `1`; absence selects `0`. Invalid values retain the
+off default and are included in the same configuration warning.
 
 Presentation is committed transactionally: scoped DC ownership and correctness-relevant GDI calls
 are checked, and CPU damage plus native-client invalidation remain pending after a failed or
@@ -170,7 +173,14 @@ CNA_GDI_DWM_FLUSH=1 wine build-gdi/cna_demo_2d.exe
 
 This is **not VSync** and can increase latency or block the CPU. It defaults off. The GDI backend
 loads DWM dynamically; if composition is disabled or `dwmapi.dll`/`DwmFlush` is unavailable, it
-falls back to normal non-blocking GDI presentation.
+falls back to normal non-blocking GDI presentation. `CNA_GDI_DWM_FLUSH` accepts exactly `0` or `1`;
+an invalid value retains the off default.
+
+All three `CNA_GDI_*` settings are captured once when the GDI backend is constructed. Changing the
+process environment later cannot change an existing `GraphicsDevice`; recreate the device/backend
+to apply new values. Invalid settings are sanitized and combined into one single-line diagnostic
+at construction rather than being reported every frame. Focused internal tests can inject the same
+typed configuration directly without mutating process-global state.
 
 ## Build
 
@@ -303,7 +313,9 @@ mode round-trips and bars, drawable/client agreement, fullscreen entry/exit wher
 session permits it, and retained pixels across minimize/restore. These automated checks do not
 replace GDI-061's visible multi-DPI Windows inspection. The configuration executable then proves
 that the registered environment cases select NativeFull, None and Stretch with the requested
-filter through backend telemetry.
+filter through backend telemetry. It also covers strict/default/invalid parsing, one sanitized
+aggregate diagnostic, immutable behavior after all process settings change, and a deterministic
+typed test override.
 
 `cna_test_gdi_framebuffer_allocation` verifies exact 5-byte and 21-byte GDI layouts, absence of
 unused depth storage on both the backbuffer and render targets, optional 4x sample allocation and

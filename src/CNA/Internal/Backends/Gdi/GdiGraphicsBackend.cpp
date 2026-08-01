@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Gdi/GdiConfiguration.hpp"
 #include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -13,13 +14,11 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <utility>
 
 namespace CNA::Internal::Backends::Gdi
@@ -115,18 +114,9 @@ namespace CNA::Internal::Backends::Gdi
         /// semantics. COLORONCOLOR is deliberately the default because it preserves crisp
         /// pixel-art edges. HALFTONE is opt-in for applications that prefer a smoother window
         /// resize: `CNA_GDI_PRESENT_FILTER=halftone`.
-        [[nodiscard]] int GetPresentationStretchMode()
+        [[nodiscard]] int GetPresentationStretchMode(GdiPresentationFilter filter)
         {
-            const char* value = std::getenv("CNA_GDI_PRESENT_FILTER");
-            if (value != nullptr && std::string_view(value) == "halftone")
-                return HALFTONE;
-            return COLORONCOLOR;
-        }
-
-        [[nodiscard]] bool IsDirtyPresentationRequested()
-        {
-            const char* value = std::getenv("CNA_GDI_DIRTY_PRESENTATION");
-            return value != nullptr && std::string_view(value) == "1";
+            return filter == GdiPresentationFilter::Halftone ? HALFTONE : COLORONCOLOR;
         }
 
         /// DwmFlush is a compositor pacing hint, not a swap interval. Keep it strictly opt-in:
@@ -134,10 +124,9 @@ namespace CNA::Internal::Backends::Gdi
         /// compatibility applications but is an unwanted latency policy by default. Loading it at
         /// runtime preserves the GDI backend's ability to run on systems where DWM is absent or
         /// disabled, with an intentionally silent non-blocking fallback.
-        void ApplyOptionalDwmPacing()
+        void ApplyOptionalDwmPacing(bool requested)
         {
-            const char* requested = std::getenv("CNA_GDI_DWM_FLUSH");
-            if (requested == nullptr || std::string_view(requested) != "1")
+            if (!requested)
                 return;
 
             using DwmFlushFunction = HRESULT(WINAPI*)();
@@ -226,6 +215,14 @@ namespace CNA::Internal::Backends::Gdi
 
     GdiGraphicsBackend::GdiGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                                            CnaPresentationMode presentationMode)
+        : GdiGraphicsBackend(window, virtualWidth, virtualHeight, presentationMode,
+                             CaptureGdiConfigurationFromEnvironment())
+    {
+    }
+
+    GdiGraphicsBackend::GdiGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                                           CnaPresentationMode presentationMode,
+                                           GdiConfiguration configuration)
         : Software::SoftwareGraphicsBackend(
               ValidateGdiFramebufferDimension("virtualWidth", virtualWidth),
               ValidateGdiFramebufferDimension("virtualHeight", virtualHeight),
@@ -234,6 +231,7 @@ namespace CNA::Internal::Backends::Gdi
         , requestedVirtualWidth_(virtualWidth)
         , requestedVirtualHeight_(virtualHeight)
         , presentationMode_(ValidatePresentationMode(static_cast<int>(presentationMode)))
+        , configuration_(configuration)
     {
         if (window_ == nullptr)
             throw std::runtime_error("GDI graphics backend requires an SDL window.");
@@ -417,9 +415,9 @@ namespace CNA::Internal::Backends::Gdi
             backbufferDirtyWidth_, backbufferDirtyHeight_};
         const GdiPresentationPlan plan = BuildGdiPresentationPlan(
             presentationMode_, clientWidth, clientHeight, backbuffer.width, backbuffer.height,
-            IsDirtyPresentationRequested(), clientNeedsRepair,
+            configuration_.dirtyPresentation, clientNeedsRepair,
             backbufferFullyDirty_, backbufferDirtyValid_, dirtyRectangle);
-        const int stretchMode = GetPresentationStretchMode();
+        const int stretchMode = GetPresentationStretchMode(configuration_.presentationFilter);
         lastPresentationTelemetry_ = {
             true, plan, stretchMode, {true, 0, 0, "none"}};
         if (plan.path == GdiBlitPath::None)
@@ -446,7 +444,7 @@ namespace CNA::Internal::Backends::Gdi
                 false, 0, static_cast<std::uint32_t>(error), "GdiFlush"};
             ThrowWin32Failure("GdiFlush", error);
         }
-        ApplyOptionalDwmPacing();
+        ApplyOptionalDwmPacing(configuration_.dwmFlush);
 
         // Commit only after every correctness-relevant native operation succeeds. Any exception
         // above leaves both CPU damage and the watched invalidation generation pending.

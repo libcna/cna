@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CNA/Internal/Backends/Gdi/GdiConfiguration.hpp"
 #include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
 #include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 
@@ -38,6 +39,10 @@ namespace CNA::Internal::Backends::Gdi
     public:
         GdiGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                            CnaPresentationMode presentationMode);
+        /** @brief Internal deterministic-construction overload used by focused backend tests. */
+        GdiGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                           CnaPresentationMode presentationMode,
+                           GdiConfiguration configuration);
         ~GdiGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -80,6 +85,8 @@ namespace CNA::Internal::Backends::Gdi
             GdiPresentationTelemetry& telemetry) const;
         /** @brief Reports actual vector storage for GDI-067 allocation-contract tests. */
         [[nodiscard]] GdiFramebufferStorageTelemetry DebugGetBackbufferStorage() const;
+        /** @brief Returns the construction-time policy snapshot for focused backend tests. */
+        [[nodiscard]] GdiConfiguration DebugGetConfiguration() const { return configuration_; }
 
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(
@@ -159,6 +166,7 @@ namespace CNA::Internal::Backends::Gdi
         std::atomic<std::uint64_t> nativeInvalidationGeneration_{1};
         std::uint64_t presentedNativeInvalidationGeneration_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        const GdiConfiguration configuration_{};
         bool renderingToBackbuffer_ = true;
         bool backbufferFullyDirty_ = true;
         bool backbufferDirtyValid_ = true;

@@ -8,11 +8,12 @@
 
 ## Current focus
 
-- GDI-050 through GDI-060 and GDI-067 are complete. The approved catch-up baseline is commit
+- GDI-050 through GDI-060 and GDI-067 are complete; GDI-072 is implemented and validated in the
+  current working tree. The approved catch-up baseline is commit
   `48826e0b`; later completed tasks are `4c512245`, `01873ca9`, `c8fd70d6`, `47fe3f1e`, and
-  `3096ab0c`, followed by the current validated GDI-067 change set.
+  `3096ab0c`, followed by GDI-067 in `de79659d`.
 - GDI-061 and GDI-062 require native visible Windows work. The next safe autonomous candidate is
-  GDI-072's typed, construction-time presentation configuration.
+  the GDI-070 contract/boundary audit after GDI-072 is committed.
 
 ## Completed in the current working tree
 
@@ -54,6 +55,12 @@
   changes preserve prior pixels; allocator failures become `System::OutOfMemoryException`.
   Focused live/pure tests and a genuine 32-bit i686 MinGW harness cover storage and overflow. The
   shared SOFTWARE target now resolves its real 4x plane before readback/mip generation.
+- GDI-072: `GdiConfiguration` captures filter, dirty-presentation, and DWM policy exactly once at
+  backend construction. The pure strict parser accepts `nearest`/`halftone` and `0`/`1`, keeps safe
+  per-setting defaults for invalid values, sanitizes their text, and emits one aggregate warning.
+  `Present()` uses only the backend's const snapshot. The existing configuration executable now
+  mutates all three environment variables after construction and exercises a contrary typed
+  constructor override.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -93,6 +100,8 @@ baseline. All later tasks use one task per commit.
   backend transforms bridge SDL window coordinates explicitly rather than assuming density 1.
 - 2026-08-01: CPU framebuffer pixel storage is limited to 16,384 on either axis and 512 MiB per
   resource after including all selected attachment/sample planes and generated mips.
+- 2026-08-01: GDI presentation environment settings are immutable per backend instance. Invalid
+  values warn once at construction and fall back individually to nearest/disabled policy.
 - Preserve XNA/FNA public API compatibility; backend-specific unsupported behavior must fail
   clearly without broadening the GDI 2D contract.
 
@@ -134,6 +143,11 @@ baseline. All later tasks use one task per commit.
   and halftone configuration runs pass; the new allocation executable passes all 22 assertions.
 - GDI-067 32-bit gate: the standalone i686-w64-mingw32 executable is genuinely 32-bit and passes
   exact 4K layout, arithmetic-overflow, byte-budget, and mip-budget assertions under Wine.
+- GDI-072 focused MinGW build: CNA and `cna_test_gdi_presentation_configuration` compile and link at
+  `-j2`. Default, dirty, and halftone variants pass under Wine/Xvfb, including strict parsing,
+  sanitized aggregate diagnostics, immutable post-construction behavior, and typed overrides. The
+  complete fifteen-case Wine/Xvfb GDI correctness matrix also passes. A smoke run with all three
+  settings invalid emits exactly one aggregate diagnostic and continues on safe defaults.
 - Shared SOFTWARE gate: CNA plus eight focused executables build at `-j2`; smoke, rasterizer,
   depth-contract, depth-state, and depth/stencil-usage CTests pass. Under Xvfb the complete
   31-leg MSAA depth contract and 34-leg first-readback supervisor pass after resolving the real
@@ -166,6 +180,7 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Begin GDI-072 by replacing repeated environment reads with one validated, typed configuration
-captured at backend construction, including deterministic test overrides and diagnostics. Keep
-physical multi-DPI/visible observations in GDI-061 and native performance decisions in GDI-062.
+Commit the validated GDI-072 change, then begin GDI-070 by inventorying the complete graphics
+backend virtual contract and determining the smallest enforceable guard against inherited Software
+3D behavior. Keep physical multi-DPI/visible observations in GDI-061 and native performance
+decisions in GDI-062.
