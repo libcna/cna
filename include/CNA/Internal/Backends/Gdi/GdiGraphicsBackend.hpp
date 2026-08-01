@@ -29,6 +29,7 @@ namespace CNA::Internal::Backends::Gdi
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        [[nodiscard]] int GetMultiSampleCount() const override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc, int stencilPass,
                                     int stencilFail, int stencilDepthFail, int stencilMask,

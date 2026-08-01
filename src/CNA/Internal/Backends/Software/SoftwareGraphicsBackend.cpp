@@ -1749,13 +1749,18 @@ namespace CNA::Internal::Backends::Software
         inline void WriteShadedFragment(SoftwareFramebuffer& fb, const ShadedContext& ctx,
                                         const RasterClipRect& clip, int x, int y, float depth, float invW,
                                         float pr, float pg, float pb, float pa, float pu, float pv,
-                                        float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz)
+                                        float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz,
+                                        unsigned int coverageMask = 0xFFFFFFFFu)
         {
             if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
                 return;
-            // REMED-GFX-077: single-sample MultiSampleMask — bit 0 clear discards the fragment
-            // entirely (no colour, no depth). Default 0xFFFFFFFF keeps bit 0 set.
-            if ((ctx.multiSampleMask & 1u) == 0u)
+            // GDI-025: 4x CPU MSAA evaluates a 2x2 sub-pixel coverage pattern in the triangle
+            // walker below. MultiSampleMask gates those actual samples; single-sample backends
+            // retain the established bit-0 behavior exactly.
+            const unsigned int availableSamples = fb.HasMultiSampleColor() ? 0xFu : 0x1u;
+            const unsigned int activeSamples =
+                ctx.multiSampleMask & coverageMask & availableSamples;
+            if (activeSamples == 0u)
                 return;
             // REMED-GFX-182: the cube trace reports the same destination pixel, so this stamp is
             // shared by both traces rather than tied to the 2D one.
@@ -1891,54 +1896,59 @@ namespace CNA::Internal::Backends::Software
             // REMED-GFX-030: DepthRead reaches this point but leaves stored depth untouched.
             WritePassingDepth(fb, ctx.depthState, pixelIndex, depth);
 
-            const std::size_t colorIndex = pixelIndex * 4;
-            // REMED-GFX-077: final colour channels (opaque store or blended result). Each channel is
+            // REMED-GFX-077: final colour channels (opaque store or exact XNA blend result). Each channel is
             // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing
             // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
             // path writes every channel exactly as before.
-            float outR, outG, outB, outA;
-            if (ctx.blendState.IsOpaqueIdentity())
+            const std::array<float, 4> source{r, g, b, a};
+            const auto writeBlendedColor = [&](std::uint8_t* destinationBytes) {
+                std::array<float, 4> output = source;
+                if (!ctx.blendState.IsOpaqueIdentity())
+                {
+                    const std::array<float, 4> destination{
+                        destinationBytes[0] / 255.0f, destinationBytes[1] / 255.0f,
+                        destinationBytes[2] / 255.0f, destinationBytes[3] / 255.0f,
+                    };
+                    output[0] = BlendComponent(0, ctx.blendState.colorSource,
+                                               ctx.blendState.colorDestination,
+                                               ctx.blendState.colorFunction,
+                                               source, destination, ctx.blendFactor);
+                    output[1] = BlendComponent(1, ctx.blendState.colorSource,
+                                               ctx.blendState.colorDestination,
+                                               ctx.blendState.colorFunction,
+                                               source, destination, ctx.blendFactor);
+                    output[2] = BlendComponent(2, ctx.blendState.colorSource,
+                                               ctx.blendState.colorDestination,
+                                               ctx.blendState.colorFunction,
+                                               source, destination, ctx.blendFactor);
+                    output[3] = BlendComponent(3, ctx.blendState.alphaSource,
+                                               ctx.blendState.alphaDestination,
+                                               ctx.blendState.alphaFunction,
+                                               source, destination, ctx.blendFactor);
+                }
+                for (float& channel : output)
+                    channel = std::clamp(channel, 0.0f, 1.0f);
+                if (ColorWriteHasRed(ctx.colorWriteMask))
+                    destinationBytes[0] = static_cast<std::uint8_t>(output[0] * 255.0f);
+                if (ColorWriteHasGreen(ctx.colorWriteMask))
+                    destinationBytes[1] = static_cast<std::uint8_t>(output[1] * 255.0f);
+                if (ColorWriteHasBlue(ctx.colorWriteMask))
+                    destinationBytes[2] = static_cast<std::uint8_t>(output[2] * 255.0f);
+                if (ColorWriteHasAlpha(ctx.colorWriteMask))
+                    destinationBytes[3] = static_cast<std::uint8_t>(output[3] * 255.0f);
+            };
+            if (!fb.HasMultiSampleColor())
             {
-                outR = std::clamp(r, 0.0f, 1.0f);
-                outG = std::clamp(g, 0.0f, 1.0f);
-                outB = std::clamp(b, 0.0f, 1.0f);
-                outA = std::clamp(a, 0.0f, 1.0f);
+                writeBlendedColor(fb.color.data() + pixelIndex * 4u);
+                return;
             }
-            else
+            for (int sample = 0; sample < 4; ++sample)
             {
-                // REMED-GFX-148: load the actual destination bytes before any conversion, multiply
-                // source and destination by their independently selected factors, apply separate
-                // colour/alpha functions, then clamp. The established byte conversion below stays
-                // last. For Additive this is rgb=src.rgb*src.a+dst.rgb and
-                // a=src.a*src.a+dst.a -- never the old straight-alpha "over" equation.
-                const std::array<float, 4> source{r, g, b, a};
-                const std::array<float, 4> destination{
-                    fb.color[colorIndex + 0] / 255.0f,
-                    fb.color[colorIndex + 1] / 255.0f,
-                    fb.color[colorIndex + 2] / 255.0f,
-                    fb.color[colorIndex + 3] / 255.0f,
-                };
-                outR = BlendComponent(0, ctx.blendState.colorSource,
-                                      ctx.blendState.colorDestination,
-                                      ctx.blendState.colorFunction,
-                                      source, destination, ctx.blendFactor);
-                outG = BlendComponent(1, ctx.blendState.colorSource,
-                                      ctx.blendState.colorDestination,
-                                      ctx.blendState.colorFunction,
-                                      source, destination, ctx.blendFactor);
-                outB = BlendComponent(2, ctx.blendState.colorSource,
-                                      ctx.blendState.colorDestination,
-                                      ctx.blendState.colorFunction,
-                                      source, destination, ctx.blendFactor);
-                outA = BlendComponent(3, ctx.blendState.alphaSource,
-                                      ctx.blendState.alphaDestination,
-                                      ctx.blendState.alphaFunction,
-                                      source, destination, ctx.blendFactor);
+                if ((activeSamples & (1u << sample)) == 0u)
+                    continue;
+                writeBlendedColor(fb.multiSampleColor.data() +
+                                  (pixelIndex * 4u + static_cast<std::size_t>(sample)) * 4u);
             }
-            if (ColorWriteHasRed  (ctx.colorWriteMask)) fb.color[colorIndex + 0] = static_cast<std::uint8_t>(outR * 255.0f);
-            if (ColorWriteHasGreen(ctx.colorWriteMask)) fb.color[colorIndex + 1] = static_cast<std::uint8_t>(outG * 255.0f);
-            if (ColorWriteHasBlue (ctx.colorWriteMask)) fb.color[colorIndex + 2] = static_cast<std::uint8_t>(outB * 255.0f);
-            if (ColorWriteHasAlpha(ctx.colorWriteMask)) fb.color[colorIndex + 3] = static_cast<std::uint8_t>(outA * 255.0f);
         }
 
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
@@ -2073,12 +2083,42 @@ namespace CNA::Internal::Backends::Software
                     const float w1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y, px, py);
                     const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
 
-                    const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
-                                        (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
-                    if (!inside)
-                        continue;
-                    if (IsExcludedFillEdge(fillExcludedEdges, w0, w1, w2, area))
-                        continue;
+                    unsigned int coverageMask = 1u;
+                    if (!fb.HasMultiSampleColor())
+                    {
+                        const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
+                                            (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
+                        if (!inside || IsExcludedFillEdge(fillExcludedEdges, w0, w1, w2, area))
+                            continue;
+                    }
+                    else
+                    {
+                        // Four actual coverage samples at (1/4,1/4), (3/4,1/4),
+                        // (1/4,3/4), (3/4,3/4). A partially covered edge therefore blends only
+                        // its covered samples and ResolveColor() averages them before GDI blits.
+                        coverageMask = 0u;
+                        for (int sample = 0; sample < 4; ++sample)
+                        {
+                            const float sampleX = static_cast<float>(x) +
+                                ((sample & 1) == 0 ? 0.25f : 0.75f);
+                            const float sampleY = static_cast<float>(y) +
+                                (sample < 2 ? 0.25f : 0.75f);
+                            const float sampleW0 = EdgeFunction(v1.x, v1.y, v2.x, v2.y,
+                                                                sampleX, sampleY);
+                            const float sampleW1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y,
+                                                                sampleX, sampleY);
+                            const float sampleW2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y,
+                                                                sampleX, sampleY);
+                            const bool sampleInside =
+                                (sampleW0 >= 0.0f && sampleW1 >= 0.0f && sampleW2 >= 0.0f) ||
+                                (sampleW0 <= 0.0f && sampleW1 <= 0.0f && sampleW2 <= 0.0f);
+                            if (sampleInside && !IsExcludedFillEdge(fillExcludedEdges, sampleW0,
+                                                                    sampleW1, sampleW2, area))
+                                coverageMask |= 1u << sample;
+                        }
+                        if (coverageMask == 0u)
+                            continue;
+                    }
 
                     const float lambda0 = w0 / area;
                     const float lambda1 = w1 / area;
@@ -2099,7 +2139,8 @@ namespace CNA::Internal::Backends::Software
                                         lambda0 * v0.wpz + lambda1 * v1.wpz + lambda2 * v2.wpz,
                                         lambda0 * v0.nx + lambda1 * v1.nx + lambda2 * v2.nx,
                                         lambda0 * v0.ny + lambda1 * v1.ny + lambda2 * v2.ny,
-                                        lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz);
+                                        lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz,
+                                        coverageMask);
                 }
             }
         }
@@ -2282,6 +2323,71 @@ namespace CNA::Internal::Backends::Software
         color.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u, 0u);
         depthBuffer.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 1.0f);
         stencilBuffer.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 0u);
+        if (HasMultiSampleColor())
+            multiSampleColor.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
+                                        static_cast<std::size_t>(multiSampleCount) * 4u,
+                                    0u);
+    }
+
+    void SoftwareFramebuffer::SetMultiSampleCount(int sampleCount)
+    {
+        // CPU MSAA deliberately has one high-quality, predictable option: a rotated-independent
+        // 2x2 grid. Treat every other request as unsupported rather than silently claiming an
+        // arbitrary count with a different number of actual samples.
+        const int appliedCount = sampleCount == 4 ? 4 : 0;
+        if (multiSampleCount == appliedCount)
+            return;
+
+        if (appliedCount == 0)
+        {
+            // Preserve the last rendered image when an application turns the optional feature
+            // back off at reset time; otherwise the unresolved colour plane would be discarded.
+            ResolveColor();
+            multiSampleCount = 0;
+            multiSampleColor.clear();
+            multiSampleColor.shrink_to_fit();
+            return;
+        }
+
+        multiSampleCount = appliedCount;
+
+        const std::size_t pixelCount = static_cast<std::size_t>(width) *
+                                       static_cast<std::size_t>(height);
+        multiSampleColor.resize(pixelCount * 4u * 4u);
+        for (std::size_t pixel = 0; pixel < pixelCount; ++pixel)
+        {
+            const std::size_t resolvedIndex = pixel * 4u;
+            for (int sample = 0; sample < 4; ++sample)
+            {
+                const std::size_t sampleIndex = (pixel * 4u + static_cast<std::size_t>(sample)) * 4u;
+                multiSampleColor[sampleIndex + 0] = color[resolvedIndex + 0];
+                multiSampleColor[sampleIndex + 1] = color[resolvedIndex + 1];
+                multiSampleColor[sampleIndex + 2] = color[resolvedIndex + 2];
+                multiSampleColor[sampleIndex + 3] = color[resolvedIndex + 3];
+            }
+        }
+    }
+
+    void SoftwareFramebuffer::ResolveColor()
+    {
+        if (!HasMultiSampleColor())
+            return;
+
+        const std::size_t pixelCount = static_cast<std::size_t>(width) *
+                                       static_cast<std::size_t>(height);
+        for (std::size_t pixel = 0; pixel < pixelCount; ++pixel)
+        {
+            const std::size_t resolvedIndex = pixel * 4u;
+            for (int channel = 0; channel < 4; ++channel)
+            {
+                unsigned int sum = 0;
+                for (int sample = 0; sample < 4; ++sample)
+                    sum += multiSampleColor[(pixel * 4u + static_cast<std::size_t>(sample)) * 4u +
+                                            static_cast<std::size_t>(channel)];
+                color[resolvedIndex + static_cast<std::size_t>(channel)] =
+                    static_cast<std::uint8_t>(sum / 4u);
+            }
+        }
     }
 
     void SoftwareFramebuffer::ClearColor(float r, float g, float b, float a)
@@ -2297,6 +2403,17 @@ namespace CNA::Internal::Backends::Software
             color[i * 4 + 1] = gb;
             color[i * 4 + 2] = bb;
             color[i * 4 + 3] = ab;
+            if (HasMultiSampleColor())
+            {
+                for (int sample = 0; sample < 4; ++sample)
+                {
+                    const std::size_t sampleIndex = (i * 4u + static_cast<std::size_t>(sample)) * 4u;
+                    multiSampleColor[sampleIndex + 0] = rb;
+                    multiSampleColor[sampleIndex + 1] = gb;
+                    multiSampleColor[sampleIndex + 2] = bb;
+                    multiSampleColor[sampleIndex + 3] = ab;
+                }
+            }
         }
     }
 
@@ -2993,7 +3110,9 @@ namespace CNA::Internal::Backends::Software
         if (w < 0 || h < 0)
             throw std::runtime_error("SoftwareGraphicsBackend::ReadBackbuffer: negative width/height");
 
-        const SoftwareFramebuffer& fb = CurrentFramebuffer();
+        SoftwareFramebuffer& writableFramebuffer = CurrentFramebuffer();
+        writableFramebuffer.ResolveColor();
+        const SoftwareFramebuffer& fb = writableFramebuffer;
         for (int row = 0; row < h; ++row)
         {
             const int srcY = y + row;

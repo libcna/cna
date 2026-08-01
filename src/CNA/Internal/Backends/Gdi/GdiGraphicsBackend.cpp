@@ -309,7 +309,9 @@ namespace CNA::Internal::Backends::Gdi
     {
         SynchronizeBackbufferSize();
 
-        const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
+        Software::SoftwareFramebuffer& writableBackbuffer = BackbufferFramebuffer();
+        writableBackbuffer.ResolveColor();
+        const Software::SoftwareFramebuffer& backbuffer = writableBackbuffer;
         if (backbuffer.width <= 0 || backbuffer.height <= 0 || backbuffer.color.empty())
             return;
 
@@ -457,10 +459,20 @@ namespace CNA::Internal::Backends::Gdi
         // GDI has no swap-chain or vertical-retrace present control.
     }
 
-    int GdiGraphicsBackend::ApplyMultiSampleCount(int /*requestedMultiSampleCount*/)
+    int GdiGraphicsBackend::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
-        // GDI's CPU framebuffer is single-sampled. Sprite edges are rasterized exactly as stored.
-        return 0;
+        // CPU MSAA is intentionally opt-in and deliberately supports one honest configuration:
+        // four 2x2-grid samples per pixel. A request for any other count stays single-sampled;
+        // reporting a requested 2x/8x count while allocating four samples would be misleading.
+        SynchronizeBackbufferSize();
+        BackbufferFramebuffer().SetMultiSampleCount(requestedMultiSampleCount == 4 ? 4 : 0);
+        MarkBackbufferFullyDirty();
+        return BackbufferFramebuffer().multiSampleCount;
+    }
+
+    int GdiGraphicsBackend::GetMultiSampleCount() const
+    {
+        return BackbufferFramebuffer().multiSampleCount;
     }
 
     void GdiGraphicsBackend::ApplyDepthStencilState(bool, bool, int, bool stencilEnable,
@@ -628,10 +640,12 @@ namespace CNA::Internal::Backends::Gdi
 
     bool GdiGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        // Wireframe SpriteBatch quads are genuinely rasterized by the shared CPU 2D path.  GDI
+        // Wireframe SpriteBatch quads are genuinely rasterized by the shared CPU 2D path. GDI
+        // also has an opt-in, real 4x CPU-MSAA backbuffer path.
         // also owns a stencil-only plane for 2D masks, but GraphicsCapability::DepthStencilBuffer
         // means a complete depth+stencil attachment and remains false because GDI has no depth.
-        return capability == CNA::GraphicsCapability::WireFrame;
+        return capability == CNA::GraphicsCapability::WireFrame ||
+               capability == CNA::GraphicsCapability::MultiSampleAntiAliasing;
     }
 
     void GdiGraphicsBackend::ClearColorAndDepth(float, float, float, float, float)
@@ -703,8 +717,10 @@ namespace CNA::Internal::Backends
 #ifdef CNA_BACKEND_GDI
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
-        return std::make_unique<Gdi::GdiGraphicsBackend>(
+        auto backend = std::make_unique<Gdi::GdiGraphicsBackend>(
             args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+        backend->ApplyMultiSampleCount(args.multiSampleCount);
+        return backend;
     }
 #endif
 } // namespace CNA::Internal::Backends

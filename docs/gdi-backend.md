@@ -21,9 +21,30 @@ create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
   clamps each result to `[0,1]`, then uses the ordinary `BlendState`. `SetGrayscale()` selects
   Rec.709 luma and preserves alpha. Its cost is one 4×4 transform per covered sprite pixel
   (16 multiplies, 16 additions and 4 clamps), with no intermediate render target or allocation.
-- Not supported: vertex/index buffers, 3D draw calls, depth buffers, MSAA, cube/3D textures,
+- Not supported: vertex/index buffers, 3D draw calls, depth buffers, cube/3D textures,
   occlusion queries and arbitrary custom effects. `SupportsCapability()` returns `false` and
   direct 3D API calls throw rather than silently rendering through the inherited CPU 3D code.
+- Optional 4x CPU MSAA is available for the GDI backbuffer only: request exactly
+  `PresentationParameters.MultiSampleCount = 4` (or call `ApplyMultiSampleCount(4)`). It uses
+  four 2x2-grid coverage samples, blends each covered sample independently, and resolves before
+  GDI `Present()` and CPU readback. Requests other than 4 return 0; `RenderTarget2D` remains
+  single-sampled and reports 0. `SupportsCapability(MultiSampleAntiAliasing)` is true because the
+  backbuffer path is real, but applications that require multisampled off-screen targets should
+  use another backend.
+- The feature is intentionally opt-in because it adds 16 bytes/pixel of sample colour storage in
+  addition to the ordinary resolved RGBA8 image. At 800×600 this is 7.32 MiB extra (11.44 MiB for
+  the complete colour/depth/stencil framebuffer), and at 1280×720 it is 14.06 MiB extra (21.97
+  MiB complete). `cna_bench_gdi_2d --frames 1` measures 0x and 4x side by side; the current Wine
+  reference run changed 800×600/12 rotating sprites from 7.64 ms to 18.04 ms per frame and
+  1280×720/20 from 13.08 ms to 31.04 ms. Native Windows hardware/compositor measurements remain
+  the decision point for a shipping application.
+- `TextureFilter::Anisotropic` intentionally maps to the same CPU Linear+mip-linear sampler as
+  `TextureFilter::Linear`; it does not advertise anisotropic capability. A true anisotropic CPU
+  filter would require several directionally distributed texture footprints per covered sample,
+  multiplying the dominant raster workload while offering little value for this compatibility-2D
+  backend. The GDI regression pixel-tests that mapping. The benchmark accepts `--linear` and
+  `--anisotropic` to compare the paths; they use the same sampler implementation (the small Wine
+  run-to-run timing variance is not a feature difference).
 - GDI provides a separate, real 8-bit CPU stencil plane for SpriteBatch 2D masks. `ClearStencil`
   and `ClearColorAndStencil` work; all `StencilOperation` values, compare/read masks, write masks
   and the clockwise stencil state work. `TwoSidedStencilMode` and
@@ -38,7 +59,7 @@ create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
   GDI does not accept shader source or uniforms and then ignore them. `ColorMatrixEffect` is the
   sole fixed non-shader exception; every other custom `SpriteBatch` effect is rejected.
 - `PresentInterval` is ignored because GDI has no swap-chain interval control. The backbuffer is
-  single-sampled.
+  single-sampled unless the explicit 4x CPU-MSAA option is active.
 
 ## Performance
 

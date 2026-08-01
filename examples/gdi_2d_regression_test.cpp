@@ -131,10 +131,11 @@ namespace
                      "GDI must explicitly reject custom ShaderEffect programs.");
         ok &= Expect(backend.SupportsCapability(CNA::GraphicsCapability::WireFrame),
                      "GDI must report its real CPU SpriteBatch wireframe support.");
+        ok &= Expect(backend.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
+                     "GDI must report its optional real CPU 4x MSAA path.");
         constexpr CNA::GraphicsCapability unsupportedCapabilities[] = {
             CNA::GraphicsCapability::ThreeD,
             CNA::GraphicsCapability::DepthStencilBuffer,
-            CNA::GraphicsCapability::MultiSampleAntiAliasing,
             CNA::GraphicsCapability::MultipleRenderTargets,
             CNA::GraphicsCapability::AnisotropicFiltering,
             CNA::GraphicsCapability::OcclusionQuery,
@@ -520,6 +521,41 @@ namespace
         Draw(backend, *atlas, Rectangle(7, 3, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
         backend.Present();
         ok &= ExpectPixel("dirty presentation updated sprite", ReadPixel(backend, 7, 3), red);
+
+        // GDI-028: Anisotropic deliberately uses the CPU sampler's documented Linear path. It
+        // must be stable and visibly identical to Linear rather than claiming a costly, partial
+        // anisotropic approximation. The atlas's non-uniform texels make an accidental Point path
+        // immediately detectable.
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        Draw(backend, *atlas, Rectangle(0, 0, 3, 3), Rectangle(0, 0, 2, 2), Color::White,
+             0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, /*Linear*/ 0);
+        const Pixel linearFilteredPixel = ReadPixel(backend, 1, 1);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        Draw(backend, *atlas, Rectangle(0, 0, 3, 3), Rectangle(0, 0, 2, 2), Color::White,
+             0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, /*Anisotropic*/ 2);
+        ok &= ExpectPixel("GDI anisotropic maps to Linear", ReadPixel(backend, 1, 1),
+                          linearFilteredPixel);
+
+        // GDI-025: only an explicit request for four samples opts into CPU MSAA.  A rotated
+        // opaque sprite leaves a predictable fractional edge coverage after the sample resolve;
+        // the 2x2 grid has one covered sample at this chosen edge pixel, so red resolves to 63.
+        ok &= Expect(backend.ApplyMultiSampleCount(2) == 0 && backend.GetMultiSampleCount() == 0,
+                     "GDI must honestly reject unsupported CPU MSAA sample counts.");
+        ok &= Expect(backend.ApplyMultiSampleCount(4) == 4 && backend.GetMultiSampleCount() == 4,
+                     "GDI must apply the requested 4x CPU MSAA count.");
+        std::unique_ptr<IRenderTargetBackend> msaaTarget =
+            backend.CreateRenderTarget2D(2, 2, /*DepthFormat::None*/ 0,
+                                         /*preserveContents*/ false, /*mipMap*/ false,
+                                         /*requested MSAA*/ 4);
+        ok &= Expect(msaaTarget != nullptr && msaaTarget->GetMultiSampleCount() == 0,
+                     "GDI render targets must honestly remain single-sampled.");
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        Draw(backend, *atlas, Rectangle(6, 2, 4, 4), Rectangle(0, 0, 1, 1), Color::White,
+             0.78539816339f, Vector2(0.5f, 0.5f));
+        ok &= ExpectPixel("GDI 4x MSAA resolves fractional rotated edge", ReadPixel(backend, 3, 1),
+                          Pixel{ 63, 0, 0, 255 }, 1);
+        ok &= Expect(backend.ApplyMultiSampleCount(0) == 0 && backend.GetMultiSampleCount() == 0,
+                     "GDI must release optional CPU MSAA when zero samples are requested.");
         return ok;
     }
 } // namespace

@@ -12,7 +12,7 @@
 namespace CNA::Internal::Backends::Software
 {
     /**
-     * @brief Real CPU-owned color (RGBA8) + depth (float32) buffer pair.
+     * @brief Real CPU-owned RGBA8 colour, depth and optional resolved 4x MSAA storage.
      *
      * This is the Software backend's actual state, not a bookkeeping fiction
      * (plan_software.md design decision 3) -- every pixel written here is a genuinely correct
@@ -25,8 +25,18 @@ namespace CNA::Internal::Backends::Software
         std::vector<std::uint8_t> color;  ///< RGBA8, width*height*4 bytes.
         std::vector<float> depthBuffer;   ///< width*height floats, 0..1.
         std::vector<std::uint8_t> stencilBuffer; ///< 8-bit stencil, width*height bytes.
+        /// Four RGBA8 samples per pixel when 4x CPU MSAA is enabled; empty otherwise. `color`
+        /// remains the resolved presentation/readback image, so existing consumers never see an
+        /// unresolved sample plane.
+        std::vector<std::uint8_t> multiSampleColor;
+        int multiSampleCount = 0; ///< 0 = single sampled; the CPU implementation supports 4 only.
 
         void Resize(int w, int h);
+        void SetMultiSampleCount(int sampleCount);
+        [[nodiscard]] bool HasMultiSampleColor() const { return multiSampleCount == 4; }
+        [[nodiscard]] int EffectiveSampleCount() const { return HasMultiSampleColor() ? 4 : 1; }
+        /// Resolves the per-sample colour plane into `color`. A no-op for single-sample targets.
+        void ResolveColor();
         void ClearColor(float r, float g, float b, float a);
         void ClearDepthValue(float depthValue);
         void ClearStencilValue(int stencilValue);
@@ -743,6 +753,7 @@ namespace CNA::Internal::Backends::Software
         /// The real backbuffer, independently of any currently bound render target. Presentation
         /// backends layered on this CPU rasterizer use it rather than accidentally displaying an
         /// off-screen target that happens to be active when Present() is called.
+        [[nodiscard]] SoftwareFramebuffer& BackbufferFramebuffer() { return backbuffer_; }
         [[nodiscard]] const SoftwareFramebuffer& BackbufferFramebuffer() const { return backbuffer_; }
 
     private:

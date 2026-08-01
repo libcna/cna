@@ -67,7 +67,8 @@ namespace
                                 /*Add*/ 0, /*Add*/ 0, BlendWriteState{});
     }
 
-    Measurements RunCase(const BenchmarkCase& benchmarkCase, int frames)
+    Measurements RunCase(const BenchmarkCase& benchmarkCase, int frames, int requestedMultiSampleCount,
+                         int textureFilter)
     {
         SDL_Window* window = SDL_CreateWindow(benchmarkCase.name, benchmarkCase.width,
                                                benchmarkCase.height, SDL_WINDOW_HIDDEN);
@@ -84,6 +85,9 @@ namespace
                 args.virtualHeight = benchmarkCase.height;
                 args.presentationMode = CnaPresentationMode::Stretch;
                 std::unique_ptr<IGraphicsBackend> backend = CreateGraphicsBackend(args);
+                if (backend->ApplyMultiSampleCount(requestedMultiSampleCount) !=
+                    requestedMultiSampleCount)
+                    throw std::runtime_error("GDI benchmark could not apply its requested MSAA count.");
                 std::unique_ptr<ITextureBackend> texture = backend->CreateTexture(MakeBenchmarkTexture());
                 std::unique_ptr<ISpriteBatchBackend> spriteBatch = backend->CreateSpriteBatch();
                 SetAlphaBlend(*backend);
@@ -94,7 +98,7 @@ namespace
                     const Clock::time_point rasterStart = Clock::now();
                     backend->Clear(0.05f, 0.08f, 0.12f, 1.0f);
                     spriteBatch->Begin();
-                    spriteBatch->SetSamplerFilter(/*Point*/ 1);
+                    spriteBatch->SetSamplerFilter(textureFilter);
                     spriteBatch->SetSamplerAddressMode(/*Clamp*/ 1, /*Clamp*/ 1);
 
                     for (int sprite = 0; sprite < benchmarkCase.spriteCount; ++sprite)
@@ -135,10 +139,22 @@ namespace
 int main(int argc, char* argv[])
 {
     int frames = 4;
+    int textureFilter = /*Point*/ 1;
+    const char* filterName = "Point";
     for (int i = 1; i < argc; ++i)
     {
         if (std::string(argv[i]) == "--frames" && i + 1 < argc)
             frames = std::clamp(std::stoi(argv[++i]), 1, 30);
+        else if (std::string(argv[i]) == "--linear")
+        {
+            textureFilter = /*Linear*/ 0;
+            filterName = "Linear";
+        }
+        else if (std::string(argv[i]) == "--anisotropic")
+        {
+            textureFilter = /*Anisotropic*/ 2;
+            filterName = "Anisotropic->Linear";
+        }
     }
 
     if (!SDL_Init(SDL_INIT_VIDEO))
@@ -158,15 +174,20 @@ int main(int argc, char* argv[])
             { "GDI benchmark 800x600 stress", 800, 600, 50 },
             { "GDI benchmark 1280x720 modest", 1280, 720, 20 },
         };
-        std::printf("GDI 2D benchmark: %d measured frames (+ 1 warm-up), PointClamp, 96px rotating alpha sprites\n",
-                    frames);
+        std::printf("GDI 2D benchmark: %d measured frames (+ 1 warm-up), %sClamp, 96px rotating alpha sprites\n",
+                    frames, filterName);
         for (const BenchmarkCase& benchmarkCase : cases)
         {
-            const Measurements measurements = RunCase(benchmarkCase, frames);
-            const double raster = measurements.rasterMilliseconds / frames;
-            const double present = measurements.presentMilliseconds / frames;
-            std::printf("%-30s sprites=%-3d raster=%7.3f ms  present=%7.3f ms  frame=%7.3f ms\n",
-                        benchmarkCase.name, benchmarkCase.spriteCount, raster, present, raster + present);
+            for (const int multiSampleCount : { 0, 4 })
+            {
+                const Measurements measurements =
+                    RunCase(benchmarkCase, frames, multiSampleCount, textureFilter);
+                const double raster = measurements.rasterMilliseconds / frames;
+                const double present = measurements.presentMilliseconds / frames;
+                std::printf("%-30s msaa=%d sprites=%-3d raster=%7.3f ms  present=%7.3f ms  frame=%7.3f ms\n",
+                            benchmarkCase.name, multiSampleCount, benchmarkCase.spriteCount,
+                            raster, present, raster + present);
+            }
         }
     }
     catch (const std::exception& error)
