@@ -52,10 +52,11 @@ normal CTest because CNA cannot provide or configure the external emulator.
   CPU partitions clipped geometry at logical tile and `Wrap`/`Clamp`/`Mirror` boundaries, then
   Glide TMU0 performs the final filtered sample from each tile. Tile padding is regenerated from
   the retained RGBA source when the address mode changes, and an internal one-texel neighbour
-  gutter preserves level-0 linear filtering at a tile boundary. SpriteBatch source rectangles are
-  split per tile directly. The remaining fidelity item is minified mip filtering at a logical tile
-  edge: each physical tile currently creates its own mip chain, whose level footprint is not
-  phase-aligned with its neighbour.
+  gutter preserves level-0 linear filtering at a tile boundary. A single logical ARGB4444 mip
+  pyramid supplies every tile LOD, so minification does not derive colours from isolated tile
+  padding. SpriteBatch source rectangles are split per tile directly. The remaining fidelity item
+  is only a possible sub-texel LOD phase at a tile edge; it requires visual validation on a real
+  Glide runtime before any compensation is added.
 - The native context uses `grQueryResolutions` and selects the smallest supported historical Glide
   double-buffered depth mode that contains CNA's virtual resolution, rather than assuming a fixed
   640×480/800×600 capability. It also queries texture/TMU limits through `grGet`.

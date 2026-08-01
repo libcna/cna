@@ -893,6 +893,7 @@ namespace CNA::Internal::Backends::Glide
             std::memcpy(rgba_.data(), data.pixels.data(), std::min(rgba_.size(), data.pixels.size()));
             try
             {
+                BuildLogicalMipChain(uploadedAddressU_, uploadedAddressV_);
                 BuildTiles();
             }
             catch (...)
@@ -937,6 +938,7 @@ namespace CNA::Internal::Backends::Glide
                 std::memcpy(rgba_.data() + static_cast<std::size_t>(row) * rowBytes,
                             rgba + static_cast<std::size_t>(row) * sourceStride, rowBytes);
             }
+            BuildLogicalMipChain(uploadedAddressU_, uploadedAddressV_);
             for (Tile& tile : tiles_)
             {
                 ConvertTileToGlideTexels(tile, uploadedAddressU_, uploadedAddressV_);
@@ -961,14 +963,15 @@ namespace CNA::Internal::Backends::Glide
         void EnsureAddressMode(int addressU, int addressV)
         {
             // The source image is retained in RGBA8, so changing the sampler address mode can
-            // rebuild tile padding without losing information to an earlier ARGB4444 conversion.
-            // The tile body is unchanged; only its halo and unused power-of-two padding differ.
+            // rebuild the global mip pyramid and tile padding without losing information to an
+            // earlier ARGB4444 conversion. Lower LODs also depend on the mode at image edges.
             if (addressU == uploadedAddressU_ && addressV == uploadedAddressV_)
             {
                 return;
             }
             static_cast<void>(ToGlideTextureAddress(addressU));
             static_cast<void>(ToGlideTextureAddress(addressV));
+            BuildLogicalMipChain(addressU, addressV);
             for (Tile& tile : tiles_)
             {
                 ConvertTileToGlideTexels(tile, addressU, addressV);
@@ -979,6 +982,70 @@ namespace CNA::Internal::Backends::Glide
         }
 
     private:
+        struct LogicalMipLevel
+        {
+            int width = 0;
+            int height = 0;
+            std::vector<std::uint16_t> texels;
+        };
+
+        void BuildLogicalMipChain(int addressU, int addressV)
+        {
+            logicalMipLevels_.clear();
+            LogicalMipLevel level{};
+            // Glide stores a power-of-two chain even for a non-power-of-two logical CNA image.
+            // Build one address-mode-aware virtual image first, then downsample it globally. This
+            // gives every physical tile the same source mip texels at a shared logical boundary.
+            level.width = NextPowerOfTwo(width_, 16384);
+            level.height = NextPowerOfTwo(height_, 16384);
+            level.texels.resize(static_cast<std::size_t>(level.width) * level.height);
+            for (int y = 0; y < level.height; ++y)
+            {
+                const int sourceY = AddressTexel(y, height_, addressV);
+                for (int x = 0; x < level.width; ++x)
+                {
+                    const int sourceX = AddressTexel(x, width_, addressU);
+                    level.texels[static_cast<std::size_t>(y) * level.width + x] = RgbaToArgb4444(
+                        rgba_.data() + (static_cast<std::size_t>(sourceY) * width_ + sourceX) * 4u);
+                }
+            }
+            logicalMipLevels_.push_back(std::move(level));
+
+            while (logicalMipLevels_.back().width != 1 || logicalMipLevels_.back().height != 1)
+            {
+                const LogicalMipLevel& previous = logicalMipLevels_.back();
+                LogicalMipLevel next{};
+                next.width = std::max(1, previous.width / 2);
+                next.height = std::max(1, previous.height / 2);
+                next.texels.resize(static_cast<std::size_t>(next.width) * next.height);
+                for (int y = 0; y < next.height; ++y)
+                {
+                    for (int x = 0; x < next.width; ++x)
+                    {
+                        unsigned int channels[4]{};
+                        for (int dy = 0; dy < 2; ++dy)
+                        {
+                            const int sourceY = std::min(previous.height - 1, y * 2 + dy);
+                            for (int dx = 0; dx < 2; ++dx)
+                            {
+                                const int sourceX = std::min(previous.width - 1, x * 2 + dx);
+                                const std::uint16_t sample = previous.texels[
+                                    static_cast<std::size_t>(sourceY) * previous.width + sourceX];
+                                channels[0] += (sample >> 12) & 0x0f;
+                                channels[1] += (sample >> 8) & 0x0f;
+                                channels[2] += (sample >> 4) & 0x0f;
+                                channels[3] += sample & 0x0f;
+                            }
+                        }
+                        next.texels[static_cast<std::size_t>(y) * next.width + x] = static_cast<std::uint16_t>(
+                            (((channels[0] + 2) / 4) << 12) | (((channels[1] + 2) / 4) << 8) |
+                            (((channels[2] + 2) / 4) << 4) | ((channels[3] + 2) / 4));
+                    }
+                }
+                logicalMipLevels_.push_back(std::move(next));
+            }
+        }
+
         void BuildTiles()
         {
             const int maximum = owner_.impl_->maxTextureDimension;
@@ -1089,6 +1156,19 @@ namespace CNA::Internal::Backends::Glide
             }
         }
 
+        [[nodiscard]] static int FloorDivide(int numerator, int denominator)
+        {
+            if (denominator <= 0)
+            {
+                throw std::runtime_error("GLIDE mip coordinate conversion received an invalid divisor");
+            }
+            if (numerator >= 0)
+            {
+                return numerator / denominator;
+            }
+            return -(((-numerator) + denominator - 1) / denominator);
+        }
+
         void ConvertTileToGlideTexels(Tile& tile, int addressU, int addressV)
         {
             const int largeDimension = std::max(tile.paddedWidth, tile.paddedHeight);
@@ -1096,53 +1176,32 @@ namespace CNA::Internal::Backends::Glide
             tile.nativeTexels.reserve(static_cast<std::size_t>(tile.paddedWidth) * tile.paddedHeight * 2u);
             int levelWidth = tile.paddedWidth;
             int levelHeight = tile.paddedHeight;
-            std::vector<std::uint16_t> level(static_cast<std::size_t>(levelWidth) * levelHeight);
-            for (int y = 0; y < levelHeight; ++y)
+            for (std::size_t levelIndex = 0; ; ++levelIndex)
             {
-                const int sourceY = AddressTexel(tile.sourceY + y - tile.gutterTop, height_, addressV);
-                for (int x = 0; x < levelWidth; ++x)
+                if (levelIndex >= logicalMipLevels_.size())
                 {
-                    const int sourceX = AddressTexel(tile.sourceX + x - tile.gutterLeft, width_, addressU);
-                    level[static_cast<std::size_t>(y) * levelWidth + x] = RgbaToArgb4444(
-                        rgba_.data() + (static_cast<std::size_t>(sourceY) * width_ + sourceX) * 4u);
+                    throw std::runtime_error("GLIDE tile mip chain exceeds the logical texture mip chain");
                 }
-            }
-            while (true)
-            {
-                tile.nativeTexels.insert(tile.nativeTexels.end(), level.begin(), level.end());
+                const LogicalMipLevel& logicalLevel = logicalMipLevels_[levelIndex];
+                const int texelScale = 1 << levelIndex;
+                const int logicalOriginX = FloorDivide(tile.sourceX - tile.gutterLeft, texelScale);
+                const int logicalOriginY = FloorDivide(tile.sourceY - tile.gutterTop, texelScale);
+                for (int y = 0; y < levelHeight; ++y)
+                {
+                    const int sourceY = AddressTexel(logicalOriginY + y, logicalLevel.height, addressV);
+                    for (int x = 0; x < levelWidth; ++x)
+                    {
+                        const int sourceX = AddressTexel(logicalOriginX + x, logicalLevel.width, addressU);
+                        tile.nativeTexels.push_back(logicalLevel.texels[
+                            static_cast<std::size_t>(sourceY) * logicalLevel.width + sourceX]);
+                    }
+                }
                 if (levelWidth == 1 && levelHeight == 1)
                 {
                     break;
                 }
-                const int nextWidth = std::max(1, levelWidth / 2);
-                const int nextHeight = std::max(1, levelHeight / 2);
-                std::vector<std::uint16_t> next(static_cast<std::size_t>(nextWidth) * nextHeight);
-                for (int y = 0; y < nextHeight; ++y)
-                {
-                    for (int x = 0; x < nextWidth; ++x)
-                    {
-                        unsigned int channels[4]{};
-                        for (int dy = 0; dy < 2; ++dy)
-                        {
-                            const int sampleY = std::min(levelHeight - 1, y * 2 + dy);
-                            for (int dx = 0; dx < 2; ++dx)
-                            {
-                                const int sampleX = std::min(levelWidth - 1, x * 2 + dx);
-                                const std::uint16_t sample = level[static_cast<std::size_t>(sampleY) * levelWidth + sampleX];
-                                channels[0] += (sample >> 12) & 0x0f;
-                                channels[1] += (sample >> 8) & 0x0f;
-                                channels[2] += (sample >> 4) & 0x0f;
-                                channels[3] += sample & 0x0f;
-                            }
-                        }
-                        next[static_cast<std::size_t>(y) * nextWidth + x] = static_cast<std::uint16_t>(
-                            (((channels[0] + 2) / 4) << 12) | (((channels[1] + 2) / 4) << 8) |
-                            (((channels[2] + 2) / 4) << 4) | ((channels[3] + 2) / 4));
-                    }
-                }
-                level = std::move(next);
-                levelWidth = nextWidth;
-                levelHeight = nextHeight;
+                levelWidth = std::max(1, levelWidth / 2);
+                levelHeight = std::max(1, levelHeight / 2);
             }
             tile.nativeInfo = GlideTexInfo{
                 0, Log2PowerOfTwo(largeDimension),
@@ -1162,6 +1221,7 @@ namespace CNA::Internal::Backends::Glide
         int uploadedAddressU_ = 1;
         int uploadedAddressV_ = 1;
         std::vector<std::uint8_t> rgba_;
+        std::vector<LogicalMipLevel> logicalMipLevels_;
         std::vector<Tile> tiles_;
 
         friend struct GlideGraphicsBackend::Impl;

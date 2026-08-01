@@ -36,6 +36,9 @@ renderer.
 - [x] Tile bodies have address-mode-aware padding and a one-texel neighbour gutter at internal
   logical boundaries. This preserves point sampling and level-0 bilinear samples through tile
   seams for `Wrap`, `Clamp`, and `Mirror` while the final sample remains on TMU0.
+- [x] A single address-mode-aware ARGB4444 mip pyramid is generated for the complete logical
+  image. Each native Glide tile copies every LOD from that shared pyramid instead of downsampling
+  its isolated padded tile, removing the cross-tile source mismatch during minification.
 - [x] Startup queries `grQueryResolutions` for the actually usable double-buffered depth modes and
   `grGet` for `GR_MAX_TEXTURE_SIZE`, `GR_MAX_TEXTURE_ASPECT_RATIO`, and `GR_NUM_TMU`. It selects
   the smallest listed historical Glide mode that contains CNA's virtual framebuffer.
@@ -73,7 +76,7 @@ renderer.
 
 ## Next implementation work
 
-- [ ] Preserve minified mip sampling exactly at logical tile seams. Level-0 linear samples now
-  have an address-mode-aware neighbour gutter, but every physical Glide tile still builds its own
-  mip chain. Their level footprints/phases do not line up at a logical boundary, so fixing the
-  remaining minification mismatch needs a cross-tile mip design rather than simply a wider gutter.
+- [ ] Validate and, if observable on real Voodoo/dgVoodoo output, compensate the remaining
+  sub-texel LOD phase at a logical tile seam. All levels now use one shared logical mip pyramid,
+  but a physical tile's one-texel gutter means its coordinate origin cannot be exactly aligned for
+  every power-of-two LOD simultaneously.
