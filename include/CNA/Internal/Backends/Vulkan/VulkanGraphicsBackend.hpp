@@ -736,6 +736,8 @@ namespace CNA::Internal::Backends::Vulkan
     class VulkanRenderTargetCubeBackend : public IRenderTargetCubeBackend,
                                           public IVulkanCubeSamplable
     {
+        friend class VulkanMRTProxy;
+
     public:
         // Task 911: `depthFormat` (raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal)
         // gives this instance true per-RT DepthStencilFormat fidelity, mirroring
@@ -904,6 +906,8 @@ namespace CNA::Internal::Backends::Vulkan
         }
         // XNA/FNA shares binding 0's depth attachment across the active MRT set.
         VkFormat      GetDepthFormat()           const override { return depthFormat_; }
+        /** @brief Regenerates every mipmapped colour attachment finalized by this MRT pass. */
+        void          MaybeGenerateMips(VkCommandBuffer cb) override;
 
         // REMED-GFX-095 read-only structural diagnostics. Keeping the actual framebuffer
         // vector makes each live attachment/view association directly testable; Vulkan has
@@ -957,6 +961,11 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VkImageView> resolveAttachments_;
         std::vector<VkImageView> framebufferAttachments_;
         std::vector<VkImageView> resolveTargetViews_;
+        // REMED-GFX-190: immutable per-binding destinations, retained in public attachment order.
+        // Besides supplying the exact image/layer/level metadata for post-pass mip generation,
+        // shared ownership keeps that metadata valid when a bound target is disposed before the
+        // deferred MRT segment records (REMED-GFX-166's lifetime rule).
+        std::vector<std::shared_ptr<VulkanTargetPassEXT>> colorTargetPasses_;
         VkFormat                depthFormat_ = VK_FORMAT_UNDEFINED;
         // Borrowed from binding 0. Render-target retirement keeps it alive until frame completion.
         VkImageView             depthView_ = VK_NULL_HANDLE;

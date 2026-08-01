@@ -10423,6 +10423,7 @@ namespace CNA::Internal::Backends::Vulkan
             VkImageView msaaView = VK_NULL_HANDLE;
             VkImageView depthView = VK_NULL_HANDLE;
             VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+            std::shared_ptr<VulkanTargetPassEXT> targetPass;
         };
         auto normalize = [](const RenderTargetBindingDescriptor& binding) {
             Attachment result;
@@ -10444,6 +10445,9 @@ namespace CNA::Internal::Backends::Vulkan
                 result.msaaView = cube->GetMsaaColorViewEXT(binding.GetCubeFace());
                 result.depthView = cube->GetDepthViewEXT();
                 result.depthFormat = cube->GetDepthFormatEXT();
+                const int face = binding.GetCubeFace();
+                if (face >= 0 && face < 6)
+                    result.targetPass = cube->facePasses_[static_cast<std::size_t>(face)];
             } else {
                 auto* rt2D = dynamic_cast<VulkanRenderTargetBackend*>(
                     binding.GetRenderTarget2D());
@@ -10456,6 +10460,7 @@ namespace CNA::Internal::Backends::Vulkan
                 result.depthView = rt2D->GetDepthView();
                 result.depthFormat = rt2D->PassEXT() ? rt2D->PassEXT()->GetDepthFormat()
                                                     : VK_FORMAT_UNDEFINED;
+                result.targetPass = rt2D->PassEXT();
             }
             return result;
         };
@@ -10501,6 +10506,7 @@ namespace CNA::Internal::Backends::Vulkan
         // resolve i. Non-MSAA continues to bind the texture views directly.
         colorAttachments_.reserve(count);
         resolveTargetViews_.reserve(count);
+        colorTargetPasses_.reserve(count);
         if (WantsMsaa()) resolveAttachments_.reserve(count);
         for (uint32_t i = 0; i < count; ++i) {
             const VkImageView resolve = attachments[i].resolveView;
@@ -10509,6 +10515,8 @@ namespace CNA::Internal::Backends::Vulkan
                 : resolve;
             if (color == VK_NULL_HANDLE || resolve == VK_NULL_HANDLE)
                 throw std::runtime_error("VulkanMRTProxy: target attachment view is missing");
+            if (!attachments[i].targetPass)
+                throw std::runtime_error("VulkanMRTProxy: target pass metadata is missing");
             if (WantsMsaa()
                 && std::find(colorAttachments_.begin(), colorAttachments_.end(), color)
                     != colorAttachments_.end())
@@ -10517,6 +10525,7 @@ namespace CNA::Internal::Backends::Vulkan
                     "than one slot (same-cube multi-face MSAA is unsupported)");
             colorAttachments_.push_back(color);
             resolveTargetViews_.push_back(resolve);
+            colorTargetPasses_.push_back(attachments[i].targetPass);
             if (WantsMsaa()) resolveAttachments_.push_back(resolve);
         }
 
@@ -10544,6 +10553,18 @@ namespace CNA::Internal::Backends::Vulkan
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
         if (framebuffer_ != VK_NULL_HANDLE) vkDestroyFramebuffer(dev, framebuffer_, nullptr);
+    }
+
+    void VulkanMRTProxy::MaybeGenerateMips(VkCommandBuffer cb)
+    {
+        // REMED-GFX-190: the MRT proxy is the deferred segment's VulkanRTSource, so the generic
+        // post-pass hook reaches only this object, not the individual RenderTarget2D/cube-face
+        // sources it combines. Preserve the public binding order and delegate to those immutable
+        // pass records after vkCmdEndRenderPass: MSAA resolves have therefore completed first,
+        // one-level attachments no-op in VulkanTargetPassEXT, and no resource outside this
+        // producer segment is visited.
+        for (const auto& targetPass : colorTargetPasses_)
+            if (targetPass) targetPass->MaybeGenerateMips(cb);
     }
 
     // --- VulkanTexture3DBackend ---

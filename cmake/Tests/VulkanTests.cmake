@@ -1364,6 +1364,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_MsaaMipReadback COMMAND cna_test_vulkan_msaa_mip_readback
             TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-190: Vulkan MRT pass finalization must regenerate every mipmapped colour
+        # attachment after the pass' MSAA resolves, in public binding order. This Vulkan-only
+        # matrix independently covers both slots, mixed mip counts, reordered/repeated binds,
+        # every mip level, guarded full/rectangular readback, invalid-then-valid reads, cube-face
+        # attachments, disposal and device teardown. Validation is asserted live in-process; the
+        # output guard also catches a message emitted during final device/resource destruction.
+        cna_vulkan_test(cna_test_vulkan_mrt_mip_finalization
+            examples/vulkan_mrt_mip_finalization_test.cpp)
+        cna_register_backend_test(NAME Vulkan_MrtMipFinalization
+            COMMAND cna_test_vulkan_mrt_mip_finalization
+            TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        set_tests_properties(Vulkan_MrtMipFinalization PROPERTIES
+            FAIL_REGULAR_EXPRESSION "VUID-|Validation Error|Validation Warning|SYNC-HAZARD")
+
         # REMED-GFX-189/191: invalid levels must be refused before native work, and every valid level
         # must be copied from the exact subresource after that subresource alone has transitioned to
         # TRANSFER_SRC_OPTIMAL. Pixel checks passed on GFX-191's defective implementation, so make

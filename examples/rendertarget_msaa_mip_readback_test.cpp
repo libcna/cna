@@ -211,35 +211,15 @@ namespace
 #endif
 
     /**
-     * @brief Whether an MRT PRIMARY attachment's mip chain is generated here.
-     *
-     * False on VULKAN, measured by this fixture's own controls on 2026-07-31 and recorded as
-     * **REMED-GFX-190**. It is specifically an MRT property, not a mip property: the identical
-     * mipmapped multisampled target read after a SINGLE-target bind cycle (leg A1) has a byte-exact
-     * level 1 on Vulkan, while `rts[0]` of a `SetRenderTargets({a, b})` cycle comes back with level
-     * 0 exact and level 1 entirely (0,0,0,0). A different backend and a different mechanism from
-     * REMED-GFX-186, so it is declared here rather than absorbed.
-     */
-    constexpr bool kMrtPrimaryAttachmentMipsGenerated =
-#if defined(CNA_BACKEND_VULKAN)
-        false;
-#else
-        true;
-#endif
-
-    /**
      * @brief Whether the CONTENT of an MRT extra attachment's generated level is claimable here.
      *
-     * TRUE only on SDL_GPU, where SDLGPU-37 establishes that a stock single-output draw writes
-     * attachment 0 only, so attachment 1 keeps the pass' clear colour and its generated chain must
-     * reproduce that. XNA leaves an unwritten MRT output undefined, so everywhere else this file
-     * MEASURES and PRINTS what the extra attachment's level 1 holds and asserts only that the read
-     * is safe, complete and inside its window -- claiming a value there would be inventing a
-     * contract. Bgfx measures the top-left quadrant colour and Vulkan measures (0,0,0,0); both are
-     * legal answers to a question XNA does not ask.
+     * SDL_GPU and Vulkan leave attachment 1 at the pass' explicit clear colour when a stock
+     * single-output draw writes attachment 0 only, so its regenerated chain is independently
+     * claimable there. XNA leaves a genuinely unwritten MRT output undefined, so everywhere else
+     * this file measures and prints what the extra attachment holds rather than inventing a value.
      */
     constexpr bool kMrtExtraAttachmentContentClaimable =
-#if defined(CNA_BACKEND_SDL_GPU)
+#if defined(CNA_BACKEND_SDL_GPU) || defined(CNA_BACKEND_VULKAN)
         true;
 #else
         false;
@@ -1421,25 +1401,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
         ReadWholeLevel(*a, 0, "I1 MRT attachment 0 level 0");
-        if (kMrtPrimaryAttachmentMipsGenerated)
-        {
-            ReadWholeLevel(*a, 1, "I1 MRT attachment 0 level 1");
-        }
-        else
-        {
-            std::vector<Color> lvl1 = ReadWholeLevel(*a, 1, "I1 MRT attachment 0 level 1",
-                                                     /*contentAsserted=*/false);
-            int zeroed = 0;
-            for (const Color& c : lvl1) if (Exact(c, Color(0, 0, 0, 0))) ++zeroed;
-            boundary("I1 REMED-GFX-190 -- this backend does not regenerate the PRIMARY MRT "
-                     "attachment's chain; the same target read after a single-target cycle (leg "
-                     "A1) is byte-exact at level 1. If this stops reproducing, the defect was "
-                     "fixed and this declaration must go");
-            check(zeroed == static_cast<int>(lvl1.size()),
-                  "I1: REMED-GFX-190's boundary still reproduces exactly -- all " +
-                      std::to_string(lvl1.size()) + " texels of the primary attachment's level 1 "
-                      "are (0,0,0,0) (" + std::to_string(zeroed) + " are)");
-        }
+        ReadWholeLevel(*a, 1, "I1 MRT attachment 0 level 1");
         // Stock single-output draws write attachment 0 only (SDLGPU-37), so attachment 1 holds the
         // pass' CLEAR colour. Its LEVEL 1 must still be that colour rather than a crash, an
         // ungenerated zero, or a copy of attachment 0.
