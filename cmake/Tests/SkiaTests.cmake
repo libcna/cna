@@ -58,6 +58,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_texture_constraints examples/skia_texture_constraints_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Constraints cna_test_skia_texture_constraints)
 
+    cna_skia_test(cna_test_skia_texture2d_dispose examples/sdlrenderer_texture2d_dispose_test.cpp)
+    cna_register_skia_display_test(Skia_Texture2D_Dispose cna_test_skia_texture2d_dispose)
+
     cna_skia_test(cna_test_skia_mipmap_policy examples/skia_mipmap_policy_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_MipmapPolicy cna_test_skia_mipmap_policy)
 
@@ -71,6 +74,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     cna_skia_test(cna_test_skia_spritebatch_begin_end examples/sdlrenderer_spritebatch_begin_end_guard_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_BeginEnd cna_test_skia_spritebatch_begin_end)
+
+    cna_skia_test(cna_test_skia_disposed_guards examples/sdlrenderer_disposed_guards_test.cpp)
+    cna_register_skia_display_test(Skia_DisposedGuards cna_test_skia_disposed_guards)
+
+    cna_skia_test(cna_test_skia_double_dispose examples/sdlrenderer_double_dispose_test.cpp)
+    cna_register_skia_display_test(Skia_DoubleDispose cna_test_skia_double_dispose)
 
     cna_skia_test(cna_test_skia_spritebatch_sourcerect examples/sdlrenderer_spritebatch_sourcerect_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_SourceRect cna_test_skia_spritebatch_sourcerect)
