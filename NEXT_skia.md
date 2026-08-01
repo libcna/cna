@@ -17,10 +17,9 @@
 - The raster backbuffer, SDL presentation, `Texture2D`, `SpriteBatch`, SpriteFont atlas path,
   scissor/viewport, point/linear Clamp/Wrap/Mirror sampling, the four standard blend presets,
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
-- The most recent pushed commits are `50670060` (detach a destroyed bound render target),
-  `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
-  `SetData`).
-- `docs/skia-backend.md` records 71 Skia CTests: six raster-only and 65 display-required tests.
+- Recent relevant pushed commits include `f18aaf07` (bounded target snapshot cache) and
+  `cbded7d7` (shared RenderTarget2D golden across Skia, EasyGL, and SDL_Renderer).
+- `docs/skia-backend.md` records 72 Skia CTests: six raster-only and 66 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -167,6 +166,21 @@
   build sets `CNA_BUILD_EXAMPLES=ON`, because its historical CMake test block is explicitly
   guarded by that option.
 
+## Completed in this session: SKIA-16, SKIA-28, and SKIA-65
+
+- The Skia raster resources are CPU-owned, whereas its SDL renderer and streaming texture are
+  presentation-only resources. `DebugSimulateContextLoss()` and `DebugRestoreContext()` now each
+  reconstruct that SDL presenter without replacing or clearing the raster backbuffer, images,
+  RenderTarget2D surfaces, or their bounded snapshots. This is an intentionally narrow emulation:
+  it does not claim that the CPU Skia surface experienced a GPU/context loss.
+- The factory now passes the graphics-device lifecycle callback to Skia. Each synchronous presenter
+  reconstruction reports exactly `DeviceResetting` then `DeviceReset`, with no fabricated
+  `DeviceLost`, and leaves the public device status `Normal` when it returns.
+- Added `Skia_ContextRecovery` (13 assertions): it holds a source texture, render target, and
+  cached target snapshot across both debug entries; verifies event order/status and unchanged
+  resource counters; then verifies target readback, texture drawing, target sampling, and actual
+  presentation. This closes the remaining recovery portion of SKIA-16, SKIA-28, and SKIA-65.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -213,22 +227,26 @@
   builds (`detect_leaks=0`, matching the known display-stack exit baseline). The independently
   configured SDL_Renderer and EasyGL targets also pass under Xvfb with the identical 16/16 and
   64/64 exact-RGBA results.
+- SKIA-16/SKIA-28/SKIA-65: `Skia_ContextRecovery` passes all 13 checks under Xvfb in normal and
+  AddressSanitizer builds (`detect_leaks=0`). Following its presenter-recreation change,
+  `Skia_Resize_Presentation` (16 checks), `Skia_ResourceBudget` (9 checks), and
+  `Skia_RenderTarget2D_Golden` (16/16 target plus 64/64 sampled pixels) also pass under Xvfb.
 
 ## Current task
 
-Audit SKIA-65's remaining device/context-recreation requirement. Its level-0 `SetData`, transfer,
-and target-mipmap policy are already proven; do not mark the row complete until the unimplemented
-SKIA-16/SKIA-28 lifecycle has either acquired an honest public recovery contract or been split
-into a precise blocked dependency.
+Audit the remaining early lifecycle rows SKIA-10 through SKIA-18 against the actual raster
+implementation. Several predate the completed vertical slice and may already be fulfilled by
+current code/tests; validate each claim before correcting a stale status or selecting a missing
+safe implementation task.
 
 ## Next candidates
 
-1. Audit and, if feasible, implement SKIA-16/SKIA-28 device/context recovery needed to close
-   SKIA-65. Keep target lifetime, readback, and snapshot ownership correct across every reset.
+1. Audit SKIA-10 through SKIA-18 in dependency order, update stale plan evidence, and implement
+   only the independently observable gaps found by that audit.
 2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
    probe; the selected raster path has no truthful capability to expose there.
-3. If recovery cannot be induced through the public runtime, leave SKIA-65 explicitly dependent
-   on a separately testable device-loss seam rather than inventing a context-loss claim.
+3. Keep the recovery boundary precise: raster resources survive SDL presenter reconstruction;
+   only a future accelerated Skia mode may acquire a genuine context-loss lifecycle.
 
 ## Known boundaries / assumptions
 

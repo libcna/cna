@@ -57,6 +57,13 @@ state leakage rather than application logging.
 
 Raster uses premultiplied RGBA8888 inside Skia and normalizes readback into top-row-first RGBA8 bytes for SDL. A future GPU path must preserve that contract and pass the same pixel tests; it may not silently change reported capabilities mid-frame.
 
+The raster images and `SkSurface` objects are CPU-owned, so they have no GPU context handle to
+recreate. The test-only recovery seam therefore rebuilds the SDL renderer and its streaming
+presentation texture while retaining live raster textures, render targets, and their snapshots.
+It synchronously reports `DeviceResetting` followed by `DeviceReset`; it deliberately does not
+claim a `DeviceLost` event for resources that did not become unavailable. A future accelerated
+Skia mode needs its own genuine device-loss contract and must not inherit this raster claim.
+
 `Texture2D` keeps a CPU shadow, so its successful public `GetData` calls return the exact bytes
 accepted by `SetData`. At draw time the active blend preset selects an explicitly labelled
 premultiplied (`AlphaBlend`) or straight-alpha (`NonPremultiplied`) Skia image made from those
@@ -310,5 +317,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     pixels and all 64 Point-sampled 2× backbuffer pixels exactly, with zero tolerance; this covers
     common target orientation, unbind/restoration, snapshot freshness, and Point-sampling semantics
     without claiming GPU parity.
+49. `Skia_ContextRecovery` holds a Texture2D, RenderTarget2D, and cached target snapshot across
+    both debug presenter-recovery entries. Each rebuilds the real SDL renderer and streaming texture,
+    reports exactly one `DeviceResetting`/`DeviceReset` pair without `DeviceLost`, preserves the
+    bounded resource counters, and proves target readback, texture draw, target sampling, and
+    presentation remain exact afterward.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

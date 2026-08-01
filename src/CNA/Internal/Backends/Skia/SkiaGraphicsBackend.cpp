@@ -100,8 +100,10 @@ namespace CNA::Internal::Backends::Skia
     }
 
     SkiaGraphicsBackend::SkiaGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                             CnaPresentationMode presentationMode, int swapInterval)
+                                             CnaPresentationMode presentationMode, int swapInterval,
+                                             std::function<void(BackendDeviceEvent)> deviceEventCallback)
         : window_(window)
+        , deviceEventCallback_(std::move(deviceEventCallback))
         , presentationMode_(presentationMode)
         , preferredVirtualHeight_(virtualHeight)
     {
@@ -120,7 +122,7 @@ namespace CNA::Internal::Backends::Skia
     SkiaGraphicsBackend::~SkiaGraphicsBackend()
     {
         IGraphicsBackend::UnregisterForWindow(window_);
-        if (presentTexture_) SDL_DestroyTexture(presentTexture_);
+        DestroyPresentationTexture();
         if (renderer_) SDL_DestroyRenderer(renderer_);
     }
 
@@ -144,17 +146,58 @@ namespace CNA::Internal::Backends::Skia
         // the zero-draw Present contract deterministic instead of exposing allocator bytes.
         surface_.Clear(0.0f, 0.0f, 0.0f, 0.0f);
         TraceSkiaState("surface=backbuffer size=%dx%d", width, height);
-        if (presentTexture_)
-        {
-            SDL_DestroyTexture(presentTexture_);
-            presentTexture_ = nullptr;
-        }
-        presentTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32,
-                                            SDL_TEXTUREACCESS_STREAMING, width, height);
-        if (!presentTexture_)
-            throw std::runtime_error(std::string("Skia SDL_CreateTexture failed: ") + SDL_GetError());
+        DestroyPresentationTexture();
+        RecreatePresentationTexture();
 
         ApplyLogicalPresentation();
+    }
+
+    void SkiaGraphicsBackend::RecreatePresentationTexture()
+    {
+        presentTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32,
+                                            SDL_TEXTUREACCESS_STREAMING, LogicalWidth(), LogicalHeight());
+        if (!presentTexture_)
+            throw std::runtime_error(std::string("Skia SDL_CreateTexture failed: ") + SDL_GetError());
+    }
+
+    void SkiaGraphicsBackend::DestroyPresentationTexture() noexcept
+    {
+        if (!presentTexture_)
+            return;
+        SDL_DestroyTexture(presentTexture_);
+        presentTexture_ = nullptr;
+    }
+
+    void SkiaGraphicsBackend::RecreatePresentationRenderer()
+    {
+        // Skia's selected raster surface and every raster image are CPU-owned, so they have no
+        // GPU/context handle to recreate. The SDL renderer and its streaming texture are the
+        // presentation-only device objects. Rebuild those without calling RecreateBackbuffer(),
+        // which would incorrectly clear the live raster surface and invalidate app resources.
+        DestroyPresentationTexture();
+        if (renderer_)
+        {
+            SDL_DestroyRenderer(renderer_);
+            renderer_ = nullptr;
+        }
+        renderer_ = SDL_CreateRenderer(window_, nullptr);
+        if (!renderer_)
+            throw std::runtime_error(std::string("Skia SDL_CreateRenderer failed during presentation recovery: ")
+                                     + SDL_GetError());
+
+        try
+        {
+            SetSwapInterval(swapInterval_);
+            RecreatePresentationTexture();
+            ApplyLogicalPresentation();
+        }
+        catch (...)
+        {
+            DestroyPresentationTexture();
+            SDL_DestroyRenderer(renderer_);
+            renderer_ = nullptr;
+            throw;
+        }
     }
 
     void SkiaGraphicsBackend::ApplyLogicalPresentation()
@@ -208,9 +251,33 @@ namespace CNA::Internal::Backends::Skia
     {
         if (!SDL_SetRenderVSync(renderer_, interval))
         {
-            if (interval > 1 && SDL_SetRenderVSync(renderer_, 1)) return;
+            if (interval > 1 && SDL_SetRenderVSync(renderer_, 1))
+            {
+                swapInterval_ = 1;
+                return;
+            }
             throw std::runtime_error(std::string("Skia SDL_SetRenderVSync failed: ") + SDL_GetError());
         }
+        swapInterval_ = interval;
+    }
+
+    void SkiaGraphicsBackend::DebugSimulateContextLoss()
+    {
+        // A CPU-raster Skia surface cannot incur a real GPU context loss. The useful equivalent
+        // is loss of the SDL presenter: reconstruct its renderer/streaming texture while leaving
+        // CPU-owned Texture2D and RenderTarget2D data live. Report only a reset pair, rather than
+        // fabricating DeviceLost for a device whose raster resources never became unavailable.
+        if (deviceEventCallback_)
+            deviceEventCallback_(BackendDeviceEvent::Resetting);
+        RecreatePresentationRenderer();
+        if (deviceEventCallback_)
+            deviceEventCallback_(BackendDeviceEvent::Reset);
+    }
+
+    void SkiaGraphicsBackend::DebugRestoreContext()
+    {
+        // Desktop recovery is immediate, exactly like EasyGL's existing debug restore path.
+        DebugSimulateContextLoss();
     }
 
     bool SkiaGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
@@ -448,7 +515,8 @@ namespace CNA::Internal::Backends
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
         return std::make_unique<Skia::SkiaGraphicsBackend>(args.window, args.virtualWidth, args.virtualHeight,
-                                                            args.presentationMode, args.swapInterval);
+                                                            args.presentationMode, args.swapInterval,
+                                                            args.deviceEventCallback);
     }
 #endif
 } // namespace CNA::Internal::Backends

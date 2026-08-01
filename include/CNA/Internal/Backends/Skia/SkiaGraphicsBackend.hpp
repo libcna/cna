@@ -11,6 +11,7 @@
 #include "include/core/SkBlender.h"
 #include "include/core/SkBlendMode.h"
 
+#include <functional>
 #include <memory>
 
 namespace CNA::Internal::Backends::Skia
@@ -25,7 +26,8 @@ namespace CNA::Internal::Backends::Skia
     {
     public:
         SkiaGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                            CnaPresentationMode presentationMode, int swapInterval);
+                            CnaPresentationMode presentationMode, int swapInterval,
+                            std::function<void(BackendDeviceEvent)> deviceEventCallback = {});
         ~SkiaGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -34,6 +36,8 @@ namespace CNA::Internal::Backends::Skia
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        void DebugSimulateContextLoss() override;
+        void DebugRestoreContext() override;
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY,
@@ -88,6 +92,9 @@ namespace CNA::Internal::Backends::Skia
 
     private:
         void RecreateBackbuffer(int requestedWidth, int requestedHeight);
+        void RecreatePresentationRenderer();
+        void RecreatePresentationTexture();
+        void DestroyPresentationTexture() noexcept;
         void ApplyLogicalPresentation();
         [[nodiscard]] SkiaSurface& ActiveSurface() noexcept { return *targetBinding_->ActiveSurface(); }
         [[nodiscard]] const SkiaSurface& ActiveSurface() const noexcept { return *targetBinding_->ActiveSurface(); }
@@ -97,6 +104,7 @@ namespace CNA::Internal::Backends::Skia
         SDL_Window* window_ = nullptr;
         SDL_Renderer* renderer_ = nullptr;
         SDL_Texture* presentTexture_ = nullptr;
+        std::function<void(BackendDeviceEvent)> deviceEventCallback_;
         SkiaSurface surface_;
         std::shared_ptr<SkiaRenderTargetBinding> targetBinding_ = std::make_shared<SkiaRenderTargetBinding>();
         std::shared_ptr<SkiaResourceCounters> resourceCounters_ = std::make_shared<SkiaResourceCounters>();
@@ -111,5 +119,6 @@ namespace CNA::Internal::Backends::Skia
         SkiaRasterState rasterState_;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int preferredVirtualHeight_ = 0;
+        int swapInterval_ = 1;
     };
 } // namespace CNA::Internal::Backends::Skia
