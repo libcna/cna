@@ -190,6 +190,13 @@ Not implemented — each **throws with its own name** rather than rendering an a
   backend's pipelines don't expose a way to set.
 - **`RenderTargetCube` is never multisampled**, even when the back buffer or a `RenderTarget2D` is —
   requesting MSAA on one clamps to 1 (`DILIGENT-25`).
+- **Only one `SamplerState` slot is actually independent** (`DILIGENT-48`, confirmed real bug, found
+  by code reading rather than a failing test): `ApplySamplerState(slot, ...)` takes a slot number
+  but never uses it, storing into flat scalar members every texture-binding site reads regardless
+  of which slot the caller configured. `DualTextureEffect`'s second layer and
+  `EnvironmentMapEffect`'s cube map currently always sample with whatever `SamplerState` was set on
+  slot 0, not their own slot — silently wrong the moment a caller sets a genuinely different
+  `SamplerState` per slot, which no existing Diligent test does yet.
 
 ## Tests
 
