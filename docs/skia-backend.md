@@ -81,8 +81,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers forty-eight SKIA-only CTests: two window-independent raster
-   surface pixel tests and forty-six display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers forty-nine SKIA-only CTests: two window-independent raster
+   surface pixel tests and forty-seven display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -152,5 +152,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 26. `Skia_Sampler_MipmapFilterPolicy` verifies every mip-dependent `TextureFilter` value rejects
     during `SpriteBatch::Begin`, before any draw; it then reuses the same batch successfully with
     `PointClamp`.
+27. `Skia_BlendEnabled_State` verifies `SetBlendEnabled(false)` makes sprites replace their
+    destination, `Clear` remains an unconditional surface clear, and re-enabling restores the
+    previously configured `BlendState::AlphaBlend` composition.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

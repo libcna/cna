@@ -93,6 +93,10 @@ namespace CNA::Internal::Backends::Skia
         SkiaSurface* activeSurface_ = &surface_;
         SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
         SkiaSourceAlphaConvention spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
+        SkBlendMode configuredSpriteBlendMode_ = SkBlendMode::kSrcOver;
+        SkiaSourceAlphaConvention configuredSpriteSourceAlphaConvention_
+            = SkiaSourceAlphaConvention::Premultiplied;
+        bool blendEnabled_ = true;
         SkiaRasterState rasterState_;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int preferredVirtualHeight_ = 0;

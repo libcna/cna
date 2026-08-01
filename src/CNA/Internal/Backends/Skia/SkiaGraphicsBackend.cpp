@@ -267,36 +267,45 @@ namespace CNA::Internal::Backends::Skia
         const bool additive = colorSrcBlend == kBlendSourceAlpha && alphaSrcBlend == kBlendSourceAlpha
             && colorDstBlend == kBlendOne && alphaDstBlend == kBlendOne;
 
+        SkBlendMode mappedMode;
+        SkiaSourceAlphaConvention mappedSourceConvention;
         if (opaque)
         {
-            spriteBlendMode_ = SkBlendMode::kSrc;
-            spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
-            return;
+            mappedMode = SkBlendMode::kSrc;
+            mappedSourceConvention = SkiaSourceAlphaConvention::Premultiplied;
         }
-        if (alphaBlend)
+        else if (alphaBlend)
         {
-            spriteBlendMode_ = SkBlendMode::kSrcOver;
-            spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
-            return;
+            mappedMode = SkBlendMode::kSrcOver;
+            mappedSourceConvention = SkiaSourceAlphaConvention::Premultiplied;
         }
-        if (nonPremultiplied)
+        else if (nonPremultiplied)
         {
             // Skia converts the straight-alpha image into its native premultiplied canvas pipeline
             // before applying SourceOver.  AlphaBlend selects the separately labelled premultiplied
             // image above, preventing an accidental second premultiplication.
-            spriteBlendMode_ = SkBlendMode::kSrcOver;
-            spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Straight;
-            return;
+            mappedMode = SkBlendMode::kSrcOver;
+            mappedSourceConvention = SkiaSourceAlphaConvention::Straight;
         }
-        if (additive)
+        else if (additive)
         {
             // kPlus adds premultiplied source and destination.  Selecting the straight-alpha
             // texture representation performs the XNA SourceAlpha source factor first.
-            spriteBlendMode_ = SkBlendMode::kPlus;
-            spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Straight;
-            return;
+            mappedMode = SkBlendMode::kPlus;
+            mappedSourceConvention = SkiaSourceAlphaConvention::Straight;
         }
-        throw std::runtime_error("Skia raster backend does not implement this BlendState yet.");
+        else
+        {
+            throw std::runtime_error("Skia raster backend does not implement this BlendState yet.");
+        }
+
+        configuredSpriteBlendMode_ = mappedMode;
+        configuredSpriteSourceAlphaConvention_ = mappedSourceConvention;
+        if (blendEnabled_)
+        {
+            spriteBlendMode_ = mappedMode;
+            spriteSourceAlphaConvention_ = mappedSourceConvention;
+        }
     }
 
     void SkiaGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
@@ -348,7 +357,22 @@ namespace CNA::Internal::Backends::Skia
     void SkiaGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
     void SkiaGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
     void SkiaGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D("SetDepthTestEnabled"); }
-    void SkiaGraphicsBackend::SetBlendEnabled(bool) { ThrowNo3D("SetBlendEnabled"); }
+    void SkiaGraphicsBackend::SetBlendEnabled(bool enabled)
+    {
+        blendEnabled_ = enabled;
+        if (enabled)
+        {
+            spriteBlendMode_ = configuredSpriteBlendMode_;
+            spriteSourceAlphaConvention_ = configuredSpriteSourceAlphaConvention_;
+            return;
+        }
+
+        // This is the 2D equivalent of disabling the output-merger blend stage: source replaces
+        // destination. Keep the same source labelling as BlendState::Opaque so tint/alpha obey the
+        // already-tested opaque path rather than a new alpha convention.
+        spriteBlendMode_ = SkBlendMode::kSrc;
+        spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
+    }
     void SkiaGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
     std::unique_ptr<IVertexBufferBackend> SkiaGraphicsBackend::CreateVertexBuffer(int) { ThrowNo3D("CreateVertexBuffer"); }
     std::unique_ptr<IIndexBufferBackend> SkiaGraphicsBackend::CreateIndexBuffer16(int) { ThrowNo3D("CreateIndexBuffer16"); }
