@@ -194,6 +194,14 @@ Not implemented — each **throws with its own name** rather than rendering an a
   backend's pipelines don't expose a way to set.
 - **`RenderTargetCube` is never multisampled**, even when the back buffer or a `RenderTarget2D` is —
   requesting MSAA on one clamps to 1 (`DILIGENT-25`).
+- **`RasterizerState.DepthBias` (the constant term) has no observable effect on this project's
+  software Vulkan device** (`llvmpipe`/`lavapipe`), even at the maximum magnitude the backend's own
+  packing can represent (`DILIGENT-49`). `SlopeScaleDepthBias` is real and verified working. This
+  matches two independent pre-existing findings elsewhere in this codebase — `D9-62` (D3D9's own
+  oracle attempt against real XNA 4.0 found no observable pixel difference from constant `DepthBias`
+  at any magnitude up to `±1e8`) and `Vulkan_DepthBias`'s own pre-existing `DepthBias=-1e6` sub-case
+  failure — so this is treated as an already-known, cross-backend, environment/driver limitation of
+  the test environment, not a CNA-side bug specific to this backend.
 
 ## Tests
 
@@ -204,12 +212,12 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Fifteen further binaries are the real-device pixel proofs (71 checks total): `Diligent_2D` (6),
+Sixteen further binaries are the real-device pixel proofs (75 checks total): `Diligent_2D` (6),
 `Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (6), `Diligent_Skinned` (4),
 `Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4),
-`Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4), `Diligent_VertexLit` (4) and
-`Diligent_Pbr` (5). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
+`Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4), `Diligent_VertexLit` (4),
+`Diligent_Pbr` (5) and `Diligent_DepthBias` (4). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
 into off-screen 2D/cube targets, and assert on pixels (or query results) read back through
 `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData` /
 `OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential (binary transition with MSAA
@@ -232,10 +240,16 @@ light aimed the same way collapses every BRDF dot product to exactly 1 at the ba
 pixel, so the metallic-roughness shader reduces to a closed-form constant independently re-derived
 in Python; three hand-derived `PbrEffect` cases (white/metallic=0, red/metallic=1, red/metallic=0)
 all match their predicted RGB values exactly, and `SkinnedPbrEffect` with a single identity bone
-(a mathematical no-op skin transform) reproduces the white/metallic=0 case's value exactly. All 69
-pass against a real Vulkan device. On a machine with no usable device they exit 77 and print
-`[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a pass with nothing rendered
-would be dishonest.
+(a mathematical no-op skin transform) reproduces the white/metallic=0 case's value exactly.
+`Diligent_DepthBias` (`DILIGENT-49`) proves `RasterizerState.SlopeScaleDepthBias` genuinely changes
+a depth-test outcome (a coplanar redraw only shows through with a negative slope bias applied), but
+its constant-`DepthBias` check fails on this software Vulkan device — matching two independent
+pre-existing findings elsewhere in this codebase (`D9-62`'s own oracle attempt against real XNA 4.0,
+and `Vulkan_DepthBias`'s own pre-existing `DepthBias=-1e6` sub-case), a documented environment
+limitation rather than a CNA-side bug. 74 of the 75 checks pass against a real Vulkan device; the
+one known failure is left visible rather than masked. On a machine with no usable device the
+binaries exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a
+pass with nothing rendered would be dishonest.
 
 ```bash
 ctest --test-dir cmake-build-diligent -R Diligent --output-on-failure

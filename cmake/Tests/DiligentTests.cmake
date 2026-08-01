@@ -129,4 +129,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
         TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
+
+    # plan_diligent.md DILIGENT-49: RasterizerState.DepthBias/SlopeScaleDepthBias pixel verification.
+    cna_diligent_test(cna_test_diligent_depthbias examples/diligent_depthbias_test.cpp)
+    cna_register_backend_test(NAME Diligent_DepthBias COMMAND cna_test_diligent_depthbias
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
 endif()
