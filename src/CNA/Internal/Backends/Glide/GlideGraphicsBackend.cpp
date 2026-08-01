@@ -397,6 +397,7 @@ namespace CNA::Internal::Backends::Glide
             using TexFilterModeFn = void (WINAPI*)(FxI32, FxI32, FxI32);
             using TexClampModeFn = void (WINAPI*)(FxI32, FxI32, FxI32);
             using TexMipMapModeFn = void (WINAPI*)(FxI32, FxI32, FxBool);
+            using TexLodBiasValueFn = void (WINAPI*)(FxI32, float);
             using TexCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxI32, FxBool, FxBool);
             using LfbReadRegionFn = FxBool (WINAPI*)(FxI32, FxU32, FxU32, FxU32, FxU32, FxU32, void*);
 
@@ -479,6 +480,7 @@ namespace CNA::Internal::Backends::Glide
                 grTexFilterMode = Required<TexFilterModeFn>("grTexFilterMode", 12);
                 grTexClampMode = Required<TexClampModeFn>("grTexClampMode", 12);
                 grTexMipMapMode = Required<TexMipMapModeFn>("grTexMipMapMode", 12);
+                grTexLodBiasValue = Required<TexLodBiasValueFn>("grTexLodBiasValue", 8);
                 grTexCombine = Required<TexCombineFn>("grTexCombine", 28);
                 grLfbReadRegion = Required<LfbReadRegionFn>("grLfbReadRegion", 28);
             }
@@ -516,6 +518,7 @@ namespace CNA::Internal::Backends::Glide
             TexFilterModeFn grTexFilterMode = nullptr;
             TexClampModeFn grTexClampMode = nullptr;
             TexMipMapModeFn grTexMipMapMode = nullptr;
+            TexLodBiasValueFn grTexLodBiasValue = nullptr;
             TexCombineFn grTexCombine = nullptr;
             LfbReadRegionFn grLfbReadRegion = nullptr;
 
@@ -939,6 +942,7 @@ namespace CNA::Internal::Backends::Glide
         int samplerFilter = 0;
         int samplerAddressU = 1;
         int samplerAddressV = 1;
+        float samplerLodBias = 0.0f;
         int scissorX = 0;
         int scissorY = 0;
         int scissorWidth = 640;
@@ -1800,6 +1804,30 @@ namespace CNA::Internal::Backends::Glide
         impl_->samplerAddressV = addressV;
     }
 
+    void GlideGraphicsBackend::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)
+    {
+        if (slot < 0)
+        {
+            throw std::runtime_error("GLIDE backend received a negative texture slot");
+        }
+        if (slot != 0)
+        {
+            return;
+        }
+        // Glide's fixed-function LOD selector has a native bias control but no per-sampler
+        // maximum-mip clamp. Keep the unsupported half explicit rather than silently applying a
+        // different texture level than CNA requested.
+        if (maxMipLevel != 0)
+        {
+            throw std::runtime_error("GLIDE backend cannot represent SamplerState::MaxMipLevel");
+        }
+        if (!std::isfinite(lodBias) || lodBias < -8.0f || lodBias > 7.75f)
+        {
+            throw std::runtime_error("GLIDE SamplerState LOD bias must be finite and within [-8, 7.75]");
+        }
+        impl_->samplerLodBias = lodBias;
+    }
+
     int GlideGraphicsBackend::GetMaxTextureDimension() const
     {
         // Each physical tile is limited by GR_MAX_TEXTURE_SIZE, queried during construction. CNA
@@ -1906,6 +1934,7 @@ namespace CNA::Internal::Backends::Glide
             // Mirror escape into its power-of-two padding would sample a wrong logical tile.
             impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
             impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
+            impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
             const GlideVertex topLeft = makeVertex(0);
             const GlideVertex topRight = makeVertex(1);
             const GlideVertex bottomRight = makeVertex(2);
@@ -2441,6 +2470,7 @@ namespace CNA::Internal::Backends::Glide
                 // each submitted polygon is sampled only from its selected native tile.
                 impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
                 impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
+                impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
                 const auto drawTriangleForTile = [&](CpuVertex a, CpuVertex b, CpuVertex c)
                 {
                     std::vector<CpuVertex> polygon{a, b, c};

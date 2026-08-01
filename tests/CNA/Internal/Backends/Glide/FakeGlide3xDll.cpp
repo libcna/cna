@@ -73,6 +73,7 @@ extern "C" __declspec(dllexport) void WINAPI grTexSource(int, std::uint32_t, std
 extern "C" __declspec(dllexport) void WINAPI grTexFilterMode(int, int, int) {}
 extern "C" __declspec(dllexport) void WINAPI grTexClampMode(int, int, int) {}
 extern "C" __declspec(dllexport) void WINAPI grTexMipMapMode(int, int, std::uint32_t) {}
+extern "C" __declspec(dllexport) void WINAPI grTexLodBiasValue(int, float) {}
 extern "C" __declspec(dllexport) void WINAPI grTexCombine(int, int, int, int, int, std::uint32_t, std::uint32_t) {}
 extern "C" __declspec(dllexport) std::uint32_t WINAPI grLfbReadRegion(int, std::uint32_t, std::uint32_t,
                                                                          std::uint32_t, std::uint32_t, std::uint32_t, void*)

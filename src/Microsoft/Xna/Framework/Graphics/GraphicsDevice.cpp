@@ -2459,6 +2459,8 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)ss.getAddressUProperty(),
                 (int)ss.getAddressVProperty(),
                 ss.getMaxAnisotropyProperty());
+            backend_->ApplySamplerMipState(i, ss.getMaxMipLevelProperty(),
+                                           ss.getMipMapLevelOfDetailBiasProperty());
         }
     }
 

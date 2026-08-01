@@ -1469,6 +1469,10 @@ namespace CNA::Internal::Backends
                                        int addressU, int addressV,
                                        int maxAnisotropy) {}
 
+        /// Applies sampler controls not represented by filter/address mode. Defaults to no-op
+        /// so existing backends can adopt each field independently and explicitly.
+        virtual void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) {}
+
         /// Sets the constant blend color used with the BlendFactor blend mode.
         /// Maps to glBlendColor on GL backends. Default: no-op.
         virtual void SetBlendFactor(float r, float g, float b, float a) {}

@@ -131,7 +131,10 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   sampler-state hand-off so `MipMapLevelOfDetailBias` and `MaxMipLevel` reach the backend; map
   the former to native LOD bias and implement/clamp the latter without selecting unavailable
   levels. Define the quantization and out-of-range policy with cross-backend tests, rather than
-  silently ignoring either property.
+  silently ignoring either property. **Implementation staged:** the common hand-off now forwards
+  both values, Glide maps finite native-range `[-8, 7.75]` LOD bias through `grTexLodBiasValue`
+  for sprites and 3D tiles, and explicitly rejects non-zero `MaxMipLevel` until it can be
+  represented without changing the selected mip chain.
 - [ ] **GLIDE-FUT-006 — Support explicit and partial `Texture2D::SetData` updates.** Retain
   CPU copies for every supplied mip level, update rectangles, regenerate only the affected
   derived levels/gutters, fence before re-download, and preserve explicit mip data instead of

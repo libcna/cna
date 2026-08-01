@@ -71,6 +71,7 @@ namespace CNA::Internal::Backends::Glide
         void ApplySamplerState(int slot, int filter,
                                int addressU, int addressV,
                                int maxAnisotropy) override;
+        void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsDepthBuffer() const override { return true; }
