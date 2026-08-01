@@ -295,6 +295,48 @@ backend's real Emscripten canvas/PNG-data-URL upload machinery, not about writin
 |---|---|---|
 | HTMLDOM-96 | ✅ | Added to `examples/htmldom_pixel_verification_test.cpp` (11 → 13 checks). **96a**: a plain `Texture2D` is created via `CreateFromPixels` with four distinct, unambiguous per-texel colours (including a non-255 alpha, ruling out both a wrong-channel and a wrong-texel-order bug), and `GetData()` is checked byte-exact against the source — `CreateFromPixels`/`GetData` is a lossless path with no codec involved, so no rounding tolerance is needed. **96b**: a source texture is created and uploaded through this backend, encoded to a real PNG via `SaveAsPng` (into a `System::IO::MemoryStream`), decoded back via `Texture2D::FromStream` (re-uploading through this backend's real canvas/data-URL machinery a second time, exercising the SAME upload path a fresh game asset load would), and read back matching the original colour within PNG's own lossless-but-8-bit-rounded tolerance. Both `docs/html-dom-backend.md` rows move from 🟨 to ✅ — this closes the last two 🟨 rows on that page. Full regression pass: 32/32 smoke, 13/13 pixel, 6/6 dispose, 33/33 GTest. |
 
+### D15 — Closing the gap with `EASYGL`, where it's real and worth closing
+
+The owner asked what `HTML_DOM` can't do that `EASYGL` (this project's default, 3D-capable WebGL2
+backend) can. Read both backends' real source rather than guessing. Most of the gap is `EASYGL`
+being 3D-capable at all — out of scope by explicit owner mandate (Scope, above), not a real gap.
+Within the 2D-relevant surface both backends actually share (`SpriteBatch`/`Texture2D`/
+`RenderTarget2D`/`BlendState`/`SamplerState`), most of the rest turned out to be **permanent**
+architectural gaps (CSS genuinely cannot express what GL can here), not deferred work — separating
+those from the two/three items that are real, closeable gaps is the point of this phase.
+
+**Confirmed permanent, not pursued as tasks** (verified by reading `EasyGLGraphicsBackend.cpp`, not
+assumed):
+- **Real backbuffer readback.** `EasyGLGraphicsBackend::ReadBackbuffer` does a real `glReadPixels`
+  (with an MSAA-FBO resolve first). No browser API rasterizes a live DOM subtree — already Known
+  Limitation 1, unchanged.
+- **Custom `Effect`/shader stage.** `EasyGLSpriteBatchBackend::FlushBatch` genuinely binds and runs
+  a compiled custom GLSL program per Task 1077 (not a stub) when one is set. CSS has no
+  programmable shader stage for a translated HLSL/GLSL effect to run in — already Known Limitation
+  5, unchanged.
+- **Arbitrary custom `BlendState`.** `EasyGLGraphicsBackend::ApplyBlendState` accepts any
+  `(colorSrcBlend, colorDstBlend, colorBlendFunc, ...)` combination via real
+  `glBlendFuncSeparate`/`glBlendEquationSeparate`. Checked whether CSS's other `mix-blend-mode`
+  values (`multiply`, `screen`, `darken`, …) could extend `BlendStateToDomCompositeOp`'s existing
+  4-tuple table beyond the four already mapped: they can't — those CSS modes are distinct nonlinear
+  compositing formulas, not reachable from *any* `(srcFactor, dstFactor, equation)` triple the
+  additive `BlendState` model can express, so there is no natural fifth preset to add. Already Known
+  Limitation 4, confirmed exhaustively rather than left as an assumption.
+- **Anisotropic/finer `TextureFilter` granularity.** `EasyGLGraphicsBackend` reports real
+  `GL_EXT_texture_filter_anisotropic` support (Task 918, up to 16x). CSS `image-rendering` is a
+  coarse, effectively binary hint (`auto`/`pixelated`/`crisp-edges` — no anisotropic-level control);
+  not meaningfully closeable.
+- **MSAA render targets.** `EasyGLGraphicsBackend::CreateRenderTarget2D` supports a real multisample
+  renderbuffer + resolve. `HTML_DOM` render targets are backed by an ordinary `<canvas>` 2D context,
+  which has no analogous MSAA render-target concept — architecturally different, not a deferred
+  feature.
+
+| Task | Status | Description |
+|---|---|---|
+| HTMLDOM-97 | ⬜ | **`TextureAddressMode` coverage when `sourceRectangle` exceeds the texture.** Two real, closeable sub-gaps found in `HtmlDomState.cpp`'s `ValidateAddressModes`: (1) symmetric `Mirror` (`addressU == addressV == Mirror`) throws unconditionally — every one of XNA's built-in `SamplerState` presets (`PointMirror`/`LinearMirror`/`AnisotropicMirror`) uses symmetric U/V, so this is the realistic common case, not an edge case. `EASYGL` supports it for real via native `GL_MIRRORED_REPEAT`. (2) mixed per-axis modes (`addressU != addressV`) throw unconditionally even when NEITHER axis is `Mirror` (e.g. U=Wrap, V=Clamp) — but CSS `background-repeat` natively accepts two independent values, one per axis (`repeat no-repeat`), so this case needs no image trick at all, just per-axis CSS. **Plan**: (1) symmetric `Mirror`, via a lazily-built, cached pre-tiled-and-mirrored PNG data-URL texture variant — the same general technique `CANVAS`'s own `CanvasSpriteBatchBackend` already proved out for its equivalent gap (`plan_canvas.md` CANVAS-44), adapted to this backend's existing variant-cache architecture (tint/blend variants already work this way) rather than invented fresh. (2) mixed non-`Mirror` axes, via `background-repeat: <u> <v>` instead of the single derived-from-one-mode value used today. Mixed axes where EITHER side is `Mirror` remain a throw (composing a per-axis mirrored-tile image with per-axis repeat is real extra complexity for a case no built-in `SamplerState` preset can even produce) — documented as a deliberately narrower residual, not silently dropped. |
+| HTMLDOM-98 | ⬜ | **`SetViewport` (sub-rectangle `Viewport`).** `EasyGLGraphicsBackend::SetViewport` supports a real sub-region: `EasyGLSpriteBatchBackend::FlushBatch` builds its ortho projection from `Viewport.Width/Height` and leaves a non-full-target `Viewport` as the live GL rasterizer region (Task REMED-GFX-072), enabling split-screen/sub-panel rendering. `HTML_DOM` currently inherits `IGraphicsBackend`'s no-op default, matching every OTHER 2D-only sibling (`SDL_RENDERER`/`CANVAS`/`DX3`) — confirmed non-gap AGAINST those siblings (HTMLDOM-81), but a real, closeable gap against `EASYGL` specifically, since nothing about DOM/CSS compositing rules it out. **Plan**: track the current `Viewport` rect on the backend; `CNA_HtmlDom_UpdateSurface` positions/sizes `#cna-dom-root` to the viewport sub-rect (`left`/`top` offset by `Viewport.X/Y`, `width`/`height` from `Viewport.Width/Height`) instead of always the full logical surface, falling back to today's exact full-surface behaviour when the viewport covers the whole backbuffer (the overwhelmingly common case, so it must cost nothing extra) — the same "collapizes to the existing default case" shape HTMLDOM-94's regions already used. Sprite-local coordinates need no change (XNA already expresses them viewport-relative). The scissor-region system (HTMLDOM-94) needs its insets computed against the CURRENT viewport size, not always the full logical size, once a non-default viewport is active. A bound `RenderTarget2D` already resets `Viewport` to the target's own size at the shared `GraphicsDevice` layer (confirmed in HTMLDOM-93's research) — this task only needs to handle the DOM backbuffer case. |
+| HTMLDOM-99 | ⬜ | **Investigate (implement only if it verifiably wins): SVG `feColorMatrix`-based exact real-time tint**, as a possible alternative to the current per-distinct-colour PNG-variant cache (LRU-capped at 256, confirmed under real eviction pressure by HTMLDOM-90). `EASYGL` tints exactly, every frame, for free in its fragment shader, with no cache/eviction concept at all — a real per-pixel RGB×tint multiply is expressible in SVG via a diagonal `<feColorMatrix>` applied as a CSS `filter: url(#...)` with per-sprite-instance parameters, which could in principle replace baking a new cached image per distinct tint. **Genuinely uncertain, not assumed a win**: CSS `filter` on an element is known to force the browser into an extra compositor/backdrop pass for that element in many engines, which risks costing MORE than the current approach for the overwhelmingly common case (a handful of stable, already-cached tints) — directly at odds with this backend's core "zero cost when nothing changes" design premise (design decisions section, above). **Acceptance bar, stated up front so this can't be quietly declared a win**: only keep this if a real headless-Chromium measurement shows it is not slower than today's cache for the steady-state case AND is faster (not just "also correct") for the heavy-tint-churn case HTMLDOM-90 exercises. If it regresses either, document the finding and keep the existing PNG-variant cache — a documented "investigated, not adopted" outcome is an acceptable, honest result for this task. |
+
 ---
 
 ## What the browser run caught
