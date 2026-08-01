@@ -69,8 +69,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers five SKIA-only CTests: one window-independent raster
-   surface pixel test and four display-required public tests. The raster test passes without a
+6. `cmake/Tests/SkiaTests.cmake` registers ten SKIA-only CTests: one window-independent raster
+   surface pixel test and nine display-required public tests. The raster test passes without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -79,5 +79,9 @@ limit before allocation. Mipmapped texture construction is also rejected before 
    `SurfaceFormat` values, 1×1 and 3×5 uploads, a large valid single axis, zero dimensions, and
    the precise above-limit rejection. `Skia_Texture2D_NpotSampling` then samples both 3×5 and
    7×11 textures and reads each distinct source row back from the rendered frame.
+8. `Skia_SpriteBatch_BeginEnd`, `Skia_SpriteBatch_SourceRect`, and
+   `Skia_SpriteBatch_Overloads` exercise real public SpriteBatch sessions. They verify invalid
+   sequencing, native-size and destination/source-rectangle draws, all current overloads, tint,
+   scaling, and a discriminating horizontal-flip pixel assertion.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
