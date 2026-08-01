@@ -8,10 +8,10 @@
 
 ## Current focus
 
-- GDI-050 through GDI-058 are complete. The approved catch-up baseline is commit `48826e0b`,
+- GDI-050 through GDI-059 are complete. The approved catch-up baseline is commit `48826e0b`,
   GDI-055 is `4c512245`, and the manual workflow is `01873ca9`.
-- Next normalize GDI's unsupported-feature failures in GDI-059, then continue through the safe,
-  automatable GDI roadmap in dependency order.
+- Next audit the automatable DPI/resize/input-transform portion of GDI-060, leaving real multi-DPI
+  and visible lifecycle observations explicitly human-gated.
 
 ## Completed in the current working tree
 
@@ -25,14 +25,19 @@
   sampling, 4x and rejected 2x MSAA resets, resize and backbuffer readback. Public stencil coverage
   remains in its focused companion test.
 - GDI-056: distinct native CTest cases for default, dirty and halftone presentation policies.
-- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the ten
-  focused GDI executables at `--parallel 2`, runs all twelve `GDI` CTest cases, and uploads native
+- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the eleven
+  focused GDI executables at `--parallel 2`, runs all thirteen `GDI` CTest cases, and uploads native
   diagnostics on failure. It intentionally does not claim the visible GDI-061 gate.
 - GDI-058: applied backbuffer format/depth/MSAA are normalized on construction, reset, and the
   store-only update path; invalid presentation modes throw transactionally. Render targets expose
   actual RGBA8/depthless/single-sample storage, reject other color formats, and have verified
   Preserve/Platform/Discard rebind behavior. The always-present stencil remains a separate
   capability and focused public stencil contract.
+- GDI-059: all excluded GDI resource factories and 3D entries now throw
+  `System::NotSupportedException`. Public construction fails immediately for cube/3D textures,
+  cube render targets, shader effects, occlusion queries and static/dynamic buffers. The focused
+  public test also covers depth state and indexed/non-indexed user draws without allowing inherited
+  Software 3D behavior to escape.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -61,10 +66,10 @@ baseline. All later tasks use one task per commit.
 ## Validation status
 
 - Fresh MinGW-w64 Release configure in `cmake-build-gdi/`: pass.
-- `CNA`, all ten focused GDI correctness executables, the presentation benchmark and 2D demo:
+- `CNA`, all eleven focused GDI correctness executables, the presentation benchmark and 2D demo:
   build pass at `-j2`.
-- Wine/Xvfb: smoke, 2D regression, ColorMatrix, public stencil/API/applied-state, dirty damage,
-  repaint/failure and presentation-oracle executables pass.
+- Wine/Xvfb: smoke, 2D regression, ColorMatrix, public stencil/API/applied-state,
+  unsupported-feature, dirty-damage, repaint/failure and presentation-oracle executables pass.
 - Wine/Xvfb presentation configuration: default, dirty and halftone variants all pass with
   `CNA_GDI_DWM_FLUSH=0`.
 - GDI-055 `cna_test_gdi_public_api`: MinGW compile/link pass and all 33 public-path assertions pass
@@ -76,13 +81,16 @@ baseline. All later tasks use one task per commit.
   public stencil tests also pass; stencil Preserve/Platform/Discard rebind behavior is explicit.
 - GDI-058 shared-interface gate: native HEADLESS `CNA` and `CnaTests` rebuild pass at `-j2`; 35
   focused PresentationParameters/GraphicsDeviceInformation unit tests pass.
-- Post-GDI-058 full Wine/Xvfb milestone: all ten correctness executables and all three presentation
-  configurations pass in one shared display session.
+- GDI-059 focused MinGW build: CNA plus smoke, 2D regression, ColorMatrix and the new
+  unsupported-feature executable pass at `-j2`. Wine/Xvfb passes all 15 new public assertions and
+  the three updated regression executables; the exception family and diagnostics are verified.
+- Post-GDI-059 full Wine/Xvfb milestone: all eleven correctness executables and all three
+  presentation configurations pass in one shared display session.
 - Native HEADLESS/system-SDL build: `CNA` and `CnaTests` link successfully at `-j2`.
 - `GraphicsDeviceCapabilityTest.SupportsStencilBuffer`: pass under HEADLESS. The complete
   `GraphicsDeviceCapabilityTest.*` filter is 9 pass / 1 pre-existing configuration mismatch:
   `DoesNotSupportWireFrame` assumes EasyGL, while HEADLESS truthfully reports wireframe support.
-- `git diff --check`: pass for the GDI-058 change set.
+- `git diff --check`: pass for the GDI-059 change set.
 
 ## Useful commands
 
@@ -107,5 +115,6 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Commit GDI-058, then implement one early `System::NotSupportedException` policy and public tests for
-every resource/query/buffer/draw family listed in GDI-059.
+Start GDI-060 with a source-of-truth audit of Win32 client pixels versus SDL pixel coordinates,
+then extend deterministic resize/coordinate tests. Keep real 100/150/200% DPI and visible
+fullscreen observations for GDI-061's native-Windows gate.

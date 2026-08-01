@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -122,19 +123,18 @@ int main()
                           "ColorMatrixEffect must reject non-finite offset components.");
 
         // The fixed effect is a deliberately narrow exception, not a back door for ShaderEffect.
-        ShaderEffect customShader(device, "void main() {}", "void main() {}");
         bool rejectedCustomShader = false;
         try
         {
-            sprites.Begin(SpriteSortMode::Immediate, BlendState::Opaque,
-                          nullptr, nullptr, nullptr, &customShader);
+            ShaderEffect customShader(device, "void main() {}", "void main() {}");
+            (void)customShader;
         }
-        catch (const std::runtime_error&)
+        catch (const System::NotSupportedException&)
         {
             rejectedCustomShader = true;
         }
         result |= !Expect(rejectedCustomShader,
-                          "GDI must reject ShaderEffect even though it accepts ColorMatrixEffect.");
+                          "GDI must reject ShaderEffect construction while accepting ColorMatrixEffect.");
 
         effect.SetGrayscale();
         result |= !ExpectColor("ColorMatrixEffect grayscale",

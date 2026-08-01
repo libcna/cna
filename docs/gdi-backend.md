@@ -25,9 +25,13 @@ compatibility backend under validation, not yet as a release baseline.
   clamps each result to `[0,1]`, then uses the ordinary `BlendState`. `SetGrayscale()` selects
   Rec.709 luma and preserves alpha. Its cost is one 4×4 transform per covered sprite pixel
   (16 multiplies, 16 additions and 4 clamps), with no intermediate render target or allocation.
-- Not supported: vertex/index buffers, 3D draw calls, depth buffers, cube/3D textures,
-  occlusion queries and arbitrary custom effects. `SupportsCapability()` returns `false` and
-  direct 3D API calls throw rather than silently rendering through the inherited CPU 3D code.
+- Not supported: vertex/index buffers (including dynamic variants), 3D draw/state calls, depth
+  buffers, cube/3D textures, cube render targets, occlusion queries and arbitrary custom effects.
+  GDI rejects each at its first resource-construction or backend-invocation boundary with
+  `System::NotSupportedException`; it never returns a null-backed object that appears usable.
+  `Texture3D` is rejected by its public capability guard before backend creation, while the other
+  resources are rejected by the GDI factory entry. `SupportsCapability(ThreeD)`, `Texture3D`,
+  `OcclusionQuery`, and `CustomEffects` remain false.
 - Optional 4x CPU MSAA is available for the GDI backbuffer only: request exactly
   `PresentationParameters.MultiSampleCount = 4` (or call `ApplyMultiSampleCount(4)`). It uses
   four 2x2-grid coverage samples, blends each covered sample independently, and resolves before
@@ -73,9 +77,10 @@ compatibility backend under validation, not yet as a release baseline.
   depth state on every application. A `DepthStencilState` therefore cannot change SpriteBatch's
   ordinary submission order, while its independent stencil fields can still clip/mask a later 2D
   draw.
-- A custom `ShaderEffect` is deliberately invalid on GDI (`CreateEffectBackend()` returns null).
-  GDI does not accept shader source or uniforms and then ignore them. `ColorMatrixEffect` is the
-  sole fixed non-shader exception; every other custom `SpriteBatch` effect is rejected.
+- A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
+  does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
+  `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`
+  effect is rejected.
 - `PresentInterval` is ignored because GDI has no swap-chain interval control. The backbuffer is
   single-sampled unless the explicit 4x CPU-MSAA option is active.
 
@@ -162,13 +167,14 @@ CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
            cna_test_gdi_colormatrix_effect cna_test_gdi_public_stencil \
            cna_test_gdi_public_api \
            cna_test_gdi_applied_state \
+           cna_test_gdi_unsupported_features \
            cna_test_gdi_dirty_damage cna_test_gdi_repaint_invalidation \
            cna_test_gdi_presentation_oracle \
            cna_test_gdi_presentation_configuration \
            cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
-The backend is hard-gated to Windows targets. A native Windows build registers twelve `GDI` CTest
+The backend is hard-gated to Windows targets. A native Windows build registers thirteen `GDI` CTest
 cases, including separate default, dirty and halftone configurations; run them with
 `ctest -L GDI --output-on-failure`.
 
@@ -188,6 +194,7 @@ build-gdi\cna_test_gdi_colormatrix_effect.exe
 build-gdi\cna_test_gdi_public_stencil.exe
 build-gdi\cna_test_gdi_public_api.exe
 build-gdi\cna_test_gdi_applied_state.exe
+build-gdi\cna_test_gdi_unsupported_features.exe
 build-gdi\cna_test_gdi_dirty_damage.exe
 build-gdi\cna_test_gdi_repaint_invalidation.exe
 build-gdi\cna_test_gdi_presentation_oracle.exe
@@ -201,6 +208,7 @@ wine build-gdi/cna_test_gdi_colormatrix_effect.exe
 wine build-gdi/cna_test_gdi_public_stencil.exe
 wine build-gdi/cna_test_gdi_public_api.exe
 wine build-gdi/cna_test_gdi_applied_state.exe
+wine build-gdi/cna_test_gdi_unsupported_features.exe
 wine build-gdi/cna_test_gdi_dirty_damage.exe
 wine build-gdi/cna_test_gdi_repaint_invalidation.exe
 wine build-gdi/cna_test_gdi_presentation_oracle.exe
@@ -250,6 +258,11 @@ and resolve, rejected 2x write-back, resize, and backbuffer readback at the new 
 sample combinations, then compares the normalized public properties with real readback, mip and
 rebind behavior. The low-level 2D regression separately checks all five presentation-mode ordinals,
 both invalid boundaries, and transactional rejection that leaves the prior mode active.
+
+`cna_test_gdi_unsupported_features` uses only public resources and draw APIs. It verifies the exact
+`System::NotSupportedException` family for cube/3D textures, cube render targets, `ShaderEffect`,
+occlusion queries, 16/32-bit and dynamic buffers, depth state, and non-indexed/indexed public user
+draw paths, while retaining the corresponding false capability answers.
 
 `cna_test_gdi_dirty_damage` verifies the raster-derived rectangle after origin, viewport, scissor,
 transform and rotation, plus negative, off-screen and overflow-sized geometry. The repaint test

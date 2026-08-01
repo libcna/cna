@@ -4,6 +4,7 @@
 #include "CNA/GraphicsBackendType.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -126,10 +127,17 @@ namespace
 
         // GDI is deliberately a fixed-function 2D backend. It must reject a custom shader instead
         // of returning a dummy object whose source/uniforms are silently ignored by the CPU path.
-        std::unique_ptr<IEffectBackend> customEffect =
-            backend.CreateEffectBackend("void main() {}", "void main() {}");
-        ok &= Expect(customEffect == nullptr,
-                     "GDI must explicitly reject custom ShaderEffect programs.");
+        bool customEffectRejected = false;
+        try
+        {
+            (void)backend.CreateEffectBackend("void main() {}", "void main() {}");
+        }
+        catch (const System::NotSupportedException&)
+        {
+            customEffectRejected = true;
+        }
+        ok &= Expect(customEffectRejected,
+                     "GDI must reject custom ShaderEffect programs during creation.");
         ok &= Expect(backend.SupportsCapability(CNA::GraphicsCapability::WireFrame),
                      "GDI must report its real CPU SpriteBatch wireframe support.");
         ok &= Expect(backend.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),

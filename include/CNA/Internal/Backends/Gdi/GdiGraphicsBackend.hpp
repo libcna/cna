@@ -70,6 +70,9 @@ namespace CNA::Internal::Backends::Gdi
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(
             int w, int h, int depthFormat, bool preserveContents = false,
             bool mipMap = false, int multiSampleCount = 0) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool preserveContents = false,
+            bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* target) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;

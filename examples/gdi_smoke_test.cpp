@@ -4,6 +4,7 @@
 
 #include "CNA/GraphicsBackendType.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -61,7 +62,7 @@ int main()
 
         bool vertexBufferRejected = false;
         try { (void)backend->CreateVertexBuffer(3); }
-        catch (const std::runtime_error&) { vertexBufferRejected = true; }
+        catch (const System::NotSupportedException&) { vertexBufferRejected = true; }
         if (backend->SupportsCapability(CNA::GraphicsCapability::ThreeD) || !vertexBufferRejected)
         {
             std::fprintf(stderr, "GDI must expose a 2D-only contract.\n");

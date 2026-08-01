@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -140,9 +141,10 @@ namespace CNA::Internal::Backends::Gdi
                 (void)dwmFlush(); // A disabled compositor/failure is an intentional safe fallback.
         }
 
-        [[noreturn]] void ThrowNo3D(const char* methodName)
+        [[noreturn]] void ThrowUnsupportedFeature(const char* operation)
         {
-            throw std::runtime_error(std::string("GDI (Win32 2D) does not support 3D: ") + methodName);
+            throw System::NotSupportedException(
+                std::string("GDI (Win32 2D) does not support ") + operation + ".");
         }
 
         /// Delegates the shared CPU rasterizer SpriteBatch implementation while accepting exactly
@@ -675,23 +677,29 @@ namespace CNA::Internal::Backends::Gdi
 
     std::unique_ptr<ITextureCubeBackend> GdiGraphicsBackend::CreateTextureCube(int, bool, int)
     {
-        return nullptr;
+        ThrowUnsupportedFeature("TextureCube resources");
     }
 
     std::unique_ptr<ITexture3DBackend> GdiGraphicsBackend::CreateTexture3D(int, int, int, bool, int)
     {
-        return nullptr;
+        ThrowUnsupportedFeature("Texture3D resources");
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> GdiGraphicsBackend::CreateRenderTargetCube(
+        int, int, bool, bool, int)
+    {
+        ThrowUnsupportedFeature("RenderTargetCube resources");
     }
 
     std::unique_ptr<IEffectBackend> GdiGraphicsBackend::CreateEffectBackend(const std::string&,
                                                                               const std::string&)
     {
-        return nullptr;
+        ThrowUnsupportedFeature("ShaderEffect programs");
     }
 
     std::unique_ptr<IOcclusionQueryBackend> GdiGraphicsBackend::CreateOcclusionQuery()
     {
-        ThrowNo3D("CreateOcclusionQuery");
+        ThrowUnsupportedFeature("occlusion queries");
     }
 
     bool GdiGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
@@ -706,14 +714,15 @@ namespace CNA::Internal::Backends::Gdi
     }
 
     void GdiGraphicsBackend::ClearColorAndDepth(float, float, float, float, float)
-    { ThrowNo3D("ClearColorAndDepth"); }
-    void GdiGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
+    { ThrowUnsupportedFeature("ClearColorAndDepth"); }
+    void GdiGraphicsBackend::ClearDepth(float) { ThrowUnsupportedFeature("ClearDepth"); }
     void GdiGraphicsBackend::ClearStencil(int stencil)
     {
         SynchronizeBackbufferSize();
         Software::SoftwareGraphicsBackend::ClearStencil(stencil);
     }
-    void GdiGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
+    void GdiGraphicsBackend::ClearDepthAndStencil(float, int)
+    { ThrowUnsupportedFeature("ClearDepthAndStencil"); }
     void GdiGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
         SynchronizeBackbufferSize();
@@ -722,51 +731,54 @@ namespace CNA::Internal::Backends::Gdi
             MarkBackbufferFullyDirty();
     }
     void GdiGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int)
-    { ThrowNo3D("ClearColorDepthAndStencil"); }
-    void GdiGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D("SetDepthTestEnabled"); }
-    void GdiGraphicsBackend::SetBlendEnabled(bool) { ThrowNo3D("SetBlendEnabled"); }
-    void GdiGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
+    { ThrowUnsupportedFeature("ClearColorDepthAndStencil"); }
+    void GdiGraphicsBackend::SetDepthTestEnabled(bool)
+    { ThrowUnsupportedFeature("SetDepthTestEnabled"); }
+    void GdiGraphicsBackend::SetBlendEnabled(bool)
+    { ThrowUnsupportedFeature("SetBlendEnabled"); }
+    void GdiGraphicsBackend::SetDepthWriteEnabled(bool)
+    { ThrowUnsupportedFeature("SetDepthWriteEnabled"); }
 
     std::unique_ptr<IVertexBufferBackend> GdiGraphicsBackend::CreateVertexBuffer(int)
     {
-        ThrowNo3D("CreateVertexBuffer");
+        ThrowUnsupportedFeature("vertex buffers");
     }
 
     std::unique_ptr<IIndexBufferBackend> GdiGraphicsBackend::CreateIndexBuffer16(int)
     {
-        ThrowNo3D("CreateIndexBuffer16");
+        ThrowUnsupportedFeature("16-bit index buffers");
     }
 
     std::unique_ptr<IIndexBufferBackend> GdiGraphicsBackend::CreateIndexBuffer32(int)
     {
-        ThrowNo3D("CreateIndexBuffer32");
+        ThrowUnsupportedFeature("32-bit index buffers");
     }
 
     void GdiGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&, const Matrix&,
                                                     const Matrix&, const Matrix&, PrimitiveType, int)
-    { ThrowNo3D("DrawColoredPrimitives"); }
+    { ThrowUnsupportedFeature("DrawColoredPrimitives"); }
 
     void GdiGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
                                                            const IIndexBufferBackend&, const Matrix&,
                                                            const Matrix&, const Matrix&, PrimitiveType, int)
-    { ThrowNo3D("DrawIndexedColoredPrimitives"); }
+    { ThrowUnsupportedFeature("DrawIndexedColoredPrimitives"); }
 
     void GdiGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&, const Matrix&,
                                                const Matrix&, const Matrix&, PrimitiveType, int,
                                                const GpuDrawParams&)
-    { ThrowNo3D("DrawPrimitivesEx"); }
+    { ThrowUnsupportedFeature("DrawPrimitivesEx"); }
 
     void GdiGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend&,
                                                       const IIndexBufferBackend&, const Matrix&,
                                                       const Matrix&, const Matrix&, PrimitiveType, int,
                                                       const GpuDrawParams&)
-    { ThrowNo3D("DrawIndexedPrimitivesEx"); }
+    { ThrowUnsupportedFeature("DrawIndexedPrimitivesEx"); }
 
     void GdiGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend&,
                                                         const IIndexBufferBackend&, const Matrix&,
                                                         const Matrix&, const Matrix&, PrimitiveType, int,
                                                         int, const GpuDrawParams&)
-    { ThrowNo3D("DrawInstancedPrimitivesEx"); }
+    { ThrowUnsupportedFeature("DrawInstancedPrimitivesEx"); }
 } // namespace CNA::Internal::Backends::Gdi
 
 namespace CNA::Internal::Backends
