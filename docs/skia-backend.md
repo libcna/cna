@@ -188,8 +188,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers 77 SKIA-only CTests: seven window-independent raster
-   tests and 70 display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers 78 SKIA-only CTests: seven window-independent raster
+   tests and 71 display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -396,5 +396,11 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     stride, alpha-conversion, bounds, and resize checks; Debug and ASan/LSan variants pass the same
     boundary. Together with the missing-dependency and constructor-unwind probes, this closes the
     initial raster compile/presentation/fallback spikes without implying accelerated support.
+57. `Skia_WindowLifecycle` models a minimized presenter reporting 0×0 and proves the last valid
+    raster dimensions and sentinel pixel survive a Present. It then performs real synchronized
+    SDL hide/show, eight physical window resizes with exact fixed-height width recalculation and
+    far-corner readback, plus four actual SDL renderer/streaming-texture reconstructions while the
+    CPU raster remains live. All twelve checks pass normally and under AddressSanitizer; existing
+    presentation-mode and resource-recovery tests pass alongside it.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

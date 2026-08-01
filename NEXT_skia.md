@@ -19,7 +19,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 77 Skia CTests: seven raster-only and 70 display-required tests.
+- `docs/skia-backend.md` records 78 Skia CTests: seven raster-only and 71 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -270,6 +270,20 @@
   SDL presenter construction failures transactionally, and emits one immutable raster capability
   diagnostic on success. A future accelerated path must be selected observably at construction.
 
+## Completed in this session: SKIA-8
+
+- Centralized presenter-output measurement so a real or simulated 0×0 output remains unavailable
+  instead of being silently replaced by stale window dimensions. FixedHeightDynamicWidth keeps
+  its last valid CPU surface until a positive output returns; construction/reset still use the
+  requested virtual dimensions when no output exists.
+- Added owner-thread-only debug output-size override solely for deterministic minimized/restore
+  tests. It never resizes the SDL window and is not a public XNA API.
+- `Skia_WindowLifecycle` passes 12/12 normally and under ASan: non-mutating invalid-override
+  rejection, exact sentinel preservation through 0×0 Present, real synchronized hide/show,
+  positive restore reallocation, eight real physical resize/render/readback cycles, and four
+  actual presenter rebuilds preserving the live raster.
+  `Skia_PresentationModes` (25/25) and `Skia_ContextRecovery` (13/13) pass beside it under ASan.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -339,8 +353,8 @@
   builds. `Skia_DisplayScale` (10/10), `Skia_Resize_Presentation` (16/16), and
   `Skia_Presentation_Edge` (4/4) also pass in both builds; the 2D demo completes its three-frame
   smoke run from the build directory.
-- Full normal Skia milestone: all 77 labelled tests pass on one Xvfb server with CTest parallelism
-  2 (70 Display, seven Raster; 46.56 seconds real time). The temporary test display cache value was
+- Full normal Skia milestone: all 78 labelled tests pass on one Xvfb server with CTest parallelism
+  2 (71 Display, seven Raster; 48.93 seconds real time). The temporary test display cache value was
   restored to the repository's prior `:0` setting after the run.
 - SKIA-4 Release: `cmake-build-skia-release` configured successfully with ccache disabled; the
   two-job build completed 479 initial steps for the backend, full CNA static library, and raster

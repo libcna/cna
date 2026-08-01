@@ -70,6 +70,9 @@ namespace CNA::Internal::Backends::Skia
         }
         /// Actual SDL presenter interval after any supported-driver clamp (2 may become 1).
         NOXNA [[nodiscard]] int GetSwapIntervalEXT() const noexcept { return swapInterval_; }
+        /// Deterministic minimized/zero-output seam; does not alter the real SDL window.
+        NOXNA void DebugSetPresentationOutputSizeEXT(int width, int height);
+        NOXNA void DebugClearPresentationOutputSizeEXT();
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
@@ -112,6 +115,7 @@ namespace CNA::Internal::Backends::Skia
 
     private:
         void RecreateBackbuffer(int requestedWidth, int requestedHeight);
+        void GetPresentationOutputSize(int& width, int& height) const;
         void RefreshDynamicBackbufferIfNeeded();
         void RecreatePresentationRenderer();
         void RecreatePresentationTexture();
@@ -145,5 +149,8 @@ namespace CNA::Internal::Backends::Skia
         int preferredVirtualWidth_ = 0;
         int preferredVirtualHeight_ = 0;
         int swapInterval_ = 1;
+        bool debugOutputSizeOverride_ = false;
+        int debugOutputWidth_ = 0;
+        int debugOutputHeight_ = 0;
     };
 } // namespace CNA::Internal::Backends::Skia

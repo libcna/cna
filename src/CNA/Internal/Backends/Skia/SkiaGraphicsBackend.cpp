@@ -192,13 +192,24 @@ namespace CNA::Internal::Backends::Skia
         return *activeSurface;
     }
 
+    void SkiaGraphicsBackend::GetPresentationOutputSize(int& width, int& height) const
+    {
+        if (debugOutputSizeOverride_)
+        {
+            width = debugOutputWidth_;
+            height = debugOutputHeight_;
+            return;
+        }
+        width = 0;
+        height = 0;
+        (void)SDL_GetRenderOutputSize(renderer_, &width, &height);
+    }
+
     void SkiaGraphicsBackend::RecreateBackbuffer(int requestedWidth, int requestedHeight)
     {
         int outputWidth = 0;
         int outputHeight = 0;
-        SDL_GetRenderOutputSize(renderer_, &outputWidth, &outputHeight);
-        if (outputWidth <= 0 || outputHeight <= 0)
-            SDL_GetWindowSize(window_, &outputWidth, &outputHeight);
+        GetPresentationOutputSize(outputWidth, outputHeight);
 
         const int height = requestedHeight > 0 ? requestedHeight : std::max(outputHeight, 1);
         int width = requestedWidth;
@@ -228,9 +239,7 @@ namespace CNA::Internal::Backends::Skia
 
         int outputWidth = 0;
         int outputHeight = 0;
-        SDL_GetRenderOutputSize(renderer_, &outputWidth, &outputHeight);
-        if (outputWidth <= 0 || outputHeight <= 0)
-            SDL_GetWindowSize(window_, &outputWidth, &outputHeight);
+        GetPresentationOutputSize(outputWidth, outputHeight);
         if (outputWidth <= 0 || outputHeight <= 0)
             return;
 
@@ -375,6 +384,24 @@ namespace CNA::Internal::Backends::Skia
             throw std::runtime_error(std::string("Skia SDL_SetRenderVSync failed: ") + SDL_GetError());
         }
         swapInterval_ = interval;
+    }
+
+    void SkiaGraphicsBackend::DebugSetPresentationOutputSizeEXT(int width, int height)
+    {
+        AssertOwnership("DebugSetPresentationOutputSizeEXT");
+        if (width < 0 || height < 0)
+            throw std::out_of_range("Skia debug presentation output size must not be negative.");
+        debugOutputSizeOverride_ = true;
+        debugOutputWidth_ = width;
+        debugOutputHeight_ = height;
+    }
+
+    void SkiaGraphicsBackend::DebugClearPresentationOutputSizeEXT()
+    {
+        AssertOwnership("DebugClearPresentationOutputSizeEXT");
+        debugOutputSizeOverride_ = false;
+        debugOutputWidth_ = 0;
+        debugOutputHeight_ = 0;
     }
 
     void SkiaGraphicsBackend::DebugSimulateContextLoss()
