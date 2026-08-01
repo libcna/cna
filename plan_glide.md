@@ -33,6 +33,9 @@ renderer.
 - [x] Logical textures are tiled to the runtime-reported `GR_MAX_TEXTURE_SIZE`, each tile is padded
   to Glide's reported aspect limit, and each gets a complete generated mip chain before
   `grTexDownloadMipMap`.
+- [x] Tile bodies have address-mode-aware padding and a one-texel neighbour gutter at internal
+  logical boundaries. This preserves point sampling and level-0 bilinear samples through tile
+  seams for `Wrap`, `Clamp`, and `Mirror` while the final sample remains on TMU0.
 - [x] Startup queries `grQueryResolutions` for the actually usable double-buffered depth modes and
   `grGet` for `GR_MAX_TEXTURE_SIZE`, `GR_MAX_TEXTURE_ASPECT_RATIO`, and `GR_NUM_TMU`. It selects
   the smallest listed historical Glide mode that contains CNA's virtual framebuffer.
@@ -70,7 +73,7 @@ renderer.
 
 ## Next implementation work
 
-- [ ] Preserve linear and mip filtering exactly at logical tile seams. The new 3D address-mode
-  partition draws from the correct tile for `Wrap`, `Clamp`, and `Mirror`, but the current
-  power-of-two tile padding repeats that tile's edge texel. It needs address-mode-aware neighbour
-  gutters, generated consistently for every mip level, to blend with the adjacent logical texel.
+- [ ] Preserve minified mip sampling exactly at logical tile seams. Level-0 linear samples now
+  have an address-mode-aware neighbour gutter, but every physical Glide tile still builds its own
+  mip chain. Their level footprints/phases do not line up at a logical boundary, so fixing the
+  remaining minification mismatch needs a cross-tile mip design rather than simply a wider gutter.

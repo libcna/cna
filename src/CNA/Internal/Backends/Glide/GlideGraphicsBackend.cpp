@@ -866,6 +866,12 @@ namespace CNA::Internal::Backends::Glide
             int sourceY = 0;
             int sourceWidth = 0;
             int sourceHeight = 0;
+            // A tile owns source texels plus a one-texel halo wherever an adjacent logical tile
+            // exists. The remaining power-of-two padding is filled with the active address mode.
+            int gutterLeft = 0;
+            int gutterTop = 0;
+            int gutterRight = 0;
+            int gutterBottom = 0;
             int paddedWidth = 0;
             int paddedHeight = 0;
             TextureRange range{};
@@ -933,7 +939,7 @@ namespace CNA::Internal::Backends::Glide
             }
             for (Tile& tile : tiles_)
             {
-                ConvertTileToGlideTexels(tile);
+                ConvertTileToGlideTexels(tile, uploadedAddressU_, uploadedAddressV_);
                 Upload(tile);
             }
         }
@@ -952,6 +958,26 @@ namespace CNA::Internal::Backends::Glide
         [[nodiscard]] const std::vector<Tile>& Tiles() const { return tiles_; }
         [[nodiscard]] bool IsTiled() const { return tiles_.size() != 1; }
 
+        void EnsureAddressMode(int addressU, int addressV)
+        {
+            // The source image is retained in RGBA8, so changing the sampler address mode can
+            // rebuild tile padding without losing information to an earlier ARGB4444 conversion.
+            // The tile body is unchanged; only its halo and unused power-of-two padding differ.
+            if (addressU == uploadedAddressU_ && addressV == uploadedAddressV_)
+            {
+                return;
+            }
+            static_cast<void>(ToGlideTextureAddress(addressU));
+            static_cast<void>(ToGlideTextureAddress(addressV));
+            for (Tile& tile : tiles_)
+            {
+                ConvertTileToGlideTexels(tile, addressU, addressV);
+                Upload(tile);
+            }
+            uploadedAddressU_ = addressU;
+            uploadedAddressV_ = addressV;
+        }
+
     private:
         void BuildTiles()
         {
@@ -960,17 +986,41 @@ namespace CNA::Internal::Backends::Glide
             {
                 throw std::runtime_error("Glide reported an invalid non-power-of-two maximum texture size");
             }
-            for (int sourceY = 0; sourceY < height_; sourceY += maximum)
+            if (maximum < 4 && (width_ > maximum || height_ > maximum))
             {
-                for (int sourceX = 0; sourceX < width_; sourceX += maximum)
+                throw std::runtime_error("Glide texture-size limit is too small to construct tile gutters");
+            }
+            for (int sourceY = 0; sourceY < height_; )
+            {
+                const int gutterTop = sourceY == 0 ? 0 : 1;
+                const int remainingY = height_ - sourceY;
+                const int gutterBottom = remainingY > maximum - gutterTop ? 1 : 0;
+                const int sourceHeight = std::min(remainingY, maximum - gutterTop - gutterBottom);
+                if (sourceHeight <= 0)
                 {
+                    throw std::runtime_error("GLIDE texture tiler could not reserve a vertical gutter");
+                }
+                for (int sourceX = 0; sourceX < width_; )
+                {
+                    const int gutterLeft = sourceX == 0 ? 0 : 1;
+                    const int remainingX = width_ - sourceX;
+                    const int gutterRight = remainingX > maximum - gutterLeft ? 1 : 0;
+                    const int sourceWidth = std::min(remainingX, maximum - gutterLeft - gutterRight);
+                    if (sourceWidth <= 0)
+                    {
+                        throw std::runtime_error("GLIDE texture tiler could not reserve a horizontal gutter");
+                    }
                     Tile tile{};
                     tile.sourceX = sourceX;
                     tile.sourceY = sourceY;
-                    tile.sourceWidth = std::min(maximum, width_ - sourceX);
-                    tile.sourceHeight = std::min(maximum, height_ - sourceY);
-                    tile.paddedWidth = NextPowerOfTwo(tile.sourceWidth, maximum);
-                    tile.paddedHeight = NextPowerOfTwo(tile.sourceHeight, maximum);
+                    tile.sourceWidth = sourceWidth;
+                    tile.sourceHeight = sourceHeight;
+                    tile.gutterLeft = gutterLeft;
+                    tile.gutterTop = gutterTop;
+                    tile.gutterRight = gutterRight;
+                    tile.gutterBottom = gutterBottom;
+                    tile.paddedWidth = NextPowerOfTwo(tile.sourceWidth + tile.gutterLeft + tile.gutterRight, maximum);
+                    tile.paddedHeight = NextPowerOfTwo(tile.sourceHeight + tile.gutterTop + tile.gutterBottom, maximum);
                     const int maximumAspect = 1 << owner_.impl_->maxTextureAspectLog2;
                     while (tile.paddedWidth > tile.paddedHeight * maximumAspect && tile.paddedHeight < maximum)
                     {
@@ -986,7 +1036,7 @@ namespace CNA::Internal::Backends::Glide
                     {
                         throw std::runtime_error("GLIDE texture tile cannot satisfy the emulator-reported aspect-ratio limit");
                     }
-                    ConvertTileToGlideTexels(tile);
+                    ConvertTileToGlideTexels(tile, uploadedAddressU_, uploadedAddressV_);
                     const FxU32 requiredBytes = owner_.impl_->api.grTexTextureMemRequired(kMipMapBoth, &tile.nativeInfo);
                     if (requiredBytes == 0)
                     {
@@ -1003,11 +1053,43 @@ namespace CNA::Internal::Backends::Glide
                         throw;
                     }
                     tiles_.push_back(std::move(tile));
+                    sourceX += sourceWidth;
                 }
+                sourceY += sourceHeight;
             }
         }
 
-        void ConvertTileToGlideTexels(Tile& tile)
+        [[nodiscard]] static int AddressTexel(int coordinate, int dimension, int addressMode)
+        {
+            if (dimension <= 0)
+            {
+                throw std::runtime_error("GLIDE texture address conversion received an invalid dimension");
+            }
+            switch (addressMode)
+            {
+                case 0: // TextureAddressMode::Wrap
+                {
+                    int result = coordinate % dimension;
+                    return result < 0 ? result + dimension : result;
+                }
+                case 1: // TextureAddressMode::Clamp
+                    return std::clamp(coordinate, 0, dimension - 1);
+                case 2: // TextureAddressMode::Mirror
+                {
+                    const int period = dimension * 2;
+                    int reflected = coordinate % period;
+                    if (reflected < 0)
+                    {
+                        reflected += period;
+                    }
+                    return reflected < dimension ? reflected : period - 1 - reflected;
+                }
+                default:
+                    throw std::runtime_error("GLIDE backend received an unknown TextureAddressMode value");
+            }
+        }
+
+        void ConvertTileToGlideTexels(Tile& tile, int addressU, int addressV)
         {
             const int largeDimension = std::max(tile.paddedWidth, tile.paddedHeight);
             tile.nativeTexels.clear();
@@ -1017,10 +1099,10 @@ namespace CNA::Internal::Backends::Glide
             std::vector<std::uint16_t> level(static_cast<std::size_t>(levelWidth) * levelHeight);
             for (int y = 0; y < levelHeight; ++y)
             {
-                const int sourceY = tile.sourceY + std::min(y, tile.sourceHeight - 1);
+                const int sourceY = AddressTexel(tile.sourceY + y - tile.gutterTop, height_, addressV);
                 for (int x = 0; x < levelWidth; ++x)
                 {
-                    const int sourceX = tile.sourceX + std::min(x, tile.sourceWidth - 1);
+                    const int sourceX = AddressTexel(tile.sourceX + x - tile.gutterLeft, width_, addressU);
                     level[static_cast<std::size_t>(y) * levelWidth + x] = RgbaToArgb4444(
                         rgba_.data() + (static_cast<std::size_t>(sourceY) * width_ + sourceX) * 4u);
                 }
@@ -1077,6 +1159,8 @@ namespace CNA::Internal::Backends::Glide
         GlideGraphicsBackend& owner_;
         int width_ = 0;
         int height_ = 0;
+        int uploadedAddressU_ = 1;
+        int uploadedAddressV_ = 1;
         std::vector<std::uint8_t> rgba_;
         std::vector<Tile> tiles_;
 
@@ -1526,6 +1610,9 @@ namespace CNA::Internal::Backends::Glide
         {
             return;
         }
+        // `texture` is publicly const during a draw, but its backend owns mutable native cache
+        // storage. Rebuild only address-dependent gutters/padding before TMU0 sees the tile.
+        const_cast<GlideTextureBackend*>(glideTexture)->EnsureAddressMode(addressU, addressV);
 
         // A preceding colored 3D draw leaves the fixed function combiner untextured. Restore
         // the SpriteBatch path explicitly instead of relying on accidental Glide state.
@@ -1577,10 +1664,14 @@ namespace CNA::Internal::Backends::Glide
                 place(localLeft, localTop), place(localRight, localTop),
                 place(localRight, localBottom), place(localLeft, localBottom) };
             const std::array<Vector2, 4> texcoords = {
-                Vector2(static_cast<float>(texLeft - tile.sourceX), static_cast<float>(texTop - tile.sourceY)),
-                Vector2(static_cast<float>(texRight - tile.sourceX), static_cast<float>(texTop - tile.sourceY)),
-                Vector2(static_cast<float>(texRight - tile.sourceX), static_cast<float>(texBottom - tile.sourceY)),
-                Vector2(static_cast<float>(texLeft - tile.sourceX), static_cast<float>(texBottom - tile.sourceY)) };
+                Vector2(static_cast<float>(texLeft - tile.sourceX + tile.gutterLeft),
+                        static_cast<float>(texTop - tile.sourceY + tile.gutterTop)),
+                Vector2(static_cast<float>(texRight - tile.sourceX + tile.gutterLeft),
+                        static_cast<float>(texTop - tile.sourceY + tile.gutterTop)),
+                Vector2(static_cast<float>(texRight - tile.sourceX + tile.gutterLeft),
+                        static_cast<float>(texBottom - tile.sourceY + tile.gutterTop)),
+                Vector2(static_cast<float>(texLeft - tile.sourceX + tile.gutterLeft),
+                        static_cast<float>(texBottom - tile.sourceY + tile.gutterTop)) };
             const auto makeVertex = [&](int index) -> GlideVertex
             {
                 return GlideVertex{
@@ -1596,7 +1687,9 @@ namespace CNA::Internal::Backends::Glide
             impl_->api.grTexSource(0, tile.range.address, kMipMapBoth,
                                     const_cast<GlideTexInfo*>(&tile.nativeInfo));
             impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
-            impl_->api.grTexClampMode(0, ToGlideTextureAddress(addressU), ToGlideTextureAddress(addressV));
+            // Geometry has already been restricted to the selected tile; letting native Wrap or
+            // Mirror escape into its power-of-two padding would sample a wrong logical tile.
+            impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
             impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
             const GlideVertex topLeft = makeVertex(0);
             const GlideVertex topRight = makeVertex(1);
@@ -1947,6 +2040,11 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE textured draw received a texture created by a different backend");
         }
+        if (textured)
+        {
+            const_cast<GlideTextureBackend*>(texture)->EnsureAddressMode(
+                impl_->samplerAddressU, impl_->samplerAddressV);
+        }
         const Matrix wvp = world * view * projection;
         const auto readVertex = [&](int vertexIndex) -> CpuVertex
         {
@@ -2057,8 +2155,10 @@ namespace CNA::Internal::Backends::Glide
             const float ndcX = input.clipX * reciprocalW;
             const float ndcY = input.clipY * reciprocalW;
             const float ndcZ = input.clipZ * reciprocalW;
-            const float s = tile == nullptr ? 0.0f : input.u * static_cast<float>(texture->GetWidth()) - tile->sourceX;
-            const float t = tile == nullptr ? 0.0f : input.v * static_cast<float>(texture->GetHeight()) - tile->sourceY;
+            const float s = tile == nullptr ? 0.0f :
+                input.u * static_cast<float>(texture->GetWidth()) - tile->sourceX + tile->gutterLeft;
+            const float t = tile == nullptr ? 0.0f :
+                input.v * static_cast<float>(texture->GetHeight()) - tile->sourceY + tile->gutterTop;
             return GlideVertex{
                 (ndcX + 1.0f) * static_cast<float>(impl_->virtualWidth) * 0.5f,
                 (1.0f - ndcY) * static_cast<float>(impl_->virtualHeight) * 0.5f,
