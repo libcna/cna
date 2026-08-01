@@ -196,6 +196,35 @@ That makes it valuable to CNA in two specific ways:
 
 ---
 
+## Feature gap vs. EasyGL
+
+SOKOL is not at EasyGL parity. This is the complete list of what EasyGL supports today that SOKOL
+does not, as of the state above:
+
+| Feature | EasyGL | SOKOL | Why |
+|---|---|---|---|
+| Custom `Effect` via `SpriteBatch.Begin(effect)` / arbitrary `ShaderEffect` | ✅ real GLSL compilation at runtime | ⬜ `CreateEffectBackend` returns null | `SOKOL-28`: no runtime shader-compilation path or shdc-at-build-time contract exists yet. Far and away the largest remaining gap — it is also what blocks MRT and arbitrary vertex declarations below from having any consumer. |
+| `RasterizerState.FillMode = WireFrame` | ✅ CPU-side triangle-to-`GL_LINES` re-expansion at draw time | ⬜ accepted and ignored | **Permanent**: sokol_gfx exposes no polygon fill-mode API at all, unlike raw GL. `SOKOL-23`. |
+| Vertex elements other than Position/Color/TextureCoordinate/Normal at usage index 0 (BlendWeight/BlendIndices for skinning, Tangent/Binormal for normal mapping, PBR inputs) | ✅ (skinned, normal-mapped, PBR stock effect shaders) | ⬜ ignored by the colored-3D pipeline | `SOKOL-22`: needs new shader variants that don't exist for this backend; also has no consumer without `SOKOL-28`. |
+| Dual-texture, environment-mapped, skinned or PBR 3D shading (`DualTextureEffect`, `EnvironmentMapEffect`, skinned `BasicEffect`) | ✅ | ⬜ throws, naming the unsupported combination | Phase 5 — same shader-variant gap as above. |
+| Instanced draws | ✅ | ⬜ throws | Phase 5. |
+| MRT (`SetRenderTargets` with more than one binding) | ✅ real multiple colour attachments | ⬜ throws `NotYetImplemented` | `SOKOL-26` — blocked on `SOKOL-28`: no stock shader writes more than one colour output, so MRT has no consumer to verify against yet. |
+| `RenderTarget2D`/`RenderTargetCube` mip-mapped (`mipMap=true`) | ✅ | ⬜ throws `NotYetImplemented` | `SOKOL-26`. |
+| `RenderTarget2D`/`RenderTargetCube` direct CPU readback (`GetData()`) | ✅ | ⬜ throws `System::NotSupportedException` | `SOKOL-26` — sampling the target as a texture, or reading the backbuffer after drawing it there, both still work. |
+| `RenderTargetCube` MSAA | ✅ six real multisample renderbuffers, one per face | ⬜ `multiSampleCount` silently clamped to 1 | **Permanent, not "not implemented yet"**: sokol_gfx's own validation layer hard-rejects any `SG_IMAGETYPE_CUBE` image with `sample_count > 1` (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed empirically via a real `[sg][panic]` abort while prototyping the same layout `RenderTarget2D` MSAA uses successfully. `SOKOL-26`, closed as a permanent gap. |
+| `BlendState.MultiSampleMask` | ✅ | ⬜ ignored | **No upstream API**: sokol_gfx exposes alpha-to-coverage only, no per-sample coverage mask. |
+| `Viewport.MinDepth`/`MaxDepth` | ✅ | ⬜ ignored | `sg_apply_viewport` carries no depth range. `SOKOL-21`. |
+| Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ✅ | ⬜ every `SetData` recreates the GPU resource | `SOKOL-24` — a pure, unmeasured perf optimisation, deliberately deprioritised. |
+| Non-GL native context (`D3D11`/Metal/WebGPU dispatch inside sokol_gfx itself) | N/A (EasyGL is GL-only by design) | ⬜ configure warns, construction throws for any `CNA_SOKOL_API` other than `GLCORE` | `SOKOL-31`. |
+| Verified on real discrete-GPU hardware | ✅ | ⬜ only verified under Mesa llvmpipe (Xvfb) so far | `SOKOL-30` — infeasible in this sandbox, no discrete GPU available. |
+
+Everything **not** in this table (2D SpriteBatch, BasicEffect textured/lit 3D, depth/stencil,
+culling, depth bias, RenderTarget2D incl. MSAA+resolve, RenderTargetCube, TextureCube, Texture3D
+storage, occlusion queries) is already at parity with EasyGL — see the "What works" table in
+[`docs/sokol-backend.md`](docs/sokol-backend.md) for the verification evidence behind each one.
+
+---
+
 ## Regenerating the shaders
 
 ```bash
