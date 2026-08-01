@@ -1752,6 +1752,90 @@ namespace CNA::Internal::Backends::Glide
             return polygon;
         }
 
+        struct TextureAddressSegment
+        {
+            float lower = 0.0f;
+            float upper = 0.0f;
+            // Convert an input coordinate in [lower, upper] back into the logical image's
+            // [0, 1] coordinate range before it is converted to a tile-local Glide ST value.
+            float scale = 1.0f;
+            float offset = 0.0f;
+        };
+
+        [[nodiscard]] std::vector<TextureAddressSegment> MakeTextureAddressSegments(
+            int addressMode, float minimum, float maximum, float tileBegin, float tileEnd)
+        {
+            if (minimum > maximum || tileBegin < 0.0f || tileEnd > 1.0f || tileBegin > tileEnd)
+            {
+                throw std::runtime_error("GLIDE texture-address partition received an invalid coordinate range");
+            }
+
+            std::vector<TextureAddressSegment> result;
+            const auto appendIntersecting = [&](float lower, float upper, float scale, float offset)
+            {
+                const float clippedLower = std::max(lower, minimum);
+                const float clippedUpper = std::min(upper, maximum);
+                if (clippedLower <= clippedUpper)
+                {
+                    result.push_back(TextureAddressSegment{clippedLower, clippedUpper, scale, offset});
+                }
+            };
+
+            switch (addressMode)
+            {
+                case 1: // TextureAddressMode::Clamp
+                    appendIntersecting(tileBegin, tileEnd, 1.0f, 0.0f);
+                    if (tileBegin == 0.0f && minimum < 0.0f)
+                    {
+                        appendIntersecting(minimum, 0.0f, 0.0f, 0.0f);
+                    }
+                    if (tileEnd == 1.0f && maximum > 1.0f)
+                    {
+                        appendIntersecting(1.0f, maximum, 0.0f, 1.0f);
+                    }
+                    return result;
+
+                case 0: // TextureAddressMode::Wrap
+                case 2: // TextureAddressMode::Mirror
+                    break;
+
+                default:
+                    throw std::runtime_error("GLIDE backend received an unknown TextureAddressMode value");
+            }
+
+            // Logical texture tiling needs one Glide submission for every touched image tile and
+            // every repeated unit interval. Keep an explicit limit instead of risking a runaway
+            // draw loop from corrupt vertex data; normal CNA geometry is many orders below this.
+            constexpr int kMaximumAddressRepeatIntervals = 4096;
+            const float firstInterval = std::floor(minimum);
+            const float lastInterval = std::floor(maximum);
+            if (firstInterval < -static_cast<float>(kMaximumAddressRepeatIntervals) ||
+                lastInterval > static_cast<float>(kMaximumAddressRepeatIntervals) ||
+                lastInterval - firstInterval >= static_cast<float>(kMaximumAddressRepeatIntervals))
+            {
+                throw std::runtime_error(
+                    "GLIDE 3D texture addressing spans too many Wrap/Mirror repeat intervals");
+            }
+
+            for (int interval = static_cast<int>(firstInterval);
+                 interval <= static_cast<int>(lastInterval); ++interval)
+            {
+                const float intervalStart = static_cast<float>(interval);
+                if (addressMode == 0 || interval % 2 == 0)
+                {
+                    appendIntersecting(intervalStart + tileBegin, intervalStart + tileEnd,
+                                       1.0f, -intervalStart);
+                }
+                else
+                {
+                    appendIntersecting(intervalStart + 1.0f - tileEnd,
+                                       intervalStart + 1.0f - tileBegin,
+                                       -1.0f, intervalStart + 1.0f);
+                }
+            }
+            return result;
+        }
+
         [[nodiscard]] bool HasFiniteClipCoordinates(const CpuVertex& vertex)
         {
             return std::isfinite(vertex.clipX) && std::isfinite(vertex.clipY) &&
@@ -1863,13 +1947,6 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE textured draw received a texture created by a different backend");
         }
-        if (textured && texture->IsTiled() && (impl_->samplerAddressU != 1 || impl_->samplerAddressV != 1))
-        {
-            throw std::runtime_error(
-                "GLIDE tiled 3D textures currently require SamplerState.Clamp; repeating across a tile boundary "
-                "would require a second geometry unwrap pass");
-        }
-
         const Matrix wvp = world * view * projection;
         const auto readVertex = [&](int vertexIndex) -> CpuVertex
         {
@@ -2007,7 +2084,9 @@ namespace CNA::Internal::Backends::Glide
             {
                 impl_->api.grTexSource(0, tile.range.address, kMipMapBoth, const_cast<GlideTexInfo*>(&tile.nativeInfo));
                 impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
-                impl_->api.grTexClampMode(0, ToGlideTextureAddress(impl_->samplerAddressU), ToGlideTextureAddress(impl_->samplerAddressV));
+                // CPU partitions the logical image at every tile and address-mode boundary, so
+                // each submitted polygon is sampled only from its selected native tile.
+                impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
                 impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
                 const auto drawTriangleForTile = [&](CpuVertex a, CpuVertex b, CpuVertex c)
                 {
@@ -2021,13 +2100,47 @@ namespace CNA::Internal::Backends::Glide
                     const float u1 = static_cast<float>(tile.sourceX + tile.sourceWidth) / texture->GetWidth();
                     const float v0 = static_cast<float>(tile.sourceY) / texture->GetHeight();
                     const float v1 = static_cast<float>(tile.sourceY + tile.sourceHeight) / texture->GetHeight();
-                    polygon = ClipPolygon(polygon, [u0](const CpuVertex& v) { return v.u - u0; });
-                    polygon = ClipPolygon(polygon, [u1](const CpuVertex& v) { return u1 - v.u; });
-                    polygon = ClipPolygon(polygon, [v0](const CpuVertex& v) { return v.v - v0; });
-                    polygon = ClipPolygon(polygon, [v1](const CpuVertex& v) { return v1 - v.v; });
-                    if (polygon.size() >= 3)
+                    const auto minMaxU = std::minmax_element(
+                        polygon.begin(), polygon.end(), [](const CpuVertex& left, const CpuVertex& right)
+                        {
+                            return left.u < right.u;
+                        });
+                    const auto minMaxV = std::minmax_element(
+                        polygon.begin(), polygon.end(), [](const CpuVertex& left, const CpuVertex& right)
+                        {
+                            return left.v < right.v;
+                        });
+                    const std::vector<TextureAddressSegment> uSegments = MakeTextureAddressSegments(
+                        impl_->samplerAddressU, minMaxU.first->u, minMaxU.second->u, u0, u1);
+                    const std::vector<TextureAddressSegment> vSegments = MakeTextureAddressSegments(
+                        impl_->samplerAddressV, minMaxV.first->v, minMaxV.second->v, v0, v1);
+                    for (const TextureAddressSegment& uSegment : uSegments)
                     {
-                        drawFan(polygon, &tile);
+                        std::vector<CpuVertex> uPolygon = ClipPolygon(
+                            polygon, [uSegment](const CpuVertex& v) { return v.u - uSegment.lower; });
+                        uPolygon = ClipPolygon(
+                            uPolygon, [uSegment](const CpuVertex& v) { return uSegment.upper - v.u; });
+                        if (uPolygon.size() < 3)
+                        {
+                            continue;
+                        }
+                        for (const TextureAddressSegment& vSegment : vSegments)
+                        {
+                            std::vector<CpuVertex> tilePolygon = ClipPolygon(
+                                uPolygon, [vSegment](const CpuVertex& v) { return v.v - vSegment.lower; });
+                            tilePolygon = ClipPolygon(
+                                tilePolygon, [vSegment](const CpuVertex& v) { return vSegment.upper - v.v; });
+                            if (tilePolygon.size() < 3)
+                            {
+                                continue;
+                            }
+                            for (CpuVertex& vertex : tilePolygon)
+                            {
+                                vertex.u = vertex.u * uSegment.scale + uSegment.offset;
+                                vertex.v = vertex.v * vSegment.scale + vSegment.offset;
+                            }
+                            drawFan(tilePolygon, &tile);
+                        }
                     }
                 };
                 for (int triangle = 0; triangle < primitiveCount; ++triangle)

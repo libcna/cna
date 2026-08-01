@@ -133,9 +133,9 @@ namespace
 
             using TexturedVertex = CNA::Internal::Graphics::PositionTextureStream;
             const std::array<TexturedVertex, 3> texturedTriangle = {{
-                {-0.75f, -0.75f, 0.25f, 0.0f, 1.0f},
-                { 0.75f, -0.75f, 0.25f, 1.0f, 1.0f},
-                { 0.00f,  0.75f, 0.25f, 0.5f, 0.0f},
+                {-0.75f, -0.75f, 0.25f, 0.25f, 1.25f},
+                { 0.75f, -0.75f, 0.25f, 2.25f, 1.25f},
+                { 0.00f,  0.75f, 0.25f, 1.25f, 2.25f},
             }};
             auto texturedBuffer = backend.CreateVertexBuffer(static_cast<int>(texturedTriangle.size()));
             texturedBuffer->SetData(texturedTriangle.data(), static_cast<int>(texturedTriangle.size()), sizeof(TexturedVertex));
@@ -143,6 +143,7 @@ namespace
             texturedParams.texture0 = &texture_->GetBackend();
             texturedParams.textureEnabled = true;
             texturedParams.vertexColorEnabled = false;
+            backend.ApplySamplerState(0, 0, 0, 0, 4); // LinearWrap: crosses two U/V intervals.
             backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
             backend.DrawPrimitivesEx(*texturedBuffer, Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
@@ -152,7 +153,18 @@ namespace
             device.GetBackBufferData(&texturedProbeRegion, &texturedProbe, 0, 1);
             Check(texturedProbe.getRProperty() > 200 && texturedProbe.getGProperty() < 40 &&
                       texturedProbe.getBProperty() < 40,
-                  "VertexPositionTexture uses TMU0 perspective texture submission");
+                  "VertexPositionTexture wraps across texture-address intervals through TMU0");
+
+            backend.ApplySamplerState(0, 0, 2, 2, 4); // LinearMirror over the same out-of-range UVs.
+            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            backend.DrawPrimitivesEx(*texturedBuffer, Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     PrimitiveType::TriangleList, 1, texturedParams);
+            Color mirroredProbe(0, 0, 0, 0);
+            device.GetBackBufferData(&texturedProbeRegion, &mirroredProbe, 0, 1);
+            Check(mirroredProbe.getRProperty() > 200 && mirroredProbe.getGProperty() < 40 &&
+                      mirroredProbe.getBProperty() < 40,
+                  "VertexPositionTexture mirrors out-of-range UVs through TMU0");
 
             std::printf("=== %d/%d PASS ===\n", passes_, kChecks);
             result_ = passes_ == kChecks ? 0 : 1;
@@ -160,7 +172,7 @@ namespace
         }
 
     private:
-        static constexpr int kChecks = 8;
+        static constexpr int kChecks = 9;
 
         void Check(bool condition, const char* label)
         {

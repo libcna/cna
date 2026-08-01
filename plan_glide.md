@@ -47,9 +47,10 @@ renderer.
 - Generated mips are a 2×2 box average in ARGB4444 space. That is faithful to the historical
   texture format and hardware mip selection, but differs slightly from an RGBA8 source-space mip
   generator because the source has already been quantized to four bits per channel.
-- A tiled 3D image requires `SamplerState.Clamp`. `SpriteBatch` already splits its bounded source
-  rectangle per tile; transparent Wrap/Mirror across a 3D tile seam would require a second CPU UV
-  unwrap pass and is explicitly rejected rather than sampled from a wrong tile.
+- Tiled 3D images partition clipped geometry at logical tile and address-mode boundaries on the
+  CPU, so `SamplerState.Wrap`, `Clamp` and `Mirror` work over the complete logical image while
+  Glide TMU0 still performs the final filtered sample. A malformed draw spanning more than 4096
+  Wrap/Mirror intervals is rejected to avoid an unbounded CPU submission loop.
 - CNA exposes no dither setting in `RasterizerState` or `GpuDrawParams`. The backend therefore
   keeps the emulator's native Glide dither default and does not invent a state mapping. When CNA
   adds a dither control, it can map directly to `grDitherMode` (`Disable`, `2x2`, `4x4`).
@@ -66,3 +67,10 @@ renderer.
   approval, because it would no longer be a real Glide backend.
 - Native 64-bit applications: historical Glide's window-handle ABI is 32-bit. Use the supplied
   i686 MinGW toolchain and an x86 emulator DLL.
+
+## Next implementation work
+
+- [ ] Preserve linear and mip filtering exactly at logical tile seams. The new 3D address-mode
+  partition draws from the correct tile for `Wrap`, `Clamp`, and `Mirror`, but the current
+  power-of-two tile padding repeats that tile's edge texel. It needs address-mode-aware neighbour
+  gutters, generated consistently for every mip level, to blend with the adjacent logical texel.

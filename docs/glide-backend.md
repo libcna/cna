@@ -48,8 +48,12 @@ normal CTest because CNA cannot provide or configure the external emulator.
   depth buffer but no stencil buffer, so stencil requests remain unsupported.
 - Textures are converted from CNA RGBA8 to native Glide ARGB4444, padded to power-of-two tiles,
   and receive complete generated ARGB4444 mip chains. The backend queries the runtime texture and
-  aspect limits and tiles larger logical images rather than downsampling them. Tiled 3D sampling
-  requires Clamp; SpriteBatch source rectangles are split per tile.
+  aspect limits and tiles larger logical images rather than downsampling them. For 3D draws, the
+  CPU partitions clipped geometry at logical tile and `Wrap`/`Clamp`/`Mirror` boundaries, then
+  Glide TMU0 performs the final filtered sample from each tile. SpriteBatch source rectangles are
+  split per tile directly. The remaining fidelity item is seamless linear/mip filtering at a
+  logical tile edge: today its power-of-two padding repeats the edge texel instead of including a
+  neighbouring-tile gutter.
 - The native context uses `grQueryResolutions` and selects the smallest supported historical Glide
   double-buffered depth mode that contains CNA's virtual resolution, rather than assuming a fixed
   640×480/800×600 capability. It also queries texture/TMU limits through `grGet`.
