@@ -22,6 +22,20 @@
 - `docs/skia-backend.md` records 78 Skia CTests: seven raster-only and 71 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
+## Completed in this session: SKIA-21
+
+- Added a distinct non-zero process-local identity to every logical `SkiaSurface`. The identity
+  remains stable when `Resize` transactionally replaces the raster storage; copying and moving are
+  forbidden because the active-target binding intentionally retains stable surface addresses.
+- `SkiaRenderTargetBinding` records both backbuffer and active identities alongside its pointers
+  and validates them before access. `CNA_SKIA_STATE_TRACE=1` now prints those identities, making a
+  transition from backbuffer to target and back directly observable.
+- Expanded `Skia_Surface_Raster` from 10 to 14 checks: unallocated lifetime behavior, safe Clear
+  rejection, canvas/snapshot absence, distinct/stable identity, and the existing exact pixel-
+  origin/alpha/bounds contracts. Surface and binding tests pass in Debug and Release and under
+  ASan/LSan with `detect_leaks=1`; the eleven-check windowed state-transition suite passes normally
+  and under ASan (`detect_leaks=0` for the known display-stack exit baseline).
+
 ## Completed in this session: SKIA-69
 
 - Added `SkiaRenderTargetBinding`: the graphics backend owns the active-surface record and every
@@ -358,18 +372,19 @@
   restored to the repository's prior `:0` setting after the run.
 - SKIA-4 Release: `cmake-build-skia-release` configured successfully with ccache disabled; the
   two-job build completed 479 initial steps for the backend, full CNA static library, and raster
-  smoke. Release `Skia_Surface_Raster` passes all ten checks.
+  smoke. The current `Skia_Surface_Raster` passes all 14 checks and the target-binding companion
+  passes 10/10 in Release.
 
 ## Current task
 
-Audit the remaining unchecked foundational rows (SKIA-1 through SKIA-9, then stale implementation
-rows such as SKIA-21) against the completed raster vertical slice. Correct stale status only with
-existing evidence; implement independently observable gaps in dependency order.
+Build the maintainable row-per-entry parity ledger required by SKIA-1 from the actual common
+backend interfaces and public `GraphicsDevice` forwarding surface. Keep aspirational accelerated
+work explicitly separate from the implemented raster result.
 
 ## Next candidates
 
-1. Audit SKIA-1 through SKIA-9 against code, dependency metadata, and current tests; implement the
-   highest-value safe gap rather than marking aspirational accelerated work complete.
+1. Complete SKIA-1's machine-checkable backend/public API ledger, then use it to classify the
+   EasyGL test registrations for SKIA-2 without duplicating stale hand-maintained inventories.
 2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
    probe; the selected raster path has no truthful capability to expose there.
 3. Keep the recovery boundary precise: raster resources survive SDL presenter reconstruction;

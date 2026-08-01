@@ -1,7 +1,9 @@
 #pragma once
 
 #include "CNA/Internal/Backends/Skia/SkiaOwnership.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -10,8 +12,6 @@
 namespace CNA::Internal::Backends::Skia
 {
     class SkiaRenderTargetBackend;
-    class SkiaSurface;
-
     /**
      * Backend-owned record of the current raster destination.
      *
@@ -45,8 +45,12 @@ namespace CNA::Internal::Backends::Skia
             if (!backbuffer)
                 throw std::runtime_error("Skia active-surface violation: backbuffer must not be null.");
             backbuffer_ = backbuffer;
+            backbufferIdentity_ = backbuffer->Identity();
             if (activeTarget_ == nullptr)
+            {
                 activeSurface_ = backbuffer_;
+                activeSurfaceIdentity_ = backbufferIdentity_;
+            }
         }
 
         void Bind(SkiaRenderTargetBackend* target, SkiaSurface* surface)
@@ -59,6 +63,7 @@ namespace CNA::Internal::Backends::Skia
             }
             activeTarget_ = target;
             activeSurface_ = surface;
+            activeSurfaceIdentity_ = surface->Identity();
         }
 
         void UnbindToBackbuffer()
@@ -68,6 +73,7 @@ namespace CNA::Internal::Backends::Skia
                 throw std::runtime_error("Skia active-surface violation: no backbuffer is registered.");
             activeTarget_ = nullptr;
             activeSurface_ = backbuffer_;
+            activeSurfaceIdentity_ = backbufferIdentity_;
         }
 
         void Detach(const SkiaRenderTargetBackend* target) noexcept
@@ -79,6 +85,7 @@ namespace CNA::Internal::Backends::Skia
                 // backend-owned surface directly before the target's surface is released.
                 activeTarget_ = nullptr;
                 activeSurface_ = backbuffer_;
+                activeSurfaceIdentity_ = backbufferIdentity_;
             }
         }
 
@@ -86,6 +93,9 @@ namespace CNA::Internal::Backends::Skia
         {
             AssertOwnerAccess("active-surface access");
             if (!backbuffer_ || backbuffer_ != expectedBackbuffer || !activeSurface_
+                || backbufferIdentity_ == 0 || activeSurfaceIdentity_ == 0
+                || backbuffer_->Identity() != backbufferIdentity_
+                || activeSurface_->Identity() != activeSurfaceIdentity_
                 || (activeTarget_ == nullptr && activeSurface_ != backbuffer_)
                 || (activeTarget_ != nullptr && activeSurface_ == backbuffer_))
             {
@@ -113,6 +123,8 @@ namespace CNA::Internal::Backends::Skia
         SkiaSurface* backbuffer_ = nullptr;
         SkiaSurface* activeSurface_ = nullptr;
         SkiaRenderTargetBackend* activeTarget_ = nullptr;
+        std::uint64_t backbufferIdentity_ = 0;
+        std::uint64_t activeSurfaceIdentity_ = 0;
         std::weak_ptr<SkiaOwnership> ownership_;
         bool requiresOwnership_ = false;
     };

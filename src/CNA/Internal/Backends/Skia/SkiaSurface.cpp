@@ -7,6 +7,7 @@
 #include "include/core/SkSurface.h"
 
 #include <algorithm>
+#include <atomic>
 #include <stdexcept>
 #include <utility>
 
@@ -28,9 +29,24 @@ namespace CNA::Internal::Backends::Skia
         {
             return SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
         }
+
+        [[nodiscard]] std::uint64_t NextSurfaceIdentity()
+        {
+            static std::atomic<std::uint64_t> nextIdentity{1};
+            const std::uint64_t identity = nextIdentity.fetch_add(1, std::memory_order_relaxed);
+            if (identity == 0)
+                throw std::runtime_error("Skia raster surface identity space is exhausted.");
+            return identity;
+        }
+    }
+
+    SkiaSurface::SkiaSurface()
+        : identity_(NextSurfaceIdentity())
+    {
     }
 
     SkiaSurface::SkiaSurface(int width, int height)
+        : SkiaSurface()
     {
         Resize(width, height);
     }
@@ -51,6 +67,8 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaSurface::Clear(float r, float g, float b, float a)
     {
+        if (!surface_)
+            throw std::runtime_error("Skia raster surface must be allocated before Clear().");
         surface_->getCanvas()->clear(SkColorSetARGB(ToByte(a), ToByte(r), ToByte(g), ToByte(b)));
     }
 

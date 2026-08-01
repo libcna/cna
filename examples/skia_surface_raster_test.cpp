@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <type_traits>
 #include <vector>
 
 using CNA::Internal::Backends::Skia::SkiaSurface;
@@ -31,7 +32,30 @@ namespace
 
 int main()
 {
+    static_assert(!std::is_copy_constructible_v<SkiaSurface>);
+    static_assert(!std::is_copy_assignable_v<SkiaSurface>);
+    static_assert(!std::is_move_constructible_v<SkiaSurface>);
+    static_assert(!std::is_move_assignable_v<SkiaSurface>);
+
+    SkiaSurface unallocated;
     SkiaSurface surface(3, 2);
+    Check(unallocated.Identity() != 0 && surface.Identity() != 0
+              && unallocated.Identity() != surface.Identity(),
+          "logical surfaces receive distinct non-zero target identities");
+    Check(unallocated.Canvas() == nullptr && unallocated.SnapshotImage() == nullptr,
+          "an unallocated surface exposes no canvas or image snapshot");
+    bool unallocatedClearRejected = false;
+    try
+    {
+        unallocated.Clear(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+    catch (const std::exception&)
+    {
+        unallocatedClearRejected = true;
+    }
+    Check(unallocatedClearRejected, "Clear rejects an unallocated surface without dereferencing null");
+
+    const std::uint64_t identityBeforeResize = surface.Identity();
     surface.Clear(17.0f / 255.0f, 34.0f / 255.0f, 51.0f / 255.0f, 1.0f);
     const std::vector<std::uint8_t> cleared = surface.SnapshotRgba();
     Check(cleared.size() == 24, "SnapshotRgba returns tightly packed RGBA8 pixels");
@@ -70,6 +94,8 @@ int main()
 
     surface.Resize(1, 1);
     Check(surface.Width() == 1 && surface.Height() == 1, "Resize updates surface dimensions");
+    Check(surface.Identity() == identityBeforeResize,
+          "Resize replaces storage without changing logical target identity");
     Check(surface.SnapshotRgba().size() == 4, "Resize replaces the raster pixel storage");
 
     std::printf("=== %s ===\n", failures == 0 ? "PASS" : "FAIL");

@@ -20,8 +20,12 @@ namespace CNA::Internal::Backends::Skia
     class SkiaSurface final
     {
     public:
-        SkiaSurface() = default;
+        SkiaSurface();
         SkiaSurface(int width, int height);
+        SkiaSurface(const SkiaSurface&) = delete;
+        SkiaSurface& operator=(const SkiaSurface&) = delete;
+        SkiaSurface(SkiaSurface&&) = delete;
+        SkiaSurface& operator=(SkiaSurface&&) = delete;
 
         void Resize(int width, int height);
         void Clear(float r, float g, float b, float a);
@@ -29,6 +33,8 @@ namespace CNA::Internal::Backends::Skia
 
         [[nodiscard]] int Width() const noexcept { return width_; }
         [[nodiscard]] int Height() const noexcept { return height_; }
+        /// Process-local identity of this logical target. It remains stable across Resize().
+        [[nodiscard]] std::uint64_t Identity() const noexcept { return identity_; }
         [[nodiscard]] SkCanvas* Canvas() const noexcept;
 
         /// Reads a complete rectangular region into tightly packed, top-row-first RGBA8 bytes.
@@ -46,6 +52,7 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] std::vector<std::uint8_t> SnapshotRgba() const;
 
     private:
+        const std::uint64_t identity_;
         sk_sp<SkSurface> surface_;
         int width_ = 0;
         int height_ = 0;

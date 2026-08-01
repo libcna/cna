@@ -222,7 +222,8 @@ namespace CNA::Internal::Backends::Skia
         // A newly allocated raster backbuffer has no previous-frame contents to preserve.  Make
         // the zero-draw Present contract deterministic instead of exposing allocator bytes.
         surface_.Clear(0.0f, 0.0f, 0.0f, 0.0f);
-        TraceSkiaState("surface=backbuffer size=%dx%d", width, height);
+        TraceSkiaState("surface=backbuffer id=%llu size=%dx%d",
+                       static_cast<unsigned long long>(surface_.Identity()), width, height);
         DestroyPresentationTexture();
         RecreatePresentationTexture();
 
@@ -481,7 +482,9 @@ namespace CNA::Internal::Backends::Skia
         {
             targetBinding_->UnbindToBackbuffer();
             RefreshDynamicBackbufferIfNeeded();
-            TraceSkiaState("surface=backbuffer size=%dx%d", surface_.Width(), surface_.Height());
+            TraceSkiaState("surface=backbuffer id=%llu size=%dx%d",
+                           static_cast<unsigned long long>(surface_.Identity()),
+                           surface_.Width(), surface_.Height());
             return;
         }
 
@@ -490,7 +493,9 @@ namespace CNA::Internal::Backends::Skia
             throw std::runtime_error("Skia cannot bind a render target created by a different backend.");
         skiaTarget->PrepareForBind();
         targetBinding_->Bind(skiaTarget, &skiaTarget->Surface());
-        TraceSkiaState("surface=render-target size=%dx%d", ActiveSurface().Width(), ActiveSurface().Height());
+        TraceSkiaState("surface=render-target id=%llu size=%dx%d",
+                       static_cast<unsigned long long>(ActiveSurface().Identity()),
+                       ActiveSurface().Width(), ActiveSurface().Height());
     }
 
     void SkiaGraphicsBackend::ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels)

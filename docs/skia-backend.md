@@ -63,7 +63,8 @@ raster diagnostic or turn a runtime device loss into an unannounced CPU-mode swi
 ## Diagnostic state trace
 
 Set `CNA_SKIA_STATE_TRACE=1` when launching a Skia executable to emit backend-only state lines
-to standard error. The trace reports backbuffer/render-target selection and size, blend preset and
+to standard error. The trace reports backbuffer/render-target selection, stable surface identity,
+and size, blend preset and
 source-alpha convention, sampler filter/address modes, and scissor rectangle updates. It is off by
 default (and also off when set to `0`), does not change raster state, and is intended for diagnosing
 state leakage rather than application logging.
@@ -392,9 +393,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     detection enabled.
 56. A persistent `cmake-build-skia-release` GNU 14/C++23 configuration builds the selected Skia
     backend and links the full CNA static library plus `Skia_Surface_Raster` against the six pinned
-    archives using two jobs. The Release executable passes all ten raster surface, orientation,
-    stride, alpha-conversion, bounds, and resize checks; Debug and ASan/LSan variants pass the same
-    boundary. Together with the missing-dependency and constructor-unwind probes, this closes the
+    archives using two jobs. The current Release executable passes all fourteen raster surface,
+    identity, lifetime, orientation, stride, alpha-conversion, bounds, and resize checks; Debug
+    and ASan/LSan variants pass the same boundary. Together with the missing-dependency and
+    constructor-unwind probes, this closes the
     initial raster compile/presentation/fallback spikes without implying accelerated support.
 57. `Skia_WindowLifecycle` models a minimized presenter reporting 0×0 and proves the last valid
     raster dimensions and sentinel pixel survive a Present. It then performs real synchronized
@@ -402,5 +404,15 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     far-corner readback, plus four actual SDL renderer/streaming-texture reconstructions while the
     CPU raster remains live. All twelve checks pass normally and under AddressSanitizer; existing
     presentation-mode and resource-recovery tests pass alongside it.
+58. `Skia_Surface_Raster` closes the internal surface boundary with fourteen checks. Every logical
+    surface receives a distinct non-zero process-local identity; `Resize` replaces pixel storage
+    without changing it, while copying and moving are compile-time forbidden because active target
+    bindings retain stable addresses. An unallocated surface exposes neither canvas nor snapshot
+    and rejects `Clear` safely. The existing top-left RGBA8, premultiplication, bounds, and resize
+    checks remain exact. `SkiaRenderTargetBinding` records the identities selected alongside its
+    pointers and validates both before active-surface use; state trace output makes backbuffer and
+    target transitions observable. Surface and binding tests pass under Debug, Release, and
+    ASan/LSan with leak detection enabled, and the windowed eleven-check transition suite passes
+    normally and under ASan.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
