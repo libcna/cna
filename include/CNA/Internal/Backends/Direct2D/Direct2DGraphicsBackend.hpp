@@ -40,6 +40,7 @@ namespace CNA::Internal::Backends::Direct2D
     {
     public:
         Direct2DTextureBackend(Direct2DGraphicsBackend& owner, const ImageData& data);
+        ~Direct2DTextureBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -47,17 +48,26 @@ namespace CNA::Internal::Backends::Direct2D
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
-        [[nodiscard]] ID2D1Bitmap1* Bitmap() const { return bitmap_.Get(); }
+        [[nodiscard]] ID2D1Bitmap1* Bitmap() const;
+        [[nodiscard]] ID2D1Bitmap1* BitmapForLevel(int level) const;
+        /// Returns the greatest initialized mip level not exceeding @p preferredLevel. A texture
+        /// with no uploaded lower levels deliberately falls back to level zero instead of
+        /// sampling black/uninitialized storage during minification.
+        [[nodiscard]] int SelectAvailableMipLevel(int preferredLevel) const;
         [[nodiscard]] const std::vector<uint8_t>& RgbaPixels() const { return rgbaPixels_; }
 
     private:
+        friend class Direct2DGraphicsBackend;
         void RecreateBitmap();
 
         Direct2DGraphicsBackend* owner_ = nullptr;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap_;
         std::vector<uint8_t> rgbaPixels_;
+        std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> mipBitmaps_;
+        std::vector<std::vector<uint8_t>> mipRgbaPixels_;
         int width_ = 0;
         int height_ = 0;
+        std::uint64_t deviceGeneration_ = 0;
     };
 
     /** A GPU-resident Direct2D target bitmap.  It can be sampled after it is unbound. */
@@ -81,13 +91,17 @@ namespace CNA::Internal::Backends::Direct2D
             return false;
         }
 
-        [[nodiscard]] ID2D1Bitmap1* Bitmap() const { return bitmap_.Get(); }
+        [[nodiscard]] ID2D1Bitmap1* Bitmap() const;
 
     private:
+        friend class Direct2DGraphicsBackend;
+        void RecreateBitmap();
+
         Direct2DGraphicsBackend* owner_ = nullptr;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap_;
         int width_ = 0;
         int height_ = 0;
+        std::uint64_t deviceGeneration_ = 0;
     };
 
     class Direct2DSpriteBatchBackend final : public ISpriteBatchBackend
@@ -130,7 +144,8 @@ namespace CNA::Internal::Backends::Direct2D
     {
     public:
         Direct2DGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                CnaPresentationMode presentationMode, int swapInterval);
+                                CnaPresentationMode presentationMode, int swapInterval,
+                                bool contextRecoveryEnabled = true);
         ~Direct2DGraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -157,10 +172,18 @@ namespace CNA::Internal::Backends::Direct2D
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* renderTarget) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
+        void SetContextRecoveryEnabled(bool enabled) override { contextRecoveryEnabled_ = enabled; }
+        void DebugSimulateContextLoss() override;
+        void DebugRestoreContext() override;
         void SetScissorRect(int x, int y, int width, int height) override;
+        void SetViewport(int x, int y, int width, int height, float minDepth, float maxDepth) override;
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias = 0.0f,
+                                  float slopeScaleDepthBias = 0.0f) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend,
                              int alphaDstBlend, int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
@@ -201,6 +224,7 @@ namespace CNA::Internal::Backends::Direct2D
                         bool linearFilter, int addressU, int addressV);
 
     private:
+        friend class Direct2DTextureBackend;
         friend class Direct2DRenderTargetBackend;
         struct PresentationTransform
         {
@@ -213,13 +237,29 @@ namespace CNA::Internal::Backends::Direct2D
         };
 
         void CreateDeviceResources();
+        void ReleaseDeviceResourcesNoThrow();
+        void RecreateDeviceResourcesForRecovery();
+        void RegisterTexture(Direct2DTextureBackend* texture);
+        void UnregisterTexture(Direct2DTextureBackend* texture);
+        void RegisterRenderTarget(Direct2DRenderTargetBackend* renderTarget);
+        void UnregisterRenderTarget(Direct2DRenderTargetBackend* renderTarget);
+        [[nodiscard]] bool IsRegisteredRenderTarget(const Direct2DRenderTargetBackend* renderTarget) const;
+        void EnsureResourceGeneration(std::uint64_t generation, const char* resourceKind) const;
         void CreateBackBufferTarget();
         void EnsureMainTargetSize();
         void EndDrawing(const char* operation);
+        /// Copies a render target through a temporary Direct2D CPU-readable bitmap. This is a
+        /// 2D-only path: Direct2D requires CPU_READ bitmaps to be populated by CopyFromRenderTarget
+        /// before Map(READ), and the source must be the currently bound device-context target.
+        void ReadRenderTargetPixels(const Direct2DRenderTargetBackend& renderTarget, int x, int y,
+                                    int width, int height, uint8_t* pixels);
+        void ReadCurrentTargetPixels(int x, int y, int width, int height,
+                                     const D2D1_PIXEL_FORMAT& pixelFormat, uint8_t* pixels);
         [[nodiscard]] PresentationTransform GetPresentationTransform() const;
         [[nodiscard]] D2D1_MATRIX_3X2_F PresentationMatrix() const;
-        void ApplyScissorClip();
-        void ClearScissorClip();
+        [[nodiscard]] D2D1_MATRIX_3X2_F ViewportMatrix() const;
+        void ApplyOutputClips();
+        void ClearOutputClips();
         [[nodiscard]] std::vector<uint8_t> MakeSpritePixels(const Direct2DTextureBackend& texture,
                                                              const Rectangle& sourceRectangle,
                                                              const Color& color, SpriteEffects effects,
@@ -233,13 +273,26 @@ namespace CNA::Internal::Backends::Direct2D
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int swapInterval_ = 1;
+        bool contextRecoveryEnabled_ = true;
+        std::uint64_t deviceGeneration_ = 1;
         Direct2DRenderTargetBackend* activeRenderTarget_ = nullptr;
         bool drawing_ = false;
+        bool viewportSet_ = false;
+        int viewportX_ = 0;
+        int viewportY_ = 0;
+        int viewportWidth_ = 0;
+        int viewportHeight_ = 0;
+        bool scissorTestEnabled_ = false;
         bool scissorActive_ = false;
+        bool viewportPushed_ = false;
         bool scissorPushed_ = false;
         Rectangle scissorRect_{};
         Direct2DBlendMode blendMode_ = Direct2DBlendMode::SourceOver;
         bool nonPremultipliedSource_ = false;
+        // GraphicsDevice always forwards BlendState.BlendFactor immediately after ApplyBlendState,
+        // even when the accepted Direct2D preset cannot consume a constant blend factor. Consume
+        // that bookkeeping write once; later standalone non-white BlendFactor requests fail.
+        bool pendingBlendStateFactorWrite_ = false;
 
         Microsoft::WRL::ComPtr<ID3D11Device> d3dDevice_;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3dContext_;
@@ -248,7 +301,15 @@ namespace CNA::Internal::Backends::Direct2D
         Microsoft::WRL::ComPtr<ID2D1Factory1> d2dFactory_;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> d2dContext_;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> backBufferTarget_;
-        /// Keeps CPU-generated SpriteBatch bitmaps alive until Direct2D finishes the frame.
+        /// Keeps transient SpriteBatch resources alive until Direct2D finishes the frame.  The
+        /// bitmap collection is for ordinary textures; effects/image brushes let rendered targets
+        /// stay GPU resident while they are tinted, flipped, or tiled.
         std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> transientBitmaps_;
+        std::vector<Microsoft::WRL::ComPtr<ID2D1Effect>> transientEffects_;
+        std::vector<Microsoft::WRL::ComPtr<ID2D1Image>> transientImages_;
+        std::vector<Microsoft::WRL::ComPtr<ID2D1ImageBrush>> transientImageBrushes_;
+        // Non-owning; only resources constructed while recovery is enabled register here.
+        std::vector<Direct2DTextureBackend*> recoverableTextures_;
+        std::vector<Direct2DRenderTargetBackend*> recoverableRenderTargets_;
     };
 }
