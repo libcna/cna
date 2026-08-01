@@ -71,6 +71,10 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "OPENGL1")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "GLIDE")
+    # Glide itself is dynamically loaded at runtime (glide3x.dll); SDL is used only to obtain the
+    # application's existing Win32 HWND. Do not link or vendor a particular Glide emulator here.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2")
     target_link_libraries(${BACKEND_TARGET} PRIVATE easy-gl SDL3::SDL3)

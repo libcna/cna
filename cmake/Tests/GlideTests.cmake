@@ -1,0 +1,15 @@
+if(CNA_BUILD_TESTS AND WIN32 AND CNA_GRAPHICS_BACKEND STREQUAL "GLIDE")
+    # This target intentionally has no add_test(): it executes real Glide commands and needs an
+    # externally supplied emulator DLL. See docs/glide-backend.md for the manual dgVoodoo2 loop.
+    add_executable(cna_glide_smoke examples/glide_smoke_test.cpp)
+    target_link_libraries(cna_glide_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_glide_smoke PRIVATE SDL3::SDL3main)
+    endif()
+    if(MINGW)
+        target_link_options(cna_glide_smoke PRIVATE -static-libgcc -static-libstdc++)
+        target_link_options(cna_glide_smoke PRIVATE -Wl,--allow-multiple-definition)
+        cna_copy_mingw_runtime(cna_glide_smoke)
+        cna_copy_sdl_runtime(cna_glide_smoke)
+    endif()
+endif()

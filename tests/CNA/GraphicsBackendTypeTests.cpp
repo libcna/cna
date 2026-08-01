@@ -82,6 +82,7 @@ namespace
             case GraphicsBackendType::Wicked:      return "WICKED";
             case GraphicsBackendType::Sokol:       return "SOKOL";
             case GraphicsBackendType::Diligent:    return "DILIGENT";
+            case GraphicsBackendType::Glide:       return "GLIDE";
         }
         return {};
     }

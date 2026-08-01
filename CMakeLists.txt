@@ -127,6 +127,10 @@ include(cmake/Tests/SdlRendererTests.cmake)
 # tests/opengl1/README.md's 8 priority smoke-coverage scenarios.
 include(cmake/Tests/OpenGL1Tests.cmake)
 
+# GLIDE's smoke executable is built only when selected. It is not registered as a normal CTest:
+# running it requires a user-supplied, separately licensed glide3x.dll (e.g. dgVoodoo2).
+include(cmake/Tests/GlideTests.cmake)
+
 include(cmake/Tests/BgfxTests.cmake)
 
 include(cmake/Tests/WebGpuTests.cmake)

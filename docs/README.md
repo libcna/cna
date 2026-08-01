@@ -45,6 +45,9 @@ on it) rather than assuming either way.
 - **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
   2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.
+- **[`glide-backend.md`](glide-backend.md)** — build/runtime setup and current native
+  fixed-function 2D plus constrained color-vertex 3D scope of the Windows-only historical Glide
+  3.x backend, which dynamically loads an external emulator DLL.
 - **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
   per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
@@ -110,6 +113,9 @@ Kept for their investigation methodology and root-cause detail, not as current s
   glyph-grid) backend; see `../plan_ascii.md` for full task-by-task detail.
 - `freedirect-backend.md` — FreeDirect (formerly `DX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
   current as of `plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
+- `glide-backend.md` — Glide 3.x's native-API SpriteBatch and constrained color-vertex 3D path;
+  runtime verification needs a separately supplied `glide3x.dll`, so this repository does not
+  claim a bundled emulator.
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
 
