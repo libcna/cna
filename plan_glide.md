@@ -79,4 +79,7 @@ renderer.
 - [ ] Validate and, if observable on real Voodoo/dgVoodoo output, compensate the remaining
   sub-texel LOD phase at a logical tile seam. All levels now use one shared logical mip pyramid,
   but a physical tile's one-texel gutter means its coordinate origin cannot be exactly aligned for
-  every power-of-two LOD simultaneously.
+  every power-of-two LOD simultaneously. The new path's backend source compiles with the i686
+  MinGW compiler; executing the current CNA smoke target is separately blocked by the external
+  `../sharp-runtime` dependency's unsupported i686 `__int128` use. Resume this validation after
+  that dependency is made i686-compatible, or with an equivalent prebuilt x86 CNA smoke binary.
