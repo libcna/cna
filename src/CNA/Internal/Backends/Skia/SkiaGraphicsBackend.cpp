@@ -174,7 +174,7 @@ namespace CNA::Internal::Backends::Skia
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<SkiaSpriteBatchBackend>(activeSurface_, spriteBlendMode_,
-                                                        spriteSourceAlphaConvention_);
+                                                        spriteSourceAlphaConvention_, rasterState_);
     }
 
     std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(
@@ -295,6 +295,27 @@ namespace CNA::Internal::Backends::Skia
             return;
         }
         throw std::runtime_error("Skia raster backend does not implement this BlendState yet.");
+    }
+
+    void SkiaGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                                   float depthBias, float slopeScaleDepthBias)
+    {
+        // Skia's SpriteBatch route is intrinsically filled 2D canvas geometry, without a depth
+        // buffer or face winding. ScissorTestEnable is the one RasterizerState member that has
+        // a direct 2D effect and is applied by SkiaSpriteBatchBackend for every draw.
+        (void)cullMode;
+        (void)fillMode;
+        (void)depthBias;
+        (void)slopeScaleDepthBias;
+        rasterState_.scissorTestEnabled = scissorTestEnable;
+    }
+
+    void SkiaGraphicsBackend::SetScissorRect(int x, int y, int width, int height)
+    {
+        rasterState_.scissorX = x;
+        rasterState_.scissorY = y;
+        rasterState_.scissorWidth = width;
+        rasterState_.scissorHeight = height;
     }
 
     bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability) const

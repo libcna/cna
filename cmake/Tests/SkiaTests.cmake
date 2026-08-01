@@ -106,6 +106,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spritebatch_source_rect_linear examples/skia_spritebatch_source_rect_linear_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_SourceRectLinear cna_test_skia_spritebatch_source_rect_linear)
 
+    # Shared public SpriteBatch test: its Begin-supplied RasterizerState must enable/disable the
+    # ScissorRectangle for deferred, immediate, and front-to-back submissions.
+    cna_skia_test(cna_test_skia_spritebatch_rasterizerstate examples/software_spritebatch_rasterizerstate_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_RasterizerState cna_test_skia_spritebatch_rasterizerstate)
+
     cna_skia_test(cna_test_skia_sprite_effects examples/sdlrenderer_sprite_effects_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_Effects cna_test_skia_sprite_effects)
 

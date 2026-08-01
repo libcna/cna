@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include <SDL3/SDL.h>
@@ -51,6 +52,9 @@ namespace CNA::Internal::Backends::Skia
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias, float slopeScaleDepthBias) override;
+        void SetScissorRect(int x, int y, int width, int height) override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
@@ -88,6 +92,7 @@ namespace CNA::Internal::Backends::Skia
         SkiaSurface* activeSurface_ = &surface_;
         SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
         SkiaSourceAlphaConvention spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
+        SkiaRasterState rasterState_;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int preferredVirtualHeight_ = 0;
     };

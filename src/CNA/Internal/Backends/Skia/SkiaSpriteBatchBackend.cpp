@@ -9,6 +9,7 @@
 #include "include/core/SkData.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkSamplingOptions.h"
 #include "include/effects/SkRuntimeEffect.h"
 
@@ -191,6 +192,17 @@ namespace CNA::Internal::Backends::Skia
         const float sourceWidth = static_cast<float>(sourceRectangle.Width);
         const float sourceHeight = static_cast<float>(sourceRectangle.Height);
         SkAutoCanvasRestore restore(canvas, true);
+        if (rasterState_ && rasterState_->scissorTestEnabled)
+        {
+            // ScissorRectangle lives in active-target pixel coordinates, not in the SpriteBatch
+            // transform's local coordinates. Clip before applying the Begin transform so its
+            // edges remain axis-aligned and exact after any rotation/scale of a sprite.
+            canvas->clipRect(SkRect::MakeXYWH(static_cast<float>(rasterState_->scissorX),
+                                               static_cast<float>(rasterState_->scissorY),
+                                               static_cast<float>(rasterState_->scissorWidth),
+                                               static_cast<float>(rasterState_->scissorHeight)),
+                             SkClipOp::kIntersect, false);
+        }
         // SkCanvas::concat pre-concatenates the matrix, making each following local sprite
         // transform run first and this Begin transform run second. That is XNA's ordering:
         // generate the sprite corner, then pass it through Vector2::Transform(matrix).
