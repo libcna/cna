@@ -77,6 +77,9 @@ namespace CNA::Internal::Backends::Skia
         if (width <= 0) width = std::max(outputWidth, 1);
 
         surface_.Resize(width, height);
+        // A newly allocated raster backbuffer has no previous-frame contents to preserve.  Make
+        // the zero-draw Present contract deterministic instead of exposing allocator bytes.
+        surface_.Clear(0.0f, 0.0f, 0.0f, 0.0f);
         TraceSkiaState("surface=backbuffer size=%dx%d", width, height);
         if (presentTexture_)
         {

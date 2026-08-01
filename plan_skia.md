@@ -218,7 +218,7 @@ public CNA API.
 | SKIA-70 | Investigate native 2D target mipmap generation and quality; implement generation only after it survives readback and sampling verification. | ⬜ | Mip target test passes or construct/draw/read clearly refuses unavailable mips. |
 | SKIA-71 | Add resize/fullscreen/presentation-parameter regression tests while a RenderTarget2D and SpriteBatch exist. | ⬜ | Device reset events and post-resize rendering remain correct. |
 | SKIA-72 | Test high-DPI/backbuffer scale interaction so logical coordinates and pixel readback are never conflated. | ⬜ | Display-scale diagnostic test documents and verifies conversion. |
-| SKIA-73 | Test presentation after zero draws, Clear only, and a failed draw call. | ⬜ | No stale frame, invalid flush, or state leakage. |
+| SKIA-73 | Test presentation after zero draws, Clear only, and a failed draw call. | ✅ | `Skia_Presentation_Edge` confirms deterministic transparent-black zero-draw presentation, Clear-only presentation, and retained current colour after a disposed-texture draw failure; backbuffer creation now explicitly clears its new raster surface. |
 | SKIA-74 | Add bounded cache/resource budgets for images, snapshots, and off-screen surfaces; expose counters in debug builds. | ⬜ | Stress test demonstrates release/reuse and no unbounded cache growth. |
 | SKIA-75 | Cross-check RenderTarget2D goldens with EasyGL and the existing SDL_Renderer 2D semantics where applicable. | ⬜ | Checked-in expected images and documented tolerances. |
 
