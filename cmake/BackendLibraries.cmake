@@ -131,6 +131,8 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # plan_canvas.md design decision 2: reuses the existing SDL-created window/canvas element,
     # so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 CNA::Skia)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_backend_graphics_sdl_renderer_core)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")

@@ -43,6 +43,9 @@ namespace CNA
         /** @brief HTML Canvas 2D (Emscripten). */
         Canvas,
 
+        /** @brief Skia 2D raster backend. */
+        Skia,
+
         /** @brief ASCII (SDL-windowed glyph grid). */
         Ascii,
 
@@ -137,6 +140,8 @@ namespace CNA
         return GraphicsBackendType::D3D12;
 #elif defined(CNA_BACKEND_CANVAS)
         return GraphicsBackendType::Canvas;
+#elif defined(CNA_BACKEND_SKIA)
+        return GraphicsBackendType::Skia;
 #elif defined(CNA_BACKEND_ASCII)
         return GraphicsBackendType::Ascii;
 #elif defined(CNA_BACKEND_FREEDIRECT)
@@ -206,6 +211,7 @@ namespace CNA
             case GraphicsBackendType::D3D11:        return "D3D11";
             case GraphicsBackendType::D3D12:        return "D3D12";
             case GraphicsBackendType::Canvas:       return "CANVAS";
+            case GraphicsBackendType::Skia:         return "SKIA";
             case GraphicsBackendType::Ascii:        return "ASCII";
             case GraphicsBackendType::FreeDirect:           return "FREEDIRECT";
             case GraphicsBackendType::D3D9:          return "D3D9";

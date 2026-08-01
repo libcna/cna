@@ -1,8 +1,8 @@
 # Skia Graphics Backend — Implementation Plan
 
-> **Status: DRAFT — planning only.** No `SKIA` backend code, Skia dependency, or CMake option is
-> introduced by this document. Every row starts unchecked and is updated only after its stated
-> acceptance evidence exists.
+> **Status: ACTIVE — raster vertical slice in progress.** The initial `SKIA` CMake selection,
+> externally-built Skia dependency adapter, and CPU-raster presentation path are implemented.
+> Every remaining row stays unchecked until its stated acceptance evidence exists.
 >
 > **Goal:** add `CNA_GRAPHICS_BACKEND=SKIA` to CNA. The first usable delivery is a complete,
 > pixel-verified **2D** backend. Its target is every part of `EASYGL` that Skia can express
@@ -123,8 +123,8 @@ public CNA API.
 |---|---|---|---|
 | SKIA-1 | Inventory every `IGraphicsBackend`, resource interface, `GraphicsCapability`, and public `GraphicsDevice` call against the EasyGL implementation; produce a row-per-entry parity ledger. | ⬜ | `docs/skia-backend.md` lists each entry, current EasyGL semantics/tests, Skia plan, and final status field. |
 | SKIA-2 | Inventory all EasyGL-specific test registrations, golden images, XNA-oracle scenes, and backend-neutral tests; tag each as 2D-direct, 2D-emulation, 3D, or device-dependent. | ⬜ | Reusable Skia test matrix with no unclassified EasyGL graphics test. |
-| SKIA-3 | Pin a reproducible Skia revision and license/NOTICE policy; decide vendored source, approved prebuilt package, or explicitly versioned external build without network activity during ordinary CNA configure. | ⬜ | Locked revision, checksum/source provenance, license notice, and fresh-clone build instructions. |
-| SKIA-4 | Run a minimal compile/link spike against the selected Skia build with CNA's compiler, standard library, warning policy, sanitizers, and debug/release configurations. | ⬜ | Tiny target compiles and links in CI-equivalent Linux configuration; incompatibilities documented and resolved. |
+| SKIA-3 | Pin a reproducible Skia revision and license/NOTICE policy; decide vendored source, approved prebuilt package, or explicitly versioned external build without network activity during ordinary CNA configure. | ✅ | `docs/skia-backend.md` pins `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`, records the BSD-style license/notice requirement, and gives an external GN raster build recipe. |
+| SKIA-4 | Run a minimal compile/link spike against the selected Skia build with CNA's compiler, standard library, warning policy, sanitizers, and debug/release configurations. | ⬜ | C++23 raster smoke compiled and linked the six static archives; the CNA `SKIA` static target also completed on Linux. Debug/sanitizer matrix remains required before completion. |
 | SKIA-5 | Compare raster, Ganesh/OpenGL, and any relevant platform GPU path for CNA's supported targets; select one initial accelerated presentation strategy and one deterministic raster fallback. | ⬜ | ADR records ownership of context/device, supported OSes, and why alternatives were rejected. |
 | SKIA-6 | Prove accelerated backbuffer wrapping: create an SDL window/context owned by `SKIA`, wrap the default framebuffer in an `SkSurface`, clear, flush/submit, swap, and read pixels. | ⬜ | Visible/manual smoke plus automated pixel test; no EasyGL link dependency. |
 | SKIA-7 | Prove raster presentation: draw through an `SkSurface`, transfer to the selected SDL presentation path, and verify alpha/channel order, row order, and one-pixel updates. | ⬜ | Deterministic headless test and windowed smoke; no format or stride mismatch. |
@@ -152,7 +152,7 @@ public CNA API.
 | ID | Task | Status | Acceptance evidence |
 |---|---|---|---|
 | SKIA-21 | Define `SkiaSurface` APIs for canvas access, flush/submit, snapshots, normalized RGBA8 readback, and target identity. | ⬜ | Unit tests cover lifetime and all pixel-origin conversions. |
-| SKIA-22 | Implement `SkiaTextureBackend` for immutable/mutable `Texture2D` images and `UpdatePixels`/`UpdatePixelsLevel`. | ⬜ | Create/upload/draw/update changes exactly the requested pixels. |
+| SKIA-22 | Implement `SkiaTextureBackend` for immutable/mutable `Texture2D` images and `UpdatePixels`/`UpdatePixelsLevel`. | ✅ | C++23 raster smoke created, drew, and fully updated a `SkiaTextureBackend`; each RGBA8 pixel exactly matched the post-draw `SkiaSurface` readback. Level 0 is implemented; mip uploads reject explicitly pending SKIA-27. |
 | SKIA-23 | Preserve or deliberately synchronize the CPU pixel shadow required by public `Texture2D::GetData`; do not return invented transparent pixels. | ⬜ | Full and partial GetData tests prove updated bytes and failure behavior. |
 | SKIA-24 | Implement exact `SetData` transfer-range/offset/rectangle rules and `SetDataOptions` decision for 2D textures. | ⬜ | Existing backend-agnostic contract tests plus malformed-range tests pass. |
 | SKIA-25 | Establish the texture `SurfaceFormat` matrix against CNA's current public validation; map supported format/alpha/color-space storage without widening API claims accidentally. | ⬜ | Each accepted format round-trips and each unsupported format throws at the same layer as other backends. |

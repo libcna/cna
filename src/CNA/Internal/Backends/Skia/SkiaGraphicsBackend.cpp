@@ -1,0 +1,225 @@
+#include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+
+#include <algorithm>
+#include <stdexcept>
+#include <string>
+
+namespace CNA::Internal::Backends::Skia
+{
+    namespace
+    {
+        [[noreturn]] void ThrowUnavailable(const char* method)
+        {
+            throw std::runtime_error(std::string("Skia backend does not implement this path yet: ") + method);
+        }
+
+        [[noreturn]] void ThrowNo3D(const char* method)
+        {
+            throw std::runtime_error(std::string("Skia (raster 2D) does not support 3D: ") + method);
+        }
+
+        [[nodiscard]] SDL_RendererLogicalPresentation ToSdlPresentation(CnaPresentationMode mode)
+        {
+            switch (mode)
+            {
+                case CnaPresentationMode::Letterbox: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+                case CnaPresentationMode::Overscan: return SDL_LOGICAL_PRESENTATION_OVERSCAN;
+                case CnaPresentationMode::Stretch: return SDL_LOGICAL_PRESENTATION_STRETCH;
+                case CnaPresentationMode::NativeBackBuffer: return SDL_LOGICAL_PRESENTATION_DISABLED;
+                case CnaPresentationMode::FixedHeightDynamicWidth: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+            }
+            return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+        }
+    }
+
+    SkiaGraphicsBackend::SkiaGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                                             CnaPresentationMode presentationMode, int swapInterval)
+        : window_(window)
+        , presentationMode_(presentationMode)
+        , preferredVirtualHeight_(virtualHeight)
+    {
+        if (!window_)
+            throw std::runtime_error("SkiaGraphicsBackend initialized with null window.");
+
+        renderer_ = SDL_CreateRenderer(window_, nullptr);
+        if (!renderer_)
+            throw std::runtime_error(std::string("Skia SDL_CreateRenderer failed: ") + SDL_GetError());
+
+        SetSwapInterval(swapInterval);
+        RecreateBackbuffer(virtualWidth, virtualHeight);
+        IGraphicsBackend::RegisterForWindow(window_, this);
+    }
+
+    SkiaGraphicsBackend::~SkiaGraphicsBackend()
+    {
+        IGraphicsBackend::UnregisterForWindow(window_);
+        if (presentTexture_) SDL_DestroyTexture(presentTexture_);
+        if (renderer_) SDL_DestroyRenderer(renderer_);
+    }
+
+    void SkiaGraphicsBackend::RecreateBackbuffer(int requestedWidth, int requestedHeight)
+    {
+        int outputWidth = 0;
+        int outputHeight = 0;
+        SDL_GetRenderOutputSize(renderer_, &outputWidth, &outputHeight);
+        if (outputWidth <= 0 || outputHeight <= 0)
+            SDL_GetWindowSize(window_, &outputWidth, &outputHeight);
+
+        const int height = requestedHeight > 0 ? requestedHeight : std::max(outputHeight, 1);
+        int width = requestedWidth;
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && requestedHeight > 0 && outputHeight > 0)
+            width = static_cast<int>(static_cast<double>(outputWidth) * requestedHeight / outputHeight + 0.5);
+        if (width <= 0) width = std::max(outputWidth, 1);
+
+        surface_.Resize(width, height);
+        if (presentTexture_)
+        {
+            SDL_DestroyTexture(presentTexture_);
+            presentTexture_ = nullptr;
+        }
+        presentTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32,
+                                            SDL_TEXTUREACCESS_STREAMING, width, height);
+        if (!presentTexture_)
+            throw std::runtime_error(std::string("Skia SDL_CreateTexture failed: ") + SDL_GetError());
+
+        ApplyLogicalPresentation();
+    }
+
+    void SkiaGraphicsBackend::ApplyLogicalPresentation()
+    {
+        if (!SDL_SetRenderLogicalPresentation(renderer_, LogicalWidth(), LogicalHeight(),
+                                              ToSdlPresentation(presentationMode_)))
+        {
+            throw std::runtime_error(std::string("Skia SDL_SetRenderLogicalPresentation failed: ") + SDL_GetError());
+        }
+    }
+
+    void SkiaGraphicsBackend::Clear(float r, float g, float b, float a)
+    {
+        surface_.Clear(r, g, b, a);
+    }
+
+    void SkiaGraphicsBackend::Present()
+    {
+        surface_.Flush();
+        const auto pixels = surface_.SnapshotRgba();
+        if (!SDL_UpdateTexture(presentTexture_, nullptr, pixels.data(), LogicalWidth() * 4))
+            throw std::runtime_error(std::string("Skia SDL_UpdateTexture failed: ") + SDL_GetError());
+        if (!SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255) || !SDL_RenderClear(renderer_)
+            || !SDL_RenderTexture(renderer_, presentTexture_, nullptr, nullptr) || !SDL_RenderPresent(renderer_))
+        {
+            throw std::runtime_error(std::string("Skia SDL presentation failed: ") + SDL_GetError());
+        }
+    }
+
+    void SkiaGraphicsBackend::GetViewportSize(int& width, int& height)
+    {
+        width = LogicalWidth();
+        height = LogicalHeight();
+    }
+
+    void SkiaGraphicsBackend::SetVirtualResolution(int width, int height)
+    {
+        preferredVirtualHeight_ = height;
+        RecreateBackbuffer(width, height);
+    }
+
+    void SkiaGraphicsBackend::SetPresentationMode(int mode)
+    {
+        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        RecreateBackbuffer(LogicalWidth(), preferredVirtualHeight_ > 0 ? preferredVirtualHeight_ : LogicalHeight());
+    }
+
+    void SkiaGraphicsBackend::SetSwapInterval(int interval)
+    {
+        if (!SDL_SetRenderVSync(renderer_, interval))
+        {
+            if (interval > 1 && SDL_SetRenderVSync(renderer_, 1)) return;
+            throw std::runtime_error(std::string("Skia SDL_SetRenderVSync failed: ") + SDL_GetError());
+        }
+    }
+
+    bool SkiaGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
+                                                        float& logX, float& logY) const
+    {
+        int outputWidth = 0;
+        int outputHeight = 0;
+        SDL_GetRenderOutputSize(renderer_, &outputWidth, &outputHeight);
+        if (outputWidth <= 0 || outputHeight <= 0) return false;
+        logX = windowX * static_cast<float>(LogicalWidth()) / outputWidth;
+        logY = windowY * static_cast<float>(LogicalHeight()) / outputHeight;
+        return true;
+    }
+
+    bool SkiaGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
+                                                        float& windowX, float& windowY) const
+    {
+        int outputWidth = 0;
+        int outputHeight = 0;
+        SDL_GetRenderOutputSize(renderer_, &outputWidth, &outputHeight);
+        if (outputWidth <= 0 || outputHeight <= 0) return false;
+        windowX = logX * static_cast<float>(outputWidth) / LogicalWidth();
+        windowY = logY * static_cast<float>(outputHeight) / LogicalHeight();
+        return true;
+    }
+
+    std::unique_ptr<ITextureBackend> SkiaGraphicsBackend::CreateTexture(const ImageData& data)
+    {
+        return std::make_unique<SkiaTextureBackend>(data);
+    }
+
+    std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
+    {
+        return std::make_unique<SkiaSpriteBatchBackend>(surface_);
+    }
+
+    void SkiaGraphicsBackend::ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels)
+    {
+        surface_.Flush();
+        if (!surface_.ReadPixels(x, y, width, height, pixels, width * 4))
+            throw std::runtime_error("Skia ReadBackbuffer request is outside the raster backbuffer.");
+    }
+
+    void SkiaGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
+    {
+        if (count < 0)
+            throw std::runtime_error("Skia SetRenderTargets count must not be negative.");
+        if (count == 0)
+            return; // The Skia raster backbuffer is already the active default target.
+        (void)renderTargets;
+        ThrowUnavailable("SetRenderTargets");
+    }
+
+    bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability) const
+    {
+        return false;
+    }
+
+    void SkiaGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
+    void SkiaGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
+    void SkiaGraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
+    void SkiaGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
+    void SkiaGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
+    void SkiaGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
+    void SkiaGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D("SetDepthTestEnabled"); }
+    void SkiaGraphicsBackend::SetBlendEnabled(bool) { ThrowNo3D("SetBlendEnabled"); }
+    void SkiaGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
+    std::unique_ptr<IVertexBufferBackend> SkiaGraphicsBackend::CreateVertexBuffer(int) { ThrowNo3D("CreateVertexBuffer"); }
+    std::unique_ptr<IIndexBufferBackend> SkiaGraphicsBackend::CreateIndexBuffer16(int) { ThrowNo3D("CreateIndexBuffer16"); }
+    void SkiaGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
+    void SkiaGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
+} // namespace CNA::Internal::Backends::Skia
+
+namespace CNA::Internal::Backends
+{
+#ifdef CNA_BACKEND_SKIA
+    std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
+    {
+        return std::make_unique<Skia::SkiaGraphicsBackend>(args.window, args.virtualWidth, args.virtualHeight,
+                                                            args.presentationMode, args.swapInterval);
+    }
+#endif
+} // namespace CNA::Internal::Backends

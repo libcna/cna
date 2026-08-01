@@ -1,0 +1,59 @@
+# Skia backend
+
+## Current status
+
+`CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create an OpenGL context and does not call the EasyGL backend.
+
+The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, tint, rotation, flips, and point/linear sampling with Clamp addressing. Mipmaps, Wrap/Mirror addressing, non-identity SpriteBatch transforms, offscreen targets, effects, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer; non-empty target bindings are not implemented yet.
+
+## Dependency policy
+
+CNA does not download Skia during CMake configuration. Build Skia outside the CNA source tree and pass the two resulting paths explicitly. The dependency is pinned to the official Skia commit `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`; it was the `main` revision used for the initial integration spike. Skia is distributed under the BSD-style license in its source checkout; a packaged CNA distribution must include its upstream license/notice before this experimental backend is shipped.
+
+The current link adapter requires every archive emitted by the minimal raster build. A missing or incompatible build therefore fails at CMake configure time rather than silently linking a different Skia installation.
+
+## Reproducible Linux raster build
+
+The following is the supported initial build input. It assumes a C++23-capable Clang, Ninja, Python 3, and Skia's `gn` tool. Use no more than two jobs where the host requires that limit.
+
+```sh
+git clone https://skia.googlesource.com/skia.git /path/to/skia
+git -C /path/to/skia checkout ebf50520d720a1ce9d842d942d04c6c39c3fbc7b
+cd /path/to/skia
+bin/fetch-gn
+bin/gn gen /path/to/skia-out/raster --args='is_official_build=true is_debug=false cc="clang" cxx="clang++" skia_use_gl=false skia_enable_ganesh=false skia_use_vulkan=false skia_use_dawn=false skia_enable_graphite=false skia_enable_pdf=false skia_use_freetype=false skia_use_fontconfig=false skia_use_libpng_decode=false skia_use_libjpeg_turbo_decode=false skia_use_libwebp_decode=false skia_use_wuffs=false skia_use_icu=false skia_enable_tools=false'
+ninja -C /path/to/skia-out/raster -j2 skia
+```
+
+The output directory must contain `libskia.a`, `libskcms.a`, `liballocator_base.a`, `liballocator_core.a`, `liballocator_shim.a`, and `libraw_ptr.a`.
+
+## Configure CNA
+
+```sh
+cmake -S . -B build-skia -G Ninja \
+  -DCNA_GRAPHICS_BACKEND=SKIA \
+  -DCNA_SKIA_ROOT=/path/to/skia \
+  -DCNA_SKIA_BUILD_DIR=/path/to/skia-out/raster
+cmake --build build-skia --parallel 2
+```
+
+`cmake/ThirdPartySkia.cmake` exports `CNA::Skia`, including the header root, all six static archives in a linker group, threads, and `dl` where needed. It is intentionally limited to the tested GNU/Clang ELF raster configuration until platform-specific adapters are added.
+
+## Execution modes and capability policy
+
+| Mode | Status | Presentation | 3D/depth/stencil |
+|---|---|---|---|
+| Raster | Implemented first slice | `SkSurface` readback to SDL streaming texture | Unsupported |
+| Ganesh/OpenGL | Not implemented | Requires a separately owned current GL context and framebuffer wrapper | Not claimed |
+| Graphite/Vulkan/Metal/Dawn | Not investigated | No selected interop or reset contract | Not claimed |
+
+Raster uses premultiplied RGBA8888 inside Skia and normalizes readback into top-row-first RGBA8 bytes for SDL. A future GPU path must preserve that contract and pass the same pixel tests; it may not silently change reported capabilities mid-frame.
+
+## Verification recorded for the initial slice
+
+1. A standalone C++23 smoke target created a raster `SkSurface`, cleared it, read a pixel, and linked the six archives above.
+2. CNA configured with `CNA_GRAPHICS_BACKEND=SKIA`, the two explicit Skia paths, and no EasyGL target.
+3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
+4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
+
+Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
