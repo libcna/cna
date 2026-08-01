@@ -499,5 +499,17 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     effect types. The focused headless raster test passes 8/8 in Debug, Release and under
     ASan/LSan with leak detection enabled. The complete Debug suite passes 102/102 in 16.32 seconds
     with eight-way parallelism (10 Raster, 90 Display and two Audit tests).
+69. `Skia_StockEffect_Boundary` closes SKIA-94 without a false promotion. All eight
+    AlphaTestEffect compare modes forward the expected 24 threshold decisions, and 16
+    DualTextureEffect texture-availability/fog/vertex-colour combinations preserve their CPU
+    parameters, yet public `DrawUserPrimitives` consistently rejects at the raster backend's
+    missing `CreateVertexBuffer` before changing a sentinel pixel. SpriteBatch now distinguishes
+    the missing stock-3D primitive route from the explicit tagged-SkSL custom route, and remains
+    reusable after both refusals. The focused test and the earlier generic effect diagnostic test
+    pass together; 78 existing AlphaTest/DualTexture property/clone/forwarding tests also pass
+    under Xvfb. No Skia golden is registered because no additional stock effect passed the public
+    geometry/depth/fog/property gate; `ThreeD` and `CustomEffects` remain false. Both focused
+    display tests pass in Debug, Release and under ASan (`detect_leaks=0`). The complete Debug suite
+    passes 103/103 in 12.86 seconds with eight-way parallelism (10 Raster, 91 Display, two Audit).
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

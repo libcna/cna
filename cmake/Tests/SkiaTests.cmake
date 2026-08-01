@@ -132,6 +132,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_Effect_Emulation_Spike
                                   cna_test_skia_effect_emulation_spike)
 
+    # SKIA-94: fragment-like feasibility does not promote stock effects whose public route starts
+    # with transformed primitives. Exercise AlphaTestEffect/DualTextureEffect property matrices,
+    # atomic 3D refusal, actionable SpriteBatch diagnostics, and immediate 2D recovery.
+    cna_skia_test(cna_test_skia_stock_effect_boundary
+                  examples/skia_stock_effect_boundary_test.cpp)
+    cna_register_skia_display_test(Skia_StockEffect_Boundary
+                                   cna_test_skia_stock_effect_boundary)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

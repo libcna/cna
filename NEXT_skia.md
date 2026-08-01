@@ -588,8 +588,8 @@
 
 ## Current task
 
-SKIA-93 implementation and validation are complete. Commit/push this checkpoint, then execute
-SKIA-94's explicit stock-effect promotion decision.
+SKIA-94 implementation and validation are complete. Commit/push this checkpoint, then begin
+SKIA-95's complete 3D call/effect matrix.
 
 ## Completed in this session: SKIA-93
 
@@ -617,12 +617,40 @@ SKIA-94's explicit stock-effect promotion decision.
   pass under Xvfb in 16.32 seconds with `--parallel 8` (10 Raster, 90 Display, two Audit). The
   temporary display cache was restored to `:0`. `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-94
+
+- No stock effect was promoted. AlphaTestEffect and DualTextureEffect have valid shared CPU-side
+  properties and the SKIA-93 fragment pieces are feasible, but their public route begins with a
+  transformed vertex stream. Skia rejects `DrawUserPrimitives` at `CreateVertexBuffer` before
+  fragment work; matrices, triangle coverage, per-vertex fog/colour and depth are not optional
+  properties that can be silently dropped.
+- Added `Skia_StockEffect_Boundary`. It checks all eight alpha compare modes and the 24
+  below/equal/above forwarded decisions, then proves every corresponding public draw refuses with
+  the no-3D `CreateVertexBuffer` diagnostic. It also checks forwarded dual textures,
+  premultiplied tint, fog and vertex colour plus all 16 texture-availability/fog/vertex-colour
+  combinations. Every failure leaves an opaque sentinel pixel byte-exactly unchanged.
+- SpriteBatch's fallback diagnostic now separates stock 3D effects (unsupported primitive route)
+  from other custom effects (explicit `CNA_SKIA_SKSL_V1` route), while retaining the `custom
+  Effects` wording covered by SKIA-89. The same batch renders normally after AlphaTestEffect and
+  DualTextureEffect Begin refusals.
+- The new eight-check display fixture and `Skia_Effect_Boundary` pass together under Xvfb. The 78
+  existing AlphaTestEffect/DualTextureEffect default, setter, clone, owned-texture,
+  reference-scaling and forwarding GTests pass 78/78 under Xvfb. Their first display-free attempt
+  failed only at expected SDL video initialization, before assertions.
+- Existing EasyGL golden images remain classified as 3D. No Skia golden is registered because no
+  additional stock effect passed the complete public gate; a fragment-only golden would be false
+  promotion evidence. `ThreeD` and `CustomEffects` remain false.
+- `Skia_StockEffect_Boundary` and `Skia_Effect_Boundary` pass together in Debug and Release and
+  under AddressSanitizer (`detect_leaks=0` for the known display-stack exit baseline). The full
+  Debug build succeeds and all 103 Skia CTests pass under Xvfb in 12.86 seconds with `--parallel 8`
+  (10 Raster, 91 Display, two Audit). All Debug/Release/ASan display caches were restored to `:0`.
+  `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-94: promote a stock effect only if every relevant property combination matches; otherwise
-   retain explicit unsupported status and record the first observable blocker.
-2. SKIA-95: build the complete EasyGL 3D call/effect matrix before selecting any projected-
+1. SKIA-95: build the complete EasyGL 3D call/effect matrix before selecting any projected-
    geometry prototype.
+2. SKIA-96: prototype projected SkVertices only after the matrix defines one exact bounded slice.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

@@ -92,6 +92,32 @@ intermediate surface would add another clamp, premultiplication and eight-bit qu
 and therefore needs new oracles. These costs and precision limits are acceptable evidence for the
 components, not evidence that the stock 3D effect types are complete.
 
+## SKIA-94 stock-effect promotion decision
+
+No additional stock effect is promoted. `SpriteEffect` remains the sole exact stock alias because
+its observable CNA/EasyGL route is already the built-in SpriteBatch paint. `AlphaTestEffect` and
+`DualTextureEffect` expose working CPU-side properties and `GpuDrawParams`, but their public draw
+contract begins with a transformed vertex stream. On raster Skia, `DrawUserPrimitives` therefore
+reaches the explicit `CreateVertexBuffer` no-3D refusal before any candidate fragment operation.
+
+`Skia_StockEffect_Boundary` makes the decision observable rather than relying on capability prose:
+
+- all eight alpha compare modes forward the same 24 below/equal/above decisions proven by the
+  SKIA-93 clip spike, while every public draw still rejects at `CreateVertexBuffer`;
+- all 16 combinations of dual texture availability, fog and vertex-colour enablement reject at the
+  same boundary; a separate assertion proves both texture backends, premultiplied diffuse/alpha,
+  fog and vertex-colour state were forwarded rather than absent;
+- every refused draw leaves a non-black raster sentinel byte-exactly unchanged;
+- passing either stock 3D effect to SpriteBatch reports that the unsupported 3D primitive route is
+  required, and the same batch immediately renders through its normal 2D path afterward;
+- `ThreeD` and `CustomEffects` remain false.
+
+The existing 78 AlphaTestEffect/DualTextureEffect property, clone, ownership, reference-scaling and
+forwarding tests pass on the Skia selection under Xvfb. Existing EasyGL alpha/dual golden images
+remain classified as 3D geometry oracles in `docs/skia-easygl-test-matrix.md`. Since neither stock
+effect passed the complete public draw gate, SKIA-94 intentionally registers no Skia golden image;
+doing so for only the fragment equation would mislabel an unsupported effect as promoted.
+
 ## Explicit SkSL SpriteBatch ABI v1
 
 The SKIA-91 prototype deliberately reuses the two opaque `ShaderEffect` payload slots without

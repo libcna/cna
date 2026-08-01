@@ -216,8 +216,9 @@ namespace CNA::Internal::Backends::Skia
                 + skiaEffect->GetCompileError());
         }
         throw std::runtime_error(
-            "Skia raster SpriteBatch supports only the exact stock SpriteEffect; custom Effects "
-            "require an explicit SkSL contract.");
+            "Skia raster SpriteBatch supports only the exact stock SpriteEffect or an explicit "
+            "tagged SkSL effect; stock 3D Effects require the unsupported 3D primitive route, "
+            "and other custom Effects require CNA_SKIA_SKSL_V1.");
     }
 
     void SkiaSpriteBatchBackend::SetSamplerFilter(int textureFilter)
