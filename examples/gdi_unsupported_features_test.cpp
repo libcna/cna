@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// GDI-059: public unsupported-feature construction and invocation contract.
+// GDI-059/GDI-070: public rejection plus the complete direct 3D/resource boundary.
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -34,13 +36,48 @@
 #include <cstdio>
 #include <exception>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using namespace CNA::Internal::Backends;
+using namespace CNA::Internal::Backends::Gdi;
+
+static_assert(std::is_base_of_v<IGraphicsBackend, GdiGraphicsBackend>);
+static_assert(!std::is_base_of_v<Software::SoftwareGraphicsBackend, GdiGraphicsBackend>,
+              "GDI must compose the CPU core rather than inherit Software's 3D contract");
 
 namespace
 {
+    class DummyVertexBuffer final : public IVertexBufferBackend
+    {
+    public:
+        void SetData(const void*, int, std::size_t) override {}
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
+        [[nodiscard]] int GetVertexCount() const override { return 0; }
+    };
+
+    class DummyIndexBuffer final : public IIndexBufferBackend
+    {
+    public:
+        void SetData16(const void*, int) override {}
+        [[nodiscard]] int GetIndexCount() const override { return 0; }
+    };
+
+    class DummyRenderTargetCube final : public IRenderTargetCubeBackend
+    {
+    public:
+        [[nodiscard]] bool SetData(int, int, int, int, int, int,
+                                   const void*, int) override
+        {
+            return false;
+        }
+        [[nodiscard]] int GetSize() const override { return 2; }
+        void BindAsRenderTargetFace(int) override {}
+        void UnbindAsRenderTarget() override {}
+    };
+
     bool Expect(bool condition, const char* message)
     {
         std::printf("[%s] %s\n", condition ? "PASS" : "FAIL", message);
@@ -181,7 +218,7 @@ namespace
         const std::array<std::uint16_t, 3> indices = { 0, 1, 2 };
 
         ok &= ExpectNotSupported(
-            "DrawUserPrimitives fails before allocating an inherited Software 3D buffer",
+            "DrawUserPrimitives fails before allocating a private-core 3D buffer",
             "vertex buffers", [&]
             {
                 device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices.data(), 0, 1);
@@ -194,6 +231,151 @@ namespace
                                                  vertices.data(), 0,
                                                  static_cast<int>(vertices.size()),
                                                  indices.data(), 0, 1);
+            });
+        return ok;
+    }
+
+    bool ExerciseDirectBackendBoundary(GdiGraphicsBackend& backend)
+    {
+        bool ok = true;
+        ok &= Expect(!backend.SupportsDepthStencil() && !backend.SupportsDepthBuffer() &&
+                         backend.SupportsStencilBuffer(),
+                     "direct attachment contract remains depthless and stencil-only");
+        ok &= Expect(backend.GetMaxTextureDimension() ==
+                         Software::SoftwareFramebufferMaxDimension,
+                     "direct texture ceiling matches the guarded CPU allocation ceiling");
+
+        ok &= ExpectNotSupported(
+            "direct TextureCube factory remains outside the 2D boundary",
+            "TextureCube resources", [&] { (void)backend.CreateTextureCube(2, false, 0); });
+        ok &= ExpectNotSupported(
+            "direct Texture3D factory remains outside the 2D boundary",
+            "Texture3D resources", [&] { (void)backend.CreateTexture3D(2, 2, 2, false, 0); });
+        ok &= ExpectNotSupported(
+            "direct RenderTargetCube factory remains outside the 2D boundary",
+            "RenderTargetCube resources",
+            [&] { (void)backend.CreateRenderTargetCube(2, 0, false, false, 0); });
+        ok &= ExpectNotSupported(
+            "direct shader-effect factory remains outside the 2D boundary",
+            "ShaderEffect programs",
+            [&] { (void)backend.CreateEffectBackend("void main() {}", "void main() {}"); });
+        ok &= ExpectNotSupported(
+            "direct occlusion-query factory remains outside the 2D boundary",
+            "occlusion queries", [&] { (void)backend.CreateOcclusionQuery(); });
+        ok &= ExpectNotSupported(
+            "direct vertex-buffer factory remains outside the 2D boundary",
+            "vertex buffers", [&] { (void)backend.CreateVertexBuffer(3); });
+        ok &= ExpectNotSupported(
+            "direct 16-bit index factory remains outside the 2D boundary",
+            "16-bit index buffers", [&] { (void)backend.CreateIndexBuffer16(3); });
+        ok &= ExpectNotSupported(
+            "direct 32-bit index factory remains outside the 2D boundary",
+            "32-bit index buffers", [&] { (void)backend.CreateIndexBuffer32(3); });
+
+        DummyRenderTargetCube cubeTarget;
+        ok &= ExpectNotSupported(
+            "direct cube-face binding cannot reach a foreign cube implementation",
+            "RenderTargetCube face bindings",
+            [&] { backend.SetRenderTargetCubeFace(&cubeTarget, 0); });
+        const RenderTargetBindingDescriptor cubeBinding =
+            RenderTargetBindingDescriptor::ForRenderTargetCubeFace(
+                &cubeTarget, 0, cubeTarget.GetSize(), 0);
+        ok &= ExpectNotSupported(
+            "normalized cube descriptor remains outside the 2D boundary",
+            "RenderTargetCube face bindings",
+            [&] { backend.SetRenderTargets(&cubeBinding, 1); });
+
+        std::unique_ptr<IRenderTargetBackend> firstTarget =
+            backend.CreateRenderTarget2D(2, 2, 0, true, false, 0);
+        std::unique_ptr<IRenderTargetBackend> secondTarget =
+            backend.CreateRenderTarget2D(2, 2, 0, true, false, 0);
+        const std::array<RenderTargetBindingDescriptor, 2> multipleBindings = {
+            RenderTargetBindingDescriptor::ForRenderTarget2D(
+                firstTarget.get(), 0, 2, 2, 0),
+            RenderTargetBindingDescriptor::ForRenderTarget2D(
+                secondTarget.get(), 0, 2, 2, 0),
+        };
+        ok &= ExpectNotSupported(
+            "multiple 2D targets cannot fall through to Software behavior",
+            "multiple simultaneous render targets",
+            [&] { backend.SetRenderTargets(multipleBindings.data(), 2); });
+        const RenderTargetBindingDescriptor arraySliceBinding =
+            RenderTargetBindingDescriptor::ForRenderTarget2D(
+                firstTarget.get(), 1, 2, 2, 0);
+        ok &= ExpectNotSupported(
+            "2D array slices cannot fall through to Software behavior",
+            "RenderTarget2D array slices",
+            [&] { backend.SetRenderTargets(&arraySliceBinding, 1); });
+
+        backend.SetRenderTargetCubeFace(nullptr, 0);
+        backend.SetRenderTargets(nullptr, 0);
+        ok &= Expect(true, "null cube/plural bindings explicitly restore the GDI backbuffer");
+
+        ok &= ExpectNotSupported(
+            "direct ClearColorAndDepth is rejected", "ClearColorAndDepth",
+            [&] { backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f); });
+        ok &= ExpectNotSupported(
+            "direct ClearDepth is rejected", "ClearDepth",
+            [&] { backend.ClearDepth(1.0f); });
+        ok &= ExpectNotSupported(
+            "direct ClearDepthAndStencil is rejected", "ClearDepthAndStencil",
+            [&] { backend.ClearDepthAndStencil(1.0f, 0); });
+        ok &= ExpectNotSupported(
+            "direct ClearColorDepthAndStencil is rejected", "ClearColorDepthAndStencil",
+            [&] { backend.ClearColorDepthAndStencil(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0); });
+        ok &= ExpectNotSupported(
+            "direct depth-test toggle is rejected", "SetDepthTestEnabled",
+            [&] { backend.SetDepthTestEnabled(true); });
+        ok &= ExpectNotSupported(
+            "direct depth-write toggle is rejected", "SetDepthWriteEnabled",
+            [&] { backend.SetDepthWriteEnabled(true); });
+        ok &= ExpectNotSupported(
+            "legacy direct blend toggle is rejected", "SetBlendEnabled",
+            [&] { backend.SetBlendEnabled(true); });
+
+        DummyVertexBuffer vertexBuffer;
+        DummyIndexBuffer indexBuffer;
+        const Matrix identity = Matrix::getIdentityProperty();
+        const GpuDrawParams drawParameters{};
+        ok &= ExpectNotSupported(
+            "direct colored draw is rejected", "DrawColoredPrimitives",
+            [&]
+            {
+                backend.DrawColoredPrimitives(
+                    vertexBuffer, identity, identity, identity,
+                    PrimitiveType::TriangleList, 1);
+            });
+        ok &= ExpectNotSupported(
+            "direct indexed colored draw is rejected", "DrawIndexedColoredPrimitives",
+            [&]
+            {
+                backend.DrawIndexedColoredPrimitives(
+                    vertexBuffer, indexBuffer, identity, identity, identity,
+                    PrimitiveType::TriangleList, 1);
+            });
+        ok &= ExpectNotSupported(
+            "direct effect-aware draw is rejected", "DrawPrimitivesEx",
+            [&]
+            {
+                backend.DrawPrimitivesEx(
+                    vertexBuffer, identity, identity, identity,
+                    PrimitiveType::TriangleList, 1, drawParameters);
+            });
+        ok &= ExpectNotSupported(
+            "direct indexed effect-aware draw is rejected", "DrawIndexedPrimitivesEx",
+            [&]
+            {
+                backend.DrawIndexedPrimitivesEx(
+                    vertexBuffer, indexBuffer, identity, identity, identity,
+                    PrimitiveType::TriangleList, 1, drawParameters);
+            });
+        ok &= ExpectNotSupported(
+            "direct instanced draw is rejected", "DrawInstancedPrimitivesEx",
+            [&]
+            {
+                backend.DrawInstancedPrimitivesEx(
+                    vertexBuffer, indexBuffer, identity, identity, identity,
+                    PrimitiveType::TriangleList, 1, 2, drawParameters);
             });
         return ok;
     }
@@ -227,18 +409,26 @@ int main()
         parameters.setDeviceWindowHandleProperty(
             reinterpret_cast<PresentationParameters::IntPtr>(window));
 
-        GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),
-                              GraphicsProfile::Reach, parameters);
         bool ok = true;
-        ok &= Expect(!device.SupportsCapability(CNA::GraphicsCapability::ThreeD),
-                     "GDI continues to report ThreeD=false");
-        ok &= Expect(!device.SupportsCapability(CNA::GraphicsCapability::Texture3D) &&
-                         !device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery) &&
-                         !device.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
-                     "resource-specific capability answers remain false");
-        ok &= ExerciseUnsupportedResources(device);
-        ok &= ExerciseUnsupportedBuffers(device);
-        ok &= ExerciseUnsupported3DCalls(device);
+        {
+            GraphicsDevice device(GraphicsAdapter::getDefaultAdapterProperty(),
+                                  GraphicsProfile::Reach, parameters);
+            ok &= Expect(!device.SupportsCapability(CNA::GraphicsCapability::ThreeD),
+                         "GDI continues to report ThreeD=false");
+            ok &= Expect(!device.SupportsCapability(CNA::GraphicsCapability::Texture3D) &&
+                             !device.SupportsCapability(CNA::GraphicsCapability::OcclusionQuery) &&
+                             !device.SupportsCapability(CNA::GraphicsCapability::CustomEffects),
+                         "resource-specific capability answers remain false");
+            ok &= ExerciseUnsupportedResources(device);
+            ok &= ExerciseUnsupportedBuffers(device);
+            ok &= ExerciseUnsupported3DCalls(device);
+        }
+        {
+            GdiGraphicsBackend backend(
+                window, 8, 8, CnaPresentationMode::NativeBackBuffer,
+                GdiConfiguration{});
+            ok &= ExerciseDirectBackendBoundary(backend);
+        }
         result = ok ? 0 : 1;
     }
     catch (const std::exception& error)

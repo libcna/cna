@@ -2,15 +2,19 @@
 
 #include "CNA/Internal/Backends/Gdi/GdiConfiguration.hpp"
 #include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
-#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <SDL3/SDL_events.h>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 
 namespace CNA::Internal::Backends::Gdi
 {
+    class GdiSoftware2DCore;
+
     struct GdiFramebufferStorageTelemetry
     {
         std::size_t colorBytes = 0;
@@ -30,11 +34,11 @@ namespace CNA::Internal::Backends::Gdi
      * SpriteBatch, textures and 2D render targets are CPU-rasterized by the reusable Software
      * core. Present() transfers the RGBA8 backbuffer to the SDL window's HWND with Win32 DIB APIs:
      * SetDIBitsToDevice for a 1:1 blit and StretchDIBits when scaling is necessary. This makes the
-     * final display operation real Win32 GDI rather than SDL_Renderer or a GPU API. The 3D-facing
-     * Software operations are deliberately overridden to throw: GDI exposes a 2D-only contract
-     * even though its CPU implementation is shared with the software rasterizer.
+     * final display operation real Win32 GDI rather than SDL_Renderer or a GPU API. The reusable
+     * rasterizer is privately composed behind explicit 2D forwards; GDI derives directly from the
+     * backend interface, and every 3D/resource entry is deliberately rejected.
      */
-    class GdiGraphicsBackend final : public Software::SoftwareGraphicsBackend
+    class GdiGraphicsBackend final : public IGraphicsBackend
     {
     public:
         GdiGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
@@ -53,6 +57,7 @@ namespace CNA::Internal::Backends::Gdi
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        void UpdatePresentationFormatEXT(int, int, bool) override {}
         [[nodiscard]] int GetMultiSampleCount() const override;
         [[nodiscard]] int GetAppliedBackBufferFormatEXT(int) const override { return 0; }
         [[nodiscard]] int GetAppliedDepthStencilFormatEXT(int) const override { return 0; }
@@ -70,6 +75,8 @@ namespace CNA::Internal::Backends::Gdi
 
         [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
+
+        std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
 
         /** @brief Test telemetry for the currently accumulated logical backbuffer damage. */
         [[nodiscard]] bool DebugGetBackbufferDamage(Rectangle& rectangle,
@@ -96,6 +103,9 @@ namespace CNA::Internal::Backends::Gdi
             int size, int depthFormat, bool preserveContents = false,
             bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* target) override;
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* target, int face) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
@@ -104,9 +114,26 @@ namespace CNA::Internal::Backends::Gdi
                                                              const std::string& fragSrc) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias = 0.0f,
+                                  float slopeScaleDepthBias = 0.0f) override;
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                               int maxAnisotropy) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
+        void SetReferenceStencil(int value) override;
+        void SetScissorRect(int x, int y, int w, int h) override;
+        void SetViewport(int x, int y, int w, int h,
+                         float minDepth, float maxDepth) override;
+
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsDepthBuffer() const override { return false; }
         [[nodiscard]] bool SupportsStencilBuffer() const override { return true; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+        [[nodiscard]] int GetMaxTextureDimension() const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
@@ -143,8 +170,13 @@ namespace CNA::Internal::Backends::Gdi
                                        PrimitiveType primitive, int primitiveCount,
                                        int instanceCount, const GpuDrawParams& params) override;
 
+        void SetContextRecoveryEnabled(bool) override {}
+        void SetStringMarkerEXT(const char*) override {}
+        void DebugSimulateContextLoss() override {}
+        void DebugRestoreContext() override {}
+
     protected:
-        void OnSpriteRasterBounds(int minX, int minY, int maxX, int maxY) override;
+        void OnSpriteRasterBounds(int minX, int minY, int maxX, int maxY);
 
     private:
         static bool SDLCALL WindowEventWatch(void* userdata, SDL_Event* event);
@@ -157,6 +189,7 @@ namespace CNA::Internal::Backends::Gdi
         void MarkBackbufferFullyDirty();
         void ResetBackbufferDamage();
 
+        std::unique_ptr<GdiSoftware2DCore> software2D_;
         SDL_Window* window_ = nullptr;
         void* nativeWindow_ = nullptr;
         int requestedVirtualWidth_ = 0;

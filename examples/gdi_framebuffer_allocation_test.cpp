@@ -2,6 +2,7 @@
 // GDI-067: optional attachment storage and overflow-/budget-safe framebuffer allocation.
 
 #include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 

@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Gdi/GdiConfiguration.hpp"
 #include "CNA/Internal/Backends/Gdi/GdiPresentation.hpp"
+#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -23,6 +24,47 @@
 
 namespace CNA::Internal::Backends::Gdi
 {
+    /**
+     * Private composition adapter around the reusable CPU rasterizer.
+     *
+     * No pointer or reference to this complete Software backend escapes GDI. The public backend
+     * derives directly from IGraphicsBackend and forwards only its reviewed 2D operations, so a
+     * future Software 3D virtual cannot silently appear in GDI's public vtable. This small adapter
+     * exposes only the backbuffer needed for presentation and the raster-bounds callback needed
+     * for dirty tracking.
+     */
+    class GdiSoftware2DCore final : public Software::SoftwareGraphicsBackend
+    {
+    public:
+        using RasterBoundsCallback = std::function<void(int, int, int, int)>;
+        using SoftwareGraphicsBackend::SoftwareGraphicsBackend;
+
+        void SetRasterBoundsCallback(RasterBoundsCallback callback)
+        {
+            rasterBoundsCallback_ = std::move(callback);
+        }
+
+        [[nodiscard]] Software::SoftwareFramebuffer& Backbuffer()
+        {
+            return BackbufferFramebuffer();
+        }
+
+        [[nodiscard]] const Software::SoftwareFramebuffer& Backbuffer() const
+        {
+            return BackbufferFramebuffer();
+        }
+
+    protected:
+        void OnSpriteRasterBounds(int minX, int minY, int maxX, int maxY) override
+        {
+            if (rasterBoundsCallback_)
+                rasterBoundsCallback_(minX, minY, maxX, maxY);
+        }
+
+    private:
+        RasterBoundsCallback rasterBoundsCallback_;
+    };
+
     namespace
     {
         [[nodiscard]] CnaPresentationMode ValidatePresentationMode(int mode)
@@ -223,10 +265,9 @@ namespace CNA::Internal::Backends::Gdi
     GdiGraphicsBackend::GdiGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                                            CnaPresentationMode presentationMode,
                                            GdiConfiguration configuration)
-        : Software::SoftwareGraphicsBackend(
+        : software2D_(std::make_unique<GdiSoftware2DCore>(
               ValidateGdiFramebufferDimension("virtualWidth", virtualWidth),
-              ValidateGdiFramebufferDimension("virtualHeight", virtualHeight),
-              false, true)
+              ValidateGdiFramebufferDimension("virtualHeight", virtualHeight), false, true))
         , window_(window)
         , requestedVirtualWidth_(virtualWidth)
         , requestedVirtualHeight_(virtualHeight)
@@ -236,11 +277,17 @@ namespace CNA::Internal::Backends::Gdi
         if (window_ == nullptr)
             throw std::runtime_error("GDI graphics backend requires an SDL window.");
 
+        software2D_->SetRasterBoundsCallback(
+            [this](int minX, int minY, int maxX, int maxY)
+            {
+                OnSpriteRasterBounds(minX, minY, maxX, maxY);
+            });
+
         // GDI owns no depth storage. Establish that invariant even for direct backend users;
         // GraphicsDevice later applies its public default state, but focused/internal callers can
         // create a SpriteBatch immediately after construction.
-        Software::SoftwareGraphicsBackend::SetDepthTestEnabled(false);
-        Software::SoftwareGraphicsBackend::SetDepthWriteEnabled(false);
+        software2D_->SetDepthTestEnabled(false);
+        software2D_->SetDepthWriteEnabled(false);
 
         nativeWindow_ = SDL_GetPointerProperty(
             SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
@@ -355,7 +402,7 @@ namespace CNA::Internal::Backends::Gdi
         int drawableWidth = 0;
         int drawableHeight = 0;
         (void)GetDrawablePixelSize(drawableWidth, drawableHeight);
-        const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
+        const Software::SoftwareFramebuffer& backbuffer = software2D_->Backbuffer();
         const GdiPresentationSize size = ResolveGdiLogicalSize(
             presentationMode_, drawableWidth, drawableHeight,
             requestedVirtualWidth_, requestedVirtualHeight_,
@@ -369,11 +416,11 @@ namespace CNA::Internal::Backends::Gdi
         int logicalWidth = 0;
         int logicalHeight = 0;
         GetLogicalSize(logicalWidth, logicalHeight);
-        const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
+        const Software::SoftwareFramebuffer& backbuffer = software2D_->Backbuffer();
         if (logicalWidth > 0 && logicalHeight > 0 &&
             (backbuffer.width != logicalWidth || backbuffer.height != logicalHeight))
         {
-            Software::SoftwareGraphicsBackend::SetVirtualResolution(logicalWidth, logicalHeight);
+            software2D_->SetVirtualResolution(logicalWidth, logicalHeight);
             MarkBackbufferFullyDirty();
         }
     }
@@ -381,7 +428,7 @@ namespace CNA::Internal::Backends::Gdi
     void GdiGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         SynchronizeBackbufferSize();
-        Software::SoftwareGraphicsBackend::Clear(r, g, b, a);
+        software2D_->Clear(r, g, b, a);
         if (renderingToBackbuffer_)
             MarkBackbufferFullyDirty();
     }
@@ -390,7 +437,7 @@ namespace CNA::Internal::Backends::Gdi
     {
         SynchronizeBackbufferSize();
 
-        Software::SoftwareFramebuffer& writableBackbuffer = BackbufferFramebuffer();
+        Software::SoftwareFramebuffer& writableBackbuffer = software2D_->Backbuffer();
         writableBackbuffer.ResolveColor();
         const Software::SoftwareFramebuffer& backbuffer = writableBackbuffer;
         if (backbuffer.width <= 0 || backbuffer.height <= 0 || backbuffer.color.empty())
@@ -457,13 +504,13 @@ namespace CNA::Internal::Backends::Gdi
     void GdiGraphicsBackend::GetViewportSize(int& width, int& height)
     {
         SynchronizeBackbufferSize();
-        Software::SoftwareGraphicsBackend::GetViewportSize(width, height);
+        software2D_->GetViewportSize(width, height);
     }
 
     void GdiGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
         SynchronizeBackbufferSize();
-        Software::SoftwareGraphicsBackend::ReadBackbuffer(x, y, w, h, pixels);
+        software2D_->ReadBackbuffer(x, y, w, h, pixels);
     }
 
     void GdiGraphicsBackend::SetVirtualResolution(int width, int height)
@@ -507,14 +554,14 @@ namespace CNA::Internal::Backends::Gdi
         // four 2x2-grid samples per pixel. A request for any other count stays single-sampled;
         // reporting a requested 2x/8x count while allocating four samples would be misleading.
         SynchronizeBackbufferSize();
-        BackbufferFramebuffer().SetMultiSampleCount(requestedMultiSampleCount == 4 ? 4 : 0);
+        software2D_->Backbuffer().SetMultiSampleCount(requestedMultiSampleCount == 4 ? 4 : 0);
         MarkBackbufferFullyDirty();
-        return BackbufferFramebuffer().multiSampleCount;
+        return software2D_->Backbuffer().multiSampleCount;
     }
 
     int GdiGraphicsBackend::GetMultiSampleCount() const
     {
-        return BackbufferFramebuffer().multiSampleCount;
+        return software2D_->Backbuffer().multiSampleCount;
     }
 
     void GdiGraphicsBackend::ApplyDepthStencilState(bool, bool, int, bool stencilEnable,
@@ -530,7 +577,7 @@ namespace CNA::Internal::Backends::Gdi
         // SpriteBatch's documented draw ordering.  Its separate 8-bit CPU stencil plane is real,
         // however, and is useful for ordinary 2D clipping/masking.  Front/back face selection has
         // no meaning for a 2D quad, so the clockwise state is deliberately the one applied.
-        Software::SoftwareGraphicsBackend::ApplyDepthStencilState(
+        software2D_->ApplyDepthStencilState(
             /*depthEnable*/ false, /*depthWriteEnable*/ false, /*LessEqual*/ 3,
             stencilEnable, stencilFunc, stencilPass, stencilFail, stencilDepthFail,
             stencilMask, stencilWriteMask, referenceStencil, false, 0, 0, 0, 0);
@@ -574,17 +621,55 @@ namespace CNA::Internal::Backends::Gdi
             logX, logY, windowX, windowY);
     }
 
+    std::unique_ptr<ITextureBackend> GdiGraphicsBackend::CreateTexture(const ImageData& data)
+    {
+        return software2D_->CreateTexture(data);
+    }
+
     std::unique_ptr<ISpriteBatchBackend> GdiGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<GdiSpriteBatchBackend>(
-            Software::SoftwareGraphicsBackend::CreateSpriteBatch(),
+            software2D_->CreateSpriteBatch(),
             [this] { SynchronizeBackbufferSize(); });
     }
 
     void GdiGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* target)
     {
-        Software::SoftwareGraphicsBackend::SetRenderTarget2D(target);
+        if (target != nullptr &&
+            dynamic_cast<Software::SoftwareRenderTargetBackend*>(target) == nullptr)
+        {
+            throw std::invalid_argument(
+                "GDI SetRenderTarget2D requires a compatible CPU render target.");
+        }
+        software2D_->SetRenderTarget2D(target);
         renderingToBackbuffer_ = target == nullptr;
+    }
+
+    void GdiGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* target, int)
+    {
+        if (target != nullptr)
+            ThrowUnsupportedFeature("RenderTargetCube face bindings");
+        SetRenderTarget2D(nullptr);
+    }
+
+    void GdiGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
+    {
+        if (renderTargets == nullptr || count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (count != 1)
+            ThrowUnsupportedFeature("multiple simultaneous render targets");
+        if (renderTargets[0].IsRenderTargetCubeFace())
+            ThrowUnsupportedFeature("RenderTargetCube face bindings");
+        if (renderTargets[0].GetArraySlice() != 0)
+            ThrowUnsupportedFeature("RenderTarget2D array slices");
+        IRenderTargetBackend* target = renderTargets[0].GetRenderTarget2D();
+        if (target == nullptr)
+            throw std::invalid_argument("GDI SetRenderTargets received a null 2D target.");
+        SetRenderTarget2D(target);
     }
 
     void GdiGraphicsBackend::MarkBackbufferDirty(const Rectangle& rectangle)
@@ -593,7 +678,7 @@ namespace CNA::Internal::Backends::Gdi
             rectangle.Width <= 0 || rectangle.Height <= 0)
             return;
 
-        const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
+        const Software::SoftwareFramebuffer& backbuffer = software2D_->Backbuffer();
         const auto clampEdge = [](long long value, int limit) {
             return static_cast<int>(std::clamp<long long>(value, 0, limit));
         };
@@ -686,7 +771,7 @@ namespace CNA::Internal::Backends::Gdi
 
     GdiFramebufferStorageTelemetry GdiGraphicsBackend::DebugGetBackbufferStorage() const
     {
-        const Software::SoftwareFramebuffer& framebuffer = BackbufferFramebuffer();
+        const Software::SoftwareFramebuffer& framebuffer = software2D_->Backbuffer();
         return {
             framebuffer.color.size(),
             framebuffer.depthBuffer.size() * sizeof(float),
@@ -734,6 +819,50 @@ namespace CNA::Internal::Backends::Gdi
         ThrowUnsupportedFeature("occlusion queries");
     }
 
+    void GdiGraphicsBackend::ApplyBlendState(
+        int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
+        int colorBlendFunc, int alphaBlendFunc, const BlendWriteState& writeState)
+    {
+        software2D_->ApplyBlendState(
+            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+            colorBlendFunc, alphaBlendFunc, writeState);
+    }
+
+    void GdiGraphicsBackend::ApplyRasterizerState(
+        int cullMode, int fillMode, bool scissorTestEnable,
+        float depthBias, float slopeScaleDepthBias)
+    {
+        software2D_->ApplyRasterizerState(
+            cullMode, fillMode, scissorTestEnable, depthBias, slopeScaleDepthBias);
+    }
+
+    void GdiGraphicsBackend::ApplySamplerState(
+        int slot, int filter, int addressU, int addressV, int maxAnisotropy)
+    {
+        software2D_->ApplySamplerState(slot, filter, addressU, addressV, maxAnisotropy);
+    }
+
+    void GdiGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        software2D_->SetBlendFactor(r, g, b, a);
+    }
+
+    void GdiGraphicsBackend::SetReferenceStencil(int value)
+    {
+        software2D_->SetReferenceStencil(value);
+    }
+
+    void GdiGraphicsBackend::SetScissorRect(int x, int y, int width, int height)
+    {
+        software2D_->SetScissorRect(x, y, width, height);
+    }
+
+    void GdiGraphicsBackend::SetViewport(
+        int x, int y, int width, int height, float minDepth, float maxDepth)
+    {
+        software2D_->SetViewport(x, y, width, height, minDepth, maxDepth);
+    }
+
     bool GdiGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
         // Wireframe SpriteBatch quads are genuinely rasterized by the shared CPU 2D path. GDI
@@ -745,20 +874,25 @@ namespace CNA::Internal::Backends::Gdi
                capability == CNA::GraphicsCapability::MultiSampleAntiAliasing;
     }
 
+    int GdiGraphicsBackend::GetMaxTextureDimension() const
+    {
+        return Software::SoftwareFramebufferMaxDimension;
+    }
+
     void GdiGraphicsBackend::ClearColorAndDepth(float, float, float, float, float)
     { ThrowUnsupportedFeature("ClearColorAndDepth"); }
     void GdiGraphicsBackend::ClearDepth(float) { ThrowUnsupportedFeature("ClearDepth"); }
     void GdiGraphicsBackend::ClearStencil(int stencil)
     {
         SynchronizeBackbufferSize();
-        Software::SoftwareGraphicsBackend::ClearStencil(stencil);
+        software2D_->ClearStencil(stencil);
     }
     void GdiGraphicsBackend::ClearDepthAndStencil(float, int)
     { ThrowUnsupportedFeature("ClearDepthAndStencil"); }
     void GdiGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
         SynchronizeBackbufferSize();
-        Software::SoftwareGraphicsBackend::ClearColorAndStencil(r, g, b, a, stencil);
+        software2D_->ClearColorAndStencil(r, g, b, a, stencil);
         if (renderingToBackbuffer_)
             MarkBackbufferFullyDirty();
     }

@@ -2,10 +2,10 @@
 
 `CNA_GRAPHICS_BACKEND=GDI` selects CNA's Windows-only, 2D-only GDI presentation backend.
 
-It uses the CPU SpriteBatch/textures/render-target path shared with `SOFTWARE`, then presents the
-main RGBA8 backbuffer into SDL's native Win32 `HWND` with GDI DIB APIs (`SetDIBitsToDevice` for a
-1:1 blit and `StretchDIBits` when scaling is needed). This is a real GDI display path; it does not
-create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
+It privately composes the CPU SpriteBatch/textures/render-target services shared with `SOFTWARE`,
+then presents the main RGBA8 backbuffer into SDL's native Win32 `HWND` with GDI DIB APIs
+(`SetDIBitsToDevice` for a 1:1 blit and `StretchDIBits` when scaling is needed). This is a real GDI
+display path; it does not create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
 
 The focused automated correctness suite passes in the MinGW/Wine configuration documented below,
 but the native visible Windows lifecycle/DPI gate in `plan_gdi.md` is still open. Treat GDI as a
@@ -81,10 +81,12 @@ compatibility backend under validation, not yet as a release baseline.
   plane. `PreserveContents` and `PlatformContents` both retain color/stencil on rebind;
   `DiscardContents` deterministically replaces them with black/zero. Mipmap and usage properties
   therefore describe the actual CPU storage rather than the original unsupported request.
-- The shared Software core can own an internal 3D depth buffer, but GDI constructs its surfaces
-  without that plane and forcibly disables depth state on every application. A `DepthStencilState`
-  therefore cannot change SpriteBatch's ordinary submission order, while its independent stencil
-  fields can still clip/mask a later 2D draw.
+- `GdiGraphicsBackend` derives directly from `IGraphicsBackend`. Its private `GdiSoftware2DCore`
+  forwards only reviewed framebuffer, texture, SpriteBatch, 2D-target, and 2D-state services; no
+  complete Software backend pointer escapes. GDI constructs every surface without a depth plane
+  and forcibly disables depth state on every application. A `DepthStencilState` therefore cannot
+  change SpriteBatch's ordinary submission order, while its independent stencil fields can still
+  clip/mask a later 2D draw. New Software 3D methods cannot enter GDI through inheritance.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`
@@ -295,10 +297,11 @@ sample combinations, then compares the normalized public properties with real re
 rebind behavior. The low-level 2D regression separately checks all five presentation-mode ordinals,
 both invalid boundaries, and transactional rejection that leaves the prior mode active.
 
-`cna_test_gdi_unsupported_features` uses only public resources and draw APIs. It verifies the exact
-`System::NotSupportedException` family for cube/3D textures, cube render targets, `ShaderEffect`,
-occlusion queries, 16/32-bit and dynamic buffers, depth state, and non-indexed/indexed public user
-draw paths, while retaining the corresponding false capability answers.
+`cna_test_gdi_unsupported_features` verifies public resources/draws and the complete direct backend
+boundary. Its 42 checks cover cube/3D textures, cube targets and bindings, MRT/array slices,
+`ShaderEffect`, occlusion queries, 16/32-bit and dynamic buffers, every depth-only clear/toggle, and
+all five draw entries with exact `System::NotSupportedException` diagnostics. A compile-time
+assertion also requires GDI to compose, never inherit, `SoftwareGraphicsBackend`.
 
 `cna_test_gdi_dirty_damage` verifies the raster-derived rectangle after origin, viewport, scissor,
 transform and rotation, plus negative, off-screen and overflow-sized geometry. The repaint test

@@ -219,10 +219,10 @@ namespace
         backend.SetBlendFactor(1.0f, 1.0f, 1.0f, 1.0f);
         SetOpaque(backend);
 
-        // GDI is a 2D-only backend. The Software base owns a 3D depth buffer, but applying a
-        // DepthStencilState must never let it accidentally alter SpriteBatch layering. With an
-        // active LessEqual test, blue at 0.75 would normally fail behind red at 0.25; GDI instead
-        // keeps its declared 2D draw-order contract and shows the later blue draw.
+        // GDI is a 2D-only backend. Its privately composed CPU core has no depth allocation, and
+        // applying a DepthStencilState must never alter SpriteBatch layering. With an active
+        // LessEqual test, blue at 0.75 would normally fail behind red at 0.25; GDI instead keeps
+        // its declared 2D draw-order contract and shows the later blue draw.
         backend.ApplyDepthStencilState(
             /*depthEnable*/ true, /*depthWriteEnable*/ true, /*LessEqual*/ 3,
             /*stencilEnable*/ false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);

@@ -8,12 +8,12 @@
 
 ## Current focus
 
-- GDI-050 through GDI-060 and GDI-067 are complete; GDI-072 is implemented and validated in the
-  current working tree. The approved catch-up baseline is commit
-  `48826e0b`; later completed tasks are `4c512245`, `01873ca9`, `c8fd70d6`, `47fe3f1e`, and
-  `3096ab0c`, followed by GDI-067 in `de79659d`.
-- GDI-061 and GDI-062 require native visible Windows work. The next safe autonomous candidate is
-  the GDI-070 contract/boundary audit after GDI-072 is committed.
+- GDI-050 through GDI-060, GDI-067, and GDI-072 are committed; GDI-070 is implemented and
+  validated in the current working tree. The approved catch-up baseline is commit `48826e0b`;
+  later completed tasks are `4c512245`, `01873ca9`, `c8fd70d6`, `47fe3f1e`, and
+  `3096ab0c`, GDI-067 in `de79659d`, and GDI-072 in `517a0776`.
+- GDI-061 and GDI-062 require native visible Windows work. After committing GDI-070, the next
+  dependency-ordered autonomous task is GDI-071's explicit shared-core build boundary.
 
 ## Completed in the current working tree
 
@@ -38,7 +38,7 @@
 - GDI-059: all excluded GDI resource factories and 3D entries now throw
   `System::NotSupportedException`. Public construction fails immediately for cube/3D textures,
   cube render targets, shader effects, occlusion queries and static/dynamic buffers. The focused
-  public test also covers depth state and indexed/non-indexed user draws without allowing inherited
+  public test also covers depth state and indexed/non-indexed user draws without allowing private
   Software 3D behavior to escape.
 - GDI-060: presentation and dynamic backbuffer sizing now use `SDL_GetWindowSizeInPixels()` as
   their one pixel-size authority. Input transforms explicitly bridge SDL window coordinates and
@@ -61,6 +61,11 @@
   `Present()` uses only the backend's const snapshot. The existing configuration executable now
   mutates all three environment variables after construction and exercises a contrary typed
   constructor override.
+- GDI-070: `GdiGraphicsBackend` now derives directly from `IGraphicsBackend` and privately owns a
+  `GdiSoftware2DCore` composition adapter. Only reviewed CPU framebuffer, texture, SpriteBatch,
+  2D-target, and state calls are forwarded, so future Software virtual methods cannot silently
+  enter GDI. Every resource/3D entry remains explicit. The unsupported-feature executable now has
+  42 public/direct boundary checks and a compile-time assertion forbidding Software inheritance.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -102,6 +107,8 @@ baseline. All later tasks use one task per commit.
   resource after including all selected attachment/sample planes and generated mips.
 - 2026-08-01: GDI presentation environment settings are immutable per backend instance. Invalid
   values warn once at construction and fall back individually to nearest/disabled policy.
+- 2026-08-01: GDI's runtime contract uses composition, not inheritance from the full Software
+  backend. GDI-071 separately owns the remaining build-source/archive narrowing work.
 - Preserve XNA/FNA public API compatibility; backend-specific unsupported behavior must fail
   clearly without broadening the GDI 2D contract.
 
@@ -148,6 +155,10 @@ baseline. All later tasks use one task per commit.
   sanitized aggregate diagnostics, immutable post-construction behavior, and typed overrides. The
   complete fifteen-case Wine/Xvfb GDI correctness matrix also passes. A smoke run with all three
   settings invalid emits exactly one aggregate diagnostic and continues on safe defaults.
+- GDI-070 focused MinGW build: CNA, all thirteen correctness executables, benchmark, and demo
+  compile/link at `-j2`. All twelve ordinary executables and all three configuration variants pass
+  in one Wine/Xvfb session after the composition change. The expanded unsupported-feature test
+  passes all 42 public/direct boundary assertions.
 - Shared SOFTWARE gate: CNA plus eight focused executables build at `-j2`; smoke, rasterizer,
   depth-contract, depth-state, and depth/stencil-usage CTests pass. Under Xvfb the complete
   31-leg MSAA depth contract and 34-leg first-readback supervisor pass after resolving the real
@@ -155,7 +166,7 @@ baseline. All later tasks use one task per commit.
 - `GraphicsDeviceCapabilityTest.SupportsStencilBuffer`: pass under HEADLESS. The complete
   `GraphicsDeviceCapabilityTest.*` filter is 9 pass / 1 pre-existing configuration mismatch:
   `DoesNotSupportWireFrame` assumes EasyGL, while HEADLESS truthfully reports wireframe support.
-- `git diff --check`: pass for the complete GDI-067 change set.
+- `git diff --check`: pass for the complete GDI-070 change set.
 
 ## Useful commands
 
@@ -180,7 +191,6 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Commit the validated GDI-072 change, then begin GDI-070 by inventorying the complete graphics
-backend virtual contract and determining the smallest enforceable guard against inherited Software
-3D behavior. Keep physical multi-DPI/visible observations in GDI-061 and native performance
-decisions in GDI-062.
+Commit the validated GDI-070 composition boundary, then begin GDI-071 by replacing the GDI Software
+source glob with an explicit dependency list and auditing the static archive cycle. Keep physical
+multi-DPI/visible observations in GDI-061 and native performance decisions in GDI-062.
