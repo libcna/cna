@@ -11,7 +11,7 @@
 >
 > **Status legend:** ✅ implemented; 🟨 code exists but the stated end-to-end verification is
 > still missing; ⬜ not started; ⏸ blocked by an external prerequisite; 🚫 intentionally outside
-> the current 2D-only scope.  GDI-001 through GDI-003, GDI-005, GDI-006 and GDI-010 are complete;
+> the current 2D-only scope.  GDI-001 through GDI-003, GDI-005, GDI-006, GDI-010 and GDI-020 are complete;
 > GDI-004 awaits manual confirmation using the Release GDI compatibility profile.
 
 ---
@@ -23,9 +23,9 @@ EasyGL.  It must keep using a real Win32 GDI presentation path; adding an SDL re
 context, or a Direct3D device would be a different backend rather than an improvement to this one.
 
 The current usable 2D slice already includes RGBA `Texture2D`, CPU `SpriteBatch` (source
-rectangles, transforms, rotation, flips and basic alpha compositing), one colour `RenderTarget2D`,
-readback, viewport/scissor state, and all CNA presentation modes.  It deliberately rejects 3D
-entry points, depth/stencil, MSAA, cube/volume textures, occlusion queries and custom effects.
+rectangles, transforms, rotation and flips), full XNA `BlendState` factors/equations, one colour
+`RenderTarget2D`, readback, viewport/scissor state, and all CNA presentation modes.  It deliberately
+rejects 3D entry points, depth/stencil, MSAA, cube/volume textures, occlusion queries and custom effects.
 
 All builds and test commands for this plan must use at most two parallel jobs (`-j2` or
 `CMAKE_BUILD_PARALLEL_LEVEL=2`).
@@ -70,7 +70,7 @@ changes the `SOFTWARE` backend and run its relevant regression tests.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| GDI-020 | Implement exact XNA blend factors and blend equations instead of the current `Opaque` versus simplified alpha-blend choice. | ⬜ | Pixel tests cover at least Opaque, AlphaBlend, NonPremultiplied and Additive plus independently discriminating blend-factor/equation cases; channel-write masks remain correct. |
+| GDI-020 | Implement exact XNA blend factors and blend equations instead of the former `Opaque` versus simplified alpha-blend choice. | ✅ | The shared CPU 2D raster path stores all four factors, both equations and the dynamic `BlendFactor`. The Release GDI regression passed Opaque, premultiplied AlphaBlend, straight-alpha NonPremultiplied, Additive saturation, independent RGB/A equation and constant-factor readback cases; existing channel-write masking remains post-blend. |
 | GDI-021 | Generate and retain mip levels for a `RenderTarget2D` created with `mipMap=true`, after rendering is complete. | ⬜ | Every generated level has correct dimensions and downsampled pixels, can be sampled/read back, and regeneration respects target unbind/pass boundaries. |
 | GDI-022 | Define a small, explicit set of fixed CPU 2D effects (for example colour matrix, greyscale or a simple blur). | ⬜ | Each effect has defined parameters, pixel tests and a documented cost.  This is not a claim of general shader support. |
 | GDI-023 | Decide whether custom `Effect` support should remain an explicit exception or use a restricted CPU-effect API. | ⬜ | The backend never silently accepts a custom shader and ignores it.  Any accepted effect has real, documented rendering semantics. |
@@ -118,9 +118,8 @@ explicit, not forgotten.
 2. GDI-010 shows CPU rasterization dominates the current hidden-Wine baseline, not `Present()`.
    Repeat visibly on native Windows before choosing GDI-011, GDI-012 or GDI-015; do not optimize
    the GDI blit merely from the current numbers.
-3. For compatibility value, implement GDI-020 (full blend semantics) before visual extras.
-4. Next choose GDI-021 (render-target mipmaps) or GDI-022/023 (bounded CPU effects), based on the
+3. Next choose GDI-021 (render-target mipmaps) or GDI-022/023 (bounded CPU effects), based on the
    consuming application's needs.
-5. Treat GDI-025 through GDI-028 as opt-in 2D+ work with explicit cost/benefit evidence.
-6. Do not begin GDI-030 onward without a new scope decision; they are recorded as exclusions, not
+4. Treat GDI-025 through GDI-028 as opt-in 2D+ work with explicit cost/benefit evidence.
+5. Do not begin GDI-030 onward without a new scope decision; they are recorded as exclusions, not
    an implied roadmap commitment.

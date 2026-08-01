@@ -79,11 +79,30 @@ namespace
                                 /*Add*/ 0, /*Add*/ 0, BlendWriteState{});
     }
 
+    void SetBlend(IGraphicsBackend& backend, int colorSource, int alphaSource,
+                  int colorDestination, int alphaDestination,
+                  int colorFunction = /*Add*/ 0, int alphaFunction = /*Add*/ 0)
+    {
+        backend.ApplyBlendState(colorSource, alphaSource, colorDestination, alphaDestination,
+                                colorFunction, alphaFunction, BlendWriteState{});
+    }
+
     void SetAlphaBlend(IGraphicsBackend& backend)
     {
-        backend.ApplyBlendState(/*One*/ 0, /*One*/ 0,
-                                /*InverseSourceAlpha*/ 5, /*InverseSourceAlpha*/ 5,
-                                /*Add*/ 0, /*Add*/ 0, BlendWriteState{});
+        SetBlend(backend, /*One*/ 0, /*One*/ 0,
+                 /*InverseSourceAlpha*/ 5, /*InverseSourceAlpha*/ 5);
+    }
+
+    void SetNonPremultiplied(IGraphicsBackend& backend)
+    {
+        SetBlend(backend, /*SourceAlpha*/ 4, /*SourceAlpha*/ 4,
+                 /*InverseSourceAlpha*/ 5, /*InverseSourceAlpha*/ 5);
+    }
+
+    void SetAdditive(IGraphicsBackend& backend)
+    {
+        SetBlend(backend, /*SourceAlpha*/ 4, /*SourceAlpha*/ 4,
+                 /*One*/ 0, /*One*/ 0);
     }
 
     bool RunRegression(IGraphicsBackend& backend, SDL_Window* window)
@@ -99,6 +118,10 @@ namespace
             0, 0, 255, 255,    255, 255, 0, 255,
         });
         std::unique_ptr<ITextureBackend> atlas = backend.CreateTexture(atlasData);
+        const ImageData premultipliedRedData = MakeImage(1, 1, { 128, 0, 0, 128 });
+        std::unique_ptr<ITextureBackend> premultipliedRed = backend.CreateTexture(premultipliedRedData);
+        const ImageData blendSourceData = MakeImage(1, 1, { 255, 100, 0, 255 });
+        std::unique_ptr<ITextureBackend> blendSource = backend.CreateTexture(blendSourceData);
 
         // Upload + source rectangle: top-right texel is green.
         SetOpaque(backend);
@@ -107,13 +130,59 @@ namespace
         ok &= ExpectPixel("source rectangle", ReadPixel(backend, 1, 1), green);
         ok &= ExpectPixel("source rectangle does not spill", ReadPixel(backend, 0, 0), black);
 
-        // Tint + alpha blend: half-transparent red over opaque blue.
+        // BlendState::AlphaBlend uses premultiplied source colour: it must NOT multiply the
+        // already-premultiplied red by alpha a second time.
         SetAlphaBlend(backend);
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        Draw(backend, *premultipliedRed, Rectangle(2, 2, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        ok &= ExpectPixel("premultiplied AlphaBlend", ReadPixel(backend, 2, 2),
+                          Pixel{ 128, 0, 127, 255 }, 1);
+
+        // The raw red texture reaches the same visual result only through NonPremultiplied,
+        // whose source factor is SourceAlpha rather than AlphaBlend's One.
+        SetNonPremultiplied(backend);
         backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
         Draw(backend, *atlas, Rectangle(2, 2, 1, 1), Rectangle(0, 0, 1, 1),
              Color(255, 255, 255, 128));
-        ok &= ExpectPixel("tint alpha blend", ReadPixel(backend, 2, 2),
-                          Pixel{ 128, 0, 127, 255 }, 1);
+        ok &= ExpectPixel("straight-alpha NonPremultiplied", ReadPixel(backend, 2, 2),
+                          Pixel{ 128, 0, 127, 191 }, 1);
+
+        // Additive must keep the complete destination factor (One) and saturate, unlike alpha
+        // compositing which would discard it at source alpha 1.
+        SetAdditive(backend);
+        backend.Clear(200.0f / 255.0f, 50.0f / 255.0f, 0.0f, 1.0f);
+        Draw(backend, *blendSource, Rectangle(2, 2, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        ok &= ExpectPixel("Additive", ReadPixel(backend, 2, 2), Pixel{ 255, 150, 0, 255 }, 1);
+
+        // Colour and alpha equations are independent. All factors are One, so the expected
+        // values expose the selected function rather than a factor coincidence.
+        SetBlend(backend, /*One*/ 0, /*One*/ 0, /*One*/ 0, /*One*/ 0,
+                 /*Subtract*/ 1, /*Add*/ 0);
+        backend.Clear(50.0f / 255.0f, 200.0f / 255.0f, 0.0f, 64.0f / 255.0f);
+        const ImageData functionSourceData = MakeImage(1, 1, { 200, 50, 0, 128 });
+        std::unique_ptr<ITextureBackend> functionSource = backend.CreateTexture(functionSourceData);
+        Draw(backend, *functionSource, Rectangle(2, 2, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        ok &= ExpectPixel("separate blend functions subtract/add", ReadPixel(backend, 2, 2),
+                          Pixel{ 150, 0, 0, 192 }, 1);
+
+        SetBlend(backend, /*One*/ 0, /*One*/ 0, /*One*/ 0, /*One*/ 0,
+                 /*Add*/ 0, /*ReverseSubtract*/ 2);
+        backend.Clear(50.0f / 255.0f, 200.0f / 255.0f, 0.0f, 64.0f / 255.0f);
+        Draw(backend, *functionSource, Rectangle(2, 2, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        ok &= ExpectPixel("separate blend functions add/reverse subtract", ReadPixel(backend, 2, 2),
+                          Pixel{ 250, 250, 0, 0 }, 1);
+
+        // BlendFactor is dynamic state, independent of ApplyBlendState. A white source exposes
+        // the per-channel constant exactly; destination is zero for colour and alpha.
+        SetBlend(backend, /*BlendFactor*/ 10, /*One*/ 0, /*Zero*/ 1, /*Zero*/ 1);
+        backend.SetBlendFactor(0.75f, 0.5f, 0.25f, 1.0f);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        const ImageData whiteData = MakeImage(1, 1, { 255, 255, 255, 255 });
+        std::unique_ptr<ITextureBackend> white = backend.CreateTexture(whiteData);
+        Draw(backend, *white, Rectangle(2, 2, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        ok &= ExpectPixel("BlendFactor", ReadPixel(backend, 2, 2), Pixel{ 191, 127, 63, 255 }, 1);
+
+        backend.SetBlendFactor(1.0f, 1.0f, 1.0f, 1.0f);
         SetOpaque(backend);
 
         // Horizontal flip maps the 2-pixel source row in reverse order.
