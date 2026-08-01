@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // SKIA-51/SKIA-56: public BlendState rejection policy. A failed Begin must name the requested
-// unsupported state/mask and leave the SpriteBatch usable with a documented mapping.
+// unsupported state/sample mask and leave the SpriteBatch usable with a documented mapping.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -10,7 +10,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
-#include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -77,11 +76,6 @@ protected:
         subtract.setColorBlendFunctionProperty(BlendFunction::Subtract);
         Check(BeginRejects(subtract, "Subtract"),
               "unsupported blend equation names Subtract");
-
-        BlendState redOnly = BlendState::Opaque;
-        redOnly.setColorWriteChannelsProperty(ColorWriteChannels::Red);
-        Check(BeginRejects(redOnly, "ColorWriteChannels"),
-              "unimplemented public ColorWriteChannels mask rejects before drawing");
 
         BlendState zeroCoverage = BlendState::Opaque;
         zeroCoverage.setMultiSampleMaskProperty(0);

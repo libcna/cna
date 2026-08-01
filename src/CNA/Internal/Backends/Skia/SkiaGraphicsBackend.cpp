@@ -6,6 +6,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
 #include "System/NotSupportedException.hpp"
 
+#include "include/core/SkData.h"
 #include "include/effects/SkRuntimeEffect.h"
 
 #include <algorithm>
@@ -39,20 +40,36 @@ namespace CNA::Internal::Backends::Skia
             return SDL_LOGICAL_PRESENTATION_LETTERBOX;
         }
 
-        [[nodiscard]] const sk_sp<SkRuntimeEffect>& DestinationColorPrototypeEffect()
+        struct MaskedBlendUniform
+        {
+            // source-over, additive, destination-colour runtime route, unused
+            float route[4];
+            float writeMask[4];
+        };
+        static_assert(sizeof(MaskedBlendUniform) == sizeof(float) * 8);
+
+        [[nodiscard]] const sk_sp<SkRuntimeEffect>& MaskedBlendEffect()
         {
             static const sk_sp<SkRuntimeEffect> effect = []
             {
                 const auto result = SkRuntimeEffect::MakeForBlender(SkString(R"(
+                    uniform float4 route;
+                    uniform float4 writeMask;
                     half4 main(half4 src, half4 dst) {
-                        // XNA: RGB = src * DestinationColor, alpha = src * One + dst * Zero.
-                        return half4(src.rgb * dst.rgb, src.a);
+                        // route=(source-over, additive, DestinationColor runtime, unused).
+                        half4 blended = src;
+                        blended = mix(blended, src + dst * (1.0 - src.a), route.x);
+                        blended = mix(blended, src + dst, route.y);
+                        blended = mix(blended, half4(src.rgb * dst.rgb, src.a), route.z);
+                        // XNA ColorWriteChannels is an output-merger write mask: choose after
+                        // calculating the blend result, retaining disabled destination channels.
+                        return half4(mix(dst, blended, writeMask));
                     }
                 )"));
                 if (!result.effect)
                 {
                     throw std::runtime_error(
-                        std::string("Skia failed to compile the SKIA-54 runtime blender: ")
+                        std::string("Skia failed to compile the masked runtime blender: ")
                         + result.errorText.c_str());
                 }
                 return result.effect;
@@ -60,9 +77,25 @@ namespace CNA::Internal::Backends::Skia
             return effect;
         }
 
-        [[nodiscard]] sk_sp<SkBlender> MakeDestinationColorPrototypeBlender()
+        [[nodiscard]] sk_sp<SkBlender> MakeMaskedBlender(const SkiaBlendMapping& mapping, int writeMask)
         {
-            return DestinationColorPrototypeEffect()->makeBlender(nullptr);
+            MaskedBlendUniform uniform{};
+            if (mapping.route == SkiaBlendMappingRoute::RuntimeDestinationColorPrototype)
+                uniform.route[2] = 1.0f;
+            else if (mapping.mode == SkBlendMode::kSrcOver)
+                uniform.route[0] = 1.0f;
+            else if (mapping.mode == SkBlendMode::kPlus)
+                uniform.route[1] = 1.0f;
+            else if (mapping.mode != SkBlendMode::kSrc)
+                throw std::runtime_error("Skia has no masked runtime formula for this blend mapping.");
+
+            for (int channel = 0; channel < 4; ++channel)
+                uniform.writeMask[channel] = (writeMask & (1 << channel)) ? 1.0f : 0.0f;
+            const sk_sp<SkBlender> blender = MaskedBlendEffect()->makeBlender(
+                SkData::MakeWithCopy(&uniform, sizeof(uniform)));
+            if (!blender)
+                throw std::runtime_error("Skia failed to create a masked runtime blender.");
+            return blender;
         }
     }
 
@@ -280,11 +313,16 @@ namespace CNA::Internal::Backends::Skia
         // convention. The one runtime-blender probe remains deliberately narrow until a general
         // convention-preserving factor/function generator has public target/readback evidence.
         constexpr int kColorWriteAll = 15;
-
-        for (int mask : writeState.colorWriteChannels)
+        const int colorWriteMask = writeState.colorWriteChannels[0];
+        if (colorWriteMask < 0 || colorWriteMask > kColorWriteAll)
+            throw std::runtime_error("Skia raster backend received an invalid ColorWriteChannels mask.");
+        for (int target = 1; target < 4; ++target)
         {
-            if (mask != kColorWriteAll)
-                throw std::runtime_error("Skia raster backend does not implement ColorWriteChannels masks yet.");
+            if (writeState.colorWriteChannels[target] != kColorWriteAll)
+            {
+                throw std::runtime_error(
+                    "Skia raster backend has one render target and does not implement ColorWriteChannels1-3.");
+            }
         }
         if (writeState.multiSampleMask != ~0u)
             throw std::runtime_error("Skia raster backend does not implement non-default MultiSampleMask values.");
@@ -295,27 +333,27 @@ namespace CNA::Internal::Backends::Skia
                 colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                 colorBlendFunc, alphaBlendFunc));
 
-        if (mapping->route == SkiaBlendMappingRoute::DirectBlendMode)
+        if (colorWriteMask == kColorWriteAll && mapping->route == SkiaBlendMappingRoute::DirectBlendMode)
         {
             configuredSpriteBlendMode_ = mapping->mode;
             configuredSpriteCustomBlender_.reset();
-            configuredSpriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
         }
         else
         {
             configuredSpriteBlendMode_ = SkBlendMode::kSrcOver;
-            configuredSpriteCustomBlender_ = MakeDestinationColorPrototypeBlender();
-            configuredSpriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
+            configuredSpriteCustomBlender_ = MakeMaskedBlender(*mapping, colorWriteMask);
         }
+        configuredSpriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
         if (blendEnabled_)
         {
             spriteBlendMode_ = configuredSpriteBlendMode_;
             spriteCustomBlender_ = configuredSpriteCustomBlender_;
             spriteSourceAlphaConvention_ = configuredSpriteSourceAlphaConvention_;
         }
-        TraceSkiaState("blend mapping=%s mode=%d source-alpha=%s enabled=%s",
+        TraceSkiaState("blend mapping=%s mode=%d write-mask=%d source-alpha=%s enabled=%s",
                        mapping->name,
                        static_cast<int>(configuredSpriteBlendMode_),
+                       colorWriteMask,
                        configuredSpriteSourceAlphaConvention_ == SkiaSourceAlphaConvention::Premultiplied
                            ? "premultiplied" : "straight",
                        blendEnabled_ ? "true" : "false");

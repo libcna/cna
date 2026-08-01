@@ -20,7 +20,7 @@
 - The most recent pushed commits are `50670060` (detach a destroyed bound render target),
   `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
   `SetData`).
-- `docs/skia-backend.md` records 66 Skia CTests: six raster-only and 60 display-required tests.
+- `docs/skia-backend.md` records 67 Skia CTests: six raster-only and 61 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -98,6 +98,17 @@
   proves the SpriteBatch is still reusable. Raster has no applied MSAA samples, so no honest
   per-sample interpretation exists for a coverage mask.
 
+## Completed in this session: SKIA-57
+
+- Implemented `ColorWriteChannels` for the five existing accepted blend routes. A non-`All`
+  target-0 mask selects the result only after its route's blend equation, preserving disabled
+  destination bytes through a bounded `SkRuntimeEffect`; `All` retains the prior direct mode path.
+- `Skia_ColorWrite_Policy` passes all 16 masks after all five routes on the backbuffer, all 16
+  masks for the destination-reading runtime route on RenderTarget2D readback, and a distinct
+  alpha-source/alpha-destination matrix. It also passes under AddressSanitizer.
+- `ColorWriteChannels1-3` continue to reject because raster supports one target; non-default
+  `MultiSampleMask` continues to reject because that target has zero raster samples.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -125,17 +136,20 @@
   Xvfb after table centralization.
 - SKIA-56 debug/ASan: all sixteen low-level masks pass through CTest and with `detect_leaks=1`;
   the public rejection/recovery test passes all five assertions under Xvfb.
+- SKIA-57 debug/ASan: the 112-case public channel-mask matrix passes under Xvfb in both normal and
+  AddressSanitizer builds; the BlendState policy regression still rejects only the unproven blend
+  tuples and non-default sample mask.
 
 ## Current task
 
-SKIA-57: integrate the proven post-blend channel selection only for the five accepted blend routes,
-then test the RGBA mask matrix on backbuffer and RenderTarget2D. Keep MultiSampleMask rejection:
-no raster MSAA surface exists to emulate honestly.
+Reassess the next incomplete 2D task after SKIA-57. Blend, write-mask, and raster state work is
+now bounded and documented; choose the next plan row with an independently testable public
+contract.
 
 ## Next candidates
 
-1. Complete SKIA-57's public RGBA mask matrix for each accepted blend route without changing the
-   explicit raster MultiSampleMask rejection.
+1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely resize/
+   display-scale coverage (SKIA-71/72) or a precise raster target-mipmap disposition (SKIA-70).
 2. SKIA-71/72: resize and display-scale regressions with live targets, once lifecycle ownership is
    sound.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to

@@ -132,6 +132,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_runtime_blender_policy examples/skia_runtime_blender_policy_test.cpp)
     cna_register_skia_display_test(Skia_RuntimeBlender_Policy cna_test_skia_runtime_blender_policy)
 
+    cna_skia_test(cna_test_skia_color_write_policy examples/skia_color_write_policy_test.cpp)
+    cna_register_skia_display_test(Skia_ColorWrite_Policy cna_test_skia_color_write_policy)
+
     cna_skia_test(cna_test_skia_spritebatch_tint_alpha examples/skia_spritebatch_tint_alpha_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_TintAlpha cna_test_skia_spritebatch_tint_alpha)
 
