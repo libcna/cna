@@ -62,6 +62,24 @@
   contents, then rejects missing, stale, duplicate, malformed, or unclassified entries. Together
   with SKIA-1 this makes two source audits and 80 selected Skia CTests total.
 
+## Completed in this session: SKIA-20
+
+- Ran fresh GNU 14/Debug configurations and complete `CNA` target builds for all ten native Linux
+  non-Skia selections: HEADLESS, SOFTWARE, SDL_RENDERER, ASCII, EASYGL, DX3, VULKAN, SDL_GPU,
+  BGFX, and WEBGPU. Every build used `--parallel 2`, tests/examples/networking were disabled, and
+  compiler caching was disabled.
+- BGFX resolved `bgfx.cmake` at `99752df38e40179cf998bb880fe4c16c0b3d60ca`; WebGPU used the
+  already-pinned `wgpu-native v29.0.1.1` archive with SHA-256
+  `95a4d90c071005a98d03eab348beaa6b07e16eb00d1dcdb9f8348f75eb97ec5a`. Both downloads stayed
+  inside ignored build directories. Vulkan built with the system 1.4.309 loader despite absent
+  optional shader tools, and SDL_GPU resolved the installed versioned `libshaderc.so.1`.
+- Fresh native D3D9, D3D11, D3D12, and Canvas configure probes were rejected by their intentional
+  Windows/Emscripten gates with actionable toolchain diagnostics. They are recorded as
+  host-incompatible probes, not successful builds. Full commands and results are in
+  `docs/skia-nonskia-build-matrix.md`.
+- A final incremental `--target CNA --parallel 2` check returned success/no-work in all ten build
+  directories. Both display-free audits also remain green (2/2 via `ctest -L Audit --parallel 2`).
+
 ## Completed in this session: SKIA-69
 
 - Added `SkiaRenderTargetBinding`: the graphics backend owns the active-surface record and every
@@ -403,12 +421,13 @@
 
 ## Current task
 
-Audit SKIA-20's non-Skia compile matrix and the remaining stale integration/release rows against
-the now machine-checked SKIA-1/SKIA-2 inventories, without beginning accelerated-only work.
+SKIA-20 is complete. Work is paused after its commit/push at the user's request; do not begin the
+next plan item until the user explicitly asks to continue.
 
 ## Next candidates
 
-1. Execute SKIA-20's clean non-Skia configuration/target matrix with at most two build jobs.
+1. Audit the remaining stale integration/release rows against the machine-checked SKIA-1/SKIA-2
+   inventories when work resumes.
 2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
    probe; the selected raster path has no truthful capability to expose there.
 3. Keep the recovery boundary precise: raster resources survive SDL presenter reconstruction;
