@@ -543,5 +543,16 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     RGBA8+float-depth layout would cost nine CPU bytes/pixel. The focused test passes in Debug,
     Release and leak-enabled ASan; the complete Debug suite passes 106/106 in 13.28 seconds
     (13 Raster, 91 Display, two Audit). Public depth/stencil and `ThreeD` capabilities remain false.
+74. `Skia_CpuGeometry_Spike` closes SKIA-99 below every public buffer and Draw entry point. It
+    retains all seven built-in vertex declarations, all 12 formats and 13 usages, bounded upload
+    and source-offset behavior, exact 16/32-bit index fetch (including vertex 70000), all five
+    primitive types, alternating strip winding, XNA clockwise-as-displayed culling, post-cull
+    wire expansion, and raw/four typed/indexed DrawUser input. Invalid layouts, counts, ranges and
+    states reject atomically instead of falling back to position-only bytes. Exact line/point pixel
+    rules, instancing, clipping/coverage, effects, public resource ownership and mixed ordering are
+    intentionally outside this input-assembly result. A test-only temporary-lifetime bug found by
+    ASan was fixed; the final focused test passes in Debug, Release and leak-enabled ASan/LSan.
+    The complete Debug suite passes 107/107 in 13.21 seconds (14 Raster, 91 Display, two Audit).
+    `ThreeD`, depth/stencil and wireframe capability reporting remains false.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

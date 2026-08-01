@@ -166,6 +166,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_CpuStencil_Spike
                                   cna_test_skia_cpu_stencil_spike)
 
+    # SKIA-99: isolated CPU input assembly over the selected depth/stencil bridge. It decodes every
+    # declared format/usage, preserves 16/32-bit indices, expands all topologies, applies XNA
+    # winding/culling before wireframe edges and exercises raw DrawUser offsets/range rejection.
+    cna_skia_test(cna_test_skia_cpu_geometry_spike
+                  examples/skia_cpu_geometry_spike_test.cpp)
+    cna_register_skia_raster_test(Skia_CpuGeometry_Spike
+                                  cna_test_skia_cpu_geometry_spike)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

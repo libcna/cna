@@ -23,7 +23,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 106 Skia CTests: 13 raster-only, 91 display-required, and two
+- `docs/skia-backend.md` records 107 Skia CTests: 14 raster-only, 91 display-required, and two
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -589,9 +589,9 @@
 
 ## Current task
 
-SKIA-98 implementation and validation are complete. Commit/push this checkpoint, then begin
-SKIA-99 only as an isolated CPU vertex/index/primitive feasibility suite; do not connect it to
-public buffers, Draw calls, depth/stencil, or 3D capability reporting.
+SKIA-99 implementation and validation are complete. Commit/push this checkpoint, then begin
+SKIA-100 by prototyping one isolated textured BasicEffect route and separately mapping every
+remaining effect family. Do not connect the prototype to public draws or capability reporting.
 
 ## Completed in this session: SKIA-93
 
@@ -744,14 +744,44 @@ public buffers, Draw calls, depth/stencil, or 3D capability reporting.
   with `--parallel 8` (13 Raster, 91 Display, two Audit). Debug, Release and ASan display caches are
   `:0`; `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-99
+
+- Added the headless, internal `Skia_CpuGeometry_Spike`; no public buffer, draw or capability path
+  changed. It preserves the exact seven built-in declarations (strides 16/20/24/32/48/52/68),
+  decodes all 12 `VertexElementFormat` values, retains all 13 `VertexElementUsage` values plus
+  usage indices, and requires an explicit valid `POSITION0` instead of silently treating unknown
+  input as position bytes.
+- Bounded CPU vertex uploads preserve source offsets and the logical replacement semantics of
+  None/Discard/NoOverwrite. Bounded 16- and 32-bit index uploads preserve source offsets; an
+  indexed fixture fetches vertex 70000 without truncation. Bad widths, layouts, capacities,
+  ranges and topology counts reject before mutating stored data or emitted primitives.
+- Triangle list/strip, line list/strip and PointListEXT expand to exact counts. Odd strip
+  triangles swap their first two vertices to retain winding. XNA's clockwise-as-displayed
+  front-face convention selects all three cull modes, and wireframe expands three explicit edges
+  only after triangle culling.
+- Raw DrawUser input applies declaration-driven byte offsets. The four currently public typed
+  streams pack their values through the canonical declarations rather than copying C++ ABI bytes.
+  Indexed raw paths independently apply vertex/index offsets for both widths. The fixture passes
+  17/17 checks in Debug and Release.
+- The first leak-enabled ASan run found a test-only use-after-free: a reference bound through
+  `Position(vertices.Decode(0))` outlived the temporary decoded vertex. Retaining the decoded value
+  fixes the lifetime; the rebuilt leak-enabled ASan/LSan run passes all 17 checks with no leaks.
+- `docs/skia-cpu-geometry-spike.md` records the exact contract and remaining costs. The spike
+  proves input assembly, not exact line/point pixel coverage, instancing, clipping/raster coverage,
+  effects, dynamic-upload performance or mixed 2D/3D ordering. Public `ThreeD`, depth/stencil and
+  wireframe capabilities remain false.
+- The complete Debug Skia suite passes 107/107 under Xvfb in 13.21 seconds with `--parallel 8`
+  (14 Raster, 91 Display, two Audit). Focused Debug/Release/ASan tests and both audits pass; Debug,
+  Release and ASan display caches are `:0`. `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-99: inventory every declared CNA vertex layout and public vertex/index/DrawUser validation
-   rule, then add an isolated CPU upload/primitive-expansion/cull/fill micro-suite in dependency
-   order.
-2. Stop the CPU route and feed a precise rejection into SKIA-101 if the complete layout,
-   primitive, winding, wireframe or range contract cannot remain bounded; do not weaken the
-   EasyGL oracle.
+1. SKIA-100: prototype one textured BasicEffect route over the isolated CPU bridge, then build a
+   requirement matrix for BasicEffect lighting/fog and the alpha-test, dual-texture, environment,
+   skinned and PBR families. Reuse only components with exact evidence.
+2. SKIA-101: decide whether the combined CPU raster/input/effect design is complete and
+   maintainable, explicitly costing line/point raster rules, instancing, clipping/coverage,
+   texture LOD, state ordering and mixed 2D/3D presentation before any capability promotion.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

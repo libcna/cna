@@ -36,15 +36,15 @@ but none supplies the missing vertex/depth pipeline. No row permits setting
 
 | Feature ID | EasyGL contract represented | Current Skia result and decision task |
 |---|---|---|
-| `3D-VERTEX-LAYOUT` | Fixed position/colour/texture/normal layouts plus custom declarations and exact strides. | No public vertex input; first bounded PCT layout is SKIA-96, full set is conditional SKIA-99. |
-| `3D-VERTEX-BUFFER` | Static/dynamic vertex uploads, binding, ranges, readback, usage and lifetime. | Creation rejects as no-3D; conditional SKIA-99. |
-| `3D-INDEX-16` | Indexed draws with the ordinary 16-bit index path. | No public index buffer/draw path; conditional SKIA-99. |
-| `3D-INDEX-32` | 32-bit buffer, model and DrawUser index paths without truncation. | No public index path; conditional SKIA-99. |
-| `3D-DRAW-USER` | Typed and declaration-driven DrawUser calls with range validation. | Refuses atomically at buffer creation; conditional SKIA-99. |
-| `3D-PRIMITIVE-TRIANGLE` | Triangle-list assembly and coverage. | One projected triangle-list spike only in SKIA-96; not a capability claim. |
-| `3D-PRIMITIVE-STRIP` | Triangle-strip assembly and alternating winding. | Unsupported; conditional SKIA-99. |
-| `3D-PRIMITIVE-LINE` | Line-list and line-strip endpoint/raster rules. | Unsupported; conditional SKIA-99. |
-| `3D-INSTANCING` | Multiple vertex streams, instance frequency and indexed instanced draws. | SkCanvas has no matching input model; conditional SKIA-99/SKIA-101. |
+| `3D-VERTEX-LAYOUT` | Fixed position/colour/texture/normal layouts plus custom declarations and exact strides. | SKIA-99 decodes all seven built-ins, 12 formats and 13 usages in isolation; no public vertex input. |
+| `3D-VERTEX-BUFFER` | Static/dynamic vertex uploads, binding, ranges, readback, usage and lifetime. | SKIA-99 proves bounded CPU replacement uploads and hints; public creation/readback/lifetime remain unsupported. |
+| `3D-INDEX-16` | Indexed draws with the ordinary 16-bit index path. | SKIA-99 preserves 16-bit upload, offsets and fetch in isolation; no public index path. |
+| `3D-INDEX-32` | 32-bit buffer, model and DrawUser index paths without truncation. | SKIA-99 fetches indices 70000+ without truncation in isolation; no public index path. |
+| `3D-DRAW-USER` | Typed and declaration-driven DrawUser calls with range validation. | SKIA-99 proves raw, four typed, and 16/32-bit indexed input assembly; public calls still reject. |
+| `3D-PRIMITIVE-TRIANGLE` | Triangle-list assembly and coverage. | SKIA-99 proves list assembly/culling/wire expansion; SKIA-97 coverage remains non-production. |
+| `3D-PRIMITIVE-STRIP` | Triangle-strip assembly and alternating winding. | SKIA-99 proves alternating-winding list expansion; coverage remains non-production. |
+| `3D-PRIMITIVE-LINE` | Line-list and line-strip endpoint/raster rules. | SKIA-99 proves assembly only; exact line/point raster rules remain a SKIA-101 cost. |
+| `3D-INSTANCING` | Multiple vertex streams, instance frequency and indexed instanced draws. | Not covered by the single-stream SKIA-99 spike; explicit SKIA-101 decision remains required. |
 | `3D-TRANSFORM` | World/view/projection, normal/bone transforms and viewport mapping. | No vertex stage; projection semantics are investigated by SKIA-96. |
 | `3D-CLIP-INTERPOLATE` | Homogeneous clipping, perspective-correct varyings, winding after projection and viewport depth. | SkVertices is not an XNA clip-space pipeline; exact boundary is SKIA-96. |
 | `3D-TEXTURE-2D` | Effect-driven 2D sampling on geometry and render-target producer/consumer use. | CPU images exist; their 3D coordinates/LOD depend on SKIA-96/SKIA-100. |
@@ -54,7 +54,7 @@ but none supplies the missing vertex/depth pipeline. No row permits setting
 | `3D-SAMPLER-ANISOTROPY` | Probed anisotropic filtering for stock-effect and texture paths. | Deterministically rejected by SKIA-79; remains device-dependent. |
 | `3D-STATE-DEPTH` | Depth storage, clear, compare/write, target persistence and bias interaction. | No depth attachment; CPU feasibility is conditional SKIA-97. |
 | `3D-STATE-STENCIL` | Reference/masks, compare, operations, two-sided winding and colour-write interaction. | No stencil attachment; conditional on depth bridge, SKIA-98. |
-| `3D-STATE-CULL-FILL` | Front-face convention, all cull modes, solid/wireframe and raster bias. | No projected triangle raster state; conditional SKIA-96/SKIA-99. |
+| `3D-STATE-CULL-FILL` | Front-face convention, all cull modes, solid/wireframe and raster bias. | SKIA-99 proves post-projection winding, all cull modes and wire expansion; depth bias/pixel rules remain absent. |
 | `3D-STATE-BLEND-COLOR` | Effect alpha/vertex colour, blend and colour-write interaction on geometry. | 2D blend pieces exist but 3D coverage/varyings do not; SKIA-99/SKIA-100. |
 | `3D-STATE-MRT` | Multiple simultaneous colour outputs with atomic target binding. | Not representable by one raster canvas; exact refusal is proven by SKIA-87. |
 | `3D-STATE-MSAA` | Sample-count negotiation, depth coupling, resolve, mip readback and cube faces. | Raster requests above one sample reject; measured in SKIA-76/SKIA-77. |
@@ -85,4 +85,3 @@ but none supplies the missing vertex/depth pipeline. No row permits setting
 - SKIA-101 must account for every live feature ID in this document. If it rejects the complete
   emulator, SKIA-102 supplies uniform public failures; if it accepts, SKIA-103 creates a successor
   implementation plan before capability changes.
-
