@@ -136,4 +136,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
         TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
+
+    # plan_diligent.md DILIGENT-50: GraphicsDevice.ReferenceStencil pixel verification.
+    cna_diligent_test(cna_test_diligent_referencestencil examples/diligent_referencestencil_test.cpp)
+    cna_register_backend_test(NAME Diligent_ReferenceStencil COMMAND cna_test_diligent_referencestencil
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
 endif()

@@ -212,12 +212,12 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Sixteen further binaries are the real-device pixel proofs (75 checks total): `Diligent_2D` (6),
+Seventeen further binaries are the real-device pixel proofs (76 checks total): `Diligent_2D` (6),
 `Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (6), `Diligent_Skinned` (4),
 `Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4),
 `Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4), `Diligent_VertexLit` (4),
-`Diligent_Pbr` (5) and `Diligent_DepthBias` (4). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
+`Diligent_Pbr` (5), `Diligent_DepthBias` (4) and `Diligent_ReferenceStencil` (1). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
 into off-screen 2D/cube targets, and assert on pixels (or query results) read back through
 `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData` /
 `OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential (binary transition with MSAA
@@ -246,8 +246,12 @@ a depth-test outcome (a coplanar redraw only shows through with a negative slope
 its constant-`DepthBias` check fails on this software Vulkan device — matching two independent
 pre-existing findings elsewhere in this codebase (`D9-62`'s own oracle attempt against real XNA 4.0,
 and `Vulkan_DepthBias`'s own pre-existing `DepthBias=-1e6` sub-case), a documented environment
-limitation rather than a CNA-side bug. 74 of the 75 checks pass against a real Vulkan device; the
-one known failure is left visible rather than masked. On a machine with no usable device the
+limitation rather than a CNA-side bug. `Diligent_ReferenceStencil` (`DILIGENT-50`) proves
+`GraphicsDevice.ReferenceStencil` genuinely overrides the active stencil-compare reference
+independently of the assigned `DepthStencilState`'s own baked-in value — real and working here,
+unlike EasyGL/Bgfx's still-open, universal no-backend-connection gap (Task 872). 75 of the 76
+checks pass against a real Vulkan device; the one known failure is left visible rather than masked.
+On a machine with no usable device the
 binaries exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a
 pass with nothing rendered would be dishonest.
 
