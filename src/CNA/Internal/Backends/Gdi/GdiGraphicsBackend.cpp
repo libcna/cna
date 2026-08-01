@@ -76,6 +76,30 @@ namespace CNA::Internal::Backends::Gdi
             return COLORONCOLOR;
         }
 
+        /// DwmFlush is a compositor pacing hint, not a swap interval. Keep it strictly opt-in:
+        /// it can block until DWM accepts the next composition batch, which is useful for modest
+        /// compatibility applications but is an unwanted latency policy by default. Loading it at
+        /// runtime preserves the GDI backend's ability to run on systems where DWM is absent or
+        /// disabled, with an intentionally silent non-blocking fallback.
+        void ApplyOptionalDwmPacing()
+        {
+            const char* requested = std::getenv("CNA_GDI_DWM_FLUSH");
+            if (requested == nullptr || std::string_view(requested) != "1")
+                return;
+
+            using DwmFlushFunction = HRESULT(WINAPI*)();
+            static DwmFlushFunction dwmFlush = []() -> DwmFlushFunction
+            {
+                HMODULE dwmApi = LoadLibraryW(L"dwmapi.dll");
+                if (dwmApi == nullptr)
+                    return nullptr;
+                return reinterpret_cast<DwmFlushFunction>(GetProcAddress(dwmApi, "DwmFlush"));
+            }();
+
+            if (dwmFlush != nullptr)
+                (void)dwmFlush(); // A disabled compositor/failure is an intentional safe fallback.
+        }
+
         [[noreturn]] void ThrowNo3D(const char* methodName)
         {
             throw std::runtime_error(std::string("GDI (Win32 2D) does not support 3D: ") + methodName);
@@ -309,6 +333,7 @@ namespace CNA::Internal::Backends::Gdi
             }
 
             GdiFlush();
+            ApplyOptionalDwmPacing();
             ReleaseDC(static_cast<HWND>(nativeWindow_), deviceContext);
         }
         catch (...)

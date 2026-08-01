@@ -58,6 +58,22 @@ Only the exact value `halftone` selects GDI's `HALFTONE` stretch mode; absent or
 keeps the nearest-neighbour default. The option has no effect when the backbuffer is already
 presented 1:1.
 
+GDI has no swap interval. An application that prefers best-effort compositor pacing may opt in to
+one `DwmFlush()` after every GDI present:
+
+```bash
+# Windows cmd.exe
+set CNA_GDI_DWM_FLUSH=1
+build-gdi\cna_demo_2d.exe
+
+# Linux host running a MinGW build under Wine
+CNA_GDI_DWM_FLUSH=1 wine build-gdi/cna_demo_2d.exe
+```
+
+This is **not VSync** and can increase latency or block the CPU. It defaults off. The GDI backend
+loads DWM dynamically; if composition is disabled or `dwmapi.dll`/`DwmFlush` is unavailable, it
+falls back to normal non-blocking GDI presentation.
+
 ## Build
 
 ```bash
