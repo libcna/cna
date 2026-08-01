@@ -130,11 +130,29 @@ TEST(HtmlDomAddressModes, WrapIsAcceptedOutOfBounds)
     EXPECT_NO_THROW(ValidateAddressModes(0, 0, true));
 }
 
-TEST(HtmlDomAddressModes, MirrorAndMixedModesThrowOutOfBounds)
+// HTMLDOM-97: symmetric Mirror (the same mode on both axes -- every built-in SamplerState Mirror
+// preset is symmetric U/V) is now supported via a pre-tiled-mirrored variant.
+TEST(HtmlDomAddressModes, SymmetricMirrorIsAcceptedOutOfBounds)
 {
-    EXPECT_THROW(ValidateAddressModes(2, 2, true), std::runtime_error);
-    EXPECT_THROW(ValidateAddressModes(0, 1, true), std::runtime_error);
-    EXPECT_THROW(ValidateAddressModes(1, 0, true), std::runtime_error);
+    EXPECT_NO_THROW(ValidateAddressModes(2, 2, true));
+}
+
+// HTMLDOM-97: mixed per-axis modes that do NOT involve Mirror are now supported via independent
+// per-axis background-repeat/CanvasPattern repetition.
+TEST(HtmlDomAddressModes, MixedNonMirrorAxesAreAcceptedOutOfBounds)
+{
+    EXPECT_NO_THROW(ValidateAddressModes(0, 1, true));
+    EXPECT_NO_THROW(ValidateAddressModes(1, 0, true));
+}
+
+// The one combination that remains genuinely unsupported: Mirror on one axis paired with a
+// DIFFERENT mode on the other -- no built-in SamplerState preset can even produce this.
+TEST(HtmlDomAddressModes, MirrorMixedWithADifferentAxisModeThrowsOutOfBounds)
+{
+    EXPECT_THROW(ValidateAddressModes(2, 0, true), std::runtime_error);
+    EXPECT_THROW(ValidateAddressModes(0, 2, true), std::runtime_error);
+    EXPECT_THROW(ValidateAddressModes(2, 1, true), std::runtime_error);
+    EXPECT_THROW(ValidateAddressModes(1, 2, true), std::runtime_error);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -240,12 +258,49 @@ TEST(HtmlDomDrawCommand, WrapKeepsTheFullSourceRectAndFlagsTiling)
     EXPECT_FLOAT_EQ(c.localX, 0.0f);
 }
 
-TEST(HtmlDomDrawCommand, MirrorOutOfBoundsThrowsFromTheEncoder)
+// HTMLDOM-97: symmetric Mirror (same mode both axes) now keeps the full unclamped source rect and
+// tiles, exactly like Wrap, but additionally flags FlagMirror so the flush picks the pre-tiled
+// mirrored variant instead of the plain one.
+TEST(HtmlDomDrawCommand, SymmetricMirrorKeepsTheFullSourceRectAndFlagsMirrorTiling)
+{
+    const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 128, 16), Rectangle(0, 0, 128, 16),
+                                       Color(255, 255, 255, 255), 0.0f, Vector2(0, 0),
+                                       SpriteEffects::None, true, /*addressU*/ 2, /*addressV*/ 2);
+    EXPECT_TRUE((c.flags & FlagWrap) != 0);
+    EXPECT_TRUE((c.flags & FlagWrapV) != 0);
+    EXPECT_TRUE((c.flags & FlagMirror) != 0);
+    EXPECT_FLOAT_EQ(c.sw, 128.0f);
+    EXPECT_FLOAT_EQ(c.localX, 0.0f);
+}
+
+// HTMLDOM-97: Mirror mixed with a DIFFERENT mode on the other axis remains the one unsupported
+// combination -- still throws from the encoder, same as before this task.
+TEST(HtmlDomDrawCommand, MirrorMixedWithADifferentAxisModeThrowsFromTheEncoder)
 {
     EXPECT_THROW(Build(Rectangle(0, 0, 128, 16), Rectangle(0, 0, 128, 16),
                        Color(255, 255, 255, 255), 0.0f, Vector2(0, 0), SpriteEffects::None, true,
-                       /*addressU*/ 2, /*addressV*/ 2),
+                       /*addressU*/ 2, /*addressV*/ 1),
                  std::runtime_error);
+}
+
+// HTMLDOM-97: mixed non-Mirror axes (U=Wrap, V=Clamp) tile only the U extent and clamp the V
+// extent independently -- flags carry each axis's own repetition, and the V extent is genuinely
+// narrowed while the U extent stays full, unlike the old whole-rect-follows-addressU behaviour.
+TEST(HtmlDomDrawCommand, MixedWrapUClampVTilesOnlyUAndClampsV)
+{
+    // U: 0..128 (exceeds the 64-wide texture, Wrap). V: -8..24 (exceeds the 32-tall texture on
+    // both sides, Clamp) -- only y in [0,24) survives clamping to [0, kTexH).
+    const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 128, 32), Rectangle(0, -8, 128, 32),
+                                       Color(255, 255, 255, 255), 0.0f, Vector2(0, 0),
+                                       SpriteEffects::None, true, /*addressU*/ 0, /*addressV*/ 1);
+    EXPECT_TRUE((c.flags & FlagWrap) != 0);
+    EXPECT_EQ(c.flags & FlagWrapV, 0);
+    EXPECT_EQ(c.flags & FlagMirror, 0);
+    EXPECT_FLOAT_EQ(c.sx, 0.0f);
+    EXPECT_FLOAT_EQ(c.sw, 128.0f);
+    EXPECT_FLOAT_EQ(c.sy, 0.0f);
+    EXPECT_FLOAT_EQ(c.sh, 24.0f);
+    EXPECT_FLOAT_EQ(c.localY, 8.0f);
 }
 
 TEST(HtmlDomDrawCommand, ColorIsPackedRgbaAndBlendOpSelectsTheVariant)

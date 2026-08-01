@@ -43,7 +43,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 32;
+    constexpr int kExpectedChecks = 35;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -184,6 +184,15 @@ namespace
         return root.children[i].style.backgroundRepeat === 'repeat' ? 1 : 0;
     });
 
+    /// plan_html_dom.md HTMLDOM-97: 1 when sprite `i`'s `background-repeat` equals `expected`
+    /// exactly (e.g. `"repeat no-repeat"` for a mixed-axis draw) -- the general form of
+    /// JsSpriteBackgroundRepeat above, needed once the two axes can carry different values.
+    EM_JS(int, JsSpriteBackgroundRepeatIs, (int i, const char* expected), {
+        const root = document.getElementById('cna-dom-root');
+        if (!root || !root.children[i]) return 0;
+        return root.children[i].style.backgroundRepeat === UTF8ToString(expected) ? 1 : 0;
+    });
+
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
         window.__cnaSmokeResult = result;
         window.__cnaSmokePassed = passed;
@@ -201,6 +210,7 @@ namespace
     int JsSpriteOpacity255(int) { return -1; }
     int JsCanvasHidden() { return 0; }
     int JsSpriteBackgroundRepeat(int) { return 0; }
+    int JsSpriteBackgroundRepeatIs(int, const char*) { return 0; }
     int JsRegionExists(int, int, int, int) { return 0; }
     int JsRegionClipPathInsetIs(int, int, int, int, int, int, int, int) { return 0; }
     int JsRegionVisibleSpriteCount(int, int, int, int) { return -1; }
@@ -578,6 +588,50 @@ protected:
                   "scissor reapplication by the caller");
 
             backend.SetScissorRect(0, 0, 128, 128);
+        }
+
+        // plan_html_dom.md HTMLDOM-97: the DOM-path (no render target bound) side of Mirror/mixed-
+        // axis addressing -- htmldom_pixel_verification_test.cpp already checked the Canvas2D
+        // render-target branch pixel-exact; this is the OTHER of the two separate code paths
+        // CNA_HtmlDom_FlushSprites has (design decision 10's own split), checked structurally the
+        // same way frame 5's Wrap check above is (CSS property values, not pixels -- consistent
+        // with how every other DOM-path property in this file is verified). Draws with no scissor
+        // rect active (frame 8 left it at the full 128x128 surface), so both sprites land in the
+        // default 'full' region at predictable indices 0 and 1, the same as every other
+        // non-scissored frame in this file.
+        if (frame_ == 9)
+        {
+            SamplerState mirrorSampler;
+            mirrorSampler.setAddressUProperty(TextureAddressMode::Mirror);
+            mirrorSampler.setAddressVProperty(TextureAddressMode::Mirror);
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &mirrorSampler,
+                                nullptr, nullptr);
+            spriteBatch_->Draw(*texture_, Rectangle(2, 2, 8, 8), Rectangle(0, 0, 4, 4), Color::White);
+            spriteBatch_->End();
+            check(JsSpriteHasDataUrlBackground(0) == 1,
+                  "HTMLDOM-97c: a symmetric-Mirror DOM sprite is textured from a generated PNG "
+                  "data URL (the pre-tiled mirrored variant, not a throw)");
+            check(JsSpriteBackgroundRepeat(0) == 1,
+                  "HTMLDOM-97c: symmetric Mirror maps to CSS background-repeat: repeat -- tiling "
+                  "the pre-built mirrored image reproduces mirror-repeat");
+
+            SamplerState mixedSampler;
+            mixedSampler.setAddressUProperty(TextureAddressMode::Wrap);
+            mixedSampler.setAddressVProperty(TextureAddressMode::Clamp);
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &mixedSampler,
+                                nullptr, nullptr);
+            spriteBatch_->Draw(*texture_, Rectangle(20, 20, 8, 8), Rectangle(0, 0, 4, 4), Color::White);
+            spriteBatch_->End();
+            // The CSSOM serializes the two-value 'repeat no-repeat' back as the single-keyword
+            // shorthand 'repeat-x' (repeat-x is literally defined as shorthand for that exact
+            // pair) -- confirmed by reading back the actual value rather than assumed, the same
+            // way JsRootClipPathInsetIs's own normalization caution (this file's "What the browser
+            // run caught" note) was found.
+            check(JsSpriteBackgroundRepeatIs(1, "repeat-x") == 1,
+                  "HTMLDOM-97d: mixed U=Wrap/V=Clamp maps to background-repeat's independent "
+                  "per-axis values (U=repeat, V=no-repeat), read back via the CSSOM's own "
+                  "'repeat-x' shorthand for that exact pair, not a single value derived from one "
+                  "axis's mode");
 
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

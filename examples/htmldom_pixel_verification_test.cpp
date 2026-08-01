@@ -20,6 +20,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -43,7 +44,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 13;
+    constexpr int kExpectedChecks = 15;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -84,6 +85,8 @@ class HtmlDomPixelVerificationTest : public Game
     std::unique_ptr<SpriteFont> font_;
     std::unique_ptr<RenderTarget2D> rtA_;
     std::unique_ptr<RenderTarget2D> rtB_;
+    std::unique_ptr<RenderTarget2D> tileRt_;
+    std::unique_ptr<Texture2D> tileTex_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -153,6 +156,17 @@ protected:
         fontRt_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 20, 20);
         rtA_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 4, 4);
         rtB_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 20, 20);
+        tileRt_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 4, 4);
+
+        // plan_html_dom.md HTMLDOM-97: 2x2 source, same colour layout the smoke test's own Wrap-tile
+        // check (frame 6) uses -- (0,0)=red (1,0)=green (0,1)=blue (1,1)=yellow -- so Mirror's
+        // pixel-exact expectation can be derived and cross-checked against Wrap's already-verified
+        // one by hand, rather than invented fresh.
+        tileTex_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
+            getGraphicsDeviceProperty(), 2, 2, std::vector<std::uint8_t>{
+                255, 0, 0, 255,   0, 255, 0, 255,
+                0, 0, 255, 255,   255, 255, 0, 255,
+            }));
 
         // plan_html_dom.md HTMLDOM-88: an 8x4 atlas holding two 4x4 glyphs. 'A' is split
         // left-half-red/right-half-blue so a horizontal flip is visually unambiguous (the two
@@ -590,7 +604,101 @@ protected:
                   "round-trip through the real HTML_DOM upload/readback path");
         }
 
-        if (frame_ == 13)
+        // plan_html_dom.md HTMLDOM-97: symmetric TextureAddressMode::Mirror with an out-of-bounds
+        // sourceRectangle, drawn pixel-exact for the first time (previously this threw). A 2x2
+        // source Rectangle(0,0,4,4) sourceRect tiles it twice in each axis; under real mirror-repeat
+        // the SECOND tile along each axis is the reflection of the first, unlike Wrap where it is an
+        // identical repeat -- so this is a genuine discriminator between the two, not just "did
+        // something get drawn". Expected grid hand-derived from mirror-repeat's standard "reflect at
+        // every tile boundary" definition: effective source index for tiled position i (tile size 2)
+        // is i for i<2, and (1-(i-2)) for i in [2,4) -- i.e. output index 0,1,2,3 samples source
+        // index 0,1,1,0 on both axes.
+        if (frame_ == 14)
+        {
+            SamplerState mirrorSampler;
+            mirrorSampler.setAddressUProperty(TextureAddressMode::Mirror);
+            mirrorSampler.setAddressVProperty(TextureAddressMode::Mirror);
+            const auto pixels = ReadBackWholeTarget(*tileRt_, 4, 4, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &mirrorSampler,
+                                    nullptr, nullptr);
+                spriteBatch_->Draw(*tileTex_, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const auto at = [&](int x, int y) { return pixels[static_cast<std::size_t>(y) * 4 + x]; };
+            const Color red(255, 0, 0, 255), green(0, 255, 0, 255), blue(0, 0, 255, 255), yellow(255, 255, 0, 255);
+            const auto matches = [](const Color& a, const Color& b) {
+                return a.getRProperty() == b.getRProperty() && a.getGProperty() == b.getGProperty() &&
+                       a.getBProperty() == b.getBProperty();
+            };
+            const Color expected[4][4] = {
+                {red, green, green, red},
+                {blue, yellow, yellow, blue},
+                {blue, yellow, yellow, blue},
+                {red, green, green, red},
+            };
+            bool mirrorMatches = true;
+            for (int y = 0; mirrorMatches && y < 4; ++y)
+                for (int x = 0; x < 4; ++x)
+                {
+                    const Color actual = at(x, y);
+                    if (!matches(actual, expected[y][x]))
+                    {
+                        std::printf("       mirror mismatch at (%d,%d): got (%d,%d,%d), want (%d,%d,%d)\n",
+                                    x, y, actual.getRProperty(), actual.getGProperty(), actual.getBProperty(),
+                                    expected[y][x].getRProperty(), expected[y][x].getGProperty(),
+                                    expected[y][x].getBProperty());
+                        mirrorMatches = false;
+                        break;
+                    }
+                }
+            check(mirrorMatches,
+                  "HTMLDOM-97a: symmetric TextureAddressMode::Mirror tiles the source with a real "
+                  "reflection at every tile boundary, pixel-exact -- not a plain repeat (Wrap) and "
+                  "not a throw");
+        }
+
+        // plan_html_dom.md HTMLDOM-97: mixed non-Mirror per-axis modes (U=Wrap, V=Clamp), the other
+        // half of the fix. Same 2x2 source, same Rectangle(0,0,4,4) sourceRect (exceeds bounds on
+        // both axes), but now U tiles (Wrap) while V does NOT (Clamp) -- V's own established Clamp
+        // behaviour (ClampNarrowsTheSourceRectAndShiftsTheLocalBoxToMatch, GTest) narrows the source
+        // rect into the texture's own 2px height and does not stretch to fill the requested 4px
+        // destination height, so rows y=2,3 must come back untouched (transparent), while rows
+        // y=0,1 tile the source horizontally exactly like Wrap's own already-verified pattern.
+        if (frame_ == 15)
+        {
+            SamplerState mixedSampler;
+            mixedSampler.setAddressUProperty(TextureAddressMode::Wrap);
+            mixedSampler.setAddressVProperty(TextureAddressMode::Clamp);
+            const auto pixels = ReadBackWholeTarget(*tileRt_, 4, 4, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &mixedSampler,
+                                    nullptr, nullptr);
+                spriteBatch_->Draw(*tileTex_, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const auto at = [&](int x, int y) { return pixels[static_cast<std::size_t>(y) * 4 + x]; };
+            const Color red(255, 0, 0, 255), green(0, 255, 0, 255), blue(0, 0, 255, 255), yellow(255, 255, 0, 255);
+            const auto matches = [](const Color& a, const Color& b) {
+                return a.getRProperty() == b.getRProperty() && a.getGProperty() == b.getGProperty() &&
+                       a.getBProperty() == b.getBProperty();
+            };
+            bool topRowsTile = matches(at(0, 0), red) && matches(at(1, 0), green) &&
+                               matches(at(2, 0), red) && matches(at(3, 0), green) &&
+                               matches(at(0, 1), blue) && matches(at(1, 1), yellow) &&
+                               matches(at(2, 1), blue) && matches(at(3, 1), yellow);
+            bool bottomRowsClamped = at(0, 2).getAProperty() < 50 && at(1, 2).getAProperty() < 50 &&
+                                     at(2, 2).getAProperty() < 50 && at(3, 2).getAProperty() < 50 &&
+                                     at(0, 3).getAProperty() < 50 && at(3, 3).getAProperty() < 50;
+            std::printf("       mixed axes: row0=(%d,%d,%d)(%d,%d,%d) row2-alpha=(%d,%d)\n",
+                        at(0, 0).getRProperty(), at(0, 0).getGProperty(), at(0, 0).getBProperty(),
+                        at(2, 0).getRProperty(), at(2, 0).getGProperty(), at(2, 0).getBProperty(),
+                        at(0, 2).getAProperty(), at(2, 2).getAProperty());
+            check(topRowsTile && bottomRowsClamped,
+                  "HTMLDOM-97b: mixed U=Wrap/V=Clamp tiles the U axis exactly like symmetric Wrap "
+                  "while the V axis clamps independently (narrows to the source height, does not "
+                  "tile, and does not stretch to fill the requested destination height)");
+        }
+
+        if (frame_ == 16)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

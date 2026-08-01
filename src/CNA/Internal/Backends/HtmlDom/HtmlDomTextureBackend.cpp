@@ -91,6 +91,56 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         return variant;
     };
 
+    // plan_html_dom.md HTMLDOM-97: TextureAddressMode::Mirror (symmetric on both axes) has no CSS
+    // background-repeat equivalent, so it is emulated the same way CANVAS's own equivalent gap was
+    // closed (plan_canvas.md CANVAS-44): a lazily-built, cached 2x2 tile where the source variant's
+    // pixels are drawn once per quadrant, alternate quadrants horizontally/vertically flipped.
+    // Tiling THAT image with ordinary CSS/CanvasPattern 'repeat' reproduces mirror-repeat exactly,
+    // by construction -- repeating a 2x2 mirror tile at period 2*width/2*height IS mirror-repeat.
+    // Cached in the SAME entry.variants map and the SAME LRU array as plain variants (keyed
+    // "mirror:<mode>:<r>,<g>,<b>"), so eviction is unified rather than duplicated bookkeeping.
+    Module['cnaDomGetMirrorVariant'] = function(id, mode, r, g, b) {
+        const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
+        if (!entry || !entry.ctx) return null;
+        const key = 'mirror:' + mode + ':' + r + ',' + g + ',' + b;
+        let variant = entry.variants[key];
+        if (variant) return variant;
+
+        const base = Module['cnaDomGetVariant'](id, mode, r, g, b);
+        if (!base) return null;
+        const w = entry.w, h = entry.h;
+        const canvas = Module['cnaDomNewCanvas'](w * 2, h * 2);
+        if (!canvas) return null;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(base.canvas, 0, 0);                        // top-left: as-is
+        ctx.save();                                               // top-right: flipped horizontally
+        ctx.translate(w * 2, 0); ctx.scale(-1, 1);
+        ctx.drawImage(base.canvas, 0, 0);
+        ctx.restore();
+        ctx.save();                                               // bottom-left: flipped vertically
+        ctx.translate(0, h * 2); ctx.scale(1, -1);
+        ctx.drawImage(base.canvas, 0, 0);
+        ctx.restore();
+        ctx.save();                                               // bottom-right: flipped both ways
+        ctx.translate(w * 2, h * 2); ctx.scale(-1, -1);
+        ctx.drawImage(base.canvas, 0, 0);
+        ctx.restore();
+
+        variant = { canvas: canvas, url: null, shared: false };
+        entry.variants[key] = variant;
+
+        if (!Module['cnaDomVariantLru']) Module['cnaDomVariantLru'] = [];
+        const lru = Module['cnaDomVariantLru'];
+        lru.push([id, key]);
+        while (lru.length > 256) {
+            const old = lru.shift();
+            const oldEntry = Module['cnaDomTextures'][old[0]];
+            const oldVariant = oldEntry && oldEntry.variants[old[1]];
+            if (oldVariant && !oldVariant.shared) delete oldEntry.variants[old[1]];
+        }
+        return variant;
+    };
+
     Module['cnaDomEnsureUrl'] = function(variant) {
         if (!variant || variant.url) return;
         let source = variant.canvas;

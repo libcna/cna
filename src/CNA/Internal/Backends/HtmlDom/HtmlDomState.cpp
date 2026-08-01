@@ -100,18 +100,16 @@ namespace CNA::Internal::Backends::HtmlDom
         // wrong regardless of what was requested.
         if (!exceedsBounds || (addressU == 1 && addressV == 1)) return;
 
-        if (addressU != addressV)
+        // HTMLDOM-97: Wrap (per axis, independently) and symmetric Mirror (same mode both axes) are
+        // both supported now -- see this function's own header doc for how. The one combination
+        // that remains genuinely unsupported is Mirror mixed with a DIFFERENT mode on the other
+        // axis: a per-axis-mirrored tile image is real extra complexity for a combination no
+        // built-in SamplerState preset can even produce.
+        if (addressU != addressV && (addressU == 2 || addressV == 2))
             throw std::runtime_error(
-                "HTML_DOM backend: mixed per-axis TextureAddressMode with an out-of-bounds "
-                "sourceRectangle is not supported (addressU=" + std::to_string(addressU) +
-                ", addressV=" + std::to_string(addressV) + "). CSS `background-repeat` accepts one "
-                "repetition style per axis but this backend derives both from a single mode.");
-
-        if (addressU == 2)
-            throw std::runtime_error(
-                "HTML_DOM backend: TextureAddressMode::Mirror with an out-of-bounds sourceRectangle "
-                "is not yet implemented. CSS has no mirror-repeat background repetition, and "
-                "pre-tiling a mirrored copy of the texture per draw would defeat the point of the "
-                "DOM path. Use Clamp or Wrap.");
+                "HTML_DOM backend: TextureAddressMode::Mirror combined with a DIFFERENT mode on the "
+                "other axis, with an out-of-bounds sourceRectangle, is not yet implemented "
+                "(addressU=" + std::to_string(addressU) + ", addressV=" + std::to_string(addressV) +
+                "). Use the same mode on both axes, or Clamp/Wrap for the non-Mirror axis.");
     }
 }

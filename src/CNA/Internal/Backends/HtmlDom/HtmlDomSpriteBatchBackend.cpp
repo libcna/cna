@@ -48,18 +48,22 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     if (targetCtx) {
         for (let i = 0; i < count; ++i) {
             const o = base + i * stride;
-            const variant = Module['cnaDomGetVariant'](
-                HEAP32[o], HEAP32[o + 15],
-                HEAPU32[o + 16] & 255, (HEAPU32[o + 16] >>> 8) & 255, (HEAPU32[o + 16] >>> 16) & 255);
+            const flags = HEAP32[o + 14];
+            const packed = HEAPU32[o + 16];
+            const isMirror = (flags & 64) !== 0;
+            const variant = isMirror
+                ? Module['cnaDomGetMirrorVariant'](HEAP32[o], HEAP32[o + 15],
+                    packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255)
+                : Module['cnaDomGetVariant'](HEAP32[o], HEAP32[o + 15],
+                    packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255);
             if (!variant) continue;
             const sx = HEAPF32[o + 1], sy = HEAPF32[o + 2], sw = HEAPF32[o + 3], sh = HEAPF32[o + 4];
-            const flags = HEAP32[o + 14];
             targetCtx.save();
             targetCtx.setTransform(1, 0, 0, 1, 0, 0);
             if (hasMatrix) targetCtx.transform(m0, m1, m2, m3, m4, m5);
             targetCtx.imageSmoothingEnabled = (flags & 4) !== 0;
             targetCtx.globalCompositeOperation = (flags & 16) !== 0 ? 'lighter' : 'source-over';
-            targetCtx.globalAlpha = ((HEAPU32[o + 16] >>> 24) & 255) / 255;
+            targetCtx.globalAlpha = ((packed >>> 24) & 255) / 255;
             targetCtx.translate(HEAPF32[o + 5], HEAPF32[o + 6]);
             const rot = HEAPF32[o + 9];
             if (rot !== 0) targetCtx.rotate(rot);
@@ -73,10 +77,16 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                 targetCtx.translate(0, cy); targetCtx.scale(1, -1); targetCtx.translate(0, -cy);
             }
             const lx = HEAPF32[o + 10], ly = HEAPF32[o + 11];
-            if ((flags & 8) !== 0) {
-                // Wrap: CSS background tiling has no Canvas2D equivalent other than a repeating
-                // pattern, offset so the tile phase matches the requested source rectangle.
-                const pattern = targetCtx.createPattern(variant.canvas, 'repeat');
+            const repU = (flags & 8) !== 0, repV = (flags & 32) !== 0;
+            if (repU || repV) {
+                // Wrap/Mirror: CSS background tiling has no Canvas2D equivalent other than a
+                // repeating pattern, offset so the tile phase matches the requested source
+                // rectangle. CanvasPattern's own repetition string natively supports independent
+                // per-axis repeat (HTMLDOM-97), same as background-repeat's two-value shorthand
+                // below -- the mirrored variant is already a pre-tiled image, so 'repeat' on it
+                // reproduces mirror-repeat by construction, no different from plain Wrap here.
+                const repetition = repU && repV ? 'repeat' : repU ? 'repeat-x' : 'repeat-y';
+                const pattern = targetCtx.createPattern(variant.canvas, repetition);
                 if (pattern && pattern.setTransform) {
                     const dm = new DOMMatrix();
                     dm.e = lx - sx; dm.f = ly - sy;
@@ -109,8 +119,13 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     for (let i = 0; i < count; ++i) {
         const o = base + i * stride;
         const packed = HEAPU32[o + 16];
-        const variant = Module['cnaDomGetVariant'](
-            HEAP32[o], HEAP32[o + 15], packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255);
+        const flags = HEAP32[o + 14];
+        const isMirror = (flags & 64) !== 0;
+        const variant = isMirror
+            ? Module['cnaDomGetMirrorVariant'](HEAP32[o], HEAP32[o + 15],
+                packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255)
+            : Module['cnaDomGetVariant'](HEAP32[o], HEAP32[o + 15],
+                packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255);
         if (!variant) continue;
         Module['cnaDomEnsureUrl'](variant);
 
@@ -139,8 +154,10 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         const bp = (-HEAPF32[o + 1]) + 'px ' + (-HEAPF32[o + 2]) + 'px';
         if (st.bp !== bp) { style.backgroundPosition = bp; st.bp = bp; }
 
-        const flags = HEAP32[o + 14];
-        const rep = (flags & 8) !== 0 ? 'repeat' : 'no-repeat';
+        // Two-value background-repeat shorthand: one repetition style per axis, independent of
+        // each other (HTMLDOM-97) -- 'no-repeat no-repeat' reads identically to plain 'no-repeat'.
+        const rep = ((flags & 8) !== 0 ? 'repeat' : 'no-repeat') + ' ' +
+                    ((flags & 32) !== 0 ? 'repeat' : 'no-repeat');
         if (st.rep !== rep) { style.backgroundRepeat = rep; st.rep = rep; }
         const ir = (flags & 4) !== 0 ? 'auto' : 'pixelated';
         if (st.ir !== ir) { style.imageRendering = ir; st.ir = ir; }
@@ -217,21 +234,34 @@ namespace CNA::Internal::Backends::HtmlDom
                                    source.X + source.Width > textureWidth ||
                                    source.Y + source.Height > textureHeight;
         ValidateAddressModes(addressU, addressV, exceedsBounds);
-        const bool wrap = exceedsBounds && addressU == 0;
+        // HTMLDOM-97: tiling is now per-axis (Wrap or Mirror on THAT axis specifically), not a
+        // single whole-rect decision keyed off addressU alone -- a mixed U=Wrap/V=Clamp draw tiles
+        // its U extent and clamps its V extent independently. ValidateAddressModes above already
+        // guarantees addressU==addressV whenever either is Mirror, so `mirror` below is exact.
+        const bool tiledU = exceedsBounds && (addressU == 0 || addressU == 2);
+        const bool tiledV = exceedsBounds && (addressV == 0 || addressV == 2);
+        const bool mirror = exceedsBounds && addressU == 2 && addressV == 2;
 
         // Clamp is implemented for real, by narrowing the source rectangle into the texture and
         // shifting the sprite's local box by the same amount -- not by relying on any implicit
-        // out-of-bounds behaviour of CSS background painting or drawImage. Wrap deliberately keeps
-        // the full rectangle: tiling is what makes it differ from Clamp in the first place.
+        // out-of-bounds behaviour of CSS background painting or drawImage. A tiled axis deliberately
+        // keeps its full extent: tiling is what makes Wrap/Mirror differ from Clamp in the first
+        // place.
         float clampedX = sourceX, clampedY = sourceY, clampedW = sourceW, clampedH = sourceH;
-        if (exceedsBounds && !wrap)
+        if (exceedsBounds)
         {
             const float texW = static_cast<float>(textureWidth);
             const float texH = static_cast<float>(textureHeight);
-            clampedX = std::clamp(sourceX, 0.0f, texW);
-            clampedY = std::clamp(sourceY, 0.0f, texH);
-            clampedW = std::max(0.0f, std::min(sourceX + sourceW, texW) - clampedX);
-            clampedH = std::max(0.0f, std::min(sourceY + sourceH, texH) - clampedY);
+            if (!tiledU)
+            {
+                clampedX = std::clamp(sourceX, 0.0f, texW);
+                clampedW = std::max(0.0f, std::min(sourceX + sourceW, texW) - clampedX);
+            }
+            if (!tiledV)
+            {
+                clampedY = std::clamp(sourceY, 0.0f, texH);
+                clampedH = std::max(0.0f, std::min(sourceY + sourceH, texH) - clampedY);
+            }
         }
 
         HtmlDomDrawCommand cmd{};
@@ -263,7 +293,9 @@ namespace CNA::Internal::Backends::HtmlDom
         if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0)
             flags |= FlagFlipVertically;
         if (smoothing) flags |= FlagSmoothing;
-        if (wrap) flags |= FlagWrap;
+        if (tiledU) flags |= FlagWrap;
+        if (tiledV) flags |= FlagWrapV;
+        if (mirror) flags |= FlagMirror;
         if (op == DomCompositeOp::Additive) flags |= FlagAdditive;
         cmd.flags = flags;
 

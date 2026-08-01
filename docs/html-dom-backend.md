@@ -110,8 +110,8 @@ appends a fixed-stride 80-byte command and `End()` hands the array over as a blo
 | `TextureFilter` (magnification) | ✅ | `image-rendering: auto` vs `pixelated`, using the same magnification-dominant grouping `SDL_RENDERER` (Task 701) and `CANVAS` (CANVAS-42) use. |
 | `TextureAddressMode::Clamp` | ✅ | Implemented for real: the source rectangle is narrowed into the texture and the sprite's local box shifted to match — not a reliance on implicit out-of-bounds behaviour. |
 | `TextureAddressMode::Wrap` | ✅ | CSS `background-repeat: repeat` on the DOM path; a repeating Canvas2D pattern on the render-target path (two separate code paths). Only differs from Clamp when the source rectangle leaves the texture. Both verified in-browser: the DOM path keeps its full (unclamped) element width and gets `background-repeat: repeat`; the render-target path is checked pixel-exact — a 2x2 source tiled into a 4x4 target reads back with every texel matching `source(x%2, y%2)`. |
-| `TextureAddressMode::Mirror` | 🟨 planned (HTMLDOM-97) | Currently throws when the source rectangle leaves the texture. `EASYGL` supports this for real via native `GL_MIRRORED_REPEAT`, and every built-in `SamplerState` Mirror preset (`Point`/`Linear`/`AnisotropicMirror`) is symmetric U/V, so this is a real, closeable common case, not an edge case — planned via a cached pre-tiled-mirrored PNG variant, the same technique `CANVAS` already proved out for its own equivalent gap. |
-| Mixed per-axis modes, out of bounds | 🟨 planned (HTMLDOM-97) | Currently rejected unconditionally. The non-`Mirror` case (e.g. U=Wrap, V=Clamp) needs no image trick at all — CSS `background-repeat` natively takes two independent per-axis values — and is planned. Combinations where either axis is `Mirror` will remain a narrower, documented residual throw. |
+| `TextureAddressMode::Mirror` (symmetric) | ✅ | Implemented via a cached, lazily-built 2x2 pre-tiled-and-mirrored variant (the base variant drawn once per quadrant, alternate quadrants flipped), the same technique `CANVAS` proved out for its own equivalent gap. Tiling that image with ordinary CSS `background-repeat: repeat`/`CanvasPattern('repeat')` reproduces mirror-repeat exactly, by construction. Verified pixel-exact in a real browser: a 2x2 four-colour source tiled 2x2 reads back the full hand-derived reflected grid (HTMLDOM-97a). Note: `SamplerState` has no built-in Mirror preset at all — a game always constructs a custom one, and symmetric U/V is simply the natural way to do that, not a claim about a specific preset. |
+| Mixed per-axis modes, out of bounds | ✅ (non-Mirror); Mirror-mixed-with-a-different-axis still throws | Non-`Mirror` mixed axes (e.g. U=Wrap, V=Clamp) now tile/clamp each axis independently via `background-repeat`'s two-value shorthand (DOM path) or `CanvasPattern`'s `repeat-x`/`repeat-y` repetition string (Canvas2D path) — verified pixel-exact (HTMLDOM-97b) and structurally (HTMLDOM-97d, where the CSSOM serializes the two-value form back as the `repeat-x` shorthand). Mirror combined with a genuinely different mode on the other axis remains a narrower, documented residual throw — real extra complexity for a combination no realistic `SamplerState` configuration produces. |
 
 ## 5. Viewport / PresentationParameters / Rasterizer
 
@@ -186,7 +186,9 @@ evidence that `HTML_DOM` outperforms real hardware-accelerated WebGL2.
 1. **No backbuffer readback** — no browser API rasterizes a live DOM subtree. Render into a
    `RenderTarget2D` and read that, or use `CANVAS`.
 2. **Texture upload costs a PNG encode** — by design; see design decision 6 in `plan_html_dom.md`.
-3. **`TextureAddressMode::Mirror` throws** when the source rectangle leaves the texture.
+3. **`TextureAddressMode::Mirror` mixed with a different mode on the other axis throws** when the
+   source rectangle leaves the texture (HTMLDOM-97) — symmetric Mirror and non-Mirror mixed axes
+   (e.g. Wrap+Clamp) are both supported now.
 4. **Custom `BlendState`s throw** — only the four standard presets exist in CSS compositing.
 5. **No custom `Effect`s** — there is no shader stage.
 6. **No MSAA, no depth, no stencil** — the same 2D-only boundary as `SDL_RENDERER` and `CANVAS`.

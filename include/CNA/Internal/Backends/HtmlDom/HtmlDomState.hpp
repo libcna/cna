@@ -189,26 +189,48 @@ namespace CNA::Internal::Backends::HtmlDom
     inline constexpr std::int32_t FlagFlipVertically = 1 << 1;
     /** @brief HtmlDomDrawCommand::flags bit: smooth (linear) magnification rather than nearest. */
     inline constexpr std::int32_t FlagSmoothing = 1 << 2;
-    /** @brief HtmlDomDrawCommand::flags bit: tile the texture (TextureAddressMode::Wrap). */
+    /** @brief HtmlDomDrawCommand::flags bit: tile the U axis (TextureAddressMode Wrap or Mirror). */
     inline constexpr std::int32_t FlagWrap = 1 << 3;
     /** @brief HtmlDomDrawCommand::flags bit: composite additively (`mix-blend-mode: plus-lighter`). */
     inline constexpr std::int32_t FlagAdditive = 1 << 4;
+    /**
+     * @brief HtmlDomDrawCommand::flags bit: tile the V axis (TextureAddressMode Wrap or Mirror).
+     *
+     * Independent of FlagWrap (the U axis) so a mixed-axis draw (e.g. U=Wrap, V=Clamp) can tile one
+     * axis and not the other -- CSS `background-repeat`/`CanvasPattern` repetition both natively
+     * accept independent per-axis values (HTMLDOM-97).
+     */
+    inline constexpr std::int32_t FlagWrapV = 1 << 5;
+    /**
+     * @brief HtmlDomDrawCommand::flags bit: tile from the pre-tiled MIRRORED variant, not the plain
+     * texture (TextureAddressMode::Mirror, symmetric on both axes -- HTMLDOM-97).
+     *
+     * Only ever set together with both FlagWrap and FlagWrapV: ValidateAddressModes only allows
+     * Mirror through when it is the SAME mode on both axes.
+     */
+    inline constexpr std::int32_t FlagMirror = 1 << 6;
 
     /**
-     * @brief Rejects the TextureAddressMode combinations this backend cannot reproduce.
+     * @brief Rejects the one TextureAddressMode combination this backend still cannot reproduce.
      *
-     * plan_html_dom.md HTMLDOM-45. Only relevant when the requested source rectangle actually
-     * leaves the texture's own bounds -- the single case in which Wrap/Mirror can ever differ
-     * visibly from Clamp. `Wrap` maps to CSS background tiling; `Mirror` has no CSS equivalent
-     * (there is no mirror-repeat for backgrounds, and pre-tiling a mirrored copy per texture would
-     * defeat the point of the DOM path), and mixed per-axis modes cannot be expressed by the single
-     * `background-repeat` property either. Both throw rather than silently drawing something else.
-     * Pure function, no DOM access -- directly unit-testable.
+     * plan_html_dom.md HTMLDOM-45/HTMLDOM-97. Only relevant when the requested source rectangle
+     * actually leaves the texture's own bounds -- the single case in which Wrap/Mirror can ever
+     * differ visibly from Clamp. `Wrap` maps to CSS background tiling; symmetric `Mirror` (the same
+     * mode on both axes -- `SamplerState` has no built-in Mirror preset at all, so a game always
+     * constructs a custom one, and using the same mode on both axes is simply the natural way to do
+     * that) maps to a cached, pre-tiled-and-mirrored texture variant tiled the same way; mixed non-`Mirror` per-axis
+     * modes (e.g. U=Wrap, V=Clamp) map to independent per-axis `background-repeat`/`CanvasPattern`
+     * repetition values. The one combination genuinely unsupported is `Mirror` paired with a
+     * DIFFERENT mode on the other axis: that would need a per-axis-mirrored tile image (composing a
+     * pre-tiled-mirror source with independent per-axis repetition), real extra complexity for a
+     * combination no built-in `SamplerState` preset can even produce. Pure function, no DOM access
+     * -- directly unit-testable.
      *
      * @param addressU       Raw TextureAddressMode ordinal for U (0=Wrap, 1=Clamp, 2=Mirror).
      * @param addressV       Raw TextureAddressMode ordinal for V.
      * @param exceedsBounds  Whether the source rectangle leaves the texture's own bounds.
-     * @throws std::runtime_error for Mirror, or for mixed per-axis modes, when @p exceedsBounds.
+     * @throws std::runtime_error when @p addressU != @p addressV and either is Mirror, while
+     *         @p exceedsBounds.
      */
     void ValidateAddressModes(int addressU, int addressV, bool exceedsBounds);
 }
