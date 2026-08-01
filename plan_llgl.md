@@ -430,6 +430,61 @@ plan's own `LLGL-17` investigation did exactly that).
 
 ---
 
+## Gaps vs EasyGL
+
+`EasyGL` is this project's mature, established OpenGL backend. As of 2026-08-01, `LLGL` covers the
+same broad functional surface — the full 2D+3D pipeline, every stock effect (`BasicEffect`,
+`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
+`SkinnedPbrEffect`), `RenderTarget2D`/`RenderTargetCube`/MRT, MSAA and mip-mapped render targets,
+custom `ShaderEffect`s, occlusion queries, cube/volume textures — but it is **not** at unqualified
+parity with `EasyGL`. The real, currently-known gaps:
+
+* **Never verified on real GPU hardware.** Every check in this plan runs against a software
+  rasterizer (Xvfb + Mesa lavapipe for Vulkan, llvmpipe for OpenGL). `EasyGL` has real-hardware
+  mileage this backend does not yet have — see "Closing notes" below.
+* **This backend picks Vulkan or OpenGL at runtime, and several features only work on ONE of the
+  two modules on this project's own test environment** (a single fixed OpenGL implementation like
+  `EasyGL` has no equivalent split):
+  - `FillMode::WireFrame` does not work on the Vulkan module (`LLGL-30`) — LLGL's own vendored
+    Vulkan module never requests the `fillModeNonSolid` device feature at all, confirmed by reading
+    its source; not fixable without patching vendored LLGL.
+  - Back-buffer `MultiSampleCount` (MSAA) does not work on the OpenGL module (`LLGL-23`).
+  - Cube textures — and therefore `EnvironmentMapEffect` and `RenderTargetCube` entirely — do not
+    work on the OpenGL module at all (`hasCubeTextures` unsupported on this environment's GLX
+    driver).
+  - Per-slot `BlendState.ColorWriteChannels1..3` under MRT does not work on the OpenGL module
+    (`LLGL-21`) — `glColorMaski` is not honoured by this environment's GL driver once the real
+    `independentBlendEnabled` bug was fixed.
+* **`BlendState.MultiSampleMask` is not implemented at all** (`LLGL-21`, deliberately deprioritized
+  — LLGL's sample mask lives in the blend descriptor and would multiply the pipeline cache with no
+  real use on this backend yet).
+* **`RenderTargetCube` has no MSAA or mip-mapping support** — only plain `RenderTarget2D` got real
+  `MultiSampleCount`/`mipMap` support (`LLGL-26` follow-ups); `RenderTargetCube`'s own `mipMap`/
+  `multiSampleCount` parameters are still silently ignored.
+* **`RenderTargetCube` is not wired into this project's shared cross-backend `RenderTargetCube`
+  oracles** (`examples/rendertargetcube_usage_test.cpp`'s `PreserveContents`/MSAA/mip battery,
+  `rendertargetcube_getdata_contract_test.cpp`'s row-order/orientation/mirroring `Contract` table,
+  `rendertargetcube_msaa_face_test.cpp`) — left as a documented follow-up rather than guessed at.
+* **`SkinnedEffect`'s `VertexColorEnabled` (CNA-only `NOXNA` extension property) and its stride-56
+  vertex-colour variant are not implemented** on this backend.
+* **Only per-pixel lighting.** Real XNA compiles 9 distinct vertex-shader permutations
+  ({vertex-lit, one-light, pixel-lit} × {1,2,4 bones}); this backend is per-pixel-lit only
+  regardless of `PreferPerPixelLighting` — the same documented deviation every established CNA
+  backend except `D3D9` already has, not unique to `LLGL`.
+* **`RenderTargetUsage.PreserveContents` is not honoured across separate binds** — every render
+  pass this backend opens uses `Undefined`/`DONT_CARE` load semantics (LLGL's own public Vulkan
+  API has no way to re-enter a render pass with real `Load` semantics).
+* **`ColorWriteChannels1..3` outside MRT was never a gap** (a single-attachment bind only ever
+  needed slot 0), but the underlying `independentBlendEnabled` bug (`LLGL-21`) means any FUTURE
+  per-slot blend-state feature added to this backend needs the same care.
+
+None of these are silent — each either reports itself unsupported through
+`GraphicsDevice.SupportsCapability()`, is detected at runtime and reported `[SKIP]` (not `[FAIL]`)
+by the relevant CTest, or throws by name. See `docs/llgl-backend.md`'s own "Capability boundary"
+table for the authoritative, per-capability answer this backend gives.
+
+---
+
 ## Closing notes
 
 The 2D baseline is real and pixel-verified on both renderer modules — but on one platform, and
