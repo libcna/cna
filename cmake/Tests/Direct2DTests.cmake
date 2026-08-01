@@ -54,7 +54,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
             message(FATAL_ERROR "CNA_DIRECT2D_TEST_RUNTIME must be WINE or PROTON, got '${CNA_DIRECT2D_TEST_RUNTIME}'.")
         endif()
         # WineD3D and Proton's Wine Direct2D both implement render/readback through the fallback,
-        # but do not register ColorMatrix and ignore PLUS/SOURCE_COPY DrawImage composite modes.
+        # but do not register ColorMatrix and ignore PLUS/BOUNDED_SOURCE_COPY DrawImage composite modes.
         # Keep the public RT-readback matrix active and reserve only those native Direct2D-specific
         # matrices for a real Windows runtime.
         set(_direct2d_2d_parity_environment

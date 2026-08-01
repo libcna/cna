@@ -18,22 +18,40 @@ namespace CNA::Internal::Backends::Direct2D
     class Direct2DGraphicsBackend;
 
     /**
-     * @brief The Direct2D primitive blend selected from CNA's standard BlendState presets.
+     * @brief The exact Direct2D primitive/image composite selected from CNA BlendState.
      *
-     * Direct2D's primitive blend API can represent source-over, copy, and additive composition,
-     * but it has no general source/destination-factor blend-equation interface.  Keeping this
-     * mapping independent of a live device makes the supported contract testable without a window.
+     * Primitive blend represents source-over, copy and additive composition; DrawImage adds the
+     * exact Porter-Duff modes below. Direct2D still has no general source/destination-factor
+     * blend-equation interface. Keeping this mapping device-free makes the contract unit-testable.
      */
     enum class Direct2DBlendMode
     {
         SourceOver,
         Copy,
-        Add
+        Add,
+        DestinationOver,
+        SourceIn,
+        DestinationIn,
+        SourceOut,
+        DestinationOut,
+        SourceAtop,
+        DestinationAtop,
+        Xor
     };
 
     Direct2DBlendMode BlendStateToDirect2DBlendMode(int colorSrcBlend, int alphaSrcBlend,
                                                     int colorDstBlend, int alphaDstBlend,
                                                     int colorBlendFunc, int alphaBlendFunc);
+
+    /** Pure helpers kept public to make Direct2D's manually managed mip policy unit-testable. */
+    int PreferredMipLevelForTransform(int sourceWidth, int sourceHeight,
+                                      int destinationWidth, int destinationHeight,
+                                      float rotation, const Matrix& batchTransform,
+                                      float presentationScaleX, float presentationScaleY,
+                                      bool* minifying = nullptr);
+    Rectangle MapSourceRectangleToMip(const Rectangle& sourceRectangle,
+                                      int baseWidth, int baseHeight,
+                                      int mipWidth, int mipHeight);
 
     /** A device-dependent Direct2D bitmap plus the source RGBA8 shadow required for CPU-side tint,
      *  flip, wrap/mirror, and non-premultiplied SpriteBatch variants. */
@@ -82,6 +100,7 @@ namespace CNA::Internal::Backends::Direct2D
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
@@ -134,7 +153,7 @@ namespace CNA::Internal::Backends::Direct2D
         Direct2DGraphicsBackend* owner_ = nullptr;
         Matrix transform_ = Matrix::getIdentityProperty();
         bool begun_ = false;
-        bool linearFilter_ = true;
+        int textureFilter_ = 0; // TextureFilter::Linear
         int addressU_ = 1; // TextureAddressMode::Clamp
         int addressV_ = 1;
     };
@@ -194,10 +213,7 @@ namespace CNA::Internal::Backends::Direct2D
         void SetBlendFactor(float r, float g, float b, float a) override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
-        {
-            return false;
-        }
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         [[nodiscard]] int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
@@ -229,7 +245,7 @@ namespace CNA::Internal::Backends::Direct2D
         void DrawSprite(const ITextureBackend& texture, const Rectangle& destinationRectangle,
                         const Rectangle& sourceRectangle, const Color& color, float rotation,
                         const Vector2& origin, SpriteEffects effects, const Matrix& batchTransform,
-                        bool linearFilter, int addressU, int addressV);
+                        int textureFilter, int addressU, int addressV);
 
     private:
         friend class Direct2DTextureBackend;
@@ -254,6 +270,7 @@ namespace CNA::Internal::Backends::Direct2D
         [[nodiscard]] bool IsRegisteredRenderTarget(const Direct2DRenderTargetBackend* renderTarget) const;
         void EnsureResourceGeneration(std::uint64_t generation, const char* resourceKind) const;
         void CreateBackBufferTarget();
+        void CreateLogicalTarget();
         void EnsureMainTargetSize();
         void EndDrawing(const char* operation);
         /// Copies a render target through a temporary Direct2D CPU-readable bitmap. This is a
@@ -314,6 +331,9 @@ namespace CNA::Internal::Backends::Direct2D
         Microsoft::WRL::ComPtr<ID2D1Factory1> d2dFactory_;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> d2dContext_;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> backBufferTarget_;
+        /// Logical 2D framebuffer. Presentation scales this bitmap into the physical swap chain,
+        /// while GetBackBufferData reads it byte-for-byte before presentation filtering.
+        Microsoft::WRL::ComPtr<ID2D1Bitmap1> logicalTarget_;
         /// Keeps transient SpriteBatch resources alive until Direct2D finishes the frame.  The
         /// bitmap collection is for ordinary textures; effects/image brushes let rendered targets
         /// stay GPU resident while they are tinted, flipped, or tiled.
