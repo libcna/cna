@@ -56,6 +56,25 @@ TEST(Direct2DMipPolicy, MapsNpotSourceCoordinatesUsingActualLevelDimensions)
     EXPECT_EQ(negative.Height, 2);
 }
 
+TEST(Direct2DMipPolicy, RejectsUnrepresentableOrNonPositiveSourceRectangles)
+{
+    const int minimum = std::numeric_limits<int>::min();
+    const int maximum = std::numeric_limits<int>::max();
+
+    EXPECT_THROW(
+        MapSourceRectangleToMip(XnaRectangle(maximum - 1, 0, maximum, 1), 1, 1, 1, 1),
+        std::exception);
+    EXPECT_THROW(
+        MapSourceRectangleToMip(XnaRectangle(minimum, 0, maximum, 1), 1, 1, 1, 1),
+        std::exception);
+    EXPECT_THROW(
+        MapSourceRectangleToMip(XnaRectangle(0, 0, 0, 1), 4, 4, 2, 2),
+        std::exception);
+    EXPECT_THROW(
+        MapSourceRectangleToMip(XnaRectangle(0, 0, 1, -1), 4, 4, 2, 2),
+        std::exception);
+}
+
 TEST(Direct2DMipPolicy, UsesCompleteBatchAndPresentationTransform)
 {
     bool minifying = false;

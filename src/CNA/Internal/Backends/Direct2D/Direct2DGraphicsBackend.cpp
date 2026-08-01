@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Direct2D/Direct2DGraphicsBackend.hpp"
 
 #include <d2d1effects.h>
+#include <d3d11sdklayers.h>
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -11,6 +12,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <limits>
@@ -23,6 +26,13 @@ namespace CNA::Internal::Backends::Direct2D
     namespace
     {
         using Microsoft::WRL::ComPtr;
+
+        [[nodiscard]] bool EnvironmentFlagEnabled(const char* name)
+        {
+            const char* const value = std::getenv(name);
+            return value != nullptr && *value != '\0' && std::strcmp(value, "0") != 0 &&
+                   std::strcmp(value, "false") != 0 && std::strcmp(value, "FALSE") != 0;
+        }
 
         [[nodiscard]] std::string FormatHr(HRESULT hr)
         {
@@ -264,6 +274,10 @@ namespace CNA::Internal::Backends::Direct2D
     {
         if (baseWidth <= 0 || baseHeight <= 0 || mipWidth <= 0 || mipHeight <= 0)
             throw std::runtime_error("Direct2D mip source mapping requires positive dimensions.");
+        if (sourceRectangle.Width <= 0 || sourceRectangle.Height <= 0)
+            throw System::ArgumentOutOfRangeException(
+                "sourceRectangle", "non-positive size",
+                "The Direct2D mip source rectangle must have positive dimensions.");
         const double scaleX = static_cast<double>(mipWidth) / baseWidth;
         const double scaleY = static_cast<double>(mipHeight) / baseHeight;
         const std::int64_t right = static_cast<std::int64_t>(sourceRectangle.X) + sourceRectangle.Width;
@@ -673,20 +687,15 @@ namespace CNA::Internal::Backends::Direct2D
           contextRecoveryEnabled_(contextRecoveryEnabled)
     {
         if (!window_) throw std::runtime_error("Direct2DGraphicsBackend initialized with null SDL_Window.");
+        diagnosticsEnabled_ = EnvironmentFlagEnabled("CNA_DIRECT2D_DIAGNOSTICS");
         CreateDeviceResources();
         IGraphicsBackend::RegisterForWindow(window_, this);
     }
 
     Direct2DGraphicsBackend::~Direct2DGraphicsBackend()
     {
-        if (drawing_)
-        {
-            // Destructors must not throw. EndDraw still ensures Direct2D releases any outstanding
-            // resource references before the device context is destroyed.
-            ClearOutputClips();
-            d2dContext_->EndDraw();
-        }
         IGraphicsBackend::UnregisterForWindow(window_);
+        ReleaseDeviceResourcesNoThrow(true);
     }
 
     void Direct2DGraphicsBackend::RegisterTexture(Direct2DTextureBackend* texture)
@@ -727,7 +736,53 @@ namespace CNA::Internal::Backends::Direct2D
             "GraphicsDevice::SetContextRecoveryEnabled(false).");
     }
 
-    void Direct2DGraphicsBackend::ReleaseDeviceResourcesNoThrow()
+    void Direct2DGraphicsBackend::ReportLiveDeviceObjectsNoThrow()
+    {
+        if (!debugLayerEnabled_ || !d3dDevice_) return;
+        try
+        {
+            ComPtr<ID3D11Debug> debug;
+            if (FAILED(d3dDevice_.As(&debug)))
+            {
+                std::fprintf(stderr,
+                             "[Direct2D diagnostics] D3D11 debug interface unavailable at shutdown.\n");
+                return;
+            }
+            ComPtr<ID3D11InfoQueue> infoQueue;
+            if (SUCCEEDED(d3dDevice_.As(&infoQueue))) infoQueue->ClearStoredMessages();
+            // DETAIL is present in both MinGW's baseline SDK headers and current native Windows
+            // SDKs. Do not depend on the newer IGNORE_INTERNAL flag: the uploaded message list is
+            // more useful when it remains cross-toolchain compilable and complete.
+            const HRESULT reportResult = debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+            std::fprintf(stderr,
+                         "[Direct2D diagnostics] ReportLiveDeviceObjects hr=%s.\n",
+                         FormatHr(reportResult).c_str());
+            if (!infoQueue) return;
+            const UINT64 messageCount = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+            std::fprintf(stderr,
+                         "[Direct2D diagnostics] debug-layer stored messages=%llu.\n",
+                         static_cast<unsigned long long>(messageCount));
+            for (UINT64 index = 0; index < messageCount; ++index)
+            {
+                SIZE_T messageBytes = 0;
+                if (FAILED(infoQueue->GetMessage(index, nullptr, &messageBytes)) || messageBytes == 0)
+                    continue;
+                std::vector<std::uint8_t> storage(messageBytes);
+                auto* const message = reinterpret_cast<D3D11_MESSAGE*>(storage.data());
+                if (SUCCEEDED(infoQueue->GetMessage(index, message, &messageBytes)))
+                    std::fprintf(stderr, "[Direct2D D3D11 debug] %.*s\n",
+                                 static_cast<int>(message->DescriptionByteLength),
+                                 message->pDescription ? message->pDescription : "");
+            }
+        }
+        catch (...)
+        {
+            std::fprintf(stderr,
+                         "[Direct2D diagnostics] live-object reporting raised an unexpected exception.\n");
+        }
+    }
+
+    void Direct2DGraphicsBackend::ReleaseDeviceResourcesNoThrow(bool reportLiveObjects)
     {
         if (drawing_ && d2dContext_)
         {
@@ -751,8 +806,26 @@ namespace CNA::Internal::Backends::Direct2D
         swapChain_.Reset();
         d2dContext_.Reset();
         d2dFactory_.Reset();
+        if (d3dContext_)
+        {
+            d3dContext_->ClearState();
+            d3dContext_->Flush();
+        }
         d3dContext_.Reset();
+        if (reportLiveObjects)
+        {
+            if (diagnosticsEnabled_)
+                std::fprintf(stderr,
+                             "[Direct2D diagnostics] driver=%s EndDraw=%llu transient-releases=%llu "
+                             "transient-high-water=%zu.\n",
+                             usingWarp_ ? "WARP" : "hardware",
+                             static_cast<unsigned long long>(endDrawCount_),
+                             static_cast<unsigned long long>(transientResourceReleaseCount_),
+                             transientResourceHighWater_);
+            ReportLiveDeviceObjectsNoThrow();
+        }
         d3dDevice_.Reset();
+        debugLayerEnabled_ = false;
     }
 
     void Direct2DGraphicsBackend::RecreateDeviceResourcesForRecovery()
@@ -796,30 +869,56 @@ namespace CNA::Internal::Backends::Direct2D
     void Direct2DGraphicsBackend::CreateDeviceResources()
     {
         UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+        const bool requestDebugLayer = EnvironmentFlagEnabled("CNA_DIRECT2D_DEBUG_LAYER");
+        const bool forceWarp = EnvironmentFlagEnabled("CNA_DIRECT2D_FORCE_WARP");
+        if (requestDebugLayer) flags |= D3D11_CREATE_DEVICE_DEBUG;
         constexpr D3D_FEATURE_LEVEL featureLevels[] = {
             D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0};
         D3D_FEATURE_LEVEL createdFeatureLevel{};
-        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
+        D3D_DRIVER_TYPE driverType = forceWarp ? D3D_DRIVER_TYPE_WARP : D3D_DRIVER_TYPE_HARDWARE;
+        HRESULT hr = D3D11CreateDevice(nullptr, driverType, nullptr, flags,
                                        featureLevels, static_cast<UINT>(std::size(featureLevels)), D3D11_SDK_VERSION,
                                        &d3dDevice_, &createdFeatureLevel, &d3dContext_);
-        if (FAILED(hr))
+        if (FAILED(hr) && !forceWarp)
         {
             // WARP retains a functional Direct2D path on VMs/RDP sessions without a hardware D3D
             // adapter; this is an intentional Direct2D fallback, not an SDL renderer fallback.
-            ThrowIfFailed(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags,
-                                             featureLevels, static_cast<UINT>(std::size(featureLevels)), D3D11_SDK_VERSION,
-                                             &d3dDevice_, &createdFeatureLevel, &d3dContext_),
-                          "D3D11CreateDevice (hardware and WARP)");
+            driverType = D3D_DRIVER_TYPE_WARP;
+            hr = D3D11CreateDevice(nullptr, driverType, nullptr, flags,
+                                   featureLevels, static_cast<UINT>(std::size(featureLevels)), D3D11_SDK_VERSION,
+                                   &d3dDevice_, &createdFeatureLevel, &d3dContext_);
         }
+        ThrowIfFailed(hr, forceWarp ? "D3D11CreateDevice (forced WARP)"
+                                    : "D3D11CreateDevice (hardware and WARP)");
+        usingWarp_ = driverType == D3D_DRIVER_TYPE_WARP;
+        debugLayerEnabled_ = requestDebugLayer;
 
         ComPtr<IDXGIDevice> dxgiDevice;
         ThrowIfFailed(d3dDevice_.As(&dxgiDevice), "QueryInterface(IDXGIDevice)");
         ComPtr<IDXGIAdapter> adapter;
         ThrowIfFailed(dxgiDevice->GetAdapter(&adapter), "IDXGIDevice::GetAdapter");
+        if (diagnosticsEnabled_)
+        {
+            DXGI_ADAPTER_DESC adapterDescription{};
+            adapter->GetDesc(&adapterDescription);
+            std::fprintf(stderr,
+                         "[Direct2D diagnostics] created driver=%s feature-level=0x%X "
+                         "adapter-vendor=0x%04X adapter-device=0x%04X debug-layer=%s.\n",
+                         usingWarp_ ? "WARP" : "hardware",
+                         static_cast<unsigned int>(createdFeatureLevel),
+                         adapterDescription.VendorId, adapterDescription.DeviceId,
+                         debugLayerEnabled_ ? "enabled" : "disabled");
+        }
         ComPtr<IDXGIFactory2> dxgiFactory;
         ThrowIfFailed(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)), "IDXGIAdapter::GetParent(IDXGIFactory2)");
 
-        ThrowIfFailed(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, IID_PPV_ARGS(&d2dFactory_)),
+        D2D1_FACTORY_OPTIONS factoryOptions{};
+        factoryOptions.debugLevel = requestDebugLayer
+            ? D2D1_DEBUG_LEVEL_INFORMATION : D2D1_DEBUG_LEVEL_NONE;
+        ThrowIfFailed(D2D1CreateFactory(
+                          D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1),
+                          &factoryOptions,
+                          reinterpret_cast<void**>(d2dFactory_.ReleaseAndGetAddressOf())),
                       "D2D1CreateFactory");
         ComPtr<ID2D1Device> d2dDevice;
         ThrowIfFailed(d2dFactory_->CreateDevice(dxgiDevice.Get(), &d2dDevice), "ID2D1Factory1::CreateDevice");
@@ -938,6 +1037,11 @@ namespace CNA::Internal::Backends::Direct2D
         ClearOutputClips();
         const HRESULT hr = d2dContext_->EndDraw();
         drawing_ = false;
+        const std::size_t transientCount = transientBitmaps_.size() + transientEffects_.size() +
+            transientImages_.size() + transientImageBrushes_.size();
+        ++endDrawCount_;
+        transientResourceReleaseCount_ += transientCount;
+        transientResourceHighWater_ = std::max(transientResourceHighWater_, transientCount);
         transientBitmaps_.clear();
         transientEffects_.clear();
         transientImages_.clear();
@@ -1373,9 +1477,13 @@ namespace CNA::Internal::Backends::Direct2D
 
     void Direct2DGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* renderTarget)
     {
-        if (renderTarget && !dynamic_cast<Direct2DRenderTargetBackend*>(renderTarget))
+        auto* const direct2dTarget = dynamic_cast<Direct2DRenderTargetBackend*>(renderTarget);
+        if (renderTarget && !direct2dTarget)
             throw std::runtime_error("Direct2D cannot bind a render target created by another graphics backend.");
-        BindRenderTarget(static_cast<Direct2DRenderTargetBackend*>(renderTarget));
+        if (direct2dTarget && direct2dTarget->owner_ != this)
+            throw std::runtime_error(
+                "Direct2D cannot bind a render target created by another GraphicsDevice.");
+        BindRenderTarget(direct2dTarget);
     }
 
     void Direct2DGraphicsBackend::SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count)
@@ -1621,6 +1729,10 @@ namespace CNA::Internal::Backends::Direct2D
         const auto* renderTargetTexture = dynamic_cast<const Direct2DRenderTargetBackend*>(&texture);
         if (!ordinaryTexture && !renderTargetTexture)
             throw std::runtime_error("Direct2D SpriteBatch received a texture created by another graphics backend.");
+        if ((ordinaryTexture && ordinaryTexture->owner_ != this) ||
+            (renderTargetTexture && renderTargetTexture->owner_ != this))
+            throw std::runtime_error(
+                "Direct2D SpriteBatch received a texture created by another GraphicsDevice.");
         const std::int64_t sourceRight = static_cast<std::int64_t>(sourceRectangle.X) + sourceRectangle.Width;
         const std::int64_t sourceBottom = static_cast<std::int64_t>(sourceRectangle.Y) + sourceRectangle.Height;
         const bool sourceOutside = sourceRectangle.X < 0 || sourceRectangle.Y < 0 ||
@@ -1672,6 +1784,12 @@ namespace CNA::Internal::Backends::Direct2D
             : renderTargetTexture->BitmapForLevel(selectedMipLevel);
         if (requiresCpuBitmap)
         {
+            const UINT32 maximumBitmapSize = d2dContext_->GetMaximumBitmapSize();
+            if (localSource.Width > static_cast<int>(maximumBitmapSize) ||
+                localSource.Height > static_cast<int>(maximumBitmapSize))
+                throw System::ArgumentOutOfRangeException(
+                    "sourceRectangle", "too large",
+                    "The Direct2D CPU fallback source exceeds the device maximum bitmap size.");
             const std::vector<uint8_t> pixels = MakeSpritePixels(*ordinaryTexture, localSource, color,
                                                                   effects, addressU, addressV, selectedMipLevel);
             transient.Attach(CreateBitmapFromRgba(pixels.data(), localSource.Width, localSource.Height,
@@ -1701,9 +1819,10 @@ namespace CNA::Internal::Backends::Direct2D
         const D2D1_RECT_F destination = D2D1::RectF(-bitmapOrigin.X, -bitmapOrigin.Y,
                                                      static_cast<float>(localSource.Width) - bitmapOrigin.X,
                                                      static_cast<float>(localSource.Height) - bitmapOrigin.Y);
-        const D2D1_RECT_F source = D2D1::RectF(static_cast<float>(localSource.X), static_cast<float>(localSource.Y),
-                                                static_cast<float>(localSource.X + localSource.Width),
-                                                static_cast<float>(localSource.Y + localSource.Height));
+        const D2D1_RECT_F source = D2D1::RectF(
+            static_cast<float>(localSource.X), static_cast<float>(localSource.Y),
+            static_cast<float>(static_cast<std::int64_t>(localSource.X) + localSource.Width),
+            static_cast<float>(static_cast<std::int64_t>(localSource.Y) + localSource.Height));
 
         const bool requiresImageBrush = !requiresCpuBitmap &&
             (!IsWhite(color) || IsFlipped(effects) || nonPremultipliedSource_ || sourceOutside ||
@@ -1762,8 +1881,8 @@ namespace CNA::Internal::Backends::Direct2D
             // negative coordinate. Translate the brush's output back by that clipped amount so
             // its inverse coordinate mapping still reaches -1/-2/etc.; the image brush's
             // Clamp/Wrap/Mirror extend mode then implements the same sampler contract as EasyGL.
-            const float clippedLeft = static_cast<float>(std::max(0, -localSource.X));
-            const float clippedTop = static_cast<float>(std::max(0, -localSource.Y));
+            const float clippedLeft = std::max(0.0f, -static_cast<float>(localSource.X));
+            const float clippedTop = std::max(0.0f, -static_cast<float>(localSource.Y));
             // The correction has to run before reflection. A post-flip translation would send
             // negative UVs to the far edge instead (the exact error D2D-13's Flip probes guard
             // against); the original clipped-origin magnitude remains correct on both axes.

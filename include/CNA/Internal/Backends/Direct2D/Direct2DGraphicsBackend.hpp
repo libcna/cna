@@ -261,7 +261,8 @@ namespace CNA::Internal::Backends::Direct2D
         };
 
         void CreateDeviceResources();
-        void ReleaseDeviceResourcesNoThrow();
+        void ReleaseDeviceResourcesNoThrow(bool reportLiveObjects = false);
+        void ReportLiveDeviceObjectsNoThrow();
         void RecreateDeviceResourcesForRecovery();
         void RegisterTexture(Direct2DTextureBackend* texture);
         void UnregisterTexture(Direct2DTextureBackend* texture);
@@ -323,6 +324,12 @@ namespace CNA::Internal::Backends::Direct2D
         // even when the accepted Direct2D preset cannot consume a constant blend factor. Consume
         // that bookkeeping write once; later standalone non-white BlendFactor requests fail.
         bool pendingBlendStateFactorWrite_ = false;
+        bool diagnosticsEnabled_ = false;
+        bool debugLayerEnabled_ = false;
+        bool usingWarp_ = false;
+        std::uint64_t endDrawCount_ = 0;
+        std::uint64_t transientResourceReleaseCount_ = 0;
+        std::size_t transientResourceHighWater_ = 0;
 
         Microsoft::WRL::ComPtr<ID3D11Device> d3dDevice_;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3dContext_;

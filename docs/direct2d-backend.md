@@ -47,6 +47,10 @@ does not grow a parallel 3D implementation.
   FixedHeightDynamicWidth instead of sampling presentation-scaled physical pixels.
 - Device recovery for registered 2D resources: ordinary textures are rebuilt from their RGBA CPU
   shadow; render targets are reallocated as transparent, so their former contents are invalid.
+- Render targets and sampled textures are device-owned. Public bind calls, the concrete Direct2D
+  entry points, and SpriteBatch reject resources from a different `GraphicsDevice` before changing
+  native state; disposed targets are likewise rejected. Source/readback rectangle endpoint checks
+  use widened arithmetic, including deterministic extreme-coordinate regression coverage.
 
 The routine test trio is `Direct2D_Smoke`, `Direct2D_2DParity`, and `Direct2D_Lifetime`. The
 parity test validates partial and full RT readback plus mip readback under Wine through the
@@ -60,6 +64,13 @@ Steam's Proton Experimental installation (including Debian's `~/.steam/debian-in
 uses a dedicated compat-data directory. WineD3D and Proton's Wine Direct2D do not register the
 built-in `ColorMatrix`/`Premultiply` effects and ignore `PLUS`/`BOUNDED_SOURCE_COPY` image composite modes,
 so only those decorated and Additive/Opaque pixel probes remain native-Windows branches.
+
+The manual `Windows graphics CI` workflow runs the native MSVC Direct2D suite with no compatibility
+skips. It enables both D3D11 and Direct2D debug layers, records Windows/runtime DLL and adapter-driver
+versions, captures `ReportLiveDeviceObjects`, transient-resource high-water and lifetime timing, and
+runs a second lifetime pass with WARP forced. The resulting `direct2d-native-debug-*` artifact is the
+audit record. The same modes are available locally through `CNA_DIRECT2D_DEBUG_LAYER=1`,
+`CNA_DIRECT2D_DIAGNOSTICS=1`, and `CNA_DIRECT2D_FORCE_WARP=1`.
 
 ## Explicit limits
 

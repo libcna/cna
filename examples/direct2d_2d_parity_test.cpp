@@ -38,9 +38,11 @@
 
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstdio>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -905,6 +907,104 @@ protected:
         expectBackendRejection("Direct2D rejects unknown presentation mode", [&] {
             direct2dBackend.SetPresentationMode(99);
         });
+
+        // D2D-26: deterministic rectangle fuzz covers every sampler addressing mode, both flips,
+        // and source regions far outside the image. The fixed seed keeps failures reproducible;
+        // the final marker proves that an accepted edge case did not poison the next Begin/EndDraw.
+        std::uint32_t fuzzState = 0xD2D2601u;
+        const auto nextFuzz = [&] {
+            fuzzState = fuzzState * 1664525u + 1013904223u;
+            return fuzzState;
+        };
+        constexpr std::array addressModes{
+            TextureAddressMode::Clamp, TextureAddressMode::Wrap, TextureAddressMode::Mirror};
+        device.Clear(Color::Black);
+        for (const TextureAddressMode addressMode : addressModes)
+        {
+            SamplerState fuzzSampler;
+            fuzzSampler.setFilterProperty(TextureFilter::Point);
+            fuzzSampler.setAddressUProperty(addressMode);
+            fuzzSampler.setAddressVProperty(addressMode);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &fuzzSampler,
+                            nullptr, &scissorDisabled);
+            for (int iteration = 0; iteration < 64; ++iteration)
+            {
+                const int sourceX = static_cast<int>(nextFuzz() % 257u) - 128;
+                const int sourceY = static_cast<int>(nextFuzz() % 257u) - 128;
+                const int sourceWidth = static_cast<int>(nextFuzz() % 16u) + 1;
+                const int sourceHeight = static_cast<int>(nextFuzz() % 16u) + 1;
+                const int destinationX = static_cast<int>(nextFuzz() % 44u) - 4;
+                const int destinationY = static_cast<int>(nextFuzz() % 28u) - 4;
+                const SpriteEffects fuzzEffects = static_cast<SpriteEffects>(nextFuzz() & 0x3u);
+                sprites_->Draw(*twoTexels_, Rectangle(destinationX, destinationY, 4, 4),
+                               Rectangle(sourceX, sourceY, sourceWidth, sourceHeight), Color::White,
+                               0.0f, Vector2::Zero, fuzzEffects, 0.0f);
+            }
+            // These must remain defined no-ops without evaluating INT_MIN negation or endpoint sums.
+            sprites_->Draw(*twoTexels_, Rectangle(0, 0, 1, 1),
+                           Rectangle(std::numeric_limits<int>::min(),
+                                     std::numeric_limits<int>::max(), 0, 1), Color::White);
+            sprites_->Draw(*twoTexels_, Rectangle(0, 0, 1, 1),
+                           Rectangle(std::numeric_limits<int>::max(),
+                                     std::numeric_limits<int>::min(), 1, -1), Color::White);
+            sprites_->End();
+        }
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point,
+                        nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D deterministic source-rectangle fuzz leaves drawing usable",
+              0, 0, Color::White);
+
+        // The public readback validation must widen endpoint arithmetic before addition. These
+        // rectangles used to reach signed-overflow expressions before the backend's own checks.
+        Color rejectedReadback(0, 0, 0, 0);
+        const Rectangle overflowingReadbackX(std::numeric_limits<int>::max() - 2, 0, 8, 1);
+        expectBackendRejection("GetBackBufferData rejects overflowing X endpoint", [&] {
+            device.GetBackBufferData(&overflowingReadbackX, &rejectedReadback, 0, 1);
+        });
+        const Rectangle overflowingReadbackY(0, std::numeric_limits<int>::max() - 2, 1, 8);
+        expectBackendRejection("GetBackBufferData rejects overflowing Y endpoint", [&] {
+            device.GetBackBufferData(&overflowingReadbackY, &rejectedReadback, 0, 1);
+        });
+        const Rectangle oneReadbackPixel(0, 0, 1, 1);
+        expectBackendRejection("GetBackBufferData rejects negative startIndex", [&] {
+            device.GetBackBufferData(&oneReadbackPixel, &rejectedReadback, -1, 1);
+        });
+
+        // Disposed and foreign targets are rejected before native state changes. Exercise both
+        // public binding overloads and the backend entry point, then continue rendering on the
+        // original device to prove each failure was transactional.
+        RenderTarget2D disposedTarget(device, 2, 2);
+        disposedTarget.Dispose();
+        expectBackendRejection("SetRenderTarget rejects a disposed target", [&] {
+            device.SetRenderTarget(&disposedTarget);
+        });
+        expectBackendRejection("SetRenderTargets rejects a disposed target", [&] {
+            device.SetRenderTargets({RenderTargetBinding(static_cast<Texture*>(&disposedTarget))});
+        });
+        {
+            PresentationParameters foreignPresentation;
+            foreignPresentation.setBackBufferWidthProperty(8);
+            foreignPresentation.setBackBufferHeightProperty(8);
+            GraphicsDevice foreignDevice(GraphicsAdapter::getDefaultAdapterProperty(),
+                                          GraphicsProfile::Reach, foreignPresentation);
+            RenderTarget2D foreignTarget(foreignDevice, 2, 2);
+            expectBackendRejection("SetRenderTarget rejects a foreign GraphicsDevice target", [&] {
+                device.SetRenderTarget(&foreignTarget);
+            });
+            expectBackendRejection("SetRenderTargets rejects a foreign GraphicsDevice target", [&] {
+                device.SetRenderTargets({RenderTargetBinding(static_cast<Texture*>(&foreignTarget))});
+            });
+            expectBackendRejection("Direct2D backend rejects a foreign device target", [&] {
+                direct2dBackend.SetRenderTarget2D(foreignTarget.GetRenderTargetBackend());
+            });
+        }
+        const bool targetFailuresKeptBackbuffer = device.GetRenderTargets().empty();
+        std::printf("[%s] rejected target bindings leave the Direct2D backbuffer active\n",
+                    targetFailuresKeptBackbuffer ? "PASS" : "FAIL");
+        passed = passed && targetFailuresKeptBackbuffer;
 
         // GraphicsDevice owns the bind-time clear contract, while Direct2D must preserve the
         // actual bitmap for PreserveContents and PlatformContents. Check all three public usages

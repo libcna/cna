@@ -114,12 +114,85 @@ jobs:
         working-directory: cna_graphics
         run: cmake --build build --parallel
 
+      # D3D11_CREATE_DEVICE_DEBUG depends on Windows' Graphics Tools capability. Hosted-image
+      # contents change over time, so make the native audit deterministic instead of assuming the
+      # SDK layers happen to be preinstalled on the current windows-latest image.
+      - name: Ensure DirectX Graphics Tools debug layers
+        if: matrix.backend == 'DIRECT2D'
+        shell: pwsh
+        run: |
+          $graphicsTools = Get-WindowsCapability -Online |
+            Where-Object Name -Like 'Tools.Graphics.DirectX*' |
+            Select-Object -First 1
+          if ($null -eq $graphicsTools) {
+            throw 'Windows did not expose the Tools.Graphics.DirectX capability.'
+          }
+          if ($graphicsTools.State -ne 'Installed') {
+            Add-WindowsCapability -Online -Name $graphicsTools.Name
+          }
+
+      - name: Record native Direct2D runtime and adapter environment
+        if: matrix.backend == 'DIRECT2D'
+        shell: pwsh
+        working-directory: cna_graphics
+        run: |
+          New-Item -ItemType Directory -Force build/direct2d-native-diagnostics | Out-Null
+          $output = @()
+          $os = Get-CimInstance Win32_OperatingSystem
+          $output += "WindowsCaption=$($os.Caption)"
+          $output += "WindowsVersion=$($os.Version)"
+          $output += "WindowsBuild=$($os.BuildNumber)"
+          foreach ($dllName in @('d2d1.dll', 'd3d11.dll', 'dxgi.dll')) {
+            $dll = Get-Item (Join-Path $env:WINDIR "System32/$dllName")
+            $output += "$dllName=$($dll.VersionInfo.FileVersion)"
+          }
+          foreach ($adapter in Get-CimInstance Win32_VideoController) {
+            $output += "Adapter=$($adapter.Name);PNPDeviceID=$($adapter.PNPDeviceID);DriverVersion=$($adapter.DriverVersion)"
+          }
+          $output | Tee-Object -FilePath build/direct2d-native-diagnostics/environment.txt
+
       # CMAKE_CROSSCOMPILING is false here (native MSVC, not the MinGW cross-compile toolchain
       # file), so every backend's registered CTest executable runs directly against Windows DLLs
       # with no Wine wrapper. Direct2D consequently does not set its Wine/Proton skip variables.
       - name: Run ${{ matrix.backend }} CTest suite (real Windows, no Wine)
+        if: matrix.backend != 'DIRECT2D'
         working-directory: cna_graphics
         run: ctest --test-dir build -L ${{ matrix.backend }} --output-on-failure
+
+      # D2D-22/D2D-27: require the native debug layers instead of silently dropping their flags.
+      # Verbose output preserves effect/composite probes, adapter selection, transient-resource
+      # high-water counts and ReportLiveDeviceObjects messages in the uploaded audit artifact.
+      - name: Run Direct2D native debug-layer suite (no compatibility skips)
+        if: matrix.backend == 'DIRECT2D'
+        working-directory: cna_graphics
+        run: |
+          CNA_DIRECT2D_DEBUG_LAYER=1 \
+          CNA_DIRECT2D_DIAGNOSTICS=1 \
+          ctest --test-dir build -L Direct2D --verbose 2>&1 \
+            | tee build/direct2d-native-diagnostics/hardware-debug-ctest.log
+
+      # Force the software adapter explicitly as a second lifetime pass. This proves that the
+      # documented hardware->WARP fallback is not merely dead code and gives its own timing/live-
+      # object log without doubling every pixel test in the main native gate.
+      - name: Run Direct2D lifetime audit on forced WARP
+        if: matrix.backend == 'DIRECT2D'
+        working-directory: cna_graphics
+        run: |
+          CNA_DIRECT2D_DEBUG_LAYER=1 \
+          CNA_DIRECT2D_DIAGNOSTICS=1 \
+          CNA_DIRECT2D_FORCE_WARP=1 \
+          ctest --test-dir build -R '^Direct2D_Lifetime$' --verbose 2>&1 \
+            | tee build/direct2d-native-diagnostics/warp-debug-lifetime-ctest.log
+
+      - name: Upload Direct2D native validation artifact
+        if: always() && matrix.backend == 'DIRECT2D'
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct2d-native-debug-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            cna_graphics/build/direct2d-native-diagnostics/
+            cna_graphics/build/Testing/Temporary/LastTest.log
 
       # DX-90/DX-114's own "shader-generation check" -- only needs to run once (the HLSL sources
       # and hlsl_compiler_tool.cpp are shared D3DCommon content, not backend-specific), so gated to

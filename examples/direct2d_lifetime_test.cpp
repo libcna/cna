@@ -18,6 +18,7 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -43,6 +44,7 @@ protected:
     void Initialize() override
     {
         Game::Initialize();
+        startedAt_ = std::chrono::steady_clock::now();
         auto& device = getGraphicsDeviceProperty();
         sprites_ = std::make_unique<SpriteBatch>(device);
         white_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
@@ -123,7 +125,11 @@ protected:
         ++frame_;
         if (frame_ == 8)
         {
-            std::printf("[PASS] Direct2D lifetime smoke\n");
+            const auto elapsed = std::chrono::steady_clock::now() - startedAt_;
+            const double elapsedMilliseconds =
+                std::chrono::duration<double, std::milli>(elapsed).count();
+            std::printf("[PASS] Direct2D lifetime smoke: frames=%d elapsed-ms=%.3f ms-per-frame=%.3f\n",
+                        frame_, elapsedMilliseconds, elapsedMilliseconds / frame_);
             result_ = 0;
             Exit();
         }
@@ -134,6 +140,7 @@ private:
     std::unique_ptr<SpriteBatch> sprites_;
     std::unique_ptr<Texture2D> white_;
     std::unique_ptr<RenderTarget2D> target_;
+    std::chrono::steady_clock::time_point startedAt_{};
     int frame_ = 0;
     int result_ = 1;
 };
