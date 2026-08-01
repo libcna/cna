@@ -194,6 +194,27 @@ That makes it valuable to CNA in two specific ways:
 | SOKOL-31 | Implement the non-GL context paths so `CNA_SOKOL_API` other than `GLCORE` is real | ⬜ | Warns at configure time today |
 | SOKOL-32 | Emscripten/WebGL2 build via `CNA_SOKOL_API=GLES3` | ⬜ | Shaders already build for `glsl300es` |
 
+### Phase 7 — Closing the EasyGL feature gap (not started)
+
+Derived directly from the "Feature gap vs. EasyGL" table below: every gap item that is genuinely
+implementable (not permanently blocked by a missing sokol_gfx API, and not already covered by an
+open task above) gets its own task here.
+
+| ID | Task | Status | Notes |
+|---|---|---|---|
+| SOKOL-33 | `DualTextureEffect` (base + overlay texture multiply) | ⬜ | A new dedicated shader variant, the same shape as `lit3d.glsl`/`textured3d.glsl` -- `DualTextureEffect` is a stock XNA effect, not a user-authored one, so this does **not** need `SOKOL-28`'s general custom-shader infrastructure. Needs a second texture unit wired into `DrawColored3D`'s `GpuDrawParams` and `Pipeline3DKey`. |
+| SOKOL-34 | `EnvironmentMapEffect` (reflection cube mapping) | ⬜ | Needs a new shader variant sampling a cube map by reflection vector. Blocked on promoting `SokolTextureCubeBackend` from its current pure CPU-shadow store to a real `sg_image` (see its own doc comment: "nothing on this backend samples a cube map yet") -- this task is what would finally give that a consumer. |
+| SOKOL-35 | Skinned vertex support (`SkinnedEffect`, `BlendWeight`/`BlendIndices`) | ⬜ | A new shader variant taking a bone matrix palette uniform array plus two new vertex attributes. Closes the skinning slice of `SOKOL-22`'s "vertex elements other than Position/Color/TextureCoordinate/Normal" gap; does not need `SOKOL-28` since `SkinnedEffect` is a stock XNA effect. |
+| SOKOL-36 | Instanced draws (`GraphicsDevice.DrawInstancedPrimitives`) | ⬜ | Needs a per-instance vertex buffer bound at a second `vertex_buffer` slot with `step_func = SG_VERTEXSTEP_PER_INSTANCE`, plus an instanced variant of each existing 3D shader (colored/textured/lit) and `sg_draw`'s instance-count parameter. |
+| SOKOL-37 | `Viewport.MinDepth`/`MaxDepth` | ⬜ | `sg_apply_viewport` carries no depth-range parameter, but the GL backend's raw context is already reachable for other purposes (`SokolOcclusionQueryBackend`, `ReadBackbuffer`) -- a raw `glDepthRangef(minDepth, maxDepth)` call before each draw, GL-only like those two, is the same escape hatch. Must follow the same "never leave a pending GL error" discipline `SokolOcclusionQueryBackend`'s doc comment establishes. |
+| SOKOL-38 | `RenderTarget2D`/`RenderTargetCube` direct CPU readback (`GetData()`) | ⬜ | sokol_gfx exposes `sg_gl_query_image_info(sg_image)` (`sokol_gfx.h`, GL-only), which returns the raw GL texture handle backing an image. `GetData()` can attach that handle to a throwaway GL FBO and `glReadPixels()` it, the same shape `ReadBackbuffer()` already uses for the default framebuffer -- no sokol_gfx-level read-back API is needed. Closes this half of `SOKOL-26`. |
+| SOKOL-39 | `RenderTarget2D`/`RenderTargetCube` mip-mapped rendering (`mipMap=true`) | ⬜ | sokol_gfx already supports rendering into a specific mip level of an image via `sg_view_desc.color_attachment.mip_level` (used internally for regular texture mips); a render target would need `num_mipmaps > 1` on its colour image and one attachment view per mip level, generated (or left ungenerated, matching FNA's own "caller must render into every level explicitly") the same way `Texture2D`'s existing mip storage works. Closes the other half of `SOKOL-26`. |
+
+`SOKOL-22` (remaining vertex declaration elements) and `SOKOL-26`'s MRT item both stay blocked on
+`SOKOL-28` (custom `Effect` support) as noted in the gap table -- no new task is added for them
+here since a stock-effect-only implementation has nothing to consume multiple colour attachments or
+arbitrary vertex usages with.
+
 ---
 
 ## Feature gap vs. EasyGL
@@ -205,15 +226,15 @@ does not, as of the state above:
 |---|---|---|---|
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / arbitrary `ShaderEffect` | ✅ real GLSL compilation at runtime | ⬜ `CreateEffectBackend` returns null | `SOKOL-28`: no runtime shader-compilation path or shdc-at-build-time contract exists yet. Far and away the largest remaining gap — it is also what blocks MRT and arbitrary vertex declarations below from having any consumer. |
 | `RasterizerState.FillMode = WireFrame` | ✅ CPU-side triangle-to-`GL_LINES` re-expansion at draw time | ⬜ accepted and ignored | **Permanent**: sokol_gfx exposes no polygon fill-mode API at all, unlike raw GL. `SOKOL-23`. |
-| Vertex elements other than Position/Color/TextureCoordinate/Normal at usage index 0 (BlendWeight/BlendIndices for skinning, Tangent/Binormal for normal mapping, PBR inputs) | ✅ (skinned, normal-mapped, PBR stock effect shaders) | ⬜ ignored by the colored-3D pipeline | `SOKOL-22`: needs new shader variants that don't exist for this backend; also has no consumer without `SOKOL-28`. |
-| Dual-texture, environment-mapped, skinned or PBR 3D shading (`DualTextureEffect`, `EnvironmentMapEffect`, skinned `BasicEffect`) | ✅ | ⬜ throws, naming the unsupported combination | Phase 5 — same shader-variant gap as above. |
-| Instanced draws | ✅ | ⬜ throws | Phase 5. |
+| Vertex elements other than Position/Color/TextureCoordinate/Normal at usage index 0 (BlendWeight/BlendIndices for skinning, Tangent/Binormal for normal mapping, PBR inputs) | ✅ (skinned, normal-mapped, PBR stock effect shaders) | ⬜ ignored by the colored-3D pipeline | `SOKOL-22`, `SOKOL-35` closes the skinning slice specifically; normal-mapping/PBR still need new shader variants with no consumer without `SOKOL-28`. |
+| Dual-texture, environment-mapped, skinned or PBR 3D shading (`DualTextureEffect`, `EnvironmentMapEffect`, skinned `BasicEffect`) | ✅ | ⬜ throws, naming the unsupported combination | `SOKOL-33`/`SOKOL-34`/`SOKOL-35` (PBR excepted -- no CNA backend has PBR yet, out of scope here). |
+| Instanced draws | ✅ | ⬜ throws | `SOKOL-36`. |
 | MRT (`SetRenderTargets` with more than one binding) | ✅ real multiple colour attachments | ⬜ throws `NotYetImplemented` | `SOKOL-26` — blocked on `SOKOL-28`: no stock shader writes more than one colour output, so MRT has no consumer to verify against yet. |
-| `RenderTarget2D`/`RenderTargetCube` mip-mapped (`mipMap=true`) | ✅ | ⬜ throws `NotYetImplemented` | `SOKOL-26`. |
-| `RenderTarget2D`/`RenderTargetCube` direct CPU readback (`GetData()`) | ✅ | ⬜ throws `System::NotSupportedException` | `SOKOL-26` — sampling the target as a texture, or reading the backbuffer after drawing it there, both still work. |
+| `RenderTarget2D`/`RenderTargetCube` mip-mapped (`mipMap=true`) | ✅ | ⬜ throws `NotYetImplemented` | `SOKOL-26`/`SOKOL-39`. |
+| `RenderTarget2D`/`RenderTargetCube` direct CPU readback (`GetData()`) | ✅ | ⬜ throws `System::NotSupportedException` | `SOKOL-26`/`SOKOL-38` — sampling the target as a texture, or reading the backbuffer after drawing it there, both still work. |
 | `RenderTargetCube` MSAA | ✅ six real multisample renderbuffers, one per face | ⬜ `multiSampleCount` silently clamped to 1 | **Permanent, not "not implemented yet"**: sokol_gfx's own validation layer hard-rejects any `SG_IMAGETYPE_CUBE` image with `sample_count > 1` (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed empirically via a real `[sg][panic]` abort while prototyping the same layout `RenderTarget2D` MSAA uses successfully. `SOKOL-26`, closed as a permanent gap. |
 | `BlendState.MultiSampleMask` | ✅ | ⬜ ignored | **No upstream API**: sokol_gfx exposes alpha-to-coverage only, no per-sample coverage mask. |
-| `Viewport.MinDepth`/`MaxDepth` | ✅ | ⬜ ignored | `sg_apply_viewport` carries no depth range. `SOKOL-21`. |
+| `Viewport.MinDepth`/`MaxDepth` | ✅ | ⬜ ignored | `sg_apply_viewport` carries no depth range. `SOKOL-37`. |
 | Cheaper `VertexBuffer`/`IndexBuffer` re-upload than recreate-per-`SetData` | ✅ | ⬜ every `SetData` recreates the GPU resource | `SOKOL-24` — a pure, unmeasured perf optimisation, deliberately deprioritised. |
 | Non-GL native context (`D3D11`/Metal/WebGPU dispatch inside sokol_gfx itself) | N/A (EasyGL is GL-only by design) | ⬜ configure warns, construction throws for any `CNA_SOKOL_API` other than `GLCORE` | `SOKOL-31`. |
 | Verified on real discrete-GPU hardware | ✅ | ⬜ only verified under Mesa llvmpipe (Xvfb) so far | `SOKOL-30` — infeasible in this sandbox, no discrete GPU available. |
