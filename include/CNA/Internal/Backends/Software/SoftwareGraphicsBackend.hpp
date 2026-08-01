@@ -24,10 +24,12 @@ namespace CNA::Internal::Backends::Software
         int height = 0;
         std::vector<std::uint8_t> color;  ///< RGBA8, width*height*4 bytes.
         std::vector<float> depthBuffer;   ///< width*height floats, 0..1.
+        std::vector<std::uint8_t> stencilBuffer; ///< 8-bit stencil, width*height bytes.
 
         void Resize(int w, int h);
         void ClearColor(float r, float g, float b, float a);
         void ClearDepthValue(float depthValue);
+        void ClearStencilValue(int stencilValue);
     };
 
     class SoftwareVertexBufferBackend final : public IVertexBufferBackend
@@ -598,6 +600,7 @@ namespace CNA::Internal::Backends::Software
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
+        void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
@@ -692,6 +695,14 @@ namespace CNA::Internal::Backends::Software
         /// the unit convention.
         [[nodiscard]] float GetDepthBias() const { return depthBias_; }
         [[nodiscard]] float GetSlopeScaleDepthBias() const { return slopeScaleDepthBias_; }
+        [[nodiscard]] bool IsStencilTestEnabled() const { return stencilTestEnabled_; }
+        [[nodiscard]] int GetStencilCompareFunction() const { return stencilCompareFunction_; }
+        [[nodiscard]] int GetStencilPassOperation() const { return stencilPassOperation_; }
+        [[nodiscard]] int GetStencilFailOperation() const { return stencilFailOperation_; }
+        [[nodiscard]] int GetStencilDepthFailOperation() const { return stencilDepthFailOperation_; }
+        [[nodiscard]] int GetStencilReadMask() const { return stencilReadMask_; }
+        [[nodiscard]] int GetStencilWriteMask() const { return stencilWriteMask_; }
+        [[nodiscard]] int GetReferenceStencil() const { return referenceStencil_; }
 
         /// REMED-GFX-073: the active GraphicsDevice.Viewport rectangle in pixels of the currently
         /// bound target. When no custom viewport has been set (SetViewport never called), the full
@@ -801,6 +812,17 @@ namespace CNA::Internal::Backends::Software
         /// via ComputeDepthBiasOffset (see the .cpp), matching the GPU backends' polygon-offset contract.
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
+
+        // 8-bit stencil state, captured by the GDI 2D masking path and stored here beside the
+        // shared CPU depth state. The Software backend keeps its established default of disabled.
+        bool stencilTestEnabled_ = false;
+        int stencilCompareFunction_ = 0; // CompareFunction::Always
+        int stencilPassOperation_ = 0; // StencilOperation::Keep
+        int stencilFailOperation_ = 0;
+        int stencilDepthFailOperation_ = 0;
+        int stencilReadMask_ = 0xFF;
+        int stencilWriteMask_ = 0xFF;
+        int referenceStencil_ = 0;
 
         /// REMED-GFX-073: current GraphicsDevice.Viewport, stored by SetViewport() and consumed by
         /// the SpriteBatch path (GetActiveViewport()). GraphicsDevice pushes this on every viewport

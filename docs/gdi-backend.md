@@ -21,13 +21,19 @@ create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
   clamps each result to `[0,1]`, then uses the ordinary `BlendState`. `SetGrayscale()` selects
   Rec.709 luma and preserves alpha. Its cost is one 4×4 transform per covered sprite pixel
   (16 multiplies, 16 additions and 4 clamps), with no intermediate render target or allocation.
-- Not supported: vertex/index buffers, 3D draw calls, depth/stencil, MSAA, cube/3D textures,
+- Not supported: vertex/index buffers, 3D draw calls, depth buffers, MSAA, cube/3D textures,
   occlusion queries and arbitrary custom effects. `SupportsCapability()` returns `false` and
   direct 3D API calls throw rather than silently rendering through the inherited CPU 3D code.
-- The shared Software core has an internal 3D depth buffer, but GDI forcibly disables its
-  depth/stencil state on every application. A `DepthStencilState` therefore cannot change
-  SpriteBatch's ordinary submission order; this avoids exposing an incomplete, accidental 2D
-  depth feature while `DepthStencilBuffer` remains unsupported.
+- GDI provides a separate, real 8-bit CPU stencil plane for SpriteBatch 2D masks. `ClearStencil`
+  and `ClearColorAndStencil` work; all `StencilOperation` values, compare/read masks, write masks
+  and the clockwise stencil state work. `TwoSidedStencilMode` and
+  `StencilDepthBufferFail` have no 2D meaning because GDI always disables depth and has no front/
+  back-facing 3D primitives. `DepthStencilBuffer` deliberately remains unsupported: that
+  capability means a complete depth+stencil attachment, not this stencil-only clipping feature.
+- The shared Software core has an internal 3D depth buffer, but GDI forcibly disables only its
+  depth state on every application. A `DepthStencilState` therefore cannot change SpriteBatch's
+  ordinary submission order, while its independent stencil fields can still clip/mask a later 2D
+  draw.
 - A custom `ShaderEffect` is deliberately invalid on GDI (`CreateEffectBackend()` returns null).
   GDI does not accept shader source or uniforms and then ignore them. `ColorMatrixEffect` is the
   sole fixed non-shader exception; every other custom `SpriteBatch` effect is rejected.

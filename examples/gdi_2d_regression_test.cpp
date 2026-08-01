@@ -223,6 +223,83 @@ namespace
              /*Clamp*/ 1, /*Clamp*/ 1, /*layerDepth*/ 0.75f);
         ok &= ExpectPixel("GDI ignores 2D depth state", ReadPixel(backend, 2, 2), blue);
 
+        // GDI-026: the GDI path deliberately has no depth buffer, but it owns a real independent
+        // 8-bit stencil plane for 2D clipping.  First replace stencil with 1 inside a 2x2 mask,
+        // then clear only colour and use Equal(1) to reveal the blue sprite through that mask.
+        backend.ClearStencil(0);
+        backend.ApplyDepthStencilState(
+            /*depthEnable*/ false, /*depthWriteEnable*/ false, /*LessEqual*/ 3,
+            /*stencilEnable*/ true, /*Always*/ 0, /*Replace*/ 2, /*Keep*/ 0, /*Keep*/ 0,
+            /*readMask*/ 0xFF, /*writeMask*/ 0xFF, /*reference*/ 1,
+            /*twoSided*/ false, 0, 0, 0, 0);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        Draw(backend, *atlas, Rectangle(2, 2, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f); // must preserve the stencil mask
+        backend.ApplyDepthStencilState(
+            /*depthEnable*/ false, /*depthWriteEnable*/ false, /*LessEqual*/ 3,
+            /*stencilEnable*/ true, /*Equal*/ 4, /*Keep*/ 0, /*Keep*/ 0, /*Keep*/ 0,
+            /*readMask*/ 0xFF, /*writeMask*/ 0xFF, /*reference*/ 1,
+            /*twoSided*/ false, 0, 0, 0, 0);
+        Draw(backend, *atlas, Rectangle(1, 1, 4, 4), Rectangle(0, 1, 1, 1), Color::White);
+        ok &= ExpectPixel("GDI stencil mask accepts matching pixel", ReadPixel(backend, 2, 2), blue);
+        ok &= ExpectPixel("GDI stencil mask rejects outside pixel", ReadPixel(backend, 1, 1), black);
+        backend.ClearStencil(0);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        Draw(backend, *atlas, Rectangle(2, 2, 1, 1), Rectangle(0, 1, 1, 1), Color::White);
+        ok &= ExpectPixel("GDI ClearStencil clears the 2D mask", ReadPixel(backend, 2, 2), black);
+
+        // Exercise every reachable StencilOperation rather than only the Replace/Keep pair the
+        // clipping example needs.  The test makes the resulting stencil value visible by clearing
+        // only colour, comparing it with Equal, then drawing blue.  GDI intentionally disables
+        // depth, so StencilDepthBufferFail has no reachable 2D fragment path (the depth-order
+        // assertion above proves that boundary); all pass and stencil-fail operations are real.
+        const auto expectStencilPassOperation = [&](const char* label, int initial, int operation,
+                                                    int operationReference, int compareReference,
+                                                    int writeMask = 0xFF, int readMask = 0xFF) {
+            backend.ClearStencil(initial);
+            backend.ApplyDepthStencilState(
+                false, false, /*LessEqual*/ 3, true, /*Always*/ 0, operation,
+                /*fail Keep*/ 0, /*depth-fail Keep*/ 0, 0xFF, writeMask,
+                operationReference, false, 0, 0, 0, 0);
+            Draw(backend, *atlas, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+            backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+            backend.ApplyDepthStencilState(
+                false, false, /*LessEqual*/ 3, true, /*Equal*/ 4, /*Keep*/ 0,
+                /*fail Keep*/ 0, /*depth-fail Keep*/ 0, readMask, 0xFF,
+                compareReference, false, 0, 0, 0, 0);
+            Draw(backend, *atlas, Rectangle(0, 0, 1, 1), Rectangle(0, 1, 1, 1), Color::White);
+            ok &= ExpectPixel(label, ReadPixel(backend, 0, 0), blue);
+        };
+        expectStencilPassOperation("GDI stencil Keep", 0x31, /*Keep*/ 0, 0x80, 0x31);
+        expectStencilPassOperation("GDI stencil Zero", 0x31, /*Zero*/ 1, 0x80, 0);
+        expectStencilPassOperation("GDI stencil Replace", 0, /*Replace*/ 2, 0x5A, 0x5A);
+        expectStencilPassOperation("GDI stencil Increment wraps", 0xFF, /*Increment*/ 3, 0, 0);
+        expectStencilPassOperation("GDI stencil Decrement wraps", 0, /*Decrement*/ 4, 0, 0xFF);
+        expectStencilPassOperation("GDI stencil IncrementSaturation", 0xFF,
+                                   /*IncrementSaturation*/ 5, 0, 0xFF);
+        expectStencilPassOperation("GDI stencil DecrementSaturation", 0,
+                                   /*DecrementSaturation*/ 6, 0, 0);
+        expectStencilPassOperation("GDI stencil Invert", 0x55, /*Invert*/ 7, 0, 0xAA);
+        expectStencilPassOperation("GDI stencil write/read mask", 0xF0, /*Replace*/ 2,
+                                   0x0A, /*compare low nibble*/ 0x0A, /*write*/ 0x0F,
+                                   /*read*/ 0x0F);
+        backend.ClearStencil(0);
+        backend.ApplyDepthStencilState(
+            false, false, /*LessEqual*/ 3, true, /*Never*/ 1, /*pass Keep*/ 0,
+            /*fail Replace*/ 2, /*depth-fail Keep*/ 0, 0xFF, 0xFF, /*reference*/ 7,
+            false, 0, 0, 0, 0);
+        Draw(backend, *atlas, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.ApplyDepthStencilState(
+            false, false, /*LessEqual*/ 3, true, /*Equal*/ 4, /*pass Keep*/ 0,
+            /*fail Keep*/ 0, /*depth-fail Keep*/ 0, 0xFF, 0xFF, /*reference*/ 7,
+            false, 0, 0, 0, 0);
+        Draw(backend, *atlas, Rectangle(0, 0, 1, 1), Rectangle(0, 1, 1, 1), Color::White);
+        ok &= ExpectPixel("GDI stencil fail operation", ReadPixel(backend, 0, 0), blue);
+        backend.ApplyDepthStencilState(
+            /*depthEnable*/ false, /*depthWriteEnable*/ false, /*LessEqual*/ 3,
+            /*stencilEnable*/ false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+
         // GDI's one advertised GraphicsCapability is CPU SpriteBatch wireframe. The middle of a
         // 5x5 quad is intentionally off the two triangle edges and must remain untouched, while
         // its outer corner proves edges are actually rasterized instead of merely accepting state.

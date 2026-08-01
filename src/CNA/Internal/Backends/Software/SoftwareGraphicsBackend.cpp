@@ -124,6 +124,21 @@ namespace CNA::Internal::Backends::Software
             return std::clamp(ApplyBlendFunction(function, sourceTerm, destinationTerm), 0.0f, 1.0f);
         }
 
+        /// One CPU stencil state snapshot.  The shared framebuffer stores one unsigned 8-bit
+        /// stencil value per pixel.  GDI uses this through SpriteBatch for 2D masking; retaining
+        /// it in the shared rasterizer also keeps a target switch from losing its stencil image.
+        struct RasterStencilState
+        {
+            bool testEnabled = false;
+            int compareFunction = 0; // CompareFunction::Always
+            int passOperation = 0; // StencilOperation::Keep
+            int failOperation = 0;
+            int depthFailOperation = 0;
+            std::uint8_t readMask = 0xFF;
+            std::uint8_t writeMask = 0xFF;
+            std::uint8_t reference = 0;
+        };
+
         /// REMED-GFX-030: XNA/FNA compares the incoming fragment depth (left operand) with the
         /// currently stored depth (right operand). Every public CompareFunction is mapped explicitly;
         /// an invalid ordinal is rejected instead of silently falling back to a different relation.
@@ -158,6 +173,57 @@ namespace CNA::Internal::Backends::Software
             // depth operation even if a custom state happens to retain writeEnable=true.
             if (state.testEnabled && state.writeEnabled)
                 fb.depthBuffer[pixelIndex] = depth;
+        }
+
+        bool StencilComparisonPasses(std::uint8_t reference, std::uint8_t stored,
+                                     std::uint8_t readMask, int compareFunction)
+        {
+            const int incoming = reference & readMask;
+            const int destination = stored & readMask;
+            switch (compareFunction)
+            {
+                case 0: return true;                    // Always
+                case 1: return false;                   // Never
+                case 2: return incoming <  destination; // Less
+                case 3: return incoming <= destination; // LessEqual
+                case 4: return incoming == destination; // Equal
+                case 5: return incoming >= destination; // GreaterEqual
+                case 6: return incoming >  destination; // Greater
+                case 7: return incoming != destination; // NotEqual
+                default:
+                    throw std::runtime_error(
+                        "SoftwareGraphicsBackend: unsupported stencil CompareFunction ordinal");
+            }
+        }
+
+        std::uint8_t ApplyStencilOperation(std::uint8_t stored, std::uint8_t reference,
+                                           int operation)
+        {
+            switch (operation)
+            {
+                case 0: return stored; // Keep
+                case 1: return 0; // Zero
+                case 2: return reference; // Replace
+                case 3: return static_cast<std::uint8_t>(stored + 1u); // Increment (wrap)
+                case 4: return static_cast<std::uint8_t>(stored - 1u); // Decrement (wrap)
+                case 5: return stored == 0xFF ? 0xFF : static_cast<std::uint8_t>(stored + 1u);
+                case 6: return stored == 0 ? 0 : static_cast<std::uint8_t>(stored - 1u);
+                case 7: return static_cast<std::uint8_t>(~stored); // Invert
+                default:
+                    throw std::runtime_error(
+                        "SoftwareGraphicsBackend: unsupported StencilOperation ordinal");
+            }
+        }
+
+        void WriteStencil(SoftwareFramebuffer& fb, const RasterStencilState& state,
+                          std::size_t pixelIndex, int operation)
+        {
+            const std::uint8_t oldValue = fb.stencilBuffer[pixelIndex];
+            const std::uint8_t operationValue =
+                ApplyStencilOperation(oldValue, state.reference, operation);
+            fb.stencilBuffer[pixelIndex] = static_cast<std::uint8_t>(
+                (oldValue & static_cast<std::uint8_t>(~state.writeMask)) |
+                (operationValue & state.writeMask));
         }
 
         /// One vertex in clip space (before the perspective divide), attributes NOT premultiplied
@@ -1649,6 +1715,7 @@ namespace CNA::Internal::Backends::Software
             SoftwareBlendState blendState;
             std::array<float, 4> blendFactor;
             RasterDepthState depthState; // REMED-GFX-030: per-draw test/write/function snapshot
+            RasterStencilState stencilState; // GDI-026: per-draw 8-bit stencil snapshot
             int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
             unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
             // REMED-GFX-150: the SamplerState of each bound texture slot, resolved once per draw so
@@ -1696,9 +1763,26 @@ namespace CNA::Internal::Backends::Software
             { g_samplerTrace.fragX = x; g_samplerTrace.fragY = y; }
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
+            // Stencil runs before depth and shading, matching the GPU fragment-test order.  A
+            // failed stencil test updates only StencilFail and must not reach depth or colour.
+            if (ctx.stencilState.testEnabled && !StencilComparisonPasses(
+                    ctx.stencilState.reference, fb.stencilBuffer[pixelIndex],
+                    ctx.stencilState.readMask, ctx.stencilState.compareFunction))
+            {
+                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.failOperation);
+                return;
+            }
             // REMED-GFX-030: comparison precedes shading and every color/depth write.
             if (!DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
+            {
+                if (ctx.stencilState.testEnabled)
+                    WriteStencil(fb, ctx.stencilState, pixelIndex,
+                                 ctx.stencilState.depthFailOperation);
                 return;
+            }
+
+            if (ctx.stencilState.testEnabled)
+                WriteStencil(fb, ctx.stencilState, pixelIndex, ctx.stencilState.passOperation);
 
             float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
 
@@ -1868,6 +1952,7 @@ namespace CNA::Internal::Backends::Software
         /// engine in v1), so the "lit" base color is just vertexColor*diffuseColor*texture0, the
         /// same simplification already used for the plain BasicEffect path.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+                                     const RasterStencilState& stencilState,
                                      const SoftwareBlendState& blendState,
                                      const std::array<float, 4>& blendFactor,
                                      int cullMode, float depthBias, float slopeScaleDepthBias,
@@ -1912,7 +1997,7 @@ namespace CNA::Internal::Backends::Software
                 : 1.0f;
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
                                     needUV, blendState, blendFactor,
-                                    depthState, colorWriteMask, multiSampleMask,
+                                    depthState, stencilState, colorWriteMask, multiSampleMask,
                                     sampler0, sampler1, magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
                                     !(rhoCube > 1.0f), LodFromTexelRate(rhoCube)};
@@ -2196,6 +2281,7 @@ namespace CNA::Internal::Backends::Software
         height = h;
         color.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u, 0u);
         depthBuffer.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 1.0f);
+        stencilBuffer.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h), 0u);
     }
 
     void SoftwareFramebuffer::ClearColor(float r, float g, float b, float a)
@@ -2217,6 +2303,12 @@ namespace CNA::Internal::Backends::Software
     void SoftwareFramebuffer::ClearDepthValue(float depthValue)
     {
         std::fill(depthBuffer.begin(), depthBuffer.end(), depthValue);
+    }
+
+    void SoftwareFramebuffer::ClearStencilValue(int stencilValue)
+    {
+        std::fill(stencilBuffer.begin(), stencilBuffer.end(),
+                  static_cast<std::uint8_t>(std::clamp(stencilValue, 0, 255)));
     }
 
     // ---- SoftwareVertexBufferBackend ----
@@ -2793,6 +2885,13 @@ namespace CNA::Internal::Backends::Software
         const RasterDepthState depthState{owner_.IsDepthTestEnabled(),
                                           owner_.IsDepthWriteEnabled(),
                                           owner_.GetDepthCompareFunction()};
+        const RasterStencilState stencilState{
+            owner_.IsStencilTestEnabled(), owner_.GetStencilCompareFunction(),
+            owner_.GetStencilPassOperation(), owner_.GetStencilFailOperation(),
+            owner_.GetStencilDepthFailOperation(),
+            static_cast<std::uint8_t>(owner_.GetStencilReadMask()),
+            static_cast<std::uint8_t>(owner_.GetStencilWriteMask()),
+            static_cast<std::uint8_t>(owner_.GetReferenceStencil())};
         const SoftwareBlendState blendState = owner_.GetBlendState();
         const std::array<float, 4> blendFactor = owner_.GetBlendFactor();
         const int cullMode = owner_.GetCullMode();
@@ -2833,12 +2932,12 @@ namespace CNA::Internal::Backends::Software
         // Begin always re-applies it, so it cannot leak in from a previous batch, and passing it
         // here rather than through the device slots means a sprite batch cannot leak it out either.
         const SoftwareSamplerState spriteSampler = GetSamplerState();
-        RasterizeTriangleShaded(fb, depthState, blendState, blendFactor,
+        RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
                                 owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
                                 spriteSampler, spriteSampler, wire, kEdgeAll, kEdgeV2V0);
-        RasterizeTriangleShaded(fb, depthState, blendState, blendFactor,
+        RasterizeTriangleShaded(fb, depthState, stencilState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
                                 owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
@@ -3039,7 +3138,9 @@ namespace CNA::Internal::Backends::Software
     }
 
     void SoftwareGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
-                                                         bool, int, int, int, int, int, int, int, bool,
+                                                         bool stencilEnable, int stencilFunc, int stencilPass,
+                                                         int stencilFail, int stencilDepthFail, int stencilMask,
+                                                         int stencilWriteMask, int referenceStencil, bool,
                                                          int, int, int, int)
     {
         // REMED-GFX-030: every public CompareFunction has ordinal 0..7. Reject an invalid value at
@@ -3050,6 +3151,30 @@ namespace CNA::Internal::Backends::Software
         depthTestEnabled_ = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;
         depthCompareFunction_ = depthFunc;
+        if (stencilFunc < 0 || stencilFunc > 7)
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::ApplyDepthStencilState: unsupported stencil CompareFunction ordinal");
+        const auto validateStencilOperation = [](int operation) {
+            if (operation < 0 || operation > 7)
+                throw std::runtime_error(
+                    "SoftwareGraphicsBackend::ApplyDepthStencilState: unsupported StencilOperation ordinal");
+        };
+        validateStencilOperation(stencilPass);
+        validateStencilOperation(stencilFail);
+        validateStencilOperation(stencilDepthFail);
+        stencilTestEnabled_ = stencilEnable;
+        stencilCompareFunction_ = stencilFunc;
+        stencilPassOperation_ = stencilPass;
+        stencilFailOperation_ = stencilFail;
+        stencilDepthFailOperation_ = stencilDepthFail;
+        stencilReadMask_ = stencilMask & 0xFF;
+        stencilWriteMask_ = stencilWriteMask & 0xFF;
+        referenceStencil_ = referenceStencil & 0xFF;
+    }
+
+    void SoftwareGraphicsBackend::SetReferenceStencil(int value)
+    {
+        referenceStencil_ = value & 0xFF;
     }
 
     void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
@@ -3173,12 +3298,23 @@ namespace CNA::Internal::Backends::Software
     }
 
     void SoftwareGraphicsBackend::ClearDepth(float depth) { CurrentFramebuffer().ClearDepthValue(depth); }
-    void SoftwareGraphicsBackend::ClearStencil(int) {}
-    void SoftwareGraphicsBackend::ClearDepthAndStencil(float depth, int) { CurrentFramebuffer().ClearDepthValue(depth); }
-    void SoftwareGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int)
-    { CurrentFramebuffer().ClearColor(r, g, b, a); }
-    void SoftwareGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int)
-    { ClearColorAndDepth(r, g, b, a, depth); }
+    void SoftwareGraphicsBackend::ClearStencil(int stencil)
+    { CurrentFramebuffer().ClearStencilValue(stencil); }
+    void SoftwareGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
+    {
+        CurrentFramebuffer().ClearDepthValue(depth);
+        CurrentFramebuffer().ClearStencilValue(stencil);
+    }
+    void SoftwareGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        CurrentFramebuffer().ClearColor(r, g, b, a);
+        CurrentFramebuffer().ClearStencilValue(stencil);
+    }
+    void SoftwareGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
+    {
+        ClearColorAndDepth(r, g, b, a, depth);
+        CurrentFramebuffer().ClearStencilValue(stencil);
+    }
 
     void SoftwareGraphicsBackend::SetDepthTestEnabled(bool enabled) { depthTestEnabled_ = enabled; }
     void SoftwareGraphicsBackend::SetBlendEnabled(bool) {}
@@ -3503,13 +3639,15 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
+            RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                                    cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
                                     GetSamplerState(0), GetSamplerState(1), wire, mask0,
                                     clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
+                RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                                        cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
                                         GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
@@ -3635,13 +3773,15 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
+            RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                                    cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
                                     GetSamplerState(0), GetSamplerState(1), wire, mask0,
                                     clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
+                RasterizeTriangleShaded(fb, depthState, RasterStencilState{}, blendState, blendFactor,
+                                        cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
                                         GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);

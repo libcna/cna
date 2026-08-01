@@ -463,17 +463,23 @@ namespace CNA::Internal::Backends::Gdi
         return 0;
     }
 
-    void GdiGraphicsBackend::ApplyDepthStencilState(bool, bool, int, bool, int, int, int, int,
-                                                     int, int, int, bool, int, int, int, int)
+    void GdiGraphicsBackend::ApplyDepthStencilState(bool, bool, int, bool stencilEnable,
+                                                     int stencilFunc, int stencilPass,
+                                                     int stencilFail, int stencilDepthFail,
+                                                     int stencilMask, int stencilWriteMask,
+                                                     int referenceStencil, bool /*twoSidedStencilMode*/,
+                                                     int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
+                                                     int /*ccwStencilFail*/,
+                                                     int /*ccwStencilDepthFail*/)
     {
-        // The Software base also powers 3D backends and owns an internal depth buffer. GDI is
-        // intentionally 2D-only, so let no inherited depth state leak into SpriteBatch ordering:
-        // a later 2D draw must remain visible regardless of layerDepth. This no-depth state must
-        // still be installed rather than merely ignoring the call, because GraphicsDevice applies
-        // DepthStencilState::Default while it constructs every backend.
+        // GDI has no 3D depth contract: retaining a caller's depth state here would change
+        // SpriteBatch's documented draw ordering.  Its separate 8-bit CPU stencil plane is real,
+        // however, and is useful for ordinary 2D clipping/masking.  Front/back face selection has
+        // no meaning for a 2D quad, so the clockwise state is deliberately the one applied.
         Software::SoftwareGraphicsBackend::ApplyDepthStencilState(
             /*depthEnable*/ false, /*depthWriteEnable*/ false, /*LessEqual*/ 3,
-            /*stencilEnable*/ false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            stencilEnable, stencilFunc, stencilPass, stencilFail, stencilDepthFail,
+            stencilMask, stencilWriteMask, referenceStencil, false, 0, 0, 0, 0);
     }
 
     bool GdiGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
@@ -592,9 +598,9 @@ namespace CNA::Internal::Backends::Gdi
         int /*multiSampleCount*/)
     {
         // A 2D CPU surface is a useful SpriteBatch target. It can generate an RGBA8 mip chain on
-        // unbind, but GDI still has no depth/stencil or MSAA resource. This explicit construction
-        // prevents the reusable Software target from reporting a requested depth attachment as if
-        // GDI had one.
+        // unbind and owns the shared CPU stencil plane, but GDI still has no depth attachment or
+        // MSAA resource. This explicit construction prevents the reusable Software target from
+        // reporting a requested depth attachment as if GDI had one.
         return std::make_unique<Software::SoftwareRenderTargetBackend>(
             width, height, 0, mipMap, 0, false);
     }
@@ -622,20 +628,28 @@ namespace CNA::Internal::Backends::Gdi
 
     bool GdiGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        // Wireframe SpriteBatch quads are genuinely rasterized by the shared CPU 2D path. It is
-        // the one non-3D capability from this enum that GDI implements end-to-end; every other
-        // entry still requires a resource or programmable/3D feature deliberately outside this
-        // backend's compatibility-2D contract.
+        // Wireframe SpriteBatch quads are genuinely rasterized by the shared CPU 2D path.  GDI
+        // also owns a stencil-only plane for 2D masks, but GraphicsCapability::DepthStencilBuffer
+        // means a complete depth+stencil attachment and remains false because GDI has no depth.
         return capability == CNA::GraphicsCapability::WireFrame;
     }
 
     void GdiGraphicsBackend::ClearColorAndDepth(float, float, float, float, float)
     { ThrowNo3D("ClearColorAndDepth"); }
     void GdiGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
-    void GdiGraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
+    void GdiGraphicsBackend::ClearStencil(int stencil)
+    {
+        SynchronizeBackbufferSize();
+        Software::SoftwareGraphicsBackend::ClearStencil(stencil);
+    }
     void GdiGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
-    void GdiGraphicsBackend::ClearColorAndStencil(float, float, float, float, int)
-    { ThrowNo3D("ClearColorAndStencil"); }
+    void GdiGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        SynchronizeBackbufferSize();
+        Software::SoftwareGraphicsBackend::ClearColorAndStencil(r, g, b, a, stencil);
+        if (renderingToBackbuffer_)
+            MarkBackbufferFullyDirty();
+    }
     void GdiGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int)
     { ThrowNo3D("ClearColorDepthAndStencil"); }
     void GdiGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D("SetDepthTestEnabled"); }
