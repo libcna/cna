@@ -3,8 +3,8 @@
 // supplied glide3x.dll (normally dgVoodoo2) and a working Windows display path.
 //
 // It proves the public CNA path issues an actual Glide clear, uploads an ARGB4444 texture, emits
-// the sprite as two Glide triangles, submits a fixed-function colored 3D triangle, and reads the
-// physical Glide backbuffer through grLfbReadRegion.
+// the sprite as two Glide triangles, submits clipped colored and perspective-textured 3D triangles,
+// and reads the physical Glide backbuffer through grLfbReadRegion.
 
 #include "CNA/GraphicsBackendType.hpp"
 #include "CNA/GraphicsCapability.hpp"
@@ -111,13 +111,56 @@ namespace
                       triangleProbe.getBProperty() < 40,
                   "VertexPositionColor reaches native Glide Gouraud triangle rasterization");
 
+            // The upper vertex lies beyond XNA's near plane. The CPU clipper must split the
+            // triangle before Glide sees it rather than dropping the whole primitive or emitting
+            // a non-projectable vertex to the FIFO.
+            const std::array<Vertex, 3> crossingTriangle = {{
+                {-0.75f, -0.75f,  0.25f, 0, 0, 255, 255},
+                { 0.75f, -0.75f,  0.25f, 0, 0, 255, 255},
+                { 0.00f,  0.75f, -0.25f, 0, 0, 255, 255},
+            }};
+            auto clippingBuffer = backend.CreateVertexBuffer(static_cast<int>(crossingTriangle.size()));
+            clippingBuffer->SetData(crossingTriangle.data(), static_cast<int>(crossingTriangle.size()), sizeof(Vertex));
+            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            backend.DrawColoredPrimitives(*clippingBuffer, Matrix::getIdentityProperty(),
+                                          Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                          PrimitiveType::TriangleList, 1);
+            Color clippedProbe(0, 0, 0, 0);
+            const Rectangle clippedProbeRegion(32, 40, 1, 1);
+            device.GetBackBufferData(&clippedProbeRegion, &clippedProbe, 0, 1);
+            Check(clippedProbe.getBProperty() > 200 && clippedProbe.getRProperty() < 40,
+                  "near-plane-crossing triangle is clipped then rasterized through Glide");
+
+            using TexturedVertex = CNA::Internal::Graphics::PositionTextureStream;
+            const std::array<TexturedVertex, 3> texturedTriangle = {{
+                {-0.75f, -0.75f, 0.25f, 0.0f, 1.0f},
+                { 0.75f, -0.75f, 0.25f, 1.0f, 1.0f},
+                { 0.00f,  0.75f, 0.25f, 0.5f, 0.0f},
+            }};
+            auto texturedBuffer = backend.CreateVertexBuffer(static_cast<int>(texturedTriangle.size()));
+            texturedBuffer->SetData(texturedTriangle.data(), static_cast<int>(texturedTriangle.size()), sizeof(TexturedVertex));
+            CNA::Internal::Backends::GpuDrawParams texturedParams{};
+            texturedParams.texture0 = &texture_->GetBackend();
+            texturedParams.textureEnabled = true;
+            texturedParams.vertexColorEnabled = false;
+            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            backend.DrawPrimitivesEx(*texturedBuffer, Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     PrimitiveType::TriangleList, 1, texturedParams);
+            Color texturedProbe(0, 0, 0, 0);
+            const Rectangle texturedProbeRegion(32, 32, 1, 1);
+            device.GetBackBufferData(&texturedProbeRegion, &texturedProbe, 0, 1);
+            Check(texturedProbe.getRProperty() > 200 && texturedProbe.getGProperty() < 40 &&
+                      texturedProbe.getBProperty() < 40,
+                  "VertexPositionTexture uses TMU0 perspective texture submission");
+
             std::printf("=== %d/%d PASS ===\n", passes_, kChecks);
             result_ = passes_ == kChecks ? 0 : 1;
             Exit();
         }
 
     private:
-        static constexpr int kChecks = 6;
+        static constexpr int kChecks = 8;
 
         void Check(bool condition, const char* label)
         {

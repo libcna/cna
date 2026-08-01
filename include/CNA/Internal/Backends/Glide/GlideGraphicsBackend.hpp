@@ -16,13 +16,13 @@ namespace CNA::Internal::Backends::Glide
      * never falls back to another graphics API: every Clear, texture upload, sprite draw and
      * present in this backend is a Glide call.  Besides 2D-over-Glide (`SpriteBatch` quads
      * submitted as two `grDrawTriangle` calls), the native fixed-function 3D path supports
-     * transformed `VertexPositionColor` triangle lists and strips with a hardware Z buffer.
+     * clipped fixed-function triangle lists and strips with a hardware Z buffer.
      *
-     * Historical Glide constraints are preserved intentionally: level-zero textures are converted
-     * to ARGB4444, downsampled as needed, and padded to a power of two within a 256-pixel axis. The display
-     * context is selected from Glide's 640x480 or 800x600 double-buffered modes; the game virtual resolution
-     * must fit inside it. Render targets, programmable effects, volume/cube textures, lighting and textured
-     * 3D vertex formats remain intentionally unsupported.
+     * Historical Glide constraints are preserved intentionally: textures are converted to ARGB4444,
+     * padded to a power of two and split into hardware-sized tiles when needed. The display context
+     * is selected from a Glide-reported double-buffered mode; the game virtual resolution must fit
+     * inside it. Render targets, programmable effects, volume/cube textures, stencil and GPU skinning
+     * remain intentionally unsupported.
      */
     class GlideGraphicsBackend final : public IGraphicsBackend
     {
@@ -55,10 +55,25 @@ namespace CNA::Internal::Backends::Glide
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                    int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+        void ApplyRasterizerState(int cullMode, int fillMode,
+                                  bool scissorTestEnable,
+                                  float depthBias = 0.0f,
+                                  float slopeScaleDepthBias = 0.0f) override;
+        void ApplySamplerState(int slot, int filter,
+                               int addressU, int addressV,
+                               int maxAnisotropy) override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return true; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
-        [[nodiscard]] int GetMaxTextureDimension() const override { return 256; }
+        [[nodiscard]] int GetMaxTextureDimension() const override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
@@ -98,14 +113,15 @@ namespace CNA::Internal::Backends::Glide
                         const Rectangle& sourceRectangle, const Color& color, float rotation,
                         const Vector2& origin, SpriteEffects effects, const Matrix& transform,
                         int textureFilter, int addressU, int addressV);
-        void DrawColoredPrimitiveRange(const IVertexBufferBackend& vb,
+        void DrawPrimitiveRange(const IVertexBufferBackend& vb,
+                                const Matrix& world, const Matrix& view, const Matrix& projection,
+                                PrimitiveType primitive, int primitiveCount, int vertexStart,
+                                const GpuDrawParams& params);
+        void DrawIndexedPrimitiveRange(const IVertexBufferBackend& vb,
+                                       const IIndexBufferBackend& ib,
                                        const Matrix& world, const Matrix& view, const Matrix& projection,
-                                       PrimitiveType primitive, int primitiveCount, int vertexStart);
-        void DrawIndexedColoredPrimitiveRange(const IVertexBufferBackend& vb,
-                                              const IIndexBufferBackend& ib,
-                                              const Matrix& world, const Matrix& view, const Matrix& projection,
-                                              PrimitiveType primitive, int primitiveCount,
-                                              int startIndex, int baseVertex);
+                                       PrimitiveType primitive, int primitiveCount,
+                                       int startIndex, int baseVertex, const GpuDrawParams& params);
 
         friend class GlideTextureBackend;
         friend class GlideSpriteBatchBackend;

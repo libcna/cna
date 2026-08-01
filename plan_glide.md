@@ -19,22 +19,43 @@ renderer.
   `world * view * projection` transforms.
 - [x] Native 16-bit Z buffer, depth clear/test/write state, source/destination alpha blending, and
   a manual dgVoodoo smoke target.
+- [x] Homogeneous CPU frustum clipping before the perspective divide. Triangles crossing a side,
+  near, far, or eye plane are split into a clipped fan and then emitted as real `grDrawTriangle`
+  calls; invalid non-finite input is rejected rather than sent to Glide's FIFO.
+- [x] Textured 3D `VertexPositionTexture` and `VertexPositionColorTexture` through TMU0, with
+  Glide `s/w`, `t/w`, and `1/w`. Indexed versions expand the index stream before the same real
+  triangle submission.
+- [x] The documented fixed-function `BasicEffect` subset: unlit diffuse/vertex-colour, or
+  `VertexPositionNormalTexture` directional **per-vertex** diffuse lighting with ambient and
+  emissive terms. It deliberately rejects specular and `PreferPerPixelLighting`.
+- [x] AlphaTestEffect's discrete alpha-test encoding maps to `grAlphaTestFunction` and
+  `grAlphaTestReferenceValue`; cull and depth-compare states map to their native Glide equivalents.
+- [x] Logical textures are tiled to the runtime-reported `GR_MAX_TEXTURE_SIZE`, each tile is padded
+  to Glide's reported aspect limit, and each gets a complete generated mip chain before
+  `grTexDownloadMipMap`.
+- [x] Startup queries `grQueryResolutions` for the actually usable double-buffered depth modes and
+  `grGet` for `GR_MAX_TEXTURE_SIZE`, `GR_MAX_TEXTURE_ASPECT_RATIO`, and `GR_NUM_TMU`. It selects
+  the smallest listed historical Glide mode that contains CNA's virtual framebuffer.
 
-## Next implementable work
+## Fixed-function fidelity notes
 
-- [ ] CPU homogeneous frustum clipping for colored triangles. Current code safely rejects a
-  triangle with non-positive clip W or a vertex outside the near/far Z interval; it does not split
-  crossing triangles.
-- [ ] Textured 3D `VertexPositionTexture` and `VertexPositionColorTexture` through TMU0, including
-  perspective-correct `s/w`, `t/w`, and `1/w`. This remains compatible with real Glide hardware.
-- [ ] Fixed-function per-vertex fog and the subset of `BasicEffect` that maps exactly to unlit or
-  vertex-lit Voodoo combiners. Document every approximation before enabling it.
-- [ ] Native Glide culling, alpha test, dither and depth-compare state mapping once CNA exposes
-  the required state information to this backend.
-- [ ] Texture tiling and true mip chains so images beyond a single 256-pixel Glide texture do not
-  need the current downsample-to-fit policy.
-- [ ] Query the emulator's supported resolution/TMU limits at startup instead of the conservative
-  640x480/800x600 and 256-pixel defaults.
+- Fog and BasicEffect vertex lighting are evaluated on the CPU and submitted as Glide iterated RGB.
+  This exactly preserves CNA's supplied per-vertex fog factor and directional diffuse calculation,
+  but it is not Glide's depth-table fog: a Glide fog table cannot represent CNA's arbitrary
+  `fogVector` semantic. The final rasterization, texture sampling, depth test, alpha test and blend
+  remain real Glide operations.
+- Generated mips are a 2×2 box average in ARGB4444 space. That is faithful to the historical
+  texture format and hardware mip selection, but differs slightly from an RGBA8 source-space mip
+  generator because the source has already been quantized to four bits per channel.
+- A tiled 3D image requires `SamplerState.Clamp`. `SpriteBatch` already splits its bounded source
+  rectangle per tile; transparent Wrap/Mirror across a 3D tile seam would require a second CPU UV
+  unwrap pass and is explicitly rejected rather than sampled from a wrong tile.
+- CNA exposes no dither setting in `RasterizerState` or `GpuDrawParams`. The backend therefore
+  keeps the emulator's native Glide dither default and does not invent a state mapping. When CNA
+  adds a dither control, it can map directly to `grDitherMode` (`Disable`, `2x2`, `4x4`).
+- The mode selector recognizes the historical `GR_RESOLUTION_*` list returned by Glide 3.x. A
+  vendor-specific extended resolution token is rejected until its ABI and dimensions are documented;
+  this avoids treating an emulator extension as historical Glide.
 
 ## Explicitly unsupported by this backend
 

@@ -46,8 +46,8 @@ on it) rather than assuming either way.
   2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.
 - **[`glide-backend.md`](glide-backend.md)** — build/runtime setup and current native
-  fixed-function 2D plus constrained color-vertex 3D scope of the Windows-only historical Glide
-  3.x backend, which dynamically loads an external emulator DLL.
+  fixed-function 2D plus constrained color/textured-vertex 3D scope of the Windows-only historical
+  Glide 3.x backend, which dynamically loads an external emulator DLL.
 - **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
   per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
