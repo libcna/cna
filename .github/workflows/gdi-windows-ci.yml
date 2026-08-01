@@ -1,0 +1,98 @@
+# GDI-057: native MSVC compiler/hidden-window correctness gate for the Windows-only GDI backend.
+# This does not replace GDI-061's visible Windows lifecycle and DPI inspection: GitHub-hosted
+# runners do not provide a representative interactive desktop/compositor environment.
+#
+# Deliberately workflow_dispatch-only. The project owner approved this one-job GDI exception to the
+# repository's manual-Windows-CI policy; it does not add a push or pull_request trigger.
+
+name: GDI Windows CI (MSVC)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  msvc-build-and-test:
+    name: GDI (native MSVC, windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # sharp-runtime is a sibling checkout consumed with add_subdirectory(../sharp-runtime).
+      # GDI does not depend on the easy-gl or meta-gl sibling repositories.
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna_graphics
+          submodules: true
+
+      - name: Checkout sharp-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Set up MSVC developer environment (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Record SDL submodule commit
+        id: sdlsha
+        run: echo "sha=$(git -C cna_graphics/third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache vendored SDL prebuilt tree
+        uses: actions/cache@v4
+        with:
+          path: cna_graphics/.sdl-prebuilt-Windows-*
+          key: sdl-prebuilt-windows-msvc-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Configure GDI (native MSVC)
+        working-directory: cna_graphics
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCNA_GRAPHICS_BACKEND=GDI \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF \
+            -DCNA_MAX_VENDORED_BUILD_JOBS=2
+
+      - name: Build CNA and focused GDI test executables
+        working-directory: cna_graphics
+        run: |
+          cmake --build build --parallel 2 --target \
+            CNA \
+            cna_test_gdi_smoke \
+            cna_test_gdi_2d_regression \
+            cna_test_gdi_colormatrix_effect \
+            cna_test_gdi_public_stencil \
+            cna_test_gdi_public_api \
+            cna_test_gdi_dirty_damage \
+            cna_test_gdi_repaint_invalidation \
+            cna_test_gdi_presentation_oracle \
+            cna_test_gdi_presentation_configuration
+
+      - name: Run focused GDI CTest suite
+        working-directory: cna_graphics
+        env:
+          CNA_GDI_DWM_FLUSH: "0"
+        run: ctest --test-dir build -L GDI --output-on-failure
+
+      - name: Upload native GDI diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdi-msvc-diagnostics
+          path: |
+            cna_graphics/build/Testing/Temporary/**
+            cna_graphics/build/CMakeFiles/CMakeConfigureLog.yaml
+          if-no-files-found: warn

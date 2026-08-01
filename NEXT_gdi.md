@@ -8,10 +8,10 @@
 
 ## Current focus
 
-- GDI-050 through GDI-056 are complete. The approved catch-up baseline is commit `48826e0b`;
-  GDI-055 adds the final public API matrix as its own follow-up task.
-- Next add the approved manual MSVC workflow from GDI-057, then continue through the safe,
-  automatable GDI roadmap in dependency order.
+- GDI-050 through GDI-057 are complete. The approved catch-up baseline is commit `48826e0b`, and
+  GDI-055's final public API matrix is commit `4c512245`.
+- Next implement honest applied presentation/resource state in GDI-058, then continue through the
+  safe, automatable GDI roadmap in dependency order.
 
 ## Completed in the current working tree
 
@@ -25,6 +25,9 @@
   sampling, 4x and rejected 2x MSAA resets, resize and backbuffer readback. Public stencil coverage
   remains in its focused companion test.
 - GDI-056: distinct native CTest cases for default, dirty and halftone presentation policies.
+- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the nine
+  focused GDI executables at `--parallel 2`, runs all eleven `GDI` CTest cases, and uploads native
+  diagnostics on failure. It intentionally does not claim the visible GDI-061 gate.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -61,6 +64,8 @@ baseline. All later tasks use one task per commit.
   `CNA_GDI_DWM_FLUSH=0`.
 - GDI-055 `cna_test_gdi_public_api`: MinGW compile/link pass and all 33 public-path assertions pass
   under Wine/Xvfb, including exact scissor, RT, 4x resolve and resized-edge pixels.
+- GDI-057 workflow: static YAML/action structure inspected locally; it cannot be executed until a
+  human manually dispatches it on GitHub. The first native MSVC result therefore remains pending.
 - Native HEADLESS/system-SDL build: `CNA` and `CnaTests` link successfully at `-j2`.
 - `GraphicsDeviceCapabilityTest.SupportsStencilBuffer`: pass under HEADLESS. The complete
   `GraphicsDeviceCapabilityTest.*` filter is 9 pass / 1 pre-existing configuration mismatch:
@@ -90,5 +95,5 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Commit the validated GDI-055 public API matrix, then implement the approved manual native-MSVC
-workflow in GDI-057.
+Commit the approved GDI-057 workflow, then begin GDI-058 with presentation-mode validation and
+tests for constructor/reset/resource properties versus actually created GDI storage.

@@ -12,8 +12,9 @@
 > The focused MinGW Release build, all nine GDI correctness executables, and all three configuration
 > variants pass under Wine. The suite includes a real memory-DC/DIBSection pixel oracle, complete
 > public-path coverage for advertised features, exact dirty-damage coverage,
-> event/failure-retention integration, and distinct default/dirty/halftone cases. Native MSVC CI and
-> the visible Windows lifecycle/DPI gate remain open, so the backend is still not a release baseline.
+> event/failure-retention integration, and distinct default/dirty/halftone cases. The first manual
+> native-MSVC workflow result and the visible Windows lifecycle/DPI gate remain open, so the backend
+> is still not a release baseline.
 >
 > **Status legend:** ✅ implemented and adequately verified for its stated scope; 🟨 implemented but
 > incompletely verified or with a provisional conclusion; 🔴 confirmed correctness defect;
@@ -111,7 +112,8 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 ColorMatrix integration, public-stencil, complete public-API, dirty-damage, repaint/failure,
 presentation-oracle, and presentation-configuration and benchmark executables. It registers eleven
 cases (eight original/focused cases plus three environment configurations) as CTests only for a
-native Windows build. No current GitHub workflow configures `CNA_GRAPHICS_BACKEND=GDI`.
+native Windows build. The manual `gdi-windows-ci.yml` workflow now configures the backend with MSVC,
+builds only CNA plus those focused tests, and runs the `GDI` CTest label.
 
 ---
 
@@ -262,11 +264,17 @@ validates channel order, row orientation, both blit paths and filters, every pre
 odd geometry, bars/cropping, coordinate edges, dirty clipping, a non-zero-Y dirty band, and injected
 failure without relying on CPU backbuffer readback.
 
-### F6 — native Windows compilation and CTest are not exercised in CI (P1)
+### F6 — native Windows compilation and CTest were not exercised in CI (P1, resolved by GDI-057)
 
 The CMake registration is suitable for native Windows, but no workflow selects GDI. The existing
 manual Windows workflow is explicitly scoped to D3D11/D3D12. This leaves MSVC compilation, native
 GDI behavior, and the registered `GDI` label unobserved.
+
+**Resolution:** a separate owner-approved, `workflow_dispatch`-only workflow uses one
+`windows-latest` MSVC/Ninja job. It checks out only the required sibling dependency, caches the
+vendored SDL build, builds CNA plus the nine focused executables at two-way parallelism, runs all
+eleven native `GDI` CTest cases, and uploads CTest/CMake diagnostics on failure. It remains a
+compiler/hidden-window gate and explicitly does not close the visible GDI-061 gate.
 
 ### F7 — public configuration and rejection semantics are not consistently honest (P1)
 
@@ -342,7 +350,7 @@ means only the narrowed statement in this table, not overall release readiness.
 |---|---|---:|---|
 | GDI-055 | Add high-level GDI API coverage. | ✅ | `gdi_public_api_test` drives `GraphicsDevice`, `PresentationParameters`, `Texture2D` upload/readback, `SpriteBatch`, `RenderTarget2D` binding/preservation/sampling, viewport/scissor, 4x and rejected 2x MSAA reset, backbuffer readback, resize, and the complete capability matrix. `gdi_public_stencil_test` covers stencil clear/use on the backbuffer and a depthless target. Low-level raster details remain in `gdi_2d_regression_test`; every advertised feature now has a public-path assertion. |
 | GDI-056 | Register meaningful configuration variants. | ✅ | Native CTest has distinct default, `CNA_GDI_DIRTY_PRESENTATION=1`, and scaled `CNA_GDI_PRESENT_FILTER=halftone` cases. The variants assert NativeFull/None/Stretch and filter selection through GDI-054 telemetry, while the oracle verifies corresponding pixels. Every case explicitly disables `DwmFlush` so CI cannot block on a compositor. |
-| GDI-057 | Add a manual native-Windows GDI workflow. | ⬜ | Create a GDI-specific `workflow_dispatch` MSVC job, respecting the repository's manual-Windows-CI policy and the two-job limit. Build only CNA plus focused GDI tests, run `ctest -L GDI --output-on-failure`, and upload logs on failure. This is a compiler/hidden-surface gate, not a replacement for the visible test. |
+| GDI-057 | Add a manual native-Windows GDI workflow. | ✅ | `.github/workflows/gdi-windows-ci.yml` is a one-job, `workflow_dispatch`-only MSVC/Ninja gate. It builds only CNA plus the nine focused GDI executables with `--parallel 2`, runs `ctest -L GDI --output-on-failure`, and uploads CTest/CMake diagnostics on failure. Its header and documentation explicitly retain GDI-061 as the separate visible lifecycle/DPI gate. |
 | GDI-058 | Make applied presentation/resource state honest. | ⬜ | Validate presentation-mode ordinals. Reject or normalize unsupported backbuffer/depth formats before public state claims them. Write the actually applied initial MSAA count back just as `Reset()` does. Define RT depth, stencil, MSAA, format, and preservation behavior; tests compare every public property/query with the created storage. No request may silently remain visible as if it were applied. |
 | GDI-059 | Normalize unsupported-feature failures. | ⬜ | Choose one documented early-failure policy and exception family for GDI's TextureCube, Texture3D, RenderTargetCube, ShaderEffect, occlusion, buffers, and 3D draw APIs. Construction must not appear usable only to fail unpredictably later. Add one public test per excluded feature and retain `SupportsCapability(ThreeD)==false`. |
 | GDI-060 | Audit DPI, fullscreen, resize, and input transforms. | ⬜ | Establish whether Win32 client pixels or `SDL_GetWindowSizeInPixels()` is the single source of truth and make presentation/input use it consistently. Test 100%, 150%, and 200% Windows scale where available, external SDL windows, every presentation mode, repeated odd-size resize, fullscreen round-trip, and coordinate round-trips at edges/bars. No zero-size minimize transition may reallocate or erase a retained backbuffer. |
@@ -377,7 +385,7 @@ means only the narrowed statement in this table, not overall release readiness.
 3. ✅ **Create the deterministic oracle:** GDI-054.
 4. ✅ **Finish public coverage:** GDI-055.
 5. ✅ **Register configuration coverage:** GDI-056.
-6. **Establish native repeatability:** GDI-057, followed by GDI-058 through GDI-061.
+6. **Establish native repeatability:** ✅ GDI-057; next GDI-058 through GDI-061.
 7. **Measure a visible client:** GDI-062. Only then choose GDI-063 through GDI-066.
 8. **Reduce memory and architectural risk:** GDI-067 and GDI-070 through GDI-073.
 

@@ -158,8 +158,15 @@ CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
 
 The backend is hard-gated to Windows targets. A native Windows build registers eleven `GDI` CTest
 cases, including separate default, dirty and halftone configurations; run them with
-`ctest -L GDI --output-on-failure`. Cross-built PE files are intentionally not registered as Linux
-CTest commands, so run the produced executables under a Wine setup with an available display:
+`ctest -L GDI --output-on-failure`.
+
+The GitHub Actions workflow `GDI Windows CI (MSVC)` is deliberately manual (`workflow_dispatch`).
+Its one Windows job builds only CNA plus these focused executables and runs the complete `GDI`
+CTest label with native MSVC. It is a compiler and hidden-window correctness gate; it does not
+replace the visible lifecycle/DPI checklist required by GDI-061.
+
+Cross-built PE files are intentionally not registered as Linux CTest commands, so run the produced
+executables under a Wine setup with an available display:
 
 ```bash
 # Native Windows
@@ -219,6 +226,11 @@ rejected.
 `GraphicsDevice`, `SpriteBatch` and `DepthStencilState`, then proves stencil-only and single-colour
 clears on both the backbuffer and a depthless `RenderTarget2D`. It also checks the separate
 `StencilBuffer=true` and combined `DepthStencilBuffer=false` capability answers.
+
+`cna_test_gdi_public_api` covers the rest of the advertised public surface: applied presentation
+properties and the complete capability matrix, texture upload/readback, SpriteBatch source
+selection, viewport/scissor clipping, render-target binding/preservation/sampling, 4x MSAA reset
+and resolve, rejected 2x write-back, resize, and backbuffer readback at the new edge.
 
 `cna_test_gdi_dirty_damage` verifies the raster-derived rectangle after origin, viewport, scissor,
 transform and rotation, plus negative, off-screen and overflow-sized geometry. The repaint test
