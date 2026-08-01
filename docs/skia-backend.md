@@ -305,5 +305,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     two alpha-labelled images; a target retains one surface and at most one immutable sampling
     snapshot. A target write drops the old snapshot, and 64 create/sample/release cycles return
     target, snapshot, and byte counters to zero. There is no unbounded hidden image/snapshot cache.
+48. `Skia_RenderTarget2D_Golden` shares one checked-in, top-row-first 4×4 opaque RGBA quadrant
+    oracle with the EasyGL and SDL_Renderer builds. Each backend matches all 16 target-readback
+    pixels and all 64 Point-sampled 2× backbuffer pixels exactly, with zero tolerance; this covers
+    common target orientation, unbind/restoration, snapshot freshness, and Point-sampling semantics
+    without claiming GPU parity.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

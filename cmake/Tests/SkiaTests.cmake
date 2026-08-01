@@ -217,6 +217,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_rendertarget_sample examples/sdlrenderer_rendertarget2d_sample_test.cpp)
     cna_register_skia_display_test(Skia_RenderTarget2D_SampleAfterUnbind cna_test_skia_rendertarget_sample)
 
+    cna_skia_test(cna_test_skia_rendertarget_golden examples/rendertarget2d_golden_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTarget2D_Golden cna_test_skia_rendertarget_golden)
+
     cna_skia_test(cna_test_skia_rendertarget_usage examples/sdlrenderer_rendertarget_usage_test.cpp)
     cna_register_skia_display_test(Skia_RenderTarget2D_Usage cna_test_skia_rendertarget_usage)
 

@@ -20,7 +20,7 @@
 - The most recent pushed commits are `50670060` (detach a destroyed bound render target),
   `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
   `SetData`).
-- `docs/skia-backend.md` records 70 Skia CTests: six raster-only and 64 display-required tests.
+- `docs/skia-backend.md` records 71 Skia CTests: six raster-only and 65 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -155,6 +155,18 @@
   cycles, with all tracked counters returning to zero. Existing RenderTarget sample and 64-frame
   SpriteBatch stress regressions still pass after cache introduction.
 
+## Completed in this session: SKIA-75
+
+- Added one shared `rendertarget2d_golden_test.cpp` to the Skia, EasyGL, and SDL_Renderer test
+  registrations. Its checked-in, top-row-first 4×4 RGBA oracle contains four opaque colour
+  quadrants. It first compares `RenderTarget2D::GetData`, then unbinds and Point-samples the
+  target into an 8×8 backbuffer. This compactly detects target row orientation, stale snapshots,
+  target restoration, and scaling/sampling errors without a driver-dependent image format.
+- All three render paths match the same oracle exactly: 16/16 target-readback pixels and 64/64
+  sampled backbuffer pixels, with an intentional tolerance of zero. EasyGL's isolated validation
+  build sets `CNA_BUILD_EXAMPLES=ON`, because its historical CMake test block is explicitly
+  guarded by that option.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -197,22 +209,26 @@
   AddressSanitizer builds. Existing `Skia_RenderTarget2D_SampleAfterUnbind` and
   `Skia_SpriteBatch_Stress` also pass after snapshot caching (the latter reports 64 stable frames,
   1,664 Begin/Draw/End blocks, and 192 target changes).
+- SKIA-75: `Skia_RenderTarget2D_Golden` passes under Xvfb in the normal and AddressSanitizer
+  builds (`detect_leaks=0`, matching the known display-stack exit baseline). The independently
+  configured SDL_Renderer and EasyGL targets also pass under Xvfb with the identical 16/16 and
+  64/64 exact-RGBA results.
 
 ## Current task
 
-Reassess the next incomplete 2D task after SKIA-74. Blend, write-mask, target-mipmap disposition,
-resize/presentation, display scaling, and bounded target snapshot ownership are documented; choose
-the next plan row with an independently testable public contract.
+Audit SKIA-65's remaining device/context-recreation requirement. Its level-0 `SetData`, transfer,
+and target-mipmap policy are already proven; do not mark the row complete until the unimplemented
+SKIA-16/SKIA-28 lifecycle has either acquired an honest public recovery contract or been split
+into a precise blocked dependency.
 
 ## Next candidates
 
-1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely
-   RenderTarget2D parity goldens (SKIA-75).
-2. SKIA-75: compare stable target/readback cases against EasyGL and SDL_Renderer without claiming
-   GPU parity. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface
-   exists to probe.
-3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to
-   SKIA-16/SKIA-28 and is not yet implemented.
+1. Audit and, if feasible, implement SKIA-16/SKIA-28 device/context recovery needed to close
+   SKIA-65. Keep target lifetime, readback, and snapshot ownership correct across every reset.
+2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
+   probe; the selected raster path has no truthful capability to expose there.
+3. If recovery cannot be induced through the public runtime, leave SKIA-65 explicitly dependent
+   on a separately testable device-loss seam rather than inventing a context-loss claim.
 
 ## Known boundaries / assumptions
 
