@@ -4,11 +4,28 @@
 > pipeline jen proto, že Direct2D interně používá D3D11 device pro GPU akceleraci a prezentaci.
 > Pro 3D slouží existující `D3D11` backend.
 >
-> **Stav:** `⬜` znamená neimplementováno, `🟨` znamená rozpracovaný kód bez dokončeného
-> nativního Windows pixelového ověření a `🔬` technický spike před implementací. Wine/Proton-DXVK
-> jsou hodnotné regresní běhy, ale nenahrazují Windows Direct2D pro built-in effects a image
-> composite modes. Každá hotová položka musí mít veřejný pixelový test; položky závislé na těchto
-> funkcích musí navíc projít nativním Windows Direct2D.
+> **Stav:** `⬜` znamená neimplementováno, `🟨` znamená implementováno nebo rozpracováno bez
+> dokončeného nativního Windows pixelového ověření a `🔬` technický spike před implementací.
+> Wine/Proton-DXVK jsou hodnotné regresní běhy, ale nenahrazují Windows Direct2D pro built-in
+> effects, image composite modes, fyzický swap-chain výstup a DPI. Každá hotová položka musí mít
+> veřejný pixelový test; položky závislé na těchto funkcích musí navíc projít nativním Windows
+> Direct2D.
+
+## Aktuálně zbývající práce
+
+K 2026-08-01 neexistuje žádná otevřená položka `⬜` ani žádná známá další implementační mezera,
+kterou lze uzavřít na Linuxu, ve Wine nebo v Proton/DXVK. Všech deset zbývajících položek `🟨`
+vyžaduje **nativní Windows OS**:
+
+- `D2D-4`, `D2D-13`, `D2D-20`, `D2D-22`, `D2D-24`, `D2D-27`, `D2D-28` a `D2D-33` vyžadují
+  první úspěšný běh připravené nativní MSVC/Direct2D validační brány bez kompatibilitních skipů,
+  včetně kontroly debug-layer/WARP artefaktu. Stejný běh uzavře také `ColorMatrix` část `D2D-1`.
+- `D2D-23` a presentation/DPI část `D2D-1` vyžadují fyzické Windows okno a samostatnou oracle
+  fyzického swap-chain výstupu pro letterbox pruhy, Overscan crop a nenulové DPI.
+
+Wine/Proton regresní matice je pro dostupné větve dokončená a prochází; její další opakování nemůže
+výše uvedené nativní položky změnit na `✅`, protože dané runtime neposkytují požadované Direct2D
+effects/composite chování ani důkaz fyzického Windows presentation/DPI výstupu.
 
 ## Co EasyGL umí navíc a co je zde v rozsahu
 
@@ -122,7 +139,9 @@ Větve závislé na built-in effects/composite modes navíc podléhají nativní
 1. Nejprve D2D-1 až D2D-9: nejvyšší 2D přínos bez změny rozsahu backendu.
 2. D2D-10 je brána před skutečnými mip úkoly D2D-11/D2D-12.
 3. D2D-20/D2D-21 uzavírají compositing; plný blend model zůstává úkolem existujícího `D3D11` backendu.
-4. D2D-22 je release gate pro aktuálně rozpracované D2D-1, D2D-4, D2D-13 a D2D-20; teprve po něm je lze označit `✅`.
+4. D2D-22 je nativní release gate pro effect/composite části D2D-1, D2D-4, D2D-13, D2D-20,
+   D2D-24, D2D-28 a D2D-33; jeho debug-layer/WARP artefakt je zároveň posledním důkazem D2D-27.
+   Fyzická presentation/DPI část D2D-1 se uzavírá samostatně přes D2D-23.
 5. D2D-24 a D2D-25 jsou opravné priority před D2D-27, protože jinak benchmark měří i chybnou cestu.
 6. D2D-28 až D2D-33 jsou auditované 2D mezery; jejich implementace nesmí oslabit explicitní 3D hranice ani D2D-21 odmítací kontrakty.
 7. Při každé změně ověř čistý unit test, Wine, Proton a podle rozsahu skutečný nativní Windows pixelový CTest. Budoucí kompilace a testy spouštěj nanejvýš se dvěma souběžnými joby (`-j2` / `--parallel 2`).
