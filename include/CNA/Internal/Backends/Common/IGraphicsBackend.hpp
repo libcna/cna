@@ -1502,6 +1502,16 @@ namespace CNA::Internal::Backends
          */
         [[nodiscard]] virtual bool SupportsDepthStencil() const { return true; }
 
+        /// Returns whether the default back buffer has a usable depth plane. Backends with a
+        /// depth-only surface override this independently of SupportsDepthStencil().
+        [[nodiscard]] virtual bool SupportsDepthBuffer() const { return SupportsDepthStencil(); }
+
+        /// Returns whether the default back buffer has a usable stencil plane. Kept separate
+        /// from SupportsDepthBuffer() because historical APIs such as Glide expose Z but no
+        /// stencil; GraphicsDevice::Clear must then retain a requested depth clear and discard
+        /// only the impossible stencil portion.
+        [[nodiscard]] virtual bool SupportsStencilBuffer() const { return SupportsDepthStencil(); }
+
         /**
          * Backend boundary used by common public draw/model entry points before they inspect,
          * pack, allocate, bind, or otherwise consume 3D input. Fully 3D-capable backends retain

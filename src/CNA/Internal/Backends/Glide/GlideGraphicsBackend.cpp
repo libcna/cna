@@ -44,6 +44,7 @@ namespace CNA::Internal::Backends::Glide
         constexpr FxI32 kCullDisable = 0x0;
         constexpr FxI32 kCullNegative = 0x1;
         constexpr FxI32 kCullPositive = 0x2;
+        constexpr FxI32 kPrimitiveTriangles = 0x6;
         constexpr FxU32 kWindowCoords = 0x00;
         constexpr FxI32 kQueryAny = -1;
 
@@ -136,6 +137,13 @@ namespace CNA::Internal::Backends::Glide
         static_assert(offsetof(GlideVertex, r) == 16);
         static_assert(offsetof(GlideVertex, a) == 28);
         static_assert(offsetof(GlideVertex, sow) == 36);
+#if !defined(_WIN64)
+        // The loader declarations intentionally do not vendor a Glide SDK. Keep the ABI-critical
+        // data layouts checked in the x86 target that is allowed to load this backend.
+        static_assert(sizeof(GlideTexInfo) == 20);
+        static_assert(sizeof(GlideResolution) == 16);
+        static_assert(sizeof(GlideVertex) == 48);
+#endif
 
         [[nodiscard]] std::string LastWin32Error(const char* action)
         {
@@ -367,6 +375,7 @@ namespace CNA::Internal::Backends::Glide
             using CullModeFn = void (WINAPI*)(FxI32);
             using VertexLayoutFn = void (WINAPI*)(FxU32, FxI32, FxU32);
             using DrawTriangleFn = void (WINAPI*)(const void*, const void*, const void*);
+            using DrawVertexArrayFn = void (WINAPI*)(FxI32, FxU32, void**);
             using ColorCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxBool);
             using AlphaCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxBool);
             using AlphaTestFunctionFn = void (WINAPI*)(FxI32);
@@ -437,6 +446,7 @@ namespace CNA::Internal::Backends::Glide
                 grCullMode = Required<CullModeFn>("grCullMode", 4);
                 grVertexLayout = Required<VertexLayoutFn>("grVertexLayout", 12);
                 grDrawTriangle = Required<DrawTriangleFn>("grDrawTriangle", 12);
+                grDrawVertexArray = Required<DrawVertexArrayFn>("grDrawVertexArray", 12);
                 grColorCombine = Required<ColorCombineFn>("grColorCombine", 20);
                 grAlphaCombine = Required<AlphaCombineFn>("grAlphaCombine", 20);
                 grAlphaTestFunction = Required<AlphaTestFunctionFn>("grAlphaTestFunction", 4);
@@ -473,6 +483,7 @@ namespace CNA::Internal::Backends::Glide
             CullModeFn grCullMode = nullptr;
             VertexLayoutFn grVertexLayout = nullptr;
             DrawTriangleFn grDrawTriangle = nullptr;
+            DrawVertexArrayFn grDrawVertexArray = nullptr;
             ColorCombineFn grColorCombine = nullptr;
             AlphaCombineFn grAlphaCombine = nullptr;
             AlphaTestFunctionFn grAlphaTestFunction = nullptr;
@@ -546,6 +557,16 @@ namespace CNA::Internal::Backends::Glide
             {
                 throw std::runtime_error("GLIDE backend requires CNA's SDL window");
             }
+            if (presentationMode != CnaPresentationMode::NativeBackBuffer)
+            {
+                throw std::runtime_error(
+                    "GLIDE backend supports only PresentationMode::NativeBackBuffer; Glide 3.x has no faithful "
+                    "logical-surface scaling path");
+            }
+            if (swapInterval < 0 || swapInterval > 1)
+            {
+                throw std::runtime_error("GLIDE backend supports only swap intervals 0 (immediate) and 1 (v-sync)");
+            }
             const HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
                 SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
             if (hwnd == nullptr)
@@ -605,7 +626,9 @@ namespace CNA::Internal::Backends::Glide
                 ApplyDepthState();
                 scissorWidth = virtualWidth;
                 scissorHeight = virtualHeight;
-                ApplyClipWindow(0, 0, virtualWidth, virtualHeight);
+                viewportWidth = virtualWidth;
+                viewportHeight = virtualHeight;
+                ApplyEffectiveClipWindow();
 
                 QueryHardwareLimits();
 
@@ -615,7 +638,12 @@ namespace CNA::Internal::Backends::Glide
                 {
                     throw std::runtime_error("Glide TMU0 reported no usable texture memory");
                 }
-                freeTextureRanges.push_back(TextureRange{minAddress, maxAddress - minAddress + 1});
+                const std::uint64_t rangeSize = static_cast<std::uint64_t>(maxAddress) - minAddress + 1u;
+                if (rangeSize > std::numeric_limits<FxU32>::max())
+                {
+                    throw std::runtime_error("Glide TMU0 reported an unrepresentable texture-memory range");
+                }
+                freeTextureRanges.push_back(TextureRange{minAddress, static_cast<FxU32>(rangeSize)});
             }
             catch (...)
             {
@@ -725,13 +753,18 @@ namespace CNA::Internal::Backends::Glide
             }
         }
 
+        void ApplyColorMask()
+        {
+            api.grColorMask(colorMaskRgb, colorMaskAlpha);
+        }
+
         void ClearDepthOnly(std::uint16_t depth)
         {
             api.grDepthBufferMode(kDepthBufferZ);
             api.grDepthMask(kFxTrue);
             api.grColorMask(kFxFalse, kFxFalse);
             api.grBufferClear(0, 0, depth);
-            api.grColorMask(kFxTrue, kFxTrue);
+            ApplyColorMask();
             ApplyDepthState();
         }
 
@@ -741,7 +774,9 @@ namespace CNA::Internal::Backends::Glide
             // GraphicsDevice::Clear(Color), which is specified to be color-only.
             api.grDepthBufferMode(kDepthBufferZ);
             api.grDepthMask(kFxFalse);
+            api.grColorMask(kFxTrue, kFxTrue);
             api.grBufferClear(color, alpha, 0);
+            ApplyColorMask();
             ApplyDepthState();
         }
 
@@ -749,18 +784,43 @@ namespace CNA::Internal::Backends::Glide
         {
             api.grDepthBufferMode(kDepthBufferZ);
             api.grDepthMask(kFxTrue);
+            api.grColorMask(kFxTrue, kFxTrue);
             api.grBufferClear(color, alpha, depth);
+            ApplyColorMask();
             ApplyDepthState();
         }
 
         void ApplyClipWindow(int x, int y, int width, int height)
         {
-            if (width < 0 || height < 0 || x < 0 || y < 0 || x + width > virtualWidth || y + height > virtualHeight)
-            {
-                throw std::runtime_error("GLIDE scissor rectangle lies outside the active virtual framebuffer");
-            }
             api.grClipWindow(static_cast<FxU32>(x), static_cast<FxU32>(y),
                              static_cast<FxU32>(x + width), static_cast<FxU32>(y + height));
+        }
+
+        void ApplyEffectiveClipWindow()
+        {
+            // Glide has one clip rectangle, whereas XNA has an always-active viewport plus an
+            // optional scissor rectangle. Intersect both with the virtual framebuffer before
+            // handing the result to Glide; this also makes off-target viewport/scissor portions
+            // harmless rather than wrapping when converted to FxU32.
+            const auto clippedEnd = [](int origin, int extent, int limit) -> int
+            {
+                const std::int64_t value = static_cast<std::int64_t>(origin) + extent;
+                return static_cast<int>(std::clamp<std::int64_t>(value, 0, limit));
+            };
+            int left = std::clamp(viewportX, 0, virtualWidth);
+            int top = std::clamp(viewportY, 0, virtualHeight);
+            int right = clippedEnd(viewportX, viewportWidth, virtualWidth);
+            int bottom = clippedEnd(viewportY, viewportHeight, virtualHeight);
+            if (scissorEnabled)
+            {
+                left = std::max(left, std::clamp(scissorX, 0, virtualWidth));
+                top = std::max(top, std::clamp(scissorY, 0, virtualHeight));
+                right = std::min(right, clippedEnd(scissorX, scissorWidth, virtualWidth));
+                bottom = std::min(bottom, clippedEnd(scissorY, scissorHeight, virtualHeight));
+            }
+            right = std::max(left, right);
+            bottom = std::max(top, bottom);
+            ApplyClipWindow(left, top, right - left, bottom - top);
         }
 
         [[nodiscard]] TextureRange AllocateTexture(FxU32 size)
@@ -768,12 +828,18 @@ namespace CNA::Internal::Backends::Glide
             constexpr FxU32 alignment = 8;
             for (auto it = freeTextureRanges.begin(); it != freeTextureRanges.end(); ++it)
             {
-                const FxU32 alignedAddress = (it->address + alignment - 1) & ~(alignment - 1);
+                const std::uint64_t alignedAddress64 =
+                    (static_cast<std::uint64_t>(it->address) + alignment - 1) & ~(static_cast<std::uint64_t>(alignment) - 1);
+                if (alignedAddress64 > std::numeric_limits<FxU32>::max())
+                {
+                    continue;
+                }
+                const FxU32 alignedAddress = static_cast<FxU32>(alignedAddress64);
                 const FxU32 padding = alignedAddress - it->address;
                 if (padding <= it->size && size <= it->size - padding)
                 {
                     const TextureRange allocation{alignedAddress, size};
-                    const FxU32 oldEnd = it->address + it->size;
+                    const std::uint64_t oldEnd = static_cast<std::uint64_t>(it->address) + it->size;
                     if (padding == 0)
                     {
                         it->address += size;
@@ -786,10 +852,11 @@ namespace CNA::Internal::Backends::Glide
                     else
                     {
                         it->size = padding;
-                        const FxU32 allocationEnd = alignedAddress + size;
+                        const std::uint64_t allocationEnd = static_cast<std::uint64_t>(alignedAddress) + size;
                         if (allocationEnd < oldEnd)
                         {
-                            freeTextureRanges.insert(std::next(it), TextureRange{allocationEnd, oldEnd - allocationEnd});
+                            freeTextureRanges.insert(std::next(it), TextureRange{
+                                static_cast<FxU32>(allocationEnd), static_cast<FxU32>(oldEnd - allocationEnd)});
                         }
                     }
                     return allocation;
@@ -810,17 +877,28 @@ namespace CNA::Internal::Backends::Glide
             if (position != freeTextureRanges.begin())
             {
                 const auto previous = std::prev(position);
-                if (previous->address + previous->size == position->address)
+                if (static_cast<std::uint64_t>(previous->address) + previous->size == position->address)
                 {
-                    previous->size += position->size;
+                    const std::uint64_t combinedSize = static_cast<std::uint64_t>(previous->size) + position->size;
+                    if (combinedSize > std::numeric_limits<FxU32>::max())
+                    {
+                        throw std::runtime_error("GLIDE TMU0 free-range coalescing overflowed");
+                    }
+                    previous->size = static_cast<FxU32>(combinedSize);
                     position = freeTextureRanges.erase(position);
                     position = previous;
                 }
             }
             const auto next = std::next(position);
-            if (next != freeTextureRanges.end() && position->address + position->size == next->address)
+            if (next != freeTextureRanges.end() &&
+                static_cast<std::uint64_t>(position->address) + position->size == next->address)
             {
-                position->size += next->size;
+                const std::uint64_t combinedSize = static_cast<std::uint64_t>(position->size) + next->size;
+                if (combinedSize > std::numeric_limits<FxU32>::max())
+                {
+                    throw std::runtime_error("GLIDE TMU0 free-range coalescing overflowed");
+                }
+                position->size = static_cast<FxU32>(combinedSize);
                 freeTextureRanges.erase(next);
             }
         }
@@ -843,6 +921,8 @@ namespace CNA::Internal::Backends::Glide
         bool depthTestEnabled = false;
         bool depthWriteEnabled = true;
         FxI32 depthCompare = kDepthCompareGreater;
+        FxBool colorMaskRgb = kFxTrue;
+        FxBool colorMaskAlpha = kFxTrue;
         int samplerFilter = 0;
         int samplerAddressU = 1;
         int samplerAddressV = 1;
@@ -851,6 +931,12 @@ namespace CNA::Internal::Backends::Glide
         int scissorWidth = 640;
         int scissorHeight = 480;
         bool scissorEnabled = false;
+        int viewportX = 0;
+        int viewportY = 0;
+        int viewportWidth = 640;
+        int viewportHeight = 480;
+        float viewportMinDepth = 0.0f;
+        float viewportMaxDepth = 1.0f;
         int maxTextureDimension = 256;
         int maxTextureAspectLog2 = 3;
         int textureUnitCount = 1;
@@ -880,7 +966,7 @@ namespace CNA::Internal::Backends::Glide
         };
 
         GlideTextureBackend(GlideGraphicsBackend& owner, const ImageData& data)
-            : owner_(owner)
+            : impl_(owner.impl_)
             , width_(data.width)
             , height_(data.height)
         {
@@ -888,9 +974,24 @@ namespace CNA::Internal::Backends::Glide
             {
                 throw std::runtime_error("GLIDE texture dimensions must be positive");
             }
-
-            rgba_.assign(static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) * 4u, 0);
-            std::memcpy(rgba_.data(), data.pixels.data(), std::min(rgba_.size(), data.pixels.size()));
+            constexpr int kMaximumLogicalTextureDimension = 16384;
+            if (width_ > kMaximumLogicalTextureDimension || height_ > kMaximumLogicalTextureDimension)
+            {
+                throw std::runtime_error("GLIDE logical texture exceeds CNA's 16384-pixel dimension limit");
+            }
+            const std::size_t width = static_cast<std::size_t>(width_);
+            const std::size_t height = static_cast<std::size_t>(height_);
+            if (width > std::numeric_limits<std::size_t>::max() / 4u ||
+                height > std::numeric_limits<std::size_t>::max() / (width * 4u))
+            {
+                throw std::runtime_error("GLIDE texture byte count overflows size_t");
+            }
+            const std::size_t requiredBytes = width * height * 4u;
+            if (data.pixels.size() < requiredBytes)
+            {
+                throw std::runtime_error("GLIDE texture upload is shorter than its declared RGBA8 dimensions");
+            }
+            rgba_.assign(data.pixels.begin(), data.pixels.begin() + static_cast<std::ptrdiff_t>(requiredBytes));
             try
             {
                 BuildLogicalMipChain(uploadedAddressU_, uploadedAddressV_);
@@ -900,7 +1001,7 @@ namespace CNA::Internal::Backends::Glide
             {
                 for (const Tile& tile : tiles_)
                 {
-                    owner_.impl_->ReleaseTexture(tile.range);
+                    GetImpl().ReleaseTexture(tile.range);
                 }
                 throw;
             }
@@ -908,11 +1009,14 @@ namespace CNA::Internal::Backends::Glide
 
         ~GlideTextureBackend() override
         {
-            if (owner_.impl_)
+            if (const std::shared_ptr<GlideGraphicsBackend::Impl> impl = impl_.lock())
             {
+                // A source command can remain in Glide's FIFO after the C++ texture dies. Do
+                // not make its TMU range reusable until the hardware/emulator has consumed it.
+                impl->api.grFinish();
                 for (const Tile& tile : tiles_)
                 {
-                    owner_.impl_->ReleaseTexture(tile.range);
+                    impl->ReleaseTexture(tile.range);
                 }
             }
         }
@@ -938,6 +1042,9 @@ namespace CNA::Internal::Backends::Glide
                 std::memcpy(rgba_.data() + static_cast<std::size_t>(row) * rowBytes,
                             rgba + static_cast<std::size_t>(row) * sourceStride, rowBytes);
             }
+            // Existing draws may still sample this native allocation. Synchronize before
+            // downloading a replacement mip chain into the same TMU addresses.
+            GetImpl().api.grFinish();
             BuildLogicalMipChain(uploadedAddressU_, uploadedAddressV_);
             for (Tile& tile : tiles_)
             {
@@ -971,6 +1078,7 @@ namespace CNA::Internal::Backends::Glide
             }
             static_cast<void>(ToGlideTextureAddress(addressU));
             static_cast<void>(ToGlideTextureAddress(addressV));
+            GetImpl().api.grFinish();
             BuildLogicalMipChain(addressU, addressV);
             for (Tile& tile : tiles_)
             {
@@ -1048,7 +1156,7 @@ namespace CNA::Internal::Backends::Glide
 
         void BuildTiles()
         {
-            const int maximum = owner_.impl_->maxTextureDimension;
+            const int maximum = GetImpl().maxTextureDimension;
             if (maximum < 1 || (maximum & (maximum - 1)) != 0)
             {
                 throw std::runtime_error("Glide reported an invalid non-power-of-two maximum texture size");
@@ -1088,7 +1196,7 @@ namespace CNA::Internal::Backends::Glide
                     tile.gutterBottom = gutterBottom;
                     tile.paddedWidth = NextPowerOfTwo(tile.sourceWidth + tile.gutterLeft + tile.gutterRight, maximum);
                     tile.paddedHeight = NextPowerOfTwo(tile.sourceHeight + tile.gutterTop + tile.gutterBottom, maximum);
-                    const int maximumAspect = 1 << owner_.impl_->maxTextureAspectLog2;
+                    const int maximumAspect = 1 << GetImpl().maxTextureAspectLog2;
                     while (tile.paddedWidth > tile.paddedHeight * maximumAspect && tile.paddedHeight < maximum)
                     {
                         tile.paddedHeight <<= 1;
@@ -1104,19 +1212,19 @@ namespace CNA::Internal::Backends::Glide
                         throw std::runtime_error("GLIDE texture tile cannot satisfy the emulator-reported aspect-ratio limit");
                     }
                     ConvertTileToGlideTexels(tile, uploadedAddressU_, uploadedAddressV_);
-                    const FxU32 requiredBytes = owner_.impl_->api.grTexTextureMemRequired(kMipMapBoth, &tile.nativeInfo);
+                    const FxU32 requiredBytes = GetImpl().api.grTexTextureMemRequired(kMipMapBoth, &tile.nativeInfo);
                     if (requiredBytes == 0)
                     {
                         throw std::runtime_error("grTexTextureMemRequired rejected an ARGB4444 tiled Glide texture");
                     }
-                    tile.range = owner_.impl_->AllocateTexture(requiredBytes);
+                    tile.range = GetImpl().AllocateTexture(requiredBytes);
                     try
                     {
                         Upload(tile);
                     }
                     catch (...)
                     {
-                        owner_.impl_->ReleaseTexture(tile.range);
+                        GetImpl().ReleaseTexture(tile.range);
                         throw;
                     }
                     tiles_.push_back(std::move(tile));
@@ -1212,10 +1320,20 @@ namespace CNA::Internal::Backends::Glide
         void Upload(Tile& tile)
         {
             tile.nativeInfo.data = tile.nativeTexels.data();
-            owner_.impl_->api.grTexDownloadMipMap(0, tile.range.address, kMipMapBoth, &tile.nativeInfo);
+            GetImpl().api.grTexDownloadMipMap(0, tile.range.address, kMipMapBoth, &tile.nativeInfo);
         }
 
-        GlideGraphicsBackend& owner_;
+        [[nodiscard]] GlideGraphicsBackend::Impl& GetImpl() const
+        {
+            const std::shared_ptr<GlideGraphicsBackend::Impl> impl = impl_.lock();
+            if (!impl)
+            {
+                throw std::runtime_error("GLIDE texture outlived its graphics backend");
+            }
+            return *impl;
+        }
+
+        std::weak_ptr<GlideGraphicsBackend::Impl> impl_;
         int width_ = 0;
         int height_ = 0;
         int uploadedAddressU_ = 1;
@@ -1400,7 +1518,7 @@ namespace CNA::Internal::Backends::Glide
     };
 
     GlideGraphicsBackend::GlideGraphicsBackend(const GraphicsBackendCreateArgs& args)
-        : impl_(std::make_unique<Impl>(args))
+        : impl_(std::make_shared<Impl>(args))
     {
         ApplyBlendState(/*One*/ 0, /*One*/ 0, /*InverseSourceAlpha*/ 5, /*InverseSourceAlpha*/ 5,
                         /*Add*/ 0, /*Add*/ 0, BlendWriteState{});
@@ -1477,24 +1595,42 @@ namespace CNA::Internal::Backends::Glide
             impl_->scissorWidth = width;
             impl_->scissorHeight = height;
         }
-        if (impl_->scissorEnabled)
-        {
-            impl_->ApplyClipWindow(impl_->scissorX, impl_->scissorY, impl_->scissorWidth, impl_->scissorHeight);
-        }
-        else
-        {
-            impl_->ApplyClipWindow(0, 0, width, height);
-        }
+        impl_->ApplyEffectiveClipWindow();
     }
 
     void GlideGraphicsBackend::SetPresentationMode(int mode)
     {
-        impl_->presentationMode = static_cast<CnaPresentationMode>(mode);
+        if (static_cast<CnaPresentationMode>(mode) != CnaPresentationMode::NativeBackBuffer)
+        {
+            throw std::runtime_error(
+                "GLIDE backend supports only PresentationMode::NativeBackBuffer; scaling is owned by the external Glide runtime");
+        }
+        impl_->presentationMode = CnaPresentationMode::NativeBackBuffer;
     }
 
     void GlideGraphicsBackend::SetSwapInterval(int interval)
     {
-        impl_->swapInterval = std::max(0, interval);
+        if (interval < 0 || interval > 1)
+        {
+            throw std::runtime_error("GLIDE backend supports only swap intervals 0 (immediate) and 1 (v-sync)");
+        }
+        impl_->swapInterval = interval;
+    }
+
+    void GlideGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        if (w < 0 || h < 0 || !std::isfinite(minDepth) || !std::isfinite(maxDepth) ||
+            minDepth < 0.0f || maxDepth > 1.0f || minDepth > maxDepth)
+        {
+            throw std::runtime_error("GLIDE backend received an invalid Viewport");
+        }
+        impl_->viewportX = x;
+        impl_->viewportY = y;
+        impl_->viewportWidth = w;
+        impl_->viewportHeight = h;
+        impl_->viewportMinDepth = minDepth;
+        impl_->viewportMaxDepth = maxDepth;
+        impl_->ApplyEffectiveClipWindow();
     }
 
     SDL_Window* GlideGraphicsBackend::GetWindowInternal() const
@@ -1545,7 +1681,7 @@ namespace CNA::Internal::Backends::Glide
         impl_->scissorHeight = h;
         if (impl_->scissorEnabled)
         {
-            impl_->ApplyClipWindow(x, y, w, h);
+            impl_->ApplyEffectiveClipWindow();
         }
     }
 
@@ -1560,18 +1696,22 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE backend supports only BlendFunction::Add in its initial 2D scope");
         }
-        if (!ColorWriteHasRed(writeState.colorWriteChannels[0]) ||
-            !ColorWriteHasGreen(writeState.colorWriteChannels[0]) ||
-            !ColorWriteHasBlue(writeState.colorWriteChannels[0]) ||
-            !ColorWriteHasAlpha(writeState.colorWriteChannels[0]) ||
+        const bool writeRed = ColorWriteHasRed(writeState.colorWriteChannels[0]);
+        const bool writeGreen = ColorWriteHasGreen(writeState.colorWriteChannels[0]);
+        const bool writeBlue = ColorWriteHasBlue(writeState.colorWriteChannels[0]);
+        if (writeRed != writeGreen || writeRed != writeBlue ||
             writeState.multiSampleMask != std::numeric_limits<unsigned int>::max())
         {
-            throw std::runtime_error("GLIDE backend does not support partial color-write or multisample masks");
+            throw std::runtime_error(
+                "GLIDE backend supports RGB and alpha write masks independently, but cannot mask individual RGB channels or samples");
         }
         impl_->colorSrcBlend = ToGlideBlend(colorSrcBlend);
         impl_->colorDstBlend = ToGlideBlend(colorDstBlend);
         impl_->alphaSrcBlend = ToGlideBlend(alphaSrcBlend);
         impl_->alphaDstBlend = ToGlideBlend(alphaDstBlend);
+        impl_->colorMaskRgb = writeRed ? kFxTrue : kFxFalse;
+        impl_->colorMaskAlpha = ColorWriteHasAlpha(writeState.colorWriteChannels[0]) ? kFxTrue : kFxFalse;
+        impl_->ApplyColorMask();
         impl_->ApplyBlendState();
     }
 
@@ -1612,14 +1752,7 @@ namespace CNA::Internal::Backends::Glide
             default: throw std::runtime_error("GLIDE backend received an unknown CullMode value");
         }
         impl_->scissorEnabled = scissorTestEnable;
-        if (scissorTestEnable)
-        {
-            impl_->ApplyClipWindow(impl_->scissorX, impl_->scissorY, impl_->scissorWidth, impl_->scissorHeight);
-        }
-        else
-        {
-            impl_->ApplyClipWindow(0, 0, impl_->virtualWidth, impl_->virtualHeight);
-        }
+        impl_->ApplyEffectiveClipWindow();
     }
 
     void GlideGraphicsBackend::ApplySamplerState(int slot, int filter,
@@ -2106,6 +2239,33 @@ namespace CNA::Internal::Backends::Glide
                 impl_->samplerAddressU, impl_->samplerAddressV);
         }
         const Matrix wvp = world * view * projection;
+        // CNA's matrix convention transforms positions as row vectors. Normals therefore need
+        // the transpose of World^{-1}; using World's upper 3x3 is only correct for rigid or
+        // uniform-scale transforms and visibly bends directional lighting otherwise.
+        std::array<float, 9> normalMatrix{};
+        if (params.lightingEnabled)
+        {
+            const float determinant =
+                world.M11 * (world.M22 * world.M33 - world.M23 * world.M32) -
+                world.M12 * (world.M21 * world.M33 - world.M23 * world.M31) +
+                world.M13 * (world.M21 * world.M32 - world.M22 * world.M31);
+            if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001f)
+            {
+                throw std::runtime_error(
+                    "GLIDE vertex-lit BasicEffect cannot transform normals through a singular World matrix");
+            }
+            const float inverseDeterminant = 1.0f / determinant;
+            // Row-major entries of transpose(inverse(World3x3)).
+            normalMatrix = {
+                (world.M22 * world.M33 - world.M23 * world.M32) * inverseDeterminant,
+                (world.M12 * world.M33 - world.M13 * world.M32) * -inverseDeterminant,
+                (world.M12 * world.M23 - world.M13 * world.M22) * inverseDeterminant,
+                (world.M21 * world.M33 - world.M23 * world.M31) * -inverseDeterminant,
+                (world.M11 * world.M33 - world.M13 * world.M31) * inverseDeterminant,
+                (world.M11 * world.M32 - world.M12 * world.M31) * -inverseDeterminant,
+                (world.M11 * world.M23 - world.M13 * world.M21) * -inverseDeterminant,
+                (world.M11 * world.M22 - world.M12 * world.M21) * inverseDeterminant};
+        }
         const auto readVertex = [&](int vertexIndex) -> CpuVertex
         {
             const std::uint8_t* bytes = vb->Bytes().data() + static_cast<std::size_t>(vertexIndex) * stride;
@@ -2163,9 +2323,9 @@ namespace CNA::Internal::Backends::Glide
             a *= params.diffuseColor[3];
             if (params.lightingEnabled)
             {
-                const float worldNx = nx * world.M11 + ny * world.M21 + nz * world.M31;
-                const float worldNy = nx * world.M12 + ny * world.M22 + nz * world.M32;
-                const float worldNz = nx * world.M13 + ny * world.M23 + nz * world.M33;
+                const float worldNx = nx * normalMatrix[0] + ny * normalMatrix[3] + nz * normalMatrix[6];
+                const float worldNy = nx * normalMatrix[1] + ny * normalMatrix[4] + nz * normalMatrix[7];
+                const float worldNz = nx * normalMatrix[2] + ny * normalMatrix[5] + nz * normalMatrix[8];
                 const float length = std::sqrt(worldNx * worldNx + worldNy * worldNy + worldNz * worldNz);
                 if (length <= 0.000001f)
                 {
@@ -2219,21 +2379,45 @@ namespace CNA::Internal::Backends::Glide
                 input.u * static_cast<float>(texture->GetWidth()) - tile->sourceX + tile->gutterLeft;
             const float t = tile == nullptr ? 0.0f :
                 input.v * static_cast<float>(texture->GetHeight()) - tile->sourceY + tile->gutterTop;
+            const float viewportDepth = impl_->viewportMinDepth + ndcZ *
+                (impl_->viewportMaxDepth - impl_->viewportMinDepth);
             return GlideVertex{
-                (ndcX + 1.0f) * static_cast<float>(impl_->virtualWidth) * 0.5f,
-                (1.0f - ndcY) * static_cast<float>(impl_->virtualHeight) * 0.5f,
-                static_cast<float>(ToGlideDepth(ndcZ)), reciprocalW,
+                static_cast<float>(impl_->viewportX) +
+                    (ndcX + 1.0f) * static_cast<float>(impl_->viewportWidth) * 0.5f,
+                static_cast<float>(impl_->viewportY) +
+                    (1.0f - ndcY) * static_cast<float>(impl_->viewportHeight) * 0.5f,
+                static_cast<float>(ToGlideDepth(viewportDepth)), reciprocalW,
                 input.r, input.g, input.b, input.a, ndcZ,
                 s * reciprocalW, t * reciprocalW, reciprocalW};
+        };
+        std::vector<GlideVertex> pendingTriangles;
+        constexpr std::size_t kMaximumBatchedVertices = 3u * 1024u;
+        const auto flushTriangleBatch = [&]
+        {
+            if (pendingTriangles.empty())
+            {
+                return;
+            }
+            std::vector<void*> pointers;
+            pointers.reserve(pendingTriangles.size());
+            for (GlideVertex& vertex : pendingTriangles)
+            {
+                pointers.push_back(&vertex);
+            }
+            impl_->api.grDrawVertexArray(kPrimitiveTriangles, static_cast<FxU32>(pointers.size()), pointers.data());
+            pendingTriangles.clear();
         };
         const auto drawFan = [&](const std::vector<CpuVertex>& polygon, const GlideTextureBackend::Tile* tile)
         {
             for (std::size_t index = 1; index + 1 < polygon.size(); ++index)
             {
-                const GlideVertex a = makeGlideVertex(polygon[0], tile);
-                const GlideVertex b = makeGlideVertex(polygon[index], tile);
-                const GlideVertex c = makeGlideVertex(polygon[index + 1], tile);
-                impl_->api.grDrawTriangle(&a, &b, &c);
+                pendingTriangles.push_back(makeGlideVertex(polygon[0], tile));
+                pendingTriangles.push_back(makeGlideVertex(polygon[index], tile));
+                pendingTriangles.push_back(makeGlideVertex(polygon[index + 1], tile));
+                if (pendingTriangles.size() >= kMaximumBatchedVertices)
+                {
+                    flushTriangleBatch();
+                }
             }
         };
         if (textured)
@@ -2315,6 +2499,7 @@ namespace CNA::Internal::Backends::Glide
                         drawTriangleForTile(readVertex(offset + 1), readVertex(offset), readVertex(offset + 2));
                     }
                 }
+                flushTriangleBatch();
             }
         }
         else
@@ -2338,6 +2523,7 @@ namespace CNA::Internal::Backends::Glide
                     drawFan(polygon, nullptr);
                 }
             }
+            flushTriangleBatch();
         }
     }
 

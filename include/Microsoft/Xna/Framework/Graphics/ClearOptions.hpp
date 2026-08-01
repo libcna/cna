@@ -36,6 +36,13 @@ namespace Microsoft::Xna::Framework::Graphics
         );
     }
 
+    /** @brief Inverts a ClearOptions flag mask. */
+    [[nodiscard]] constexpr ClearOptions operator~(ClearOptions value)
+    {
+        using Underlying = std::underlying_type_t<ClearOptions>;
+        return static_cast<ClearOptions>(~static_cast<Underlying>(value));
+    }
+
     /** @brief Combines flags into @p left with bitwise OR-assignment. */
     constexpr ClearOptions& operator|=(ClearOptions& left, ClearOptions right)
     {

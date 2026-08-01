@@ -111,6 +111,22 @@ namespace
                       triangleProbe.getBProperty() < 40,
                   "VertexPositionColor reaches native Glide Gouraud triangle rasterization");
 
+            // A non-full viewport must affect both NDC-to-window conversion and Glide's native
+            // clip rectangle. The same triangle's centroid moves from the 64x64 centre to the
+            // centre of this 32x32 viewport.
+            backend.ClearColorAndDepth(0.0f, 0.0f, 0.0f, 1.0f, 1.0f);
+            backend.SetViewport(0, 0, 32, 32, 0.0f, 1.0f);
+            backend.DrawColoredPrimitives(*vertexBuffer, Matrix::getIdentityProperty(),
+                                          Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                          PrimitiveType::TriangleList, 1);
+            Color viewportProbe(0, 0, 0, 0);
+            const Rectangle viewportProbeRegion(16, 16, 1, 1);
+            device.GetBackBufferData(&viewportProbeRegion, &viewportProbe, 0, 1);
+            Check(viewportProbe.getGProperty() > 200 && viewportProbe.getRProperty() < 40 &&
+                      viewportProbe.getBProperty() < 40,
+                  "Viewport maps fixed-function NDC geometry and clips through Glide");
+            backend.SetViewport(0, 0, kCanvasSize, kCanvasSize, 0.0f, 1.0f);
+
             // The upper vertex lies beyond XNA's near plane. The CPU clipper must split the
             // triangle before Glide sees it rather than dropping the whole primitive or emitting
             // a non-projectable vertex to the FIFO.
@@ -172,7 +188,7 @@ namespace
         }
 
     private:
-        static constexpr int kChecks = 9;
+        static constexpr int kChecks = 10;
 
         void Check(bool condition, const char* label)
         {

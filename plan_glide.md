@@ -16,12 +16,14 @@ renderer.
   undecorated and x86 stdcall-exported Glide DLLs.
 - [x] `SpriteBatch` texture upload and quad submission through TMU0 plus `grDrawTriangle`.
 - [x] Fixed-function `VertexPositionColor` triangle lists/strips, including indexed draws and CPU
-  `world * view * projection` transforms.
+  `world * view * projection` transforms. Compatible clipped triangle runs are batched through
+  native `grDrawVertexArray(GR_TRIANGLES)`; SpriteBatch remains two direct `grDrawTriangle` calls.
 - [x] Native 16-bit Z buffer, depth clear/test/write state, source/destination alpha blending, and
   a manual dgVoodoo smoke target.
 - [x] Homogeneous CPU frustum clipping before the perspective divide. Triangles crossing a side,
-  near, far, or eye plane are split into a clipped fan and then emitted as real `grDrawTriangle`
-  calls; invalid non-finite input is rejected rather than sent to Glide's FIFO.
+  near, far, or eye plane are split into a clipped fan and then emitted as native
+  `grDrawVertexArray(GR_TRIANGLES)` batches; invalid non-finite input is rejected rather than sent
+  to Glide's FIFO.
 - [x] Textured 3D `VertexPositionTexture` and `VertexPositionColorTexture` through TMU0, with
   Glide `s/w`, `t/w`, and `1/w`. Indexed versions expand the index stream before the same real
   triangle submission.
@@ -76,6 +78,19 @@ renderer.
 
 ## Next implementation work
 
+- [x] **GLIDE-AUD-001 — Make the standard clear path work without inventing stencil.** The shared backend contract now distinguishes default depth and stencil planes. Glide reports depth=true/stencil=false, so `GraphicsDevice::Clear(Color)` preserves its colour+Z clear while masking only its impossible stencil portion; the smoke target executes this standard path.
+- [x] **GLIDE-AUD-002 — Implement the XNA viewport contract and combine it correctly with scissor.** Glide now stores and validates XY/depth viewport state, maps 3D XY/Z into it, and submits the viewport/scissor/framebuffer intersection through `grClipWindow`. The smoke target contains an offset-viewport probe; the comprehensive state matrix remains under GLIDE-AUD-007.
+- [x] **GLIDE-AUD-003 — Fence texture mutation/reuse and make resource lifetime safe.** `UpdatePixels()` and address-mode rebuilds now finish the FIFO before replacing TMU contents; destruction finishes before returning ranges. Textures keep only a weak native-state reference, so backend-first teardown is safe instead of dereferencing a destroyed backend.
+- [x] **GLIDE-AUD-004 — Correct per-vertex lighting for non-uniform world transforms.** BasicEffect lighting now uses the transpose of the inverse World 3×3 and rejects singular/non-finite normal transforms with a clear error.
+- [x] **GLIDE-AUD-005 — Make reset, virtual resolution and presentation policy honest.** Glide explicitly supports only `NativeBackBuffer` and swap intervals 0/1. Resize remains an atomic fit-or-throw operation, which `GraphicsDevice::SetVirtualResolution()` already commits only after backend success.
+- [ ] **GLIDE-AUD-006 — Add an automated native-ABI contract test.** The backend deliberately hand-declares Glide 3.x types, numeric constants, layouts and stdcall byte counts. Factor the loader-facing declarations into a small auditable unit and test them against a purpose-built x86 fake `glide3x.dll` that records calls, including undecorated and decorated exports, `grSstWinOpen`, vertex layout, combiner state, texture calls, clear/readback and shutdown ordering. This must run without dgVoodoo and without the external `sharp-runtime` i686 executable dependency.
+- [ ] **GLIDE-AUD-007 — Expand rendering regressions beyond the nine smoke probes.** Add deterministic pixel probes/golden captures for all alpha-test compare functions, source/destination blend factors, depth compare/write combinations, cull modes, colour-mask groups, scissor, indexed strips, fog, and BasicEffect lighting. Include NPOT and multi-tile textures under Point/Linear × Clamp/Wrap/Mirror, with minification and texture updates. Run the visual subset on both dgVoodoo and, when available, real Voodoo hardware; record emulator/version, tolerance and known intentional ARGB4444/RGB565 differences.
+- [x] **GLIDE-AUD-008 — Harden texture input and TMU allocation failure paths.** Texture creation rejects undersized RGBA8 input, oversized logical dimensions and overflowing byte counts; TMU range allocation/coalescing now uses checked 64-bit intermediates. Failure-injection coverage remains part of the fake-DLL harness in GLIDE-AUD-006.
+- [x] **GLIDE-AUD-009 — Batch native submissions without crossing state boundaries.** Compatible
+  3D fan triangles now accumulate in bounded (1024-triangle) submission-order batches and use
+  `grDrawVertexArray(GR_TRIANGLES)`. The batch flushes before a texture-tile/state change and
+  preserves the existing per-triangle vertex order; SpriteBatch deliberately retains its direct
+  two-triangle path. The still-pending fake-DLL/dgVoodoo checks are tracked in GLIDE-AUD-006/007.
 - [ ] Validate and, if observable on real Voodoo/dgVoodoo output, compensate the remaining
   sub-texel LOD phase at a logical tile seam. All levels now use one shared logical mip pyramid,
   but a physical tile's one-texel gutter means its coordinate origin cannot be exactly aligned for

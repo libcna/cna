@@ -40,6 +40,7 @@ namespace CNA::Internal::Backends::Glide
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
         SDL_Window* GetWindowInternal() const override;
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
@@ -71,7 +72,9 @@ namespace CNA::Internal::Backends::Glide
                                int addressU, int addressV,
                                int maxAnisotropy) override;
 
-        [[nodiscard]] bool SupportsDepthStencil() const override { return true; }
+        [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsDepthBuffer() const override { return true; }
+        [[nodiscard]] bool SupportsStencilBuffer() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         [[nodiscard]] int GetMaxTextureDimension() const override;
 
@@ -107,7 +110,7 @@ namespace CNA::Internal::Backends::Glide
 
     private:
         struct Impl;
-        std::unique_ptr<Impl> impl_;
+        std::shared_ptr<Impl> impl_;
 
         void DrawSprite(const ITextureBackend& texture, const Rectangle& destinationRectangle,
                         const Rectangle& sourceRectangle, const Color& color, float rotation,

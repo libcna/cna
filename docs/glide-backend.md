@@ -8,6 +8,11 @@ through the Glide TMU API, swaps with `grBufferSwap`, and reads pixels with `grL
 It is intended for an emulator runtime such as [dgVoodoo2](https://dgvoodoo2.dege.freeweb.hu/).
 `glide3x.dll` is external to CNA: this repository neither contains nor copies it. Place a compatible
 DLL beside the executable, or set `CNA_GLIDE3X_DLL` to the DLL's full Windows path before launching.
+Use `PresentationMode::NativeBackBuffer` and a swap interval of either 0 or 1. Glide has no
+faithful CNA logical-surface scaling path; other presentation modes and intervals above one are
+rejected rather than silently ignored. A later virtual-resolution change is accepted only while it
+fits the Glide mode selected at startup, so `GraphicsDevice` retains its previous public size if
+the backend rejects it.
 
 ## Build
 
@@ -38,6 +43,8 @@ normal CTest because CNA cannot provide or configure the external emulator.
   indexed or non-indexed. CNA CPU-transforms and clips the triangle in homogeneous XNA space;
   Glide then rasterizes every resulting fan triangle with its native depth, TMU, alpha-test and
   blending pipeline. Texture parameters are submitted as perspective-correct `s/w`, `t/w`, `1/w`.
+  `Viewport` XY, depth range and the intersection of viewport/scissor are applied before native
+  rasterization.
 - Unlit BasicEffect material/vertex colour, and the documented per-vertex directional-diffuse
   BasicEffect subset (ambient/emissive included). Per-pixel lighting and specular are rejected.
   CNA computes vertex lighting and its `fogVector` on the CPU, then hands the iterated RGB to
@@ -45,7 +52,10 @@ normal CTest because CNA cannot provide or configure the external emulator.
   vector. It is a documented approximation, not a hidden fallback renderer.
 - Color-only and color-plus-depth clears, native depth-test/depth-write/depth-compare, native
   culling, AlphaTestEffect's discrete alpha comparisons, and blend enable/disable. Glide has a
-  depth buffer but no stencil buffer, so stencil requests remain unsupported.
+  depth buffer but no stencil buffer: common `GraphicsDevice::Clear(Color)` clears colour and
+  depth, while stencil-only portions are masked by the shared clear routing. RGB and alpha write
+  masks are independently supported; a mask that separates R/G/B or requests a sample mask is
+  rejected.
 - Textures are converted from CNA RGBA8 to native Glide ARGB4444, padded to power-of-two tiles,
   and receive complete generated ARGB4444 mip chains. The backend queries the runtime texture and
   aspect limits and tiles larger logical images rather than downsampling them. For 3D draws, the
