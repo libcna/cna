@@ -22,11 +22,11 @@ pro poctivý 2D Direct2D backend.
 | `RenderTarget2D::GetData` a readback aktivního cíle | RT `GetData` vrací `false`; readback vždy čte swap chain | **V rozsahu:** skutečný 2D readback |
 | Tint, flip, Wrap/Mirror pro render target jako SpriteBatch zdroj | u RT hází výjimku, protože nemá CPU shadow | **V rozsahu:** Direct2D effect/brush cesta |
 | Mipové levely `Texture2D` a `RenderTarget2D` | Texture2D má explicitně nahrané levely; RT generuje GPU chain po odbindu | **V rozsahu:** 2D bitmapy po levelech, generování downsamplem |
-| Point/linear + adresování 2D sprite zdrojů | základ funguje; RT omezený | **V rozsahu:** přesné 2D chování; anisotropie není cíl |
+| Point/linear/anisotropic + adresování 2D sprite zdrojů | point/linear základ funguje; RT omezený | **V rozsahu:** přesné 2D chování dostupné přes `ID2D1DeviceContext`, včetně `D2D1_INTERPOLATION_MODE_ANISOTROPIC` |
 | Scissor enable a viewport | `SetScissorRect` vždy clipuje; `SetViewport` je no-op | **V rozsahu:** 2D clip/transform stav |
 | Context loss/recovery | požaduje rekonstrukci celé hry | **V rozsahu:** obnova Direct2D zdrojů |
 | MSAA | 0 | **Vyřešeno:** trvalé `0`/`false`; Direct2D primitive antialiasing není `MultiSampleCount` a D3D multisample/resolve pipeline je mimo rozsah |
-| Obecné blend faktory, blend equation, write/sample mask | jen čtyři standardní presety | **Mimo rozsah:** Direct2D API je neumí přesně; nepřibližovat je D3D11 passem |
+| Obecné blend faktory, blend equation, write/sample mask | čtyři standardní presety | **Částečně v rozsahu:** přesné Porter–Duff kombinace dostupné přes `D2D1_COMPOSITE_MODE`; zbytek explicitně odmítat a nepřibližovat D3D11 passem |
 | 3D buffery/draw, depth/stencil, MRT, cube/volume textury, queries, custom shader effects | nepodporováno | **Mimo rozsah:** patří do `D3D11` backendu |
 
 ## Pevné hranice
@@ -37,7 +37,8 @@ Následující EasyGL schopnosti nejsou úkoly pro Direct2D a zůstávají expli
 - `BasicEffect` a ostatní stock 3D efekty, custom `Effect`/GLSL shader pipeline;
 - depth/stencil resources a state, 3D clear operace, culling, wireframe a depth bias;
 - `Texture3D`, `TextureCube`, `RenderTargetCube`, environment mapping a skinning;
-- MRT, occlusion queries a obecné D3D11 sampler state včetně anisotropie;
+- MRT, occlusion queries a obecné D3D11 sampler state; Direct2D anisotropie pro SpriteBatch je
+  naproti tomu čistě 2D schopnost a patří do D2D-32;
 - obecné `BlendState`, constant blend factor, color-write a multisample mask.
 
 `SupportsCapability()` musí pro tyto funkce zůstat `false`, 3D vstupy musí dál selhávat
@@ -99,6 +100,22 @@ navázaného targetu. Ani jedna z nich se neprojeví v dosavadních testech se s
 | D2D-26 | Rozšiř unit a veřejnou regresní matici na chybové a hraniční 2D kontrakty, které nelze spolehlivě vyčíst z happy-path pixelů. | 🟨 | Backend nyní odmítá záporný MRT count, null MRT array s nenulovým count, záporné scissor/viewport rozměry a neznámý presentation mode; součty readback/source rectangles používají 64-bit aritmetiku. Veřejný parity test ověřuje tyto named failures a `RenderTargetUsage::{DiscardContents,PreserveContents,PlatformContents}` přes reálný unbind/rebind, potom kreslí další frame. Zbývá systematický fuzz extrémních source rectangle a cizích/disponovaných targetů. |
 | D2D-27 | Zaveď měřitelný smoke pro dlouhý 2D frame a resource-lifetime audit. Direct2D drží transient bitmapy/effects/image brushes do `EndDraw`; je nutné prokázat, že se uvolní na Present, readbacku, resize, target switchi i device recovery. | 🟨 | Přidán `Direct2D_Lifetime` CTest: osm frameů, 256 off-screen sprite writes a 128 wrapped/flipped RT image-brush sprites na frame, střídavý mip readback, target switch, debug recovery a `ApplyChanges` resize; Wine pixel/readback smoke prošel. Zbývá nativní Windows Debug Layer/WARP audit live-object a timing/allocační log. |
 
+## Fáze D2D-5 — skutečné 2D mezery potvrzené následným auditem
+
+Tyto položky nejsou rozšířením do 3D. Všechny používají pouze Direct2D bitmapy, built-in effects,
+image brushes, command lists a image composite modes; D3D11 zůstává jen hostitelem Direct2D device
+a swap chainu. Položka smí být označena `✅` až po regresním testu příslušné veřejné 2D cesty.
+Větve závislé na built-in effects/composite modes navíc podléhají nativní bráně D2D-22.
+
+| # | Úkol | Stav | Akceptace |
+|---|---|---|---|
+| D2D-28 | Oprav `BlendState::Opaque` s `Color.A != 255`. Zdrojový RGB faktor musí zůstat `One`, ale kopírovaná alpha se musí násobit `Color.A`; současná GPU větev alpha-only tint vůbec nevytvoří a CPU fallback ji při `D2D1_ALPHA_MODE_IGNORE` zahodí. | ⬜ | Sdílené rozhodnutí o tintu zahrne alpha i pro Copy, GPU ColorMatrix zachová RGB a škáluje alpha a fallback nahraje skutečnou alpha. Veřejné pixely ověří premultiplied `Texture2D` i GPU-only `RenderTarget2D`, alespoň pro vstup `(128,0,0,128)` × `Color.A=128` → `(128,0,0,64)`, bez změny výsledků AlphaBlend/Additive. |
+| D2D-29 | Implementuj skutečný `Direct2DRenderTargetBackend::UpdatePixelsLevel`. `RenderTarget2D::SetData(level>0)` dnes skončí v prázdném defaultu rozhraní a sdílený CPU mip shadow pak může lhát proti GPU obsahu. | ⬜ | Level 0 i každý existující nižší mip validují rozměry a nahrají RGBA do odpovídající Direct2D bitmapy. Částečný SetData GPU-only targetu nejdřív zachová nezměněné pixely backendovým readbackem; nevznikne dlouhodobý CPU shadow, takže pozdější render/generování mipů nemůže vracet zastaralá data. Veřejný test porovná `SetData` → `GetData` → SpriteBatch sampling a následnou invalidaci po zápisu do levelu 0. |
+| D2D-30 | Zpřesni volbu a mapování mip levelu pro NPOT textury a výsledný 2D transform. Současné `2^-level` není poměr skutečných NPOT rozměrů a LOD ignoruje scale/shear SpriteBatch matice i presentation scale. | ⬜ | Source rectangle a origin se mapují poměrem skutečných rozměrů level/base na každé ose. Preferovaný LOD vychází z nejmenšího efektivního scale výsledné 2D lineární transformace (sprite × batch × presentation), bezpečně řeší rotaci/shear/singulární matici a stále vybírá pouze existující level. Unit test pokryje NPOT poměry a matici; veřejný pixelový test prokáže změnu levelu vyvolanou batch transformem. |
+| D2D-31 | Odstraň omezení `ReadBackbuffer` na 1:1 prezentaci čistě 2D logickým framebufferem. Přímé kreslení do fyzického swap-chain bitmapu dnes znemožňuje přesný logický readback při Letterbox/Overscan/Stretch/FixedHeightDynamicWidth. | ⬜ | Defaultní scéna se kreslí do samostatné targetovatelné Direct2D bitmapy v logických rozměrech a `Present` ji kompozituje do swap-chain targetu presentation transformem; pruhy/crop/resize/recovery zůstanou deterministické. `GetBackBufferData` čte logické pixely před škálováním ve všech pěti režimech a veřejný test projde alespoň jedním skutečným non-1:1 resize bez výjimky. |
+| D2D-32 | Využij nativní Direct2D sampler schopnosti místo boolean point/linear aproximace všech devíti `TextureFilter` hodnot. | ⬜ | `TextureFilter::Anisotropic` používá `D2D1_INTERPOLATION_MODE_ANISOTROPIC` pro přímý `DrawImage` i `ImageBrush` a `SupportsCapability(AnisotropicFiltering)` vrací `true`. Kombinované min/mag hodnoty vybírají Point/Linear podle skutečné minifikace či magnifikace; nemožnost nativního trilineárního přechodu mezi samostatnými per-level bitmapami zůstane výslovně dokumentovaná jako nearest-level politika. Veřejný test projde přímou i brush anisotropic cestou a capability reportingem. |
+| D2D-33 | Rozšiř přesné 2D blend mapování o všechny symetrické Add faktorové kombinace, které mají ekvivalent v `D2D1_COMPOSITE_MODE` (Porter–Duff), bez obecného D3D11 blend pasu. | ⬜ | Čistá mapovací funkce jednoznačně pokryje SourceOver/Copy/Plus a přesně odpovídající DestinationOver, Source/Destination In/Out/Atop a Xor; rozdílné color/alpha faktory, jiné rovnice, masky a konstantní faktor dál selžou named exception. Přímý bitmapový draw použije composite mode; dekorovaný/Wrap/Mirror zdroj se nejdřív materializuje čistě 2D command listem a poté kompozituje stejným režimem. Unit test pokryje celou tabulku a veřejné pixely alespoň jeden nový režim na přímé i brush cestě. |
+
 ## Pořadí a pravidla ověření
 
 1. Nejprve D2D-1 až D2D-9: nejvyšší 2D přínos bez změny rozsahu backendu.
@@ -106,4 +123,5 @@ navázaného targetu. Ani jedna z nich se neprojeví v dosavadních testech se s
 3. D2D-20/D2D-21 uzavírají compositing; plný blend model zůstává úkolem existujícího `D3D11` backendu.
 4. D2D-22 je release gate pro aktuálně rozpracované D2D-1, D2D-4, D2D-13 a D2D-20; teprve po něm je lze označit `✅`.
 5. D2D-24 a D2D-25 jsou opravné priority před D2D-27, protože jinak benchmark měří i chybnou cestu.
-6. Při každé změně ověř čistý unit test, Wine, Proton a podle rozsahu skutečný nativní Windows pixelový CTest. Budoucí kompilace a testy spouštěj nanejvýš se dvěma souběžnými joby (`-j2` / `--parallel 2`).
+6. D2D-28 až D2D-33 jsou auditované 2D mezery; jejich implementace nesmí oslabit explicitní 3D hranice ani D2D-21 odmítací kontrakty.
+7. Při každé změně ověř čistý unit test, Wine, Proton a podle rozsahu skutečný nativní Windows pixelový CTest. Budoucí kompilace a testy spouštěj nanejvýš se dvěma souběžnými joby (`-j2` / `--parallel 2`).
