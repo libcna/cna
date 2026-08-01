@@ -1820,8 +1820,11 @@ namespace CNA::Internal::Backends::Software
             if (ctx.stencilState.testEnabled && fb.stencilBuffer.empty())
                 throw std::logic_error(
                     "Software rasterizer received enabled stencil state without stencil storage.");
-            // Stencil runs before depth and shading, matching the GPU fragment-test order.  A
-            // failed stencil test updates only StencilFail and must not reach depth or colour.
+            // Stencil runs before depth and shading, matching the GPU fragment-test order. GDI-073
+            // deliberately keeps one stencil byte per PIXEL: after sample-mask/coverage rejection,
+            // this comparison/operation runs once for the triangle fragment and gates its complete
+            // active colour-sample set. It does not claim a per-sample depth/stencil attachment.
+            // A failed stencil test updates only StencilFail and must not reach depth or colour.
             if (ctx.stencilState.testEnabled && !StencilComparisonPasses(
                     ctx.stencilState.reference, fb.stencilBuffer[pixelIndex],
                     ctx.stencilState.readMask, ctx.stencilState.compareFunction))
@@ -2095,6 +2098,10 @@ namespace CNA::Internal::Backends::Software
             {
                 // REMED-GFX-082: rasterize the selected edges as perspective-correct shaded lines,
                 // reusing WriteShadedFragment (identical texture/diffuse/env-map/blend + depth path).
+                // GDI-073: the established DDA visits whole pixels and intentionally omits a
+                // geometric coverage mask, so each visited wire pixel writes every sample enabled
+                // by MultiSampleMask when a sample plane is active. This is crisp pixel wireframe,
+                // not subpixel line AA.
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
                     WalkWireEdge(clip, A, B, [&](int x, int y, float t) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
@@ -3458,7 +3465,8 @@ namespace CNA::Internal::Backends::Software
                                          colorBlendFunc, alphaBlendFunc};
         // REMED-GFX-077: Software has one active colour buffer (no MRT), so only slot-0's write mask
         // applies; the CPU fragment writers (WriteColoredFragment/WriteShadedFragment) gate each
-        // channel by it. Single-sample ⇒ only MultiSampleMask bit 0 is meaningful.
+        // channel by it. Single-sample surfaces use MultiSampleMask bit 0; the optional four-sample
+        // colour plane uses bits 0..3 (GDI-073).
         colorWriteMask_  = writeState.colorWriteChannels[0];
         multiSampleMask_ = writeState.multiSampleMask;
     }

@@ -34,11 +34,18 @@ compatibility backend under validation, not yet as a release baseline.
   `OcclusionQuery`, and `CustomEffects` remain false.
 - Optional 4x CPU MSAA is available for the GDI backbuffer only: request exactly
   `PresentationParameters.MultiSampleCount = 4` (or call `ApplyMultiSampleCount(4)`). It uses
-  four 2x2-grid coverage samples, blends each covered sample independently, and resolves before
-  GDI `Present()` and CPU readback. Requests other than 4 return 0; `RenderTarget2D` remains
-  single-sampled and reports 0. `SupportsCapability(MultiSampleAntiAliasing)` is true because the
-  backbuffer path is real, but applications that require multisampled off-screen targets should
-  use another backend.
+  four 2x2-grid colour samples for filled SpriteBatch triangles, blends each geometrically covered
+  sample independently, and resolves before GDI `Present()` and CPU readback.
+  `BlendState.MultiSampleMask` bits 0 through 3 enable those four samples; higher bits are ignored.
+  Wireframe SpriteBatch quads deliberately remain crisp one-pixel DDA lines: every enabled sample
+  in a visited pixel is written, so this mode does not provide subpixel line antialiasing. Stencil
+  remains one 8-bit value per pixel, not per sample. One stencil comparison/operation occurs for a
+  covered triangle fragment after sample-mask/coverage rejection and gates all active colour
+  samples; a fragment with no active samples cannot modify stencil. Requests other than 4 return 0;
+  `RenderTarget2D` remains single-sampled and reports 0. There is no per-sample depth/stencil
+  attachment. `SupportsCapability(MultiSampleAntiAliasing)` is true for this deliberately narrow,
+  real backbuffer path; applications requiring multisampled off-screen targets, antialiased wire
+  edges, or per-sample depth/stencil should use another backend.
 - The applied GDI backbuffer is always `SurfaceFormat::Color` with
   `PresentationParameters.DepthStencilFormat=None`; unsupported format/depth requests are
   normalized before the device exposes its active parameters. Direct construction, store-only
@@ -212,10 +219,11 @@ CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
            cna_test_gdi_presentation_configuration \
            cna_test_gdi_window_metrics \
            cna_test_gdi_framebuffer_allocation \
+           cna_test_gdi_msaa_contract \
            cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
-The backend is hard-gated to Windows targets. A native Windows build registers fifteen `GDI` CTest
+The backend is hard-gated to Windows targets. A native Windows build registers sixteen `GDI` CTest
 cases, including separate default, dirty and halftone configurations; run them with
 `ctest -L GDI --output-on-failure`.
 
@@ -248,6 +256,7 @@ build-gdi\cna_test_gdi_repaint_invalidation.exe
 build-gdi\cna_test_gdi_presentation_oracle.exe
 build-gdi\cna_test_gdi_window_metrics.exe
 build-gdi\cna_test_gdi_framebuffer_allocation.exe
+build-gdi\cna_test_gdi_msaa_contract.exe
 build-gdi\cna_bench_gdi_2d.exe --frames 4
 build-gdi\cna_demo_2d.exe
 
@@ -264,6 +273,7 @@ wine build-gdi/cna_test_gdi_repaint_invalidation.exe
 wine build-gdi/cna_test_gdi_presentation_oracle.exe
 wine build-gdi/cna_test_gdi_window_metrics.exe
 wine build-gdi/cna_test_gdi_framebuffer_allocation.exe
+wine build-gdi/cna_test_gdi_msaa_contract.exe
 wine build-gdi/cna_bench_gdi_2d.exe --frames 4
 wine build-gdi/cna_demo_2d.exe
 ```
@@ -339,6 +349,13 @@ unused depth storage on both the backbuffer and render targets, optional 4x samp
 release, mip accounting, dimension/budget rejection, and transactional resize failure. Its pure
 planner is also compiled and run by the standalone genuine-32-bit arithmetic workflow, which
 distinguishes `size_t` overflow from a multiplication-safe request above the byte budget.
+
+`cna_test_gdi_msaa_contract` locks down the deliberately narrow backbuffer contract in 19 checks:
+four individual sample-mask bits and fractional resolves, geometric coverage intersection, ignored
+high mask bits, crisp wireframe behavior, per-pixel stencil operations, zero-sample stencil
+suppression, and all-active-sample gating after a matching or failing stencil comparison. It also
+proves that render targets remain single-sampled and disabling backbuffer MSAA releases the sample
+plane.
 
 `cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
 CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run

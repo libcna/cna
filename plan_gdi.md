@@ -9,9 +9,9 @@
 > put in the window.
 >
 > **Implementation update (2026-08-01 working tree):** GDI-050 through GDI-060, GDI-067, GDI-070,
-> and GDI-072 are implemented. GDI-071's source/archive boundary is implemented and locally
+> GDI-072, and GDI-073 are implemented. GDI-071's source/archive boundary is implemented and locally
 > verified with native GCC plus MinGW, but its first native-MSVC workflow result is still pending.
-> The focused MinGW Release build, all thirteen GDI correctness
+> The focused MinGW Release build, all fourteen GDI correctness
 > executables, and all three configuration variants pass under Wine. The suite includes a real
 > memory-DC/DIBSection pixel oracle, complete public-path coverage for advertised features, exact
 > dirty-damage coverage, event/failure-retention integration, DPI-coordinate oracles, live
@@ -129,10 +129,10 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 [`cmake/Tests/GdiTests.cmake`](cmake/Tests/GdiTests.cmake) builds smoke, CPU 2D regression,
 ColorMatrix integration, public-stencil, complete public-API, applied-state, unsupported-feature,
 dirty-damage, repaint/failure, presentation-oracle, presentation-configuration, window-metrics,
-framebuffer-allocation, and benchmark executables. It registers fifteen cases (twelve focused cases
-plus three environment configurations) as CTests only for a native Windows build. The manual
-`gdi-windows-ci.yml` workflow configures the backend with MSVC, builds only CNA plus those focused
-tests, and runs the `GDI` CTest label.
+framebuffer-allocation, MSAA-contract, and benchmark executables. It registers sixteen cases
+(thirteen focused cases plus three environment configurations) as CTests only for a native Windows
+build. The manual `gdi-windows-ci.yml` workflow configures the backend with MSVC, builds only CNA
+plus those focused tests, and runs the `GDI` CTest label.
 
 ---
 
@@ -173,14 +173,15 @@ or repaint behavior in a visible native Windows client.
 
 ### Current Phase G5/G6 validation
 
-The working tree builds all thirteen correctness executables together with MinGW-w64/Ninja at `-j2`.
+The working tree builds all fourteen correctness executables together with MinGW-w64/Ninja at `-j2`.
 Under Wine, smoke, 2D regression, ColorMatrix, public stencil, the complete public API matrix, dirty
-damage, unsupported-feature rejection, framebuffer-allocation, repaint/failure and the memory-DC presentation oracle all pass; the
-window-metrics integration covers external ownership, odd resize, every mode, fullscreen and
-minimize retention, while presentation configuration also passes in its default, dirty and
-halftone environments with `CNA_GDI_DWM_FLUSH=0`. Unlike the audited baseline, the memory-DC test proves the exact
-GDI-produced pixels on a deterministic selected bitmap. It still does not replace the visible
-native Windows lifecycle/DPI gate.
+damage, unsupported-feature rejection, framebuffer allocation, the 19-check MSAA contract,
+repaint/failure, and the memory-DC presentation oracle all pass. The window-metrics integration
+covers external ownership, odd resize, every mode, fullscreen, and minimize retention, while
+presentation configuration also passes in its default, dirty, and halftone environments with
+`CNA_GDI_DWM_FLUSH=0`. Unlike the audited baseline, the memory-DC test proves the exact GDI-produced
+pixels on a deterministic selected bitmap. It still does not replace the visible native Windows
+lifecycle/DPI gate.
 
 ---
 
@@ -292,8 +293,8 @@ GDI behavior, and the registered `GDI` label unobserved.
 
 **Resolution:** a separate owner-approved, `workflow_dispatch`-only workflow uses one
 `windows-latest` MSVC/Ninja job. It checks out only the required sibling dependency, caches the
-vendored SDL build, builds CNA plus the thirteen focused executables at two-way parallelism, runs all
-fifteen native `GDI` CTest cases, and uploads CTest/CMake diagnostics on failure. It remains a
+vendored SDL build, builds CNA plus the fourteen focused executables at two-way parallelism, runs all
+sixteen native `GDI` CTest cases, and uploads CTest/CMake diagnostics on failure. It remains a
 compiler/hidden-window gate and explicitly does not close the visible GDI-061 gate.
 
 ### F7 — public configuration and rejection semantics are not consistently honest (P1,
@@ -333,8 +334,9 @@ answers.
   dirty mode has no damage or only a small rectangle.
 - The hidden-Wine benchmark does not measure a visible compositor path; it cannot close the
   DIBSection, flush, dirty-blit, or pacing decisions.
-- Four-sample colour is real for solid triangle coverage, but wireframe writes all samples and
-  depth/stencil remain per pixel. This limited MSAA contract is not fully documented or tested.
+- At the audited commit, four-sample colour was real for solid triangle coverage, but wireframe
+  wrote all samples and depth/stencil remained per pixel; that limited contract was not fully
+  documented or tested.
 - Before GDI-067, GDI allocated an unused float-depth plane for every framebuffer. At 4x it retained
   roughly 25 bytes/pixel across resolved colour, depth, stencil, and sample colour before container
   overhead.
@@ -356,7 +358,7 @@ plane only when applied (21 bytes/pixel total). A side-effect-free planner check
 and a 512 MiB per-resource pixel-storage budget before allocation. Allocation failures are translated
 to `System::OutOfMemoryException`, rejected resizes retain the previous framebuffer, and a genuine
 32-bit MinGW harness covers overflow separately from budget rejection. The remaining cost and
-architecture bullets map to GDI-062 through GDI-066, GDI-071, and GDI-073.
+architecture bullets map to GDI-062 through GDI-066, GDI-071, and GDI-074.
 
 **GDI-070 resolution for the runtime boundary:** `GdiGraphicsBackend` now derives directly from
 `IGraphicsBackend` and privately owns a `GdiSoftware2DCore` composition adapter. No pointer to the
@@ -373,7 +375,7 @@ cannot enter GDI without review, and the link graph is reduced to the honest `CN
 An independent full GCC SOFTWARE build exposed the same undeclared reverse edge there
 (`ColorMatrixEffect::FillSpriteDrawParams`); declaring `CNA` ↔ SOFTWARE fixed ordinary executable
 links and removed the tests' GNU-only archive group. The complete focused MinGW build and all
-fifteen Wine/Xvfb cases pass, as does the full native GCC link. The remaining monolithic
+sixteen Wine/Xvfb cases pass, as does the full native GCC link. The remaining monolithic
 3D/cube compilation is tracked by GDI-074, and the native-MSVC result remains the only GDI-071
 verification gap.
 
@@ -383,6 +385,15 @@ the corresponding safe default for every invalid value, sanitizes values, and co
 into one diagnostic emitted during construction. The focused configuration executable mutates all
 three environment variables after construction and also injects a contrary typed override; filter,
 dirty policy, and stored DWM choice remain deterministic.
+
+**GDI-073 resolution for the multisample-contract portion:** the advertised 4x mode is now
+explicitly limited to the GDI backbuffer's filled SpriteBatch triangles. Their four 2x2-grid colour
+samples intersect geometric coverage with `MultiSampleMask` bits 0 through 3 before fragment tests;
+higher bits are ignored. Wireframe remains a crisp one-pixel DDA path that writes every enabled
+sample in a visited pixel, not subpixel-antialiased lines. Stencil remains one byte per pixel: one
+comparison/operation per covered triangle fragment gates all active colour samples, with no
+per-sample depth/stencil attachment. Render targets stay single-sampled. A focused 19-check pixel
+test covers fractional masks, edge coverage, wireframe, stencil/mask ordering, and MSAA disable.
 
 ---
 
@@ -395,7 +406,7 @@ means only the narrowed statement in this table, not overall release readiness.
 |---|---:|---|
 | GDI-001 | ✅ | Windows selection, factory, SDL3/`gdi32` linkage, and MinGW build integration work. |
 | GDI-002 | ✅ | A real GDI display path exists, using `SetDIBitsToDevice` at 1:1 and `StretchDIBits` when scaled. |
-| GDI-003 | ✅ | Focused Release cross-build passed; all thirteen current GDI correctness executables and three configuration variants pass under Wine. |
+| GDI-003 | ✅ | Focused Release cross-build passed; all fourteen current GDI correctness executables pass under Wine, with the configuration executable exercised in all three variants. |
 | GDI-004 | 🟨 | Native visible demo/lifecycle inspection is still required and its checklist must be expanded. |
 | GDI-005 | ✅ | CPU 2D raster/readback regression is substantial; it is not a GDI-output regression. |
 | GDI-006 | 🟨 | Build/run and corrected stencil/dirty/test documentation exist; release and native-performance claims still require GDI-061/062. |
@@ -406,7 +417,7 @@ means only the narrowed statement in this table, not overall release readiness.
 | GDI-015–016 | 🟨 | `GdiFlush` is checked and optional `DwmFlush` policy exists; native latency/pacing evidence is missing. |
 | GDI-020–023 | ✅ | Blend, RT mips, fixed ColorMatrix, and SpriteBatch custom-effect rejection work in CPU tests. |
 | GDI-024 | 🚫 | A general CPU shader interpreter remains outside the 2D compatibility scope. |
-| GDI-025 | 🟨 | Backbuffer 4x colour coverage/resolve exists; public count, partial resolve, and sample semantics remain. |
+| GDI-025 | ✅ | The backbuffer has real 4x colour coverage/resolve; public count, partial resolves, sample-mask bits, wireframe limits, and per-pixel stencil interaction are tested and documented. |
 | GDI-026 | ✅ | Public backbuffer and depthless-RT stencil use/clear now work without internal-backend calls. |
 | GDI-027–028 | ✅ | No-depth and Anisotropic-to-Linear decisions are implemented for the current contract. |
 | GDI-029 | ✅ | `StencilBuffer=true`, `DepthStencilBuffer=false`, and per-target attachment queries expose the standalone plane honestly. |
@@ -433,7 +444,7 @@ means only the narrowed statement in this table, not overall release readiness.
 |---|---|---:|---|
 | GDI-055 | Add high-level GDI API coverage. | ✅ | `gdi_public_api_test` drives `GraphicsDevice`, `PresentationParameters`, `Texture2D` upload/readback, `SpriteBatch`, `RenderTarget2D` binding/preservation/sampling, viewport/scissor, 4x and rejected 2x MSAA reset, backbuffer readback, resize, and the complete capability matrix. `gdi_public_stencil_test` covers stencil clear/use on the backbuffer and a depthless target. Low-level raster details remain in `gdi_2d_regression_test`; every advertised feature now has a public-path assertion. |
 | GDI-056 | Register meaningful configuration variants. | ✅ | Native CTest has distinct default, `CNA_GDI_DIRTY_PRESENTATION=1`, and scaled `CNA_GDI_PRESENT_FILTER=halftone` cases. The variants assert NativeFull/None/Stretch and filter selection through GDI-054 telemetry, while the oracle verifies corresponding pixels. Every case explicitly disables `DwmFlush` so CI cannot block on a compositor. |
-| GDI-057 | Add a manual native-Windows GDI workflow. | ✅ | `.github/workflows/gdi-windows-ci.yml` is a one-job, `workflow_dispatch`-only MSVC/Ninja gate. It builds only CNA plus the thirteen focused GDI executables with `--parallel 2`, runs all fifteen `GDI` CTest cases, and uploads CTest/CMake diagnostics on failure. Its header and documentation explicitly retain GDI-061 as the separate visible lifecycle/DPI gate. |
+| GDI-057 | Add a manual native-Windows GDI workflow. | ✅ | `.github/workflows/gdi-windows-ci.yml` is a one-job, `workflow_dispatch`-only MSVC/Ninja gate. It builds only CNA plus the fourteen focused GDI executables with `--parallel 2`, runs all sixteen `GDI` CTest cases, and uploads CTest/CMake diagnostics on failure. Its header and documentation explicitly retain GDI-061 as the separate visible lifecycle/DPI gate. |
 | GDI-058 | Make applied presentation/resource state honest. | ✅ | Presentation-mode ordinals outside 0–4 throw before state mutation. Backbuffer format/depth normalize to `Color`/`None`, and both construction and reset expose only actual 0x/4x MSAA. `RenderTarget2D` rejects non-`Color`, reports actual `None` depth and 0x MSAA while retaining the separately advertised stencil plane, and preserves `PreserveContents`/`PlatformContents` while deterministically clearing `DiscardContents`. `gdi_applied_state_test` compares every property with color readback/mip/rebind storage; the public stencil test verifies the same three rebind policies for stencil. |
 | GDI-059 | Normalize unsupported-feature failures. | ✅ | Every excluded GDI factory/backend entry throws `System::NotSupportedException`. Public construction rejects TextureCube, Texture3D, RenderTargetCube, ShaderEffect, occlusion queries, vertex buffers, and 16/32-bit index buffers (including dynamic wrappers) before a null or private-core Software resource can escape. The focused public test also covers depth state and indexed/non-indexed user draws, and confirms `SupportsCapability(ThreeD)==false` plus the resource-specific false answers. |
 | GDI-060 | Audit DPI, fullscreen, resize, and input transforms. | ✅ | `SDL_GetWindowSizeInPixels()` is authoritative for backbuffer/presentation pixels; SDL input/warp coordinates are converted via `SDL_GetWindowSize()`. Pure tests cover 100/150/200% ratios and edge/bar rejection. A live SDL/Win32 test covers caller-owned windows and input-handle cleanup, all modes, three repeated odd resizes, drawable/client agreement, fullscreen round-trip, and exact logical/pixel retention across minimize/restore. Minimized state is explicitly non-drawable even when a platform reports a misleading cached pixel size. Physical multi-DPI observation remains GDI-061. |
@@ -455,9 +466,9 @@ means only the narrowed statement in this table, not overall release readiness.
 | # | Task | Status | Acceptance criteria |
 |---|---|---:|---|
 | GDI-070 | Replace inheritance from the whole Software 3D backend with an explicit CPU-2D component, or prove a guarded equivalent. | ✅ | GDI now derives directly from `IGraphicsBackend` and privately composes `GdiSoftware2DCore`; only reviewed 2D services are forwarded. A compile-time non-inheritance assertion plus a 42-check public/direct boundary test cover all resource factories, bindings, depth operations, and draw entries, so new Software virtuals cannot enter GDI implicitly. |
-| GDI-071 | Make the shared-core build boundary explicit. | 🟨 | The GDI Software glob and intermediate archive are gone: one GDI archive uses a reviewed two-file list, and future Software files cannot enter implicitly. The GNU/MinGW cycle is now only `CNA` ↔ GDI; the independently discovered `CNA` ↔ SOFTWARE edge is declared centrally and the per-test GNU linker group is gone. Full GCC SOFTWARE linking, focused MinGW GDI linking, and all fifteen Wine/Xvfb cases pass. `SoftwareGraphicsBackend.cpp` remains a 2D/3D/cube monolith (GDI-074), and the manual native-MSVC workflow must still pass before this task becomes ✅. |
+| GDI-071 | Make the shared-core build boundary explicit. | 🟨 | The GDI Software glob and intermediate archive are gone: one GDI archive uses a reviewed two-file list, and future Software files cannot enter implicitly. The GNU/MinGW cycle is now only `CNA` ↔ GDI; the independently discovered `CNA` ↔ SOFTWARE edge is declared centrally and the per-test GNU linker group is gone. Full GCC SOFTWARE linking, focused MinGW GDI linking, and all sixteen Wine/Xvfb cases pass. `SoftwareGraphicsBackend.cpp` remains a 2D/3D/cube monolith (GDI-074), and the manual native-MSVC workflow must still pass before this task becomes ✅. |
 | GDI-072 | Capture typed GDI configuration once. | ✅ | `GdiConfiguration` captures filter/dirty/DWM once at construction; its pure strict parser aggregates sanitized invalid values into one warning and preserves safe defaults. Typed constructor-override and post-construction environment-mutation tests prove `Present()` uses only the immutable snapshot. |
-| GDI-073 | Finish the advertised 4x MSAA semantics. | ⬜ | Decide and test wireframe coverage, `MultiSampleMask`, and stencil interaction. Either implement sample-correct behavior for every advertised 2D path or explicitly narrow the capability/documentation so users cannot infer per-sample depth/stencil or anti-aliased wire edges. Keep RT MSAA false unless real sample storage is added. |
+| GDI-073 | Finish the advertised 4x MSAA semantics. | ✅ | The capability is explicitly narrowed and tested: filled backbuffer triangles have four 2x2-grid colour samples; mask bits 0–3 intersect geometric coverage and high bits are ignored; wireframe is a crisp full-enabled-sample DDA path without line AA; stencil is one value and one operation per covered pixel fragment that gates active colour samples. A 19-check pixel test covers every rule, and render targets remain single-sampled. |
 | GDI-074 | Physically split the reusable Software 2D implementation. | ⬜ | Move the framebuffer, Texture2D, SpriteBatch, RenderTarget2D, and required shared helpers into independently buildable translation units without changing public behavior. GDI must then compile no Software cube/general-3D implementation or its warnings; SOFTWARE must retain the complete feature set. Validate focused GDI MinGW/Wine, native SOFTWARE GCC tests, and the manual MSVC gate before removing the documented monolith exception. |
 
 ---
@@ -472,8 +483,8 @@ means only the narrowed statement in this table, not overall release readiness.
 6. **Establish native repeatability:** ✅ GDI-057 through GDI-060; GDI-061 remains a visible
    native-Windows gate.
 7. **Measure a visible client:** GDI-062. Only then choose GDI-063 through GDI-066.
-8. **Reduce memory and architectural risk:** ✅ GDI-067, GDI-070, and GDI-072; GDI-071 is locally
-   implemented and awaits native MSVC, while GDI-073 and GDI-074 remain.
+8. **Reduce memory and architectural risk:** ✅ GDI-067, GDI-070, GDI-072, and GDI-073; GDI-071 is
+   locally implemented and awaits native MSVC, while only GDI-074 remains in this group.
 
 The GDI-014 and GDI-026 prerequisites are now satisfied by GDI-050 through GDI-054 and their
 focused automated tests. Dirty presentation remains opt-in until the visible native lifecycle gate

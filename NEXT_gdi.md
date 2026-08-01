@@ -12,10 +12,10 @@
   baseline is commit `48826e0b`;
   later completed tasks are `4c512245`, `01873ca9`, `c8fd70d6`, `47fe3f1e`, and
   `3096ab0c`, GDI-067 in `de79659d`, GDI-072 in `517a0776`, and GDI-070 in `35c047a2`.
-- GDI-071's explicit shared-core source/archive boundary is implemented and locally validated in
-  the current tree. Its native-MSVC workflow result remains pending, so the plan status is 🟨.
-- GDI-061 and GDI-062 require native visible Windows work. After committing GDI-071, the next safe
-  implementation task is GDI-073's advertised 4x-MSAA contract audit.
+- GDI-071's explicit shared-core source/archive boundary is committed in `47268263`. Its
+  native-MSVC workflow result remains pending, so the plan status is 🟨.
+- GDI-073's narrowed 4x-MSAA contract is implemented and locally validated in this change set.
+  The current instruction is to commit and push it, then wait; no subsequent task is in progress.
 
 ## Completed in the current working tree
 
@@ -29,8 +29,8 @@
   sampling, 4x and rejected 2x MSAA resets, resize and backbuffer readback. Public stencil coverage
   remains in its focused companion test.
 - GDI-056: distinct native CTest cases for default, dirty and halftone presentation policies.
-- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the thirteen
-  focused GDI executables at `--parallel 2`, runs all fifteen `GDI` CTest cases, and uploads native
+- GDI-057: an owner-approved one-job, manual-only MSVC/Ninja workflow builds CNA plus the fourteen
+  focused GDI executables at `--parallel 2`, runs all sixteen `GDI` CTest cases, and uploads native
   diagnostics on failure. It intentionally does not claim the visible GDI-061 gate.
 - GDI-058: applied backbuffer format/depth/MSAA are normalized on construction, reset, and the
   store-only update path; invalid presentation modes throw transactionally. Render targets expose
@@ -74,6 +74,11 @@
   is reduced to `CNA` ↔ GDI. A full independent SOFTWARE build exposed its own undeclared reverse
   dependency on CNA (`ColorMatrixEffect::FillSpriteDrawParams`); that cycle is now declared
   centrally, and Software tests no longer carry a GNU-only archive-group workaround.
+- GDI-073: the advertised 4x mode is explicitly a filled-SpriteBatch backbuffer capability. Its
+  2x2 colour samples use `MultiSampleMask` bits 0 through 3, wireframe remains a crisp full-sample
+  DDA path without line antialiasing, and one per-pixel stencil comparison/operation gates every
+  active colour sample. High mask bits are ignored, zero active samples cannot modify stencil,
+  and render targets remain single-sampled. A focused test locks the contract down in 19 checks.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -126,13 +131,15 @@ baseline. All later tasks use one task per commit.
 - 2026-08-01: GDI uses one backend archive with an explicit two-file Software source list. The
   physical Software monolith split is a separate GDI-074 task; no claim is made that unrelated
   cube/3D code has already disappeared from compilation.
+- 2026-08-01: GDI's 4x claim is limited to filled backbuffer triangles with four colour samples;
+  wireframe has no subpixel line AA and stencil/depth are not per sample.
 - Preserve XNA/FNA public API compatibility; backend-specific unsupported behavior must fail
   clearly without broadening the GDI 2D contract.
 
 ## Validation status
 
 - Fresh MinGW-w64 Release configure in `cmake-build-gdi/`: pass.
-- `CNA`, all thirteen focused GDI correctness executables, the presentation benchmark and 2D demo:
+- `CNA`, all fourteen focused GDI correctness executables, the presentation benchmark and 2D demo:
   build pass at `-j2`.
 - Wine/Xvfb: smoke, 2D regression, ColorMatrix, public stencil/API/applied-state,
   unsupported-feature, dirty-damage, repaint/failure and presentation-oracle executables pass.
@@ -176,11 +183,13 @@ baseline. All later tasks use one task per commit.
   compile/link at `-j2`. All twelve ordinary executables and all three configuration variants pass
   in one Wine/Xvfb session after the composition change. The expanded unsupported-feature test
   passes all 42 public/direct boundary assertions.
-- GDI-071 focused MinGW build: CNA, all thirteen correctness executables, benchmark, and demo link
-  from the single five-object GDI archive at `-j2`; Ninja exposes no `software_core` target. The
-  final executable link line repeats only `libCNA.a` and `libcna_backend_graphics_gdi.a` for the
-  declared cycle. All twelve ordinary executables and all three configuration variants pass in
-  one Wine/Xvfb session.
+- GDI-071/GDI-073 focused MinGW build: CNA, all fourteen correctness executables, benchmark, and
+  demo link from the single five-object GDI archive at `-j2`; Ninja exposes no `software_core`
+  target. The final executable link line repeats only `libCNA.a` and
+  `libcna_backend_graphics_gdi.a` for the declared cycle. All thirteen ordinary executables and all
+  three configuration variants pass in one Wine/Xvfb session.
+- GDI-073 `cna_test_gdi_msaa_contract`: all 19 mask, coverage, wireframe, stencil-ordering,
+  single-sampled-target, and disable assertions pass under Wine/Xvfb.
 - GDI-071 independent SOFTWARE gate: the full native GCC build links after centrally declaring
   `CNA` ↔ SOFTWARE, including the formerly failing `cna_xnb_audio_metadata_dump`; its test link
   line is portable repeated archives with no `--start-group`. The 57-test `Software` label has
@@ -195,7 +204,7 @@ baseline. All later tasks use one task per commit.
 - `GraphicsDeviceCapabilityTest.SupportsStencilBuffer`: pass under HEADLESS. The complete
   `GraphicsDeviceCapabilityTest.*` filter is 9 pass / 1 pre-existing configuration mismatch:
   `DoesNotSupportWireFrame` assumes EasyGL, while HEADLESS truthfully reports wireframe support.
-- `git diff --check`: pass for the complete GDI-071 change set.
+- `git diff --check`: pass for the complete GDI-073 change set.
 
 ## Useful commands
 
@@ -220,7 +229,6 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Commit the locally validated GDI-071 boundary, then audit GDI-073's wireframe,
-`MultiSampleMask`, and stencil/sample semantics. Keep GDI-071 provisional until its manual native
-MSVC workflow passes, physical source splitting in GDI-074, visible lifecycle/DPI work in GDI-061,
-and native performance decisions in GDI-062.
+Wait for the project owner's next instruction after committing and pushing GDI-073. Do not start
+GDI-074 or any other task meanwhile. GDI-071 remains provisional until its manual native-MSVC
+workflow passes; GDI-061 and GDI-062 remain native visible-Windows gates.

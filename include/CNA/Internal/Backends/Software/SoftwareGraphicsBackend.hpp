@@ -32,7 +32,9 @@ namespace CNA::Internal::Backends::Software
         int height = 0;
         std::vector<std::uint8_t> color;  ///< RGBA8, width*height*4 bytes.
         std::vector<float> depthBuffer;   ///< width*height floats, 0..1.
-        std::vector<std::uint8_t> stencilBuffer; ///< 8-bit stencil, width*height bytes.
+        /// One 8-bit stencil value per pixel. It remains per-pixel when the optional four-sample
+        /// colour plane is active; it is deliberately not a per-sample depth/stencil attachment.
+        std::vector<std::uint8_t> stencilBuffer;
         /// Four RGBA8 samples per pixel when 4x CPU MSAA is enabled; empty otherwise. `color`
         /// remains the resolved presentation/readback image, so existing consumers never see an
         /// unresolved sample plane.
@@ -708,8 +710,9 @@ namespace CNA::Internal::Backends::Software
         /// one active colour buffer). Used by SoftwareSpriteBatchBackend so its quads honour the
         /// per-channel write mask the same way any other draw does. 15 (All) = every channel.
         [[nodiscard]] int GetColorWriteMask() const { return colorWriteMask_; }
-        /// REMED-GFX-077: the current BlendState.MultiSampleMask. Software is single-sample, so only
-        /// bit 0 is meaningful (bit 0 clear discards the fragment). 0xFFFFFFFF = all samples.
+        /// REMED-GFX-077/GDI-073: the current BlendState.MultiSampleMask. Bit 0 controls a
+        /// single-sample surface; when the optional four-sample colour plane is active, bits 0..3
+        /// independently gate its 2x2 coverage samples. 0xFFFFFFFF = all samples.
         [[nodiscard]] unsigned int GetMultiSampleMask() const { return multiSampleMask_; }
         /// The raw CullMode ordinal from the most recent ApplyRasterizerState() call (SOFTWARE-81).
         /// Used by SoftwareSpriteBatchBackend so its quads are culled the same way real FNA's
@@ -832,8 +835,9 @@ namespace CNA::Internal::Backends::Software
         /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState, slot 0 (bit0=R,
         /// bit1=G, bit2=B, bit3=A). Defaults to 15 (All), matching XNA's default BlendState.
         int colorWriteMask_ = 15;
-        /// REMED-GFX-077: current BlendState.MultiSampleMask. Single-sample ⇒ only bit 0 matters.
-        /// Defaults to 0xFFFFFFFF (all samples), matching XNA's default (-1).
+        /// REMED-GFX-077/GDI-073: current BlendState.MultiSampleMask. Single-sample surfaces use
+        /// bit 0; the optional four-sample colour plane uses bits 0..3. Defaults to 0xFFFFFFFF (all
+        /// samples), matching XNA's default (-1).
         unsigned int multiSampleMask_ = 0xFFFFFFFFu;
         /// Raw CullMode ordinal (0=None, 1=CullClockwiseFace, 2=CullCounterClockwiseFace) from the
         /// most recent ApplyRasterizerState() call (SOFTWARE-81). Defaults to 2
