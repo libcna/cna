@@ -39,19 +39,6 @@ namespace CNA::Internal::Backends::Skia
             return SDL_LOGICAL_PRESENTATION_LETTERBOX;
         }
 
-        [[nodiscard]] bool IsDestinationColorPrototype(
-            int colorSrcBlend, int alphaSrcBlend,
-            int colorDstBlend, int alphaDstBlend,
-            int colorBlendFunc, int alphaBlendFunc) noexcept
-        {
-            // Blend::DestinationColor / Blend::One / Blend::Zero / Blend::Zero, with Add for
-            // both branches.  This has a genuine independent alpha branch and no blend constant,
-            // making it the bounded public SKIA-54 probe for the runtime-blender route.
-            return colorSrcBlend == 6 && alphaSrcBlend == 0
-                && colorDstBlend == 1 && alphaDstBlend == 1
-                && colorBlendFunc == 0 && alphaBlendFunc == 0;
-        }
-
         [[nodiscard]] const sk_sp<SkRuntimeEffect>& DestinationColorPrototypeEffect()
         {
             static const sk_sp<SkRuntimeEffect> effect = []
@@ -289,9 +276,9 @@ namespace CNA::Internal::Backends::Skia
                                                int colorBlendFunc, int alphaBlendFunc,
                                                const BlendWriteState& writeState)
     {
-        // The table records only public XNA BlendState presets whose source-alpha convention is
-        // known. SKIA-54 adds one separately proven runtime-blender tuple below; it is deliberately
-        // narrow until the full factor/function generator has public target/readback evidence.
+        // This table contains all and only public XNA tuples with a pixel-proven source-alpha
+        // convention. The one runtime-blender probe remains deliberately narrow until a general
+        // convention-preserving factor/function generator has public target/readback evidence.
         constexpr int kColorWriteAll = 15;
 
         for (int mask : writeState.colorWriteChannels)
@@ -301,16 +288,14 @@ namespace CNA::Internal::Backends::Skia
         }
         if (writeState.multiSampleMask != ~0u)
             throw std::runtime_error("Skia raster backend does not implement non-default MultiSampleMask values.");
-        const SkiaBlendMapping* mapping = FindSkiaDirectBlendMapping(
+        const SkiaBlendMapping* mapping = FindSkiaBlendMapping(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
-        const bool destinationColorPrototype = !mapping && IsDestinationColorPrototype(
-            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
-        if (!mapping && !destinationColorPrototype)
+        if (!mapping)
             throw std::runtime_error(DescribeUnsupportedSkiaBlendState(
                 colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                 colorBlendFunc, alphaBlendFunc));
 
-        if (mapping)
+        if (mapping->route == SkiaBlendMappingRoute::DirectBlendMode)
         {
             configuredSpriteBlendMode_ = mapping->mode;
             configuredSpriteCustomBlender_.reset();
@@ -320,10 +305,7 @@ namespace CNA::Internal::Backends::Skia
         {
             configuredSpriteBlendMode_ = SkBlendMode::kSrcOver;
             configuredSpriteCustomBlender_ = MakeDestinationColorPrototypeBlender();
-            // This first public runtime-blender state is pixel-proven only for opaque source
-            // content. Retain CNA's established premultiplied label instead of guessing how a
-            // general custom BlendState intends its Texture2D bytes to be interpreted.
-            configuredSpriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
+            configuredSpriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
         }
         if (blendEnabled_)
         {
@@ -332,7 +314,7 @@ namespace CNA::Internal::Backends::Skia
             spriteSourceAlphaConvention_ = configuredSpriteSourceAlphaConvention_;
         }
         TraceSkiaState("blend mapping=%s mode=%d source-alpha=%s enabled=%s",
-                       mapping ? mapping->name : "DestinationColorPrototype",
+                       mapping->name,
                        static_cast<int>(configuredSpriteBlendMode_),
                        configuredSpriteSourceAlphaConvention_ == SkiaSourceAlphaConvention::Premultiplied
                            ? "premultiplied" : "straight",

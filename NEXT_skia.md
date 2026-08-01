@@ -74,6 +74,20 @@
   It does not make arbitrary custom BlendStates supported; SKIA-55 must generate and test the
   complete validated matrix, including non-opaque conventions and blend constants.
 
+## Completed in this session: SKIA-55
+
+- Centralized every accepted blend tuple in `SkiaBlendMapping`: the four established presets plus
+  SKIA-54's single runtime-blender state. The graphics backend no longer has a separate ad-hoc
+  condition, so a supported tuple always carries its route and source-alpha convention together.
+- Expanded `Skia_BlendMapping_Raster` to nine checks, including exhaustive verification of all
+  714,025 possible current factor/function combinations. Exactly the five table entries pass;
+  all others reach actionable rejection before drawing. The exhaustive test also passes with
+  AddressSanitizer and LeakSanitizer enabled.
+- This is a bounded correctness result, not an assertion that arbitrary user states are equivalent
+  to EasyGL: without a source-byte alpha label, accepting them would require an unverified choice
+  between straight and premultiplied input. A future public/API decision or an independently
+  proven source convention is required before widening the table.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -96,17 +110,20 @@
   direct output verifies both source/destination access and the non-premultiplied-result boundary.
 - SKIA-54 debug build: `Skia_RuntimeBlender_Policy` passes all three public assertions under
   `xvfb-run -a`; the existing unmapped-state policy still passes after the new narrow mapping.
+- SKIA-55 debug/ASan: the exhaustive nine-check blend selector passes through CTest and with
+  `detect_leaks=1`; the public runtime-blender and rejected-state display regressions pass under
+  Xvfb after table centralization.
 
 ## Current task
 
-SKIA-55: replace SKIA-54's one-state runtime-blender prototype with a bounded, table-driven
-generator for every proven factor/function combination, or retain deterministic rejection for a
-combination that fails the expanded pixel matrix.
+SKIA-56: investigate `ColorWriteChannels` and `MultiSampleMask`, starting with a raster
+destination-preserving channel-mask probe. Existing non-default values remain rejected until the
+probe proves exact backbuffer and RenderTarget2D behaviour.
 
 ## Next candidates
 
-1. Complete SKIA-55's public custom-blend matrix, starting with opaque source/destination cases
-   from the existing EasyGL/Vulkan tests and preserving explicit alpha-convention boundaries.
+1. Complete SKIA-56's channel-mask and sample-mask investigation before exposing any partial
+   colour write behaviour.
 2. SKIA-71/72: resize and display-scale regressions with live targets, once lifecycle ownership is
    sound.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to

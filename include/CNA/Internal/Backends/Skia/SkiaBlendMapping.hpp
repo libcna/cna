@@ -8,40 +8,55 @@
 
 namespace CNA::Internal::Backends::Skia
 {
-    /** A direct Skia mapping whose input-alpha convention is fully determined by a CNA preset. */
+    enum class SkiaBlendMappingRoute
+    {
+        DirectBlendMode,
+        RuntimeDestinationColorPrototype,
+    };
+
+    /** An accepted Skia mapping whose input-alpha convention has explicit pixel evidence. */
     struct SkiaBlendMapping
     {
         int colorSourceBlend;
         int alphaSourceBlend;
         int colorDestinationBlend;
         int alphaDestinationBlend;
+        SkiaBlendMappingRoute route;
         SkBlendMode mode;
         SkiaSourceAlphaConvention sourceAlphaConvention;
         const char* name;
     };
 
-    // XNA Blend ordinals: One=0, Zero=1, SourceAlpha=4, InverseSourceAlpha=5.  A general XNA
-    // BlendState does not identify whether texture bytes are straight or premultiplied; these four
-    // preset tuples are the combinations for which that choice is an established public contract.
-    inline constexpr SkiaBlendMapping kSkiaDirectBlendMappings[] = {
-        {0, 0, 1, 1, SkBlendMode::kSrc,     SkiaSourceAlphaConvention::Premultiplied, "Opaque"},
-        {0, 0, 5, 5, SkBlendMode::kSrcOver, SkiaSourceAlphaConvention::Premultiplied, "AlphaBlend"},
-        {4, 4, 5, 5, SkBlendMode::kSrcOver, SkiaSourceAlphaConvention::Straight,       "NonPremultiplied"},
-        {4, 4, 0, 0, SkBlendMode::kPlus,    SkiaSourceAlphaConvention::Straight,       "Additive"},
+    // XNA Blend ordinals: One=0, Zero=1, SourceAlpha=4, InverseSourceAlpha=5,
+    // DestinationColor=6. A general BlendState does not identify whether texture bytes are
+    // straight or premultiplied, so this table contains only tuples with a pixel-proven convention.
+    // SKIA-54's custom entry is intentionally a single opaque-source runtime-blender probe, not a
+    // license to infer a convention for other arbitrary factor combinations.
+    inline constexpr SkiaBlendMapping kSkiaBlendMappings[] = {
+        {0, 0, 1, 1, SkiaBlendMappingRoute::DirectBlendMode,
+         SkBlendMode::kSrc,     SkiaSourceAlphaConvention::Premultiplied, "Opaque"},
+        {0, 0, 5, 5, SkiaBlendMappingRoute::DirectBlendMode,
+         SkBlendMode::kSrcOver, SkiaSourceAlphaConvention::Premultiplied, "AlphaBlend"},
+        {4, 4, 5, 5, SkiaBlendMappingRoute::DirectBlendMode,
+         SkBlendMode::kSrcOver, SkiaSourceAlphaConvention::Straight,       "NonPremultiplied"},
+        {4, 4, 0, 0, SkiaBlendMappingRoute::DirectBlendMode,
+         SkBlendMode::kPlus,    SkiaSourceAlphaConvention::Straight,       "Additive"},
+        {6, 0, 1, 1, SkiaBlendMappingRoute::RuntimeDestinationColorPrototype,
+         SkBlendMode::kSrcOver, SkiaSourceAlphaConvention::Premultiplied, "DestinationColorPrototype"},
     };
 
-    [[nodiscard]] inline const SkiaBlendMapping* FindSkiaDirectBlendMapping(
+    [[nodiscard]] inline const SkiaBlendMapping* FindSkiaBlendMapping(
         int colorSourceBlend, int alphaSourceBlend,
         int colorDestinationBlend, int alphaDestinationBlend,
         int colorBlendFunction, int alphaBlendFunction) noexcept
     {
-        // BlendFunction::Add is the only equation covered by the current direct table.  Keeping
-        // this explicit prevents a subtract/min/max request from being silently rendered as a
-        // source-over SkPaint merely because its factors happened to match a preset.
+        // BlendFunction::Add is the only equation with public pixel evidence so far. Keeping this
+        // explicit prevents a subtract/min/max request from silently using SourceOver merely
+        // because its factors happened to match a mapped tuple.
         if (colorBlendFunction != 0 || alphaBlendFunction != 0)
             return nullptr;
 
-        for (const auto& mapping : kSkiaDirectBlendMappings)
+        for (const auto& mapping : kSkiaBlendMappings)
         {
             if (mapping.colorSourceBlend == colorSourceBlend
                 && mapping.alphaSourceBlend == alphaSourceBlend
@@ -52,6 +67,17 @@ namespace CNA::Internal::Backends::Skia
             }
         }
         return nullptr;
+    }
+
+    [[nodiscard]] inline const SkiaBlendMapping* FindSkiaDirectBlendMapping(
+        int colorSourceBlend, int alphaSourceBlend,
+        int colorDestinationBlend, int alphaDestinationBlend,
+        int colorBlendFunction, int alphaBlendFunction) noexcept
+    {
+        const SkiaBlendMapping* mapping = FindSkiaBlendMapping(
+            colorSourceBlend, alphaSourceBlend, colorDestinationBlend, alphaDestinationBlend,
+            colorBlendFunction, alphaBlendFunction);
+        return mapping && mapping->route == SkiaBlendMappingRoute::DirectBlendMode ? mapping : nullptr;
     }
 
     [[nodiscard]] inline const char* SkiaBlendFactorName(int factor) noexcept

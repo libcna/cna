@@ -70,8 +70,8 @@ raster backend must not silently pick a superficially similar `SkBlendMode`. SKI
 accepts one independently proven runtime-blender tuple: colour
 `DestinationColor`/`Zero`, alpha `One`/`Zero`, both `Add`; it uses premultiplied source bytes and
 is proven only with opaque source/destination input. Every other tuple outside the four presets
-still fails before drawing and names the requested factors/functions. SKIA-55 will expose only
-the combinations that retain the public target/readback contract.
+still fails before drawing and names the requested factors/functions. SKIA-55 records this as the
+current bounded full-matrix policy: no unproven tuple is silently treated as SourceOver.
 direct `SkiaSurface::WritePixels`/`ReadPixels` round trip is
 different by design: converting through Skia's 8-bit premultiplied storage has deterministic
 integer unpremultiplication rounding for semi-transparent texels. The raster test records this
@@ -100,7 +100,8 @@ presentation. `Skia_RuntimeBlender_Policy` now proves that a public SpriteBatch 
 `DestinationColor`/`Zero` and independent alpha `One`/`Zero` is exact for opaque source and
 destination on the backbuffer, a `RenderTarget2D` readback, and a subsequent target sample.
 Runtime Effects are documented by Skia itself as experimental, so their use stays behind the
-explicit `SKIA` backend while SKIA-55 fills the complete matrix. The source image's
+explicit `SKIA` backend. SKIA-55's exhaustive selector maps only tuples with an established
+source convention and rejects the rest. The source image's
 straight/premultiplied label remains CNA-owned; the blender alone cannot infer it from arbitrary
 RGBA bytes.
 
@@ -250,5 +251,9 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     SpriteBatch path. It proves a destination-reading, independent-alpha state on the backbuffer,
     then on RenderTarget2D readback and target sampling, without retaining the custom blender for a
     following Opaque sampling draw.
+41. `Skia_BlendMapping_Raster` exhaustively checks all 714,025 combinations of the thirteen
+    source/destination factors and five colour/alpha functions. It accepts only the four direct
+    presets plus the SKIA-54 runtime tuple; every other combination has the deterministic error
+    path rather than a silent `kSrcOver` fallback.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
