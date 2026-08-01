@@ -6,6 +6,11 @@
 
 The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, `Begin`'s 2D affine transform, viewport and scissor clipping, point/linear sampling, and independent Clamp/Wrap/Mirror U/V addressing, as well as `BlendState::{Opaque, AlphaBlend, NonPremultiplied, Additive}`. A newly created or resized backbuffer starts transparent black, so a zero-draw `Present` never exposes allocator data. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. A requested `DepthFormat` remains public construction metadata for API compatibility, but `HasRealDepthBuffer` stays false and depth/stencil-only clears have no colour effect. Mipmaps, effects, MRT, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
 
+The complete API-level comparison with EasyGL is maintained in
+[`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md). Its 247 rows cover every current
+backend/resource method, capability value, and public `GraphicsDevice` declaration; the registered
+`Skia_ParityLedger_Audit` test prevents those headers and their classifications from drifting.
+
 ## Dependency policy
 
 CNA does not download Skia during CMake configuration. Build Skia outside the CNA source tree and pass the two resulting paths explicitly. The dependency is pinned to the official Skia commit `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b`; it was the `main` revision used for the initial integration spike. Skia is distributed under the BSD-style license in its source checkout; a packaged CNA distribution must include its upstream license/notice before this experimental backend is shipped.
@@ -414,5 +419,11 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     target transitions observable. Surface and binding tests pass under Debug, Release, and
     ASan/LSan with leak detection enabled, and the windowed eleven-check transition suite passes
     normally and under ASan.
+59. `Skia_ParityLedger_Audit` extracts eleven backend/resource interfaces, all nine capability
+    values, and every public non-deleted `GraphicsDevice` method from the live headers. It matches
+    all 247 entries against `docs/skia-easygl-parity-ledger.md`, whose rows record EasyGL behavior
+    and tests, the bounded Skia result/plan, final status, and evidence. Missing, stale, duplicate,
+    malformed, empty, or unknown-status rows fail the display-free audit instead of allowing the
+    parity inventory to drift silently.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

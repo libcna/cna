@@ -19,8 +19,9 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 78 Skia CTests: seven raster-only and 71 display-required tests.
-  Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
+- `docs/skia-backend.md` records 79 Skia CTests: seven raster-only, 71 display-required, and one
+  display-free source audit. Validation uses the persistent in-repository `cmake-build-skia`
+  directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-21
 
@@ -35,6 +36,19 @@
   origin/alpha/bounds contracts. Surface and binding tests pass in Debug and Release and under
   ASan/LSan with `detect_leaks=1`; the eleven-check windowed state-transition suite passes normally
   and under ASan (`detect_leaks=0` for the known display-stack exit baseline).
+
+## Completed in this session: SKIA-1
+
+- Added `docs/skia-easygl-parity-ledger.md`, a 247-row inventory of every public method in eleven
+  backend/resource interfaces, all nine `GraphicsCapability` values, and all 109 public non-deleted
+  `GraphicsDevice` declarations. Each row records the EasyGL behavior/test surface, current Skia
+  result or plan, final status, and evidence/follow-up task.
+- Added a standard-library lexical validator that derives the live public declaration set from the
+  source headers. It rejects missing, stale, duplicated, malformed, empty, or unknown-status rows;
+  overloads are tracked by arity and stable declaration order where arity is ambiguous.
+- Registered the validator as display-free `Skia_ParityLedger_Audit`, distinct from raster pixel
+  tests. This brings the selected configuration to 79 Skia tests: seven Raster, 71 Display, and
+  one Audit.
 
 ## Completed in this session: SKIA-69
 
@@ -377,14 +391,12 @@
 
 ## Current task
 
-Build the maintainable row-per-entry parity ledger required by SKIA-1 from the actual common
-backend interfaces and public `GraphicsDevice` forwarding surface. Keep aspirational accelerated
-work explicitly separate from the implemented raster result.
+Use the completed SKIA-1 ledger to inventory and classify every EasyGL-specific or backend-neutral
+graphics test registration for SKIA-2, with a validator that prevents unclassified additions.
 
 ## Next candidates
 
-1. Complete SKIA-1's machine-checkable backend/public API ledger, then use it to classify the
-   EasyGL test registrations for SKIA-2 without duplicating stale hand-maintained inventories.
+1. Complete SKIA-2's machine-checkable EasyGL test matrix without duplicating the API ledger.
 2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
    probe; the selected raster path has no truthful capability to expose there.
 3. Keep the recovery boundary precise: raster resources survive SDL presenter reconstruction;

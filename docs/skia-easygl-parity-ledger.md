@@ -1,0 +1,280 @@
+# Skia–EasyGL graphics API parity ledger
+
+This ledger is the row-per-entry inventory required by SKIA-1. It describes the observable CNA
+contract, not whether Skia exposes an OpenGL-shaped call. Entries are extracted from the eleven
+public backend/resource interfaces in `IGraphicsBackend.hpp`, every `GraphicsCapability`, and every
+public non-deleted `GraphicsDevice` method declaration. Overloads use `name/arity`; when that is
+still ambiguous, `#N` is their declaration order in the audited header.
+
+Statuses have exact meanings:
+
+- `implemented`: the selected raster Skia backend covers the complete currently reachable entry;
+- `bounded`: a documented 2D subset works and unsupported variants fail explicitly;
+- `unsupported`: Skia reports/refuses the entry deliberately rather than silently succeeding;
+- `internal`: the entry is backend plumbing or a native-handle escape with no cross-backend pixel
+  feature to emulate; Skia implements the appropriate non-GL result.
+
+Run `python3 scripts/validate_skia_parity_ledger.py` after changing either audited header or this
+file. The validator rejects missing, stale, duplicated, malformed, or unclassified rows.
+
+## Backend and resource interfaces
+
+| Entry | EasyGL behavior and test surface | Skia result or plan | Status | Evidence or follow-up |
+|---|---|---|---|---|
+| `IVertexBufferBackend::SetData/3` | Uploads a GL vertex stream; 3D buffer tests. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95 |
+| `IVertexBufferBackend::SetDataWithOptions/4` | Uploads with streaming hint; dynamic-buffer tests. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95 |
+| `IVertexBufferBackend::SetVertexDeclaration/1` | Configures GL vertex layout; declaration tests. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95 |
+| `IVertexBufferBackend::GetVertexCount/0` | Reports uploaded vertex capacity. | Resource creation is rejected first. | `unsupported` | SKIA-95 |
+| `IIndexBufferBackend::SetData16/2` | Uploads 16-bit GL indices; index tests. | No raster 3D index pipeline. | `unsupported` | SKIA-95 |
+| `IIndexBufferBackend::SetData32/2` | Uploads 32-bit GL indices; index tests. | No raster 3D index pipeline. | `unsupported` | SKIA-95 |
+| `IIndexBufferBackend::SetData16WithOptions/3` | Streams 16-bit indices; dynamic-buffer tests. | No raster 3D index pipeline. | `unsupported` | SKIA-95 |
+| `IIndexBufferBackend::SetData32WithOptions/3` | Streams 32-bit indices; dynamic-buffer tests. | No raster 3D index pipeline. | `unsupported` | SKIA-95 |
+| `IIndexBufferBackend::GetIndexCount/0` | Reports uploaded index capacity. | Resource creation is rejected first. | `unsupported` | SKIA-95 |
+| `IIndexBufferBackend::IsThirtyTwoBit/0` | Selects GL index element type. | Resource creation is rejected first. | `unsupported` | SKIA-95 |
+| `IOcclusionQueryBackend::Begin/0` | Begins a GL samples-passed query; query tests. | No raster visibility-query surface. | `unsupported` | SKIA-104–105 |
+| `IOcclusionQueryBackend::End/0` | Ends the active GL query. | No raster visibility-query surface. | `unsupported` | SKIA-104–105 |
+| `IOcclusionQueryBackend::IsComplete/0` | Polls GL query availability. | Query construction is refused. | `unsupported` | SKIA-104–105 |
+| `IOcclusionQueryBackend::PixelCount/0` | Returns EasyGL's boolean samples-passed result. | No semantically sound count is invented. | `unsupported` | SKIA-104–105 |
+| `ITextureCubeBackend::SetData/8` | Uploads one GL cube-face region; cube transfer tests. | Skia images are 2D; no cube storage yet. | `unsupported` | SKIA-80–84 |
+| `ITextureCubeBackend::GetData/8` | Reads one cube-face region; cube readback tests. | No fabricated cube pixels. | `unsupported` | SKIA-80–84 |
+| `ITextureCubeBackend::BindGL/0` | Binds the cube GL target. | No GL/native cube handle exists. | `unsupported` | SKIA-80–84 |
+| `ITexture3DBackend::SetData/9` | Uploads a GL volume region; Texture3D tests. | Skia has no volume image primitive. | `unsupported` | SKIA-82–84 |
+| `ITexture3DBackend::GetData/9` | Reads a GL volume region; Texture3D tests. | No fabricated volume pixels. | `unsupported` | SKIA-82–84 |
+| `ITexture3DBackend::BindGL/0` | Binds the GL volume target. | No GL/native volume handle exists. | `unsupported` | SKIA-82–84 |
+| `ITextureBackend::GetWidth/0` | Reports GL texture width; Texture2D tests. | Reports the CPU image width. | `implemented` | SKIA-22, SKIA-26 |
+| `ITextureBackend::GetHeight/0` | Reports GL texture height; Texture2D tests. | Reports the CPU image height. | `implemented` | SKIA-22, SKIA-26 |
+| `ITextureBackend::GetNativeTexture/0` | EasyGL exposes no SDL texture. | Returns null; Skia owns an `SkImage`. | `internal` | SKIA-22 |
+| `ITextureBackend::UpdatePixels/2` | Replaces level zero with a GL upload. | Rebuilds both alpha-labelled CPU images. | `implemented` | SKIA-22–24 |
+| `ITextureBackend::UpdatePixelsLevel/4` | Uploads a requested GL mip level. | Level zero works; mip levels reject. | `bounded` | SKIA-27 |
+| `ITextureBackend::BindGL/0` | Binds EasyGL's native texture. | Intentional no-op; SpriteBatch samples `SkImage`. | `internal` | SKIA-22, SKIA-32 |
+| `ITextureBackend::ShareCpuPixels/1` | Shares restoration shadow with EasyGL. | Common texture shadow already owns the bytes. | `internal` | SKIA-23, SKIA-28 |
+| `ITextureBackend::GetData/7` | Reads GL target pixels when no CPU shadow exists. | Exact level-zero Texture2D/target readback. | `bounded` | SKIA-23–24, SKIA-62 |
+| `IRenderTargetBackend::BindAsRenderTarget/0` | Binds an EasyGL FBO. | Selection is owned by checked Skia target binding. | `implemented` | SKIA-61, SKIA-69 |
+| `IRenderTargetBackend::UnbindAsRenderTarget/0` | Resolves/unbinds the EasyGL FBO. | Binding restores the raster backbuffer. | `implemented` | SKIA-61, SKIA-69 |
+| `IRenderTargetBackend::GetColorGLHandle/0` | Returns the FBO color texture name. | Returns zero; sampling uses snapshots. | `internal` | SKIA-63, SKIA-74 |
+| `IRenderTargetBackend::GetMultiSampleCount/0` | Reports device-clamped target samples. | Reports zero; real MSAA requests reject. | `bounded` | SKIA-73, SKIA-76 |
+| `IRenderTargetBackend::HasRealDepthBuffer/1` | Reports the actual GL depth attachment. | Always false for raster targets. | `unsupported` | SKIA-67 |
+| `IRenderTargetCubeBackend::GetSize/0` | Reports GL cube-face size. | Cube target creation is unsupported. | `unsupported` | SKIA-85–86 |
+| `IRenderTargetCubeBackend::BindAsRenderTargetFace/1` | Selects one cube FBO face. | No 2D-equivalent face target is claimed. | `unsupported` | SKIA-85–86 |
+| `IRenderTargetCubeBackend::UnbindAsRenderTarget/0` | Resolves/unbinds a cube face. | Cube target creation is unsupported. | `unsupported` | SKIA-85–86 |
+| `IRenderTargetCubeBackend::GetGLHandle/0` | Returns the cube texture name. | No native cube handle exists. | `unsupported` | SKIA-85–86 |
+| `IRenderTargetCubeBackend::GetMultiSampleCount/0` | Reports cube-face sample count. | No cube target exists. | `unsupported` | SKIA-85–86 |
+| `IRenderTargetCubeBackend::HasRealDepthBuffer/1` | Reports cube depth attachment. | No cube target exists. | `unsupported` | SKIA-85–86 |
+| `IRenderTargetCubeBackend::SetData/8` | Cube render targets reject direct CPU upload by contract. | No cube target exists. | `unsupported` | SKIA-85–86 |
+| `IEffectBackend::CompileProgram/2` | Compiles GLSL vertex/fragment programs; shader tests. | Arbitrary GLSL is not SkSL-compatible. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::Bind/0` | Binds an EasyGL program. | Effect backend construction returns unsupported. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::Unbind/0` | Restores EasyGL program state. | Effect backend construction returns unsupported. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::IsValid/0` | Reports GL link success. | No arbitrary shader program is created. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::GetCompileError/0` | Exposes GL compile/link diagnostics. | Creation refusal is the diagnostic boundary. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformFloat/2` | Sets a scalar GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformInt/2` | Sets an integer GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformVec2/3` | Sets a vec2 GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformVec3/4` | Sets a vec3 GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformVec4/5` | Sets a vec4 GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformMat4/2` | Sets a matrix GL uniform. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformFloatArray/3` | Sets a GL scalar array. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::SetUniformVec2Array/3` | Sets a GL vec2 array. | No arbitrary effect backend. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::BindTexture/2` | Binds an extra 2D sampler. | Custom-effect sampler binding unsupported. | `unsupported` | SKIA-89–92 |
+| `IEffectBackend::BindTextureCube/2` | Binds an extra cube sampler. | Cube/effect paths unsupported. | `unsupported` | SKIA-80, SKIA-89 |
+| `IEffectBackend::BindTexture3D/2` | Binds an extra volume sampler. | Volume/effect paths unsupported. | `unsupported` | SKIA-82, SKIA-89 |
+| `ISpriteBatchBackend::Begin/0` | Starts EasyGL sprite submission. | Starts checked immediate canvas session. | `implemented` | SKIA-31 |
+| `ISpriteBatchBackend::End/0` | Flushes/ends sprite submission. | Ends checked canvas session. | `implemented` | SKIA-31 |
+| `ISpriteBatchBackend::SetTransformMatrix/1` | Applies sprite transform in GL shader. | Applies equivalent SkCanvas transform. | `implemented` | SKIA-35 |
+| `ISpriteBatchBackend::SetCustomEffect/1` | Selects a custom EasyGL effect. | Arbitrary SpriteBatch effects reject. | `unsupported` | SKIA-93–94 |
+| `ISpriteBatchBackend::SetSamplerFilter/1` | Selects GL point/linear/mip filtering. | Point/linear work; mip filters reject. | `bounded` | SKIA-43, SKIA-70 |
+| `ISpriteBatchBackend::SetSamplerAddressMode/2` | Selects GL clamp/wrap/mirror axes. | Both axes implemented in Skia shader. | `implemented` | SKIA-44–46 |
+| `ISpriteBatchBackend::Draw/3` | Draws a texture at point position. | Direct canvas image draw. | `implemented` | SKIA-32 |
+| `ISpriteBatchBackend::Draw/4` | Draws destination/source/tint rectangles. | Direct canvas image draw. | `implemented` | SKIA-32–33 |
+| `ISpriteBatchBackend::Draw/8` | Draws full transformed sprite contract. | Rotation/origin/effects/depth path covered. | `implemented` | SKIA-34–39 |
+| `IGraphicsBackend::Clear/4` | Clears current GL framebuffer color. | Clears active raster surface. | `implemented` | SKIA-13, SKIA-61 |
+| `IGraphicsBackend::Present/0` | Swaps EasyGL window buffers. | Uploads raster snapshot to SDL presenter. | `implemented` | SKIA-7, SKIA-13 |
+| `IGraphicsBackend::GetViewportSize/2` | Reports EasyGL logical target size. | Reports active raster logical size. | `implemented` | SKIA-13, SKIA-61 |
+| `IGraphicsBackend::SetVirtualResolution/2` | Updates EasyGL logical projection/presentation. | Reallocates/maps raster presentation. | `implemented` | SKIA-13–14 |
+| `IGraphicsBackend::SetPresentationMode/1` | Applies EasyGL presentation mapping. | All five mappings are pixel-tested. | `implemented` | SKIA-13–14 |
+| `IGraphicsBackend::SetSwapInterval/1` | Applies GL swap interval. | Applies SDL presenter interval. | `implemented` | SKIA-15 |
+| `IGraphicsBackend::ApplyMultiSampleCount/1` | Reconfigures EasyGL backbuffer MSAA. | Raster remains zero; nonzero unavailable. | `unsupported` | SKIA-76–77 |
+| `IGraphicsBackend::UpdatePresentationFormatEXT/3` | EasyGL keeps its historical format policy. | Raster format is fixed RGBA8888; fullscreen is separate. | `bounded` | SKIA-8, SKIA-17 |
+| `IGraphicsBackend::GetMultiSampleCount/0` | Reports EasyGL actual backbuffer samples. | Reports zero. | `unsupported` | SKIA-17, SKIA-76 |
+| `IGraphicsBackend::TransformWindowToLogical/4` | Converts through EasyGL presentation mapping. | Uses SDL's DPI-aware renderer mapping. | `implemented` | SKIA-14, SKIA-72 |
+| `IGraphicsBackend::TransformLogicalToWindow/4` | Converts inverse EasyGL presentation mapping. | Uses SDL's DPI-aware inverse mapping. | `implemented` | SKIA-14, SKIA-72 |
+| `IGraphicsBackend::GetWindowInternal/0` | Returns the owned SDL window. | Returns the checked presenter window. | `internal` | SKIA-12, SKIA-18 |
+| `IGraphicsBackend::GetRendererInternal/0` | EasyGL has no SDL renderer. | Returns owned SDL presenter renderer. | `internal` | SKIA-12, SKIA-18 |
+| `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates level-zero CPU Skia images. | `bounded` | SKIA-22–30 |
+| `IGraphicsBackend::CreateSpriteBatch/0` | Allocates EasyGL sprite renderer state. | Allocates checked SkCanvas adapter. | `implemented` | SKIA-31–40 |
+| `IGraphicsBackend::ReadBackbuffer/5` | Reads GL framebuffer top-left RGBA. | Exact active-surface RGBA8 readback. | `implemented` | SKIA-7, SKIA-62 |
+| `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Returns unsupported through common wrapper. | `unsupported` | SKIA-104–105 |
+| `IGraphicsBackend::CreateTexture3D/5` | Allocates GL volume texture/mips. | Returns unsupported; capability false. | `unsupported` | SKIA-82–84 |
+| `IGraphicsBackend::CreateTextureCube/3` | Allocates GL cube texture/mips. | Returns unsupported. | `unsupported` | SKIA-80–81 |
+| `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Level-zero color target only. | `bounded` | SKIA-61–79 |
+| `IGraphicsBackend::SetRenderTarget2D/1` | Binds/unbinds one EasyGL FBO. | Binds checked raster target/backbuffer. | `implemented` | SKIA-61, SKIA-69 |
+| `IGraphicsBackend::CreateRenderTargetCube/5` | Allocates cube-face FBO target. | Returns unsupported. | `unsupported` | SKIA-85–86 |
+| `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Returns unsupported. | `unsupported` | SKIA-89–92 |
+| `IGraphicsBackend::SetRenderTargetCubeFace/2` | Binds selected cube face. | Explicitly rejected by normalized target path. | `unsupported` | SKIA-85–86 |
+| `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Zero/one 2D target only; MRT/cube reject. | `bounded` | SKIA-68, SKIA-87–88 |
+| `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | Five proven blend routes and channel masks only. | `bounded` | SKIA-47–57 |
+| `IGraphicsBackend::ApplyDepthStencilState/16` | Applies complete GL depth/stencil state. | No raster depth/stencil attachment. | `unsupported` | SKIA-97–98 |
+| `IGraphicsBackend::ApplyRasterizerState/5` | Applies GL cull/fill/scissor/bias. | 2D solid/scissor only; wireframe rejects. | `bounded` | SKIA-41, SKIA-58 |
+| `IGraphicsBackend::ApplySamplerState/5` | Applies per-slot GL filter/address/anisotropy. | Sprite slot point/linear/address only. | `bounded` | SKIA-43–46, SKIA-79 |
+| `IGraphicsBackend::SetBlendFactor/4` | Sets GL constant blend color. | Stored state has no accepted constant-factor route. | `bounded` | SKIA-53–55 |
+| `IGraphicsBackend::SetReferenceStencil/1` | Updates GL stencil reference. | No raster stencil buffer. | `unsupported` | SKIA-98 |
+| `IGraphicsBackend::SetScissorRect/4` | Updates GL scissor. | Updates active top-left Skia clip state. | `implemented` | SKIA-41, SKIA-59 |
+| `IGraphicsBackend::SetViewport/6` | Updates GL viewport and depth range. | 2D rectangle works; depth range has no effect. | `bounded` | SKIA-42, SKIA-97 |
+| `IGraphicsBackend::SupportsDepthStencil/0` | True for EasyGL depth/stencil surfaces. | False for raster backbuffer. | `unsupported` | SKIA-67, SKIA-97 |
+| `IGraphicsBackend::ClearColorAndDepth/5` | Clears EasyGL color and depth. | Rejects because depth cannot be honored. | `unsupported` | SKIA-67, SKIA-97 |
+| `IGraphicsBackend::ClearDepth/1` | Clears EasyGL depth only. | Rejects because no depth buffer exists. | `unsupported` | SKIA-67, SKIA-97 |
+| `IGraphicsBackend::ClearStencil/1` | Clears EasyGL stencil only. | Rejects because no stencil buffer exists. | `unsupported` | SKIA-67, SKIA-98 |
+| `IGraphicsBackend::ClearDepthAndStencil/2` | Clears both EasyGL attachments. | Rejects because neither exists. | `unsupported` | SKIA-67, SKIA-98 |
+| `IGraphicsBackend::ClearColorAndStencil/5` | Clears EasyGL color/stencil. | Rejects rather than partially clearing color. | `unsupported` | SKIA-67, SKIA-98 |
+| `IGraphicsBackend::ClearColorDepthAndStencil/6` | Clears all EasyGL attachments. | Rejects rather than claiming absent attachments. | `unsupported` | SKIA-67, SKIA-98 |
+| `IGraphicsBackend::SetDepthTestEnabled/1` | Toggles GL depth test. | Explicit 3D refusal. | `unsupported` | SKIA-97 |
+| `IGraphicsBackend::SetBlendEnabled/1` | Toggles GL blend stage. | Toggles 2D source replacement/composition. | `implemented` | SKIA-50 |
+| `IGraphicsBackend::SetDepthWriteEnabled/1` | Toggles GL depth writes. | Explicit 3D refusal. | `unsupported` | SKIA-97 |
+| `IGraphicsBackend::CreateVertexBuffer/1` | Creates an EasyGL VBO/VAO. | Throws actionable no-3D error. | `unsupported` | SKIA-95 |
+| `IGraphicsBackend::CreateIndexBuffer16/1` | Creates 16-bit EasyGL IBO. | Throws actionable no-3D error. | `unsupported` | SKIA-95 |
+| `IGraphicsBackend::CreateIndexBuffer32/1` | Creates 32-bit EasyGL IBO. | Default returns unsupported. | `unsupported` | SKIA-95 |
+| `IGraphicsBackend::DrawColoredPrimitives/6` | Draws EasyGL colored vertices. | Throws actionable no-3D error. | `unsupported` | SKIA-96 |
+| `IGraphicsBackend::DrawIndexedColoredPrimitives/7` | Draws indexed EasyGL colored vertices. | Throws actionable no-3D error. | `unsupported` | SKIA-96 |
+| `IGraphicsBackend::DrawPrimitivesEx/7` | Draws stock/custom EasyGL 3D parameters. | Reaches explicit no-3D primitive refusal. | `unsupported` | SKIA-96, SKIA-99–103 |
+| `IGraphicsBackend::DrawIndexedPrimitivesEx/8` | Draws indexed stock/custom EasyGL 3D. | Reaches explicit no-3D indexed refusal. | `unsupported` | SKIA-96, SKIA-99–103 |
+| `IGraphicsBackend::DrawInstancedPrimitivesEx/9` | Draws hardware-instanced EasyGL geometry. | No raster instancing pipeline. | `unsupported` | SKIA-103 |
+| `IGraphicsBackend::SetContextRecoveryEnabled/1` | Controls EasyGL CPU restoration shadows. | Raster resources stay CPU-owned across presenter rebuild. | `internal` | SKIA-16, SKIA-28 |
+| `IGraphicsBackend::SupportsCapability/1` | Reports EasyGL compile/device features. | Returns false for every current capability. | `implemented` | SKIA-17, capability rows below |
+| `IGraphicsBackend::GetMaxTextureDimension/0` | Reports GL maximum texture axis. | Reports bounded raster maximum. | `implemented` | SKIA-26 |
+| `IGraphicsBackend::SetStringMarkerEXT/1` | Inserts GL debug marker where available. | Intentional no-op without GPU stream. | `internal` | SKIA-60 |
+| `IGraphicsBackend::DebugSimulateContextLoss/0` | Drives EasyGL recovery seam. | Rebuilds SDL presenter, retains raster resources. | `implemented` | SKIA-16, SKIA-65 |
+| `IGraphicsBackend::DebugRestoreContext/0` | Drives EasyGL restore seam. | Rebuilds SDL presenter, retains raster resources. | `implemented` | SKIA-16, SKIA-65 |
+| `IGraphicsBackend::RegisterForWindow/2` | Common SDL window-to-backend registry. | Same checked registry path. | `internal` | SKIA-12, SKIA-18 |
+| `IGraphicsBackend::UnregisterForWindow/1` | Removes common window registry entry. | Transactional teardown and rollback. | `internal` | SKIA-12 |
+| `IGraphicsBackend::GetForWindow/1` | Resolves common backend for input/presentation. | Returns only the live registered Skia backend. | `internal` | SKIA-12, SKIA-18 |
+
+## Capability values
+
+| Entry | EasyGL behavior and test surface | Skia result or plan | Status | Evidence or follow-up |
+|---|---|---|---|---|
+| `GraphicsCapability::ThreeD` | EasyGL advertises its GL primitive pipeline. | Raster backend reports false. | `unsupported` | SKIA-95–103 |
+| `GraphicsCapability::DepthStencilBuffer` | EasyGL advertises real depth/stencil storage. | Raster backend reports false. | `unsupported` | SKIA-67, SKIA-97–98 |
+| `GraphicsCapability::MultiSampleAntiAliasing` | EasyGL reports probed MSAA support. | Raster backend reports false and zero samples. | `unsupported` | SKIA-76–77 |
+| `GraphicsCapability::MultipleRenderTargets` | EasyGL advertises normalized MRT binding. | Raster backend reports false; one target only. | `unsupported` | SKIA-87–88 |
+| `GraphicsCapability::AnisotropicFiltering` | EasyGL reports device anisotropy. | Raster backend reports false. | `unsupported` | SKIA-78–79 |
+| `GraphicsCapability::WireFrame` | EasyGL supports GL line polygon mode where available. | Raster backend reports false and rejects wireframe. | `unsupported` | SKIA-58, SKIA-97 |
+| `GraphicsCapability::OcclusionQuery` | EasyGL reports query API availability. | Raster backend reports false. | `unsupported` | SKIA-104–105 |
+| `GraphicsCapability::CustomEffects` | EasyGL compiles custom GLSL effects. | Raster backend reports false. | `unsupported` | SKIA-89–94 |
+| `GraphicsCapability::Texture3D` | EasyGL exposes GL volume textures. | Raster backend reports false. | `unsupported` | SKIA-82–84 |
+
+## Public GraphicsDevice calls
+
+| Entry | EasyGL behavior and test surface | Skia result or plan | Status | Evidence or follow-up |
+|---|---|---|---|---|
+| `GraphicsDevice::GraphicsDevice/0` | Common device creates the selected EasyGL backend/window. | Creates the selected Skia backend transactionally. | `implemented` | SKIA-10–12 |
+| `GraphicsDevice::GraphicsDevice/3` | Creates EasyGL with adapter/profile/parameters. | Same common parameters select raster presentation. | `implemented` | SKIA-10–15 |
+| `GraphicsDevice::getIsDisposedProperty/0` | Common lifetime state around EasyGL teardown. | Same resource-first Skia teardown state. | `implemented` | SKIA-12, SKIA-29 |
+| `GraphicsDevice::getGraphicsDeviceStatusProperty/0` | Reflects backend device events. | Remains Normal across synchronous presenter recovery. | `implemented` | SKIA-16 |
+| `GraphicsDevice::getAdapterProperty/0` | Common adapter metadata used by EasyGL. | Same common adapter metadata. | `implemented` | SKIA-10 |
+| `GraphicsDevice::getGraphicsProfileProperty/0` | Common profile selected for EasyGL validation. | Same public profile metadata; capabilities remain truthful. | `implemented` | SKIA-10, SKIA-17 |
+| `GraphicsDevice::getPresentationParametersProperty/0#1` | Mutable common presentation state. | Reflects applied Skia logical/present interval values. | `implemented` | SKIA-13–15 |
+| `GraphicsDevice::getPresentationParametersProperty/0#2` | Const common presentation state. | Reflects applied Skia logical/present interval values. | `implemented` | SKIA-13–15 |
+| `GraphicsDevice::getDisplayModeProperty/0` | Adapter/fullscreen dimensions around EasyGL. | Reports common adapter or Skia logical fullscreen size. | `implemented` | SKIA-8, SKIA-13 |
+| `GraphicsDevice::getTexturesProperty/0` | Common pixel-shader texture slots feed EasyGL. | Slots exist; only 2D SpriteBatch sampling is supported. | `bounded` | SKIA-22, SKIA-32, SKIA-96 |
+| `GraphicsDevice::getSamplerStatesProperty/0` | Common sampler slots apply to EasyGL. | Point/linear and address modes are bounded to 2D. | `bounded` | SKIA-43–46, SKIA-79 |
+| `GraphicsDevice::getVertexTexturesProperty/0` | Common vertex-sampler slots feed EasyGL 3D. | No raster vertex shader pipeline. | `unsupported` | SKIA-95–103 |
+| `GraphicsDevice::getVertexSamplerStatesProperty/0` | Common vertex sampler state feeds EasyGL 3D. | No raster vertex shader pipeline. | `unsupported` | SKIA-95–103 |
+| `GraphicsDevice::getBlendStateProperty/0#1` | Mutable cached EasyGL blend state. | Returns cached state; only proven 2D mappings draw. | `bounded` | SKIA-47–57 |
+| `GraphicsDevice::setBlendStateProperty/1` | Applies complete EasyGL blend/write state. | Five blend tuples and target-zero write masks work. | `bounded` | SKIA-47–57 |
+| `GraphicsDevice::getBlendStateProperty/0#2` | Const cached EasyGL blend state. | Returns the common cached Skia state. | `implemented` | SKIA-47–57 |
+| `GraphicsDevice::getDepthStencilStateProperty/0#1` | Mutable cached EasyGL depth/stencil state. | State can be inspected but has no raster attachment. | `unsupported` | SKIA-97–98 |
+| `GraphicsDevice::setDepthStencilStateProperty/1` | Applies full EasyGL depth/stencil state. | No raster depth/stencil effect is claimed. | `unsupported` | SKIA-97–98 |
+| `GraphicsDevice::getDepthStencilStateProperty/0#2` | Const cached EasyGL depth/stencil state. | Cache remains common metadata only. | `unsupported` | SKIA-97–98 |
+| `GraphicsDevice::getRasterizerStateProperty/0#1` | Mutable cached EasyGL rasterizer state. | Returns cached 2D-bounded state. | `bounded` | SKIA-41, SKIA-58 |
+| `GraphicsDevice::setRasterizerStateProperty/1` | Applies EasyGL cull/fill/scissor/bias. | Solid/scissor work; wireframe rejects; 3D fields inert. | `bounded` | SKIA-41, SKIA-58 |
+| `GraphicsDevice::getRasterizerStateProperty/0#2` | Const cached EasyGL rasterizer state. | Returns cached 2D-bounded state. | `bounded` | SKIA-41, SKIA-58 |
+| `GraphicsDevice::getScissorRectangleProperty/0` | Returns common EasyGL scissor rectangle. | Returns the active top-left 2D rectangle. | `implemented` | SKIA-41, SKIA-59 |
+| `GraphicsDevice::setScissorRectangleProperty/1` | Applies EasyGL scissor immediately. | Applies checked Skia raster clip state. | `implemented` | SKIA-41, SKIA-59 |
+| `GraphicsDevice::getViewportProperty/0` | Returns common EasyGL viewport/depth range. | Rectangle is exact; depth range is metadata. | `bounded` | SKIA-42, SKIA-97 |
+| `GraphicsDevice::setViewportProperty/1` | Applies EasyGL viewport/depth range. | Applies 2D placement/clip; no depth interpretation. | `bounded` | SKIA-42, SKIA-97 |
+| `GraphicsDevice::getBlendFactorProperty/0` | Returns EasyGL constant blend color. | Returns cached value; accepted routes do not consume it. | `bounded` | SKIA-53–55 |
+| `GraphicsDevice::setBlendFactorProperty/1` | Applies GL constant blend color. | Stores value; no unproven constant-factor route is accepted. | `bounded` | SKIA-53–55 |
+| `GraphicsDevice::getMultiSampleMaskProperty/0` | Returns EasyGL coverage mask. | Returns common cache on a zero-sample raster. | `unsupported` | SKIA-56, SKIA-76 |
+| `GraphicsDevice::setMultiSampleMaskProperty/1` | Stores EasyGL coverage mask for draws. | Non-default draw use rejects; no sample mask is invented. | `unsupported` | SKIA-56, SKIA-76 |
+| `GraphicsDevice::getReferenceStencilProperty/0` | Returns EasyGL stencil reference. | Returns common cache without raster stencil. | `unsupported` | SKIA-98 |
+| `GraphicsDevice::setReferenceStencilProperty/1` | Applies EasyGL stencil reference. | Stores metadata only; capability is false. | `unsupported` | SKIA-98 |
+| `GraphicsDevice::getIndicesProperty/0` | Returns current EasyGL index buffer. | No Skia index buffer can be created. | `unsupported` | SKIA-95 |
+| `GraphicsDevice::setIndicesProperty/1` | Binds EasyGL index buffer. | Common binding cannot produce a Skia 3D draw. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::Clear/1` | Clears EasyGL target to `Color`. | Clears active raster surface exactly. | `implemented` | SKIA-13, SKIA-61 |
+| `GraphicsDevice::Clear/4#1` | Float RGBA overload clears EasyGL color. | Float RGBA clears active raster surface. | `implemented` | SKIA-13 |
+| `GraphicsDevice::Clear/4#2` | Options/color/depth/stencil clears real EasyGL attachments. | Masks absent depth/stencil and clears color if requested. | `bounded` | SKIA-67 |
+| `GraphicsDevice::Clear/2` | Color/depth overload clears EasyGL attachments. | Clears color; absent raster depth is masked. | `bounded` | SKIA-67 |
+| `GraphicsDevice::Present/0` | Presents EasyGL unless a target is bound. | Presents SDL-uploaded raster under same guard. | `implemented` | SKIA-7, SKIA-13, SKIA-61 |
+| `GraphicsDevice::Reset/0` | Reapplies current EasyGL presentation state. | Reapplies Skia size/mode/interval transactionally. | `implemented` | SKIA-8, SKIA-13–16 |
+| `GraphicsDevice::Reset/1` | Applies new EasyGL presentation parameters. | Applies bounded raster parameters; MSAA remains zero. | `bounded` | SKIA-8, SKIA-13–17 |
+| `GraphicsDevice::Reset/2#1` | Reference-adapter reset forwards to EasyGL. | Same common path with Skia rollback guarantees. | `bounded` | SKIA-8, SKIA-12–16 |
+| `GraphicsDevice::Reset/2#2` | Optional-adapter reset is the EasyGL implementation route. | Same common path with Skia rollback guarantees. | `bounded` | SKIA-8, SKIA-12–16 |
+| `GraphicsDevice::Dispose/0` | Disposes resources before EasyGL backend/window. | Same ordering with checked weak Skia resources. | `implemented` | SKIA-12, SKIA-18, SKIA-29 |
+| `GraphicsDevice::GetBackBufferData/2` | Reads complete EasyGL backbuffer to colors. | Reads exact active raster surface. | `implemented` | SKIA-23, SKIA-62 |
+| `GraphicsDevice::GetBackBufferData/3` | Reads complete EasyGL backbuffer with destination offset. | Same validated common conversion from RGBA8. | `implemented` | SKIA-23, SKIA-62 |
+| `GraphicsDevice::GetBackBufferData/4` | Reads EasyGL rectangle with destination range. | Same top-left rectangular raster readback. | `implemented` | SKIA-23, SKIA-62 |
+| `GraphicsDevice::SetRenderTarget/1` | Binds one EasyGL RenderTarget2D or backbuffer. | Binds checked raster target or backbuffer. | `implemented` | SKIA-61, SKIA-69 |
+| `GraphicsDevice::SetRenderTarget/2` | Binds EasyGL cube target face. | Deterministically rejected. | `unsupported` | SKIA-85–86 |
+| `GraphicsDevice::SetRenderTargets/1` | Validates and binds EasyGL MRT/cube sets. | Empty/one 2D works; MRT/cube reject. | `bounded` | SKIA-68, SKIA-87–88 |
+| `GraphicsDevice::GetRenderTargets/0` | Returns common active EasyGL binding vector. | Returns empty/one raster binding accurately. | `bounded` | SKIA-61, SKIA-68 |
+| `GraphicsDevice::SetVertexBuffer/1` | Binds EasyGL vertex buffer slot zero. | No raster vertex buffer exists. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::SetVertexBuffer/2` | Binds EasyGL vertex buffer with offset. | No raster vertex buffer exists. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::SetVertexBuffers/1` | Binds multiple EasyGL vertex streams/instances. | Common cache exists; Skia draws reject. | `unsupported` | SKIA-95, SKIA-103 |
+| `GraphicsDevice::GetVertexBuffers/0` | Returns common EasyGL vertex bindings. | No usable raster vertex bindings. | `unsupported` | SKIA-95 |
+| `GraphicsDevice::SetIndexBuffer/1` | Binds EasyGL index buffer. | No raster index buffer exists. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::GetVertexBuffer/0` | Returns EasyGL slot-zero binding. | No usable raster vertex buffer. | `unsupported` | SKIA-95 |
+| `GraphicsDevice::GetIndexBuffer/0` | Returns EasyGL index binding. | No usable raster index buffer. | `unsupported` | SKIA-95 |
+| `GraphicsDevice::DrawPrimitives/3` | Draws bound EasyGL non-indexed geometry. | Reaches actionable no-3D refusal. | `unsupported` | SKIA-96 |
+| `GraphicsDevice::DrawIndexedPrimitives/6` | Draws bound EasyGL indexed geometry. | Reaches actionable no-3D refusal. | `unsupported` | SKIA-96 |
+| `GraphicsDevice::DrawInstancedPrimitives/7` | Draws EasyGL instanced indexed geometry. | No raster instancing pipeline. | `unsupported` | SKIA-103 |
+| `GraphicsDevice::DrawUserPrimitives/4#1` | Draws raw default-layout EasyGL vertices. | Temporary Skia vertex backend creation rejects. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/5#1` | Draws raw explicitly declared EasyGL vertices. | No raster declared-vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/5#2` | Draws declared `VertexPositionColor` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/5#3` | Draws declared `VertexPositionTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/5#4` | Draws declared `VertexPositionColorTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/5#5` | Draws declared `VertexPositionNormalTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/4#2` | Draws `VertexPositionColor` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/4#3` | Draws `VertexPositionColorTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/4#4` | Draws `VertexPositionTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserPrimitives/4#5` | Draws `VertexPositionNormalTexture` through EasyGL. | No raster 3D vertex pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#1` | Draws raw default-layout EasyGL indexed data. | Temporary Skia buffers reject. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#2` | Draws 16-bit indexed `VertexPositionColor`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#3` | Draws 16-bit indexed `VertexPositionColorTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#4` | Draws 16-bit indexed `VertexPositionTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#5` | Draws 16-bit indexed `VertexPositionNormalTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#6` | Draws 32-bit indexed `VertexPositionColor`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#7` | Draws 32-bit indexed `VertexPositionColorTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#8` | Draws 32-bit indexed `VertexPositionTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/7#9` | Draws 32-bit indexed `VertexPositionNormalTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#1` | Draws raw declared EasyGL data with 16-bit indices. | No raster declared-index pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#2` | Draws declared 16-bit `VertexPositionColor`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#3` | Draws declared 16-bit `VertexPositionTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#4` | Draws declared 16-bit `VertexPositionColorTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#5` | Draws declared 16-bit `VertexPositionNormalTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#6` | Draws raw declared EasyGL data with 32-bit indices. | No raster declared-index pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#7` | Draws declared 32-bit `VertexPositionColor`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#8` | Draws declared 32-bit `VertexPositionTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#9` | Draws declared 32-bit `VertexPositionColorTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::DrawUserIndexedPrimitives/8#10` | Draws declared 32-bit `VertexPositionNormalTexture`. | No raster 3D indexed pipeline. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::PrimitiveVerts/2` | Common topology helper used by EasyGL validation. | Backend-neutral helper remains exact. | `implemented` | Shared primitive tests |
+| `GraphicsDevice::OnResourceCreated/1` | Raises common event for EasyGL resources. | Raises the same event for Skia resources. | `internal` | SKIA-22, SKIA-61 |
+| `GraphicsDevice::OnResourceDestroyed/2` | Raises common EasyGL destruction event. | Raises the same event for Skia resources. | `internal` | SKIA-29, SKIA-69 |
+| `GraphicsDevice::AddResourceReference/1` | Tracks EasyGL resources before backend teardown. | Tracks Skia resources under the same owner. | `internal` | SKIA-12, SKIA-29 |
+| `GraphicsDevice::RemoveResourceReference/1` | Untracks disposed EasyGL resources. | Untracks disposed Skia resources safely. | `internal` | SKIA-29, SKIA-69 |
+| `GraphicsDevice::GetTrackedResourceCount/0` | Debug count for common resource lifetime. | Same count covers Skia wrappers. | `internal` | SKIA-29, SKIA-74 |
+| `GraphicsDevice::SetDepthTestEnabled/1` | Toggles EasyGL depth testing. | Throws actionable no-3D error. | `unsupported` | SKIA-97 |
+| `GraphicsDevice::SetBlendEnabled/1` | Toggles EasyGL blending. | Implements raster replacement/composition toggle. | `implemented` | SKIA-50 |
+| `GraphicsDevice::SetDepthWriteEnabled/1` | Toggles EasyGL depth writes. | Throws actionable no-3D error. | `unsupported` | SKIA-97 |
+| `GraphicsDevice::SetGraphicsProfileEXT/1` | Common profile handoff before EasyGL reset. | Same common profile metadata handoff. | `internal` | SKIA-10, SKIA-17 |
+| `GraphicsDevice::SetContextRecoveryEnabled/1` | Controls EasyGL restoration shadows. | Forwards no-op policy for CPU-owned raster resources. | `internal` | SKIA-16, SKIA-28 |
+| `GraphicsDevice::SetStringMarkerEXT/1` | Forwards optional EasyGL GPU marker. | Safe no-op without raster GPU command stream. | `internal` | SKIA-60 |
+| `GraphicsDevice::GetBackend/0` | Exposes selected EasyGL backend internally. | Exposes selected Skia backend internally. | `internal` | SKIA-10–11 |
+| `GraphicsDevice::GetGraphicsBackendType/0` | Reports compile-time EasyGL type. | Reports `GraphicsBackendType::Skia`. | `implemented` | SKIA-11 |
+| `GraphicsDevice::GetGraphicsBackendName/0` | Reports compile-time `EASYGL`. | Reports compile-time `SKIA`. | `implemented` | SKIA-11 |
+| `GraphicsDevice::SupportsCapability/1` | Forwards EasyGL capability/device query. | Forwards false for all nine current capabilities. | `implemented` | SKIA-17, capability rows above |
+| `GraphicsDevice::GetMaxTextureDimension/0` | Forwards EasyGL hardware limit. | Returns enforced raster axis limit. | `implemented` | SKIA-26 |
+| `GraphicsDevice::SetCurrentEffect/1` | Stores stock/custom effect for EasyGL 3D draws. | Common pointer can be stored; raster 3D draws reject. | `unsupported` | SKIA-89–103 |
+| `GraphicsDevice::Indices/0` | Alias returning EasyGL index binding. | No usable raster index buffer. | `unsupported` | SKIA-95 |
+| `GraphicsDevice::Indices/1` | Alias binding EasyGL index buffer. | No usable raster index buffer. | `unsupported` | SKIA-95–96 |
+| `GraphicsDevice::GetTypeName/0` | Common runtime type identity. | Backend-independent type identity. | `internal` | Shared object tests |
+| `GraphicsDevice::SetPresentationParameters/1` | Stores/forwards EasyGL interval parameters. | Stores/forwards Skia raster interval parameters. | `implemented` | SKIA-13–15 |
+| `GraphicsDevice::RecreateBackendForMultiSampleCount/1` | Test seam recreates EasyGL with requested samples. | Recreates raster backend but remains zero-sample. | `unsupported` | SKIA-76–77 |

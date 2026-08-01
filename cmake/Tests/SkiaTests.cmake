@@ -36,6 +36,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             LABELS "Skia;Accelerated;Display")
     endfunction()
 
+    # SKIA-1: standard-library source audit. Keep it separate from Raster because it neither links
+    # Skia nor exercises pixels; it verifies that every current graphics API entry is classified.
+    find_program(CNA_SKIA_LEDGER_PYTHON NAMES python3 REQUIRED)
+    cna_register_backend_test(
+        NAME Skia_ParityLedger_Audit
+        COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
+                "${CMAKE_SOURCE_DIR}/scripts/validate_skia_parity_ledger.py"
+                "${CMAKE_SOURCE_DIR}"
+        TIMEOUT 30
+        LABELS "Skia;Audit")
+
     cna_skia_test(cna_test_skia_surface_raster examples/skia_surface_raster_test.cpp)
     # This test intentionally exercises the internal SkiaSurface boundary directly, so unlike
     # public-API tests it needs the external Skia header root while compiling its own source.
