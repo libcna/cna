@@ -46,6 +46,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_include_directories(cna_test_skia_texture_alpha_boundary PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_raster_test(Skia_Texture_AlphaBoundary cna_test_skia_texture_alpha_boundary)
 
+    cna_skia_test(cna_test_skia_target_binding_raster examples/skia_target_binding_raster_test.cpp)
+    target_include_directories(cna_test_skia_target_binding_raster PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_RenderTargetBinding_Raster cna_test_skia_target_binding_raster)
+
     cna_skia_test(cna_test_skia_graphics_capability examples/skia_graphics_capability_test.cpp)
     cna_register_skia_display_test(Skia_GraphicsCapability cna_test_skia_graphics_capability)
 
@@ -218,6 +222,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     cna_skia_test(cna_test_skia_rendertarget_scissor examples/skia_rendertarget_scissor_test.cpp)
     cna_register_skia_display_test(Skia_RenderTarget2D_Scissor cna_test_skia_rendertarget_scissor)
+
+    cna_skia_test(cna_test_skia_rendertarget_lifetime examples/skia_rendertarget_lifetime_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTarget2D_Lifetime cna_test_skia_rendertarget_lifetime)
 
     cna_skia_test(cna_test_skia_presentation_edge examples/skia_presentation_edge_test.cpp)
     cna_register_skia_display_test(Skia_Presentation_Edge cna_test_skia_presentation_edge)

@@ -2,7 +2,10 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+
+#include <memory>
 
 namespace CNA::Internal::Backends::Skia
 {
@@ -10,7 +13,9 @@ namespace CNA::Internal::Backends::Skia
     class SkiaRenderTargetBackend final : public IRenderTargetBackend, public SkiaImageSource
     {
     public:
-        SkiaRenderTargetBackend(int width, int height, bool preserveContents);
+        SkiaRenderTargetBackend(int width, int height, bool preserveContents,
+                                std::weak_ptr<SkiaRenderTargetBinding> binding);
+        ~SkiaRenderTargetBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return surface_.Width(); }
         [[nodiscard]] int GetHeight() const override { return surface_.Height(); }
@@ -31,5 +36,6 @@ namespace CNA::Internal::Backends::Skia
     private:
         SkiaSurface surface_;
         bool preserveContents_ = false;
+        std::weak_ptr<SkiaRenderTargetBinding> binding_;
     };
 } // namespace CNA::Internal::Backends::Skia

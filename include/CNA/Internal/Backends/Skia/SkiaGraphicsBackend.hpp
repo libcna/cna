@@ -3,6 +3,7 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include <SDL3/SDL.h>
@@ -81,8 +82,8 @@ namespace CNA::Internal::Backends::Skia
     private:
         void RecreateBackbuffer(int requestedWidth, int requestedHeight);
         void ApplyLogicalPresentation();
-        [[nodiscard]] SkiaSurface& ActiveSurface() noexcept { return *activeSurface_; }
-        [[nodiscard]] const SkiaSurface& ActiveSurface() const noexcept { return *activeSurface_; }
+        [[nodiscard]] SkiaSurface& ActiveSurface() noexcept { return *targetBinding_->ActiveSurface(); }
+        [[nodiscard]] const SkiaSurface& ActiveSurface() const noexcept { return *targetBinding_->ActiveSurface(); }
         [[nodiscard]] int LogicalWidth() const noexcept { return surface_.Width(); }
         [[nodiscard]] int LogicalHeight() const noexcept { return surface_.Height(); }
 
@@ -90,7 +91,7 @@ namespace CNA::Internal::Backends::Skia
         SDL_Renderer* renderer_ = nullptr;
         SDL_Texture* presentTexture_ = nullptr;
         SkiaSurface surface_;
-        SkiaSurface* activeSurface_ = &surface_;
+        std::shared_ptr<SkiaRenderTargetBinding> targetBinding_ = std::make_shared<SkiaRenderTargetBinding>();
         SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
         SkiaSourceAlphaConvention spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
         SkBlendMode configuredSpriteBlendMode_ = SkBlendMode::kSrcOver;

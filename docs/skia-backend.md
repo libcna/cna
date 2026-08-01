@@ -89,8 +89,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers fifty-nine SKIA-only CTests: two window-independent raster
-   surface pixel tests and fifty-seven display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers sixty-one SKIA-only CTests: three window-independent raster
+   surface pixel tests and fifty-eight display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -168,7 +168,9 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     texture-copy ownership, disposed-resource consumption guards, and idempotent cleanup under
     both the normal raster build and the AddressSanitizer/LeakSanitizer raster build. The latter
     keeps leak detection enabled and suppresses only SDL loader and host-process font/runtime
-    globals, so CNA and Skia allocations remain checked.
+    globals, so CNA and Skia allocations remain checked. In this GCC/Xvfb environment, a 2,864-byte
+    unsymbolized process-exit residual remains in both the old presentation test and the SKIA-69
+    window test after those suppressions; it is recorded rather than hidden by a broad suppression.
 29. `Skia_RasterizerState_Policy` distinguishes the one 2D RasterizerState field from 3D-only
     fields: a solid SpriteBatch ignores cull/depth-bias/MSAA values, `WireFrame` remains
     unadvertised and fails with an actionable error, and the rejected `Begin` leaves the batch
@@ -195,5 +197,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 36. `Skia_RenderTarget2D_MsaaPolicy` fixes the raster MSAA contract: requests 0 and 1 report 0,
     while normalized real MSAA requests (2, 3, and 4) fail before target creation and the
     corresponding capability remains false.
+37. `Skia_RenderTargetBinding_Raster` and `Skia_RenderTarget2D_Lifetime` close the target lifetime
+    hole: a target's destructor weakly detaches it from the backend-owned active-surface record
+    before releasing its `SkSurface`. The raster test covers 128 snapshot lifetimes and the inverse
+    backend-before-target order; the public test proves a subsequent Clear and SpriteBatch draw land
+    on the backbuffer and that a fresh target cycle still works.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

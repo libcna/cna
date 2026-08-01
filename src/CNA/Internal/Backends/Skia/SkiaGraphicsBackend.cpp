@@ -77,6 +77,7 @@ namespace CNA::Internal::Backends::Skia
         if (width <= 0) width = std::max(outputWidth, 1);
 
         surface_.Resize(width, height);
+        targetBinding_->SetBackbuffer(&surface_);
         // A newly allocated raster backbuffer has no previous-frame contents to preserve.  Make
         // the zero-draw Present contract deterministic instead of exposing allocator bytes.
         surface_.Clear(0.0f, 0.0f, 0.0f, 0.0f);
@@ -179,7 +180,7 @@ namespace CNA::Internal::Backends::Skia
 
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
-        return std::make_unique<SkiaSpriteBatchBackend>(activeSurface_, spriteBlendMode_,
+        return std::make_unique<SkiaSpriteBatchBackend>(targetBinding_->ActiveSurfaceRef(), spriteBlendMode_,
                                                         spriteSourceAlphaConvention_, rasterState_);
     }
 
@@ -194,14 +195,14 @@ namespace CNA::Internal::Backends::Skia
                 "Skia raster RenderTarget2D does not implement public mip chains; mipMap=true is rejected.");
         if (multiSampleCount != 0)
             throw std::runtime_error("Skia raster RenderTarget2D multisampling is not implemented yet.");
-        return std::make_unique<SkiaRenderTargetBackend>(width, height, preserveContents);
+        return std::make_unique<SkiaRenderTargetBackend>(width, height, preserveContents, targetBinding_);
     }
 
     void SkiaGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* renderTarget)
     {
         if (!renderTarget)
         {
-            activeSurface_ = &surface_;
+            targetBinding_->UnbindToBackbuffer();
             TraceSkiaState("surface=backbuffer size=%dx%d", surface_.Width(), surface_.Height());
             return;
         }
@@ -210,8 +211,8 @@ namespace CNA::Internal::Backends::Skia
         if (!skiaTarget)
             throw std::runtime_error("Skia cannot bind a render target created by a different backend.");
         skiaTarget->PrepareForBind();
-        activeSurface_ = &skiaTarget->Surface();
-        TraceSkiaState("surface=render-target size=%dx%d", activeSurface_->Width(), activeSurface_->Height());
+        targetBinding_->Bind(skiaTarget, &skiaTarget->Surface());
+        TraceSkiaState("surface=render-target size=%dx%d", ActiveSurface().Width(), ActiveSurface().Height());
     }
 
     void SkiaGraphicsBackend::ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels)

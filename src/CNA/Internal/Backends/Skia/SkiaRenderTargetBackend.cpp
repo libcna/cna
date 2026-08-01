@@ -2,14 +2,27 @@
 
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 
 namespace CNA::Internal::Backends::Skia
 {
-    SkiaRenderTargetBackend::SkiaRenderTargetBackend(int width, int height, bool preserveContents)
+    SkiaRenderTargetBackend::SkiaRenderTargetBackend(int width, int height, bool preserveContents,
+                                                     std::weak_ptr<SkiaRenderTargetBinding> binding)
         : surface_(width, height)
         , preserveContents_(preserveContents)
+        , binding_(std::move(binding))
     {
         surface_.Clear(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+
+    SkiaRenderTargetBackend::~SkiaRenderTargetBackend()
+    {
+        // `RenderTarget2D::Dispose()` rejects an explicitly disposed bound target, but a C++
+        // destructor cannot throw.  Detach here before `surface_` is released so the next Skia
+        // clear or SpriteBatch draw never observes a dangling active-surface pointer.  The weak
+        // binding intentionally expires when the graphics backend has already been destroyed.
+        if (const auto binding = binding_.lock())
+            binding->Detach(this);
     }
 
     void SkiaRenderTargetBackend::UpdatePixels(const std::uint8_t* rgba, int stride)
