@@ -73,8 +73,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers thirty-seven SKIA-only CTests: two window-independent raster
-   surface pixel tests and thirty-five display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers thirty-nine SKIA-only CTests: two window-independent raster
+   surface pixel tests and thirty-seven display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -93,8 +93,9 @@ limit before allocation. Mipmapped texture construction is also rejected before 
    saturation for additive composition. `Skia_SpriteBatch_TintAlpha` then verifies
    semi-transparent tint for both source-alpha conventions with distinct expected pixel values.
 10. `Skia_SpriteBatch_Rotation`, `Skia_SpriteBatch_Scale`,
-    `Skia_SpriteBatch_NegativeScale`, and `Skia_SpriteBatch_Effects` verify rotation around a
-    caller-origin, positive/non-uniform and negative X/Y scale, and both SpriteEffects flips.
+    `Skia_SpriteBatch_NegativeScale`, `Skia_SpriteBatch_Effects`, and
+    `Skia_SpriteBatch_TransformMatrix` verify rotation around a caller-origin, positive/non-uniform
+    and negative X/Y scale, both SpriteEffects flips, and an affine Begin transform in XNA order.
 11. `Skia_SpriteBatch_DeferredOrder`, `Skia_SpriteBatch_ImmediateFlush`,
     `Skia_SpriteBatch_LayerDepth`, and `Skia_SpriteBatch_TextureSort` prove the common
     SpriteBatch queue preserves deferred/immediate, layer-depth, and texture sort order through
@@ -117,5 +118,7 @@ limit before allocation. Mipmapped texture construction is also rejected before 
     backbuffer, be sampled afterward, and return full/partial top-row-first pixels.
 17. `Skia_RenderTarget2D_Switch` proves an A → B → backbuffer target sequence preserves
     independent target content through the surface switch and subsequent sampling.
+18. `Skia_SpriteBatch_SourceRectLinear` magnifies a one-texel source rectangle with `LinearClamp`
+    and verifies every source edge and two corners remain isolated from distinct neighbouring texels.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

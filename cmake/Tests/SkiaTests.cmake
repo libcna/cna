@@ -103,6 +103,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_transform_matrix examples/vulkan_transform_matrix_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_TransformMatrix cna_test_skia_transform_matrix)
 
+    cna_skia_test(cna_test_skia_spritebatch_source_rect_linear examples/skia_spritebatch_source_rect_linear_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_SourceRectLinear cna_test_skia_spritebatch_source_rect_linear)
+
     cna_skia_test(cna_test_skia_sprite_effects examples/sdlrenderer_sprite_effects_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_Effects cna_test_skia_sprite_effects)
 
