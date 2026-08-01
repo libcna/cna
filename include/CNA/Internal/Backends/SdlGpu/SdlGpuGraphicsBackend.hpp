@@ -392,8 +392,8 @@ namespace CNA::Internal::Backends::SdlGpu
         int multiSampleCount_ = 0;
         // REMED-GFX-186: what SDL really allocated on colorTexture, so GetData can refuse a level
         // with no storage instead of handing SDL a mip index the resource does not own. Mirrors
-        // SdlGpuRenderTargetCubeBackend's own levelCount_, which is why the cube route answered
-        // this question with a deterministic refusal while its 2D sibling segfaulted.
+        // SdlGpuRenderTargetCubeState's own levelCount, which is why the cube route answered this
+        // question with a deterministic refusal while its 2D sibling segfaulted.
         int levelCount_ = 1;
         // The actual GPU texture handles + clear-pending state live in this shared_ptr-owned
         // struct, NOT directly here -- see SdlGpuRenderTarget2DState's own doc comment for why.
@@ -406,6 +406,10 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuGraphicsBackend* owner = nullptr;
         int size = 0;
         bool mipMap = false;
+        /// REMED-GFX-188: native `num_levels` on the resolved, single-sample cube texture.
+        /// Pass finalization owns only this shared state, so allocation, mip generation and
+        /// readback all consult the same fact even after the public wrapper has been destroyed.
+        int levelCount = 1;
         SDL_GPUTexture* cubeTexture = nullptr;
         /**
          * REMED-GFX-141: SIX single-layer `SDL_GPU_TEXTURETYPE_2D` multisample textures, one per
@@ -427,6 +431,8 @@ namespace CNA::Internal::Backends::SdlGpu
          * construction -- no per-bind texture creation, no per-bind copy.
          */
         std::array<SDL_GPUTexture*, 6> msaaTextures{};
+        /// Native `num_levels` shared by the six MSAA textures; zero when none were allocated.
+        int msaaLevelCount = 0;
         SDL_GPUTexture* depthTexture = nullptr;
         /// Same rationale as SdlGpuRenderTarget2DState::sampleCount.
         SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
@@ -457,13 +463,14 @@ namespace CNA::Internal::Backends::SdlGpu
      * `D3D12RenderTargetCubeBackend`'s own shared-depth-buffer convention) -- clear/depth state is
      * tracked per face, but there is one shared depth texture reused across whichever face is
      * currently bound. MSAA resolves automatically via `SDL_GPUColorTargetInfo.resolve_texture`/
-     * `resolve_layer` at render-pass end (no manual resolve step needed, unlike D3D11/D3D12) --
-     * the actual multisampled render target is a separate `2D_ARRAY` texture, since
-     * `SDL_GPU_TEXTURETYPE_CUBE` has no multisampled variant. Mip regeneration
-     * (`SDL_GenerateMipmapsForGPUTexture`) has no per-layer control, so it regenerates the whole
-     * cube's chain (all 6 faces) whenever any face that requested mips was used in a frame. The
-     * actual GPU state lives in a separate, shared_ptr-owned `SdlGpuRenderTargetCubeState` (see
-     * that struct's own doc comment, and `SdlGpuRenderTarget2DState`'s, for why).
+     * `resolve_layer` at render-pass end (no manual resolve step needed, unlike D3D11/D3D12).
+     * The multisampled attachments are six independent, level-zero-only 2D textures because
+     * `SDL_GPU_TEXTURETYPE_CUBE` has no multisampled variant and SDL_GPU forbids multisampled
+     * arrays. REMED-GFX-188 regenerates only the resolved face's complete chain through clamped
+     * per-level GPU blits immediately after that face's pass ends, so later passes can sample its
+     * finalized mips. The actual GPU state lives in a separate, shared_ptr-owned
+     * `SdlGpuRenderTargetCubeState` (see that struct's own doc comment, and
+     * `SdlGpuRenderTarget2DState`'s, for why).
      */
     class SdlGpuRenderTargetCubeBackend final : public IRenderTargetCubeBackend
     {
@@ -526,10 +533,21 @@ namespace CNA::Internal::Backends::SdlGpu
             return face >= 0 && face < 6 ? state_->msaaTextures[static_cast<std::size_t>(face)]
                                          : nullptr;
         }
+        /** @brief Native level count of one face's MSAA attachment, or zero when absent. NOXNA. */
+        NOXNA [[nodiscard]] int MsaaLevelCountEXT(int face) const
+        {
+            return MsaaTexture(face) != nullptr ? state_->msaaLevelCount : 0;
+        }
         /** @brief Returns the shared depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
         NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return state_->depthTexture; }
         /** @brief Whether the mip chain should be regenerated after this cube's faces render each frame. NOXNA. */
         NOXNA [[nodiscard]] bool WantsMipMap() const { return state_->mipMap; }
+        /**
+         * @brief Returns the number of mip levels SDL really allocated for the resolved cube. NOXNA.
+         *
+         * @return The native `num_levels` used to create the single-sample cube texture.
+         */
+        NOXNA [[nodiscard]] int LevelCountEXT() const { return state_->levelCount; }
         /** @brief Returns the shared, backend-internal GPU state this cube's rendering operates
          * on -- kept alive independent of this wrapper's own lifetime. NOXNA. */
         NOXNA [[nodiscard]] const std::shared_ptr<SdlGpuRenderTargetCubeState>& State() const { return state_; }
@@ -538,8 +556,6 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuGraphicsBackend* owner_ = nullptr;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
-        /// Mip levels SDL really allocated for this cube target (REMED-GFX-134).
-        int levelCount_ = 1;
         std::shared_ptr<SdlGpuRenderTargetCubeState> state_;
     };
 

@@ -60,6 +60,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-188: mipMap and MSAA are independent on RenderTargetCube. The resolved cube owns
+    # every public level, each one-level face attachment resolves before that face's chain is
+    # generated, and a later pass in the same frame can sample the generated levels. All native
+    # validation diagnostics are fatal in addition to the pixel/count/lifecycle matrix.
+    cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_msaa_mip
+                    examples/sdlgpu_rendertargetcube_msaa_mip_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_RenderTargetCube_MsaaMip
+        COMMAND cna_test_sdlgpu_rendertargetcube_msaa_mip
+        TIMEOUT 300 LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    set_tests_properties(SdlGpu_RenderTargetCube_MsaaMip PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # REMED-GFX-096: backend-neutral singular/plural cube-face binding parity.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_plural_binding
                     examples/rendertargetcube_plural_binding_test.cpp)

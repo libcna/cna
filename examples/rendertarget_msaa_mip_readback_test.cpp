@@ -1392,16 +1392,12 @@ class RenderTargetMsaaMipReadbackTest : public Game
     }
 
     /**
-     * @brief I2 -- a mipmapped MULTISAMPLED RenderTargetCube: a DIFFERENT route, classified here.
+     * @brief I2 -- a mipmapped MULTISAMPLED RenderTargetCube, re-armed for REMED-GFX-188.
      *
-     * `SdlGpuRenderTargetCubeBackend` has its own `GetData`, its own `levelCount_` and its own
-     * range check, so it never reached the out-of-bounds subresource this ticket is about. It does
-     * carry the same `mipMap_ && multiSampleCount_ == 0` suppression in its constructor, so its
-     * public `LevelCount` can still describe levels its native cube texture does not own -- but
-     * the SYMPTOM is a deterministic refusal, not a signal, and the fix would have to reason about
-     * per-face resolve and the fact that `SDL_GenerateMipmapsForGPUTexture` regenerates all six
-     * faces at once. That is a separate ticket, and this leg exists to PIN what it currently does
-     * instead of leaving the claim unmeasured.
+     * GFX-186 originally classified the SDL_GPU cube as a separate, safely refusing route. GFX-188
+     * now requires its resolved cube to own and populate every public level, so the SDL_GPU branch
+     * below must answer and expose the generated level-1 content. Other backends retain this
+     * fixture's original all-or-nothing safety boundary; the focused GFX-188 matrix is SDL_GPU-only.
      */
     void LegI2()
     {
@@ -1412,7 +1408,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
             check(true, "I2 the cube boundary is declared rather than assumed");
             return;
         }
-        step("I2: RenderTargetCube(16, mipMap=true, MSAA=4) -- classification only");
+        step("I2: RenderTargetCube(16, mipMap=true, MSAA=4) -- cube mip route");
         std::unique_ptr<RenderTargetCube> cube;
         try
         {
@@ -1440,7 +1436,7 @@ class RenderTargetMsaaMipReadbackTest : public Game
         const int count = (kRT / 2) * (kRT / 2);
         std::vector<Color> buf = SentinelBuffer(count);
         const Rectangle r(0, 0, kRT / 2, kRT / 2);
-        step("I2: RenderTargetCube::GetData(PositiveX, level=1, ...) -- must never be a signal");
+        step("I2: RenderTargetCube::GetData(PositiveX, level=1, ...)");
         bool threw = false;
         std::string what;
         try { cube->GetData(CubeMapFace::PositiveX, 1, &r, buf.data(), kGuard, count); }
@@ -1458,12 +1454,25 @@ class RenderTargetMsaaMipReadbackTest : public Game
                  (threw ? ("REFUSED -- " + what) : "answered") + "; " + std::to_string(untouched) +
                  "/" + std::to_string(count) + " destination elements untouched, " +
                  std::to_string(zeroed) + "/" + std::to_string(count) + " exactly (0,0,0,0)");
-        // The ONLY thing this ticket asserts about the cube route: it is deterministic and safe.
-        // Whether it should ANSWER instead of refusing belongs to its own ticket.
+#if defined(CNA_BACKEND_SDL_GPU)
+        check(!threw, "I2: SDL_GPU answers the valid multisampled cube level-1 read");
+        check(untouched == 0,
+              "I2: SDL_GPU writes the complete level-1 destination window");
+        check(zeroed == 0,
+              "I2: SDL_GPU's generated cube level contains no fabricated zero texels");
+        if (!threw)
+        {
+            check(Near(buf[static_cast<std::size_t>(kGuard + 1 * (kRT / 2) + 1)], kTL),
+                  "I2: SDL_GPU level 1 retains the rendered top-left colour");
+            check(Near(buf[static_cast<std::size_t>(kGuard + 6 * (kRT / 2) + 6)], kBase),
+                  "I2: SDL_GPU level 1 retains the resolved clear colour away from the draw");
+        }
+#else
         check(true, "I2: the cube route completed without a signal");
         check(threw ? untouched == count : untouched == 0,
               "I2: the cube route either wrote its whole window or wrote nothing at all -- never "
               "a partially filled destination");
+#endif
         GuardsIntact(buf, count, "I2");
     }
 

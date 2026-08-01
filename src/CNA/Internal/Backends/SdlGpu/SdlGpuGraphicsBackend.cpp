@@ -368,9 +368,7 @@ namespace CNA::Internal::Backends::SdlGpu
             return enabled;
         }
 
-        /**
-         * REMED-GFX-187: traces the exact per-level GPU blits used to regenerate a 2D target.
-         */
+        /** REMED-GFX-187/GFX-188: traces exact per-level GPU target-mip blits. */
         [[nodiscard]] bool TargetMipTraceEnabled()
         {
             static const bool enabled = std::getenv("CNA_SDLGPU_TRACE_TARGET_MIPS") != nullptr;
@@ -413,6 +411,55 @@ namespace CNA::Internal::Backends::SdlGpu
                                  static_cast<void*>(texture), width, height, levelCount,
                                  static_cast<unsigned>(blit.source.mip_level), blit.source.w,
                                  blit.source.h,
+                                 static_cast<unsigned>(blit.destination.mip_level),
+                                 blit.destination.w, blit.destination.h);
+                    std::fflush(stderr);
+                }
+
+                SDL_BlitGPUTexture(commandBuffer, &blit);
+            }
+        }
+
+        /**
+         * REMED-GFX-188: regenerates one resolved cube face, and only that face, after its pass.
+         *
+         * SDL's whole-resource mip generator cannot express this ordering. Explicit GPU blits do:
+         * every source and destination names the rendered cube layer, while clamped dimensions
+         * retain the GFX-187 narrow/NPOT contract. The separate multisample attachment never
+         * participates and therefore remains level-zero only.
+         */
+        void GenerateCubeRenderTargetMipChain(SDL_GPUCommandBuffer* commandBuffer,
+                                              SDL_GPUTexture* texture,
+                                              int size, int levelCount, int face)
+        {
+            for (int level = 1; level < levelCount; ++level)
+            {
+                SDL_GPUBlitInfo blit{};
+                blit.source.texture = texture;
+                blit.source.mip_level = static_cast<Uint32>(level - 1);
+                blit.source.layer_or_depth_plane = static_cast<Uint32>(face);
+                blit.source.w = static_cast<Uint32>(std::max(1, size >> (level - 1)));
+                blit.source.h = static_cast<Uint32>(std::max(1, size >> (level - 1)));
+
+                blit.destination.texture = texture;
+                blit.destination.mip_level = static_cast<Uint32>(level);
+                blit.destination.layer_or_depth_plane = static_cast<Uint32>(face);
+                blit.destination.w = static_cast<Uint32>(std::max(1, size >> level));
+                blit.destination.h = static_cast<Uint32>(std::max(1, size >> level));
+
+                blit.load_op = SDL_GPU_LOADOP_DONT_CARE;
+                blit.filter = SDL_GPU_FILTER_LINEAR;
+
+                if (TargetMipTraceEnabled())
+                {
+                    std::fprintf(stderr,
+                                 "[cna-sdlgpu-target-mips] cube=%p face=%d base=%dx%d levels=%d "
+                                 "source=%u:%u:%ux%u destination=%u:%u:%ux%u\n",
+                                 static_cast<void*>(texture), face, size, size, levelCount,
+                                 static_cast<unsigned>(blit.source.layer_or_depth_plane),
+                                 static_cast<unsigned>(blit.source.mip_level), blit.source.w,
+                                 blit.source.h,
+                                 static_cast<unsigned>(blit.destination.layer_or_depth_plane),
                                  static_cast<unsigned>(blit.destination.mip_level),
                                  blit.destination.w, blit.destination.h);
                     std::fflush(stderr);
@@ -1473,26 +1520,6 @@ namespace CNA::Internal::Backends::SdlGpu
             }
         }
 
-        // Cube mip regen is real GPU work -- must happen on this command buffer BEFORE submission
-        // (per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass, but
-        // is otherwise fine any time before submit). No per-layer control on this call -- it
-        // regenerates all 6 faces' chains; harmless for a face untouched this frame (same
-        // unchanged level-0 data produces an identical result). Once per CUBE, not once per
-        // segment: every face's final content for this frame is already stored by now.
-        {
-            std::vector<SdlGpuRenderTargetCubeState*> mipRegenerated;
-            for (const PassSegment& segment : passSegments_)
-            {
-                SdlGpuRenderTargetCubeState* cube = segment.cube.get();
-                if (cube != nullptr && cube->mipMap &&
-                    std::find(mipRegenerated.begin(), mipRegenerated.end(), cube) == mipRegenerated.end())
-                {
-                    SDL_GenerateMipmapsForGPUTexture(cmd, cube->cubeTexture);
-                    mipRegenerated.push_back(cube);
-                }
-            }
-        }
-
         // REMED-GFX-165: the frame's backbuffer content is in the proxy -- present it by copying the
         // proxy into the acquired (write-only) swapchain texture. A 1:1 same-size, same-format blit,
         // so it is a straight copy with no scaling. Must be outside any render/copy pass and before
@@ -2018,6 +2045,14 @@ namespace CNA::Internal::Backends::SdlGpu
                           hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID, 1,
                           segment.id);
         passOwner.End();
+
+        // REMED-GFX-188: the pass end has either stored this face directly or resolved its own
+        // level-zero MSAA attachment into this face of the single-sample cube. Generate that
+        // face's lower levels now, outside the pass and before any later pass can sample them.
+        // A one-level target deliberately issues no mip work.
+        if (cube->mipMap && cube->levelCount > 1)
+            GenerateCubeRenderTargetMipChain(cmd, cube->cubeTexture, cube->size,
+                                             cube->levelCount, face);
 
         // Same rationale as RenderToTarget's: this face now HAS content, so a later cycle of it
         // must LOAD rather than clear again.
@@ -6591,9 +6626,8 @@ namespace CNA::Internal::Backends::SdlGpu
         const SDL_GPUSampleCount sampleCount = ClampSampleCount(device, kFormat, multiSampleCount);
         multiSampleCount_ = SampleCountToInt(sampleCount);
         state_->sampleCount = sampleCount;
-        // MSAA and mip generation are mutually exclusive on the same attachment, same rationale
-        // D3D12RenderTargetCubeBackend's own MSAA follow-up already established.
-        mipMap_ = mipMap_ && multiSampleCount_ == 0;
+        // The resolved cube owns the public mip chain even when rendering uses a separate
+        // level-zero-only multisample attachment (REMED-GFX-188).
         state_->mipMap = mipMap_;
 
         SDL_GPUTextureCreateInfo cubeInfo{};
@@ -6604,8 +6638,9 @@ namespace CNA::Internal::Backends::SdlGpu
         cubeInfo.height = static_cast<Uint32>(size);
         cubeInfo.layer_count_or_depth = 6;
         cubeInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(size, size)) : 1;
-        // REMED-GFX-134: what SDL really allocated, so GetData can refuse a level with no storage.
-        levelCount_ = static_cast<int>(cubeInfo.num_levels);
+        // REMED-GFX-188: one shared allocation fact drives finalization, readback and the native
+        // diagnostic accessor; it must agree with TextureCube's public LevelCount.
+        state_->levelCount = static_cast<int>(cubeInfo.num_levels);
         cubeInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;  // the cube texture itself is always single-sample
         state_->cubeTexture = SDL_CreateGPUTexture(device, &cubeInfo);
         if (state_->cubeTexture == nullptr)
@@ -6635,6 +6670,7 @@ namespace CNA::Internal::Backends::SdlGpu
             msaaInfo.height = static_cast<Uint32>(size);
             msaaInfo.layer_count_or_depth = 1;
             msaaInfo.num_levels = 1;
+            state_->msaaLevelCount = static_cast<int>(msaaInfo.num_levels);
             msaaInfo.sample_count = sampleCount;
             for (SDL_GPUTexture*& face : state_->msaaTextures)
             {
@@ -6718,12 +6754,12 @@ namespace CNA::Internal::Backends::SdlGpu
         // REMED-GFX-130: see SdlGpuTexture3DBackend::GetData above.
         if (w <= 0 || h <= 0 || data == nullptr || level < 0 || face < 0 || face >= 6)
             return false;
-        // REMED-GFX-134: a level this target never allocated has no content to return, and
+        // REMED-GFX-134/GFX-188: a level this target never allocated has no content to return, and
         // SDL_DownloadFromGPUTexture answers such a request anyway -- the shared layer would then
         // convert an untouched transfer buffer into a face. Same for a rectangle that leaves the
         // level. Refusing here is what makes the public call raise System::NotSupportedException
         // with the caller's destination untouched.
-        if (level >= levelCount_) return false;
+        if (level >= state_->levelCount) return false;
         const int levelSize = std::max(1, state_->size >> level);
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
@@ -6763,6 +6799,27 @@ namespace CNA::Internal::Backends::SdlGpu
         dest.transfer_buffer = transferBuffer;
         dest.pixels_per_row = static_cast<Uint32>(w);
         dest.rows_per_layer = static_cast<Uint32>(h);
+        if (TargetReadbackTraceEnabled())
+        {
+            std::fprintf(stderr,
+                         "[cna-sdlgpu-target-readback] cube=%dx%d appliedSamples=%d mipMap=%d "
+                         "nativeLevels=%d requestedFace=%d requestedLevel=%d levelDims=%dx%d "
+                         "msaaTex=%p resolvedTex=%p source=%s region=(%u,%u %ux%u) "
+                         "mip_level=%u layer=%u d=%u pixels_per_row=%u rows_per_layer=%u "
+                         "transferBytes=%u\n",
+                         state_->size, state_->size, multiSampleCount_, mipMap_ ? 1 : 0,
+                         state_->levelCount, face, level,
+                         std::max(1, state_->size >> level), std::max(1, state_->size >> level),
+                         static_cast<void*>(state_->msaaTextures[static_cast<std::size_t>(face)]),
+                         static_cast<void*>(state_->cubeTexture),
+                         region.texture == state_->cubeTexture ? "resolved" : "OTHER",
+                         region.x, region.y, region.w, region.h,
+                         static_cast<unsigned>(region.mip_level),
+                         static_cast<unsigned>(region.layer), static_cast<unsigned>(region.d),
+                         dest.pixels_per_row, dest.rows_per_layer,
+                         static_cast<unsigned>(sizeBytes));
+            std::fflush(stderr);
+        }
         SDL_DownloadFromGPUTexture(copyPass, &region, &dest);
         SDL_EndGPUCopyPass(copyPass);
 
