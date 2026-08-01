@@ -463,6 +463,152 @@ void main(in VSInput vsIn, out PSInput psIn)
 }
 )";
 
+        /// DILIGENT-36 (PbrEffect, NOXNA): stride 48 (position + normal + tangent [xyz + glTF
+        /// bitangent-handedness sign in w] + UV), HLSL port of this project's own established
+        /// PBR reference (src/CNA/Internal/Backends/D3DCommon/shaders/pbr3d.vert.hlsl), unchanged
+        /// except for Diligent's shared-cbuffer naming (g_WorldViewProj/g_World in place of a
+        /// per-variant Mvp/World pair).
+        constexpr const char* kPbrVertexHlsl = R"(
+struct VSInput
+{
+    float3 Pos     : ATTRIB0;
+    float3 Normal  : ATTRIB1;
+    float4 Tangent : ATTRIB2;
+    float2 UV      : ATTRIB3;
+};
+
+struct PSInput
+{
+    float4 Pos      : SV_POSITION;
+    float3 Normal   : NORMAL;
+    float4 Tangent  : TANGENT;
+    float2 UV       : TEX_COORD;
+    float  FogKeep  : FOG_KEEP;
+    float3 WorldPos : WORLD_POS;
+};
+
+float3x3 PbrInverseTranspose3x3(float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float determinant = dot(m[0], c0);
+    float invDeterminant = (abs(determinant) > 1e-8) ? (1.0 / determinant) : 0.0;
+    return float3x3(c0 * invDeterminant, c1 * invDeterminant, c2 * invDeterminant);
+}
+
+void main(in VSInput vsIn, out PSInput psIn)
+{
+    psIn.Pos = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
+
+    float3x3 normalMatrix = PbrInverseTranspose3x3((float3x3)g_World);
+    psIn.Normal = normalize(mul(vsIn.Normal, normalMatrix));
+
+    // Tangent transforms as a plain direction under World (not the inverse-transpose used for the
+    // normal above) -- correct for uniform-scale World transforms, matching this backend's own
+    // established pbr3d.vert.hlsl reference exactly.
+    psIn.Tangent = float4(mul(vsIn.Tangent.xyz, (float3x3)g_World), vsIn.Tangent.w);
+
+    psIn.UV       = vsIn.UV;
+    psIn.WorldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
+    psIn.FogKeep  = ComputeFogKeep(vsIn.Pos);
+}
+)";
+
+        /// PbrEffect's fragment stage: GGX/Trowbridge-Reitz normal distribution,
+        /// Smith-Schlick-GGX visibility, Schlick Fresnel -- glTF 2.0's own reference BRDF, term for
+        /// term identical to pbr3d.frag.hlsl. g_PbrAmbientMetallic/g_PbrEmissiveRoughness come from
+        /// their own PbrConstants buffer (see UploadPbrConstants()) rather than the shared Constants
+        /// block's g_EmissiveAmbient, which folds ambient and emissive into one value -- PBR needs
+        /// them apart (ambient scales albedo*occlusion, emissive is added standalone, unscaled).
+        constexpr const char* kPbrPixelHlsl = R"(
+Texture2D    g_Texture;
+SamplerState g_Texture_sampler;
+Texture2D    g_NormalMap;
+SamplerState g_NormalMap_sampler;
+Texture2D    g_MetallicRoughnessMap;
+SamplerState g_MetallicRoughnessMap_sampler;
+Texture2D    g_EmissiveMap;
+SamplerState g_EmissiveMap_sampler;
+Texture2D    g_OcclusionMap;
+SamplerState g_OcclusionMap_sampler;
+
+cbuffer PbrConstants
+{
+    float4 g_PbrAmbientMetallic;   // xyz = ambient colour, w = metallic factor
+    float4 g_PbrEmissiveRoughness; // xyz = emissive colour, w = roughness factor
+};
+
+struct PSInput
+{
+    float4 Pos      : SV_POSITION;
+    float3 Normal   : NORMAL;
+    float4 Tangent  : TANGENT;
+    float2 UV       : TEX_COORD;
+    float  FogKeep  : FOG_KEEP;
+    float3 WorldPos : WORLD_POS;
+};
+
+struct PSOutput
+{
+    float4 Color : SV_TARGET;
+};
+
+static const float kPbrPi = 3.14159265;
+
+float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
+                float roughness, float metallic)
+{
+    float3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 1e-4);
+    float NdotH = max(dot(N, H), 0.0);
+    float VdotH = max(dot(V, H), 0.0);
+    float a2 = pow(roughness, 4.0);
+    float dTerm = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+    float D = a2 / (kPbrPi * dTerm * dTerm + 1e-7);
+    float k = (roughness + 1.0); k = k * k / 8.0;
+    float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
+    float3 F = F0 + (float3(1.0, 1.0, 1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    float3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
+    float3 diffuseColor = albedo * (1.0 - metallic);
+    float3 kd = float3(1.0, 1.0, 1.0) - F;
+    return (kd * diffuseColor / kPbrPi + specular) * lightColor * NdotL;
+}
+
+void main(in PSInput psIn, out PSOutput psOut)
+{
+    float4 baseColorTex = g_Texture.Sample(g_Texture_sampler, psIn.UV);
+    float3 albedo = baseColorTex.rgb * g_DiffuseColor.rgb;
+    float alpha = baseColorTex.a * g_DiffuseColor.a;
+
+    float3 N = normalize(psIn.Normal);
+    float3 T = normalize(psIn.Tangent.xyz - N * dot(N, psIn.Tangent.xyz));
+    float3 B = cross(N, T) * psIn.Tangent.w;
+    float3x3 TBN = float3x3(T, B, N);
+    float3 sampledNormal = g_NormalMap.Sample(g_NormalMap_sampler, psIn.UV).rgb * 2.0 - 1.0;
+    float3 finalNormal = normalize(mul(sampledNormal, TBN));
+
+    float4 mr = g_MetallicRoughnessMap.Sample(g_MetallicRoughnessMap_sampler, psIn.UV);
+    float roughness = clamp(mr.g * g_PbrEmissiveRoughness.w, 0.045, 1.0);
+    float metallic  = clamp(mr.b * g_PbrAmbientMetallic.w, 0.0, 1.0);
+
+    float3 V = normalize(g_EyePositionSpecularPower.xyz - psIn.WorldPos);
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+
+    float3 Lo = float3(0.0, 0.0, 0.0);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[0].xyz), g_LightDiffuse[0].xyz, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[1].xyz), g_LightDiffuse[1].xyz, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[2].xyz), g_LightDiffuse[2].xyz, albedo, F0, roughness, metallic);
+
+    float occlusion = g_OcclusionMap.Sample(g_OcclusionMap_sampler, psIn.UV).r;
+    float3 ambient = g_PbrAmbientMetallic.xyz * albedo * occlusion;
+    float3 emissive = g_PbrEmissiveRoughness.xyz * g_EmissiveMap.Sample(g_EmissiveMap_sampler, psIn.UV).rgb;
+
+    psOut.Color = FinishPixel(float4(ambient + Lo + emissive, alpha), psIn.FogKeep);
+}
+)";
+
         constexpr const char* kDualTextureVertexHlsl = R"(
 struct VSInput
 {
@@ -2055,6 +2201,7 @@ float4 main(in PSInput psIn) : SV_Target
         CreateDeviceAndSwapChain(args);
         CreateConstantBuffer();
         CreateFallbackTexture();
+        CreateFallbackFlatNormalTexture();
 
         maxTextureDimension_ = static_cast<int>(device_->GetAdapterInfo().Texture.MaxTexture2DDimension);
         if (maxTextureDimension_ <= 0)
@@ -2101,7 +2248,9 @@ float4 main(in PSInput psIn) : SV_Target
         msaaBackBufferDepth_.Release();
         constantBuffer_.Release();
         boneBuffer_.Release();
+        pbrBuffer_.Release();
         fallbackTexture_.Release();
+        flatNormalTexture_.Release();
         swapChain_.Release();
         context_.Release();
         device_.Release();
@@ -2305,6 +2454,16 @@ float4 main(in PSInput psIn) : SV_Target
         device_->CreateBuffer(boneDesc, nullptr, &boneBuffer_);
         if (!boneBuffer_)
             throw std::runtime_error("CNA Diligent: bone buffer creation failed");
+
+        Dg::BufferDesc pbrDesc;
+        pbrDesc.Name = "CNA PBR constants";
+        pbrDesc.Size = 2 * sizeof(float) * 4; // g_PbrAmbientMetallic, g_PbrEmissiveRoughness
+        pbrDesc.BindFlags = Dg::BIND_UNIFORM_BUFFER;
+        pbrDesc.Usage = Dg::USAGE_DYNAMIC;
+        pbrDesc.CPUAccessFlags = Dg::CPU_ACCESS_WRITE;
+        device_->CreateBuffer(pbrDesc, nullptr, &pbrBuffer_);
+        if (!pbrBuffer_)
+            throw std::runtime_error("CNA Diligent: PBR constant buffer creation failed");
     }
 
     void DiligentGraphicsBackend::UploadBoneTransforms(const GpuDrawParams& params)
@@ -2315,6 +2474,22 @@ float4 main(in PSInput psIn) : SV_Target
             throw std::runtime_error("CNA Diligent: bone buffer could not be mapped");
         std::memcpy(mapped, params.boneTransforms, sizeof(params.boneTransforms));
         context_->UnmapBuffer(boneBuffer_, Dg::MAP_WRITE);
+    }
+
+    void DiligentGraphicsBackend::UploadPbrConstants(const GpuDrawParams& params)
+    {
+        const float values[8] = {
+            params.ambientColor[0], params.ambientColor[1], params.ambientColor[2],
+            params.pbrMetallicFactor,
+            params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2],
+            params.pbrRoughnessFactor,
+        };
+        void* mapped = nullptr;
+        context_->MapBuffer(pbrBuffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
+        if (mapped == nullptr)
+            throw std::runtime_error("CNA Diligent: PBR constant buffer could not be mapped");
+        std::memcpy(mapped, values, sizeof(values));
+        context_->UnmapBuffer(pbrBuffer_, Dg::MAP_WRITE);
     }
 
     void DiligentGraphicsBackend::CreateFallbackTexture()
@@ -2341,6 +2516,33 @@ float4 main(in PSInput psIn) : SV_Target
         fallbackTextureView_ = fallbackTexture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
         if (fallbackTextureView_ == nullptr)
             throw std::runtime_error("CNA Diligent: fallback texture has no shader resource view");
+    }
+
+    void DiligentGraphicsBackend::CreateFallbackFlatNormalTexture()
+    {
+        Dg::TextureDesc desc;
+        desc.Name = "CNA fallback flat-normal texture";
+        desc.Type = Dg::RESOURCE_DIM_TEX_2D;
+        desc.Width = 1;
+        desc.Height = 1;
+        desc.MipLevels = 1;
+        desc.Format = Dg::TEX_FORMAT_RGBA8_UNORM;
+        desc.Usage = Dg::USAGE_IMMUTABLE;
+        desc.BindFlags = Dg::BIND_SHADER_RESOURCE;
+
+        constexpr std::uint8_t kFlatNormal[4] = {128, 128, 255, 255};
+        Dg::TextureSubResData level0{};
+        level0.pData = kFlatNormal;
+        level0.Stride = 4;
+        Dg::TextureData initialData{&level0, 1};
+
+        device_->CreateTexture(desc, &initialData, &flatNormalTexture_);
+        if (!flatNormalTexture_)
+            throw std::runtime_error("CNA Diligent: fallback flat-normal texture creation failed");
+        flatNormalTextureView_ = flatNormalTexture_->GetDefaultView(Dg::TEXTURE_VIEW_SHADER_RESOURCE);
+        if (flatNormalTextureView_ == nullptr)
+            throw std::runtime_error(
+                "CNA Diligent: fallback flat-normal texture has no shader resource view");
     }
 
     int DiligentGraphicsBackend::GetMultiSampleCount() const
@@ -3286,6 +3488,7 @@ float4 main(in PSInput psIn) : SV_Target
         bool usesSecondTexture = false;
         bool usesEnvironmentMap = false;
         bool usesBones = false;
+        bool usesPbr = false;
 
         switch (key.variant)
         {
@@ -3429,6 +3632,18 @@ float4 main(in PSInput psIn) : SV_Target
                 usesTexture = true;
                 usesBones = true;
                 break;
+            case ShaderVariant::Pbr3D:
+                vertexSource = kPbrVertexHlsl;
+                pixelSource = kPbrPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False}, // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False}, // Normal
+                    Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False}, // Tangent (xyz + sign)
+                    Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False}, // UV
+                };
+                usesTexture = true;
+                usesPbr = true;
+                break;
         }
 
         const std::string vertexHlsl = std::string(kConstantsHlsl) + kVertexLightingHlsl +
@@ -3535,7 +3750,7 @@ float4 main(in PSInput psIn) : SV_Target
         psoCI.pVS = vertexShader;
         psoCI.pPS = pixelShader;
 
-        Dg::ShaderResourceVariableDesc variables[3];
+        Dg::ShaderResourceVariableDesc variables[7];
         Dg::Uint32 variableCount = 0;
         if (usesTexture)
         {
@@ -3555,6 +3770,15 @@ float4 main(in PSInput psIn) : SV_Target
                 Dg::ShaderResourceVariableDesc{Dg::SHADER_TYPE_PIXEL, "g_EnvMap",
                                                Dg::SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC};
         }
+        if (usesPbr)
+        {
+            for (const char* name :
+                 {"g_NormalMap", "g_MetallicRoughnessMap", "g_EmissiveMap", "g_OcclusionMap"})
+            {
+                variables[variableCount++] = Dg::ShaderResourceVariableDesc{
+                    Dg::SHADER_TYPE_PIXEL, name, Dg::SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC};
+            }
+        }
         psoCI.PSODesc.ResourceLayout.DefaultVariableType = Dg::SHADER_RESOURCE_VARIABLE_TYPE_STATIC;
         psoCI.PSODesc.ResourceLayout.Variables = variableCount > 0 ? variables : nullptr;
         psoCI.PSODesc.ResourceLayout.NumVariables = variableCount;
@@ -3570,6 +3794,8 @@ float4 main(in PSInput psIn) : SV_Target
                 variable->Set(constantBuffer_);
             if (auto* variable = cached.pipeline->GetStaticVariableByName(stage, "Bones"))
                 variable->Set(boneBuffer_);
+            if (auto* variable = cached.pipeline->GetStaticVariableByName(stage, "PbrConstants"))
+                variable->Set(pbrBuffer_);
         }
 
         cached.pipeline->CreateShaderResourceBinding(&cached.binding, true);
@@ -3581,6 +3807,17 @@ float4 main(in PSInput psIn) : SV_Target
             cached.texture2Variable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_Texture2");
         if (usesEnvironmentMap)
             cached.envMapVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_EnvMap");
+        if (usesPbr)
+        {
+            cached.normalMapVariable =
+                cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_NormalMap");
+            cached.metallicRoughnessVariable =
+                cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_MetallicRoughnessMap");
+            cached.emissiveMapVariable =
+                cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_EmissiveMap");
+            cached.occlusionMapVariable =
+                cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_OcclusionMap");
+        }
 
         return pipelines_.emplace(key, std::move(cached)).first->second;
     }
@@ -3892,7 +4129,7 @@ float4 main(in PSInput psIn) : SV_Target
             // available variant instead would silently produce a different image, so the draw is
             // refused until the matching phase of plan_diligent.md lands.
             const char* unsupported = nullptr;
-            if (params->pbr)                         unsupported = "PbrEffect";
+            if (params->pbr && params->skinned)      unsupported = "SkinnedPbrEffect";
             else if (params->customEffectBackend)    unsupported = "custom ShaderEffect programs";
             else if (params->instanceCount > 1)      unsupported = "hardware instancing";
             if (unsupported != nullptr)
@@ -3929,6 +4166,7 @@ float4 main(in PSInput psIn) : SV_Target
                     ? ShaderVariant::SkinnedVertexLit3D
                     : ShaderVariant::Skinned3D;
                 break;
+            case 48: variant = ShaderVariant::Pbr3D; break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
@@ -3943,6 +4181,10 @@ float4 main(in PSInput psIn) : SV_Target
             throw std::runtime_error(
                 "CNA Diligent: EnvironmentMapEffect needs a position/normal/UV vertex layout "
                 "(stride 32)");
+        if (params != nullptr && params->pbr && stride != 48)
+            throw std::runtime_error(
+                "CNA Diligent: PbrEffect needs a position/normal/tangent/UV vertex layout "
+                "(stride 48)");
 
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
@@ -4009,6 +4251,8 @@ float4 main(in PSInput psIn) : SV_Target
         if ((variant == ShaderVariant::Skinned3D || variant == ShaderVariant::SkinnedVertexLit3D) &&
             params != nullptr)
             UploadBoneTransforms(*params);
+        if (variant == ShaderVariant::Pbr3D && params != nullptr)
+            UploadPbrConstants(*params);
 
         CachedPipeline& pipeline = GetOrCreatePipeline(MakePipelineKey(variant, primitive));
         if (pipeline.textureVariable != nullptr)
@@ -4054,6 +4298,34 @@ float4 main(in PSInput psIn) : SV_Target
             view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
                                                 samplerMaxAnisotropy_));
             pipeline.envMapVariable->Set(view);
+        }
+        if (pipeline.normalMapVariable != nullptr)
+        {
+            // PbrEffect's optional maps: an unbound one is ordinary XNA (glTF materials frequently
+            // omit some), not an error -- BindPbrMap()'s own fallback view is each map's "absent"
+            // identity (flat tangent-space normal, or white for the other three -- see
+            // flatNormalTextureView_/fallbackTextureView_'s own doc comments).
+            const auto BindPbrMap = [this](Dg::IShaderResourceVariable* variable,
+                                           const ITextureBackend* texture,
+                                           Dg::ITextureView* fallback) {
+                const auto* diligentTexture = dynamic_cast<const DiligentSampledTexture*>(texture);
+                Dg::ITextureView* view =
+                    diligentTexture != nullptr ? diligentTexture->GetShaderResourceView() : nullptr;
+                if (view == nullptr)
+                    view = fallback;
+                view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_,
+                                                     samplerAddressV_, samplerMaxAnisotropy_));
+                variable->Set(view);
+            };
+            BindPbrMap(pipeline.normalMapVariable, params != nullptr ? params->pbrNormalMap : nullptr,
+                      flatNormalTextureView_);
+            BindPbrMap(pipeline.metallicRoughnessVariable,
+                      params != nullptr ? params->pbrMetallicRoughnessMap : nullptr,
+                      fallbackTextureView_);
+            BindPbrMap(pipeline.emissiveMapVariable,
+                      params != nullptr ? params->pbrEmissiveMap : nullptr, fallbackTextureView_);
+            BindPbrMap(pipeline.occlusionMapVariable,
+                      params != nullptr ? params->pbrOcclusionMap : nullptr, fallbackTextureView_);
         }
 
         context_->SetPipelineState(pipeline.pipeline);

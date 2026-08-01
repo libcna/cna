@@ -1382,6 +1382,7 @@ namespace CNA::Internal::Backends::Diligent
             Instanced3D,        ///< position-only vertex + a per-instance world matrix, flat colour
             LitTexturedVertexLit3D, ///< stride 32: LitTextured3D's PreferPerPixelLighting==false sibling
             SkinnedVertexLit3D,     ///< stride 52: Skinned3D's PreferPerPixelLighting==false sibling
+            Pbr3D,                  ///< stride 48: PbrEffect's glTF metallic-roughness BRDF
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */
@@ -1428,6 +1429,10 @@ namespace CNA::Internal::Backends::Diligent
             Dg::IShaderResourceVariable* textureVariable = nullptr;
             Dg::IShaderResourceVariable* texture2Variable = nullptr;
             Dg::IShaderResourceVariable* envMapVariable = nullptr;
+            Dg::IShaderResourceVariable* normalMapVariable = nullptr;
+            Dg::IShaderResourceVariable* metallicRoughnessVariable = nullptr;
+            Dg::IShaderResourceVariable* emissiveMapVariable = nullptr;
+            Dg::IShaderResourceVariable* occlusionMapVariable = nullptr;
         };
 
         /** @brief Constant buffer contents shared by every built-in shader. */
@@ -1465,7 +1470,9 @@ namespace CNA::Internal::Backends::Diligent
         bool TryCreateDevice(DiligentDeviceType type, int multiSampleCount);
         void CreateConstantBuffer();
         void CreateFallbackTexture();
+        void CreateFallbackFlatNormalTexture();
         void UploadBoneTransforms(const GpuDrawParams& params);
+        void UploadPbrConstants(const GpuDrawParams& params);
         void SyncSwapChainSize();
         void EnsureRenderTargetsBound();
         void ApplyViewportAndScissor();
@@ -1549,6 +1556,18 @@ namespace CNA::Internal::Backends::Diligent
         /// texture variable still has to have one bound.
         Dg::RefCntAutoPtr<Dg::ITexture> fallbackTexture_;
         Dg::ITextureView* fallbackTextureView_ = nullptr;
+        /// PbrEffect: 1x1 (128,128,255) -- decodes (via `rgb*2-1`) to tangent-space (0,0,1), the
+        /// geometric normal unperturbed. Bound whenever `PbrEffect.NormalMap` is unset; the white
+        /// `fallbackTextureView_` above is reused as-is for the other three optional PBR maps
+        /// (metallic-roughness/emissive/occlusion), since 1.0 is already each one's own
+        /// map-absent identity (factor*1.0, tint*1.0, unoccluded).
+        Dg::RefCntAutoPtr<Dg::ITexture> flatNormalTexture_;
+        Dg::ITextureView* flatNormalTextureView_ = nullptr;
+        /// PbrEffect's ambient/metallic/emissive/roughness factors, separate from `constantBuffer_`
+        /// because that shared block folds ambient+emissive into one `g_EmissiveAmbient` value
+        /// (every other stock effect's own convention) -- PBR needs them apart (ambient scales
+        /// albedo*occlusion, emissive is added standalone).
+        Dg::RefCntAutoPtr<Dg::IBuffer> pbrBuffer_;
 
         std::unordered_map<PipelineKey, CachedPipeline, PipelineKeyHash> pipelines_;
         std::unordered_map<std::uint64_t, Dg::RefCntAutoPtr<Dg::ISampler>> samplers_;

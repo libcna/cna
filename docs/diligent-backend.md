@@ -4,10 +4,10 @@
 
 The Diligent Engine backend is CNA's newest graphics backend and is **experimental**. Its
 implemented surface covers the 2D/3D baseline plus render targets (2D and cube), occlusion queries,
-MSAA, hardware instancing and most stock effects, described in `plan_diligent.md` Phases
-`DILIGENT-1` through `4`; it is **not** at parity with the Vulkan, EasyGL, SDL_GPU or bgfx backends
-(custom `ShaderEffect` programs, `PbrEffect` and `RenderTargetCube` MSAA are still unimplemented).
-Read
+MSAA, hardware instancing, `PbrEffect` and most stock effects, described in `plan_diligent.md`
+Phases `DILIGENT-1` through `4`; it is **not** at parity with the Vulkan, EasyGL, SDL_GPU or bgfx
+backends (custom `ShaderEffect` programs, `SkinnedPbrEffect` and `RenderTargetCube` MSAA are still
+unimplemented). Read
 ["What works / what does not"](#what-works--what-does-not) before using it for anything real.
 
 Select it with:
@@ -150,6 +150,10 @@ Implemented:
   XNA's own default): lighting is evaluated once per vertex and Gouraud-interpolated, rather than
   always re-evaluated per fragment. Same Blinn-Phong formula as the per-pixel path either way --
   only the stage differs.
+- `PbrEffect` (stride 48, unskinned): the glTF 2.0 metallic-roughness BRDF (GGX distribution,
+  Smith-Schlick-GGX visibility, Schlick Fresnel), five optional texture maps (base colour, normal,
+  metallic-roughness, emissive, occlusion) each falling back to their own glTF "map absent"
+  identity when unbound. `SkinnedPbrEffect` (PBR combined with skinning) is not implemented.
 
 Not implemented — each **throws with its own name** rather than rendering an approximation, and
 `GraphicsDevice.GraphicsCapabilities` reports each honestly:
@@ -158,7 +162,7 @@ Not implemented — each **throws with its own name** rather than rendering an a
 | --- | --- |
 | MSAA on `RenderTargetCube` | `DILIGENT-25` |
 | Sampling a volume texture from a shader | `DILIGENT-42` |
-| `PbrEffect`, `SkinnedEffect`'s stride-56 vertex-colour variant | `DILIGENT-36`, `DILIGENT-35` |
+| `SkinnedPbrEffect`, `SkinnedEffect`'s stride-56 vertex-colour variant | `DILIGENT-36`, `DILIGENT-35` |
 | Custom `ShaderEffect` programs | `DILIGENT-42` |
 
 ## Known limitations
@@ -195,28 +199,34 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Fourteen further binaries are the real-device pixel proofs (64 checks total): `Diligent_2D` (6),
+Fifteen further binaries are the real-device pixel proofs (68 checks total): `Diligent_2D` (6),
 `Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4),
 `Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4),
-`Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4) and `Diligent_VertexLit` (4). They clear,
-draw `SpriteBatch` quads and 3D primitives on the back buffer and into off-screen 2D/cube targets,
-and assert on pixels (or query results) read back through `GraphicsDevice.GetBackBufferData` /
-`RenderTarget2D.GetData` / `RenderTargetCube.GetData` / `OcclusionQuery`. `Diligent_MSAA` uses a
-diagonal-edge differential (binary transition with MSAA off vs. genuinely blended pixels with it
-on) rather than a solid-fill check, since a solid fill can't tell "MSAA happened" apart from "MSAA
-was silently ignored". `Diligent_Instanced` draws three instances of one quad at distinct
-per-instance translations from a single `DrawInstancedPrimitives` call and asserts each instance's
-own position reads back the quad's colour while the untouched background between them stays the
-clear colour. `Diligent_DrawOffset` proves `DrawPrimitives`/`DrawIndexedPrimitives`/
-`DrawInstancedPrimitivesEx` honor non-zero `vertexStart`/`startIndex`/`baseVertex` offsets rather
-than silently drawing from the start of the bound buffer. `Diligent_SetDataOptions` proves a
-second, differently-coloured `SetData(..., NoOverwrite)` upload into an already-`Discard`-uploaded
-`DynamicVertexBuffer`/`DynamicIndexBuffer` genuinely reaches the GPU buffer rather than being
-dropped or leaving stale content. `Diligent_VertexLit` proves `PreferPerPixelLighting=true` and
-`=false` render a flat-normal quad pixel-identically for both `BasicEffect` and `SkinnedEffect`,
-the strongest possible check since the two shading paths share the exact same lighting formula and
-only differ in evaluation frequency. All 64 pass against a real Vulkan device. On a machine with no
+`Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4), `Diligent_VertexLit` (4) and
+`Diligent_Pbr` (4). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
+into off-screen 2D/cube targets, and assert on pixels (or query results) read back through
+`GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData` /
+`OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential (binary transition with MSAA
+off vs. genuinely blended pixels with it on) rather than a solid-fill check, since a solid fill
+can't tell "MSAA happened" apart from "MSAA was silently ignored". `Diligent_Instanced` draws
+three instances of one quad at distinct per-instance translations from a single
+`DrawInstancedPrimitives` call and asserts each instance's own position reads back the quad's
+colour while the untouched background between them stays the clear colour. `Diligent_DrawOffset`
+proves `DrawPrimitives`/`DrawIndexedPrimitives`/`DrawInstancedPrimitivesEx` honor non-zero
+`vertexStart`/`startIndex`/`baseVertex` offsets rather than silently drawing from the start of the
+bound buffer. `Diligent_SetDataOptions` proves a second, differently-coloured
+`SetData(..., NoOverwrite)` upload into an already-`Discard`-uploaded `DynamicVertexBuffer`/
+`DynamicIndexBuffer` genuinely reaches the GPU buffer rather than being dropped or leaving stale
+content. `Diligent_VertexLit` proves `PreferPerPixelLighting=true` and `=false` render a
+flat-normal quad pixel-identically for both `BasicEffect` and `SkinnedEffect`, the strongest
+possible check since the two shading paths share the exact same lighting formula and only differ
+in evaluation frequency. `Diligent_Pbr` uses the same analytically-hand-derived technique as
+`vulkan_pbreffect_handderived_test.cpp` -- a flat quad viewed straight down its own normal with the
+light aimed the same way collapses every BRDF dot product to exactly 1 at the backbuffer's centre
+pixel, so the metallic-roughness shader reduces to a closed-form constant independently re-derived
+in Python; three hand-derived cases (white/metallic=0, red/metallic=1, red/metallic=0) all match
+their predicted RGB values exactly. All 68 pass against a real Vulkan device. On a machine with no
 usable device they exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip —
 reporting a pass with nothing rendered would be dishonest.
 
