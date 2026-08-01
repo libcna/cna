@@ -38,6 +38,7 @@
 #include <cstdio>
 #include <exception>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -80,6 +81,11 @@ protected:
             device, 2, 1, std::vector<uint8_t>{
                 255, 0, 0, 255, // left: red
                 0, 255, 0, 255, // right: green
+            }));
+        twoRows_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
+            device, 1, 2, std::vector<uint8_t>{
+                255, 0, 0, 255, // top: red
+                0, 255, 0, 255, // bottom: green
             }));
     }
 
@@ -249,7 +255,161 @@ protected:
             std::printf("[SKIP] RenderTarget2D GPU decoration (Wine Direct2D lacks ColorMatrix)\n");
         }
 
-        // 6. A recorded scissor rectangle must only affect SpriteBatch once RasterizerState
+        // 6. EasyGL/FNA keeps UVs outside [0,1] and delegates the result to SamplerState. The
+        // Direct2D ordinary-texture CPU route and render-target image-brush route must therefore
+        // agree for Clamp-to-edge, Wrap, and Mirror; this also makes a source rectangle extending
+        // past an image a supported 2D operation instead of a Direct2D-only error.
+        RenderTarget2D samplerTarget(device, 2, 1);
+        device.SetRenderTarget(&samplerTarget);
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+        sprites_->Draw(*twoTexels_, Rectangle(0, 0, 2, 1), Rectangle(0, 0, 2, 1), Color::White);
+        sprites_->End();
+        device.SetRenderTarget(nullptr);
+
+        SamplerState pointWrap;
+        pointWrap.setFilterProperty(TextureFilter::Point);
+        pointWrap.setAddressUProperty(TextureAddressMode::Wrap);
+        pointWrap.setAddressVProperty(TextureAddressMode::Clamp);
+        SamplerState pointMirror;
+        pointMirror.setFilterProperty(TextureFilter::Point);
+        pointMirror.setAddressUProperty(TextureAddressMode::Mirror);
+        pointMirror.setAddressVProperty(TextureAddressMode::Clamp);
+        SamplerState pointWrapRows;
+        pointWrapRows.setFilterProperty(TextureFilter::Point);
+        pointWrapRows.setAddressUProperty(TextureAddressMode::Clamp);
+        pointWrapRows.setAddressVProperty(TextureAddressMode::Wrap);
+        SamplerState pointMirrorRows;
+        pointMirrorRows.setFilterProperty(TextureFilter::Point);
+        pointMirrorRows.setAddressUProperty(TextureAddressMode::Clamp);
+        pointMirrorRows.setAddressVProperty(TextureAddressMode::Mirror);
+        SamplerState linearClamp;
+        linearClamp.setFilterProperty(TextureFilter::Linear);
+        linearClamp.setAddressUProperty(TextureAddressMode::Clamp);
+        linearClamp.setAddressVProperty(TextureAddressMode::Clamp);
+        SamplerState linearWrap;
+        linearWrap.setFilterProperty(TextureFilter::Linear);
+        linearWrap.setAddressUProperty(TextureAddressMode::Wrap);
+        linearWrap.setAddressVProperty(TextureAddressMode::Clamp);
+        SamplerState linearMirror;
+        linearMirror.setFilterProperty(TextureFilter::Linear);
+        linearMirror.setAddressUProperty(TextureAddressMode::Mirror);
+        linearMirror.setAddressVProperty(TextureAddressMode::Clamp);
+
+        RenderTarget2D samplerRowsTarget(device, 1, 2);
+        device.SetRenderTarget(&samplerRowsTarget);
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+        sprites_->Draw(*twoRows_, Rectangle(0, 0, 1, 2), Rectangle(0, 0, 1, 2), Color::White);
+        sprites_->End();
+        device.SetRenderTarget(nullptr);
+
+        const auto drawOutsideSource = [&](SamplerState& sampler, int y,
+                                          SpriteEffects effects = SpriteEffects::None) {
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
+            sprites_->Draw(*twoTexels_, Rectangle(0, y, 16, 2), Rectangle(-1, 0, 4, 1), Color::White,
+                           0.0f, Vector2::Zero, effects, 0.0f);
+            sprites_->Draw(samplerTarget, Rectangle(16, y, 16, 2), Rectangle(-1, 0, 4, 1), Color::White,
+                           0.0f, Vector2::Zero, effects, 0.0f);
+            sprites_->End();
+        };
+        const auto drawOutsideRows = [&](SamplerState& sampler, int y,
+                                         SpriteEffects effects = SpriteEffects::None) {
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
+            sprites_->Draw(*twoRows_, Rectangle(32, y, 4, 8), Rectangle(0, -1, 1, 4), Color::White,
+                           0.0f, Vector2::Zero, effects, 0.0f);
+            sprites_->Draw(samplerRowsTarget, Rectangle(40, y, 4, 8), Rectangle(0, -1, 1, 4), Color::White,
+                           0.0f, Vector2::Zero, effects, 0.0f);
+            sprites_->End();
+        };
+        const auto drawOutsideLinear = [&](SamplerState& sampler, int y) {
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
+            sprites_->Draw(*twoTexels_, Rectangle(0, y, 16, 1), Rectangle(-1, 0, 4, 1), Color::White);
+            sprites_->Draw(samplerTarget, Rectangle(16, y, 16, 1), Rectangle(-1, 0, 4, 1), Color::White);
+            sprites_->End();
+        };
+        device.Clear(Color::Black);
+        drawOutsideSource(point, 16);
+        drawOutsideSource(pointWrap, 19);
+        drawOutsideSource(pointMirror, 22);
+        drawOutsideRows(point, 0);
+        drawOutsideRows(pointWrapRows, 8);
+        drawOutsideRows(pointMirrorRows, 16);
+        drawOutsideSource(point, 26, SpriteEffects::FlipHorizontally);
+        drawOutsideRows(point, 24, SpriteEffects::FlipVertically);
+        drawOutsideLinear(linearClamp, 29);
+        drawOutsideLinear(linearWrap, 30);
+        drawOutsideLinear(linearMirror, 31);
+        const auto checkAddressingRow = [&](const char* mode, int y, const std::array<Color, 4>& expected) {
+            for (int index = 0; index < 4; ++index)
+            {
+                const int x = 1 + index * 4;
+                std::string ordinaryLabel = std::string("Texture2D ") + mode + " outside source " +
+                                            std::to_string(index);
+                std::string targetLabel = std::string("RenderTarget2D ") + mode + " outside source " +
+                                          std::to_string(index);
+                check(ordinaryLabel.c_str(), x, y, expected[static_cast<std::size_t>(index)]);
+                check(targetLabel.c_str(), x + 16, y, expected[static_cast<std::size_t>(index)]);
+            }
+        };
+        const auto checkAddressingColumn = [&](const char* mode, int y, const std::array<Color, 4>& expected) {
+            for (int index = 0; index < 4; ++index)
+            {
+                const int sampleY = y + 1 + index * 2;
+                std::string ordinaryLabel = std::string("Texture2D vertical ") + mode + " outside source " +
+                                            std::to_string(index);
+                std::string targetLabel = std::string("RenderTarget2D vertical ") + mode + " outside source " +
+                                          std::to_string(index);
+                check(ordinaryLabel.c_str(), 33, sampleY, expected[static_cast<std::size_t>(index)]);
+                check(targetLabel.c_str(), 41, sampleY, expected[static_cast<std::size_t>(index)]);
+            }
+        };
+        checkAddressingRow("Clamp", 16, {Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+                                         Color(0, 255, 0, 255), Color(0, 255, 0, 255)});
+        checkAddressingRow("Wrap", 19, {Color(0, 255, 0, 255), Color(255, 0, 0, 255),
+                                        Color(0, 255, 0, 255), Color(255, 0, 0, 255)});
+        checkAddressingRow("Mirror", 22, {Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+                                          Color(0, 255, 0, 255), Color(0, 255, 0, 255)});
+        checkAddressingColumn("Clamp", 0, {Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+                                            Color(0, 255, 0, 255), Color(0, 255, 0, 255)});
+        checkAddressingColumn("Wrap", 8, {Color(0, 255, 0, 255), Color(255, 0, 0, 255),
+                                           Color(0, 255, 0, 255), Color(255, 0, 0, 255)});
+        checkAddressingColumn("Mirror", 16, {Color(255, 0, 0, 255), Color(255, 0, 0, 255),
+                                              Color(0, 255, 0, 255), Color(0, 255, 0, 255)});
+        checkAddressingRow("Clamp FlipH", 26, {Color(0, 255, 0, 255), Color(0, 255, 0, 255),
+                                                Color(255, 0, 0, 255), Color(255, 0, 0, 255)});
+        checkAddressingColumn("Clamp FlipV", 24, {Color(0, 255, 0, 255), Color(0, 255, 0, 255),
+                                                   Color(255, 0, 0, 255), Color(255, 0, 0, 255)});
+        const auto checkLinearParity = [&](const char* mode, int y, int x) {
+            Color ordinary(0, 0, 0, 0);
+            Color target(0, 0, 0, 0);
+            const Rectangle ordinaryRegion(x, y, 1, 1);
+            const Rectangle targetRegion(x + 16, y, 1, 1);
+            device.GetBackBufferData(&ordinaryRegion, &ordinary, 0, 1);
+            device.GetBackBufferData(&targetRegion, &target, 0, 1);
+            const bool same = Matches(ordinary, target);
+            std::printf("[%s] Linear %s Texture2D/RenderTarget2D parity x=%d: ordinary=(%d,%d,%d,%d), target=(%d,%d,%d,%d)\n",
+                        same ? "PASS" : "FAIL", mode, x,
+                        ordinary.getRProperty(), ordinary.getGProperty(), ordinary.getBProperty(), ordinary.getAProperty(),
+                        target.getRProperty(), target.getGProperty(), target.getBProperty(), target.getAProperty());
+            passed = passed && same;
+        };
+        for (int x : {1, 3, 5, 7, 9, 11, 13, 15})
+        {
+            checkLinearParity("Clamp", 29, x);
+            checkLinearParity("Wrap", 30, x);
+            checkLinearParity("Mirror", 31, x);
+        }
+        Color linearProbe(0, 0, 0, 0);
+        const Rectangle linearProbeRegion(3, 30, 1, 1);
+        device.GetBackBufferData(&linearProbeRegion, &linearProbe, 0, 1);
+        const bool interpolationObserved = linearProbe.getRProperty() > 4 && linearProbe.getRProperty() < 251 &&
+                                           linearProbe.getGProperty() > 4 && linearProbe.getGProperty() < 251;
+        std::printf("[%s] Linear sampler produces an interpolated Wrap sample\n",
+                    interpolationObserved ? "PASS" : "FAIL");
+        passed = passed && interpolationObserved;
+
+        // 7. A recorded scissor rectangle must only affect SpriteBatch once RasterizerState
         // explicitly enables its test. Clear deliberately ignores it, so both branches begin
         // from the same black backbuffer.
         RasterizerState scissorDisabled;
@@ -295,7 +455,7 @@ protected:
         device.setRasterizerStateProperty(scissorDisabled);
         device.setScissorRectangleProperty(Rectangle(0, 0, 48, 32));
 
-        // 7. SpriteBatch coordinates are viewport-local, and the viewport is also an output clip.
+        // 8. SpriteBatch coordinates are viewport-local, and the viewport is also an output clip.
         // This establishes the Direct2D 2D rule without involving a 3D projection/depth range.
         device.setViewportProperty(Viewport(10, 4, 8, 4));
         device.Clear(Color::Black);
@@ -323,7 +483,7 @@ protected:
         check("RenderTarget2D viewport right clip", 8, 10, Color::Black);
         device.setViewportProperty(Viewport(0, 0, 48, 32));
 
-        // 8. Direct2D's three primitive blends cover CNA's four standard SpriteBatch presets.
+        // 9. Direct2D's three primitive blends cover CNA's four standard SpriteBatch presets.
         // AlphaBlend consumes premultiplied texture data, while NonPremultiplied must
         // premultiply a straight-alpha source before Direct2D source-over. Additive and Opaque
         // exercise their own native primitive blend modes; the RT case proves the same behavior
@@ -381,7 +541,7 @@ protected:
         sprites_->End();
         check("AlphaBlend RenderTarget2D destination", 33, 1, halfRedOverBackground);
 
-        // 9. A mipmapped Texture2D owns one Direct2D bitmap per initialized level. SpriteBatch
+        // 10. A mipmapped Texture2D owns one Direct2D bitmap per initialized level. SpriteBatch
         // chooses the nearest populated level during minification, rather than sampling an
         // uninitialized lower level or silently collapsing every draw to level zero.
         Texture2D mipTexture(device, 4, 4, true, SurfaceFormat::Color);
@@ -401,7 +561,42 @@ protected:
         check("Texture2D mip level 1", 8, 0, Color(0, 255, 0, 255));
         check("Texture2D mip level 2", 12, 0, Color(0, 0, 255, 255));
 
-        // 10. Desktop context-loss recovery is an atomic Direct3D/DXGI/Direct2D recreation.  A
+        // 11. RenderTarget2D(mipMap=true) owns the same complete Direct2D bitmap chain, generated
+        // from level zero when the target is unbound. The solid source makes the required 2x2/1x1
+        // output independent of Direct2D's exact linear downsampling kernel, while the three
+        // destination sizes exercise SpriteBatch's selected level 0/1/2 path.
+        const Color renderTargetMipColor(17, 153, 221, 255);
+        RenderTarget2D mipRenderTarget(device, 4, 4, true, SurfaceFormat::Color, DepthFormat::None);
+        device.SetRenderTarget(&mipRenderTarget);
+        device.Clear(renderTargetMipColor);
+        device.SetRenderTarget(nullptr);
+        if (verifyCpuRenderTargetReadback)
+        {
+            Color mipLevelOne(0, 0, 0, 0);
+            Color mipLevelTwo(0, 0, 0, 0);
+            mipRenderTarget.GetData(1, nullptr, &mipLevelOne, 0, 1);
+            mipRenderTarget.GetData(2, nullptr, &mipLevelTwo, 0, 1);
+            const bool mipOneMatches = Matches(mipLevelOne, renderTargetMipColor);
+            const bool mipTwoMatches = Matches(mipLevelTwo, renderTargetMipColor);
+            std::printf("[%s] RenderTarget2D mip GetData level 1\n", mipOneMatches ? "PASS" : "FAIL");
+            std::printf("[%s] RenderTarget2D mip GetData level 2\n", mipTwoMatches ? "PASS" : "FAIL");
+            passed = passed && mipOneMatches && mipTwoMatches;
+        }
+        else
+        {
+            std::printf("[SKIP] RenderTarget2D mip GetData (Wine Direct2D lacks CopyFromRenderTarget)\n");
+        }
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(mipRenderTarget, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+        sprites_->Draw(mipRenderTarget, Rectangle(8, 0, 2, 2), Rectangle(0, 0, 4, 4), Color::White);
+        sprites_->Draw(mipRenderTarget, Rectangle(12, 0, 1, 1), Rectangle(0, 0, 4, 4), Color::White);
+        sprites_->End();
+        check("RenderTarget2D mip level 0", 1, 1, renderTargetMipColor);
+        check("RenderTarget2D mip level 1", 8, 0, renderTargetMipColor);
+        check("RenderTarget2D mip level 2", 12, 0, renderTargetMipColor);
+
+        // 12. Desktop context-loss recovery is an atomic Direct3D/DXGI/Direct2D recreation.  A
         // recoverable Texture2D must acquire a new bitmap from its CPU shadow; a recoverable RT
         // must be safely reallocated with transparent contents instead of exposing its old COM
         // bitmap. This uses the public debug hook, exactly like EasyGL's desktop recovery probe.
@@ -469,7 +664,7 @@ protected:
         check("Context recovery new Texture2D", 1, 1, Color(40, 180, 90, 255));
         device.SetContextRecoveryEnabled(true);
 
-        // 11. GraphicsCapability currently contains only optional 3D-pipeline facilities. The
+        // 13. GraphicsCapability currently contains only optional 3D-pipeline facilities. The
         // Direct2D backend must report none of them: owning D3D11/DXGI presentation resources
         // does not turn this deliberately 2D-only backend into a second D3D11 renderer.
         constexpr std::array unsupportedCapabilities{
@@ -491,7 +686,7 @@ protected:
             passed = passed && correctlyRejected;
         }
 
-        // 12. Unsupported output-mask and blend-factor state must fail explicitly instead of
+        // 14. Unsupported output-mask and blend-factor state must fail explicitly instead of
         // silently rendering an approximation. Standard SpriteBatch presets above still use the
         // all-channel/all-sample defaults and therefore remain valid.
         const auto expectNamedBlendRejection = [&](const char* label, const auto& action) {
@@ -537,6 +732,7 @@ private:
     std::unique_ptr<SpriteBatch> sprites_;
     std::unique_ptr<Texture2D> white_;
     std::unique_ptr<Texture2D> twoTexels_;
+    std::unique_ptr<Texture2D> twoRows_;
     bool done_ = false;
     int result_ = 1;
 };

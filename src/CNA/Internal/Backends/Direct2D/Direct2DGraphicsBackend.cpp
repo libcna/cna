@@ -267,11 +267,22 @@ namespace CNA::Internal::Backends::Direct2D
     }
 
     Direct2DRenderTargetBackend::Direct2DRenderTargetBackend(
-        Direct2DGraphicsBackend& owner, int width, int height)
-        : owner_(&owner), width_(width), height_(height)
+        Direct2DGraphicsBackend& owner, int width, int height, bool mipMap)
+        : owner_(&owner), width_(width), height_(height), mipMap_(mipMap)
     {
         if (width_ <= 0 || height_ <= 0)
             throw std::runtime_error("Direct2D render-target dimensions must be positive.");
+        if (mipMap_)
+        {
+            int levelWidth = width_;
+            int levelHeight = height_;
+            while (levelWidth > 1 || levelHeight > 1)
+            {
+                levelWidth = std::max(1, levelWidth / 2);
+                levelHeight = std::max(1, levelHeight / 2);
+                mipBitmaps_.emplace_back();
+            }
+        }
         RecreateBitmap();
         owner_->RegisterRenderTarget(this);
     }
@@ -283,13 +294,30 @@ namespace CNA::Internal::Backends::Direct2D
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
             96.0f, 96.0f);
         // RenderTarget2D deliberately has no CPU shadow. A recovered target's old contents are
-        // discarded; initialize its replacement as transparent black so this is deterministic.
-        std::vector<uint8_t> transparentPixels(
-            static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) * 4u, 0u);
-        ThrowIfFailed(owner_->d2dContext_->CreateBitmap(
-                          D2D1::SizeU(static_cast<UINT32>(width_), static_cast<UINT32>(height_)),
-                          transparentPixels.data(), static_cast<UINT32>(width_ * 4), &properties, &bitmap_),
-                      "CreateBitmap(render target)");
+        // discarded; initialize its replacement (and every generated-mip destination) as
+        // transparent black so the resulting chain is deterministic until the first draw.
+        const auto createTargetBitmap = [&](int bitmapWidth, int bitmapHeight,
+                                            Microsoft::WRL::ComPtr<ID2D1Bitmap1>& output) {
+            std::vector<uint8_t> transparentPixels(
+                static_cast<std::size_t>(bitmapWidth) * static_cast<std::size_t>(bitmapHeight) * 4u, 0u);
+            ThrowIfFailed(owner_->d2dContext_->CreateBitmap(
+                              D2D1::SizeU(static_cast<UINT32>(bitmapWidth),
+                                          static_cast<UINT32>(bitmapHeight)),
+                              transparentPixels.data(), static_cast<UINT32>(bitmapWidth * 4),
+                              &properties, &output),
+                          "CreateBitmap(render target)");
+        };
+        createTargetBitmap(width_, height_, bitmap_);
+        int levelWidth = width_;
+        int levelHeight = height_;
+        for (Microsoft::WRL::ComPtr<ID2D1Bitmap1>& mipBitmap : mipBitmaps_)
+        {
+            levelWidth = std::max(1, levelWidth / 2);
+            levelHeight = std::max(1, levelHeight / 2);
+            mipBitmap.Reset();
+            createTargetBitmap(levelWidth, levelHeight, mipBitmap);
+        }
+        mipLevelsDirty_ = false;
         deviceGeneration_ = owner_->deviceGeneration_;
     }
 
@@ -303,6 +331,38 @@ namespace CNA::Internal::Backends::Direct2D
     {
         owner_->EnsureResourceGeneration(deviceGeneration_, "RenderTarget2D");
         return bitmap_.Get();
+    }
+
+    ID2D1Bitmap1* Direct2DRenderTargetBackend::BitmapForLevel(int level) const
+    {
+        owner_->EnsureResourceGeneration(deviceGeneration_, "RenderTarget2D");
+        if (level < 0 || level > static_cast<int>(mipBitmaps_.size()))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "level", std::to_string(level), "The requested Direct2D render-target mip level does not exist.");
+        }
+        if (level == 0) return bitmap_.Get();
+        const_cast<Direct2DRenderTargetBackend*>(this)->EnsureMipLevelsCurrent();
+        return mipBitmaps_[static_cast<std::size_t>(level - 1)].Get();
+    }
+
+    int Direct2DRenderTargetBackend::SelectAvailableMipLevel(int preferredLevel) const
+    {
+        owner_->EnsureResourceGeneration(deviceGeneration_, "RenderTarget2D");
+        preferredLevel = std::clamp(preferredLevel, 0, static_cast<int>(mipBitmaps_.size()));
+        if (preferredLevel > 0)
+            const_cast<Direct2DRenderTargetBackend*>(this)->EnsureMipLevelsCurrent();
+        return preferredLevel;
+    }
+
+    void Direct2DRenderTargetBackend::MarkMipLevelsDirty()
+    {
+        if (!mipBitmaps_.empty()) mipLevelsDirty_ = true;
+    }
+
+    void Direct2DRenderTargetBackend::EnsureMipLevelsCurrent()
+    {
+        if (mipLevelsDirty_) owner_->GenerateRenderTargetMipLevels(*this);
     }
 
     void Direct2DRenderTargetBackend::UpdatePixels(const uint8_t* rgba, int stride)
@@ -325,6 +385,7 @@ namespace CNA::Internal::Backends::Direct2D
         }
         ThrowIfFailed(Bitmap()->CopyFromMemory(nullptr, bgra.data(), static_cast<UINT32>(width_ * 4)),
                       "ID2D1Bitmap::CopyFromMemory(render target)");
+        MarkMipLevelsDirty();
     }
 
     bool Direct2DRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
@@ -333,16 +394,22 @@ namespace CNA::Internal::Backends::Direct2D
         if (level < 0)
             throw System::ArgumentOutOfRangeException("level", std::to_string(level),
                                                        "level must not be negative.");
-        if (level > 0)
-            throw System::NotSupportedException("Direct2D render targets have no mip chain.");
+        if (level > static_cast<int>(mipBitmaps_.size()))
+        {
+            throw System::NotSupportedException(
+                "Direct2D RenderTarget2D has " + std::to_string(mipBitmaps_.size() + 1) +
+                " mip level(s); level " + std::to_string(level) + " was requested.");
+        }
+        const int levelWidth = std::max(1, width_ >> level);
+        const int levelHeight = std::max(1, height_ >> level);
         const std::int64_t right = static_cast<std::int64_t>(x) + w;
         const std::int64_t bottom = static_cast<std::int64_t>(y) + h;
-        if (x < 0 || y < 0 || w <= 0 || h <= 0 || right > width_ || bottom > height_)
+        if (x < 0 || y < 0 || w <= 0 || h <= 0 || right > levelWidth || bottom > levelHeight)
             throw System::ArgumentOutOfRangeException("rect", "invalid", "The requested rectangle leaves the render target.");
         if (!data || static_cast<std::int64_t>(dataLength) < static_cast<std::int64_t>(w) * h * 4)
             throw System::ArgumentOutOfRangeException("dataLength", std::to_string(dataLength),
                                                        "The destination is too small for the requested RGBA pixels.");
-        owner_->ReadRenderTargetPixels(*this, x, y, w, h, static_cast<uint8_t*>(data));
+        owner_->ReadRenderTargetPixels(*this, level, x, y, w, h, static_cast<uint8_t*>(data));
         return true;
     }
 
@@ -667,28 +734,81 @@ namespace CNA::Internal::Backends::Direct2D
         ThrowIfFailed(hr, operation);
     }
 
-    void Direct2DGraphicsBackend::ReadRenderTargetPixels(
-        const Direct2DRenderTargetBackend& renderTarget, int x, int y, int width, int height,
-        uint8_t* pixels)
+    void Direct2DGraphicsBackend::GenerateRenderTargetMipLevels(Direct2DRenderTargetBackend& renderTarget)
     {
-        // ID2D1Bitmap::CopyFromRenderTarget reads the device context's CURRENT target. A public
-        // RenderTarget2D::GetData call may name an unbound target, so temporarily select it, finish
-        // any batched draw first, then restore the caller's current target before returning.
-        Direct2DRenderTargetBackend* previouslyActive = activeRenderTarget_;
-        auto* requestedTarget = const_cast<Direct2DRenderTargetBackend*>(&renderTarget);
-        const bool restorePreviousTarget = previouslyActive != requestedTarget;
-        if (restorePreviousTarget) BindRenderTarget(requestedTarget);
+        EnsureResourceGeneration(renderTarget.deviceGeneration_, "RenderTarget2D");
+        if (!renderTarget.mipLevelsDirty_ || renderTarget.mipBitmaps_.empty()) return;
 
+        // A target bitmap can be drawn into and sampled from the same Direct2D device context,
+        // but not in the same BeginDraw/EndDraw recording interval. Finish the caller's work,
+        // then downsample one level at a time into independently targetable lower-level bitmaps.
+        // No CPU readback/shadow is involved: this is a GPU-only Direct2D image copy.
+        EndDrawing("render-target mip generation source");
+        ID2D1Bitmap1* source = renderTarget.bitmap_.Get();
+        int sourceWidth = renderTarget.width_;
+        int sourceHeight = renderTarget.height_;
         try
         {
-            ReadCurrentTargetPixels(x, y, width, height, renderTarget.Bitmap()->GetPixelFormat(), pixels);
+            for (Microsoft::WRL::ComPtr<ID2D1Bitmap1>& destination : renderTarget.mipBitmaps_)
+            {
+                const int destinationWidth = std::max(1, sourceWidth / 2);
+                const int destinationHeight = std::max(1, sourceHeight / 2);
+                d2dContext_->SetTarget(destination.Get());
+                d2dContext_->BeginDraw();
+                drawing_ = true;
+                d2dContext_->SetPrimitiveBlend(D2D1_PRIMITIVE_BLEND_SOURCE_OVER);
+                d2dContext_->SetTransform(D2D1::Matrix3x2F::Identity());
+                d2dContext_->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+                const D2D1_RECT_F destinationRect = D2D1::RectF(
+                    0.0f, 0.0f, static_cast<float>(destinationWidth), static_cast<float>(destinationHeight));
+                const D2D1_RECT_F sourceRect = D2D1::RectF(
+                    0.0f, 0.0f, static_cast<float>(sourceWidth), static_cast<float>(sourceHeight));
+                d2dContext_->DrawBitmap(source, &destinationRect, 1.0f,
+                                        D2D1_INTERPOLATION_MODE_LINEAR, &sourceRect);
+                EndDrawing("render-target mip generation");
+                source = destination.Get();
+                sourceWidth = destinationWidth;
+                sourceHeight = destinationHeight;
+            }
         }
         catch (...)
         {
-            if (restorePreviousTarget) BindRenderTarget(previouslyActive);
+            // EndDrawing already handles real device loss atomically. For ordinary failures the
+            // caller receives the error and the chain remains dirty, so it cannot be mistaken for
+            // a completed generated chain on the next use.
             throw;
         }
-        if (restorePreviousTarget) BindRenderTarget(previouslyActive);
+
+        renderTarget.mipLevelsDirty_ = false;
+        // Preserve the logical binding. The next SpriteBatch draw starts a fresh BeginDraw and
+        // reapplies clips/state through EnsureDrawing(), while BindRenderTarget may immediately
+        // replace this with the next target/backbuffer as part of an unbind switch.
+        d2dContext_->SetTarget(activeRenderTarget_ ? activeRenderTarget_->bitmap_.Get()
+                                                    : backBufferTarget_.Get());
+    }
+
+    void Direct2DGraphicsBackend::ReadRenderTargetPixels(
+        const Direct2DRenderTargetBackend& renderTarget, int level, int x, int y, int width, int height,
+        uint8_t* pixels)
+    {
+        // ID2D1Bitmap::CopyFromRenderTarget reads the device context's CURRENT target. A public
+        // RenderTarget2D::GetData call may name an unbound target or any generated mip level, so
+        // select that bitmap temporarily without changing GraphicsDevice's logical RT binding.
+        EndDrawing("render-target readback");
+        Microsoft::WRL::ComPtr<ID2D1Image> previousTarget;
+        d2dContext_->GetTarget(previousTarget.GetAddressOf());
+        ID2D1Bitmap1* const requestedBitmap = renderTarget.BitmapForLevel(level);
+        d2dContext_->SetTarget(requestedBitmap);
+        try
+        {
+            ReadCurrentTargetPixels(x, y, width, height, requestedBitmap->GetPixelFormat(), pixels);
+        }
+        catch (...)
+        {
+            d2dContext_->SetTarget(previousTarget.Get());
+            throw;
+        }
+        d2dContext_->SetTarget(previousTarget.Get());
     }
 
     void Direct2DGraphicsBackend::ReadCurrentTargetPixels(
@@ -990,9 +1110,9 @@ namespace CNA::Internal::Backends::Direct2D
     }
 
     std::unique_ptr<IRenderTargetBackend> Direct2DGraphicsBackend::CreateRenderTarget2D(
-        int width, int height, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
+        int width, int height, int /*depthFormat*/, bool /*preserveContents*/, bool mipMap, int /*multiSampleCount*/)
     {
-        return std::make_unique<Direct2DRenderTargetBackend>(*this, width, height);
+        return std::make_unique<Direct2DRenderTargetBackend>(*this, width, height, mipMap);
     }
 
     void Direct2DGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* renderTarget)
@@ -1015,8 +1135,10 @@ namespace CNA::Internal::Backends::Direct2D
     {
         if (activeRenderTarget_ == renderTarget) return;
         EndDrawing("render-target switch");
+        if (activeRenderTarget_) activeRenderTarget_->EnsureMipLevelsCurrent();
         activeRenderTarget_ = renderTarget;
         d2dContext_->SetTarget(renderTarget ? renderTarget->Bitmap() : backBufferTarget_.Get());
+        if (renderTarget) renderTarget->MarkMipLevelsDirty();
     }
 
     void Direct2DGraphicsBackend::ReleaseRenderTarget(Direct2DRenderTargetBackend* renderTarget)
@@ -1175,7 +1297,10 @@ namespace CNA::Internal::Backends::Direct2D
             if (coordinate >= 0 && coordinate < size) return coordinate;
             if (addressMode == 0) return PositiveModulo(coordinate, size); // Wrap
             if (addressMode == 2) return MirrorCoordinate(coordinate, size); // Mirror
-            return -1; // Clamp here means no source pixel outside the requested source rectangle.
+            // EasyGL/FNA leaves SpriteBatch UVs unclamped and delegates the edge behavior to the
+            // sampler. Match its TextureAddressMode::Clamp (= clamp-to-edge), rather than making
+            // a source rectangle that crosses the texture boundary unexpectedly transparent.
+            return std::clamp(coordinate, 0, size - 1);
         };
         const std::vector<uint8_t>& pixels = texture.RgbaPixels();
         for (int dy = 0; dy < sourceHeight; ++dy)
@@ -1214,7 +1339,6 @@ namespace CNA::Internal::Backends::Direct2D
         if (sourceRectangle.Width <= 0 || sourceRectangle.Height <= 0 ||
             destinationRectangle.Width == 0 || destinationRectangle.Height == 0)
             return;
-        EnsureDrawing();
 
         const auto* ordinaryTexture = dynamic_cast<const Direct2DTextureBackend*>(&texture);
         const auto* renderTargetTexture = dynamic_cast<const Direct2DRenderTargetBackend*>(&texture);
@@ -1224,33 +1348,25 @@ namespace CNA::Internal::Backends::Direct2D
             sourceRectangle.X + sourceRectangle.Width > texture.GetWidth() ||
             sourceRectangle.Y + sourceRectangle.Height > texture.GetHeight();
         const bool requiresCpuBitmap = ordinaryTexture &&
-            (!IsWhite(color) || IsFlipped(effects) || nonPremultipliedSource_ || sourceOutside ||
-             addressU != 1 || addressV != 1);
-        if (renderTargetTexture && sourceOutside && addressU == 1 && addressV == 1)
-        {
-            // The existing CPU path deliberately treats Clamp outside the requested rectangle as
-            // transparent, whereas a Direct2D image brush's CLAMP would repeat its edge texel.
-            // Keep that difference explicit until D2D-13 defines one shared sampler policy.
-            throw System::NotSupportedException(
-                "Direct2D cannot yet sample a RenderTarget2D outside its source rectangle with Clamp; "
-                "D2D-13 will define the shared transparent/clamp policy.");
-        }
-
+            (!IsWhite(color) || nonPremultipliedSource_);
         Rectangle localSource = sourceRectangle;
         Vector2 bitmapOrigin = origin;
         int selectedMipLevel = 0;
-        if (ordinaryTexture && !requiresCpuBitmap)
+        if ((ordinaryTexture && !requiresCpuBitmap) || renderTargetTexture)
         {
             // ID2D1Bitmap1 has no implicit mip selection. Pick the nearest uploaded level for
             // minification using the unrotated source-to-destination ratio; rotation and the
-            // SpriteBatch matrix change orientation but not this source-density choice.
+            // SpriteBatch matrix change orientation but not this source-density choice. Render
+            // targets regenerate their fully initialized GPU chain on unbind before this lookup.
             const float minification = std::max(
                 static_cast<float>(sourceRectangle.Width) / std::abs(static_cast<float>(destinationRectangle.Width)),
                 static_cast<float>(sourceRectangle.Height) / std::abs(static_cast<float>(destinationRectangle.Height)));
             const int preferredMip = minification > 1.0f
                 ? static_cast<int>(std::floor(std::log2(minification)))
                 : 0;
-            selectedMipLevel = ordinaryTexture->SelectAvailableMipLevel(preferredMip);
+            selectedMipLevel = ordinaryTexture
+                ? ordinaryTexture->SelectAvailableMipLevel(preferredMip)
+                : renderTargetTexture->SelectAvailableMipLevel(preferredMip);
             if (selectedMipLevel > 0)
             {
                 const float mipScale = std::ldexp(1.0f, -selectedMipLevel);
@@ -1265,10 +1381,15 @@ namespace CNA::Internal::Backends::Direct2D
             }
         }
 
+        // Selecting a dirty RenderTarget2D mip level finishes the prior Direct2D batch, generates
+        // the chain, and restores the logical target. Begin a fresh batch afterwards so the sprite
+        // below still receives the caller's blend/clip state.
+        EnsureDrawing();
+
         ComPtr<ID2D1Bitmap1> transient;
         ID2D1Bitmap1* bitmap = ordinaryTexture
             ? ordinaryTexture->BitmapForLevel(selectedMipLevel)
-            : renderTargetTexture->Bitmap();
+            : renderTargetTexture->BitmapForLevel(selectedMipLevel);
         if (requiresCpuBitmap)
         {
             const std::vector<uint8_t> pixels = MakeSpritePixels(*ordinaryTexture, sourceRectangle, color,
@@ -1304,14 +1425,17 @@ namespace CNA::Internal::Backends::Direct2D
                                                 static_cast<float>(localSource.X + localSource.Width),
                                                 static_cast<float>(localSource.Y + localSource.Height));
 
-        if (renderTargetTexture &&
+        const bool requiresImageBrush = !requiresCpuBitmap &&
             (!IsWhite(color) || IsFlipped(effects) || nonPremultipliedSource_ || sourceOutside ||
-             addressU != 1 || addressV != 1))
+             addressU != 1 || addressV != 1);
+        if (requiresImageBrush)
         {
-            // Keep a rendered target entirely GPU-resident.  An image brush maps its source
-            // rectangle to brush-space origin, so FillRectangle in this sprite's unscaled local
-            // coordinates composes with the same world transform used by the DrawBitmap path.
-            ID2D1Image* input = renderTargetTexture->Bitmap();
+            // ImageBrush is the shared GPU sampling path for both ordinary textures and rendered
+            // targets whenever a source rectangle leaves bounds, the sampler repeats/reflects,
+            // or SpriteEffects flips it. In particular, it preserves the neighboring texel a
+            // linear Wrap/Mirror sample needs at the source edge; CPU pre-expansion cannot do so
+            // without reimplementing Direct2D's filter kernel.
+            ID2D1Image* input = bitmap;
             ComPtr<ID2D1Effect> tintEffect;
             ComPtr<ID2D1Image> tintOutput;
             const bool ignoreColorAlpha = blendMode_ == Direct2DBlendMode::Copy;
@@ -1356,9 +1480,21 @@ namespace CNA::Internal::Backends::Direct2D
                 linearFilter ? D2D1_INTERPOLATION_MODE_LINEAR : D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
             ComPtr<ID2D1ImageBrush> imageBrush;
             ThrowIfFailed(d2dContext_->CreateImageBrush(input, &imageProperties, nullptr, &imageBrush),
-                          "ID2D1DeviceContext::CreateImageBrush(RenderTarget2D sprite)");
-            imageBrush->SetTransform(MakeSpriteBrushTransform(sourceRectangle.Width, sourceRectangle.Height,
-                                                               effects));
+                          "ID2D1DeviceContext::CreateImageBrush(SpriteBatch source)");
+            // Direct2D clips a negative ImageBrush source-rectangle origin to the image bounds,
+            // which would otherwise make local x=0 sample texel zero instead of the requested
+            // negative coordinate. Translate the brush's output back by that clipped amount so
+            // its inverse coordinate mapping still reaches -1/-2/etc.; the image brush's
+            // Clamp/Wrap/Mirror extend mode then implements the same sampler contract as EasyGL.
+            const float clippedLeft = static_cast<float>(std::max(0, -localSource.X));
+            const float clippedTop = static_cast<float>(std::max(0, -localSource.Y));
+            // The correction has to run before reflection. A post-flip translation would send
+            // negative UVs to the far edge instead (the exact error D2D-13's Flip probes guard
+            // against); the original clipped-origin magnitude remains correct on both axes.
+            const D2D1_MATRIX_3X2_F clippedOrigin =
+                D2D1::Matrix3x2F::Translation(clippedLeft, clippedTop);
+            imageBrush->SetTransform(Multiply(
+                clippedOrigin, MakeSpriteBrushTransform(localSource.Width, localSource.Height, effects)));
             d2dContext_->SetTransform(finalTransform);
             d2dContext_->FillRectangle(destination, imageBrush.Get());
             d2dContext_->SetTransform(D2D1::Matrix3x2F::Identity());

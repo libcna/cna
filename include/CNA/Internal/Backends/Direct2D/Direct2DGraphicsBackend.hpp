@@ -74,7 +74,7 @@ namespace CNA::Internal::Backends::Direct2D
     class Direct2DRenderTargetBackend final : public IRenderTargetBackend
     {
     public:
-        Direct2DRenderTargetBackend(Direct2DGraphicsBackend& owner, int width, int height);
+        Direct2DRenderTargetBackend(Direct2DGraphicsBackend& owner, int width, int height, bool mipMap);
         ~Direct2DRenderTargetBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return width_; }
@@ -92,15 +92,22 @@ namespace CNA::Internal::Backends::Direct2D
         }
 
         [[nodiscard]] ID2D1Bitmap1* Bitmap() const;
+        [[nodiscard]] ID2D1Bitmap1* BitmapForLevel(int level) const;
+        [[nodiscard]] int SelectAvailableMipLevel(int preferredLevel) const;
 
     private:
         friend class Direct2DGraphicsBackend;
         void RecreateBitmap();
+        void MarkMipLevelsDirty();
+        void EnsureMipLevelsCurrent();
 
         Direct2DGraphicsBackend* owner_ = nullptr;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap_;
+        std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> mipBitmaps_;
         int width_ = 0;
         int height_ = 0;
+        bool mipMap_ = false;
+        bool mipLevelsDirty_ = false;
         std::uint64_t deviceGeneration_ = 0;
     };
 
@@ -251,7 +258,8 @@ namespace CNA::Internal::Backends::Direct2D
         /// Copies a render target through a temporary Direct2D CPU-readable bitmap. This is a
         /// 2D-only path: Direct2D requires CPU_READ bitmaps to be populated by CopyFromRenderTarget
         /// before Map(READ), and the source must be the currently bound device-context target.
-        void ReadRenderTargetPixels(const Direct2DRenderTargetBackend& renderTarget, int x, int y,
+        void GenerateRenderTargetMipLevels(Direct2DRenderTargetBackend& renderTarget);
+        void ReadRenderTargetPixels(const Direct2DRenderTargetBackend& renderTarget, int level, int x, int y,
                                     int width, int height, uint8_t* pixels);
         void ReadCurrentTargetPixels(int x, int y, int width, int height,
                                      const D2D1_PIXEL_FORMAT& pixelFormat, uint8_t* pixels);

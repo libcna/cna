@@ -14,7 +14,14 @@ does not grow a parallel 3D implementation.
   filtering and normal 2D source rectangles. Minification selects the nearest initialized mip;
   an uninitialized lower level safely falls back to level zero.
 - `RenderTarget2D` rendering, sampling after unbind, CPU readback on native Direct2D, and GPU-only
-  tint/flip/Wrap/Mirror decoration when a render target is a SpriteBatch source.
+  tint/flip/Wrap/Mirror decoration when a render target is a SpriteBatch source. A target created
+  with `mipMap=true` owns target-capable Direct2D bitmaps down to 1x1; lower levels are generated
+  GPU-only on unbind and can be sampled or read through `GetData(level, ...)`.
+- Source rectangles may extend beyond a 2D image. `SamplerState` controls those coordinates just
+  as in EasyGL: `Clamp` is clamp-to-edge, while `Wrap` and `Mirror` repeat or reflect. The
+  shared image-brush path compensates for Direct2D's clipped negative source origin, so it has the
+  same Point result in both axes (including FlipH/FlipV) and the same tested linear horizontal
+  Clamp/Wrap/Mirror result for ordinary textures and render targets.
 - The standard `Opaque`, `AlphaBlend`, `NonPremultiplied`, and `Additive` SpriteBatch blend modes.
   Image sprites use Direct2D's explicit `SOURCE_OVER`, `SOURCE_COPY`, or `PLUS` composition,
   rather than treating the presentation D3D11 device as an application compositing pass.

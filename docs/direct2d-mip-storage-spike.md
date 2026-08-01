@@ -20,7 +20,7 @@ continues to be the primary bitmap. `Texture2D::SetData(level, ...)` already pas
 dimension to `ITextureBackend::UpdatePixelsLevel`, so the Direct2D implementation can allocate or
 replace precisely that one bitmap without changing the public API.
 
-For a mipmapped `RenderTarget2D`, the backend will own a separate target-capable
+For a mipmapped `RenderTarget2D`, the backend owns a separate target-capable
 `ID2D1Bitmap1` for every level. Drawing binds only level zero. On unbind, Direct2D will draw each
 level into the next smaller target bitmap with its linear interpolation mode; the previous level is
 only an image source while the next level is the active target. `GetData(level, ...)` selects the
@@ -30,9 +30,10 @@ conversion as level-zero readback.
 ## Sampling and lifecycle decisions
 
 - Direct2D does not select a mip level implicitly for `DrawBitmap`. SpriteBatch therefore selects
-  the nearest initialized Texture2D level from the source-to-destination minification ratio;
-  magnification, and minification with no initialized lower level, select level zero. Point/linear
-  filtering and Clamp/Wrap/Mirror then apply to that selected bitmap.
+  the nearest initialized Texture2D level, or the generated RenderTarget2D level, from the
+  source-to-destination minification ratio; magnification, and Texture2D minification with no
+  initialized lower level, select level zero. Point/linear filtering and Clamp/Wrap/Mirror then
+  apply to that selected bitmap.
 - A recovered ordinary `Texture2D` rebuilds every allocated level from its matching CPU shadow.
   A recovered `RenderTarget2D` recreates every target bitmap as transparent, exactly as its current
   level-zero recovery contract does; pre-loss rendered content and generated mips are invalid.
@@ -41,4 +42,6 @@ conversion as level-zero readback.
 - The same image-brush/effect path used for decorated render-target sprites will consume the
   selected per-level `ID2D1Bitmap1`; it remains a Direct2D effect graph, never a D3D11 compositor.
 
-This design is the implementation gate for D2D-11 and D2D-12.
+`Direct2D_2DParity` now covers level 0/1/2 RenderTarget2D sampling after unbind and, on native
+Windows Direct2D, exact `GetData` of generated lower levels. WineD3D continues to skip only the
+CPU `CopyFromRenderTarget` checks because it reports `E_NOTIMPL` for that API.
