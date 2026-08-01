@@ -50,6 +50,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_include_directories(cna_test_skia_target_binding_raster PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_raster_test(Skia_RenderTargetBinding_Raster cna_test_skia_target_binding_raster)
 
+    cna_skia_test(cna_test_skia_blend_mapping_raster examples/skia_blend_mapping_raster_test.cpp)
+    target_include_directories(cna_test_skia_blend_mapping_raster PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_BlendMapping_Raster cna_test_skia_blend_mapping_raster)
+
     cna_skia_test(cna_test_skia_graphics_capability examples/skia_graphics_capability_test.cpp)
     cna_register_skia_display_test(Skia_GraphicsCapability cna_test_skia_graphics_capability)
 
@@ -113,6 +117,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     cna_skia_test(cna_test_skia_blend_enabled_state examples/skia_blend_enabled_state_test.cpp)
     cna_register_skia_display_test(Skia_BlendEnabled_State cna_test_skia_blend_enabled_state)
+
+    cna_skia_test(cna_test_skia_blend_mapping_policy examples/skia_blend_mapping_policy_test.cpp)
+    cna_register_skia_display_test(Skia_BlendMapping_Policy cna_test_skia_blend_mapping_policy)
 
     cna_skia_test(cna_test_skia_spritebatch_tint_alpha examples/skia_spritebatch_tint_alpha_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_TintAlpha cna_test_skia_spritebatch_tint_alpha)

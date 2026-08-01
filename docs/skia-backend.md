@@ -62,6 +62,13 @@ accepted by `SetData`. At draw time the active blend preset selects an explicitl
 premultiplied (`AlphaBlend`) or straight-alpha (`NonPremultiplied`) Skia image made from those
 same bytes. Tint uses a cached SkSL color filter so XNA's per-component colour and alpha
 multiplication is preserved without applying tint alpha to premultiplied RGB a second time. A
+table maps only the four public tuples whose source convention is already defined: `Opaque` to
+`kSrc` with premultiplied bytes, `AlphaBlend` to `kSrcOver` with premultiplied bytes,
+`NonPremultiplied` to `kSrcOver` with straight bytes, and `Additive` to `kPlus` with straight
+bytes. A custom `BlendState` carries factors and equations but no source-byte alpha label, so the
+raster backend rejects every tuple outside that table before drawing and names the requested
+factors/functions. It must not silently pick a superficially similar `SkBlendMode`; SKIA-53–55
+will determine which custom combinations have an exact native or bounded emulated path.
 direct `SkiaSurface::WritePixels`/`ReadPixels` round trip is
 different by design: converting through Skia's 8-bit premultiplied storage has deterministic
 integer unpremultiplication rounding for semi-transparent texels. The raster test records this
@@ -202,5 +209,9 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     before releasing its `SkSurface`. The raster test covers 128 snapshot lifetimes and the inverse
     backend-before-target order; the public test proves a subsequent Clear and SpriteBatch draw land
     on the backbuffer and that a fresh target cycle still works.
+38. `Skia_BlendMapping_Raster` table-tests all thirteen public `Blend` ordinals in each factor
+    position, all twenty-five colour/alpha `BlendFunction` pairs, the four direct preset mappings,
+    and their diagnostic names. `Skia_BlendMapping_Policy` verifies public rejection of an
+    unsupported factor/equation and that each failed `SpriteBatch::Begin` leaves the batch usable.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

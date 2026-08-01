@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaBlendMapping.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
@@ -246,14 +247,11 @@ namespace CNA::Internal::Backends::Skia
                                                int colorBlendFunc, int alphaBlendFunc,
                                                const BlendWriteState& writeState)
     {
-        // SkCanvas supports one compositing mode per paint. Map only the standard XNA formulas
-        // whose premultiplied Skia counterpart is exact; other factor/function combinations are
-        // deliberately rejected until SKIA-51--57 establish an equivalent path.
-        constexpr int kBlendOne = 0;
-        constexpr int kBlendZero = 1;
-        constexpr int kBlendSourceAlpha = 4;
-        constexpr int kBlendInverseSourceAlpha = 5;
-        constexpr int kBlendFunctionAdd = 0;
+        // SkCanvas supports one compositing mode per paint.  The table records only public XNA
+        // BlendState presets whose source-alpha convention is known.  A custom factor tuple does
+        // not say whether Texture2D's RGBA bytes are straight or premultiplied, so choosing a
+        // superficially similar SkBlendMode for it would change observable output; SKIA-53--55
+        // own that independent-alpha/emulation investigation.
         constexpr int kColorWriteAll = 15;
 
         for (int mask : writeState.colorWriteChannels)
@@ -263,65 +261,23 @@ namespace CNA::Internal::Backends::Skia
         }
         if (writeState.multiSampleMask != ~0u)
             throw std::runtime_error("Skia raster backend does not implement non-default MultiSampleMask values.");
-        if (colorBlendFunc != kBlendFunctionAdd || alphaBlendFunc != kBlendFunctionAdd)
-            throw std::runtime_error("Skia raster backend does not implement non-additive BlendState functions yet.");
+        const SkiaBlendMapping* mapping = FindSkiaDirectBlendMapping(
+            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
+        if (!mapping)
+            throw std::runtime_error(DescribeUnsupportedSkiaBlendState(
+                colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+                colorBlendFunc, alphaBlendFunc));
 
-        const bool opaque = colorSrcBlend == kBlendOne && alphaSrcBlend == kBlendOne
-            && colorDstBlend == kBlendZero && alphaDstBlend == kBlendZero;
-        const bool alphaBlend = colorSrcBlend == kBlendOne && alphaSrcBlend == kBlendOne
-            && colorDstBlend == kBlendInverseSourceAlpha && alphaDstBlend == kBlendInverseSourceAlpha;
-        const bool nonPremultiplied = colorSrcBlend == kBlendSourceAlpha && alphaSrcBlend == kBlendSourceAlpha
-            && colorDstBlend == kBlendInverseSourceAlpha && alphaDstBlend == kBlendInverseSourceAlpha;
-        const bool additive = colorSrcBlend == kBlendSourceAlpha && alphaSrcBlend == kBlendSourceAlpha
-            && colorDstBlend == kBlendOne && alphaDstBlend == kBlendOne;
-
-        SkBlendMode mappedMode;
-        SkiaSourceAlphaConvention mappedSourceConvention;
-        const char* mappingName = nullptr;
-        if (opaque)
-        {
-            mappedMode = SkBlendMode::kSrc;
-            mappedSourceConvention = SkiaSourceAlphaConvention::Premultiplied;
-            mappingName = "Opaque";
-        }
-        else if (alphaBlend)
-        {
-            mappedMode = SkBlendMode::kSrcOver;
-            mappedSourceConvention = SkiaSourceAlphaConvention::Premultiplied;
-            mappingName = "AlphaBlend";
-        }
-        else if (nonPremultiplied)
-        {
-            // Skia converts the straight-alpha image into its native premultiplied canvas pipeline
-            // before applying SourceOver.  AlphaBlend selects the separately labelled premultiplied
-            // image above, preventing an accidental second premultiplication.
-            mappedMode = SkBlendMode::kSrcOver;
-            mappedSourceConvention = SkiaSourceAlphaConvention::Straight;
-            mappingName = "NonPremultiplied";
-        }
-        else if (additive)
-        {
-            // kPlus adds premultiplied source and destination.  Selecting the straight-alpha
-            // texture representation performs the XNA SourceAlpha source factor first.
-            mappedMode = SkBlendMode::kPlus;
-            mappedSourceConvention = SkiaSourceAlphaConvention::Straight;
-            mappingName = "Additive";
-        }
-        else
-        {
-            throw std::runtime_error("Skia raster backend does not implement this BlendState yet.");
-        }
-
-        configuredSpriteBlendMode_ = mappedMode;
-        configuredSpriteSourceAlphaConvention_ = mappedSourceConvention;
+        configuredSpriteBlendMode_ = mapping->mode;
+        configuredSpriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
         if (blendEnabled_)
         {
-            spriteBlendMode_ = mappedMode;
-            spriteSourceAlphaConvention_ = mappedSourceConvention;
+            spriteBlendMode_ = mapping->mode;
+            spriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
         }
-        TraceSkiaState("blend preset=%s mode=%d source-alpha=%s enabled=%s", mappingName,
-                       static_cast<int>(mappedMode),
-                       mappedSourceConvention == SkiaSourceAlphaConvention::Premultiplied
+        TraceSkiaState("blend preset=%s mode=%d source-alpha=%s enabled=%s", mapping->name,
+                       static_cast<int>(mapping->mode),
+                       mapping->sourceAlphaConvention == SkiaSourceAlphaConvention::Premultiplied
                            ? "premultiplied"
                            : "straight",
                        blendEnabled_ ? "true" : "false");

@@ -17,11 +17,11 @@
 - The raster backbuffer, SDL presentation, `Texture2D`, `SpriteBatch`, SpriteFont atlas path,
   scissor/viewport, point/linear Clamp/Wrap/Mirror sampling, the four standard blend presets,
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
-- The most recent pushed commits are `280d05e8` (raster MSAA policy), `042be59a` (preserve a
-  RenderTarget2D backend during `SetData`), and `947a6eba` (presentation edge cases).
-- `docs/skia-backend.md` records 59 Skia CTests: two raster-only and 57 display-required tests.
-  Earlier runs used `/tmp/cna-skia-tests-build`; future work must migrate validation to an
-  incremental in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
+- The most recent pushed commits are `50670060` (detach a destroyed bound render target),
+  `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
+  `SetData`).
+- `docs/skia-backend.md` records 63 Skia CTests: four raster-only and 59 display-required tests.
+  Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
 
@@ -33,6 +33,19 @@
   and `Skia_RenderTarget2D_Lifetime` (public Clear/SpriteBatch recovery and a fresh target cycle).
 - Updated `plan_skia.md` (SKIA-69 complete) and `docs/skia-backend.md` (61 Skia CTests).
 
+## Completed in this session: SKIA-51
+
+- Added the header-only `SkiaBlendMapping` table. It is the sole conversion point used by
+  `SkiaGraphicsBackend::ApplyBlendState`, preserving the proven `Opaque`, `AlphaBlend`,
+  `NonPremultiplied`, and `Additive` mappings and their source-byte conventions.
+- All other factor/equation combinations now fail before drawing with an error that spells out the
+  requested colour and alpha source/destination factors and functions. This is intentional: a
+  general public `BlendState` does not label whether sampled RGBA bytes are straight or
+  premultiplied, so a guessed Skia Porter-Duff mode could alter pixels.
+- Added `Skia_BlendMapping_Raster` (seven checks: four mappings, 52 factor-position cases,
+  25 function pairs, diagnostics) and `Skia_BlendMapping_Policy` (unsupported factor/equation
+  diagnostics plus `SpriteBatch` reuse after failed `Begin`).
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -41,19 +54,27 @@
 - Debug build: the two new targets compile.  The new raster CTest passes.  The new display test,
   and the five relevant existing display regressions (`DisposedGuards`, `DoubleDispose`, target
   switch, target `SetData`, presentation edge) all pass under `xvfb-run -a`.
+- SKIA-51 debug build: `Skia_BlendMapping_Raster` passes through CTest and the display policy test
+  passes under `xvfb-run -a`. Existing Opaque, AlphaBlend, NonPremultiplied, Additive, and
+  blend-enable state pixel regressions also pass under `xvfb-run -a`.
 - ASan/LSan: the direct raster lifetime test passes 7/7 with `detect_leaks=1`.  The public windowed
   test passes all four checks.  LSan then reports an unsymbolized 2,864-byte exit residual; the
   existing `Skia_Presentation_Edge` has the byte-identical residual under the same GCC/Xvfb and
   suppressions.  It is an external display-stack baseline, not hidden by a broader suppression.
+- SKIA-51 ASan/LSan: the direct raster mapping test passes with `detect_leaks=1`; the public
+  display test passes with AddressSanitizer (`detect_leaks=0`) under Xvfb. The known display-stack
+  residual above is unchanged and is not suppressed more broadly.
 
 ## Current task
 
-SKIA-51: audit XNA blend factors/functions and make the existing four preset mappings into a
-table-driven, testable direct-Skia mapping with actionable rejection text for unsupported cases.
+SKIA-53: investigate whether the pinned Skia blender APIs can exactly express XNA's independent
+colour/alpha factors and equations, including the source-alpha convention boundary established by
+SKIA-51.
 
 ## Next candidates
 
-1. Complete SKIA-51 and then investigate independent colour/alpha mappings (SKIA-53).
+1. Complete SKIA-53's pinned-Skia API audit and record direct versus non-direct independent
+   colour/alpha mappings before starting an isolated-layer prototype (SKIA-54).
 2. SKIA-71/72: resize and display-scale regressions with live targets, once lifecycle ownership is
    sound.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to
