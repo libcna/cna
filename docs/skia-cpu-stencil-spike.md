@@ -74,5 +74,5 @@ Passing this state micro-suite is necessary but not sufficient for 3D support. I
 
 SKIA-99 may therefore reuse this ordering/state model only inside the isolated CPU feasibility
 route while it audits all declared vertex/index layouts, primitive expansion, range validation,
-culling and wireframe. Public depth/stencil and `ThreeD` capabilities remain false until the
-SKIA-101 decision and the complete SKIA-95 contract say otherwise.
+culling and wireframe. The accepted SKIA-101 2D-only decision keeps this spike disconnected from
+public attachment state and retains false depth/stencil/`ThreeD` capabilities.

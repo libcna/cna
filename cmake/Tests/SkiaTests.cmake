@@ -53,6 +53,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                 "${CMAKE_SOURCE_DIR}"
         TIMEOUT 30
         LABELS "Skia;Audit")
+    cna_register_backend_test(
+        NAME Skia_3DDecision_Audit
+        COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
+                "${CMAKE_SOURCE_DIR}/scripts/validate_skia_3d_decision.py"
+                "${CMAKE_SOURCE_DIR}"
+        TIMEOUT 30
+        LABELS "Skia;Audit")
 
     cna_skia_test(cna_test_skia_surface_raster examples/skia_surface_raster_test.cpp)
     # This test intentionally exercises the internal SkiaSurface boundary directly, so unlike

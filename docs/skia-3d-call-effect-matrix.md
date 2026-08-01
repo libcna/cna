@@ -1,6 +1,7 @@
 # Skia 3D call and effect requirement matrix
 
-This is the SKIA-95 decision input. It refines the `3d` section of
+This began as the SKIA-95 decision input and is now the live vocabulary audited by the accepted
+SKIA-101 2D-only ADR. It refines the `3d` section of
 `skia-easygl-test-matrix.md`; it does not claim that the raster backend implements a 3D
 pipeline. Run
 
@@ -29,8 +30,9 @@ machine audit stay adjacent.
 
 "Unsupported" below means unsupported by the current public Skia backend, not impossible in
 principle. CPU cube/volume storage, fragment-only SkSL and atomic MRT/MSAA refusals already exist,
-but none supplies the missing vertex/depth pipeline. No row permits setting
-`GraphicsCapability::ThreeD` before SKIA-101.
+but none supplies the missing vertex/depth pipeline. The accepted
+`docs/skia-3d-emulation-adr.md` rejects public 3D support; no row permits setting
+`GraphicsCapability::ThreeD` without replacing that ADR and funding a successor plan.
 
 ## Required feature vocabulary
 
@@ -43,13 +45,13 @@ but none supplies the missing vertex/depth pipeline. No row permits setting
 | `3D-DRAW-USER` | Typed and declaration-driven DrawUser calls with range validation. | SKIA-99 proves raw, four typed, and 16/32-bit indexed input assembly; public calls still reject. |
 | `3D-PRIMITIVE-TRIANGLE` | Triangle-list assembly and coverage. | SKIA-99 proves list assembly/culling/wire expansion; SKIA-97 coverage remains non-production. |
 | `3D-PRIMITIVE-STRIP` | Triangle-strip assembly and alternating winding. | SKIA-99 proves alternating-winding list expansion; coverage remains non-production. |
-| `3D-PRIMITIVE-LINE` | Line-list and line-strip endpoint/raster rules. | SKIA-99 proves assembly only; exact line/point raster rules remain a SKIA-101 cost. |
-| `3D-INSTANCING` | Multiple vertex streams, instance frequency and indexed instanced draws. | Not covered by the single-stream SKIA-99 spike; explicit SKIA-101 decision remains required. |
+| `3D-PRIMITIVE-LINE` | Line-list and line-strip endpoint/raster rules. | SKIA-99 proves assembly only; SKIA-101 rejects funding exact line/point raster rules. |
+| `3D-INSTANCING` | Multiple vertex streams, instance frequency and indexed instanced draws. | Not covered by SKIA-99 and rejected by the SKIA-101 2D-only decision. |
 | `3D-TRANSFORM` | World/view/projection, normal/bone transforms and viewport mapping. | No vertex stage; projection semantics are investigated by SKIA-96. |
 | `3D-CLIP-INTERPOLATE` | Homogeneous clipping, perspective-correct varyings, winding after projection and viewport depth. | SkVertices is not an XNA clip-space pipeline; exact boundary is SKIA-96. |
 | `3D-TEXTURE-2D` | Effect-driven 2D sampling on geometry and render-target producer/consumer use. | CPU images exist; their 3D coordinates/LOD depend on SKIA-96/SKIA-100. |
-| `3D-TEXTURE-CUBE` | Direction-vector cube sampling, cube render targets and face orientation. | CPU face storage exists, sampling does not; decision in SKIA-100/SKIA-101. |
-| `3D-TEXTURE-VOLUME` | 3D coordinates, volume filtering and custom-effect binding. | CPU volume storage exists, sampling does not; decision in SKIA-100/SKIA-101. |
+| `3D-TEXTURE-CUBE` | Direction-vector cube sampling, cube render targets and face orientation. | CPU face storage stays transfer-only; SKIA-101 rejects direction sampling. |
+| `3D-TEXTURE-VOLUME` | 3D coordinates, volume filtering and custom-effect binding. | CPU volume storage stays transfer-only; SKIA-101 rejects 3D-coordinate sampling. |
 | `3D-SAMPLER-MIP` | Independent slots, address/filter/mip selection and LOD behavior. | Raster 2D sampling is bounded; 3D/mip contract is unsupported, SKIA-99/SKIA-100. |
 | `3D-SAMPLER-ANISOTROPY` | Probed anisotropic filtering for stock-effect and texture paths. | Deterministically rejected by SKIA-79; remains device-dependent. |
 | `3D-STATE-DEPTH` | Depth storage, clear, compare/write, target persistence and bias interaction. | No depth attachment; CPU feasibility is conditional SKIA-97. |
@@ -61,12 +63,12 @@ but none supplies the missing vertex/depth pipeline. No row permits setting
 | `3D-STATE-ORDER` | Deferred source lifetime, target/backbuffer pass order and SpriteBatch/3D boundaries. | 2D ordering exists; mixed 3D ordering remains unsupported, SKIA-99/SKIA-102. |
 | `3D-VIEWPORT-SCISSOR` | Viewport/scissor application to projected geometry and deferred draws. | 2D canvas route exists; 3D mapping depends on SKIA-96/SKIA-99. |
 | `3D-FX-BASIC` | BasicEffect texture, vertex colour, alpha, lighting and shader combinations. | SKIA-100 proves one unlit/no-fog textured PCT route; normal/lighting/fog/variants/public draw remain gaps. |
-| `3D-FX-ALPHATEST` | AlphaTestEffect compare modes, reference alpha, vertex colour and fog on geometry. | Compare/discard pieces are reusable, but depth/stencil integration, fog, exact coverage and public draw remain SKIA-101 costs. |
+| `3D-FX-ALPHATEST` | AlphaTestEffect compare modes, reference alpha, vertex colour and fog on geometry. | Compare/discard pieces stay prototype-only; SKIA-101 rejects the incomplete public route. |
 | `3D-FX-DUAL` | Two independent 2D samplers, doubling equation, vertex colour, alpha and fog. | Two-child formula/address pieces are reusable; per-slot geometry sampling, fog, coverage and public draw remain gaps. |
 | `3D-FX-ENVMAP` | EnvironmentMapEffect cube reflection, Fresnel, amount, eye/normal space and lighting. | SKIA-100 matrix confirms cube direction sampling, normal/eye transforms, lighting/Fresnel and public draw are absent. |
 | `3D-FX-SKINNED` | SkinnedEffect bone weights/matrices, vertex colour, lighting and fog. | Layout/palette data exist; weighted position/normal/fog/lighting and public integration are absent. |
 | `3D-FX-PBR` | PbrEffect and SkinnedPbrEffect material, lighting and skinning variants. | Layout/storage pieces exist; TBN, five samplers, BRDF, optional skinning and public integration are absent. |
-| `3D-FX-CUSTOM` | Arbitrary EasyGL GLSL vertex+fragment programs and custom varyings/layouts. | Fragment-only tagged SkSL cannot preserve this contract; reject unless SKIA-101 funds a compiler/emulator. |
+| `3D-FX-CUSTOM` | Arbitrary EasyGL GLSL vertex+fragment programs and custom varyings/layouts. | Fragment-only tagged SkSL stays 2D-only; SKIA-101 rejects a GLSL vertex/compiler emulator. |
 | `3D-SHADE-LIGHT` | Normal transforms, directional/multiple lights, emissive, specular, Phong/Lambert and per-pixel variants. | SKIA-100 confirms forwarding alone is insufficient; no integrated CPU normal/lighting variant pipeline exists. |
 | `3D-SHADE-FOG` | View-space fog and effect-specific fog interpolation/composition. | Fog vectors exist in common code, but their pre/post-skin vertex evaluation, interpolation and fragment mix are absent. |
 | `3D-MODEL-SKIN` | Model meshes/effects, hierarchy, animation, avatars, skeletons and skin weights. | Layout/palette storage exists; SKIA-100 confirms weighted position/normal/tangent rendering is absent. |
@@ -76,12 +78,12 @@ but none supplies the missing vertex/depth pipeline. No row permits setting
 
 ## Hard gates
 
-- SKIA-96 may prove only one projected PCT triangle-list slice. It cannot satisfy strip/line,
+- SKIA-96 proved only one projected PCT triangle-list slice. It cannot satisfy strip/line,
   buffer, depth, custom vertex stage, stock-effect, model, instancing or query rows.
-- SKIA-97 and SKIA-98 run only if the previous bridge is measurably exact and bounded. Failure is
-  evidence for SKIA-101, not permission to weaken depth/stencil semantics.
+- SKIA-97 and SKIA-98 are bounded depth/stencil evidence, not permission to weaken attachment or
+  state semantics.
 - Cube/volume CPU storage is not sampling support. Fragment-only SkSL is not an EasyGL vertex
   program. Transparent output is not alpha-test discard. One canvas is not MRT.
-- SKIA-101 must account for every live feature ID in this document. If it rejects the complete
-  emulator, SKIA-102 supplies uniform public failures; if it accepts, SKIA-103 creates a successor
-  implementation plan before capability changes.
+- `Skia_3DDecision_Audit` requires the accepted SKIA-101 ADR to account for every live feature ID
+  in this document. The complete emulator was rejected, so SKIA-102 supplies uniform public
+  failures. SKIA-103 is obsolete unless a replacement ADR first accepts and funds a successor.

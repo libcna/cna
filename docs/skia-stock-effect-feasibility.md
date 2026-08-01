@@ -131,15 +131,15 @@ are different requirements and remain gaps.
 | Five-texture sampling and metallic-roughness BRDF | Gap | All unskinned PBR gaps remain and must work with post-skin varyings. |
 | Fog, production coverage and public draw | Gap | No complete route; this family cannot be inferred from BasicEffect or SkinnedEffect alone. |
 
-## Closed inventory and SKIA-101 input
+## Closed inventory and SKIA-101 decision
 
 The executable carries the same seven-family inventory as disjoint `reusable`, `prototype`, and
 `gap` bitsets over 21 requirement classes. It fails if a requirement is unclassified, classified
 twice, a family name is duplicated, a requirement class disappears from the inventory, or any
 family loses the explicit exact-coverage/public-integration/mixed-ordering gaps.
 
-SKIA-101 must decide the whole design, not only whether one more formula can be written. At
-minimum it must cost and accept or reject:
+SKIA-101 evaluated the whole design, not only whether one more formula could be written. The
+accepted `docs/skia-3d-emulation-adr.md` rejects full emulation after accounting for:
 
 - homogeneous clipping and production top-left/line/point coverage;
 - normal transforms, vertex-lit versus pixel-lit variants and fog interpolation;
@@ -148,5 +148,5 @@ minimum it must cost and accept or reject:
 - PBR TBN construction, five texture inputs and the full BRDF;
 - instancing, public buffer/effect/resource lifetime, state ordering and mixed 2D/3D draws.
 
-Until that decision, the correct observable Skia result remains deterministic refusal of public
-3D draws and false capability reporting.
+The correct observable Skia result remains deterministic refusal of public 3D draws and false
+capability reporting. SKIA-102 now makes that refusal exhaustive and uniform.

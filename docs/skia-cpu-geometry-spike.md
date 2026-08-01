@@ -93,12 +93,12 @@ This task proves bounded input assembly, not a production 3D renderer:
   not implemented; SKIA-99 proves their assembly without claiming their rasterization;
 - destination-offset buffer updates are absent from CNA's current public overloads, while dynamic
   hints have not been performance-characterized;
-- multiple vertex streams, instance frequency and instanced draws remain a SKIA-101 decision;
+- multiple vertex streams, instance frequency and instanced draws were rejected by SKIA-101;
 - no effect consumes the retained non-position attributes yet; textures, lighting, fog, skinning,
   custom vertex programs and stock-effect permutations belong to SKIA-100/101;
 - mixed SpriteBatch/CPU-3D ordering and flush/handoff ownership remain unproven; and
 - the prototype favors explicit validation and materialized decoded attributes, so production
-  memory/performance requires a separate design if SKIA-101 accepts full emulation.
+  memory/performance would require a separate design under any future replacement ADR.
 
 SKIA-99 therefore passes its layout/primitive/range feasibility gate, while public `ThreeD`,
 depth/stencil, wireframe and buffer capabilities remain false. SKIA-100 may reuse the decoded

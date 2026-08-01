@@ -565,5 +565,15 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     mixed ordering remain gaps. The focused test passes in Debug, Release and leak-enabled
     ASan/LSan. The complete Debug suite passes 108/108 in 12.99 seconds (15 Raster, 91 Display,
     two Audit). No 3D-related capability changes.
+76. The accepted SKIA-101 ADR keeps the backend 2D-only. It rejects a new embedded CPU renderer,
+    hidden Software-backend delegation and a hybrid EasyGL context after deciding all 37 live
+    renderer requirements: 16 prototype-only, seven 2D-only, two transfer-only and 12 rejected.
+    The isolated SKIA-96--100 spikes remain evidence, not product code; tagged fragment SkSL,
+    proven 2D behavior and cube/volume transfer storage retain their narrower contracts.
+    `Skia_3DDecision_Audit` now fails any missing, duplicate, stale or unclassified ADR row and
+    requires an explicit SKIA-102 consequence. All three audits pass, and the complete Debug suite
+    passes 109/109 in 12.92 seconds (15 Raster, 91 Display, three Audit). SKIA-103 is obsolete;
+    SKIA-102 must now make public 3D refusal exhaustive and atomic. All 3D/depth/stencil/wireframe
+    capability values remain false.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

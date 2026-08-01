@@ -23,7 +23,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 108 Skia CTests: 15 raster-only, 91 display-required, and two
+- `docs/skia-backend.md` records 109 Skia CTests: 15 raster-only, 91 display-required, and three
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -589,9 +589,9 @@
 
 ## Current task
 
-SKIA-100 implementation and validation are complete. Commit/push this checkpoint, then perform
-SKIA-101 as a complete maintainability/cost decision across all 37 renderer requirement IDs.
-Do not promote one successful BasicEffect route into public 3D support.
+SKIA-101 is complete and rejects full 3D emulation. Commit/push the ADR checkpoint, then begin
+SKIA-102 by auditing and normalizing every public 3D refusal while preserving all proven 2D,
+TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
 
 ## Completed in this session: SKIA-93
 
@@ -801,15 +801,39 @@ Do not promote one successful BasicEffect route into public 3D support.
   seconds with `--parallel 8` (15 Raster, 91 Display, two Audit). Debug, Release and ASan display
   caches are `:0`; `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-101
+
+- Accepted `docs/skia-3d-emulation-adr.md`: the Skia backend remains 2D-only. The CPU depth,
+  stencil, input and unlit BasicEffect prototypes prove that a separate software renderer could be
+  built, not that Skia supplies one. Completing it would duplicate coverage, sampler, effect,
+  state, resource and query responsibilities already belonging to full 3D backends.
+- Rejected three broader alternatives: embedding a new CPU renderer in Skia, secretly mirroring
+  resources/state into the Software backend, and creating a hybrid EasyGL context. The latter two
+  add cross-backend ownership/synchronization or platform context-sharing complexity; selecting
+  Software/EasyGL directly is explicit and maintainable.
+- Every one of the 37 SKIA-95 renderer requirement IDs has an evidence-backed disposition and an
+  exact SKIA-102 consequence: 16 `prototype-only`, seven `2d-only`, two `transfer-only` and 12
+  `reject`. The ADR explicitly preserves fragment-only tagged SkSL, ordinary 2D textures/states,
+  cube/volume transfer storage and colour-only target faces without treating them as 3D support.
+- Added `scripts/validate_skia_3d_decision.py` and the display-free
+  `Skia_3DDecision_Audit`. It requires accepted/2D-only ADR markers, exact equality with the live
+  requirement vocabulary, unique rows, one of four closed dispositions, nonempty evidence and a
+  nonempty SKIA-102 consequence. It passes 37/37 and will fail stale/new/missing requirements.
+- SKIA-103 is obsolete/not applicable because the accepted branch is rejection. Any future
+  reversal requires a replacement ADR and funded successor plan before implementation or
+  capability changes. SKIA-102 is now active.
+- `python3 -m py_compile`, the direct decision validator, all three source audits and the complete
+  Debug Skia suite pass. The full suite is 109/109 under Xvfb in 12.92 seconds with `--parallel 8`
+  (15 Raster, 91 Display, three Audit). The Debug display cache is restored to `:0`; `NEXT.md` was
+  not read or changed.
+
 ## Next candidates
 
-1. SKIA-101: write the evidence-backed ADR deciding whether the combined CPU raster/input/effect
-   design is complete and maintainable. It must account for every one of the 37 stable renderer
-   requirement IDs, including line/point coverage, instancing, clipping, sampler LOD, state/mixed
-   ordering, every effect family, custom vertex shaders, MRT, MSAA and queries.
-2. If SKIA-101 rejects full emulation, proceed to SKIA-102 and make every public 3D entry point
-   fail uniformly without disturbing proven 2D/cube-transfer behavior. If accepted, do not
-   implement from the current plan: SKIA-103 must first create the funded successor plan.
+1. SKIA-102: inventory every public 3D entry point and current exception/capability behavior, then
+   add an exhaustive negative fixture proving uniform, atomic refusal across buffers, Draw/DrawUser,
+   depth/stencil clears, effects/models, cube/volume bindings and queries.
+2. Preserve positive 2D and transfer-only behavior beside the negative matrix. A failed 3D call
+   must not clear, dirty, rebind, dispose or otherwise alter the current raster target/state.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

@@ -74,6 +74,6 @@ model. This does not yet show that a complete 3D emulator is maintainable:
 - mixed SpriteBatch/3D ordering would require a defined flush/handoff on every transition; and
 - every target duplicates its colour bytes until a production ownership design exists.
 
-SKIA-98 is therefore evidence gathering, not permission to expose depth or `ThreeD`. SKIA-101 must
-still judge the total SKIA-95 matrix and measured maintenance/performance cost.
-
+SKIA-98 was therefore evidence gathering, not permission to expose depth or `ThreeD`. SKIA-101
+subsequently rejected the full renderer after judging the complete SKIA-95 matrix; this buffer
+stays test-only.

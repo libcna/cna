@@ -46,5 +46,4 @@ and canvas clipping/culling cannot restore it.
 SKIA-97 may therefore proceed only as a CPU rasterizer experiment that owns homogeneous clipping,
 coverage, perspective varyings and depth, then hands a completed colour image to Skia. It must not
 describe that design as "SkVertices 3D". If that independent rasterizer is not bounded and
-maintainable, SKIA-101 should reject full 3D emulation and SKIA-102 should retain uniform failures.
-
+maintainable. SKIA-101 subsequently rejected full 3D emulation; SKIA-102 retains uniform failures.
