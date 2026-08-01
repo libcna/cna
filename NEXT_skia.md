@@ -20,7 +20,7 @@
 - The most recent pushed commits are `50670060` (detach a destroyed bound render target),
   `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
   `SetData`).
-- `docs/skia-backend.md` records 63 Skia CTests: four raster-only and 59 display-required tests.
+- `docs/skia-backend.md` records 64 Skia CTests: five raster-only and 59 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -46,6 +46,20 @@
   25 function pairs, diagnostics) and `Skia_BlendMapping_Policy` (unsupported factor/equation
   diagnostics plus `SpriteBatch` reuse after failed `Begin`).
 
+## Completed in this session: SKIA-53
+
+- The pinned source's `SkRuntimeEffect::MakeForBlender` produces an `SkBlender` with direct
+  source/destination RGBA access; unlike fixed `SkBlendMode` and `SkBlenders::Arithmetic`, it can
+  express independent colour/alpha factors and equations. All thirteen `Blend` factors and the
+  five `BlendFunction` values have a direct SkSL expression, including a uniform blend constant
+  and source-alpha saturation. This is an API audit, not yet a public feature claim.
+- Added `Skia_RuntimeBlender_Raster`: its four checks compile and execute an independent RGB/alpha
+  equation on the real CPU raster surface and establish that a non-premultiplied result is retained.
+  That result is necessary for XNA separate-alpha states and must be carried through the upcoming
+  public target/readback probe.
+- Updated SKIA-54 to prototype this direct runtime blender first. An isolated layer is now a
+  fallback only if the direct public SpriteBatch path cannot preserve the contract.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -64,17 +78,19 @@
 - SKIA-51 ASan/LSan: the direct raster mapping test passes with `detect_leaks=1`; the public
   display test passes with AddressSanitizer (`detect_leaks=0`) under Xvfb. The known display-stack
   residual above is unchanged and is not suppressed more broadly.
+- SKIA-53 debug build: `Skia_RuntimeBlender_Raster` passes through CTest (four assertions). Its
+  direct output verifies both source/destination access and the non-premultiplied-result boundary.
 
 ## Current task
 
-SKIA-53: investigate whether the pinned Skia blender APIs can exactly express XNA's independent
-colour/alpha factors and equations, including the source-alpha convention boundary established by
-SKIA-51.
+SKIA-54: prototype the direct runtime blender through public SpriteBatch, including a non-preset
+BlendState, destination reads, and RenderTarget2D sampling/readback. Do not advertise custom
+states until this public evidence exists.
 
 ## Next candidates
 
-1. Complete SKIA-53's pinned-Skia API audit and record direct versus non-direct independent
-   colour/alpha mappings before starting an isolated-layer prototype (SKIA-54).
+1. Complete SKIA-54's direct public runtime-blender prototype; use an isolated layer only if the
+   direct route fails a documented target/readback contract.
 2. SKIA-71/72: resize and display-scale regressions with live targets, once lifecycle ownership is
    sound.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to

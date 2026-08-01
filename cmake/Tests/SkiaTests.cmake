@@ -54,6 +54,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_include_directories(cna_test_skia_blend_mapping_raster PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_raster_test(Skia_BlendMapping_Raster cna_test_skia_blend_mapping_raster)
 
+    cna_skia_test(cna_test_skia_runtime_blender_raster examples/skia_runtime_blender_raster_test.cpp)
+    target_include_directories(cna_test_skia_runtime_blender_raster PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_RuntimeBlender_Raster cna_test_skia_runtime_blender_raster)
+
     cna_skia_test(cna_test_skia_graphics_capability examples/skia_graphics_capability_test.cpp)
     cna_register_skia_display_test(Skia_GraphicsCapability cna_test_skia_graphics_capability)
 
