@@ -268,6 +268,25 @@ namespace Microsoft::Xna::Framework::Graphics
             img.pixels[i * 4 + 2] = data[i].getBProperty();
             img.pixels[i * 4 + 3] = data[i].getAProperty();
         }
+        // RenderTarget2D uses this inherited overload too. Replacing an existing backend would
+        // turn its render-target backend into an ordinary Texture2D backend and leave its cached
+        // IRenderTargetBackend pointer dangling. Update the existing level-0 resource instead.
+        if (backend_)
+        {
+            backend_->UpdatePixels(img.pixels.data(), width * 4);
+            if (gpuOnlyContent_)
+            {
+                // Subsequent draws change the target surface directly, so retain no stale CPU
+                // upload shadow that could mask real target readback.
+                cpuPixels_.reset();
+                return;
+            }
+            cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
+            backend_->ShareCpuPixels(cpuPixels_);
+            MaybeFreeCpuPixels();
+            return;
+        }
+
         backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
         backend_->ShareCpuPixels(cpuPixels_);
@@ -304,10 +323,28 @@ namespace Microsoft::Xna::Framework::Graphics
         // outside the region with black. Fail loudly instead of corrupting the texture.
         const bool coversFullLevel = (x == 0 && y == 0 && w == levelW && h == levelH);
         if (level == 0 && backend_ && !cpuPixels_ && !coversFullLevel)
-            throw std::runtime_error(
-                "Texture2D::SetData: partial update requires CPU-side pixel storage, which was "
-                "freed because context recovery is disabled (see GraphicsDevice::SetContextRecoveryEnabled); "
-                "update the full level via SetData(Color*, int) instead");
+        {
+            if (!gpuOnlyContent_)
+            {
+                throw std::runtime_error(
+                    "Texture2D::SetData: partial update requires CPU-side pixel storage, which was "
+                    "freed because context recovery is disabled (see GraphicsDevice::SetContextRecoveryEnabled); "
+                    "update the full level via SetData(Color*, int) instead");
+            }
+
+            // A render target can have rendered content but deliberately keeps no CPU shadow.
+            // Seed a temporary full-level shadow from its actual surface before applying a partial
+            // upload, so untouched texels are not accidentally replaced with transparent black.
+            std::vector<uint8_t> currentPixels(static_cast<std::size_t>(levelW) * levelH * 4u);
+            if (!backend_->GetData(0, 0, 0, levelW, levelH, currentPixels.data(),
+                                   static_cast<int>(currentPixels.size())))
+            {
+                throw System::NotSupportedException(
+                    "Texture2D::SetData: this graphics backend cannot preserve untouched render-target pixels "
+                    "for a partial update");
+            }
+            cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(currentPixels));
+        }
 
         std::vector<uint8_t>& buf = getMipBuffer(level);
 
@@ -337,6 +374,13 @@ namespace Microsoft::Xna::Framework::Graphics
                 img.pixels    = buf;
                 backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
                 backend_->ShareCpuPixels(cpuPixels_);
+            }
+            if (gpuOnlyContent_)
+            {
+                // See the full-level overload: target rendering must always read back the live
+                // surface rather than this temporary partial-update staging buffer.
+                cpuPixels_.reset();
+                return;
             }
             MaybeFreeCpuPixels();
         }
