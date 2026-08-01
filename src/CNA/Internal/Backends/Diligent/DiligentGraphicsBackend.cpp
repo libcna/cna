@@ -3414,13 +3414,13 @@ float4 main(in PSInput psIn) : SV_Target
     void DiligentGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                                      int maxAnisotropy)
     {
-        // Slot 0 is the only sampler any built-in shader in this baseline declares.
-        if (slot != 0)
+        if (slot < 0 || slot >= 16)
             return;
-        samplerFilter_ = filter;
-        samplerAddressU_ = addressU;
-        samplerAddressV_ = addressV;
-        samplerMaxAnisotropy_ = std::clamp(maxAnisotropy, 1, 16);
+        SamplerSlotState& state = samplerSlots_[slot];
+        state.filter = filter;
+        state.addressU = addressU;
+        state.addressV = addressV;
+        state.maxAnisotropy = std::clamp(maxAnisotropy, 1, 16);
     }
 
     void DiligentGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
@@ -4043,9 +4043,10 @@ float4 main(in PSInput psIn) : SV_Target
         UploadConstants(constants);
 
         // Sprites go through the sampler the SpriteBatch selected, which is independent of the
-        // GraphicsDevice-level SamplerState the 3D path uses.
+        // GraphicsDevice-level SamplerState the 3D path uses (only MaxAnisotropy has no per-batch
+        // override, so slot 0's own value is reused for it).
         if (auto* view = texture.GetShaderResourceView())
-            view->SetSampler(GetOrCreateSampler(filter, addressU, addressV, samplerMaxAnisotropy_));
+            view->SetSampler(GetOrCreateSampler(filter, addressU, addressV, samplerSlots_[0].maxAnisotropy));
 
         CachedPipeline& pipeline = GetOrCreatePipeline(
             MakePipelineKey(ShaderVariant::Sprite, PrimitiveType::TriangleList));
@@ -4337,8 +4338,9 @@ float4 main(in PSInput psIn) : SV_Target
                 diligentTexture != nullptr ? diligentTexture->GetShaderResourceView() : nullptr;
             if (view == nullptr)
                 view = fallbackTextureView_;
-            view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
-                                                samplerMaxAnisotropy_));
+            const SamplerSlotState& slot0 = samplerSlots_[0];
+            view->SetSampler(
+                GetOrCreateSampler(slot0.filter, slot0.addressU, slot0.addressV, slot0.maxAnisotropy));
             pipeline.textureVariable->Set(view);
         }
         if (pipeline.texture2Variable != nullptr)
@@ -4350,8 +4352,11 @@ float4 main(in PSInput psIn) : SV_Target
             // turns into "just the first layer at double brightness" rather than a black surface.
             if (view == nullptr)
                 view = fallbackTextureView_;
-            view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
-                                                samplerMaxAnisotropy_));
+            // Slot 1: matches this project's own established cross-backend convention for
+            // DualTextureEffect's second layer (see e.g. dual_texture3d.frag.hlsl's own t1/s1).
+            const SamplerSlotState& slot1 = samplerSlots_[1];
+            view->SetSampler(
+                GetOrCreateSampler(slot1.filter, slot1.addressU, slot1.addressV, slot1.maxAnisotropy));
             pipeline.texture2Variable->Set(view);
         }
         if (pipeline.envMapVariable != nullptr)
@@ -4365,8 +4370,10 @@ float4 main(in PSInput psIn) : SV_Target
                 throw std::runtime_error(
                     "CNA Diligent: EnvironmentMapEffect was drawn without a cube map");
             Dg::ITextureView* view = envMap->GetShaderResourceView();
-            view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
-                                                samplerMaxAnisotropy_));
+            // Slot 1: matches env_map3d.frag.hlsl's own t1/s1 convention (uTexture=0, uEnvMap=1).
+            const SamplerSlotState& slot1 = samplerSlots_[1];
+            view->SetSampler(
+                GetOrCreateSampler(slot1.filter, slot1.addressU, slot1.addressV, slot1.maxAnisotropy));
             pipeline.envMapVariable->Set(view);
         }
         if (pipeline.normalMapVariable != nullptr)
@@ -4374,28 +4381,30 @@ float4 main(in PSInput psIn) : SV_Target
             // PbrEffect's optional maps: an unbound one is ordinary XNA (glTF materials frequently
             // omit some), not an error -- BindPbrMap()'s own fallback view is each map's "absent"
             // identity (flat tangent-space normal, or white for the other three -- see
-            // flatNormalTextureView_/fallbackTextureView_'s own doc comments).
+            // flatNormalTextureView_/fallbackTextureView_'s own doc comments). Slots 1-4 match
+            // pbr3d.frag.hlsl's own t1..t4 convention (base colour is slot 0, bound above).
             const auto BindPbrMap = [this](Dg::IShaderResourceVariable* variable,
                                            const ITextureBackend* texture,
-                                           Dg::ITextureView* fallback) {
+                                           Dg::ITextureView* fallback, int slotIndex) {
                 const auto* diligentTexture = dynamic_cast<const DiligentSampledTexture*>(texture);
                 Dg::ITextureView* view =
                     diligentTexture != nullptr ? diligentTexture->GetShaderResourceView() : nullptr;
                 if (view == nullptr)
                     view = fallback;
-                view->SetSampler(GetOrCreateSampler(samplerFilter_, samplerAddressU_,
-                                                     samplerAddressV_, samplerMaxAnisotropy_));
+                const SamplerSlotState& slot = samplerSlots_[slotIndex];
+                view->SetSampler(
+                    GetOrCreateSampler(slot.filter, slot.addressU, slot.addressV, slot.maxAnisotropy));
                 variable->Set(view);
             };
             BindPbrMap(pipeline.normalMapVariable, params != nullptr ? params->pbrNormalMap : nullptr,
-                      flatNormalTextureView_);
+                      flatNormalTextureView_, 1);
             BindPbrMap(pipeline.metallicRoughnessVariable,
                       params != nullptr ? params->pbrMetallicRoughnessMap : nullptr,
-                      fallbackTextureView_);
+                      fallbackTextureView_, 2);
             BindPbrMap(pipeline.emissiveMapVariable,
-                      params != nullptr ? params->pbrEmissiveMap : nullptr, fallbackTextureView_);
+                      params != nullptr ? params->pbrEmissiveMap : nullptr, fallbackTextureView_, 3);
             BindPbrMap(pipeline.occlusionMapVariable,
-                      params != nullptr ? params->pbrOcclusionMap : nullptr, fallbackTextureView_);
+                      params != nullptr ? params->pbrOcclusionMap : nullptr, fallbackTextureView_, 4);
         }
 
         context_->SetPipelineState(pipeline.pipeline);

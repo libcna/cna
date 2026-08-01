@@ -1584,10 +1584,21 @@ namespace CNA::Internal::Backends::Diligent
         PipelineKey state_;
         int referenceStencil_ = 0;
         float blendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        int samplerFilter_ = 0;
-        int samplerAddressU_ = 1;
-        int samplerAddressV_ = 1;
-        int samplerMaxAnisotropy_ = 4;
+
+        /// DILIGENT-48: one independent entry per XNA `GraphicsDevice.SamplerStates` slot, matching
+        /// `SamplerStateCollection::MaxSamplers`. Every named texture-binding site (`g_Texture` at
+        /// slot 0, `g_Texture2`/`g_EnvMap` at slot 1, the PBR maps at slots 1-4) looks up its own
+        /// slot here instead of sharing one set of values -- previously `ApplySamplerState()`
+        /// discarded every call whose `slot` was not 0, so `SamplerStates[1]` and above were
+        /// silently aliased to whatever `SamplerStates[0]` happened to be.
+        struct SamplerSlotState
+        {
+            int filter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            int maxAnisotropy = 4;
+        };
+        SamplerSlotState samplerSlots_[16];
 
         bool scissorEnabled_ = false;
         int scissorRect_[4] = {0, 0, 0, 0};

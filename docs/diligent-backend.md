@@ -155,6 +155,10 @@ Implemented:
   colour, normal, metallic-roughness, emissive, occlusion) each falling back to their own glTF
   "map absent" identity when unbound. `SkinnedPbrEffect` combines the same BRDF with `Skinned3D`'s
   bone-palette skinning; its pixel stage is the unskinned shader's own, unmodified.
+- Real per-slot `SamplerState`: each of the up to 16 sampler slots (`SamplerStateCollection`) keeps
+  its own filter/address/anisotropy state, matching the established cross-backend HLSL register
+  convention (`g_Texture`→slot 0, `g_Texture2`/`g_EnvMap`→slot 1, the 4 `PbrEffect` maps→slots 1-4).
+  Verified by `Diligent_DualTextureEnvMap`'s two independent-sampler-slot checks (`DILIGENT-48`).
 
 Not implemented — each **throws with its own name** rather than rendering an approximation, and
 `GraphicsDevice.GraphicsCapabilities` reports each honestly:
@@ -190,13 +194,6 @@ Not implemented — each **throws with its own name** rather than rendering an a
   backend's pipelines don't expose a way to set.
 - **`RenderTargetCube` is never multisampled**, even when the back buffer or a `RenderTarget2D` is —
   requesting MSAA on one clamps to 1 (`DILIGENT-25`).
-- **Only one `SamplerState` slot is actually independent** (`DILIGENT-48`, confirmed real bug, found
-  by code reading rather than a failing test): `ApplySamplerState(slot, ...)` takes a slot number
-  but never uses it, storing into flat scalar members every texture-binding site reads regardless
-  of which slot the caller configured. `DualTextureEffect`'s second layer and
-  `EnvironmentMapEffect`'s cube map currently always sample with whatever `SamplerState` was set on
-  slot 0, not their own slot — silently wrong the moment a caller sets a genuinely different
-  `SamplerState` per slot, which no existing Diligent test does yet.
 
 ## Tests
 
@@ -207,9 +204,9 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Fifteen further binaries are the real-device pixel proofs (69 checks total): `Diligent_2D` (6),
+Fifteen further binaries are the real-device pixel proofs (71 checks total): `Diligent_2D` (6),
 `Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
-`Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (4), `Diligent_Skinned` (4),
+`Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (6), `Diligent_Skinned` (4),
 `Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4),
 `Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4), `Diligent_VertexLit` (4) and
 `Diligent_Pbr` (5). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and

@@ -12,6 +12,15 @@
 //   cube's colour, not the diffuse texture's.
 // Check D -- the same geometry with EnvironmentMapAmount = 0 shows the lit diffuse colour instead,
 //   so C cannot pass on a backend that always samples the cube.
+// Check E/F -- plan_diligent.md DILIGENT-48: GraphicsDevice.SamplerStates[1] (texture2's own slot)
+//   is genuinely independent of SamplerStates[0] (texture0's slot), not silently aliased to it.
+//   Texture0 is a uniform white 1x1 (immune to address mode -- any sample reads the same value, so
+//   its own slot-0 state can never explain a difference here), texture1 is a 2-texel-wide
+//   red|green strip sampled at U=1.25 (25% past the right edge): SamplerStates[1]=PointClamp reads
+//   the clamped edge texel (green); PointWrap reads the wrapped-around texel (red) instead --
+//   different results from touching ONLY slot 1, with slot 0 never changed across either draw. A
+//   backend that aliases slot 1 to slot 0's own state (always Clamp here) would read green both
+//   times, since it would never see the Wrap request at all.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
 
@@ -29,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -48,7 +58,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSize = 64;
-    constexpr int kChecks = 4;
+    constexpr int kChecks = 6;
 
     bool ColorNear(Color a, Color b, int tolerance = 20)
     {
@@ -69,6 +79,14 @@ namespace
     {
         return Texture2D::CreateFromPixels(device, 1, 1, std::vector<std::uint8_t>{r, g, b, 255});
     }
+
+    /// A 2-texel-wide texture, red|green, for DILIGENT-48's slot-independence checks.
+    Texture2D StripTexture(GraphicsDevice& device)
+    {
+        return Texture2D::CreateFromPixels(
+            device, 2, 1,
+            std::vector<std::uint8_t>{255, 0, 0, 255, /* red */ 0, 255, 0, 255 /* green */});
+    }
 }
 
 class DiligentDualTextureEnvMapTest : public Game
@@ -78,6 +96,7 @@ class DiligentDualTextureEnvMapTest : public Game
     Texture2D greyTexture_;
     Texture2D blueTexture_;
     Texture2D whiteTexture_;
+    Texture2D stripTexture_;
     std::unique_ptr<TextureCube> greenCube_;
     bool done_ = false;
     int passCount_ = 0;
@@ -120,6 +139,21 @@ class DiligentDualTextureEnvMapTest : public Game
         device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
     }
 
+    /// Full-screen quad sampled at a fixed U past the right edge (DILIGENT-48's slot-independence
+    /// checks): U=1.25 is 25% past the strip texture's right edge, so Clamp vs Wrap disagree.
+    static void DrawQuadAtU(GraphicsDevice& device, float u)
+    {
+        const VertexPositionTexture vertices[6] = {
+            {Vector3(-1.0f, 1.0f, 0.5f), Vector2(u, 0.5f)},
+            {Vector3(-1.0f, -1.0f, 0.5f), Vector2(u, 0.5f)},
+            {Vector3(1.0f, -1.0f, 0.5f), Vector2(u, 0.5f)},
+            {Vector3(-1.0f, 1.0f, 0.5f), Vector2(u, 0.5f)},
+            {Vector3(1.0f, -1.0f, 0.5f), Vector2(u, 0.5f)},
+            {Vector3(1.0f, 1.0f, 0.5f), Vector2(u, 0.5f)},
+        };
+        device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
+    }
+
 protected:
     void LoadContent() override
     {
@@ -128,6 +162,7 @@ protected:
         greyTexture_ = SolidTexture(device, 128, 128, 128);
         blueTexture_ = SolidTexture(device, 0, 0, 255);
         whiteTexture_ = SolidTexture(device, 255, 255, 255);
+        stripTexture_ = StripTexture(device);
 
         greenCube_ = std::make_unique<TextureCube>(device, 1, false, SurfaceFormat::Color);
         const std::vector<Color> face{Color(0, 255, 0, 255)};
@@ -169,6 +204,35 @@ protected:
         DrawTexturedQuad(device);
         Check(ColorNear(ReadCenter(device), Color::Black),
               "DualTextureEffect: a blue second layer zeroes the red first layer (both sampled)");
+
+        // Checks E/F (DILIGENT-48): texture0 is uniform white (layer0.rgb*2 saturates to white, so
+        // the output is texture1's own sampled colour, isolating slot 1). Slot 0 stays PointClamp
+        // throughout both draws -- only slot 1 changes -- so a difference between the two results
+        // can only come from slot 1 genuinely being read independently of slot 0.
+        device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+        dualTexture.setTextureProperty(&whiteTexture_);
+        dualTexture.setTexture2Property(&stripTexture_);
+
+        device.Clear(Color::Black);
+        device.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+        dualTexture.Apply();
+        DrawQuadAtU(device, 1.25f);
+        const Color slot1Clamp = ReadCenter(device);
+        std::printf("    (slot1=PointClamp, U=1.25 -> R=%d G=%d B=%d)\n", slot1Clamp.getRProperty(),
+                    slot1Clamp.getGProperty(), slot1Clamp.getBProperty());
+        Check(ColorNear(slot1Clamp, Color::Lime, 24),
+              "SamplerStates[1]=PointClamp: U=1.25 clamps to the strip's right (green) texel");
+
+        device.Clear(Color::Black);
+        device.getSamplerStatesProperty()[1] = SamplerState::PointWrap;
+        dualTexture.Apply();
+        DrawQuadAtU(device, 1.25f);
+        const Color slot1Wrap = ReadCenter(device);
+        std::printf("    (slot1=PointWrap,  U=1.25 -> R=%d G=%d B=%d)\n", slot1Wrap.getRProperty(),
+                    slot1Wrap.getGProperty(), slot1Wrap.getBProperty());
+        Check(ColorNear(slot1Wrap, Color::Red, 24),
+              "SamplerStates[1]=PointWrap: same U wraps to the strip's left (red) texel -- slot 0 "
+              "never changed, so this proves slot 1 is genuinely independent");
 
         EnvironmentMapEffect envMap(device);
         envMap.setWorldProperty(Matrix::getIdentityProperty());
