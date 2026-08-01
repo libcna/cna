@@ -89,8 +89,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers fifty-five SKIA-only CTests: two window-independent raster
-   surface pixel tests and fifty-three display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers fifty-six SKIA-only CTests: two window-independent raster
+   surface pixel tests and fifty-four display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -129,9 +129,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     exact distinct source-over result expected from premultiplied and straight source data, and
     that a strided CPU upload retains each row while excluding caller padding bytes.
 16. `Skia_RenderTarget2D_SampleAfterUnbind`, `Skia_RenderTarget2D_Usage`,
-    `Skia_GetBackBufferData_AfterRtUnbind`, and `Skia_RenderTarget2D_Readback` prove the
-    CPU-raster target can render, survive or discard a rebind as requested, restore the
-    backbuffer, be sampled afterward, and return full/partial top-row-first pixels.
+    `Skia_GetBackBufferData_AfterRtUnbind`, `Skia_GetBackBufferData_ActiveTarget`, and
+    `Skia_RenderTarget2D_Readback` prove the CPU-raster target can render, survive or discard a
+    rebind as requested, expose active-target versus restored-backbuffer readback correctly, be
+    sampled afterward, and return full/partial top-row-first pixels.
 17. `Skia_RenderTarget2D_Switch` proves an A → B → backbuffer target sequence preserves
     independent target content through the surface switch and subsequent sampling.
 18. `Skia_SpriteBatch_SourceRectLinear` magnifies a one-texel source rectangle with `LinearClamp`
@@ -182,5 +183,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 32. `Skia_RenderTarget2D_DepthPolicy` constructs a target requesting `Depth24Stencil8`, verifies
     the request stays metadata while the backend reports no real attachment, and proves a
     depth/stencil-only clear leaves its red target pixel unchanged.
+33. `Skia_GetBackBufferData_ActiveTarget` verifies that `GetBackBufferData` reads the currently
+    bound target canvas, agrees with target readback, and restores the independent red default
+    backbuffer after unbinding the blue target.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

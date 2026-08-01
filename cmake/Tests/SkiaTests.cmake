@@ -198,6 +198,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_getbackbuffer_after_rt_unbind examples/sdlrenderer_getbackbufferdata_after_rt_unbind_test.cpp)
     cna_register_skia_display_test(Skia_GetBackBufferData_AfterRtUnbind cna_test_skia_getbackbuffer_after_rt_unbind)
 
+    cna_skia_test(cna_test_skia_active_target_readback examples/skia_active_target_readback_test.cpp)
+    cna_register_skia_display_test(Skia_GetBackBufferData_ActiveTarget cna_test_skia_active_target_readback)
+
     cna_skia_test(cna_test_skia_rendertarget_readback examples/skia_rendertarget_readback_test.cpp)
     cna_register_skia_display_test(Skia_RenderTarget2D_Readback cna_test_skia_rendertarget_readback)
 
