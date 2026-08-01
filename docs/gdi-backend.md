@@ -33,13 +33,14 @@ it is not a replacement for the benchmark work described in `plan_gdi.md`.
 
 ```bash
 cmake -S . -B build-gdi \
+  -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
   -DCNA_GRAPHICS_BACKEND=GDI \
   -DCNA_BUILD_TESTS=ON \
   -DCNA_BUILD_EXAMPLES=ON \
   -DCNA_MAX_VENDORED_BUILD_JOBS=2
 CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
-  --target cna_test_gdi_smoke cna_demo_2d -j2
+  --target cna_test_gdi_smoke cna_test_gdi_2d_regression cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
 The backend is hard-gated to Windows targets. `cna_test_gdi_smoke` runs automatically as `GDI_Smoke`
@@ -49,17 +50,32 @@ available display:
 ```bash
 # Native Windows
 build-gdi\\cna_test_gdi_smoke.exe
+build-gdi\\cna_test_gdi_2d_regression.exe
+build-gdi\\cna_bench_gdi_2d.exe --frames 4
 build-gdi\\cna_demo_2d.exe
 
 # Linux host, MinGW cross-build, with a real graphical Wine display
 wine build-gdi/cna_test_gdi_smoke.exe
+wine build-gdi/cna_test_gdi_2d_regression.exe
+wine build-gdi/cna_bench_gdi_2d.exe --frames 4
 wine build-gdi/cna_demo_2d.exe
 ```
 
 The smoke executable creates a hidden SDL `HWND`, clears and reads an RGBA pixel, calls GDI
 `Present()`, and verifies that 3D stays unavailable.  It exits with status zero on success.  The
-2D demo is the manual visual check: animated sprites should display, resizing should remain
-correct, and the window should close normally.
+2D regression executable adds byte-exact coverage for texture upload, source rectangles,
+tint/alpha, rotation, both flips, Clamp/Wrap/Mirror sampling, render-target sampling, resize and
+presentation-coordinate transforms. The 2D demo is the manual visual check: animated sprites
+should display, resizing should remain correct, and the window should close normally.
+
+`cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
+CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run
+it from a **Release** build: an empty CMake build type omits `-O3` and is not a valid performance
+measurement. On an AMD Ryzen 7 PRO 7840U, MinGW-w64 14 and hidden-window Wine, the Release
+baseline was 9.169 ms raster + 0.026 ms present for 12 rotating alpha sprites at 800×600; the
+same unoptimised build took 22.248 ms raster. Wine's hidden presentation number is not a
+substitute for a native visible-Windows measurement, but it correctly identifies the CPU
+rasterizer rather than the GDI blit as the dominant cost.
 
 On MinGW, the build stages SDL plus the needed GCC/C++ and threading runtime DLLs beside the
 executables, so Wine does not rely on a compiler-specific `PATH`.  Keep both the configure-time

@@ -1,17 +1,18 @@
 # Win32 GDI Graphics Backend — Plan
 
-> **Current state: baseline compiled and smoke-tested; the real-display 2D demo is ready for
-> manual inspection with its GDI compatibility profile.**
+> **Current state: Release baseline compiled and smoke/regression-tested; the real-display 2D
+> demo is ready for manual inspection with its GDI compatibility profile.**
 > `CNA_GRAPHICS_BACKEND=GDI` selects a Windows-only backend that uses the shared CPU
 > rasterizer for 2D content and displays its RGBA8 backbuffer through Win32 GDI
-> `StretchDIBits`.  A MinGW GDI build has completed with at most two jobs, and its hidden-window
-> smoke executable completed successfully under Wine.  The visible `cna_demo_2d` window remains
-> the manual visual gate and is deliberately not kept open while unattended.
+> `StretchDIBits`.  A MinGW **Release** GDI build has completed with at most two jobs, and its
+> hidden-window smoke and 2D regression executables completed successfully under Wine.  The
+> visible `cna_demo_2d` window remains the manual visual gate and is deliberately not kept open
+> while unattended.
 >
 > **Status legend:** ✅ implemented; 🟨 code exists but the stated end-to-end verification is
 > still missing; ⬜ not started; ⏸ blocked by an external prerequisite; 🚫 intentionally outside
-> the current 2D-only scope.  GDI-001 through GDI-003 are complete; GDI-004 awaits manual
-> confirmation using the GDI compatibility profile.
+> the current 2D-only scope.  GDI-001 through GDI-003, GDI-005, GDI-006 and GDI-010 are complete;
+> GDI-004 awaits manual confirmation using the Release GDI compatibility profile.
 
 ---
 
@@ -38,8 +39,8 @@ All builds and test commands for this plan must use at most two parallel jobs (`
 | GDI-001 | Keep `GDI` selectable through `CNA_GRAPHICS_BACKEND`, Windows-gated, and linked with `gdi32`; retain one unambiguous GDI factory. | ✅ | Source integration exists in `cmake/BackendSelection.cmake`, `cmake/BackendLibraries.cmake` and `GdiGraphicsBackend.cpp`. |
 | GDI-002 | Keep the CPU 2D framebuffer and the real `StretchDIBits` presentation path. | ✅ | The completed GDI smoke executable creates an SDL `HWND`, clears/readbacks a pixel and calls `Present()` through GDI. |
 | GDI-003 | Build the GDI smoke target and run its hidden-window checks. | ✅ | Vendored SDL is initialized; the MinGW GDI build completed with at most two jobs and `cna_test_gdi_smoke.exe` returned success under Wine. |
-| GDI-004 | Build and launch `cna_demo_2d` with `CNA_GRAPHICS_BACKEND=GDI` on a real display for manual inspection. | 🟨 | The first full-load run was stopped because the GPU-oriented demo profile saturated CPU. Re-inspect the built GDI compatibility profile (12–20 sprites, 30 FPS), confirming animation, resize behaviour and normal closing without `--smoke`. |
-| GDI-005 | Add deterministic 2D regression coverage for GDI: texture upload, source rectangle, tint/alpha, rotation, flip, sampler address modes, render-target sampling, resize and presentation transforms. | ⬜ | A GDI-labelled test executable covers each listed operation and checks pixels/readback where possible; a separate visible run covers the final GDI display step. |
+| GDI-004 | Build and launch `cna_demo_2d` with `CNA_GRAPHICS_BACKEND=GDI` on a real display for manual inspection. | 🟨 | The first full-load run used an unoptimised build and was stopped. Re-inspect the built **Release** GDI compatibility profile (12–20 sprites, 30 FPS), confirming animation, resize behaviour and normal closing without `--smoke`. |
+| GDI-005 | Add deterministic 2D regression coverage for GDI: texture upload, source rectangle, tint/alpha, rotation, flip, sampler address modes, render-target sampling, resize and presentation transforms. | ✅ | `cna_test_gdi_2d_regression` passed under Wine from the Release build with byte-exact readback checks for all listed operations; it also caught and prevented double alpha blending on a SpriteBatch split diagonal. |
 | GDI-006 | Record a reproducible Windows-native and MinGW+Wine test procedure in `docs/gdi-backend.md`. | ✅ | Documentation gives exact configure/build/run commands, display prerequisite, expected result, staged DLL policy and the two-job limit. |
 
 ---
@@ -51,7 +52,7 @@ the whole backbuffer to GDI each frame.  They must be driven by measurements, no
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| GDI-010 | Measure a baseline: CPU raster time, `Present()` time, frame time and memory at representative resolutions and sprite counts. | ⬜ | A repeatable benchmark records 800×600 and at least one higher-resolution case; results distinguish rasterization time from GDI presentation time. |
+| GDI-010 | Measure a baseline: CPU raster time, `Present()` time, frame time and memory at representative resolutions and sprite counts. | ✅ | `cna_bench_gdi_2d` records separate phases. Release MinGW+Wine baseline (4 frames, Ryzen 7 PRO 7840U): 800×600/12 sprites 9.169 ms raster + 0.026 ms present; 800×600/50 32.013 + 0.028 ms; 1280×720/20 13.687 + 0.027 ms. Repeat visibly on native Windows before treating compositor timings as a shipping budget. |
 | GDI-011 | Investigate a persistent `DIBSection`/memory-DC presentation surface instead of recreating bitmap metadata and passing the CPU vector through `StretchDIBits` every frame. | ⬜ | Adopt it only if profiling shows a material benefit, preserve exact RGBA channel order/top-down orientation, and retain correct resize/lifetime handling. |
 | GDI-012 | Add a 1:1 presentation fast path (`SetDIBitsToDevice` or an equivalent DIB blit) so native-size output does not go through scaling. | ⬜ | NativeBackBuffer output is pixel-identical and measurably no slower than the current generic stretch path. |
 | GDI-013 | Make final-window scaling intentional: preserve nearest-neighbour/pixel-art scaling by default and evaluate an explicit higher-quality scaling option for non-pixel-art applications. | ⬜ | Both modes are documented, testable and do not alter source-texture sampler semantics. |
@@ -112,10 +113,11 @@ explicit, not forgotten.
 
 ## Recommended execution order
 
-1. Finish the manual visual confirmation for GDI-004, then begin GDI-005.  No performance or
-   feature claim is trustworthy until the actual 2D demo is observed on a real Windows/Wine display.
-2. Use GDI-010 before optimizing.  Then choose GDI-011, GDI-012 and GDI-015 only where the
-   measurements show a bottleneck.
+1. Finish the manual visual confirmation for GDI-004 using the Release build.  No display claim is
+   trustworthy until the actual 2D demo is observed on a real Windows/Wine display.
+2. GDI-010 shows CPU rasterization dominates the current hidden-Wine baseline, not `Present()`.
+   Repeat visibly on native Windows before choosing GDI-011, GDI-012 or GDI-015; do not optimize
+   the GDI blit merely from the current numbers.
 3. For compatibility value, implement GDI-020 (full blend semantics) before visual extras.
 4. Next choose GDI-021 (render-target mipmaps) or GDI-022/023 (bounded CPU effects), based on the
    consuming application's needs.

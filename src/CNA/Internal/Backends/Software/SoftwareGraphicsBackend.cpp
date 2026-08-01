@@ -1219,6 +1219,24 @@ namespace CNA::Internal::Backends::Software
         /// sprite shows its split diagonal -- real submitted geometry, matching D3D11/FNA.
         enum : unsigned { kEdgeV0V1 = 1u, kEdgeV1V2 = 2u, kEdgeV2V0 = 4u, kEdgeAll = 7u };
 
+        /// A filled polygon split into two triangles must give its shared diagonal to exactly one
+        /// triangle.  The edge-function fill is intentionally inclusive on all three edges for an
+        /// individual triangle; without this narrow exclusion, an alpha-blended quad draws every
+        /// pixel on an exactly representable diagonal twice.  `edgeValues` map to edges V1-V2,
+        /// V2-V0 and V0-V1 respectively (the barycentric convention used below).
+        [[nodiscard]] bool IsExcludedFillEdge(unsigned excludedEdges, float edgeV1V2,
+                                              float edgeV2V0, float edgeV0V1, float area)
+        {
+            if (excludedEdges == 0u)
+                return false;
+            // The scale keeps this a boundary test after transformations rather than a thin
+            // interior strip, while accepting harmless arithmetic noise on a shared edge.
+            const float tolerance = std::max(1.0e-6f, std::fabs(area) * 1.0e-6f);
+            return ((excludedEdges & kEdgeV1V2) != 0u && std::fabs(edgeV1V2) <= tolerance) ||
+                   ((excludedEdges & kEdgeV2V0) != 0u && std::fabs(edgeV2V0) <= tolerance) ||
+                   ((excludedEdges & kEdgeV0V1) != 0u && std::fabs(edgeV0V1) <= tolerance);
+        }
+
         /// REMED-GFX-082: Liang-Barsky clip of the parametric segment P(t) = a + t*(b - a), t in
         /// [0,1], to the inclusive pixel rectangle [clip.minX,maxX] x [clip.minY,maxY]. Returns the
         /// surviving parameter range [t0,t1] (t0 <= t1) or false if the segment is entirely outside.
@@ -1332,7 +1350,8 @@ namespace CNA::Internal::Backends::Software
                                const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
                                int colorWriteMask, unsigned int multiSampleMask,
-                               bool wireframe = false, unsigned edgeMask = kEdgeAll)
+                               bool wireframe = false, unsigned edgeMask = kEdgeAll,
+                               unsigned fillExcludedEdges = 0u)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
@@ -1395,6 +1414,8 @@ namespace CNA::Internal::Backends::Software
                     const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
                                         (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
                     if (!inside)
+                        continue;
+                    if (IsExcludedFillEdge(fillExcludedEdges, w0, w1, w2, area))
                         continue;
 
                     const float lambda0 = w0 / area;
@@ -1835,7 +1856,8 @@ namespace CNA::Internal::Backends::Software
                                      int colorWriteMask, unsigned int multiSampleMask,
                                      const SoftwareSamplerState& sampler0,
                                      const SoftwareSamplerState& sampler1,
-                                     bool wireframe = false, unsigned edgeMask = kEdgeAll)
+                                     bool wireframe = false, unsigned edgeMask = kEdgeAll,
+                                     unsigned fillExcludedEdges = 0u)
         {
             // REMED-GFX-124: the cast target is the colour-storage capability, not a concrete
             // backend class, so both a SoftwareTextureBackend and a SoftwareRenderTargetBackend
@@ -1949,6 +1971,8 @@ namespace CNA::Internal::Backends::Software
                     const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
                                         (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
                     if (!inside)
+                        continue;
+                    if (IsExcludedFillEdge(fillExcludedEdges, w0, w1, w2, area))
                         continue;
 
                     const float lambda0 = w0 / area;
@@ -2670,7 +2694,7 @@ namespace CNA::Internal::Backends::Software
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
                                 owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
-                                spriteSampler, spriteSampler, wire, kEdgeAll);
+                                spriteSampler, spriteSampler, wire, kEdgeAll, kEdgeV2V0);
         RasterizeTriangleShaded(fb, depthState, blendState, blendFactor,
                                 cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
@@ -3108,7 +3132,8 @@ namespace CNA::Internal::Backends::Software
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
+                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0,
+                              clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
                 RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
@@ -3192,7 +3217,8 @@ namespace CNA::Internal::Backends::Software
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
+                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0,
+                              clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
                 RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
@@ -3337,7 +3363,8 @@ namespace CNA::Internal::Backends::Software
             RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
-                                    GetSamplerState(0), GetSamplerState(1), wire, mask0);
+                                    GetSamplerState(0), GetSamplerState(1), wire, mask0,
+                                    clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
@@ -3468,7 +3495,8 @@ namespace CNA::Internal::Backends::Software
             RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
-                                    GetSamplerState(0), GetSamplerState(1), wire, mask0);
+                                    GetSamplerState(0), GetSamplerState(1), wire, mask0,
+                                    clippedCount == 4 ? kEdgeV2V0 : 0u);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
