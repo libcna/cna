@@ -78,6 +78,16 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
+    static void validateMipLevel(const char* api, int level, int levelCount)
+    {
+        if (level < 0)
+            throw std::out_of_range(std::string(api) + ": level must be >= 0");
+        if (level >= levelCount)
+            throw std::out_of_range(
+                std::string(api) + ": level " + std::to_string(level) +
+                " must be less than LevelCount " + std::to_string(levelCount));
+    }
+
     void Texture2D::MaybeFreeCpuPixels()
     {
         if (graphicsDevice_ && !graphicsDevice_->contextRecoveryEnabled_)
@@ -92,6 +102,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     std::vector<uint8_t>& Texture2D::getMipBuffer(int level)
     {
+        validateMipLevel("Texture2D::SetData", level, levelCount_);
         if (level == 0) {
             if (!cpuPixels_) cpuPixels_ = std::make_shared<std::vector<uint8_t>>();
             if (cpuPixels_->empty())
@@ -117,6 +128,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     const std::vector<uint8_t>* Texture2D::getMipBufferConst(int level) const
     {
+        validateMipLevel("Texture2D::GetData", level, levelCount_);
         if (level == 0) return (!cpuPixels_ || cpuPixels_->empty()) ? nullptr : cpuPixels_.get();
         if (!extraMipLevels_) return nullptr;
         const int idx = level - 1;
@@ -269,8 +281,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
-        if (level < 0)
-            throw std::out_of_range("Texture2D::SetData: level must be >= 0");
+        validateMipLevel("Texture2D::SetData", level, levelCount_);
 
         const int levelW = mipDim(width,  level);
         const int levelH = mipDim(height, level);
@@ -478,8 +489,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
         if (startIndex < 0)
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
-        if (level < 0)
-            throw std::out_of_range("Texture2D::GetData: level must be >= 0");
+        validateMipLevel("Texture2D::GetData", level, levelCount_);
         Texture::ValidateGetDataFormat(format_, 4);
 
         // Delegate before touching the CPU-side mip shadow at all -- the 3-arg overload has its

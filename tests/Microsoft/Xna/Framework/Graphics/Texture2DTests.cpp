@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
+#include <memory>
 #include <stdexcept>
+#include <string>
+#include <tuple>
 #include <vector>
 
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -25,6 +32,129 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using System::IO::MemoryStream;
+
+namespace
+{
+    using CNA::Internal::Backends::ITextureBackend;
+
+    class RecordingMipTextureBackend final : public ITextureBackend
+    {
+    public:
+        explicit RecordingMipTextureBackend(int width, int height)
+            : width_(width), height_(height)
+        {
+        }
+
+        int GetWidth() const override { return width_; }
+        int GetHeight() const override { return height_; }
+        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
+        void UpdatePixels(const uint8_t*, int stride) override
+        {
+            ++levelZeroUpdates;
+            levelZeroStride = stride;
+        }
+
+        void UpdatePixelsLevel(int level, const uint8_t*, int levelW, int levelH) override
+        {
+            levelUpdates.emplace_back(level, levelW, levelH);
+        }
+
+        bool GetData(int, int, int, int, int, void*, int) const override
+        {
+            ++getDataCalls;
+            return false;
+        }
+
+        int levelZeroUpdates = 0;
+        int levelZeroStride = 0;
+        std::vector<std::tuple<int, int, int>> levelUpdates;
+        mutable int getDataCalls = 0;
+
+    private:
+        int width_;
+        int height_;
+    };
+
+    int TestMipDimension(int base, int level)
+    {
+        return std::max(1, base >> level);
+    }
+
+    Color TestMipColor(int level, int index)
+    {
+        return Color(20 + level * 31 + index % 17,
+                     40 + level * 23 + index % 19,
+                     60 + level * 13 + index % 29,
+                     255);
+    }
+
+    void ExpectExactColor(const Color& actual, const Color& expected)
+    {
+        EXPECT_EQ(actual.getRProperty(), expected.getRProperty());
+        EXPECT_EQ(actual.getGProperty(), expected.getGProperty());
+        EXPECT_EQ(actual.getBProperty(), expected.getBProperty());
+        EXPECT_EQ(actual.getAProperty(), expected.getAProperty());
+    }
+
+    std::vector<std::vector<Color>> PopulateEveryMip(Texture2D& texture, int width, int height)
+    {
+        constexpr int kSourceStart = 3;
+        std::vector<std::vector<Color>> expected;
+        for (int level = 0; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int levelW = TestMipDimension(width, level);
+            const int levelH = TestMipDimension(height, level);
+            const int count = levelW * levelH;
+            std::vector<Color> source(static_cast<std::size_t>(kSourceStart + count + 2),
+                                      Color(1, 2, 3, 4));
+            expected.emplace_back();
+            expected.back().reserve(static_cast<std::size_t>(count));
+            for (int i = 0; i < count; ++i)
+            {
+                const Color value = TestMipColor(level, i);
+                source[static_cast<std::size_t>(kSourceStart + i)] = value;
+                expected.back().push_back(value);
+            }
+            const std::vector<Color> sourceBefore = source;
+            texture.SetData(level, nullptr, source.data(), kSourceStart, count);
+            EXPECT_EQ(source, sourceBefore) << "SetData modified its source at mip " << level;
+        }
+        return expected;
+    }
+
+    void ExpectEveryMipExact(Texture2D& texture, int width, int height,
+                             const std::vector<std::vector<Color>>& expected)
+    {
+        constexpr int kDestinationStart = 4;
+        constexpr int kExtraCapacity = 2;
+        const Color sentinel(7, 3, 11, 199);
+        ASSERT_EQ(expected.size(), static_cast<std::size_t>(texture.getLevelCountProperty()));
+        for (int level = 0; level < texture.getLevelCountProperty(); ++level)
+        {
+            const int levelW = TestMipDimension(width, level);
+            const int levelH = TestMipDimension(height, level);
+            const int count = levelW * levelH;
+            ASSERT_EQ(expected[static_cast<std::size_t>(level)].size(),
+                      static_cast<std::size_t>(count));
+            std::vector<Color> destination(
+                static_cast<std::size_t>(kDestinationStart + count + kExtraCapacity + 3), sentinel);
+            texture.GetData(level, nullptr, destination.data(), kDestinationStart,
+                            count + kExtraCapacity);
+            for (int i = 0; i < count; ++i)
+            {
+                SCOPED_TRACE("mip=" + std::to_string(level) + " index=" + std::to_string(i));
+                ExpectExactColor(destination[static_cast<std::size_t>(kDestinationStart + i)],
+                                 expected[static_cast<std::size_t>(level)][static_cast<std::size_t>(i)]);
+            }
+            for (int i = 0; i < kDestinationStart; ++i)
+                ExpectExactColor(destination[static_cast<std::size_t>(i)], sentinel);
+            for (std::size_t i = static_cast<std::size_t>(kDestinationStart + count);
+                 i < destination.size(); ++i)
+                ExpectExactColor(destination[i], sentinel);
+        }
+    }
+}
 
 // -----------------------------------------------------------------------
 // Default constructor — dimensions and base-class properties
@@ -101,6 +231,117 @@ TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
     EXPECT_EQ(Texture2D(gd, 3, 5, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 7, 11, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+}
+
+// -----------------------------------------------------------------------
+// REMED-GFX-192 -- one shared [0, LevelCount) validation path must run before mip dimensions,
+// CPU shadows, allocation, or backend dispatch. A real mipmapped Texture2D proves every valid
+// level's dimensions and bytes, while the existing CPU-only recording-backend factory proves that
+// rejected SetData calls never dispatch even on the single-level boundary.
+// -----------------------------------------------------------------------
+
+TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAndTransferWindow)
+{
+    constexpr int kWidth = 13;
+    constexpr int kHeight = 7;
+    constexpr int kLevelCount = 4;
+    GraphicsDevice gd;
+    Texture2D texture(gd, kWidth, kHeight, true, SurfaceFormat::Color);
+    ASSERT_EQ(texture.getLevelCountProperty(), kLevelCount);
+
+    const std::vector<std::vector<Color>> expected =
+        PopulateEveryMip(texture, kWidth, kHeight);
+    ExpectEveryMipExact(texture, kWidth, kHeight, expected);
+}
+
+TEST(Texture2DMipLevelValidationTest, RejectedSetDataLeavesEveryValidMipAndItsSourceUnchanged)
+{
+    constexpr int kWidth = 13;
+    constexpr int kHeight = 7;
+    constexpr int kLevelCount = 1;
+    auto backend = std::make_shared<RecordingMipTextureBackend>(kWidth, kHeight);
+    Texture2D texture = Texture2D::CreateWithBackendForTests(kWidth, kHeight, backend);
+    const std::vector<std::vector<Color>> expected =
+        PopulateEveryMip(texture, kWidth, kHeight);
+
+    const int levelZeroUpdatesBefore = backend->levelZeroUpdates;
+    const std::vector<std::tuple<int, int, int>> levelUpdatesBefore = backend->levelUpdates;
+    const std::array<int, 4> invalidLevels = {
+        -1, kLevelCount, 1000, std::numeric_limits<int>::max()
+    };
+    for (int level : invalidLevels)
+    {
+        SCOPED_TRACE("level=" + std::to_string(level));
+        std::vector<Color> source(6, Color(201, 111, 77, 255));
+        const std::vector<Color> sourceBefore = source;
+        EXPECT_THROW(texture.SetData(level, nullptr, source.data(), 2, 1), std::out_of_range);
+        EXPECT_EQ(source, sourceBefore);
+        EXPECT_EQ(backend->levelZeroUpdates, levelZeroUpdatesBefore);
+        EXPECT_EQ(backend->levelUpdates, levelUpdatesBefore);
+    }
+
+    ExpectEveryMipExact(texture, kWidth, kHeight, expected);
+    EXPECT_EQ(backend->levelZeroUpdates, levelZeroUpdatesBefore);
+    EXPECT_EQ(backend->levelUpdates, levelUpdatesBefore);
+    EXPECT_EQ(backend->getDataCalls, 0);
+}
+
+TEST(Texture2DMipLevelValidationTest, RejectedGetDataLeavesDestinationAndBackendUntouched)
+{
+    constexpr int kWidth = 13;
+    constexpr int kHeight = 7;
+    constexpr int kLevelCount = 1;
+    auto backend = std::make_shared<RecordingMipTextureBackend>(kWidth, kHeight);
+    Texture2D texture = Texture2D::CreateWithBackendForTests(kWidth, kHeight, backend);
+    const Color sentinel(7, 3, 11, 199);
+    const Rectangle one(0, 0, 1, 1);
+    const std::array<int, 4> invalidLevels = {
+        -1, kLevelCount, 1000, std::numeric_limits<int>::max()
+    };
+
+    for (std::size_t request = 0; request < invalidLevels.size(); ++request)
+    {
+        const int level = invalidLevels[request];
+        SCOPED_TRACE("level=" + std::to_string(level));
+        std::vector<Color> destination(7, sentinel);
+        const Rectangle* rect = (request % 2 == 0) ? &one : nullptr;
+        EXPECT_THROW(texture.GetData(level, rect, destination.data(), 3, 1), std::out_of_range);
+        for (const Color& value : destination) ExpectExactColor(value, sentinel);
+        EXPECT_EQ(backend->getDataCalls, 0);
+    }
+}
+
+TEST(Texture2DMipLevelValidationTest, ExistingDataAndStartIndexValidationStillPrecedeLevelValidation)
+{
+    constexpr int kLevelCount = 1;
+    auto backend = std::make_shared<RecordingMipTextureBackend>(13, 7);
+    Texture2D texture = Texture2D::CreateWithBackendForTests(13, 7, backend);
+    Color value(1, 2, 3, 4);
+
+    EXPECT_THROW(texture.GetData(kLevelCount, nullptr, nullptr, -1, 0), std::invalid_argument);
+    EXPECT_THROW(texture.SetData(kLevelCount, nullptr, nullptr, -1, 0), std::invalid_argument);
+
+    try
+    {
+        texture.GetData(kLevelCount, nullptr, &value, -1, 1);
+        FAIL() << "GetData accepted a negative startIndex";
+    }
+    catch (const std::out_of_range& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("startIndex"), std::string::npos);
+    }
+    try
+    {
+        texture.SetData(kLevelCount, nullptr, &value, -1, 1);
+        FAIL() << "SetData accepted a negative startIndex";
+    }
+    catch (const std::out_of_range& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("startIndex"), std::string::npos);
+    }
+    EXPECT_EQ(backend->getDataCalls, 0);
+    EXPECT_EQ(backend->levelZeroUpdates, 0);
+    EXPECT_TRUE(backend->levelUpdates.empty());
 }
 
 // -----------------------------------------------------------------------

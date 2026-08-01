@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// REMED-GFX-189 -- a `RenderTarget2D` mip level OUTSIDE the declared chain must be REFUSED
-// deterministically, before any native call, with the caller's destination left untouched.
+// REMED-GFX-189 / REMED-GFX-192 -- a `RenderTarget2D` mip level OUTSIDE the declared chain must be
+// REFUSED deterministically in the shared Texture2D layer, before any dimension calculation or
+// native call, with the caller's destination left untouched.
 //
 // THE DEFECT
 // ----------
@@ -39,9 +40,9 @@
 //     rectangle is checked against THAT level's dimensions, the destination window follows
 //     REMED-GFX-149, and the complete requested range is written synchronously.
 //
-// A NEGATIVE level is already rejected on every backend, because the shared `Texture2D::GetData`
-// checks it -- so the hole this file is about is specifically the UPPER bound, and both ends are
-// asserted here so the pair cannot drift apart again.
+// REMED-GFX-192 puts both ends of the range through one shared `Texture2D::GetData` validation path,
+// before the old `base >> level` dimension calculation. Both ends are asserted here so that path
+// cannot drift back into backend-specific handling.
 //
 // THE ORACLE
 // ----------
@@ -75,6 +76,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -184,24 +186,6 @@ namespace
      */
     constexpr bool kMipGeneratorTruncatesUnevenChains =
 #if defined(CNA_BACKEND_SDL_GPU)
-        true;
-#else
-        false;
-#endif
-
-    /**
-     * @brief Whether an out-of-range level is rejected as `std::out_of_range` specifically here.
-     *
-     * The invariant every backend owes -- a catchable public exception that writes nothing -- is
-     * asserted unconditionally. This narrower declaration additionally pins the TYPE on the backends
-     * whose convention is established: SDL_GPU adopted it in REMED-GFX-186, and VULKAN adopts it
-     * here, both matching the shared `Texture2D::GetData`, which already raises `std::out_of_range`
-     * for the negative end of exactly the same range. Elsewhere the measured type is PRINTED rather
-     * than asserted, because inventing a contract for a backend this ticket did not touch would be
-     * churn, not coverage.
-     */
-    constexpr bool kOutOfRangeLevelIsOutOfRange =
-#if defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_SDL_GPU)
         true;
 #else
         false;
@@ -519,9 +503,8 @@ class RenderTargetInvalidMipLevelTest : public Game
         check(untouched, label + ": the refused read left the WHOLE destination untouched -- no "
                                  "clamped level, no level 0, no zero fill, no staging memory");
 
-        if (kOutOfRangeLevelIsOutOfRange && threw)
-            check(wasOutOfRange, label + ": the refusal is a std::out_of_range, matching the shared "
-                                         "layer's own rejection of the negative end of this range");
+        check(wasOutOfRange, label + ": the refusal is a std::out_of_range from the shared "
+                                     "Texture2D mip-level validator");
     }
 
     /**
@@ -721,6 +704,112 @@ class RenderTargetInvalidMipLevelTest : public Game
             ReadWholeLevel(rt, level, label + " level " + std::to_string(level));
     }
 
+    /** @brief Exercises REMED-GFX-192's shared SetData and CPU mip-buffer path. */
+    void ExercisePlainTextureSetDataContract(GraphicsDevice& dev)
+    {
+        constexpr int width = 13;
+        constexpr int height = 7;
+        constexpr int sourceStart = 3;
+        constexpr int destinationStart = 4;
+        step("A1 Texture2D: populate every valid mip, reject invalid SetData, read every mip back");
+        Texture2D texture(dev, width, height, true, SurfaceFormat::Color);
+        const int n = texture.getLevelCountProperty();
+        check(n == ChainLength(width, height),
+              "A1 Texture2D: LevelCount matches the complete 13x7 mip chain");
+
+        std::vector<std::vector<Color>> expected(static_cast<std::size_t>(n));
+        for (int level = 0; level < n; ++level)
+        {
+            const int levelW = LevelDim(width, level);
+            const int levelH = LevelDim(height, level);
+            const int count = levelW * levelH;
+            std::vector<Color> source(static_cast<std::size_t>(sourceStart + count + 2), kSentinel);
+            expected[static_cast<std::size_t>(level)].reserve(static_cast<std::size_t>(count));
+            for (int i = 0; i < count; ++i)
+            {
+                const Color value(31 + level * 41 + i % 11,
+                                  47 + level * 29 + i % 13,
+                                  63 + level * 17 + i % 19,
+                                  255);
+                source[static_cast<std::size_t>(sourceStart + i)] = value;
+                expected[static_cast<std::size_t>(level)].push_back(value);
+            }
+            const std::vector<Color> sourceBefore = source;
+            bool threw = false;
+            try { texture.SetData(level, nullptr, source.data(), sourceStart, count); }
+            catch (const std::exception& e)
+            {
+                threw = true;
+                note("A1 Texture2D valid SetData level " + std::to_string(level) + ": " + e.what());
+            }
+            check(!threw,
+                  "A1 Texture2D: valid level " + std::to_string(level) + " SetData succeeds at " +
+                      std::to_string(levelW) + "x" + std::to_string(levelH));
+            bool sourceUntouched = source.size() == sourceBefore.size();
+            for (std::size_t i = 0; sourceUntouched && i < source.size(); ++i)
+                sourceUntouched = Exact(source[i], sourceBefore[i]);
+            check(sourceUntouched,
+                  "A1 Texture2D: valid SetData level " + std::to_string(level) +
+                      " leaves its source unchanged");
+        }
+
+        const int invalidLevels[] = {-1, n, 1000, INT_MAX};
+        for (int level : invalidLevels)
+        {
+            std::vector<Color> source(7, kSentinel);
+            source[static_cast<std::size_t>(sourceStart)] = Color(201, 111, 77, 255);
+            const std::vector<Color> sourceBefore = source;
+            bool wasOutOfRange = false;
+            std::string what;
+            try { texture.SetData(level, nullptr, source.data(), sourceStart, 1); }
+            catch (const std::out_of_range& e) { wasOutOfRange = true; what = e.what(); }
+            catch (const std::exception& e) { what = e.what(); }
+            check(wasOutOfRange,
+                  "A1 Texture2D: SetData level " + std::to_string(level) +
+                      " is rejected by the shared std::out_of_range path");
+            if (!what.empty()) note("A1 Texture2D invalid SetData: " + what);
+            bool sourceUntouched = source.size() == sourceBefore.size();
+            for (std::size_t i = 0; sourceUntouched && i < source.size(); ++i)
+                sourceUntouched = Exact(source[i], sourceBefore[i]);
+            check(sourceUntouched,
+                  "A1 Texture2D: rejected SetData level " + std::to_string(level) +
+                      " leaves its source unchanged");
+        }
+
+        for (int level = 0; level < n; ++level)
+        {
+            const int count = LevelDim(width, level) * LevelDim(height, level);
+            std::vector<Color> destination(
+                static_cast<std::size_t>(destinationStart + count + 2 + kGuard), kSentinel);
+            bool threw = false;
+            try
+            {
+                texture.GetData(level, nullptr, destination.data(), destinationStart, count + 2);
+            }
+            catch (const std::exception& e)
+            {
+                threw = true;
+                note("A1 Texture2D valid GetData level " + std::to_string(level) + ": " + e.what());
+            }
+            bool exact = !threw;
+            for (int i = 0; exact && i < count; ++i)
+                exact = Exact(destination[static_cast<std::size_t>(destinationStart + i)],
+                              expected[static_cast<std::size_t>(level)][static_cast<std::size_t>(i)]);
+            check(exact,
+                  "A1 Texture2D: valid level " + std::to_string(level) +
+                      " retains its exact dimensions and contents after all rejected SetData calls");
+            bool guardsUntouched = true;
+            for (int i = 0; guardsUntouched && i < destinationStart; ++i)
+                guardsUntouched = Exact(destination[static_cast<std::size_t>(i)], kSentinel);
+            for (std::size_t i = static_cast<std::size_t>(destinationStart + count);
+                 guardsUntouched && i < destination.size(); ++i)
+                guardsUntouched = Exact(destination[i], kSentinel);
+            check(guardsUntouched,
+                  "A1 Texture2D: valid level " + std::to_string(level) +
+                      " preserves the GFX-149 destination prefix and surplus capacity");
+        }
+    }
+
     // ================================================================ the legs
 
     /**
@@ -748,9 +837,10 @@ class RenderTargetInvalidMipLevelTest : public Game
         ExpectLevelRejected(*rt, -1,      &one, 1, kGuard, "A1 level == -1");
 
         // The upper and lower ends of the SAME range, asserted in one place so they cannot drift
-        // apart again -- the negative end was already guarded in the shared layer while the positive
-        // end was guarded nowhere at all, which is the whole shape of this defect.
+        // apart again. REMED-GFX-192 routes both through the one shared guard before dimensions.
         ReadWholeLevel(*rt, n - 1, "A1 final valid level survives the four rejections");
+
+        ExercisePlainTextureSetDataContract(dev);
     }
 
     /**
