@@ -190,7 +190,7 @@ public CNA API.
 | SKIA-47 | Map `BlendState::Opaque` and prove it is an overwrite of the affected sprite pixels, not a whole-target clear. | ✅ | `Skia_BlendState_Opaque` overwrites an affected low-alpha sprite pixel over a coloured background. |
 | SKIA-48 | Map `BlendState::AlphaBlend` with correct premultiplied source algebra. | ✅ | `Skia_BlendState_AlphaBlend` verifies a genuinely premultiplied source; `Skia_SpriteBatch_TintAlpha` verifies it remains correct after a semi-transparent tint. |
 | SKIA-49 | Map `BlendState::NonPremultiplied` without treating it as AlphaBlend. | ✅ | `Skia_BlendState_NonPremultiplied` verifies a straight-alpha source; `Skia_SpriteBatch_TintAlpha` proves its tint result remains distinct from SKIA-48. |
-| SKIA-50 | Map `BlendState::Additive` and establish saturation/colour-space policy compatible with CNA's existing oracle. | ⬜ | Additive golden and over-range edge cases pass. |
+| SKIA-50 | Map `BlendState::Additive` and establish saturation/colour-space policy compatible with CNA's existing oracle. | ✅ | `Skia_BlendState_Additive` verifies a source-alpha-scaled non-saturating sum and an over-range sum that clamps to 255. |
 | SKIA-51 | Implement a table-driven conversion of XNA blend factors/functions to a direct Skia mode wherever one exists. | ⬜ | Mapping unit test covers all enum values and gives actionable error text for unmapped combinations. |
 | SKIA-52 | Implement `SetBlendEnabled`/the default blend-state lifecycle and ensure Clear is always an unconditional clear. | ⬜ | Clear-after-blend and state-reset tests pass. |
 | SKIA-53 | Investigate independent colour/alpha factors and equations using Skia's current blender APIs. | ⬜ | Written proof identifies exact direct mappings and unmappable cases. |

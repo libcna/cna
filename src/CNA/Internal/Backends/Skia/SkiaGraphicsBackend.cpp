@@ -262,6 +262,8 @@ namespace CNA::Internal::Backends::Skia
             && colorDstBlend == kBlendInverseSourceAlpha && alphaDstBlend == kBlendInverseSourceAlpha;
         const bool nonPremultiplied = colorSrcBlend == kBlendSourceAlpha && alphaSrcBlend == kBlendSourceAlpha
             && colorDstBlend == kBlendInverseSourceAlpha && alphaDstBlend == kBlendInverseSourceAlpha;
+        const bool additive = colorSrcBlend == kBlendSourceAlpha && alphaSrcBlend == kBlendSourceAlpha
+            && colorDstBlend == kBlendOne && alphaDstBlend == kBlendOne;
 
         if (opaque)
         {
@@ -281,6 +283,14 @@ namespace CNA::Internal::Backends::Skia
             // before applying SourceOver.  AlphaBlend selects the separately labelled premultiplied
             // image above, preventing an accidental second premultiplication.
             spriteBlendMode_ = SkBlendMode::kSrcOver;
+            spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Straight;
+            return;
+        }
+        if (additive)
+        {
+            // kPlus adds premultiplied source and destination.  Selecting the straight-alpha
+            // texture representation performs the XNA SourceAlpha source factor first.
+            spriteBlendMode_ = SkBlendMode::kPlus;
             spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Straight;
             return;
         }

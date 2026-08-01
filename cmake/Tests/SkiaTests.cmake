@@ -79,6 +79,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_blend_nonpremultiplied examples/sdlrenderer_blendstate_nonpremultiplied_test.cpp)
     cna_register_skia_display_test(Skia_BlendState_NonPremultiplied cna_test_skia_blend_nonpremultiplied)
 
+    cna_skia_test(cna_test_skia_blend_additive examples/sdlrenderer_blendstate_additive_test.cpp)
+    cna_register_skia_display_test(Skia_BlendState_Additive cna_test_skia_blend_additive)
+
     cna_skia_test(cna_test_skia_spritebatch_tint_alpha examples/skia_spritebatch_tint_alpha_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_TintAlpha cna_test_skia_spritebatch_tint_alpha)
 

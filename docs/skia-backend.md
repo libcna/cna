@@ -4,7 +4,7 @@
 
 `CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create an OpenGL context and does not call the EasyGL backend.
 
-The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, point/linear sampling with Clamp addressing, and `BlendState::{Opaque, AlphaBlend, NonPremultiplied}`. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. Mipmaps, Wrap/Mirror addressing, non-identity SpriteBatch transforms, effects, MRT, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
+The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, point/linear sampling with Clamp addressing, and `BlendState::{Opaque, AlphaBlend, NonPremultiplied, Additive}`. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. Mipmaps, Wrap/Mirror addressing, non-identity SpriteBatch transforms, effects, MRT, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
 
 ## Dependency policy
 
@@ -73,8 +73,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers fourteen SKIA-only CTests: one window-independent raster
-   surface pixel test and thirteen display-required public tests. The raster test passes without a
+6. `cmake/Tests/SkiaTests.cmake` registers fifteen SKIA-only CTests: one window-independent raster
+   surface pixel test and fourteen display-required public tests. The raster test passes without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -87,9 +87,10 @@ limit before allocation. Mipmapped texture construction is also rejected before 
    `Skia_SpriteBatch_Overloads` exercise real public SpriteBatch sessions. They verify invalid
    sequencing, native-size and destination/source-rectangle draws, all current overloads, tint,
    scaling, and a discriminating horizontal-flip pixel assertion.
-9. `Skia_BlendState_Opaque`, `Skia_BlendState_AlphaBlend`, and
-   `Skia_BlendState_NonPremultiplied` verify the three currently supported SpriteBatch blend
-   presets over a real background. `Skia_SpriteBatch_TintAlpha` then verifies semi-transparent
-   tint for both source-alpha conventions with distinct expected pixel values.
+9. `Skia_BlendState_Opaque`, `Skia_BlendState_AlphaBlend`,
+   `Skia_BlendState_NonPremultiplied`, and `Skia_BlendState_Additive` verify the four currently
+   supported SpriteBatch blend presets over a real background, including source-alpha scaling and
+   saturation for additive composition. `Skia_SpriteBatch_TintAlpha` then verifies
+   semi-transparent tint for both source-alpha conventions with distinct expected pixel values.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
