@@ -149,6 +149,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_rendertarget_readback examples/skia_rendertarget_readback_test.cpp)
     cna_register_skia_display_test(Skia_RenderTarget2D_Readback cna_test_skia_rendertarget_readback)
 
+    cna_skia_test(cna_test_skia_rendertarget_switch examples/skia_rendertarget_switch_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTarget2D_Switch cna_test_skia_rendertarget_switch)
+
     if(TARGET cna_demo_2d)
         cna_register_skia_display_test(Skia_Demo2D_Smoke cna_demo_2d --smoke 3)
     endif()

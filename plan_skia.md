@@ -207,7 +207,7 @@ public CNA API.
 | ID | Task | Status | Acceptance evidence |
 |---|---|---|---|
 | SKIA-61 | Implement `SkiaRenderTargetBackend` with a distinct `SkSurface`, texture/snapshot view, and safe ownership relation to `SkiaGraphicsBackend`. | ✅ | `Skia_RenderTarget2D_SampleAfterUnbind` renders a non-uniform target, unbinds it, and samples its distinct snapshot as a SpriteBatch texture. |
-| SKIA-62 | Implement `SetRenderTarget2D(nullptr)` restoration and target-switch finalization/flush behavior. | ⬜ | Target A → B → backbuffer ordering test has expected independent pixels. |
+| SKIA-62 | Implement `SetRenderTarget2D(nullptr)` restoration and target-switch finalization/flush behavior. | ✅ | `Skia_RenderTarget2D_Switch` renders target A then B, restores the backbuffer, and samples distinct expected pixels from both targets. |
 | SKIA-63 | Implement `RenderTargetUsage::PreserveContents` and `DiscardContents` according to CNA's pass boundary contract. | ✅ | `Skia_RenderTarget2D_Usage` verifies a rebind discards the prior contents only for `DiscardContents`, preserving the same contents otherwise. |
 | SKIA-64 | Implement RenderTarget2D `GetData` for full and partial rectangles, normalizing row order once and only once. | ✅ | `Skia_RenderTarget2D_Readback` verifies rendered full-level top-row-first data and a partial rectangle; target readback transfer contracts also run in `Skia_Texture2D_GetDataContract`. |
 | SKIA-65 | Implement RenderTarget2D `SetData`, mip behavior, and device recreation, or reject each unsupported level precisely. | ⬜ | Round-trip tests cover CPU upload, rendered content, and loss recovery. |
