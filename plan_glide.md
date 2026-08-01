@@ -98,3 +98,102 @@ renderer.
   MinGW compiler; executing the current CNA smoke target is separately blocked by the external
   `../sharp-runtime` dependency's unsupported i686 `__int128` use. Resume this validation after
   that dependency is made i686-compatible, or with an equivalent prebuilt x86 CNA smoke binary.
+
+## Future authentic Glide capability roadmap
+
+These are candidate additions that can still use a real Glide 3.x fixed-function pipeline (plus
+bounded CPU-side vertex processing). Each must be enabled only where the runtime advertises the
+needed capability, must retain a clear failure on older hardware, and needs an x86 fake-DLL test
+plus a dgVoodoo/real-hardware visual test before it can be advertised as supported.
+
+- [ ] **GLIDE-FUT-001 — Add the remaining native primitive topologies.** Implement
+  `PointList`, `LineList`, and `LineStrip` through Glide's point/line/vertex-array primitive
+  modes, with the same finite-input and homogeneous CPU clipping rules as triangles. Investigate
+  `FillMode::WireFrame` only as an explicitly tested triangle-edge conversion; retain rejection if
+  Glide line rasterization cannot meet CNA's culling, clipping, and duplicate-edge semantics.
+- [ ] **GLIDE-FUT-002 — Decode compatible custom vertex declarations rather than accepting only
+  known packed structs.** Build a validated declaration/offset reader for position, colour,
+  normal, and texture-coordinate 0 at arbitrary legal offsets and strides. Feed it into the
+  existing fixed-function paths and reject unsupported semantics deterministically, instead of
+  relying on accidental binary layout compatibility.
+- [ ] **GLIDE-FUT-003 — Complete the feasible `BasicEffect` vertex-lighting subset.** Compute
+  the existing FNA-compatible Blinn/Phong specular term on the CPU per vertex (eye position,
+  material specular colour/power and all enabled directional lights), add it to the iterated
+  Glide RGB result, and add golden tests for non-uniform worlds and multiple lights. Keep
+  `PreferPerPixelLighting` rejected: Glide has no per-pixel programmable lighting.
+- [ ] **GLIDE-FUT-004 — Use a second TMU when the selected runtime actually has one.** Add
+  per-TMU texture memory allocators/residency, two-texture tiled draw partitioning and the exact
+  fixed-function combiner for `DualTextureEffect` / texture slot 1. Gate it on `GR_NUM_TMU >= 2`,
+  keep single-TMU Voodoo paths explicit, and test state changes, alpha and unequal tile grids.
+- [ ] **GLIDE-FUT-005 — Map sampler mip controls that Glide can represent.** Extend the common
+  sampler-state hand-off so `MipMapLevelOfDetailBias` and `MaxMipLevel` reach the backend; map
+  the former to native LOD bias and implement/clamp the latter without selecting unavailable
+  levels. Define the quantization and out-of-range policy with cross-backend tests, rather than
+  silently ignoring either property.
+- [ ] **GLIDE-FUT-006 — Support explicit and partial `Texture2D::SetData` updates.** Retain
+  CPU copies for every supplied mip level, update rectangles, regenerate only the affected
+  derived levels/gutters, fence before re-download, and preserve explicit mip data instead of
+  treating every update as a level-0 full-image upload. This also removes the current shared
+  `Texture2D` partial-update limitation for Glide-backed textures.
+- [ ] **GLIDE-FUT-007 — Select the best native texture encoding per logical texture.** Keep a
+  deterministic RGBA8 source copy, then use RGB565 for provably opaque data, ARGB1555 for binary
+  alpha and ARGB4444 for fractional alpha, with a documented reallocation rule if later updates
+  change the alpha class. Compare sampling/blending captures against the existing ARGB4444
+  baseline; do not enable palette/NCC compression merely as an undocumented lossy shortcut.
+- [ ] **GLIDE-FUT-008 — Calibrate constant depth bias.** Establish, on real Voodoo and dgVoodoo,
+  the conversion between CNA's normalized `RasterizerState::DepthBias` and Glide's integer depth
+  bias for both Z and W depth modes, including sign, clamp and viewport-depth interaction. Support
+  only the validated constant part first; continue rejecting `SlopeScaleDepthBias` unless a
+  correct CPU-derived mapping can be demonstrated.
+- [ ] **GLIDE-FUT-009 — Offer explicit historical raster-quality controls.** When CNA gains an
+  opt-in backend/presentation setting, map dither choice to `grDitherMode` and, where supported,
+  ordered Glide anti-aliasing. Ordered AA needs documented depth-sorted non-strip submissions and
+  must never be presented as XNA MSAA; include deterministic captures for every enabled mode.
+- [ ] **GLIDE-FUT-010 — Add opt-in gamma handling with a reversible public contract.** Design a
+  CNA-level gamma/presentation control first, then use the Glide helper/runtime gamma facility
+  only if it is exported by the chosen 3.x runtime. Restore the previous ramp on shutdown and
+  treat per-window emulator gamma as separate from process/global hardware gamma.
+- [ ] **GLIDE-FUT-011 — Negotiate optional runtime extensions safely.** Centralize core versus
+  optional export loading and capability reporting (non-power-of-two textures, extended blending,
+  texture detail controls and emulator-specific functions). Every extension needs an ABI test and
+  an explicit policy: use it only when it preserves CNA semantics, otherwise keep the portable
+  tiled/core path. Never identify an extension solely from a DLL name.
+- [ ] **GLIDE-FUT-012 — Exploit genuine NPOT texture support when advertised.** After
+  GLIDE-FUT-011, add an optional direct-NPOT storage path for runtimes reporting it, while keeping
+  the existing tiled power-of-two path as the canonical fallback. Verify mip selection, wrap,
+  clamp, mirror and texture-coordinate precision before preferring the extension path.
+- [ ] **GLIDE-FUT-013 — Improve texture-memory residency under pressure.** Track logical source
+  data and native allocation costs, evict least-recently-used unbound textures only after FIFO
+  completion, and lazily re-upload them on reuse. Make eviction deterministic and observable in
+  diagnostics; if recovery cannot allocate an atomically complete tiled mip chain, fail the draw
+  rather than render a partially resident texture.
+- [ ] **GLIDE-FUT-014 — Replace pointer-array batches with the contiguous vertex-array path.**
+  Load and ABI-test `grDrawVertexArrayContiguous`, then use it for compatible triangle batches if
+  its byte-stride and FIFO behaviour match the existing pointer-array implementation. Preserve
+  the 1024-triangle state/tile flush boundaries and retain the established path as a fallback.
+- [ ] **GLIDE-FUT-015 — Batch SpriteBatch without changing its ordering contract.** Profile the
+  native immediate sprite path, then add a bounded queue for adjacent sprites with identical
+  texture/sampler/blend/scissor state. Flush at every observable ordering/state boundary and
+  compare translucent overlapping sprites, not just opaque throughput scenes.
+- [ ] **GLIDE-FUT-016 — Make presentation and mode changes more complete, only through controlled
+  recreation.** Investigate native fullscreen/windowed mode selection, higher swap intervals and
+  post-start virtual-resolution changes via an atomic `grSstWinClose`/`grSstWinOpen` rebuild that
+  restores all live resources and state. Do not claim a resize/fullscreen request succeeded until
+  the new mode is selected and a frame/readback probe has passed.
+- [ ] **GLIDE-FUT-017 — Add adapter and runtime diagnostics for deployability.** Report selected
+  Glide DLL/version, board/TMU count, queried resolution list, texture limits, extension decisions,
+  memory use/evictions and rejected CNA features through an opt-in diagnostic channel. Keep the
+  data free of raw pointers and use it in the smoke-test failure report.
+- [ ] **GLIDE-FUT-018 — Build a hardware compatibility matrix and release gate.** Automate the
+  fake-DLL ABI suite, then record results separately for Voodoo Graphics, Voodoo2 and dgVoodoo
+  versions on supported 32-bit Windows setups. The matrix must state which FUT capabilities were
+  tested on which runtime, image tolerances, driver quirks and the fallback/rejection behaviour.
+
+## Deliberate boundary for future proposals
+
+The following could only be made to "work" by adding a software/modern-renderer emulation layer,
+not by extending Glide faithfully: render targets and MRT, stencil, MSAA resolves, cube/volume
+textures, occlusion queries, arbitrary effects/shaders, per-pixel lighting, GPU skinning and PBR.
+They are not Glide roadmap tasks. Revisit any one only through a separately approved, opt-in
+hybrid-backend design that clearly labels the result as non-authentic and keeps the native Glide
+path available.
