@@ -81,8 +81,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers fifty-three SKIA-only CTests: two window-independent raster
-   surface pixel tests and fifty-one display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers fifty-four SKIA-only CTests: two window-independent raster
+   surface pixel tests and fifty-two display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -164,5 +164,9 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     fields: a solid SpriteBatch ignores cull/depth-bias/MSAA values, `WireFrame` remains
     unadvertised and fails with an actionable error, and the rejected `Begin` leaves the batch
     reusable for a subsequent solid draw.
+30. `Skia_StateTransition` keeps scissor enabled across a RenderTarget2D bind/unbind, proves the
+    public reset expands it to the full backbuffer, verifies that `Clear` is unconditional without
+    discarding the raster state, and checks both rejected `Begin` recovery and custom-viewport
+    preservation across a same-size `Present`.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
