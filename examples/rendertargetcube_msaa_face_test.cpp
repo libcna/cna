@@ -98,6 +98,9 @@ namespace
     enum class Support
     {
         Exact,
+        /// Readback succeeds and writes real data, while a separately recorded content boundary
+        /// is required to remain observable. Used only for Bgfx's REMED-GFX-195 preservation gap.
+        ReadableBoundary,
         Unsupported,
     };
 
@@ -121,9 +124,9 @@ namespace
          * GetData on a MULTISAMPLED cube target, and therefore this file's whole claim about it:
          * where this is `Exact`, every multisampled preservation check below REQUIRES exact
          * content -- that is REMED-GFX-141's post-fix contract, stated as one falsifiable value per
-         * backend rather than per check. `Unsupported` only on bgfx, whose `bgfx::blit` reports
-         * success over untouched memory when the source is a multisampled cube attachment
-         * (REMED-GFX-134/138), so nothing about its face isolation is measurable here at all.
+         * backend rather than per check. `ReadableBoundary` requires a successful, non-sentinel
+         * result while the canonical checks pin REMED-GFX-195's distinct Bgfx face-aliasing
+         * signature. `Unsupported` remains the honest no-content outcome on other routes.
          */
         Support msaaReadback;
         /**
@@ -150,10 +153,11 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true,
                                  Support::Exact, false, false};
 #elif defined(CNA_BACKEND_BGFX)
-    // `msaaReadback` Unsupported -- see the Contract field's own comment. M1 still measures the
-    // applied sample count, and every single-sample control still runs.
+    // REMED-GFX-138 makes the resolved readback real. REMED-GFX-195 separately records that Bgfx
+    // does not preserve per-face multisample contents, so this fixture must observe that boundary
+    // rather than pretend readback is unsupported or claim GFX-141 fixed Bgfx.
     constexpr Contract kContract{"BGFX", true, Support::Exact, true,
-                                 Support::Unsupported, false, false};
+                                 Support::ReadableBoundary, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // Pre-fix: ONE single-layer TRANSIENT_ATTACHMENT image AND no LOAD variant of the MSAA render
     // pass. Post-fix: a six-layer multisampled image with one per-layer view per face, plus a
@@ -409,6 +413,11 @@ class RenderTargetCubeMsaaFaceTest : public Game
         if (required == Support::Exact)
             check(!p.threwNotSupported && !p.threwSomethingElse && p.exact == p.window,
                   label + " -- exact content required" + facts);
+        else if (required == Support::ReadableBoundary)
+            check(!p.threwNotSupported && !p.threwSomethingElse &&
+                      p.sentinelSurvivors == 0,
+                  label + " -- real resolved data required; REMED-GFX-195 owns the declared "
+                          "preservation boundary" + facts);
         else
             check(p.threwNotSupported && !p.threwSomethingElse && p.sentinelSurvivors == p.window,
                   label + " -- deterministic NotSupportedException with the destination untouched "
@@ -522,6 +531,11 @@ class RenderTargetCubeMsaaFaceTest : public Game
             check(stale == 0,
                   "F1b canonical: not one texel of face 0 came back holding face 1's pattern "
                   "[contaminated texels = " + std::to_string(stale) + "]");
+        else if (MsaaRequired() == Support::ReadableBoundary)
+            check(stale > 0,
+                  "F1b canonical: REMED-GFX-195's cross-face contamination remains observable "
+                  "instead of being hidden as unsupported [contaminated texels = " +
+                  std::to_string(stale) + "]");
         else
             skip("F1b canonical: skipped -- no multisampled cube readback on this backend");
 
@@ -569,6 +583,10 @@ class RenderTargetCubeMsaaFaceTest : public Game
             check(exactFaces == 6,
                   "F4 six faces: all six faces are simultaneously live and independent [exact "
                   "faces = " + std::to_string(exactFaces) + "/6" + detail + "]");
+        else if (MsaaRequired() == Support::ReadableBoundary)
+            check(exactFaces < 6,
+                  "F4 six faces: REMED-GFX-195 remains visible across the full face set [exact "
+                  "faces = " + std::to_string(exactFaces) + "/6]");
         else
             skip("F4 six faces: skipped -- no multisampled cube readback on this backend");
     }

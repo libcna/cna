@@ -598,6 +598,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTargetCube_MsaaResolve COMMAND cna_test_bgfx_rendertargetcube_msaa
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-138: resolved/generated cube content must reach the public sampleable image in
+    # producer-consumer order, with no public frame/read/present workaround between them.
+    cna_bgfx_test(cna_test_bgfx_gfx138_rendertargetcube_finalize
+                  examples/bgfx_rendertargetcube_finalize_test.cpp)
+    cna_register_backend_test(NAME Bgfx_GFX138_RenderTargetCube_Finalize
+        COMMAND cna_test_bgfx_gfx138_rendertargetcube_finalize
+        TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 877: RenderTargetCube honors its exact requested DepthFormat -- Bgfx's first-ever
     # depth-tested RenderTargetCube face (previously no depth attachment support at all).
     cna_bgfx_test(cna_test_bgfx_rendertargetcube_depthformat

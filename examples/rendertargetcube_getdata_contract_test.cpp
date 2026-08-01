@@ -157,13 +157,11 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, Support::Exact,
                                  true, true, Support::Exact, MipTargets::Real, true, true, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
-    // `mipLevel`/`msaaReadback` Unsupported: measured, not assumed. `bgfx::blit` reports success
-    // and copies untouched memory for both a multisampled cube attachment and a cube render
-    // target's auto-regenerated mip levels on the OpenGL renderer this backend selects, so
-    // BgfxRenderTargetCubeBackend::GetData refuses them rather than returning zeros. Level 0 is
-    // exact, as is every mip of a plain BgfxTextureCubeBackend (REMED-GFX-130's own suite).
-    constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Unsupported,
-                                 true, true, Support::Unsupported, MipTargets::Real, true, true, false, false, false};
+    // REMED-GFX-138: GFX-154's ordered completion now exposes both bgfx's resolved cube level 0
+    // and every auto-generated mip before the readback blit. The combined MSAA+mip path is exact
+    // too, so both formerly Unsupported declarations are deliberately re-armed.
+    constexpr Contract kContract{"BGFX", true, Support::Exact, Support::Exact,
+                                 true, true, Support::Exact, MipTargets::Real, true, true, false, false, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // `msaaCubeTargets` false: Task 903 deliberately piggybacks a cube target's sample count on
     // the backend's own global `sampleCount_`, so a cube target multisamples only when the

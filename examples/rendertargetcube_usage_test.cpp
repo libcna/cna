@@ -152,12 +152,12 @@ namespace
     constexpr Contract kContract{"EASYGL", true, Support::Exact, true, true,
                                  true, Support::Exact, true, true, false};
 #elif defined(CNA_BACKEND_BGFX)
-    // `msaaReadback` Unsupported: bgfx::blit reports success and copies untouched memory from a
-    // multisampled cube attachment on the OpenGL renderer this backend selects, so
-    // BgfxRenderTargetCubeBackend::GetData refuses it (REMED-GFX-134/138). With no honest readback
-    // there is nothing to assert about MSAA preservation either.
+    // REMED-GFX-138: GFX-154's ordered frame completion resolves the cube attachment before the
+    // readback blit, so MSAA readback is exact. REMED-GFX-195 separately records the pre-existing
+    // PreserveContents boundary exposed by that new visibility: Bgfx reloads the other face's
+    // multisample storage after an A -> B -> A sequence. Do not broaden GFX-138 into that fix.
     constexpr Contract kContract{"BGFX", true, Support::Exact, true, true,
-                                 true, Support::Unsupported, false, true, false};
+                                 true, Support::Exact, false, true, false};
 #elif defined(CNA_BACKEND_VULKAN)
     // `msaaCubeTargets` false: a cube target multisamples only when the BACKBUFFER was created
     // multisampled (Task 903's deliberate piggyback on the backend's own sampleCount_), which this

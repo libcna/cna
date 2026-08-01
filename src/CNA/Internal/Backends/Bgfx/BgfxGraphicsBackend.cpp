@@ -1326,27 +1326,17 @@ namespace CNA::Internal::Backends::Bgfx
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         if (dataLength < w * h * 4) return false;
 
-        // REMED-GFX-134, this backend's two measured boundaries. `bgfx::blit` reports no error for
-        // either of these and simply copies untouched memory, so answering them would be exactly
-        // the fabricated transparent-black face REMED-GFX-130 removed -- one level further down.
-        //
-        //  * A MULTISAMPLED cube target: bgfx owns the multisample storage behind `cubeTex` and
-        //    exposes no resolved handle a blit can source, and there is no capability bit to ask.
-        //    Measured all-zero on the OpenGL renderer this backend selects here.
-        //  * A mip level above 0: the per-face `BGFX_RESOLVE_AUTO_GEN_MIPS` chain
-        //    `BindAsRenderTargetFace` requests is not regenerated for a cube render target on that
-        //    renderer, so those levels hold nothing that was ever rendered. Level 0 -- and every
-        //    mip of a PLAIN BgfxTextureCubeBackend, whose levels come from SetData -- is exact.
-        //
-        // Both are recorded as independent findings rather than papered over here.
-        if (multiSampleCount > 0) return false;
-        if (level > 0) return false;
+        // REMED-GFX-138: GFX-134 measured untouched data here before the ordered completion below
+        // existed. GFX-154 subsequently made that completion authoritative for every readback:
+        // ending the producer frame resolves a multisampled cube attachment and runs its
+        // per-face BGFX_RESOLVE_AUTO_GEN_MIPS before ReadTextureRegionEXT queues the blit. Direct
+        // diagnostics now prove exact resolved level 0 and exact generated levels 1..N, including
+        // the combined MSAA+mip case, so the two historical capability refusals are obsolete.
 
         // REMED-GFX-134: complete the current frame BEFORE queueing the readback blit. bgfx runs a
         // framebuffer's MSAA resolve and its BGFX_RESOLVE_AUTO_GEN_MIPS mip regeneration when it
-        // tears the framebuffer down at frame end, so a blit queued alongside this frame's draws
-        // copies pre-resolve memory -- measurably all-zero for a multisampled cube target and for
-        // every mip level above 0 -- even though it already runs on the reserved highest view id.
+        // tears the framebuffer down at frame end. A blit queued alongside this frame's draws
+        // would otherwise copy pre-resolve memory even on the reserved highest view id.
         owner_->CompleteFrameForResolveEXT();
 
         // REMED-GFX-067: a render target's colour attachment stores its texel memory BOTTOM-UP on
