@@ -73,8 +73,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers fifteen SKIA-only CTests: one window-independent raster
-   surface pixel test and fourteen display-required public tests. The raster test passes without a
+6. `cmake/Tests/SkiaTests.cmake` registers nineteen SKIA-only CTests: one window-independent raster
+   surface pixel test and eighteen display-required public tests. The raster test passes without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -92,5 +92,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
    supported SpriteBatch blend presets over a real background, including source-alpha scaling and
    saturation for additive composition. `Skia_SpriteBatch_TintAlpha` then verifies
    semi-transparent tint for both source-alpha conventions with distinct expected pixel values.
+10. `Skia_SpriteBatch_Rotation`, `Skia_SpriteBatch_Scale`,
+    `Skia_SpriteBatch_NegativeScale`, and `Skia_SpriteBatch_Effects` verify rotation around a
+    caller-origin, positive/non-uniform and negative X/Y scale, and both SpriteEffects flips.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

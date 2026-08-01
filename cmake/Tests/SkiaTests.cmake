@@ -85,6 +85,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spritebatch_tint_alpha examples/skia_spritebatch_tint_alpha_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_TintAlpha cna_test_skia_spritebatch_tint_alpha)
 
+    cna_skia_test(cna_test_skia_spritebatch_rotation examples/sdlrenderer_spritebatch_rotation_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_Rotation cna_test_skia_spritebatch_rotation)
+
+    cna_skia_test(cna_test_skia_spritebatch_scale examples/sdlrenderer_spritebatch_scale_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_Scale cna_test_skia_spritebatch_scale)
+
+    cna_skia_test(cna_test_skia_spritebatch_negative_scale examples/skia_spritebatch_negative_scale_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_NegativeScale cna_test_skia_spritebatch_negative_scale)
+
+    cna_skia_test(cna_test_skia_sprite_effects examples/sdlrenderer_sprite_effects_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteBatch_Effects cna_test_skia_sprite_effects)
+
     if(TARGET cna_demo_2d)
         cna_register_skia_display_test(Skia_Demo2D_Smoke cna_demo_2d --smoke 3)
     endif()
