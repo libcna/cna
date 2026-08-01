@@ -5,6 +5,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaStartupDiagnostic.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include <SDL3/SDL.h>
@@ -49,6 +50,11 @@ namespace CNA::Internal::Backends::Skia
         NOXNA [[nodiscard]] SkiaResourceStats GetResourceStatsEXT() const noexcept
         {
             return resourceCounters_ ? resourceCounters_->GetStats() : SkiaResourceStats{};
+        }
+        /// Returns the exact stable line emitted once after successful backend construction.
+        NOXNA [[nodiscard]] std::string_view GetStartupDiagnosticEXT() const noexcept
+        {
+            return kSkiaStartupDiagnostic;
         }
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;

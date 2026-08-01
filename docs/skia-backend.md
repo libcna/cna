@@ -39,6 +39,14 @@ cmake --build build-skia --parallel 2
 
 `cmake/ThirdPartySkia.cmake` exports `CNA::Skia`, including the header root, all six static archives in a linker group, threads, and `dl` where needed. It is intentionally limited to the tested GNU/Clang ELF raster configuration until platform-specific adapters are added.
 
+## Startup capability diagnostic
+
+After successful construction, the backend emits one stable capability line. It contains the
+pinned Skia revision, `surface=raster`, `colour=RGBA_8888/premultiplied`, `samples=0`, and
+`anisotropic filtering=unsupported`. The line has no private pointer/device values and is not
+repeated per frame. It describes only the selected raster mode; a future accelerated mode must
+replace these fields with its probed device results rather than inheriting them.
+
 ## Diagnostic state trace
 
 Set `CNA_SKIA_STATE_TRACE=1` when launching a Skia executable to emit backend-only state lines
@@ -322,5 +330,9 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     reports exactly one `DeviceResetting`/`DeviceReset` pair without `DeviceLost`, preserves the
     bounded resource counters, and proves target readback, texture draw, target sampling, and
     presentation remain exact afterward.
+50. `Skia_StartupDiagnostic_Raster` verifies the immutable startup report contains the pinned
+    revision, raster surface mode, exact RGBA/premultiplied storage, zero samples, and unsupported
+    anisotropy. It also enforces one-line static storage with no pointer-shaped value; a real Xvfb
+    backend run emits that line once at construction.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

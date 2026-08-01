@@ -10,6 +10,7 @@
 #include "include/effects/SkRuntimeEffect.h"
 
 #include <algorithm>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -117,6 +118,7 @@ namespace CNA::Internal::Backends::Skia
         SetSwapInterval(swapInterval);
         RecreateBackbuffer(virtualWidth, virtualHeight);
         IGraphicsBackend::RegisterForWindow(window_, this);
+        std::cout << kSkiaStartupDiagnostic << std::endl;
     }
 
     SkiaGraphicsBackend::~SkiaGraphicsBackend()

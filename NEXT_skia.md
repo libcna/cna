@@ -17,9 +17,9 @@
 - The raster backbuffer, SDL presentation, `Texture2D`, `SpriteBatch`, SpriteFont atlas path,
   scissor/viewport, point/linear Clamp/Wrap/Mirror sampling, the four standard blend presets,
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
-- Recent relevant pushed commits include `f18aaf07` (bounded target snapshot cache) and
-  `cbded7d7` (shared RenderTarget2D golden across Skia, EasyGL, and SDL_Renderer).
-- `docs/skia-backend.md` records 72 Skia CTests: six raster-only and 66 display-required tests.
+- Recent relevant pushed commits include `cbded7d7` (shared RenderTarget2D golden across Skia,
+  EasyGL, and SDL_Renderer) and `d26920f5` (raster presenter recovery).
+- `docs/skia-backend.md` records 73 Skia CTests: seven raster-only and 66 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -181,6 +181,16 @@
   resource counters; then verifies target readback, texture drawing, target sampling, and actual
   presentation. This closes the remaining recovery portion of SKIA-16, SKIA-28, and SKIA-65.
 
+## Completed in this session: SKIA-17
+
+- Added an immutable startup capability line with the pinned Skia revision, selected raster mode,
+  exact `RGBA_8888/premultiplied` storage, zero samples, and unsupported anisotropic filtering.
+  The backend emits it once, only after successful construction and window-registry registration.
+- Added the display-free `Skia_StartupDiagnostic_Raster` test. Its six checks verify every field,
+  the one-line/no-pointer-value policy, and stable static storage; the normal and ASan/LSan builds
+  pass. A real Xvfb backend run prints exactly the expected single line and retains all 13 context-
+  recovery assertions.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -231,6 +241,11 @@
   AddressSanitizer builds (`detect_leaks=0`). Following its presenter-recreation change,
   `Skia_Resize_Presentation` (16 checks), `Skia_ResourceBudget` (9 checks), and
   `Skia_RenderTarget2D_Golden` (16/16 target plus 64/64 sampled pixels) also pass under Xvfb.
+- SKIA-17: `Skia_StartupDiagnostic_Raster` passes 6/6 normally and under ASan/LSan with
+  `detect_leaks=1`. LeakSanitizer requires execution outside the workspace ptrace sandbox; the
+  first sandboxed launch stopped before the test with LSan's explicit ptrace diagnostic, while
+  the unrestricted rerun completed cleanly. `Skia_ContextRecovery` confirms the line is emitted
+  once during a real Xvfb backend startup.
 
 ## Current task
 
