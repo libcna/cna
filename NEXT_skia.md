@@ -20,7 +20,7 @@
 - The most recent pushed commits are `50670060` (detach a destroyed bound render target),
   `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
   `SetData`).
-- `docs/skia-backend.md` records 68 Skia CTests: six raster-only and 62 display-required tests.
+- `docs/skia-backend.md` records 69 Skia CTests: six raster-only and 63 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -131,6 +131,17 @@
   It verifies the stored presentation contract and continued rendering, deliberately not assuming
   that Xvfb implements the physical fullscreen window transition.
 
+## Completed in this session: SKIA-72
+
+- Fixed Skia's direct window/logical transform fallback: it had divided SDL window-space points by
+  the physical renderer output size, which mis-scaled coordinates on HiDPI displays and omitted
+  Letterbox/Overscan offsets. It now delegates to `SDL_RenderCoordinatesFromWindow` and
+  `SDL_RenderCoordinatesToWindow`, the same renderer mapping that input and mouse-warp use.
+- Added `Skia_DisplayScale`: a 40×30 logical Letterbox surface in a 120×60 window validates the
+  20-pixel offset in both directions, keeps `GetBackBufferData` in logical pixels, and reports
+  actual output/window scale. Xvfb reports 1×; the test's conversion checks use SDL's shared
+  DPI-aware path on hardware displays too.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -166,19 +177,22 @@
   expected for the test's registered display requirement; the Xvfb invocation is the valid check.
 - SKIA-71 debug/ASan: `Skia_Resize_Presentation` passes all 16 checks under Xvfb in normal and
   AddressSanitizer builds (`detect_leaks=0` only for the known process-exit display-stack residual).
+- SKIA-72 debug/ASan: `Skia_DisplayScale` passes all 10 checks under Xvfb in normal and
+  AddressSanitizer builds; its diagnostic records `logical=40x30`, `window=120x60`, and 1× output
+  scale in this virtual display.
 
 ## Current task
 
-Reassess the next incomplete 2D task after SKIA-71. Blend, write-mask, target-mipmap disposition,
-resize/presentation, and raster state work are bounded and documented; choose the next plan row
-with an independently testable public contract.
+Reassess the next incomplete 2D task after SKIA-72. Blend, write-mask, target-mipmap disposition,
+resize/presentation, display scaling, and raster state work are bounded and documented; choose the
+next plan row with an independently testable public contract.
 
 ## Next candidates
 
-1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely the
-   display-scale diagnostic (SKIA-72) or bounded target/snapshot cache work (SKIA-74).
-2. SKIA-72: display-scale regression with live presentation/readback coordinates; SKIA-74: inspect
-   current snapshot/resource ownership before introducing any cache policy.
+1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely bounded
+   target/snapshot cache work (SKIA-74) or RenderTarget2D parity goldens (SKIA-75).
+2. SKIA-74: inspect current snapshot/resource ownership before introducing any cache policy; SKIA-75:
+   compare stable target/readback cases against EasyGL and SDL_Renderer without claiming GPU parity.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to
    SKIA-16/SKIA-28 and is not yet implemented.
 

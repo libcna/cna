@@ -214,25 +214,18 @@ namespace CNA::Internal::Backends::Skia
     bool SkiaGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
                                                         float& logX, float& logY) const
     {
-        int outputWidth = 0;
-        int outputHeight = 0;
-        SDL_GetRenderOutputSize(renderer_, &outputWidth, &outputHeight);
-        if (outputWidth <= 0 || outputHeight <= 0) return false;
-        logX = windowX * static_cast<float>(LogicalWidth()) / outputWidth;
-        logY = windowY * static_cast<float>(LogicalHeight()) / outputHeight;
-        return true;
+        // Window coordinates are SDL window-space points, whereas GetRenderOutputSize() reports
+        // physical renderer pixels. Scaling against the latter halves a coordinate on a 2x HiDPI
+        // display and also loses Letterbox/Overscan offsets. SDL owns both conversions for its
+        // active logical-presentation mode, so use the exact same offset- and DPI-aware mapping
+        // as the input bridge and Mouse::SetPosition path.
+        return renderer_ && SDL_RenderCoordinatesFromWindow(renderer_, windowX, windowY, &logX, &logY);
     }
 
     bool SkiaGraphicsBackend::TransformLogicalToWindow(float logX, float logY,
                                                         float& windowX, float& windowY) const
     {
-        int outputWidth = 0;
-        int outputHeight = 0;
-        SDL_GetRenderOutputSize(renderer_, &outputWidth, &outputHeight);
-        if (outputWidth <= 0 || outputHeight <= 0) return false;
-        windowX = logX * static_cast<float>(outputWidth) / LogicalWidth();
-        windowY = logY * static_cast<float>(outputHeight) / LogicalHeight();
-        return true;
+        return renderer_ && SDL_RenderCoordinatesToWindow(renderer_, logX, logY, &windowX, &windowY);
     }
 
     std::unique_ptr<ITextureBackend> SkiaGraphicsBackend::CreateTexture(const ImageData& data)

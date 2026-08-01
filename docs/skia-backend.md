@@ -294,5 +294,11 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     device-reset pairs, old/new presentation dimensions, retained target readback, new-backbuffer
     sampling, and continued SpriteBatch output. Fullscreen asserts the stored public parameter;
     Xvfb is not required to support a physical fullscreen mode switch.
+46. `Skia_DisplayScale` separates the 40×30 logical Skia raster from a 120×60 letterboxed SDL
+    window, records the actual renderer-output/window ratio, and verifies the 20-pixel letterbox
+    offset in both coordinate directions. `GetBackBufferData` still reads logical-raster pixels;
+    coordinate conversion delegates to SDL's DPI- and offset-aware renderer APIs rather than
+    manually mixing output pixels with window points. The Xvfb validation ratio is 1×; a real
+    high-DPI display follows the same SDL conversion path.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

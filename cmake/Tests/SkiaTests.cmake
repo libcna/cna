@@ -250,6 +250,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_resize_presentation examples/skia_resize_presentation_test.cpp)
     cna_register_skia_display_test(Skia_Resize_Presentation cna_test_skia_resize_presentation)
 
+    cna_skia_test(cna_test_skia_display_scale examples/skia_display_scale_test.cpp)
+    target_include_directories(cna_test_skia_display_scale PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_DisplayScale cna_test_skia_display_scale)
+
     cna_skia_test(cna_test_skia_presentation_edge examples/skia_presentation_edge_test.cpp)
     cna_register_skia_display_test(Skia_Presentation_Edge cna_test_skia_presentation_edge)
 
