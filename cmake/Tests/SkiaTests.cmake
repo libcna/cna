@@ -51,6 +51,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_texture2d_getdata_transfer_range examples/texture2d_getdata_transfer_range_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_GetDataTransferRange cna_test_skia_texture2d_getdata_transfer_range)
 
+    cna_skia_test(cna_test_skia_texture_constraints examples/skia_texture_constraints_test.cpp)
+    cna_register_skia_display_test(Skia_Texture2D_Constraints cna_test_skia_texture_constraints)
+
+    # Pixel-level sampling companion to the CPU readback cases above: two odd NPOT dimensions,
+    # source-row selection, PointClamp, and backbuffer readback all pass through the public API.
+    cna_skia_test(cna_test_skia_npot_texture examples/sdlrenderer_npot_texture_test.cpp)
+    cna_register_skia_display_test(Skia_Texture2D_NpotSampling cna_test_skia_npot_texture)
+
     if(TARGET cna_demo_2d)
         cna_register_skia_display_test(Skia_Demo2D_Smoke cna_demo_2d --smoke 3)
     endif()

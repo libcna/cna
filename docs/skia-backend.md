@@ -56,6 +56,12 @@ integer unpremultiplication rounding for semi-transparent texels. The raster tes
 boundary explicitly; future code must not describe it as a byte-exact straight-alpha surface
 round trip.
 
+The current public texture-format policy is intentionally the existing CNA-wide policy:
+`SurfaceFormat::Color` is the only accepted format. Every other `SurfaceFormat` value is rejected
+by shared validation before a Skia allocation is attempted. Raster textures accept one-pixel and
+NPOT dimensions, report the shared 16384 maximum single axis, and reject a dimension above that
+limit before allocation. Mipmapped texture construction is also rejected before data is accepted.
+
 ## Verification recorded for the initial slice
 
 1. A standalone C++23 smoke target created a raster `SkSurface`, cleared it, read a pixel, and linked the six archives above.
@@ -69,5 +75,9 @@ round trip.
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
    three frames in Xvfb.
+7. `Skia_Texture2D_Constraints` verifies the successful `Color` path, all 26 unsupported
+   `SurfaceFormat` values, 1×1 and 3×5 uploads, a large valid single axis, zero dimensions, and
+   the precise above-limit rejection. `Skia_Texture2D_NpotSampling` then samples both 3×5 and
+   7×11 textures and reads each distinct source row back from the rendered frame.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
