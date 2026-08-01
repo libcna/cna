@@ -141,6 +141,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spritebatch_sampler_transition examples/skia_spritebatch_sampler_transition_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_SamplerTransition cna_test_skia_spritebatch_sampler_transition)
 
+    cna_skia_test(cna_test_skia_texture_address_axes examples/skia_texture_address_axes_test.cpp)
+    cna_register_skia_display_test(Skia_TextureAddressAxes cna_test_skia_texture_address_axes)
+
     cna_skia_test(cna_test_skia_spritefont_single_glyph examples/sdlrenderer_spritefont_single_glyph_test.cpp)
     cna_register_skia_display_test(Skia_SpriteFont_SingleGlyph cna_test_skia_spritefont_single_glyph)
 

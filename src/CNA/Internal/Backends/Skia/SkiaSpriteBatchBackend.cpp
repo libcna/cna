@@ -11,6 +11,7 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkSamplingOptions.h"
+#include "include/core/SkShader.h"
 #include "include/effects/SkRuntimeEffect.h"
 
 #include <algorithm>
@@ -38,6 +39,17 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] bool IsFlipped(SpriteEffects effects, SpriteEffects flag)
         {
             return (static_cast<int>(effects) & static_cast<int>(flag)) != 0;
+        }
+
+        [[nodiscard]] SkTileMode ToTileMode(int textureAddressMode)
+        {
+            switch (textureAddressMode)
+            {
+                case 0: return SkTileMode::kRepeat; // TextureAddressMode::Wrap
+                case 1: return SkTileMode::kClamp;  // TextureAddressMode::Clamp
+                case 2: return SkTileMode::kMirror; // TextureAddressMode::Mirror
+                default: throw std::runtime_error("Skia SpriteBatch received an invalid texture address mode.");
+            }
         }
 
         [[nodiscard]] SkMatrix ToSkMatrix(const Matrix& matrix)
@@ -128,11 +140,11 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
     {
-        // SkCanvas's source-rectangle drawing is a direct clamp operation. Tile-mode shaders are
-        // the next implementation step; accepting Wrap/Mirror here would make their semantics
-        // silently disappear for out-of-bounds source rectangles.
-        if (addressU != 1 || addressV != 1)
-            throw std::runtime_error("Skia raster SpriteBatch currently supports only Clamp texture addressing.");
+        // Validate up front because the address modes are carried as raw enum ordinals across the
+        // shared backend seam. A shader is selected lazily by Draw only when its tiled path is
+        // needed, so ordinary in-bounds Clamp sprites retain Skia's stricter source-rect path.
+        (void)ToTileMode(addressU);
+        (void)ToTileMode(addressV);
         addressU_ = addressU;
         addressV_ = addressV;
     }
@@ -172,12 +184,9 @@ namespace CNA::Internal::Backends::Skia
             : nullptr;
         if (!image)
             throw std::runtime_error("Skia SpriteBatch can only draw Skia Texture2D or RenderTarget2D resources.");
-        if (sourceRectangle.X < 0 || sourceRectangle.Y < 0
-            || sourceRectangle.X > texture.GetWidth() - sourceRectangle.Width
-            || sourceRectangle.Y > texture.GetHeight() - sourceRectangle.Height)
-        {
-            throw std::runtime_error("Skia SpriteBatch source rectangle is outside the texture while Clamp addressing is active.");
-        }
+        const bool sourceInBounds = sourceRectangle.X >= 0 && sourceRectangle.Y >= 0
+            && sourceRectangle.X <= texture.GetWidth() - sourceRectangle.Width
+            && sourceRectangle.Y <= texture.GetHeight() - sourceRectangle.Height;
 
         (void)layerDepth; // Shared SpriteBatch ordering determines call order before this backend is invoked.
         SkCanvas* canvas = activeSurface_ && *activeSurface_ ? (*activeSurface_)->Canvas() : nullptr;
@@ -245,7 +254,28 @@ namespace CNA::Internal::Backends::Skia
                                                 static_cast<float>(sourceRectangle.Y),
                                                 sourceWidth, sourceHeight);
         const SkRect destination = SkRect::MakeXYWH(-origin.X, -origin.Y, sourceWidth, sourceHeight);
-        canvas->drawImageRect(image.get(), source, destination, ToSampling(textureFilter_),
-                              &paint, SkCanvas::kStrict_SrcRectConstraint);
+        const SkSamplingOptions sampling = ToSampling(textureFilter_);
+        if (sourceInBounds && addressU_ == 1 && addressV_ == 1)
+        {
+            // Strict source clipping is more precise than a clamp shader for atlas sub-rectangles:
+            // with Linear filtering it prevents neighbouring texels from bleeding into the crop.
+            canvas->drawImageRect(image.get(), source, destination, sampling,
+                                  &paint, SkCanvas::kStrict_SrcRectConstraint);
+            return;
+        }
+
+        // Image shaders expose Skia's independent X/Y repeat and mirror tile modes. The shader's
+        // local matrix maps the sprite's unscaled source-pixel space to the full texture; Skia
+        // applies its inverse while evaluating a canvas point, hence the negative offset. This
+        // lets source rectangles legitimately extend before or past the image bounds, just like
+        // XNA SpriteBatch UVs, while the destination rect still bounds the painted geometry.
+        const SkMatrix shaderMatrix = SkMatrix::Translate(-static_cast<float>(sourceRectangle.X) - origin.X,
+                                                           -static_cast<float>(sourceRectangle.Y) - origin.Y);
+        const sk_sp<SkShader> shader = image->makeShader(ToTileMode(addressU_), ToTileMode(addressV_),
+                                                          sampling, shaderMatrix);
+        if (!shader)
+            throw std::runtime_error("Skia failed to create the SpriteBatch image shader.");
+        paint.setShader(shader);
+        canvas->drawRect(destination, paint);
     }
 } // namespace CNA::Internal::Backends::Skia
