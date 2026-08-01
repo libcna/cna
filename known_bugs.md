@@ -229,3 +229,43 @@ the divergence down to the final `mix()` call.
 **Tracked as:** `plan_llgl.md` task `LLGL-25 (EnvironmentMapEffect)`.
 
 ---
+
+## LLGL backend: drawing into a real MSAA `RenderTarget2D` produced zero antialiasing — FIXED 2026-08-01
+
+**Symptom:** requesting a genuine `MultiSampleCount` for a `RenderTarget2D` and drawing a diagonal
+edge into it produced a hard, unblended step at the edge — identical to a non-multisampled render
+target — even though `RenderTarget2D.MultiSampleCount`/`GetMultiSampleCount()` correctly reported a
+real, backend-applied sample count greater than 1. No crash, no validation error, no exception —
+just no actual antialiasing.
+
+**Cause:** every graphics pipeline this backend builds (3D primitives, `SpriteBatch`, custom
+`ShaderEffect`s) hardcoded `pipelineDesc.rasterizer.multiSampleEnabled = (swapChain_->GetSamples() >
+1)` and, for 3D primitives, `pipelineDesc.renderPass = swapChain_->GetRenderPass()` — both keyed off
+the SWAP CHAIN's own sample count/render pass regardless of what target was actually bound at draw
+time. This was invisible before real per-render-target MSAA existed, since every render target was
+previously single-sample, matching the swap chain's own usual default (0/no MSAA), so the two never
+disagreed. Once `CreateRenderTarget2D` could apply a real sample count higher than the swap chain's,
+a pipeline built with `multiSampleEnabled=false` was drawn into a genuinely multisampled framebuffer.
+LLGL's Vulkan module (lavapipe, a software rasterizer, on this project's own test environment)
+accepted this silently instead of raising a validation error, rasterizing single-sample coverage
+into every sample of the MS image — the resolve step then averaged identical values back down,
+producing a hard edge with no blend, the exact symptom observed.
+
+**Fix:** two new accessors mirror the already-existing `GetPrimaryRenderPassEXT()`/
+`GetActiveColorAttachmentCountEXT()` "ask the currently bound target, not the swap chain" pattern:
+`LlglBoundRenderTarget::GetSampleCount()` (1/no-MSAA by default; overridden by
+`LlglRenderTargetBackend` to return its own real, device-clamped sample count; MRT binds and
+`RenderTargetCube` faces do not support MSAA yet, so their default of 1 is correct) and
+`LlglGraphicsBackend::GetPrimarySampleCountEXT()` (the bound target's own sample count, or the swap
+chain's when nothing is bound). Every `multiSampleEnabled`/`renderPass` assignment across
+`AcquirePrimitivePipeline` and the shared `FillCurrentBlendAndRasterStateEXT` (used by both the
+sprite pipeline and every custom `ShaderEffect` pipeline) now calls these instead of reading the
+swap chain directly, and `MakeBlendPipelineKey` folds the sample count into its cache key so a
+pipeline built for one sample count is never handed back for a draw that needs another. Diagnosed
+by adding a temporary debug printf of the raw scanned edge-pixel values before and after the fix
+(confirmed the same hard 255→0 step with `appliedSampleCount=4` before the fix, and a genuine
+mid-tone blended pixel at the same scan position after it) rather than guessing at the cause.
+
+**Tracked as:** `plan_llgl.md` task `LLGL-26` (MSAA render targets follow-up).
+
+---

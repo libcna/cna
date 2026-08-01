@@ -166,13 +166,25 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # LLGL-25 follow-up: PbrEffect -- adapted from the Vulkan backend's own
+    # LLGL-25 follow-up: PbrEffect + SkinnedPbrEffect -- adapted (Check (d) ported back once
+    # SkinnedPbrEffect itself landed) from the Vulkan backend's own
     # examples/vulkan_pbreffect_handderived_test.cpp (itself fully backend-agnostic real public XNA
-    # API + VertexBuffer::SetDataRaw), dropping its SkinnedPbrEffect check (a separate, not-yet-
-    # implemented follow-up on this backend). Plain VertexPositionNormalTangentTexture (stride 48)
-    # works on both modules, so this gets an _OpenGL variant below too.
+    # API + VertexBuffer::SetDataRaw). Plain VertexPositionNormalTangentTexture (stride 48)/
+    # VertexPositionNormalTangentTextureSkinned (stride 68) both work on both modules, so this gets
+    # an _OpenGL variant below too.
     cna_llgl_test(cna_test_llgl_pbreffect_handderived examples/llgl_pbreffect_handderived_test.cpp)
     cna_register_backend_test(NAME Llgl_PbrEffect_HandDerived COMMAND cna_test_llgl_pbreffect_handderived
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # LLGL-26 MSAA follow-up: real multisampling into a RenderTarget2D's own colour attachment,
+    # resolved automatically by LLGL at the end of each render pass this backend replays. Mirrors
+    # llgl_msaa_test.cpp's own diagonal-hypotenuse antialiasing technique. Plain RenderTarget2D
+    # works on both modules, so this gets an _OpenGL variant below too -- whether either module
+    # actually applies MultiSampleCount to it is a separate, module-dependent question the test
+    # itself gates on (see its own header comment).
+    cna_llgl_test(cna_test_llgl_msaa_rendertarget examples/llgl_msaa_rendertarget_test.cpp)
+    cna_register_backend_test(NAME Llgl_Msaa_RenderTarget COMMAND cna_test_llgl_msaa_rendertarget
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -244,6 +256,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_backend_test(NAME Llgl_PbrEffect_HandDerived_OpenGL COMMAND cna_test_llgl_pbreffect_handderived
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_Msaa_RenderTarget_OpenGL COMMAND cna_test_llgl_msaa_rendertarget
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 endif()

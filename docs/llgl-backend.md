@@ -56,9 +56,13 @@ module**:
   pipeline layout;
 * **`SkinnedPbrEffect`**: `PbrEffect`'s glTF BRDF over a GPU-skinned mesh, reusing `PbrEffect`'s
   own fragment shader verbatim (skinning is a vertex-stage-only concern) plus a new dedicated
-  vertex shader and pipeline layout. See "PbrEffect" below.
+  vertex shader and pipeline layout. See "PbrEffect" below;
+* **MSAA render targets**: `RenderTarget2D`'s own `MultiSampleCount`, resolved into the target's
+  colour texture before it is sampled or read back — unlike back-buffer MSAA, honoured on BOTH
+  modules on this environment (a render target's sample count is read at its own construction, not
+  gated by swap-chain construction timing). See "Render targets" below.
 
-**Not implemented:** MSAA/mip-mapped render targets. Each either reports itself unsupported
+**Not implemented:** mip-mapped render targets. Each either reports itself unsupported
 through `GraphicsDevice.SupportsCapability()` or throws — none of them silently does nothing.
 
 Both modules are covered by their own CTests, so neither can break unnoticed because the default
@@ -205,8 +209,32 @@ shared colour texture. A new `LlglBoundRenderTarget` common interface lets the b
 currently bound" state point at either a plain `RenderTarget2D`, one cube face, or (see below) an
 MRT bind, without any of the queue/replay code needing to know which -- the per-distinct-target
 render-pass grouping described below already keys purely off `LLGL::RenderTarget*` pointer
-identity, so this generalizes with no changes needed there. MSAA/mip-mapped render targets are not
-implemented and fail by name.
+identity, so this generalizes with no changes needed there. Mip-mapped render targets are not
+implemented; a `mipMap=true` `RenderTarget2D` is silently created with a single level, the same
+documented scope boundary `preserveContents` already has.
+
+**`RenderTarget2D` `MultiSampleCount` is real.** `CreateRenderTarget2D`'s colour attachment uses
+LLGL's anonymous (textureless) multisampled attachment pattern when `multiSampleCount > 1`: the
+`RenderTargetDescriptor`'s `colorAttachments[0]` is left format-only (`texture == nullptr`) with
+`samples` set to the request, and `resolveAttachments[0]` names the target's own real, sampleable
+colour texture -- LLGL allocates and owns the internal MSAA buffer, resolving into the named
+texture automatically at the end of each render pass. The applied count is read back from
+`renderTarget->GetSamples()` after creation (a request LLGL cannot honour is silently reduced, not
+rejected) and exposed through `RenderTarget2D.MultiSampleCount`/`GetMultiSampleCount()`, matching
+this backend's own back-buffer convention (0 = no MSAA, even though 1 is the internally stored "no
+MSAA" sentinel). Every pipeline drawn against the currently bound target -- 3D, `SpriteBatch`, and
+custom `ShaderEffect`s alike -- is now built with a `rasterizer.multiSampleEnabled`/render-pass
+sample count that matches whatever is ACTUALLY bound (`LlglGraphicsBackend::GetPrimarySampleCountEXT()`),
+not the swap chain's own, and the pipeline cache key folds the sample count in so a pipeline built
+for one sample count is never reused for another -- see `Llgl_Msaa_RenderTarget`'s own CTest entry
+below for the real bug this closed. Unlike the back buffer (`MultiSampleCount` is only ever
+honoured at swap-chain/`GraphicsDevice` CONSTRUCTION time), a `RenderTarget2D`'s own sample count is
+read at ITS OWN construction, so it works through the ordinary `Game` + `new RenderTarget2D(...)`
+flow with no raw-`GraphicsDevice`-construction workaround needed, and — a genuine, positive
+difference from back-buffer MSAA — is honoured on BOTH modules on this project's own test
+environment, not gated behind the same Vulkan-only limitation `Llgl_Msaa` documents for the swap
+chain. MRT binds and `RenderTargetCube` faces do not support MSAA yet (`LlglBoundRenderTarget::GetSampleCount()`
+defaults to 1/no-MSAA for both).
 
 Two implementation choices are worth knowing if you are debugging a render-target frame:
 
@@ -561,8 +589,13 @@ values at a fully dot-product-aligned pixel -- full dielectric, fully metallic, 
 proving `MetallicFactor` genuinely changes the result, and a `SkinnedPbrEffect` identity-bone check
 reproducing the same BRDF value through a GPU-skinned mesh; like `Llgl_MRT`, plain
 `VertexPositionNormalTangentTexture` (stride 48) works on both modules, so it has an `_OpenGL` twin.
+`Llgl_Msaa_RenderTarget` covers the same genuinely-antialiased-diagonal-edge technique as `Llgl_Msaa`,
+but against an off-screen `RenderTarget2D` instead of the back buffer -- a single ordinary
+`PixelTestGame` device suffices (no raw-`GraphicsDevice`-construction workaround needed, since a
+render target's own `MultiSampleCount` is read at its own construction), and unlike `Llgl_Msaa` the
+blended-edge check is not module-dependent here: it genuinely passes on both modules.
 Every other test is registered a second time pinned to the OpenGL
-module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All forty
+module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED
 rather than FAILED. On a headless machine a virtual display works:
 
@@ -578,7 +611,7 @@ ctest --test-dir cmake-build-llgl -R Llgl --output-on-failure   # configure with
 | Capability | Supported | Why |
 | --- | --- | --- |
 | `DepthStencilBuffer` | yes | The swap chain really has both attachments and all seven clear paths work. |
-| `MultiSampleAntiAliasing` | module-dependent | `MultiSampleCount` is honoured only at swap-chain CONSTRUCTION time (no way to enable it after the fact via `GraphicsDeviceManager.ApplyChanges()` — a `Game`'s eagerly-constructed device is always built with `MultiSampleCount=0`). On this project's own test environment the Vulkan module (lavapipe) applies it and produces a genuinely antialiased edge; the OpenGL module (llvmpipe/GLX) does not apply it at any sample count. Pixel-verified, including the module-dependent behaviour itself, by `Llgl_Msaa` (`LLGL-23`). |
+| `MultiSampleAntiAliasing` | module-dependent | `MultiSampleCount` is honoured only at swap-chain CONSTRUCTION time (no way to enable it after the fact via `GraphicsDeviceManager.ApplyChanges()` — a `Game`'s eagerly-constructed device is always built with `MultiSampleCount=0`). On this project's own test environment the Vulkan module (lavapipe) applies it and produces a genuinely antialiased edge; the OpenGL module (llvmpipe/GLX) does not apply it at any sample count. Pixel-verified, including the module-dependent behaviour itself, by `Llgl_Msaa` (`LLGL-23`). This row is about the BACK BUFFER only — `RenderTarget2D.MultiSampleCount` is a separate, unconditionally-real capability on both modules; see "Render targets" above and `Llgl_Msaa_RenderTarget`. |
 | `AnisotropicFiltering` | device-dependent | From LLGL's reported `limits.maxAnisotropy`. |
 | `ThreeD` | yes | Draws with depth, cull and fill state, one texture, fog, the alpha test, and per-pixel lighting (textured or untextured-with-vertex-colours); the remaining stock effects are not implemented. |
 | `WireFrame` | module-dependent | Real on the OpenGL module; the Vulkan module cannot, and refuses rather than drawing an empty frame. |

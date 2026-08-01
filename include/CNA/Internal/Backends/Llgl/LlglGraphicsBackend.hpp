@@ -387,6 +387,13 @@ namespace CNA::Internal::Backends::Llgl
          *  `LlglMRTBinding`). Pipeline creation needs this to build a matching `LLGL::RenderPass`
          *  and the right number of `blend.targets[]` entries. */
         [[nodiscard]] virtual int GetColorAttachmentCount() const { return 1; }
+        /** @brief Returns the real, device-clamped MSAA sample count this target's own render pass
+         *  was built with (1 = no MSAA). A pipeline drawn against this target must be built with a
+         *  matching `rasterizer.multiSampleEnabled`/sample count, or a software Vulkan module can
+         *  silently rasterize single-sample into a multisampled framebuffer instead of erroring --
+         *  see `LlglGraphicsBackend::GetPrimarySampleCountEXT()`. Cube faces and MRT binds do not
+         *  support MSAA yet, so the default of 1 (no MSAA) is correct for both without an override. */
+        [[nodiscard]] virtual int GetSampleCount() const { return 1; }
     };
 
     /**
@@ -428,11 +435,18 @@ namespace CNA::Internal::Backends::Llgl
          *        a `RenderTarget2D` that goes out of scope before `Present()` (a perfectly normal
          *        pattern: create it, draw into it, sample it, let it die, all within one `Draw()`)
          *        must not free a resource `frameCommands_` still points at.
+         * @param multiSampleCount The REAL, device-clamped sample count this target's own
+         *        `LLGL::RenderTarget` was actually created with (`renderTarget->GetSamples()`),
+         *        not the raw constructor request -- matches `IRenderTargetBackend::
+         *        GetMultiSampleCount()`'s own documented FNA-parity semantics. 1 (not 0) means no
+         *        MSAA; `GetMultiSampleCountProperty()` reports 0 in that case (see this class's
+         *        own `GetMultiSampleCount()` override).
          */
         LlglRenderTargetBackend(LLGL::RenderSystem* renderSystem, LLGL::RenderTarget* renderTarget,
                                 LLGL::Texture* colorTexture, LLGL::Texture* depthTexture,
                                 int width, int height, bool hasRealDepthBuffer,
-                                LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner);
+                                LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner,
+                                int multiSampleCount = 1);
 
         /** @brief Releases the render target and its textures. */
         ~LlglRenderTargetBackend() override;
@@ -485,6 +499,18 @@ namespace CNA::Internal::Backends::Llgl
         /** @brief Returns this target's own fixed pixel-to-clip-space sprite projection buffer. */
         [[nodiscard]] LLGL::Buffer* GetSpriteProjectionBuffer() const override { return spriteProjectionBuffer_; }
 
+        /** @brief Returns the real, device-clamped MSAA sample count (0 = none), matching
+         *  `RenderTarget2D.MultiSampleCount`'s own FNA-parity semantics -- see this class's own
+         *  constructor doc comment for why the stored value is 1, not 0, for "no MSAA". */
+        [[nodiscard]] int GetMultiSampleCount() const override
+        {
+            return multiSampleCount_ > 1 ? multiSampleCount_ : 0;
+        }
+
+        /** @brief Returns the real, device-clamped sample count this target's `LLGL::RenderTarget`
+         *  was actually built with (1 = no MSAA) -- see `LlglBoundRenderTarget::GetSampleCount()`. */
+        [[nodiscard]] int GetSampleCount() const override { return multiSampleCount_; }
+
     private:
         LLGL::RenderSystem* renderSystem_       = nullptr;
         LLGL::RenderTarget* renderTarget_        = nullptr;
@@ -495,6 +521,7 @@ namespace CNA::Internal::Backends::Llgl
         bool                hasRealDepthBuffer_  = false;
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
         LlglGraphicsBackend* owner_               = nullptr;
+        int                 multiSampleCount_    = 1;
     };
 
     /**
@@ -1211,15 +1238,24 @@ namespace CNA::Internal::Backends::Llgl
         /**
          * @brief Creates an off-screen `RenderTarget2D`.
          *
-         * Scoped to a single colour attachment (LLGL-26): `RenderTargetCube`, multiple render
-         * targets and multisampling are not implemented here yet. The colour attachment always
-         * takes the swap chain's own colour format, and a depth/stencil attachment matching the
-         * swap chain's own depth/stencil format is always allocated regardless of @p depthFormat --
-         * every cached sprite/primitive pipeline was built against the swap chain's render pass, and
-         * Vulkan's render-pass-compatibility rule requires a matching attachment signature to reuse
-         * a `LLGL::PipelineState` across render passes. Requesting `DepthFormat::None` therefore
-         * still allocates the buffer; it only changes whether the game's own depth-stencil state
-         * ends up testing or writing to it.
+         * The colour attachment always takes the swap chain's own colour format, and a
+         * depth/stencil attachment matching the swap chain's own depth/stencil format is always
+         * allocated regardless of @p depthFormat -- every cached sprite/primitive pipeline was
+         * built against the swap chain's render pass, and Vulkan's render-pass-compatibility rule
+         * requires a matching attachment signature to reuse a `LLGL::PipelineState` across render
+         * passes. Requesting `DepthFormat::None` therefore still allocates the buffer; it only
+         * changes whether the game's own depth-stencil state ends up testing or writing to it.
+         *
+         * @p multiSampleCount is real (LLGL-26 MSAA follow-up): when greater than 1, the colour
+         * attachment becomes an anonymous, LLGL-owned multisampled buffer, resolved automatically
+         * into the returned backend's own single-sample colour texture (what `SpriteBatch`
+         * sampling/`GetData()` read) at the end of every render pass this backend replays. The
+         * REAL, device-clamped sample count actually applied (LLGL "silently reduces" an
+         * unsupported request rather than failing) is reported back through the returned backend's
+         * own `GetMultiSampleCount()`, matching `RenderTarget2D.MultiSampleCount`'s own FNA-parity
+         * semantics -- mirrors the back buffer's own already-established, module-dependent MSAA
+         * reality (`LLGL-23`): whether a request actually widens the sample count at all depends on
+         * which renderer module is loaded.
          *
          * @param w                Width in pixels.
          * @param h                Height in pixels.
@@ -1228,7 +1264,8 @@ namespace CNA::Internal::Backends::Llgl
          * @param preserveContents Ignored in this first cut -- see this backend's render-pass
          *                         grouping note on `FrameCommandBucket`.
          * @param mipMap           Ignored; not yet implemented.
-         * @param multiSampleCount Ignored; not yet implemented.
+         * @param multiSampleCount Requested MSAA sample count; 0/1 means none. See this method's
+         *                         own doc comment above for how the applied count is reported back.
          * @return The new render target backend.
          * @throws std::runtime_error If @p w or @p h is not positive, or GPU resource creation
          *         fails.
@@ -1637,6 +1674,21 @@ namespace CNA::Internal::Backends::Llgl
                 ? currentRenderTargetBackend_->GetColorAttachmentCount() : 1;
         }
 
+        /** @brief Returns the real sample count a pipeline for the CURRENTLY bound target should be
+         *  built with (1 = no MSAA) -- the bound target's own (a `RenderTarget2D` with a genuine
+         *  `MultiSampleCount`), or the swap chain's own otherwise. Mirrors
+         *  `GetPrimaryRenderPassEXT()`'s own "bound target wins" rule; the two must never disagree,
+         *  since a pipeline's `multiSampleEnabled` and its `renderPass`'s sample count both have to
+         *  match whatever is actually bound when the draw replays, not the swap chain's, or a
+         *  software Vulkan module can rasterize single-sample into a multisampled attachment without
+         *  erroring (no antialiasing, not a crash -- measured, not assumed). */
+        [[nodiscard]] int GetPrimarySampleCountEXT() const
+        {
+            if (currentRenderTargetBackend_ != nullptr)
+                return currentRenderTargetBackend_->GetSampleCount();
+            return swapChain_ != nullptr ? static_cast<int>(swapChain_->GetSamples()) : 1;
+        }
+
         /** @brief Returns the loaded module's rendering capabilities, for `LlglEffectBackend` to
          *  decide whether it can hand its GLSL source to LLGL directly or must compile it to
          *  SPIR-V first. */
@@ -1922,7 +1974,8 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] bool IsOpaqueBlendState() const;
         [[nodiscard]] bool UsesConstantBlendFactorState() const;
         [[nodiscard]] std::uint64_t MakeBlendPipelineKey(bool scissorEnabled,
-                                                         int colorAttachmentCount = 1) const;
+                                                         int colorAttachmentCount = 1,
+                                                         int sampleCount = 1) const;
         LLGL::PipelineState* AcquireSpritePipeline(bool scissorEnabled);
         /// Combines N independently-owned RenderTarget2D's colour attachments (plus a fresh
         /// anonymous depth attachment) into ONE LLGL::RenderTarget for an MRT bind -- see

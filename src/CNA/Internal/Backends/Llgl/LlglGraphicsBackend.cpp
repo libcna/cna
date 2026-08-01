@@ -720,7 +720,8 @@ namespace CNA::Internal::Backends::Llgl
                                                       LLGL::Texture* depthTexture,
                                                       int width, int height, bool hasRealDepthBuffer,
                                                       LLGL::Buffer* spriteProjectionBuffer,
-                                                      LlglGraphicsBackend* owner)
+                                                      LlglGraphicsBackend* owner,
+                                                      int multiSampleCount)
         : renderSystem_(renderSystem)
         , renderTarget_(renderTarget)
         , colorTexture_(colorTexture)
@@ -730,6 +731,7 @@ namespace CNA::Internal::Backends::Llgl
         , hasRealDepthBuffer_(hasRealDepthBuffer)
         , spriteProjectionBuffer_(spriteProjectionBuffer)
         , owner_(owner)
+        , multiSampleCount_(multiSampleCount > 0 ? multiSampleCount : 1)
     {
         if (renderSystem_ == nullptr || renderTarget_ == nullptr || colorTexture_ == nullptr ||
             spriteProjectionBuffer_ == nullptr)
@@ -2618,7 +2620,8 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + (envMapping ? 1u : 0u);
         key = key * 2u + (skinned ? 1u : 0u);
         key = key * 2u + (pbr ? 1u : 0u);
-        key = key * 1024u + (MakeBlendPipelineKey(scissorEnabled) & 0x3FFu);
+        key = key * (1024u * 64u) +
+              (MakeBlendPipelineKey(scissorEnabled, 1, GetPrimarySampleCountEXT()) & 0xFFFFu);
 
         const auto cached = primitivePipelineCache_.find(key);
         if (cached != primitivePipelineCache_.end())
@@ -2675,12 +2678,12 @@ namespace CNA::Internal::Backends::Llgl
                                      : envMapping ? primitiveEnvMapLayout_
                                      : dualTexture ? primitiveDualTextureLayout_
                                      : textured ? primitiveTexturedLayout_ : primitiveLayout_;
-        pipelineDesc.renderPass = swapChain_->GetRenderPass();
+        pipelineDesc.renderPass = GetPrimaryRenderPassEXT();
         pipelineDesc.primitiveTopology = MapPrimitiveTopology(primitive);
         pipelineDesc.depth.testEnabled = depthTestEnabled_;
         pipelineDesc.depth.writeEnabled = depthWriteEnabled_;
         pipelineDesc.depth.compareOp = MapCompareFunction(depthCompareFunction_);
-        pipelineDesc.rasterizer.multiSampleEnabled = (swapChain_->GetSamples() > 1);
+        pipelineDesc.rasterizer.multiSampleEnabled = (GetPrimarySampleCountEXT() > 1);
         pipelineDesc.rasterizer.scissorTestEnabled = scissorEnabled;
         pipelineDesc.rasterizer.cullMode = MapCullMode(cullMode_);
         if (static_cast<XnaFillMode>(fillMode_) == XnaFillMode::WireFrame && !SupportsWireFrameEXT())
@@ -3377,13 +3380,17 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     std::uint64_t LlglGraphicsBackend::MakeBlendPipelineKey(bool scissorEnabled,
-                                                             int colorAttachmentCount) const
+                                                             int colorAttachmentCount,
+                                                             int sampleCount) const
     {
         // Packs every field the sprite pipeline is built from, so a cache hit really is the same
-        // pipeline: four blend factors, two blend functions, the colour write mask, scissor, and
+        // pipeline: four blend factors, two blend functions, the colour write mask, scissor,
         // (MRT) how many colour attachments the pipeline's render pass declares -- a pipeline built
         // for a single-target bind is not interchangeable with one built for a multi-target bind
-        // even when every other field matches, since the two need different-shaped render passes.
+        // even when every other field matches, since the two need different-shaped render passes --
+        // and (MSAA render targets) the sample count the pipeline's rasterizer/render pass were
+        // built with, since a single-sample pipeline is not interchangeable with a multisampled
+        // one even when both targets have exactly one colour attachment.
         std::uint64_t key = 0;
         key = key * 16u + static_cast<std::uint64_t>(colorSrcBlend_ & 0xF);
         key = key * 16u + static_cast<std::uint64_t>(colorDstBlend_ & 0xF);
@@ -3394,6 +3401,7 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 16u + static_cast<std::uint64_t>(colorWriteChannels_ & 0xF);
         key = key * 2u + (scissorEnabled ? 1u : 0u);
         key = key * 8u + static_cast<std::uint64_t>(colorAttachmentCount & 0x7);
+        key = key * 64u + static_cast<std::uint64_t>(sampleCount & 0x3F);
         return key;
     }
 
@@ -3403,7 +3411,7 @@ namespace CNA::Internal::Backends::Llgl
     {
         pipelineDesc.depth.testEnabled = false;
         pipelineDesc.depth.writeEnabled = false;
-        pipelineDesc.rasterizer.multiSampleEnabled = (swapChain_->GetSamples() > 1);
+        pipelineDesc.rasterizer.multiSampleEnabled = (GetPrimarySampleCountEXT() > 1);
         pipelineDesc.rasterizer.scissorTestEnabled = scissorEnabled;
         pipelineDesc.rasterizer.cullMode = LLGL::CullMode::Disabled;
         // Dynamic blend-factor state is requested only when the blend state actually references the
@@ -3434,7 +3442,8 @@ namespace CNA::Internal::Backends::Llgl
     LLGL::PipelineState* LlglGraphicsBackend::AcquireSpritePipeline(bool scissorEnabled)
     {
         const int colorAttachmentCount = GetActiveColorAttachmentCountEXT();
-        const std::uint64_t key = MakeBlendPipelineKey(scissorEnabled, colorAttachmentCount);
+        const std::uint64_t key = MakeBlendPipelineKey(scissorEnabled, colorAttachmentCount,
+                                                        GetPrimarySampleCountEXT());
         const auto cached = pipelineCache_.find(key);
         if (cached != pipelineCache_.end())
             return cached->second;
@@ -4066,8 +4075,8 @@ namespace CNA::Internal::Backends::Llgl
             // AcquireCustomEffectLayoutEXT's doc comment for why the binding SHAPE is identical.
             const int colorAttachmentCount = GetActiveColorAttachmentCountEXT();
             command.pipeline = currentCustomEffect_->AcquirePipeline(
-                MakeBlendPipelineKey(scissorEnabled, colorAttachmentCount), scissorEnabled,
-                colorAttachmentCount);
+                MakeBlendPipelineKey(scissorEnabled, colorAttachmentCount, GetPrimarySampleCountEXT()),
+                scissorEnabled, colorAttachmentCount);
             command.hasCustomEffectUniform = true;
             command.customEffectUniformIndex =
                 static_cast<std::uint32_t>(customEffectUniformData_.size() / kCustomEffectUniformFloats);
@@ -4930,15 +4939,24 @@ namespace CNA::Internal::Backends::Llgl
 
     std::unique_ptr<IRenderTargetBackend> LlglGraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/,
-        int /*multiSampleCount*/)
+        int multiSampleCount)
     {
         if (w <= 0 || h <= 0)
             throw std::runtime_error(std::string(kBackendName) + " backend: render target has no pixels");
 
+        // Requested sample count, clamped only to "at least 1" here -- the REAL, device-clamped
+        // value is read back from the created LLGL::RenderTarget itself below (GetSamples()),
+        // matching GetMultiSampleCount()'s own swap-chain precedent.
+        const std::uint32_t requestedSamples =
+            multiSampleCount > 1 ? static_cast<std::uint32_t>(multiSampleCount) : 1u;
+
         LLGL::TextureDescriptor colorDesc;
         colorDesc.type = LLGL::TextureType::Texture2D;
         // Sampled so it can be drawn with SpriteBatch/the 3D path afterwards, CopySrc for
-        // GetData(), ColorAttachment so it can be bound as a render target at all.
+        // GetData(), ColorAttachment so it can be bound as a render target at all. This texture is
+        // always single-sample: when MSAA is requested it becomes the RESOLVE target below, never
+        // the multisampled attachment itself (a multisampled Texture2D cannot be sampled by this
+        // backend's plain sampler2D shaders).
         colorDesc.bindFlags = LLGL::BindFlags::ColorAttachment | LLGL::BindFlags::Sampled |
                               LLGL::BindFlags::CopySrc;
         // Matches the swap chain's own colour format -- see this method's header doc comment on
@@ -4957,10 +4975,27 @@ namespace CNA::Internal::Backends::Llgl
 
         LLGL::RenderTargetDescriptor targetDesc;
         targetDesc.resolution = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h)};
-        targetDesc.colorAttachments[0] = LLGL::AttachmentDescriptor{colorTexture};
+        targetDesc.samples = requestedSamples;
+        if (requestedSamples > 1)
+        {
+            // Anonymous (textureless) multisampled colour attachment -- LLGL allocates and owns
+            // this internally at RenderTargetDescriptor::samples, exactly like the anonymous
+            // depth/stencil attachment just below already does. colorTexture (single-sample) is
+            // the RESOLVE target instead: LLGL resolves the multisampled draw into it automatically
+            // at the end of each render pass this backend replays, so GetData()/sampling afterwards
+            // read fully-resolved pixels without this backend doing anything else.
+            targetDesc.colorAttachments[0] = LLGL::AttachmentDescriptor{colorDesc.format};
+            targetDesc.resolveAttachments[0] = LLGL::AttachmentDescriptor{colorTexture};
+        }
+        else
+        {
+            targetDesc.colorAttachments[0] = LLGL::AttachmentDescriptor{colorTexture};
+        }
         // Anonymous (textureless) attachment: LLGL allocates and owns this buffer as part of the
         // RenderTarget itself, always at the swap chain's own depth/stencil format, regardless of
-        // the requested DepthFormat -- see this method's header doc comment.
+        // the requested DepthFormat -- see this method's header doc comment. Implicitly created at
+        // targetDesc.samples too, matching the colour attachment's own sample count (a render
+        // target's attachments must all share one sample count).
         targetDesc.depthStencilAttachment = LLGL::AttachmentDescriptor{swapChain_->GetDepthStencilFormat()};
 
         LLGL::RenderTarget* renderTarget = renderer_->CreateRenderTarget(targetDesc);
@@ -4969,6 +5004,10 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*colorTexture);
             throw std::runtime_error(std::string(kBackendName) + " backend: render target creation failed");
         }
+        // The REAL, device-clamped sample count -- LLGL "silently reduces" an unsupported request
+        // (RenderTargetDescriptor::samples' own documented behaviour) rather than failing, exactly
+        // like the swap chain's own GetSamples() already reports for the back buffer.
+        const int appliedSamples = static_cast<int>(renderTarget->GetSamples());
 
         // This target's own fixed pixel-to-clip-space projection -- identical in shape to
         // UploadFrameResources()'s swap-chain one, but computed once here (a render target's
@@ -5003,7 +5042,7 @@ namespace CNA::Internal::Backends::Llgl
 
         return std::make_unique<LlglRenderTargetBackend>(renderer_.get(), renderTarget, colorTexture,
                                                           nullptr, w, h, hasRealDepthBuffer,
-                                                          spriteProjectionBuffer, this);
+                                                          spriteProjectionBuffer, this, appliedSamples);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> LlglGraphicsBackend::CreateRenderTargetCube(
