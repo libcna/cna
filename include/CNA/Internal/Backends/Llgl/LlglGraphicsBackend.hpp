@@ -1757,10 +1757,12 @@ namespace CNA::Internal::Backends::Llgl
          * @param pipelineDesc  Descriptor to fill; `vertexShader`/`fragmentShader`/`pipelineLayout`/
          *                      `renderPass`/`primitiveTopology` are the caller's own responsibility.
          * @param scissorEnabled Whether the current scissor rectangle applies to this draw.
-         * @param colorAttachmentCount Number of `blend.targets[]` entries to fill, all identically
-         *                      (this backend has no independent per-MRT-slot `ColorWriteChannels1..3`
-         *                      support yet -- every attachment gets slot 0's own blend state).
-         *                      Defaults to 1, the pre-MRT behaviour.
+         * @param colorAttachmentCount Number of `blend.targets[]` entries to fill. Every slot
+         *                      shares the SAME blend factors/functions (XNA's `BlendState` has
+         *                      only one set of those, not one per slot) but its OWN colour write
+         *                      mask (`colorWriteChannels_[slot]`, `BlendState.ColorWriteChannels1..3`
+         *                      -- real now, LLGL-21 follow-up). Defaults to 1, the pre-MRT
+         *                      behaviour, which only ever reads slot 0.
          */
         void FillCurrentBlendAndRasterStateEXT(LLGL::GraphicsPipelineDescriptor& pipelineDesc,
                                                bool scissorEnabled, int colorAttachmentCount = 1) const;
@@ -2224,7 +2226,10 @@ namespace CNA::Internal::Backends::Llgl
         int   alphaDstBlend_  = 1;
         int   colorBlendFunc_ = 0;
         int   alphaBlendFunc_ = 0;
-        int   colorWriteChannels_ = 15;
+        /// Raw XNA ColorWriteChannels int per MRT slot 0..3 (bit0=R,1=G,2=B,3=A; 15 = All) --
+        /// slot 0 applies outside an MRT bind (colorAttachmentCount == 1); slots 1..3 apply only
+        /// while a real MRT set (LLGL-26 follow-up) is bound (LLGL-21).
+        int   colorWriteChannels_[4] = {15, 15, 15, 15};
         bool  blendEnabled_   = false;
         float blendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 

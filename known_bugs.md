@@ -269,3 +269,47 @@ mid-tone blended pixel at the same scan position after it) rather than guessing 
 **Tracked as:** `plan_llgl.md` task `LLGL-26` (MSAA render targets follow-up).
 
 ---
+
+## LLGL backend: per-slot `ColorWriteChannels1..3` silently did nothing under MRT — FIXED 2026-08-01
+
+**Symptom:** setting `BlendState.ColorWriteChannels1 = ColorWriteChannels::None` (or any other
+non-default per-slot mask) while drawing into a multi-render-target set had no effect at all —
+slot 1 still received the same, fully unmasked write as slot 0, as if the property had never been
+set.
+
+**Cause:** `FillCurrentBlendAndRasterStateEXT` correctly filled `pipelineDesc.blend.targets[slot]`
+with each slot's own colour write mask, but LLGL only actually READS `blend.targets[i]` per
+attachment when `GraphicsPipelineDescriptor::blend.independentBlendEnabled` is explicitly `true` —
+confirmed by reading `VKGraphicsPSO.cpp`'s own `CreateColorBlendState`
+(`desc.targets[desc.independentBlendEnabled ? i : 0]`) and `GLBlendState.cpp`'s identical
+`if (desc.independentBlendEnabled)` branch. This backend never set that flag, so every attachment
+silently reused `targets[0]`'s own mask (and blend factors/functions, though those are always
+identical across slots for XNA anyway, so only the colour mask divergence was ever visible)
+regardless of what slots 1..3 were actually configured with.
+
+**Fix:** `pipelineDesc.blend.independentBlendEnabled = (clampedCount > 1)` in
+`FillCurrentBlendAndRasterStateEXT`, where `clampedCount` is the number of active colour
+attachments (1 outside an MRT bind, so this is a no-op for every pre-existing caller).
+
+**Found by:** extending `examples/llgl_mrt_test.cpp` with a real 2-draw masking test (an unmasked
+baseline draw establishing distinguishable per-slot content, then a masked draw attempting to
+overwrite both slots with white) and observing slot 1 read back the masked draw's own value instead
+of the baseline's — then reading LLGL's Vulkan/OpenGL source directly rather than guessing at the
+cause. A first version of the test (a single masked draw against a sentinel colour written in an
+EARLIER, separate MRT bind cycle) produced a false failure signal of its own: this backend's render
+passes use `Undefined`/`DONT_CARE` load semantics (see `LlglRenderTargetBackend`'s own doc
+comment), so content is only ever guaranteed to survive WITHIN one bind cycle, never across a later,
+separate rebind — the sentinel was legitimately gone before the masked draw even ran, for a reason
+unrelated to masking. Fixed in the TEST by keeping both draws inside one bind cycle.
+
+**Also found, module-dependent, not a CNA defect:** once the real bug was fixed, the Vulkan module
+(lavapipe, on this project's own test environment) genuinely masks a non-zero slot; the OpenGL
+module (llvmpipe via GLX) does not — slot 1 still reads back the unmasked value, meaning
+`glColorMaski`'s own per-draw-buffer masking is not honoured by this environment's GL driver. The
+test detects this and reports `[SKIP]` for that one check on the OpenGL module rather than failing,
+matching the existing `WireFrame`/back-buffer-MSAA precedent for a real, environment-specific
+driver constraint outside this backend's control.
+
+**Tracked as:** `plan_llgl.md` task `LLGL-21`.
+
+---

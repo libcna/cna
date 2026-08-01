@@ -307,8 +307,16 @@ to a deliberately narrower first cut than this project's other MRT-capable backe
   no stock effect family in this backend declares more than one fragment output, and real XNA MRT
   is only meaningfully useful through a custom `layout(location=N) out`-per-slot fragment shader
   anyway.
-* **No per-slot `ColorWriteChannels1..3`.** The blend state's write mask (slot 0's own) is applied
-  identically to every active attachment; a documented simplification, not a silent gap.
+* **`ColorWriteChannels1..3` are real** (LLGL-21 follow-up): each slot's own write mask applies
+  independently. This needed `GraphicsPipelineDescriptor::blend.independentBlendEnabled = true`
+  whenever more than one attachment is bound -- without it, LLGL silently reuses `blend.targets[0]`
+  for every attachment regardless of what `targets[1..3]` were set to (confirmed by reading
+  `VKGraphicsPSO.cpp`/`GLBlendState.cpp` directly). Module-dependent once that bug was fixed: the
+  Vulkan module genuinely masks a non-zero slot on this environment; the OpenGL module's
+  `glColorMaski` does not (a real GL driver constraint here, not a CNA defect) -- see
+  `Llgl_MRT`'s own `[SKIP]`-gated check. `BlendState.MultiSampleMask` is still not applied (LLGL's
+  sample mask lives in the blend descriptor and would multiply the pipeline cache with no real use
+  on this backend yet).
 
 A new `LlglMRTBinding` combines the N bound targets' own colour textures (borrowed -- still owned
 and released by the `RenderTarget2D` backends that created them, never duplicated or double-freed
@@ -604,9 +612,12 @@ trips plus sampling the result through `EnvironmentMapEffect`; like the `Environ
 it has no `_OpenGL` twin, for the same `hasCubeTextures` reason.
 `Llgl_MRT` covers a real 2-output custom `ShaderEffect` writing two DIFFERENT values to two
 simultaneously bound `RenderTarget2D` slots from the SAME draw call, a 3D colour-only draw throwing
-while the MRT set is bound, back-buffer isolation, and that an ordinary single-target draw still
-works correctly once the MRT bind ends; unlike `RenderTargetCube`, plain `RenderTarget2D` slots
-work on both modules, so it has an `_OpenGL` twin.
+while the MRT set is bound, back-buffer isolation, that an ordinary single-target draw still works
+correctly once the MRT bind ends, and (LLGL-21 follow-up) that `BlendState.ColorWriteChannels1`
+genuinely masks slot 1 independently of slot 0 within one bind cycle -- module-dependent, `[SKIP]`
+on the OpenGL module rather than failed, since its `glColorMaski` does not honour the mask on this
+environment. Unlike `RenderTargetCube`, plain `RenderTarget2D` slots work on both modules, so it
+has an `_OpenGL` twin.
 `Llgl_PbrEffect_HandDerived` covers the glTF metallic-roughness BRDF against hand-derived analytic
 values at a fully dot-product-aligned pixel -- full dielectric, fully metallic, a control case
 proving `MetallicFactor` genuinely changes the result, and a `SkinnedPbrEffect` identity-bone check

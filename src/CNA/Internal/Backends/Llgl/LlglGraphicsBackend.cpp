@@ -2714,7 +2714,7 @@ namespace CNA::Internal::Backends::Llgl
         pipelineDesc.blend.targets[0].srcAlpha = MapBlendFactor(alphaSrcBlend_);
         pipelineDesc.blend.targets[0].dstAlpha = MapBlendFactor(alphaDstBlend_);
         pipelineDesc.blend.targets[0].alphaArithmetic = MapBlendFunction(alphaBlendFunc_);
-        pipelineDesc.blend.targets[0].colorMask = MapColorWriteMask(colorWriteChannels_);
+        pipelineDesc.blend.targets[0].colorMask = MapColorWriteMask(colorWriteChannels_[0]);
 
         LLGL::PipelineState* pipeline = renderer_->CreatePipelineState(pipelineDesc);
         if (pipeline == nullptr)
@@ -3389,13 +3389,17 @@ namespace CNA::Internal::Backends::Llgl
                                                              int sampleCount) const
     {
         // Packs every field the sprite pipeline is built from, so a cache hit really is the same
-        // pipeline: four blend factors, two blend functions, the colour write mask, scissor,
-        // (MRT) how many colour attachments the pipeline's render pass declares -- a pipeline built
-        // for a single-target bind is not interchangeable with one built for a multi-target bind
-        // even when every other field matches, since the two need different-shaped render passes --
-        // and (MSAA render targets) the sample count the pipeline's rasterizer/render pass were
-        // built with, since a single-sample pipeline is not interchangeable with a multisampled
-        // one even when both targets have exactly one colour attachment.
+        // pipeline: four blend factors, two blend functions, EVERY slot's own colour write mask
+        // (LLGL-21 follow-up: slots 1..3 only ever matter while an MRT set is bound, but folding
+        // all four in unconditionally is simpler than gating on colorAttachmentCount and costs
+        // nothing -- a non-MRT bind always has slots 1..3 at their default all-channels value),
+        // scissor, (MRT) how many colour attachments the pipeline's render pass declares -- a
+        // pipeline built for a single-target bind is not interchangeable with one built for a
+        // multi-target bind even when every other field matches, since the two need
+        // different-shaped render passes -- and (MSAA render targets) the sample count the
+        // pipeline's rasterizer/render pass were built with, since a single-sample pipeline is not
+        // interchangeable with a multisampled one even when both targets have exactly one colour
+        // attachment.
         std::uint64_t key = 0;
         key = key * 16u + static_cast<std::uint64_t>(colorSrcBlend_ & 0xF);
         key = key * 16u + static_cast<std::uint64_t>(colorDstBlend_ & 0xF);
@@ -3403,7 +3407,8 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 16u + static_cast<std::uint64_t>(alphaDstBlend_ & 0xF);
         key = key * 8u + static_cast<std::uint64_t>(colorBlendFunc_ & 0x7);
         key = key * 8u + static_cast<std::uint64_t>(alphaBlendFunc_ & 0x7);
-        key = key * 16u + static_cast<std::uint64_t>(colorWriteChannels_ & 0xF);
+        for (int slot = 0; slot < 4; ++slot)
+            key = key * 16u + static_cast<std::uint64_t>(colorWriteChannels_[slot] & 0xF);
         key = key * 2u + (scissorEnabled ? 1u : 0u);
         key = key * 8u + static_cast<std::uint64_t>(colorAttachmentCount & 0x7);
         key = key * 64u + static_cast<std::uint64_t>(sampleCount & 0x3F);
@@ -3426,11 +3431,22 @@ namespace CNA::Internal::Backends::Llgl
         // unconditionally would make every draw depend on a call that the overwhelming majority of
         // blend states have no use for.
         pipelineDesc.blend.blendFactorDynamic = UsesConstantBlendFactorState();
-        // MRT (LLGL-26 follow-up): every attachment gets slot 0's own blend state -- this backend
-        // has no independent per-MRT-slot ColorWriteChannels1..3 support yet (a real, documented
-        // scope boundary, not an oversight). colorAttachmentCount is 1 outside an MRT bind, so this
-        // loop is a single iteration identical to the pre-MRT code for every existing caller.
+        // MRT (LLGL-26 follow-up): every attachment gets slot 0's own blend FACTORS/FUNCTIONS --
+        // XNA's BlendState has only one set of those, not one per slot -- but its OWN colour write
+        // mask (LLGL-21 follow-up: BlendState.ColorWriteChannels1..3 are real now, not slot 0's
+        // mask copied onto every attachment). colorAttachmentCount is 1 outside an MRT bind, so
+        // this loop is a single iteration reading colorWriteChannels_[0] for every existing caller
+        // that never touched ColorWriteChannels1..3 at all (they keep their all-channels default).
         const int clampedCount = std::max(1, std::min(colorAttachmentCount, 4));
+        // LLGL only reads blend.targets[i] PER ATTACHMENT when independentBlendEnabled is true --
+        // otherwise every attachment silently reuses targets[0] regardless of what targets[1..3]
+        // were set to (confirmed by reading VKGraphicsPSO.cpp's own CreateColorBlendState:
+        // `desc.targets[desc.independentBlendEnabled ? i : 0]`). Without this, a per-slot
+        // ColorWriteChannels1..3 (LLGL-21 follow-up) would silently do nothing the moment more
+        // than one attachment is bound -- the real bug this fixed, found by reading LLGL's own
+        // source after a pixel test proved slot 1 was NOT actually being masked despite the
+        // pipeline descriptor being built with the right per-slot colorMask values.
+        pipelineDesc.blend.independentBlendEnabled = (clampedCount > 1);
         for (int slot = 0; slot < clampedCount; ++slot)
         {
             pipelineDesc.blend.targets[slot].blendEnabled = !IsOpaqueBlendState();
@@ -3440,7 +3456,7 @@ namespace CNA::Internal::Backends::Llgl
             pipelineDesc.blend.targets[slot].srcAlpha = MapBlendFactor(alphaSrcBlend_);
             pipelineDesc.blend.targets[slot].dstAlpha = MapBlendFactor(alphaDstBlend_);
             pipelineDesc.blend.targets[slot].alphaArithmetic = MapBlendFunction(alphaBlendFunc_);
-            pipelineDesc.blend.targets[slot].colorMask = MapColorWriteMask(colorWriteChannels_);
+            pipelineDesc.blend.targets[slot].colorMask = MapColorWriteMask(colorWriteChannels_[slot]);
         }
     }
 
@@ -5342,10 +5358,13 @@ namespace CNA::Internal::Backends::Llgl
         alphaDstBlend_ = alphaDstBlend;
         colorBlendFunc_ = colorBlendFunc;
         alphaBlendFunc_ = alphaBlendFunc;
-        // Only slot 0's write mask is applied: this backend renders to a single attachment, so
-        // slots 1..3 have nothing to apply to. BlendState.MultiSampleMask is likewise not applied
-        // -- both are documented boundaries of the current 2D scope, not values lost in silence.
-        colorWriteChannels_ = writeState.colorWriteChannels[0];
+        // Every slot's write mask is applied now (LLGL-21 follow-up): slot 0 outside an MRT bind,
+        // all four while a real MRT set (LLGL-26 follow-up) is bound -- see
+        // FillCurrentBlendAndRasterStateEXT's own per-slot loop. BlendState.MultiSampleMask is
+        // still deliberately not applied: LLGL's sample mask lives in the blend descriptor and
+        // would multiply the pipeline cache with no real use on this backend yet.
+        for (int slot = 0; slot < 4; ++slot)
+            colorWriteChannels_[slot] = writeState.colorWriteChannels[slot];
     }
 
     void LlglGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
