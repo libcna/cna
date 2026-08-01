@@ -1050,7 +1050,7 @@ namespace CNA::Internal::Backends::Vulkan
         // capability instead of handing the caller its own zero-initialized scratch buffer.
         if (!owner_ || colorImage_ == VK_NULL_HANDLE || !data || dataLength <= 0) return false;
 
-        owner_->FlushDeferredRenderTarget(pass_.get(), this);
+        owner_->FlushDeferredRenderTarget(pass_.get(), pass_.get(), level);
 
         VkDevice dev = owner_->device_;
         VkBuffer       stagingBuf = VK_NULL_HANDLE;
@@ -9430,8 +9430,10 @@ namespace CNA::Internal::Backends::Vulkan
     // the positional rule and is exact with this one. Pulling in only genuine producers keeps
     // REMED-GFX-143's ascending-id backbuffer contract intact.
     void VulkanGraphicsBackend::FlushDeferredRenderTarget(
-        VulkanRTSource* rt, const VulkanRenderTargetBackend* mrtResolveOwner)
+        VulkanRTSource* rt, const VulkanTargetPassEXT* mrtAttachmentPass,
+        int requestedMipLevel)
     {
+        lastMrtReadbackMatchesEXT_.clear();
         if (!initialized_ || !rt || device_ == VK_NULL_HANDLE) return;
 
         // Every pending OFF-SCREEN bind cycle this frame, with the group that owns it. Backbuffer
@@ -9453,21 +9455,33 @@ namespace CNA::Internal::Backends::Vulkan
         // share one depth image, so reading one face replays the whole group in public order rather
         // than that face alone, and for every other source the group is the target itself.
         std::vector<const void*> groups{ rt->DepthStencilOwnerEXT() };
-        // An MRT draw is queued against its frame-lifetime proxy, not against either RenderTarget2D
-        // pointer. Resolve-view identity safely maps GetData(target) back to every pending proxy
-        // that writes that target; the target's retirement keeps the view handle alive, so it cannot
-        // be recycled while the proxy is still pending.
-        // REMED-GFX-166: a 2D target's destination is a VulkanTargetPassEXT now, so the concrete
-        // render target being read is passed in rather than recovered from `rt` by a downcast.
-        if (mrtResolveOwner) {
+        // REMED-GFX-194: an MRT draw is queued against one frame-lifetime proxy, not against the
+        // constituent target pass. Match the exact immutable pass retained in that proxy's public
+        // attachment vector. For a cube this distinguishes all six faces even though they share a
+        // parent image/depth group; for every target it also keeps separate proxy instances (and
+        // therefore binding cycles) distinct. The requested level is validated against this exact
+        // pass' mip chain rather than being erased into parent-resource identity.
+        if (mrtAttachmentPass) {
             auto noteProxy = [&](VulkanMRTProxy* proxy) {
-                if (!proxy || !proxy->ContainsResolveTargetEXT(*mrtResolveOwner)) return;
+                if (!proxy) return;
+                const int slot =
+                    proxy->FindColorAttachmentSlotEXT(*mrtAttachmentPass, requestedMipLevel);
+                if (slot < 0) return;
                 const void* g = proxy->DepthStencilOwnerEXT();
+                bool hasPendingCycle = false;
+                for (const auto& pending : pendingSegments)
+                    if (pending.group == g) {
+                        hasPendingCycle = true;
+                        lastMrtReadbackMatchesEXT_.emplace_back(
+                            pending.id, static_cast<uint32_t>(slot));
+                    }
+                if (!hasPendingCycle) return;
                 for (const void* have : groups) if (have == g) return;
                 groups.push_back(g);
             };
             for (auto& retired : retiredMrtProxies_) noteProxy(retired.second.get());
             noteProxy(mrtProxy_.get());
+            std::sort(lastMrtReadbackMatchesEXT_.begin(), lastMrtReadbackMatchesEXT_.end());
         }
 
         std::vector<uint64_t> flushSegments;
@@ -10505,7 +10519,6 @@ namespace CNA::Internal::Backends::Vulkan
         // the already-existing transient MSAA view as color i and the texture view as
         // resolve i. Non-MSAA continues to bind the texture views directly.
         colorAttachments_.reserve(count);
-        resolveTargetViews_.reserve(count);
         colorTargetPasses_.reserve(count);
         if (WantsMsaa()) resolveAttachments_.reserve(count);
         for (uint32_t i = 0; i < count; ++i) {
@@ -10524,7 +10537,6 @@ namespace CNA::Internal::Backends::Vulkan
                     "Vulkan MRT cannot bind one multisample source subresource to more "
                     "than one slot (same-cube multi-face MSAA is unsupported)");
             colorAttachments_.push_back(color);
-            resolveTargetViews_.push_back(resolve);
             colorTargetPasses_.push_back(attachments[i].targetPass);
             if (WantsMsaa()) resolveAttachments_.push_back(resolve);
         }
@@ -11567,10 +11579,12 @@ namespace CNA::Internal::Backends::Vulkan
         const std::size_t regionBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
         if (static_cast<std::size_t>(dataLength) < regionBytes) return false;
 
-        // REMED-GFX-074's readback flush, applied to this face's own proxy: a face whose draws are
-        // still queued for Present must be read AFTER them, not before. A no-op when nothing is
-        // pending for this proxy.
-        owner_->FlushDeferredRenderTarget(facePasses_[static_cast<std::size_t>(face)].get());
+        // REMED-GFX-074/GFX-194 readback flush, keyed by this face's exact immutable pass and the
+        // requested level. A direct or MRT face producer still queued for Present must be recorded
+        // BEFORE the copy. A no-op when no matching producer binding cycle remains pending.
+        VulkanTargetPassEXT* const facePass =
+            facePasses_[static_cast<std::size_t>(face)].get();
+        owner_->FlushDeferredRenderTarget(facePass, facePass, level);
 
         VkDevice dev = owner_->device_;
         VkBuffer       stagingBuf = VK_NULL_HANDLE;

@@ -487,19 +487,14 @@ class VulkanMrtMipFinalizationTest final : public Game
         RenderMrtCube(device, *target2D, *cube, kFace, true, clear2, draw2,
                       "F2 cube-face primary, 2D secondary (reordered)");
 
-        // REMED-GFX-194 (recorded, not fixed here): a cube face's direct GetData flush seeds its
-        // dependency search with that face pass, but a pending MRT segment is represented by its
-        // VulkanMRTProxy. Unlike the 2D route, the cube route has no ContainsResolveTargetEXT
-        // bridge to that proxy, so this first read sees the previous completed cycle. Pin the exact
-        // boundary, then flush through the 2D member to isolate this ticket's post-pass work: that
-        // one shared MRT record must regenerate both the 2D and cube-face chains.
-        std::printf("[INFO] REMED-GFX-194 boundary: direct cube-face GetData does not flush its "
-                    "pending MRT producer; production is intentionally untouched by GFX-190\n");
-        ExpectFull(*cube, kFace, 0, clear1,
-                   "F2 REMED-GFX-194 direct cube read remains on the prior cycle");
+        // REMED-GFX-194: the direct cube-face read must select this face's exact target pass from
+        // the pending MRT proxy, including its reordered primary slot, and record that producer
+        // before the copy. This used to return clear1 from the prior completed cycle.
+        ExpectFull(*cube, kFace, 0, draw2,
+                   "F2 direct cube read selects the pending reordered primary producer");
         ExpectChain(*target2D, clear2, "F2 2D secondary");
         ExpectChain(*cube, kFace, draw2,
-                    "F2 cube-face primary after the shared MRT pass is recorded");
+                    "F2 cube-face primary chain after direct producer selection");
     }
 
     void LegDeviceTeardownAndUnboundControl()

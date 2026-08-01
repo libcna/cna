@@ -803,11 +803,11 @@ namespace CNA::Internal::Backends::Vulkan
          * REMED-GFX-134. `VulkanTextureCubeBackend::GetData`'s mechanism -- transition just this
          * face layer to TRANSFER_SRC_OPTIMAL, copy it into a host-visible staging buffer, restore
          * the layout -- with the two things a RENDERED face additionally needs:
-         * `FlushDeferredRenderTarget` on this face's own proxy first (REMED-GFX-074's readback
-         * flush, so a target whose draws are still queued for Present is read after them, not
-         * before), and the BGRA->RGBA correction `VulkanRenderTargetBackend::GetData` already
-         * applies because a render target's colour image carries the swapchain format rather than
-         * a plain texture's fixed RGBA8.
+         * `FlushDeferredRenderTarget` on this face's exact immutable pass first (REMED-GFX-074 and
+         * REMED-GFX-194, so both single-target and MRT draws still queued for Present are read
+         * after their matching producer, not before), and the BGRA->RGBA correction
+         * `VulkanRenderTargetBackend::GetData` already applies because a render target's colour
+         * image carries the swapchain format rather than a plain texture's fixed RGBA8.
          *
          * No row flip: Vulkan's framebuffer origin is top-left, so a rendered face is already
          * stored top-row-first, exactly like this backend's plain-cube upload.
@@ -942,11 +942,21 @@ namespace CNA::Internal::Backends::Vulkan
         {
             return depthView_ != VK_NULL_HANDLE ? colorSampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         }
-        [[nodiscard]] bool ContainsResolveTargetEXT(
-            const VulkanRenderTargetBackend& target) const
+        /**
+         * @brief Finds the public MRT slot that produces an exact target pass and mip chain.
+         *
+         * @param targetPass The immutable 2D or cube-face destination being read.
+         * @param requestedMipLevel The valid mip level requested by the readback.
+         * @return The public colour-attachment slot, or -1 when this binding cycle is unrelated.
+         */
+        [[nodiscard]] int FindColorAttachmentSlotEXT(
+            const VulkanTargetPassEXT& targetPass, int requestedMipLevel) const
         {
-            return std::find(resolveTargetViews_.begin(), resolveTargetViews_.end(),
-                             target.GetResolveColorViewEXT()) != resolveTargetViews_.end();
+            if (requestedMipLevel < 0 || requestedMipLevel >= targetPass.mipLevels) return -1;
+            for (std::size_t i = 0; i < colorTargetPasses_.size(); ++i)
+                if (colorTargetPasses_[i].get() == &targetPass)
+                    return static_cast<int>(i);
+            return -1;
         }
 
     private:
@@ -960,7 +970,6 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VkImageView> colorAttachments_;
         std::vector<VkImageView> resolveAttachments_;
         std::vector<VkImageView> framebufferAttachments_;
-        std::vector<VkImageView> resolveTargetViews_;
         // REMED-GFX-190: immutable per-binding destinations, retained in public attachment order.
         // Besides supplying the exact image/layer/level metadata for post-pass mip generation,
         // shared ownership keeps that metadata valid when a bound target is disposed before the
@@ -1081,6 +1090,19 @@ namespace CNA::Internal::Backends::Vulkan
         [[nodiscard]] const VulkanMRTProxy* GetCurrentMRTProxyEXT() const noexcept
         {
             return mrtProxy_.get();
+        }
+        /**
+         * @brief Returns the exact pending MRT binding cycles and slots selected by the last read.
+         *
+         * Each pair is `(segment id, public colour-attachment slot)`. The list is empty for a
+         * direct single-target producer or when the requested target had no pending MRT producer.
+         *
+         * @return Read-only dependency-selection diagnostics for REMED-GFX-194 tests.
+         */
+        NOXNA [[nodiscard]] const std::vector<std::pair<uint64_t, uint32_t>>&
+        GetLastMrtReadbackMatchesEXT() const noexcept
+        {
+            return lastMrtReadbackMatchesEXT_;
         }
         [[nodiscard]] VkSampleCountFlagBits GetLastMRTPipelineSampleCountEXT() const noexcept
         {
@@ -2339,6 +2361,9 @@ namespace CNA::Internal::Backends::Vulkan
         // `VulkanRTSource::DepthStencilOwnerEXT()` value, the same key the flush and the recorder
         // use for "one target", so a dependency and the work satisfying it cannot drift apart.
         std::vector<std::pair<uint64_t, const void*>> segmentSampledGroups_;
+        // REMED-GFX-194 test diagnostics: exact pending proxy cycles and public attachment slots
+        // selected for the latest 2D/cube target read. Never participates in selection or replay.
+        std::vector<std::pair<uint64_t, uint32_t>> lastMrtReadbackMatchesEXT_;
         /** @brief The render-target group a sampled texture belongs to, or nullptr if ordinary. */
         static const void* SampledRenderTargetGroupEXT(const ITextureBackend* tex);
         /** @brief Cube overload of SampledRenderTargetGroupEXT. */
@@ -2383,11 +2408,13 @@ namespace CNA::Internal::Backends::Vulkan
         // pass now (no present, no swapchain, no frame-bookkeeping advance) so its colour image
         // holds the rendered result before a GetData readback, then drop the consumed entries so
         // Present() never replays them (no double-render). No-op if nothing is queued for `rt`.
-        // REMED-GFX-166: `mrtResolveOwner` is the concrete RenderTarget2D being read, when there
-        // is one. A 2D target's destination is now a VulkanTargetPassEXT rather than the backend
-        // object, so `rt` alone can no longer be asked whether some MRT proxy resolves into it.
+        // REMED-GFX-194: `mrtAttachmentPass` is the exact immutable 2D or cube-face destination
+        // being read. Each MRT proxy retains those pass objects in public attachment order, so the
+        // lookup distinguishes resource, cube face, mip chain, attachment slot and binding cycle
+        // without falling back to parent-cube or resolve-view identity.
         void FlushDeferredRenderTarget(VulkanRTSource* rt,
-                                       const VulkanRenderTargetBackend* mrtResolveOwner = nullptr);
+                                       const VulkanTargetPassEXT* mrtAttachmentPass,
+                                       int requestedMipLevel);
 
         // Submits one frame (render + optional deferred readback copy). When deferSwap is
         // true the swapchain image is acquired, rendered and the GPU is waited on, but

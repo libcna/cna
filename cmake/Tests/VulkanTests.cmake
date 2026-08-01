@@ -1378,6 +1378,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         set_tests_properties(Vulkan_MrtMipFinalization PROPERTIES
             FAIL_REGULAR_EXPRESSION "VUID-|Validation Error|Validation Warning|SYNC-HAZARD")
 
+        # REMED-GFX-194: a direct cube-face GetData must select the exact pending producer by
+        # resource, face pass, requested mip chain, public MRT slot and binding cycle. The matrix
+        # covers all faces, direct/single-target and both MRT slots, reordered/two-cube/A-B-A
+        # cycles, guarded full/rectangle reads, disposal and explicit device teardown.
+        cna_vulkan_test(cna_test_vulkan_cube_face_readback_dependency
+            examples/vulkan_cube_face_readback_dependency_test.cpp)
+        cna_register_backend_test(NAME Vulkan_CubeFaceReadbackDependency
+            COMMAND cna_test_vulkan_cube_face_readback_dependency
+            TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        set_tests_properties(Vulkan_CubeFaceReadbackDependency PROPERTIES
+            FAIL_REGULAR_EXPRESSION "VUID-|Validation Error|Validation Warning|SYNC-HAZARD")
+
         # REMED-GFX-189/191: invalid levels must be refused before native work, and every valid level
         # must be copied from the exact subresource after that subresource alone has transitioned to
         # TRANSFER_SRC_OPTIMAL. Pixel checks passed on GFX-191's defective implementation, so make
