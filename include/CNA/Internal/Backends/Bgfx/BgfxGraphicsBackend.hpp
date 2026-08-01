@@ -17,12 +17,8 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::RendererType::Enum ParseRendererTypeOverride(const char* value);
         bgfx::RendererType::Enum ResolveRendererType(const char* value);
 
-        /// Sentinel meaning "no view id currently allocated" (0 and every real bgfx::ViewId are
-        /// valid allocations, so this must be outside that range -- bgfx caps view ids at 255).
-        inline constexpr bgfx::ViewId kInvalidRtViewId = 0xFFFF;
-
         // Task 951: the single highest bgfx view id (255) is permanently reserved as a dedicated
-        // "backbuffer flush" view -- never handed out by AllocateRtViewId(). bgfx processes every
+        // "backbuffer flush" view -- never handed out for public rendering. bgfx processes every
         // configured view in ascending id order each frame, so whichever view was configured last
         // (highest id) is left as the bound GL framebuffer once that processing finishes; a real,
         // concurrently-bound render target's view (ids [1,254]) would otherwise be that last view
@@ -37,25 +33,20 @@ namespace CNA::Internal::Backends::Bgfx
         // REMED-GFX-065: bgfx view state (setViewRect / setViewTransform) is PER-VIEW (resolved once
         // at bgfx::frame(), last-write-wins), so two DIFFERENT GraphicsDevice.Viewport states drawn to
         // one target within a frame would collapse onto its single base view id -- the first draw's
-        // viewport is lost. The fix allocates an ordered per-FRAME "viewport segment" view id whenever
-        // the viewport changes on a target, keeping each draw under its own rect/ortho while bgfx's
-        // ascending-view-id execution order preserves submission order. View-id space is partitioned:
-        //   0                              backbuffer base view
-        //   [1, kFirstSegmentViewId)       persistent render-target base ids (AllocateRtViewId)
-        //   [kFirstSegmentViewId, 255)     per-frame ephemeral viewport-segment ids (recycled each frame)
-        //   255 (kBackbufferFlushViewId)   reserved backbuffer-flush view
-        // Segment ids sit ABOVE every RT base id, so within one target its base view (lowest id) plus
-        // its later segments (higher ids, monotonic in submission order) always execute in draw order.
-        // REMED-GFX-155 rebalanced this boundary from 192 to 64. Ordering a bind cycle now costs an
-        // ordered segment id whenever its target's base view would execute out of turn, so a frame's
-        // segment demand roughly doubled -- `graphicsdevice_ordered_clear_test` exhausted the old
-        // 63-id pool outright. The two sides of the split are not comparable quantities: base ids
-        // are needed one per CONCURRENTLY LIVE render target, while segments are needed one per
-        // ordered bind cycle WITHIN A SINGLE FRAME. Trading 191 simultaneous render targets (a
-        // number no CNA content approaches) for 63, in exchange for 63 -> 191 ordered segments per
-        // frame, is what keeps the ordering guarantee affordable. Both limits still raise a clear
-        // error rather than wrapping.
-        inline constexpr bgfx::ViewId kFirstSegmentViewId = 64;
+        // viewport is lost. The fix allocates an ordered per-FRAME view id whenever the viewport
+        // changes on a target, keeping each draw under its own rect/ortho while bgfx's ascending-id
+        // execution preserves submission order. REMED-GFX-179 removes the later fixed split between
+        // persistent target-base IDs and ephemeral segment IDs. A view is routing state for ONE
+        // frame, not a descriptor owned by a render target: never-bound targets need no view at
+        // all, and a target used in a later frame may reuse the same numeric id safely. View 0 is
+        // retained only for the first backbuffer operation of a frame. Every render-target bind
+        // cycle, later backbuffer cycle, viewport/transform transition, and ordered Clear draws
+        // monotonically from the unified per-frame range [1,255). Thus simultaneous LIVE target
+        // count is limited only by native resource pools, while the actual view limit applies to
+        // distinct ordered view states USED during one frame. The reserved readback/flush id 255
+        // remains excluded, IDs cannot collide within a frame, and the cursor is reclaimed after
+        // every bgfx::frame().
+        inline constexpr bgfx::ViewId kFirstPublicFrameViewId = 1;
 
         // REMED-GFX-155: bgfx's compile-time view-id count (BGFX_CONFIG_MAX_VIEWS). Every id in
         // [0, kMaxViews) is a legal view. Named rather than a literal so the per-frame bookkeeping
@@ -64,20 +55,8 @@ namespace CNA::Internal::Backends::Bgfx
         static_assert(kBackbufferFlushViewId == kMaxViews - 1,
                       "the reserved backbuffer-flush view must be the HIGHEST view id, so bgfx's "
                       "ascending-id execution always leaves it last (Task 951)");
-        static_assert(kFirstSegmentViewId < kBackbufferFlushViewId,
-                      "REMED-GFX-155 relies on every ordered segment id sitting ABOVE every render "
-                      "target base id and BELOW the reserved flush view");
-
-        // Task 910: each concurrently-live render target (2D or cube) needs its own bgfx view id
-        // -- bgfx::setViewFrameBuffer(viewId, fbo) is a per-view-per-*frame* setting, resolved
-        // once at bgfx::frame(), not per bgfx::submit() call. Every render target previously
-        // shared one hardcoded view id (1), so binding a 2nd render target within the same
-        // un-advanced frame silently redirected the 1st one's already-submitted draws into the
-        // 2nd's framebuffer once the frame actually flushed. Allocated at RT construction time
-        // (stable for the RT's whole lifetime) and released at destruction; free-list-backed so
-        // long-running games that create/destroy render targets don't exhaust bgfx's ~256 view ids.
-        bgfx::ViewId AllocateRtViewId();
-        void ReleaseRtViewId(bgfx::ViewId id);
+        static_assert(kFirstPublicFrameViewId < kBackbufferFlushViewId,
+                      "public frame views must sit below the reserved flush/readback view");
 
         // REMED-GFX-158: `bgfx::reset()` ends by discarding EVERY view's framebuffer binding --
         //
@@ -356,9 +335,6 @@ namespace CNA::Internal::Backends::Bgfx
         // resolves an RT_MSAA_Xn color attachment into a sampleable single-sample image
         // internally -- no explicit resolve step is needed on this backend.
         int  multiSampleCount = 0;
-        // Task 910: this instance's own stable bgfx view id, allocated at construction --
-        // see Detail::AllocateRtViewId()'s comment for why every RT needs a distinct one.
-        bgfx::ViewId viewId_ = Detail::kInvalidRtViewId;
         /// REMED-GFX-181: the `_flags` word passed to bgfx::createTexture2D. Diagnostics only.
         uint64_t creationFlags_ = 0;
 
@@ -468,10 +444,6 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 903: real, backend-clamped applied MultiSampleCount (0 = no MSAA), mirroring
         // BgfxRenderTargetBackend's identical Task 878/879 field.
         int  multiSampleCount = 0;
-        // Task 910: this instance's own stable bgfx view id (shared by all 6 faces), allocated
-        // at construction -- see Detail::AllocateRtViewId()'s comment.
-        bgfx::ViewId viewId_ = Detail::kInvalidRtViewId;
-
         /// Mip levels bgfx really allocated for this cube target (REMED-GFX-134).
         int levelCount_ = 1;
         /// REMED-GFX-181: the `_flags` word passed to bgfx::createTextureCube. Diagnostics only.
@@ -719,23 +691,14 @@ namespace CNA::Internal::Backends::Bgfx
         bool     spriteVpSet_ = false;
         bool     spriteVpValid_ = false;
 
-        // REMED-GFX-065: ordered per-frame viewport segmentation. When the active GraphicsDevice.Viewport
-        // changes on a target within one un-advanced frame, SelectViewportSegment() redirects
-        // currentViewId_/spriteViewId to a freshly-allocated segment view (id in [kFirstSegmentViewId,255))
-        // configured for the SAME framebuffer with clear suppressed, so each draw keeps its own view rect
-        // (3D) / offset ortho (sprite) and bgfx's ascending-view-id order preserves submission order.
-        // The base view of the current target (0 for the backbuffer, the RT/MRT's own id otherwise) is
-        // always tried first; only a genuine viewport change consumes a segment id. Reset each frame.
-        bgfx::ViewId segmentTargetBaseId_ = 0;                       ///< base view id of the bound target
+        // REMED-GFX-065/GFX-179: ordered per-frame view routing. Every first operation on a render
+        // target, target rebind, later backbuffer cycle, viewport/transform change, and ordered
+        // Clear receives the next ID in [1,255). Only the first backbuffer operation may use 0.
+        // Consecutive compatible draws reuse the active ID. This applies bgfx's physical limit to
+        // view states used in this frame, never to the number of target objects currently alive.
         bgfx::FrameBufferHandle segmentTargetFbo_ = BGFX_INVALID_HANDLE; ///< bound target's fbo (invalid=backbuffer)
-        bgfx::ViewId segmentNextId_ = Detail::kFirstSegmentViewId;  ///< next free per-frame segment id
+        bgfx::ViewId frameNextViewId_ = Detail::kFirstPublicFrameViewId; ///< next free ordered frame id
         bool     segmentActive_ = false;                            ///< has the first operation on this binding happened?
-        // REMED-GFX-018: a target base view can be rebound within one un-advanced frame (A->B->A).
-        // Reusing and reconfiguring that base view would retroactively change A's first operation,
-        // because bgfx resolves per-view framebuffer/clear state only at frame(). Remember which
-        // base ids were consumed and force a fresh ordered segment on a same-frame rebind.
-        std::array<bool, Detail::kFirstSegmentViewId> segmentBaseUsed_ = {};
-        bool segmentNeedsFreshView_ = false;
         // REMED-GFX-155: the view ids this frame's public commands used, in the order they were
         // first used. bgfx does NOT execute views in submission order -- it radix-sorts every draw
         // by its view's SORT POSITION, which defaults to the numeric view id. Because the backbuffer
@@ -749,11 +712,8 @@ namespace CNA::Internal::Backends::Bgfx
         std::vector<bgfx::ViewId> frameViewOrder_;
         std::array<bool, Detail::kMaxViews> frameViewOrdered_ = {};
         // REMED-GFX-155: the highest view id any public command has used this frame, or -1 before
-        // the first one. A bind cycle may keep its target's BASE view only when that base is above
-        // everything already used; otherwise bgfx's ascending-id execution would run it before work
-        // that was submitted earlier, and it takes the next ordered segment id instead. This is the
-        // whole fix: REMED-GFX-018/065 already guarantee segment ids are allocated monotonically and
-        // sit above every base id, so honouring it makes ascending-id order == public order.
+        // the first one. REMED-GFX-179's unified allocator makes every newly required view
+        // monotonically larger by construction, so ascending-id order is public order.
         int highestViewUsedThisFrame_ = -1;
         // REMED-GFX-155: set from CNA_BGFX_TRACE_VIEW_ORDER=1. bgfx's execution order is not
         // observable from the public API, so the ordering this backend programs is written to stderr
@@ -769,13 +729,9 @@ namespace CNA::Internal::Backends::Bgfx
         bool traceReadback_ = false;
         /// REMED-GFX-154: how many public readbacks this device has served, for the trace's own index.
         int readbackCallIndex_ = 0;
-        // The active view's viewport identity. The FIRST viewport on a target uses its BASE view (view 0 /
-        // RT id) exactly as before this task -- a custom viewport still shrinks that base view's rect
-        // (REMED-GFX-063), so a single-viewport frame is byte-identical to pre-GFX-065. A draw whose
-        // viewport differs from the active view's starts the next ordered draw-only segment view. Since
-        // GFX-018 records Clear on its own full-target ordered view, draw segments preserve colour,
-        // depth, and stencil; once off the base view we never return to it (that would reorder it).
-        bool     segCurIsBase_ = true;   ///< is the active view the target's base view (vs a segment)?
+        // The active view's viewport identity. A draw whose viewport differs from the active view's
+        // starts the next ordered draw-only view. Since GFX-018 records Clear on its own full-target
+        // ordered view, draw segments preserve colour, depth, and stencil.
         bool     segCurHasVp_ = false;   ///< active view's custom-viewport flag
         uint16_t segCurX_ = 0, segCurY_ = 0, segCurW_ = 0, segCurH_ = 0;  ///< active view's custom viewport
         // REMED-GFX-084: the active view's SpriteBatch view-transform identity. EnsureViewState bakes
@@ -839,9 +795,10 @@ namespace CNA::Internal::Backends::Bgfx
         BgfxCnaCallback readbackCallback_;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)
         bgfx::FrameBufferHandle mrtFbo_ = BGFX_INVALID_HANDLE;
-        // Task 910: MRT's own stable view id for as long as mrtFbo_ is valid -- allocated fresh
-        // each SetRenderTargets(count>1) call, released whenever mrtFbo_ is torn down.
-        bgfx::ViewId mrtViewId_ = Detail::kInvalidRtViewId;
+        // GFX-179: CNA's Bgfx shaders expose one colour output. Keep a sibling framebuffer with
+        // every attachment writable for public Clear(), while mrtFbo_ exposes only slot 0 to draws.
+        // A clear view and a following draw view remain distinct ordered operations.
+        bgfx::FrameBufferHandle mrtClearFbo_ = BGFX_INVALID_HANDLE;
         // 3D shader programs (BGFX_INVALID_HANDLE until bgfx_shaders.hpp binaries are loaded)
         bgfx::ProgramHandle colored3DProgram_         = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle textured3DProgram_        = BGFX_INVALID_HANDLE;
@@ -986,21 +943,6 @@ namespace CNA::Internal::Backends::Bgfx
                                                 int x, int y, int w, int h, void* data,
                                                 int layer = 0);
         /**
-         * @brief Whether @p baseId has already recorded a draw in the current, un-advanced frame.
-         *
-         * REMED-GFX-134: a render target rebound within one frame must not reconfigure its base
-         * view last-wins -- REMED-GFX-018/065 already route the rebind's own draws onto a fresh
-         * ordered segment view. A cube face's bind therefore has to know whether re-pointing the
-         * base view's framebuffer would destroy an earlier face's recorded work.
-         *
-         * @param baseId The render target's own stable base view id.
-         * @return True when that base view has already been used this frame.
-         */
-        [[nodiscard]] bool BaseViewUsedThisFrameEXT(bgfx::ViewId baseId) const
-        {
-            return baseId < segmentBaseUsed_.size() && segmentBaseUsed_[baseId];
-        }
-        /**
          * @brief Completes the current bgfx frame so every queued framebuffer RESOLVE has run.
          *
          * REMED-GFX-134: bgfx performs a render target's MSAA resolve and its
@@ -1120,11 +1062,10 @@ namespace CNA::Internal::Backends::Bgfx
         // so clears and draws remain interleavable in CNA submission order.
         void RecordClear(uint16_t clearFlags);
 
-        // REMED-GFX-065: select the view id this draw/batch must submit to, allocating an ordered
-        // per-frame viewport-segment view when the viewport changed on the current target (see the
-        // segment* members). Redirects currentViewId_ and spriteViewId; called at the very start of
-        // the 3D (ApplyViewportOverride) and SpriteBatch (SubmitSprite) submit paths. In the common
-        // single-viewport case it keeps the target's base view and allocates nothing.
+        // REMED-GFX-065/GFX-179: select the view id this draw/batch must submit to. The first real
+        // operation on a binding allocates its per-frame view lazily (except initial backbuffer view
+        // 0); later viewport/transform changes allocate another. Consecutive compatible draws reuse
+        // the active view. Redirects currentViewId_ and spriteViewId at the start of both draw paths.
         // REMED-GFX-084: spritePath == true also keys the segment on the SpriteBatch view transform
         // (spriteTransform_), which EnsureViewState bakes into the view-global setViewTransform, so a
         // same-viewport batch with a different Begin(transformMatrix) starts a new ordered segment. The
@@ -1135,12 +1076,12 @@ namespace CNA::Internal::Backends::Bgfx
         // (vs the full-target/default viewport); also returns the target's full pixel size. Shared by
         // SelectViewportSegment() and ApplyViewportOverride(); mirrors EnsureViewState()'s own test.
         bool CurrentCustomViewport(uint16_t& fullW, uint16_t& fullH) const;
-        // Allocate the next ordered per-frame segment view id; throws when the frame exhausts the
-        // reserved [kFirstSegmentViewId, 255) range (a deliberate, deterministic cap -- see the .cpp).
-        bgfx::ViewId AllocateSegmentViewId();
-        // Point the segment tracker at a newly-bound target (base view id + framebuffer), resetting so
-        // the next draw starts from that target's base view. Called by SetRenderTarget* and the cube path.
-        void ResetSegmentTarget(bgfx::ViewId baseId, bgfx::FrameBufferHandle fbo);
+        // Allocate the next ordered per-frame public view id; throws when the frame exhausts
+        // [1,255), leaving 255 reserved for readback/flush.
+        bgfx::ViewId AllocateFrameViewId();
+        // Point the tracker at a newly-bound framebuffer. No view is consumed until a real
+        // draw/Clear commits state for that binding.
+        void ResetSegmentTarget(bgfx::FrameBufferHandle fbo);
 
         /**
          * @brief Publishes the active multisampled cube face into its public cube image.
@@ -1151,19 +1092,12 @@ namespace CNA::Internal::Backends::Bgfx
          * No-op for ordinary cubes, idle binds, and an absent cube target.
          */
         void FinalizeCurrentCubeFaceEXT();
-        // Recycle the per-frame segment id pool at a frame boundary (after bgfx::frame()).
+        // Recycle the per-frame public view-id pool at a frame boundary (after bgfx::frame()).
         void EndFrameSegments();
         // REMED-GFX-155: record that a public command has just committed to @p id. Idempotent: a
         // view already used this frame keeps its original position, which is what makes a run of
         // consecutive draws on one view cheap.
         void NoteViewUsedEXT(bgfx::ViewId id);
-        // REMED-GFX-155: may a bind cycle whose target's base view is @p baseId start on that base
-        // view, or would doing so execute it before work already submitted this frame?
-        [[nodiscard]] bool BaseViewPreservesOrderEXT(bgfx::ViewId baseId) const
-        {
-            return static_cast<int>(baseId) > highestViewUsedThisFrame_;
-        }
-
         // Task 880: overrides the current 3D view's rect with a custom Viewport, if one was set
         // via SetViewport(). Since REMED-GFX-063 this applies to render-target views too, and since
         // REMED-GFX-065 it runs after SelectViewportSegment() so it targets the right segment view.

@@ -1141,6 +1141,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_DescriptorCapacityContract COMMAND cna_test_bgfx_descriptor_capacity
         TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-179: bgfx view IDs are per-frame command routing, not render-target descriptors.
+    # The former [1,64) persistent-ID partition made the 64th simultaneously live target throw
+    # before any target was bound.  This backend-specific fixture covers that exact 63/64 boundary,
+    # farther counts, sequential reclamation, A/B/A ordering, native-handle and per-frame view-ID
+    # reuse, both reserved-view readback paths, multiple frames, and teardown with live targets.
+    cna_bgfx_test(cna_test_bgfx_gfx179_view_capacity
+        examples/bgfx_gfx179_view_capacity_test.cpp)
+    cna_register_backend_test(NAME Bgfx_GFX179_ViewCapacity
+        COMMAND cna_test_bgfx_gfx179_view_capacity
+        TIMEOUT 300
+        ENVIRONMENT
+            "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_TRACE_VIEW_ORDER=1;CNA_BGFX_TRACE_READBACK=1")
+
     cna_bgfx_test(cna_test_bgfx_point_sampling
         examples/point_sampling_contract_test.cpp)
     cna_register_backend_test(NAME Bgfx_PointSamplingContract COMMAND cna_test_bgfx_point_sampling

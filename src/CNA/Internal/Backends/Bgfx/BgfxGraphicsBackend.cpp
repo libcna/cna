@@ -886,49 +886,12 @@ namespace CNA::Internal::Backends::Bgfx
 
     namespace Detail
     {
-        // Task 910: view id 0 is permanently reserved for the backbuffer; every render target
-        // (2D, cube, or MRT) gets a distinct id from this pool instead of the old hardcoded 1.
-        // Free-list-backed so long-running games creating/destroying render targets don't
-        // exhaust bgfx's view-id space (BGFX_CONFIG_MAX_VIEWS, 256 by default).
-        static std::vector<bgfx::ViewId>& RtViewIdFreeList()
-        {
-            static std::vector<bgfx::ViewId> pool;
-            return pool;
-        }
-
-        bgfx::ViewId AllocateRtViewId()
-        {
-            // Mirrors bgfx's own internal BGFX_CONFIG_MAX_VIEWS default (src/config.h, not part
-            // of the public bgfx.h API so not #include-able here) -- view id 0 is reserved for
-            // the backbuffer, [kFirstSegmentViewId, 255) is reserved for REMED-GFX-065's per-frame
-            // viewport-segment views, and kBackbufferFlushViewId (Task 951) is reserved at the top
-            // end, leaving ids [1, kFirstSegmentViewId) for render targets/MRT base views.
-            static constexpr bgfx::ViewId kMaxBgfxViews = kFirstSegmentViewId;
-            auto& pool = RtViewIdFreeList();
-            if (!pool.empty())
-            {
-                const bgfx::ViewId id = pool.back();
-                pool.pop_back();
-                return id;
-            }
-            static bgfx::ViewId nextId = 1;
-            if (nextId >= kMaxBgfxViews)
-                throw std::runtime_error("Bgfx: exhausted view ids (more concurrently-live "
-                                          "render targets than bgfx supports views)");
-            return nextId++;
-        }
-
-        void ReleaseRtViewId(bgfx::ViewId id)
-        {
-            RtViewIdFreeList().push_back(id);
-        }
-
         // REMED-GFX-158: this backend's own record of what every view's framebuffer binding is
         // meant to be. bgfx's view state is context state that survives a frame, and the only
         // thing other than this backend that ever changes it is bgfx::reset(), which wipes all of
         // it -- so this array IS the intended state, and replaying it after a reset restores
-        // precisely what the reset destroyed. Process-wide like RtViewIdFreeList() above, and for
-        // the same reason: bgfx itself is a process-wide singleton.
+        // precisely what the reset destroyed. Process-wide because bgfx itself is a process-wide
+        // singleton.
         static std::array<bgfx::FrameBufferHandle, kMaxViews>& ViewFrameBufferMirror()
         {
             static std::array<bgfx::FrameBufferHandle, kMaxViews> mirror = [] {
@@ -969,8 +932,7 @@ namespace CNA::Internal::Backends::Bgfx
     BgfxRenderTargetBackend::BgfxRenderTargetBackend(BgfxGraphicsBackend* owner,
                                                       int w, int h, int depthFormat, bool preserve,
                                                       int requestedMultiSampleCount, bool mipMap)
-        : width(w), height(h), preserveContents(preserve), viewId_(Detail::AllocateRtViewId()),
-          owner_(owner)
+        : width(w), height(h), preserveContents(preserve), owner_(owner)
     {
         // REMED-GFX-127: bgfx allocates the FULL chain when hasMips is set (same convention the
         // EasyGL target uses), so GetData can validate a mip request against a real level count
@@ -1033,22 +995,17 @@ namespace CNA::Internal::Backends::Bgfx
             Detail::ForgetFrameBufferEXT(fbo);
             bgfx::destroy(fbo);
         }
-        Detail::ReleaseRtViewId(viewId_);
     }
 
     void BgfxRenderTargetBackend::BindAsRenderTarget()
     {
-        Detail::SetViewFrameBufferEXT(viewId_, fbo);
-        bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(width), static_cast<uint16_t>(height));
-        // REMED-GFX-018: do not mutate this base view's clear state here. A same-frame A->B->A
-        // rebind would retroactively overwrite A's already-recorded clear because bgfx view state
-        // is resolved only at frame(). The owning graphics backend assigns CLEAR_NONE or the exact
-        // requested mask when the first draw/clear on this binding receives its ordered view.
+        // REMED-GFX-179: binding selects only this framebuffer. The owning graphics backend lazily
+        // assigns the frame's next ordered view when a real draw/Clear commits to the binding.
     }
 
     void BgfxRenderTargetBackend::UnbindAsRenderTarget()
     {
-        Detail::SetViewFrameBufferEXT(viewId_, BGFX_INVALID_HANDLE);
+        // No persistent view binding exists to undo (REMED-GFX-179).
     }
 
     bool BgfxRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
@@ -1129,38 +1086,49 @@ namespace CNA::Internal::Backends::Bgfx
     {
         FinalizeCurrentCubeFaceEXT();
         currentCubeTarget_ = nullptr;
-        if (bgfx::isValid(mrtFbo_)) { Detail::ForgetFrameBufferEXT(mrtFbo_); bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
-        if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
+        if (bgfx::isValid(mrtFbo_))
+        {
+            Detail::ForgetFrameBufferEXT(mrtFbo_);
+            bgfx::destroy(mrtFbo_);
+            mrtFbo_ = BGFX_INVALID_HANDLE;
+        }
+        if (bgfx::isValid(mrtClearFbo_))
+        {
+            Detail::ForgetFrameBufferEXT(mrtClearFbo_);
+            bgfx::destroy(mrtClearFbo_);
+            mrtClearFbo_ = BGFX_INVALID_HANDLE;
+        }
         if (rt)
         {
-            // Task 910: use this RT's own stable view id, not a hardcoded shared one -- lets
-            // more than one render target be bound within a single un-advanced bgfx frame
-            // without one clobbering another's already-recorded draws.
             auto* bgfxRt = static_cast<BgfxRenderTargetBackend*>(rt);
             bgfxRt->BindAsRenderTarget();
-            currentViewId_ = bgfxRt->viewId_;
-            spriteViewId = bgfxRt->viewId_;
             currentRtWidth_  = static_cast<uint16_t>(rt->GetWidth());
             currentRtHeight_ = static_cast<uint16_t>(rt->GetHeight());
-            // REMED-GFX-065: this RT's own view is the base for its segment chain this frame.
-            ResetSegmentTarget(bgfxRt->viewId_, bgfxRt->fbo);
+            ResetSegmentTarget(bgfxRt->fbo);
         }
         else
         {
             Detail::SetViewFrameBufferEXT(0, BGFX_INVALID_HANDLE);
-            currentViewId_ = 0;
-            spriteViewId = 0;
             currentRtWidth_ = currentRtHeight_ = 0;
-            // REMED-GFX-065: back to the backbuffer -> base view 0, its own default framebuffer.
-            ResetSegmentTarget(0, BGFX_INVALID_HANDLE);
+            ResetSegmentTarget(BGFX_INVALID_HANDLE);
         }
     }
 
     void BgfxGraphicsBackend::SetRenderTargets(
         const RenderTargetBindingDescriptor* renderTargets, int count)
     {
-        if (bgfx::isValid(mrtFbo_)) { Detail::ForgetFrameBufferEXT(mrtFbo_); bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
-        if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
+        if (bgfx::isValid(mrtFbo_))
+        {
+            Detail::ForgetFrameBufferEXT(mrtFbo_);
+            bgfx::destroy(mrtFbo_);
+            mrtFbo_ = BGFX_INVALID_HANDLE;
+        }
+        if (bgfx::isValid(mrtClearFbo_))
+        {
+            Detail::ForgetFrameBufferEXT(mrtClearFbo_);
+            bgfx::destroy(mrtClearFbo_);
+            mrtClearFbo_ = BGFX_INVALID_HANDLE;
+        }
         if (count <= 0)
         {
             SetRenderTarget2D(nullptr);
@@ -1183,29 +1151,34 @@ namespace CNA::Internal::Backends::Bgfx
                 throw std::runtime_error(
                     "Bgfx SetRenderTargets: cube faces in a multi-target set are not "
                     "implemented by this CNA backend.");
-        // Multi-target: build a temporary framebuffer from the color textures. Task 910: MRT
-        // gets its own freshly-allocated view id too (not the old hardcoded 1), so a 2nd,
-        // different MRT setup bound later within the same un-advanced frame doesn't clobber
-        // this one's already-recorded draws.
+        // Multi-target: build a temporary framebuffer from the color textures. REMED-GFX-179's
+        // lazy ordered allocator assigns it a view only when a draw/Clear actually uses it.
         static constexpr int kMaxAttachments = 8; // bgfx BGFX_CONFIG_MAX_FRAME_BUFFER_ATTACHMENTS default
         bgfx::Attachment attachments[kMaxAttachments];
+        bgfx::Attachment clearAttachments[kMaxAttachments];
         int n = count < kMaxAttachments ? count : kMaxAttachments;
         for (int i = 0; i < n; ++i)
         {
             auto* bgfxRt = static_cast<BgfxRenderTargetBackend*>(
                 renderTargets[i].GetRenderTarget2D());
-            attachments[i].init(bgfxRt->colorTex);
+            // Every shader CNA can submit through this backend has exactly one colour output.
+            // Access::Write makes bgfx expose an attachment through the renderer's draw-buffer
+            // list; on the OpenGL route its legacy gl_FragColor output is then broadcast to every
+            // listed attachment.  The old persistent MRT base-view alias accidentally redirected
+            // an earlier attachment set before execution and hid that effect.  GFX-179 gives each
+            // ordered set its real view, so keep slot 0 writable and attach the remaining public
+            // targets without advertising nonexistent shader outputs.  They retain their own
+            // contents instead of receiving slot 0's colour, preserving the established MRT
+            // attachment-set boundary while public draw order is no longer collapsed.
+            attachments[i].init(bgfxRt->colorTex,
+                                i == 0 ? bgfx::Access::Write : bgfx::Access::ReadWrite);
+            clearAttachments[i].init(bgfxRt->colorTex);
         }
         mrtFbo_ = bgfx::createFrameBuffer(static_cast<uint8_t>(n), attachments);
-        mrtViewId_ = Detail::AllocateRtViewId();
-        Detail::SetViewFrameBufferEXT(mrtViewId_, mrtFbo_);
-        currentViewId_ = mrtViewId_;
-        spriteViewId = mrtViewId_;
+        mrtClearFbo_ = bgfx::createFrameBuffer(static_cast<uint8_t>(n), clearAttachments);
         currentRtWidth_  = static_cast<uint16_t>(renderTargets[0].GetWidth());
         currentRtHeight_ = static_cast<uint16_t>(renderTargets[0].GetHeight());
-        // REMED-GFX-065: the MRT view is the base for its segment chain; a segment preserves the whole
-        // multi-attachment framebuffer (mrtFbo_ carries every color attachment).
-        ResetSegmentTarget(mrtViewId_, mrtFbo_);
+        ResetSegmentTarget(mrtFbo_);
     }
 
     // --- BgfxRenderTargetCubeBackend ---
@@ -1213,7 +1186,7 @@ namespace CNA::Internal::Backends::Bgfx
     BgfxRenderTargetCubeBackend::BgfxRenderTargetCubeBackend(BgfxGraphicsBackend* owner, int size,
                                                               int depthFormat, bool mipMap,
                                                               int requestedMultiSampleCount)
-        : owner_(owner), size_(size), viewId_(Detail::AllocateRtViewId())
+        : owner_(owner), size_(size)
     {
         // REMED-GFX-134: what bgfx really allocates for this cube, so GetData can refuse a level
         // that has no storage instead of answering with a clamped one.
@@ -1308,7 +1281,6 @@ namespace CNA::Internal::Backends::Bgfx
         for (auto& faceTexture : msaaFaceColorTex_)
             if (bgfx::isValid(faceTexture)) bgfx::destroy(faceTexture);
         if (bgfx::isValid(depthTex)) bgfx::destroy(depthTex);
-        Detail::ReleaseRtViewId(viewId_);
     }
 
     void BgfxRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
@@ -1344,22 +1316,13 @@ namespace CNA::Internal::Backends::Bgfx
         fbo = faceFbos_[slot];
         boundFace_ = face;
 
-        // REMED-GFX-134: only (re)point the BASE view when it has not already recorded a draw this
-        // frame. Once it has, REMED-GFX-018/065's own machinery routes this face onto a fresh
-        // ordered segment view and gives THAT view this framebuffer (see SelectViewportSegment);
-        // re-pointing the base here instead would redirect the earlier face's recorded draws at
-        // this face's attachment, which is exactly how the first face's content was lost.
-        if (owner_ == nullptr || !owner_->BaseViewUsedThisFrameEXT(viewId_))
-        {
-            Detail::SetViewFrameBufferEXT(viewId_, fbo);
-            bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(size_),
-                              static_cast<uint16_t>(size_));
-        }
+        // REMED-GFX-179: no persistent/base view is repointed here. The owner assigns a fresh
+        // ordered per-frame view to this face's framebuffer on its first real operation, so an
+        // earlier face can never be redirected last-wins.
     }
 
     void BgfxRenderTargetCubeBackend::UnbindAsRenderTarget()
     {
-        Detail::SetViewFrameBufferEXT(viewId_, BGFX_INVALID_HANDLE);
         boundFace_ = -1;
     }
 
@@ -1438,19 +1401,12 @@ namespace CNA::Internal::Backends::Bgfx
     {
         if (!rt) return;
         FinalizeCurrentCubeFaceEXT();
-        // Task 910: use this cube RT's own stable view id (shared by all 6 faces), not a
-        // hardcoded shared one -- lets more than one render target (or cube face across more
-        // than one cube) be bound within a single un-advanced bgfx frame safely.
         auto* bgfxRt = static_cast<BgfxRenderTargetCubeBackend*>(rt);
         bgfxRt->BindAsRenderTargetFace(face);
         currentCubeTarget_ = bgfxRt;
-        currentViewId_   = bgfxRt->viewId_;
-        spriteViewId     = bgfxRt->viewId_;
         currentRtWidth_  = static_cast<uint16_t>(rt->GetSize());
         currentRtHeight_ = static_cast<uint16_t>(rt->GetSize());
-        // REMED-GFX-065: this cube face's view (BindAsRenderTargetFace just (re)bound fbo to it) is the
-        // base for its segment chain. Binding a new face rebuilds fbo, so re-point the tracker each time.
-        ResetSegmentTarget(bgfxRt->viewId_, bgfxRt->fbo);
+        ResetSegmentTarget(bgfxRt->fbo);
     }
 
     BgfxSpriteBatchBackend::BgfxSpriteBatchBackend(BgfxGraphicsBackend& graphicsBackend)
@@ -1929,7 +1885,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(pbr3DProgram_);
         destroyP(pbrSkinned3DProgram_);
         if (bgfx::isValid(mrtFbo_))         { Detail::ForgetFrameBufferEXT(mrtFbo_); bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
-        if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
+        if (bgfx::isValid(mrtClearFbo_))    { Detail::ForgetFrameBufferEXT(mrtClearFbo_); bgfx::destroy(mrtClearFbo_); mrtClearFbo_ = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(textureSampler))  { bgfx::destroy(textureSampler);  textureSampler  = BGFX_INVALID_HANDLE; }
         if (bgfx::isValid(spriteProgram))   { bgfx::destroy(spriteProgram);   spriteProgram   = BGFX_INVALID_HANDLE; }
 
@@ -2036,29 +1992,20 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::RecordClear(uint16_t clearFlags)
     {
-        // A clear is a full-target ordered operation. The first operation on a target may use its
-        // base view; every later clear needs a fresh monotonically-increasing segment so bgfx
-        // cannot move it before earlier draws or collapse two clear masks/values last-wins.
-        const bool useBaseView = !segmentActive_ && !segmentNeedsFreshView_ &&
-                                 BaseViewPreservesOrderEXT(segmentTargetBaseId_);
-        if (useBaseView)
-        {
-            currentViewId_ = spriteViewId = segmentTargetBaseId_;
-            segCurIsBase_ = true;
-            if (segmentTargetBaseId_ < segmentBaseUsed_.size())
-                segmentBaseUsed_[segmentTargetBaseId_] = true;
-        }
-        else
-        {
-            const bgfx::ViewId segmentId = AllocateSegmentViewId();
-            Detail::SetViewFrameBufferEXT(segmentId, segmentTargetFbo_);
-            currentViewId_ = spriteViewId = segmentId;
-            segCurIsBase_ = false;
-        }
+        // Every Clear is its own full-target ordered operation: reusing a view would collapse its
+        // clear mask/value last-wins. Only the first backbuffer operation of a frame may use view 0;
+        // every other operation draws from the unified monotonically increasing per-frame range.
+        const bool initialBackbuffer = !segmentActive_ && !bgfx::isValid(segmentTargetFbo_) &&
+                                       frameViewOrder_.empty();
+        const bgfx::ViewId viewId = initialBackbuffer ? 0 : AllocateFrameViewId();
+        const bool mrtClear = bgfx::isValid(mrtFbo_) && bgfx::isValid(mrtClearFbo_) &&
+                              bgfx::isValid(segmentTargetFbo_) &&
+                              segmentTargetFbo_.idx == mrtFbo_.idx;
+        Detail::SetViewFrameBufferEXT(viewId, mrtClear ? mrtClearFbo_ : segmentTargetFbo_);
+        currentViewId_ = spriteViewId = viewId;
 
         NoteViewUsedEXT(currentViewId_);   // REMED-GFX-155: public order, not numeric id order.
         segmentActive_ = true;
-        segmentNeedsFreshView_ = false;
         segCurHasVp_ = false; // Clear ignores GraphicsDevice.Viewport and always owns the full target.
         segCurX_ = segCurY_ = segCurW_ = segCurH_ = 0;
         segCurSpriteTransformValid_ = false;
@@ -2066,6 +2013,11 @@ namespace CNA::Internal::Backends::Bgfx
 
         EnsureViewState();
         bgfx::touch(spriteViewId);
+        // The clear framebuffer exposes all MRT slots, while CNA's single-output draw framebuffer
+        // exposes only slot 0. A following draw therefore needs its own ordered view/FBO binding;
+        // keeping this clear view active would either broadcast slot 0 or stop clearing extras.
+        if (mrtClear)
+            segmentActive_ = false;
     }
 
     void BgfxGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -2077,14 +2029,14 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxGraphicsBackend::Present()
     {
         FinalizeCurrentCubeFaceEXT();
-        // If the current target was rebound after its base view had already been consumed this
-        // frame, configuring that base merely for Present would retroactively clobber the earlier
-        // operation. The next real draw/clear will allocate its required fresh segment.
-        if (!segmentNeedsFreshView_)
+        // A binding with no operation owns no view. Do not configure view 0 for such a pending bind
+        // when earlier work exists, because bgfx view state is last-wins. With no earlier work,
+        // EnsureViewState still performs any required backbuffer resize/reset.
+        if (segmentActive_ || frameViewOrder_.empty())
             EnsureViewState();
         bgfx::frame();
         spriteVpValid_ = false; // REMED-GFX-072: sprite viewport is per-frame; clear for the next one.
-        EndFrameSegments();     // REMED-GFX-065: recycle the per-frame viewport-segment view ids.
+        EndFrameSegments();     // REMED-GFX-179: recycle all public per-frame view ids.
     }
 
     void BgfxGraphicsBackend::SetSwapInterval(int interval)
@@ -2602,31 +2554,26 @@ namespace CNA::Internal::Backends::Bgfx
         viewportSet_ = true;
     }
 
-    // REMED-GFX-065: allocate the next ordered per-frame viewport-segment view id. Monotonic so bgfx's
-    // ascending-view-id execution order == CNA submission order for a target's segments. Recycled every
-    // frame by EndFrameSegments(). GFX-018 also uses this pool for ordered clear operations and target
-    // rebinds. Exhausting the reserved [kFirstSegmentViewId, 255) range throws a clear error rather than
-    // silently wrapping (which would corrupt an earlier view's state).
-    bgfx::ViewId BgfxGraphicsBackend::AllocateSegmentViewId()
+    // REMED-GFX-179: one unified ordered per-frame range for target binds, later backbuffer binds,
+    // viewport/transform transitions, clears, and internal cube publication. The cursor is reset
+    // after every bgfx::frame(); 255 remains reserved for readback/flush. Throw rather than wrap,
+    // because reusing a same-frame id would redirect earlier work through last-written view state.
+    bgfx::ViewId BgfxGraphicsBackend::AllocateFrameViewId()
     {
-        if (segmentNextId_ >= Detail::kBackbufferFlushViewId)
+        if (frameNextViewId_ >= Detail::kBackbufferFlushViewId)
             throw std::runtime_error(
-                "Bgfx: exhausted per-frame ordered view-segment ids (more than 190 viewport/"
-                "transform/clear/target-rebind/ordering segments in one frame -- "
-                "REMED-GFX-065/GFX-018/GFX-155)");
-        return segmentNextId_++;
+                "Bgfx: exhausted per-frame ordered view ids (more than 254 target-bind/viewport/"
+                "transform/clear/resolve states in one frame; view 255 is reserved for readback)");
+        return frameNextViewId_++;
     }
 
-    // REMED-GFX-065: repoint the segment tracker at a newly-bound target. The next draw starts from this
-    // target's base view (segmentActive_ = false); a later viewport change on it consumes a segment id.
-    void BgfxGraphicsBackend::ResetSegmentTarget(bgfx::ViewId baseId, bgfx::FrameBufferHandle fbo)
+    // REMED-GFX-179: binding selects a framebuffer but consumes no view. The first real operation
+    // allocates and programs its ordered per-frame view lazily.
+    void BgfxGraphicsBackend::ResetSegmentTarget(bgfx::FrameBufferHandle fbo)
     {
-        segmentTargetBaseId_ = baseId;
         segmentTargetFbo_    = fbo;
         segmentActive_       = false;
-        segmentNeedsFreshView_ =
-            baseId < segmentBaseUsed_.size() && segmentBaseUsed_[baseId];
-        currentViewId_ = spriteViewId = baseId;
+        currentViewId_ = spriteViewId = 0;
         currentViewClearFlags_ = BGFX_CLEAR_NONE;
     }
 
@@ -2646,7 +2593,7 @@ namespace CNA::Internal::Backends::Bgfx
         // differs from the producer framebuffer, so the transition performs bgfx's hidden MSAA
         // resolve and mip generation BEFORE this view's blits are drained (the same measured rule
         // REMED-GFX-154's readback view relies on).
-        const bgfx::ViewId resolveView = AllocateSegmentViewId();
+        const bgfx::ViewId resolveView = AllocateFrameViewId();
         Detail::SetViewFrameBufferEXT(resolveView, BGFX_INVALID_HANDLE);
         bgfx::setViewRect(resolveView, 0, 0, 1, 1);
         bgfx::setViewClear(resolveView, BGFX_CLEAR_NONE,
@@ -2664,23 +2611,19 @@ namespace CNA::Internal::Backends::Bgfx
                        source, static_cast<uint8_t>(level), 0, 0, 0, edge, edge, 1);
         }
 
-        // The copy view itself is now the latest public-order dependency. A subsequent target bind
-        // cannot reuse a lower base id; BaseViewPreservesOrderEXT routes its first operation to the
-        // next monotonically increasing segment, preserving producer -> resolve -> consumer order.
+        // The copy view itself is now the latest public-order dependency. A subsequent operation
+        // takes the next monotonically increasing ID, preserving producer -> resolve -> consumer.
         segmentActive_ = false;
     }
 
-    // REMED-GFX-065: recycle the per-frame segment id pool and fall back to the current target's base
-    // view. Called right after every bgfx::frame() (Present / ReadBackbuffer), so next frame's first
-    // draw on the still-bound target starts from its base view again.
+    // REMED-GFX-179: recycle the entire public per-frame ID range. The bound framebuffer survives,
+    // but owns no view until the next frame's first real operation.
     void BgfxGraphicsBackend::EndFrameSegments()
     {
-        segmentNextId_  = Detail::kFirstSegmentViewId;
+        frameNextViewId_ = Detail::kFirstPublicFrameViewId;
         segmentActive_  = false;
-        segmentNeedsFreshView_ = false;
-        segmentBaseUsed_.fill(false);
-        currentViewId_  = segmentTargetBaseId_;
-        spriteViewId    = segmentTargetBaseId_;
+        currentViewId_  = 0;
+        spriteViewId    = 0;
         currentViewClearFlags_ = BGFX_CLEAR_NONE;
         // REMED-GFX-155: the frame's programmed view order belongs to the frame that just ended.
         // Reprogramming right here (rather than only before the next bgfx::frame()) matters because
@@ -2705,10 +2648,8 @@ namespace CNA::Internal::Backends::Bgfx
     // a view becomes the active submission target -- SelectViewportSegment() (both draw paths) and
     // RecordClear(). Reprogramming HERE rather than once before bgfx::frame() keeps the order valid
     // at every one of this backend's frame-advance sites, including the readback paths that advance
-    // a frame from a free function with no access to this object. Every id this backend hands out is
-    // < kMaxViews by construction (base ids and segment ids are both partitioned below
-    // kBackbufferFlushViewId), so the bounds test guards a future partition change rather than an
-    // expected branch.
+    // a frame from a free function with no access to this object. Every public id is below the
+    // reserved kBackbufferFlushViewId by construction.
     void BgfxGraphicsBackend::NoteViewUsedEXT(bgfx::ViewId id)
     {
         if (id >= Detail::kMaxViews)
@@ -2725,24 +2666,20 @@ namespace CNA::Internal::Backends::Bgfx
     // of the current target (vs the full-target/default viewport), and hand back the target's full pixel
     // size. Mirrors EnsureViewState()'s own `spriteCustomVp` test exactly: a full-target viewport (what
     // GraphicsDevice resets on every SetRenderTarget) must NOT be treated as custom, else every ordinary
-    // draw would needlessly segment. RT size when a target is bound (base id != 0), else backbuffer size.
+    // draw would needlessly segment. A nonzero current target size identifies a render target;
+    // backbuffer bindings reset both dimensions to zero.
     bool BgfxGraphicsBackend::CurrentCustomViewport(uint16_t& fullW, uint16_t& fullH) const
     {
-        fullW = (segmentTargetBaseId_ != 0 && currentRtWidth_  > 0) ? currentRtWidth_  : cachedWidth;
-        fullH = (segmentTargetBaseId_ != 0 && currentRtHeight_ > 0) ? currentRtHeight_ : cachedHeight;
+        fullW = currentRtWidth_  > 0 ? currentRtWidth_  : cachedWidth;
+        fullH = currentRtHeight_ > 0 ? currentRtHeight_ : cachedHeight;
         return viewportSet_ && viewportW_ > 0 && viewportH_ > 0 &&
                (viewportX_ != 0 || viewportY_ != 0 || viewportW_ != fullW || viewportH_ != fullH);
     }
 
-    // REMED-GFX-065: pick the view id this draw/batch submits to, preserving XNA draw order across
-    // multiple viewports on one target in one frame. The FIRST viewport on a target uses its BASE view
-    // (view 0 / RT id) exactly as before this task -- a custom viewport still shrinks that base view's
-    // rect (REMED-GFX-063), so a single-viewport frame is byte-identical to pre-GFX-065 (one view, no
-    // extra state). Only a SECOND, DIFFERENT viewport in the same frame routes to a freshly-allocated
-    // ordered segment view (same framebuffer, higher id so bgfx's ascending-view-id execution keeps
-    // submission order). GFX-018 gives every public Clear its own full-target ordered view, so draw-only
-    // viewport/transform segments load and preserve ALL attachments. Consecutive draws sharing the
-    // active view's viewport reuse it (no id churn). Once off the base we never return to it.
+    // REMED-GFX-065/GFX-179: pick the view this draw/batch submits to. A binding's first real draw
+    // lazily receives an ordered per-frame view (or 0 for the frame's initial backbuffer work).
+    // A later viewport/transform transition receives the next view. Consecutive compatible draws
+    // reuse the active view, so draw count itself causes no ID growth.
     void BgfxGraphicsBackend::SelectViewportSegment(bool spritePath)
     {
         uint16_t fullW = 0, fullH = 0;
@@ -2769,27 +2706,14 @@ namespace CNA::Internal::Backends::Bgfx
 
         if (!segmentActive_)
         {
-            // First draw/batch on this binding normally uses the base view. On a same-frame target
-            // rebind, however, that base has already recorded an earlier operation and must not be
-            // reconfigured last-wins; continue on a fresh ordered segment instead (GFX-018).
-            if (segmentNeedsFreshView_ || !BaseViewPreservesOrderEXT(segmentTargetBaseId_))
-            {
-                const bgfx::ViewId segmentId = AllocateSegmentViewId();
-                Detail::SetViewFrameBufferEXT(segmentId, segmentTargetFbo_);
-                currentViewId_ = spriteViewId = segmentId;
-                segCurIsBase_ = false;
-            }
-            else
-            {
-                currentViewId_ = spriteViewId = segmentTargetBaseId_;
-                segCurIsBase_ = true;
-                if (segmentTargetBaseId_ < segmentBaseUsed_.size())
-                    segmentBaseUsed_[segmentTargetBaseId_] = true;
-            }
+            const bool initialBackbuffer = !bgfx::isValid(segmentTargetFbo_) &&
+                                           frameViewOrder_.empty();
+            const bgfx::ViewId viewId = initialBackbuffer ? 0 : AllocateFrameViewId();
+            Detail::SetViewFrameBufferEXT(viewId, segmentTargetFbo_);
+            currentViewId_ = spriteViewId = viewId;
 
             NoteViewUsedEXT(currentViewId_);   // REMED-GFX-155: public order, not numeric id order.
             segmentActive_ = true;
-            segmentNeedsFreshView_ = false;
             segCurHasVp_   = hasVp;
             segCurX_ = viewportX_; segCurY_ = viewportY_; segCurW_ = viewportW_; segCurH_ = viewportH_;
             currentViewClearFlags_ = BGFX_CLEAR_NONE;
@@ -2813,7 +2737,7 @@ namespace CNA::Internal::Backends::Bgfx
 
         if (sameVp && transformCompatible)
         {
-            // Reuse the active view (base or segment) -> no allocation. If it has no committed sprite
+            // Reuse the active view -> no allocation. If it has no committed sprite
             // transform yet (e.g. established by a 3D draw), adopt this batch's now so a later differing
             // transform on the same viewport starts a new ordered segment.
             if (spritePath && !segCurSpriteTransformValid_)
@@ -2821,9 +2745,8 @@ namespace CNA::Internal::Backends::Bgfx
             return;
         }
 
-        // A different viewport OR (sprite path) a different view transform appeared on this target within
-        // the frame -> next ordered segment view.
-        const bgfx::ViewId segId = AllocateSegmentViewId();
+        // A different viewport OR sprite transform appeared on this binding within the frame.
+        const bgfx::ViewId segId = AllocateFrameViewId();
         Detail::SetViewFrameBufferEXT(segId, segmentTargetFbo_);
         // Default to the target's FULL rect (the sprite path keeps this + an offset ortho; a custom 3D
         // viewport shrinks it in ApplyViewportOverride). This is a draw-only view and therefore LOADS
@@ -2836,7 +2759,6 @@ namespace CNA::Internal::Backends::Bgfx
                            clearRgba, clearDepthValue_, clearStencilValue_);
         currentViewId_ = spriteViewId = segId;
         NoteViewUsedEXT(segId);   // REMED-GFX-155: public order, not numeric id order.
-        segCurIsBase_  = false;
         segCurHasVp_   = hasVp;
         segCurX_ = viewportX_; segCurY_ = viewportY_; segCurW_ = viewportW_; segCurH_ = viewportH_;
         commitSpriteTransform();
@@ -2844,10 +2766,9 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::ApplyViewportOverride()
     {
-        // REMED-GFX-065: pick/allocate this draw's ordered viewport segment BEFORE setting the rect, so a
-        // second viewport's sub-rect lands on its OWN segment view rather than clobbering the first
-        // viewport's draws on a shared view. For the first viewport this is still the base view (shrunk
-        // here just like pre-GFX-063). REMED-GFX-084: spritePath=false -- the 3D path never programs
+        // REMED-GFX-065: pick/allocate this draw's ordered view BEFORE setting the rect, so a
+        // second viewport's sub-rect lands on its OWN view rather than clobbering the first
+        // viewport's draws on a shared view. REMED-GFX-084: spritePath=false -- the 3D path never programs
         // setViewTransform, so it keys on the viewport only and does not touch the sprite-transform key.
         SelectViewportSegment(false);
 

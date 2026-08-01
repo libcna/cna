@@ -2501,7 +2501,7 @@ existing task.
 | REMED-GFX-176 | SDL_GPU: `SdlGpuTextureBackend` hardcoded `num_levels = 1` and had no `UpdatePixelsLevel` override, so a `mipMap=true` Texture2D was a one-level GPU resource and every level written above 0 was silently discarded — measured over 77 textures as `nativeLevels=1` on every one and ZERO level>0 upload commands. A third mechanism was reachable only after fixing those two: the level-0 upload's `cycle=true` orphans every level it does not write, and retaining it measures 41/87 on GFX-175's fixture, BELOW the 55/87 this started from. | LOW | P3 | REMED-GFX-175 cross-backend controls | **DONE 2026-07-31 — NEW 112-CHECK STORAGE/UPLOAD FIXTURE 45/112 -> 112/112 AND GFX-175's OWN FIXTURE 55/87 -> 87/87, JOINING THE EIGHT BACKENDS ALREADY THERE. TEN-ENTRY DIMENSION MATRIX (1x1..16x2, NPOT AND ODD) WITH PUBLIC AND NATIVE LEVEL COUNTS AGREEING ON EVERY ROW; EVERY LEVEL READ BACK BYTE-EXACT. NO MIP GENERATION, NO CPU SHADOW, NO EXTRA FRAME/PRESENT/WAIT/READBACK. 77 TEXTURES CREATED / 77 DESTROYED, ONE UPLOAD PER PUBLIC LEVEL UPLOAD. VULKAN VALIDATION PROVEN LOADED, ZERO VUIDs; ASan+UBSan CLEAN. FIVE CROSS-BACKEND CONTROLS 87/87. Texture2D WAS THE ONLY AFFECTED CLASS — Texture3D/TextureCube/RT2D/RTCube ALREADY CORRECT. ONE FALSE POSITIVE FOUND (R12/R13 PASS ON THE UNFIXED BACKEND). GFX-173 UNTOUCHED. SPAWNED GFX-180.** |
 | REMED-GFX-177 | D3D12's four descriptor heaps were monotonic bump cursors with no free list and no growth, and no sampleable-resource class had a destructor, so a slot was consumed for the lifetime of the PROCESS rather than of the resource. The trace names the exact failure: the 65th CBV/SRV/UAV request, made while only 30 resources were alive — 34 of the 64 occupied slots belonged to already-destroyed resources. The SAMPLER heap failed the same way (GFX-170 died at check 26). Fixed by two allocators that reclaim (fence-stamped free lists) and grow bounded — RTV/DSV by appending a block so issued handles never move, CBV/SRV/UAV and SAMPLER by a non-shader-visible staging heap mirrored into the shader-visible one, addressed by stable index. Starting capacities deliberately unchanged. | LOW | P3 | REMED-GFX-175 cross-backend controls | **DONE 2026-07-30 — NEW 29-CHECK PUBLIC FIXTURE 2/15 -> 29/29 ON D3D12, NEW 55-CHECK NATIVE ALLOCATOR FIXTURE 55/55, AND GFX-175's OWN FIXTURE 64-CHECKS-THEN-ABORT -> 87/87. THRESHOLDS 1/2/31/32/63/64/65/66/96/128/256 ALL GREEN; 5435 ALLOCATIONS OVER THE RUN OF WHICH 5177 RECYCLED, PEAK LIVE 258, CAPACITY 512 AFTER 3 DOUBLINGS, 2 HEAP OBJECTS, NO WAIT/IDLE/EXTRA SUBMIT/EXTRA FRAME ADDED. SIX CROSS-BACKEND CONTROLS GREEN, BGFX 28/29 = REMED-GFX-179. ONE FALSE POSITIVE FOUND AND CORRECTED (d3d12_smoke_test CHECK C ASSERTED THE BUMP ALLOCATOR AND FREED NOTHING). SPAWNED GFX-178/179.** |
 | REMED-GFX-178 | D3D12: `TextureFilter::MinPointMagLinearMipLinear` (ordinal 7) magnifies with POINT. Measured by REMED-GFX-170's ordinal fixture, leg C7: `manufactured colours=0` where its sibling `MinPointMagLinearMipPoint` (ordinal 8) correctly reports 124 on the same geometry, so the two ordinals that share a LINEAR magnification component disagree. Previously UNREACHABLE — pre-REMED-GFX-177 that fixture aborted at check 26 on `SAMPLER descriptor heap exhausted`, so leg C7 had never run on D3D12. Same family as GFX-170/GFX-175 (an ordinal losing one of its three components) but a distinct backend expression, so it is not absorbed. | LOW | P3 | REMED-GFX-177 regression gates | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
-| REMED-GFX-179 | Bgfx: `BgfxGraphicsBackend`'s render-target view-id allocator draws from `[1, kFirstSegmentViewId)` and `kFirstSegmentViewId` is **64**, so **63 concurrently live render targets is a hard ceiling** — REMED-GFX-177's public fixture, leg F, needs 66 and throws `Bgfx: exhausted view ids`. Same SHAPE as the D3D12 defect but not the same mechanism and not the same fix: the free list here already works (leg E's 256 sequential create/destroy cycles pass), what is missing is headroom — bgfx's own `BGFX_CONFIG_MAX_VIEWS` default is 256 and CNA reserves `[64, 255)` for REMED-GFX-065's per-frame viewport-segment views, so the partition, not bgfx, sets the limit. Deliberately NOT fixed under GFX-177, whose boundary forbids changing another backend because its binding model differs. | LOW | P3 | REMED-GFX-177 cross-backend controls | OPEN (isolated 2026-07-30 during REMED-GFX-177) |
+| REMED-GFX-179 | **DONE 2026-08-01 — BGFX VIEW IDS NOW BELONG TO ORDERED FRAME WORK, NOT LIVE RENDER-TARGET OBJECTS.** Exact current-HEAD repro confirmed that construction allocated one persistent ID from `[1,64)` for every 2D/cube target, so 63 never-bound targets succeeded and the 64th threw `Bgfx: exhausted view ids`; sequential destruction already reclaimed the free list, proving the failure was the fixed partition/lifetime coupling rather than native descriptor exhaustion. Views 64–254 were separately reserved for ordered segments and 255 for readback. **FIX:** remove object/MRT-lifetime IDs and the split allocator; allocate views lazily and monotonically from `[1,255)` only when a Clear/draw/resolve actually commits, retain view 0 only for the first backbuffer operation, reserve 255 unchanged, reuse compatible draws, and reset the cursor after every `bgfx::frame()`. Live target count no longer consumes view state; same-frame IDs never collide or wrap. A dependent MRT split keeps every attachment writable for public Clear while exposing only CNA's real single colour output to draws, preventing the now-correct earlier MRT view from broadcasting slot 0 into extra attachments. New fixture **17/17** and re-armed descriptor contract **29/29**; 63/64/65/66/96 live, 264 sequential create/dispose cycles, A/B/A, bind/unbind, per-frame ID reuse, native framebuffer/texture-handle reuse, direct target and reserved-view backbuffer readback, multiple frames, live-target teardown all exact. Serial Bgfx shard **174/177**; only the three recorded unrelated failures remain (DRI3-less requested-Vulkan RT2D MSAA and ClearOptions controls, Task 952 cube D24S8). Linked ASan/UBSan **5/5 each**, diagnostics 17/17 with no new class, EasyGL/SDL_GPU/Vulkan controls **29/29 each**. GFX-138/154/155/157/158/163/181/195 preserved; other backend production and `audit/` untouched. **No new findings.** | LOW | P3 | `Bgfx_GFX179_ViewCapacity`, `Bgfx_DescriptorCapacityContract`, target/view/order/readback gates | **DONE (2026-08-01; fix/test/closure in this signed commit)** |
 | REMED-GFX-180 | SDL_GPU: `examples/sdlgpu_renderstate_test.cpp` (`SdlGpu_RenderState`) aborts before its FIRST check with `System::InvalidOperationException: Cannot present while render targets are bound`. Deterministic — 3/3 standalone runs, zero `[PASS]`/`[FAIL]` lines emitted, so nothing in its own try/catch around `RunAll` is ever reached. NOT caused by REMED-GFX-176: it reproduces identically with the pre-GFX-176 backend rebuilt from `249e9f9f`, that session's starting HEAD. The reported exception is a SECONDARY one raised from the present path because a render target was still bound when the frame ended; the primary failure that unwound out of `Draw` without unbinding is masked by it and was deliberately not diagnosed under GFX-176's boundary. | LOW | P3 | REMED-GFX-176 regression gates | **DONE 2026-07-31 — A FIXTURE DEFECT IN TWO STAGES; NO PRODUCTION CHANGED. THE TICKET IS RIGHT THAT IT ABORTS AND WRONG THAT ZERO CHECKS RAN — unbuffered rerun shows 11 PASS + 5 FAIL had already executed into a stdout buffer the abort discarded. PRIMARY EXCEPTION: `ArgumentOutOfRangeException: The requested primitive range exceeds the bound vertex buffer. (Parameter 'primitiveCount') Actual value was 2.` — `RunFillModeChecks` handed a THREE-vertex triangle buffer to a helper hardcoding TWO primitives. The rejection unwound past its own `SetRenderTarget(nullptr)`, so `Game::EndDraw` -> `Present` met a bound target and refused; uncaught -> SIGABRT. CONTRACT A (REJECT, never auto-unbind) read verbatim from FNA `GraphicsDevice.cs:619-631` + `GraphicsDeviceManager.cs:574-581`. SDL_GPU's own `Present` is never reached. A/B: with only the GFX-113 guard short-circuited the UNMODIFIED fixture is 16/16 — Check E had read past its buffer since 827cd036 and passed anyway. RESULT 0 visible checks + SIGABRT -> 18/18; SDL_GPU shard 102/102, the first fully green one. NEW 22-leg / 82-check process-isolated `present_lifecycle_contract_test` on SEVEN backends (22/22 each; 82/82/82/82/77/73/45). Leg C2 REQUIRES SIGABRT. Validation proven loaded, zero VUIDs; ASan+UBSan clean. 14 pass segments per frame, unchanged. ONE NEW FINDING: REMED-GFX-184. |
 | REMED-GFX-181 | Bgfx: `BgfxGraphicsBackend`'s two `EnvironmentMapEffect` submit sites call the FOUR-argument `bgfx::setTexture(1, envMapSampler_, cubeHandle)` and omit `_flags`, so bgfx falls back to the cube texture's own creation flags (`BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP`, linear) and `GraphicsDevice.SamplerStates[1]` never reaches the reflection cube. The base slot one function away does pass `samplerFlags_[0]`. Measured on REMED-GFX-173's fixture at **BGFX 62/104**, byte-identically the failure SET SDL_GPU had before that task: every Point-mode check reports the whole image off-palette and A4 reports differing=0. | LOW | P3 | REMED-GFX-173 cross-backend controls | **DONE 2026-07-31 — THE TICKET IS RIGHT AND THE CORRECTION IS THE TWO LINES IT IMPLIES; WHAT HAD TO BE PROVEN FIRST IS WHAT AN OMITTED `_flags` MEANS. UINT32_MAX IS A SENTINEL, NOT A FLAG WORD: `EncoderImpl::setTexture` STORES `BGFX_SAMPLER_INTERNAL_DEFAULT` AND EVERY RENDERER RESOLVES `0 == (INTERNAL_DEFAULT & _flags) ? _flags : m_flags`, SO AN EXPLICIT WORD **REPLACES** THE CREATION STATE AND NEVER COMBINES WITH IT. `ApplySamplerState` ALREADY HELD GFX-170'S COMPLETE NINE-ORDINAL TRANSLATION AND `applySamplerStatesToBackend` ALREADY DROVE IT FOR EVERY SLOT — `samplerFlags_[1]` WAS CORRECT AND WAS DISCARDED ONE LINE BEFORE THE SUBMIT. NO NEW STATE, NO NEW CAPTURE, NO SECOND TABLE. SUBMIT-SITE COUNT VERIFIED NOT ASSUMED: EXACTLY TWO, AND `DrawInstancedPrimitivesEx` HAS NO ENV-MAP BRANCH AT ALL. BGFX SUBMITS IMMEDIATELY AND **BGFX ITSELF** SNAPSHOTS THE BIND STATE AT `submit()`, SO READING `samplerFlags_[1]` THERE **IS** THE PER-DRAW CAPTURE — NO CNA-SIDE COMMAND STRUCT EXISTS, WHICH IS WHAT SEPARATES THIS FROM GFX-173'S SHAPE; LEG F1 PROVES IT. NEW `CNA_BGFX_ENVMAP_TRACE` OVER 86 BINDS: BEFORE, `effective1` IS `DEFAULT->creation` ON ALL 86 (TWO DISTINCT VALUES) AGAINST TWELVE DISTINCT `captured1`; AFTER, EXPLICIT ON ALL 86, TWELVE DISTINCT, AND `captured1 == effective1` WITH ZERO MISMATCHES. 62/104 -> 104/104. THE FAILING SET WAS EXACTLY THE POINT-MAGNIFYING ORDINALS {1,4,5,6} BECAUSE THE FALLBACK IS LINEAR AND COINCIDES WITH {0,3,7,8}. LEG C1 PASSED **BEFORE** THE FIX, SO THIS WAS NEVER SLOT-0 INHERITANCE — THAT IS WHAT SEPARATES IT FROM WEBGPU'S GFX-172. CARDINALITY BYTE-IDENTICAL PRE/POST (86 BINDS, 4 VIEWS, 76/10 PATHS, 86 EXPLICIT slot-0); ONLY FLAG-BEARING SLOT-1 CALLS MOVE, 0 -> 86. 15 PRE-EXISTING BGFX ENV-MAP/CUBE FIXTURES ALL PASSED UNFIXED AND **NOT ONE EVER SETS `SamplerStates[1]`**; ELEVEN ALSO USE A 1x1 SOLID CUBE. NONE ASSERTS ANYTHING FALSE, SO NONE WAS CHANGED. UBSAN AND ASAN 104/104 WITH ZERO ERRORS; THE 103852 B / 453-ALLOCATION LEAK IS BYTE-IDENTICAL PRE/POST WITH ZERO CNA FRAMES. BGFX SHARD 162/168 BEFORE **AND** AFTER, THE SAME SIX FAILURES PROVEN PRE-EXISTING BY A NARROW RESTORE TO 38c4e09a. CONTROLS: SDL_GPU 104/104, VULKAN 104/104, EASYGL 104/104, HEADLESS 8/8, WEBGPU 74/104 (GFX-172 UNCHANGED), SOFTWARE 66/100 (GFX-182 UNCHANGED). ACTIVE RENDERER OPENGL 2.1; THE BGFX VULKAN ROUTE IS REPORTED **UNTESTED** BECAUSE XVFB HAS NO DRI3. ONLY BGFX PRODUCTION CHANGED. NO NEW FINDINGS.** |
 | REMED-GFX-182 | Software: `SoftwareGraphicsBackend::SampleCubeMap` takes no sampler state at all — it ends in a single clamped `static_cast<int>` texel fetch — so an `EnvironmentMapEffect` reflection cube is ALWAYS point-sampled whatever `GraphicsDevice.SamplerStates[1]` holds. This is the shape REMED-GFX-150 replaced on the 2D path (`SampleTexture`, with explicit filter selection and address transform) and did not reach on the cube path. Measured on REMED-GFX-173's fixture at **SOFTWARE 66/100** (leg L skipped, no RenderTargetCube): every Linear-mode check reports 0 interpolated pixels and 16 distinct colours. NOT slot-0 inheritance — C1 passes with differing=0, which is what separates it from WebGPU's REMED-GFX-172. | LOW | P3 | REMED-GFX-173 cross-backend controls | **DONE 2026-07-31 — THE TICKET IS RIGHT AND NAMES THE MECHANISM EXACTLY; WHAT IT COULD NOT SAY IS THAT THE CAPTURE WAS ALREADY THERE AND ONLY THE CONSUMPTION WAS MISSING. SOFTWARE RASTERIZES IMMEDIATELY AND BOTH DRAW ENTRY POINTS ALREADY READ `GetSamplerState(0)`/`GetSamplerState(1)` AT THE PUBLIC CALL AND SNAPSHOT THEM INTO `ShadedContext`, SO SLOT 1 WAS SITTING ONE LINE AWAY FROM `SampleCubeMap` AS AN IMMUTABLE PER-DRAW COPY — THE OPPOSITE OF GFX-173'S SDL_GPU SHAPE WHERE A WHOLE COMMAND FIELD HAD TO BE ADDED. FIX = A `CubeFaceSurface` VIEW OF THE SELECTED FACE THROUGH GFX-124'S COLOUR-SURFACE CAPABILITY, SO THE CUBE GOES THROUGH `SampleTexture` ITSELF: NO FILTER CODE, NO SECOND ORDINAL TABLE, NO `bool linear`, AND MIN/MAG, MIP AND ADDRESS ARE IDENTICAL FOR A CUBE AND A TEXTURE2D BY CONSTRUCTION. STAGES 1-2 UNCHANGED: FACE SELECTION AND THE PER-FACE UV PROJECTION WERE FACTORED OUT VERBATIM SO THE NEW PER-TRIANGLE LOD USES THE SAME CONVENTION, NOT A SECOND COPY. THREE SUPPORTING PIECES WERE EACH FORCED BY THE FIX: PER-FACE SUPPLIED-LEVEL TRACKING (GFX-135 ALLOCATES THE WHOLE CHAIN BUT ZEROED, SO GFX-175'S `storedLevels_` SEMANTICS HAD TO BE APPLIED PER FACE OR A DECLARED-BUT-UNWRITTEN CHAIN WOULD MINIFY INTO BLACK NOBODY UPLOADED); `TriangleCubeTexelRate` THROUGH A SHARED `ScreenSpaceTexelRate` (BYTE-IDENTICAL FOR 2D, ONCE PER TRIANGLE, NO ALLOCATION); AND `SampleLevel`'S BILINEAR REWRITTEN AS NESTED LERPS `a+(b-a)*t` BECAUSE THE WEIGHTED SUM `a*(1-t)+b*t` LANDS ONE ULP LOW WHEN THE TAPS AGREE AND THE TRUNCATING STORE THEN WRITES A BYTE LOWER — MEASURED, NOT GUESSED: ORDINALS 3 AND 6 GAVE `out=(26,48,167)` ON 8 OF 64 PIXELS OF A FLAT MIP LEVEL WHERE EVERY OTHER ORDINAL GAVE `(26,49,167)`. CUBE ADDRESSING STAYS FACE-LOCAL CLAMP, MATCHING THE 0-DIFFERING CLAMP/WRAP/MIRROR GFX-173 AND GFX-181 MEASURED ON EVERY GPU BACKEND; NO CONVENTION IS INVENTED AND THE CAPTURED MODE IS CARRIED IN THE TRACE. NEW `CNA_SOFTWARE_CUBE_TRACE`: distinctCaptured=12 AND distinctEffective **1 -> 8**, texelFetches 72544 -> 160072 OVER AN UNCHANGED 72544 CUBE SAMPLES; CARDINALITY IS THE CANONICAL MINIMUM — 1 FETCH FOR POINT+MIP-POINT, 4 FOR LINEAR, 2 FOR POINT ACROSS EXACTLY TWO ADJACENT LEVELS, 8 FOR LINEAR+MIP-LINEAR — WITH ZERO PER-SAMPLE ALLOCATION AND NO EXTRA DRAW/PASS/FRAME/READBACK. GFX-173'S FIXTURE **66/100 -> 100/100**; NEW `envmap_cube_sampler_state_test` **21/25 -> 25/25** ON SOFTWARE, THE FOUR MOVED CHECKS BEING EXACTLY THOSE NEEDING SLOT 1 TO REACH THE CUBE. 9 PRE-EXISTING SOFTWARE ENV-MAP FIXTURES ALL PASSED UNFIXED AND **NOT ONE EVER SETS `SamplerStates[1]` DIFFERENTLY FROM `SamplerStates[0]`**; NONE ASSERTS ANYTHING FALSE, SO NONE WAS CHANGED. ASAN AND UBSAN CLEAN ON BOTH FIXTURES AND ON GFX-150/174/175'S OWN, RUNTIMES PROVEN LINKED. SOFTWARE SHARD 49/50 -> 51/51, PROVEN BY A NARROW RESTORE. CONTROLS: SDL_GPU 104/104 + 24/24, VULKAN 104/104 + 24/24, BGFX 104/104, EASYGL 104/104, HEADLESS 8/8, WEBGPU 74/104 = THE UNCHANGED GFX-172 BOUNDARY. RENDERTARGETCUBE IS AN EXPLICIT SOFTWARE V1 BOUNDARY — THE OBJECT CONSTRUCTS BUT BINDING A FACE THROWS CLEANLY, SO NO CUBE TARGET CAN EVER HOLD CONTENT TO SAMPLE. ONLY SOFTWARE PRODUCTION CHANGED. NO NEW FINDINGS.** |
@@ -23330,6 +23330,118 @@ already-running one-job builds were allowed to finish as required.
 Only REMED-GFX-194 was completed. GFX-140, GFX-144, GFX-151, GFX-166, GFX-190, and GFX-191 remain
 preserved. No other backend's production was modified; GFX-187, GFX-188, every other ticket, and the
 recommended next ticket were not begun. `audit/` is untouched.
+
+**No new findings were created.**
+
+---
+
+## REMED-GFX-179 — Bgfx render-target/view capacity (DONE 2026-08-01)
+
+### Exact reproduction and mechanism
+
+The failure reproduced on the signed GFX-195 baseline before production was edited. The existing
+`Bgfx_DescriptorCapacityContract` reached **28/29** and its render-target leg threw
+`Bgfx: exhausted view ids (more concurrently-live render targets than bgfx supports views)`. The
+dedicated boundary probe then isolated construction itself: **63** simultaneously live, never-bound
+`RenderTarget2D`s succeeded; constructing number **64** threw. Counts 65, 66 and 96 therefore failed
+at the same allocation boundary. No Clear, draw, bind, Present, readback or frame advance was needed
+to trigger it.
+
+The exact source was `Detail::AllocateRtViewId()`. Every `BgfxRenderTargetBackend` and
+`BgfxRenderTargetCubeBackend` called it from its constructor, and an MRT set took another ID while
+its temporary framebuffer lived. The allocator's free list worked: destruction returned the ID and
+the pre-existing sequential create/destroy workload passed. Its new-ID cursor, however, was limited
+to `[1, kFirstSegmentViewId)`, and `kFirstSegmentViewId` was 64. Thus IDs 1 through 63 were persistent
+object descriptors even for resources that had never been used.
+
+This was a CNA partition, not bgfx's native view limit. The build has
+`BGFX_CONFIG_MAX_VIEWS == 256`; CNA had reserved `[64,255)` for REMED-GFX-065/018/155's ordered
+per-frame target, viewport, transform and Clear segments, with view 255 separately reserved for
+readback/backbuffer flush. The fixed 256-entry framebuffer-binding mirror and view-order membership
+array merely cover legal bgfx view state and were not exhausted. Native texture/framebuffer handles
+were also not the source: they remained valid below the boundary, and disposal/recreation reused
+their IDs. The failure was therefore exactly a **fixed view-ID partition plus the wrong lifetime**:
+simultaneously live objects, rather than distinct view states used during one frame.
+
+### Narrow correction
+
+Render-target and cube objects no longer allocate, store or release a view ID. Binding selects only
+the native framebuffer and consumes no ID. The first real Clear/draw on that binding lazily receives
+the next ordered view, as do later target/backbuffer cycles, viewport or SpriteBatch-transform
+changes, and the internal GFX-195 cube publication step. View 0 is retained only for the first
+backbuffer operation in a frame. Every other public/internal ordered state draws monotonically from
+`[1,255)`, and the existing reserved readback/flush view 255 is never returned.
+
+The allocator refuses before 255 rather than wrapping, so same-frame state cannot collide with or
+redirect an earlier operation. A run of compatible draws reuses its current view: draw count does
+not grow the cursor. Every actual `bgfx::frame()` path calls `EndFrameSegments()`, which resets the
+cursor to 1 and clears order membership; a target still bound in the next frame receives a new
+per-frame ID only when it does real work. The physical limit is now at most 254 distinct ordered
+non-initial-backbuffer states **used in one frame**, not 63 objects alive across arbitrary frames.
+
+Separating every MRT bind cycle onto its real ordered view exposed an old masking effect: the prior
+MRT base ID was released and immediately reused, so the next attachment set repointed that base
+last-wins and the earlier set never retained its own framebuffer state. Once public order was
+correct, OpenGL's legacy single `gl_FragColor` output was visible on every attachment bgfx exposed as
+a draw buffer. CNA's Bgfx shader inventory has exactly one colour output. The MRT path now keeps a
+paired temporary framebuffer: the Clear framebuffer exposes every colour attachment as writable,
+while the draw framebuffer exposes only slot 0 and keeps later slots attached without inventing
+shader outputs. Clear and a following draw receive distinct ordered views. This preserves
+all-attachment `ClearOptions::Target`, the established single-output pipeline, the attachment-set
+boundary, and the newly restored public order. Both temporary framebuffers are destroyed on the
+next target transition or device teardown; no persistent view/resource list or per-frame retry
+queue was added.
+
+There is no public frame, `Present`, retry, sleep, dummy bind or wait in the correction. Readback's
+existing synchronous frame completion is unchanged. No public API or another backend's production
+was modified.
+
+### Regression coverage and results
+
+New `Bgfx_GFX179_ViewCapacity` passes **17/17** and covers:
+
+- the old last-supported count 63, first-failing count 64, and 65/66/96 beyond it;
+- simultaneous never-bound construction and 264 sequential create/dispose cycles over multiple
+  frames;
+- target A/B/A bind/unbind/Clear order with three strictly increasing, collision-free views;
+- exact A, B and next-frame target readback, cursor reuse after `Present`, and view 255 exclusion
+  across backbuffer readback;
+- native framebuffer and texture handle validity, disposal clearing the public backend pointer,
+  native handle-ID reuse, and recreation;
+- 96 targets remaining live through normal device teardown.
+
+`Bgfx_DescriptorCapacityContract` is re-armed at **29/29**. The focused capacity/MRT/order set is
+green, including `Bgfx_BoundTargetLifetime`, `Bgfx_RenderTarget_PassBoundary` **43/43** and
+`Bgfx_GraphicsDevice_OrderedClear` **49/49**. The complete Bgfx shard ran serially and finished
+**174/177**. Its three failures are exactly the recorded unrelated boundaries and were not changed:
+
+- `Bgfx_RenderTarget2D_MsaaResolve`: requested Vulkan cannot present on the DRI3-less Xvfb and bgfx
+  falls back to OpenGL, leaving the known AA discriminator binary;
+- `Bgfx_GraphicsDevice_ClearOptions_Vulkan`: the same requested-Vulkan/OpenGL-fallback control,
+  still 217/232;
+- `Bgfx_RenderTargetCube_DepthFormat`: Task 952's existing Depth24Stencil8 colour/depth mismatch.
+
+GFX-138 cube finalization, GFX-154 readback ordering, GFX-155 public view order, GFX-157 lifecycle,
+GFX-158 reset replay, GFX-163 MSAA depth construction, GFX-181 sampler flags and GFX-195 independent
+MSAA face producers all pass inside the same shard. Target sampling, producer/consumer, first-use,
+bound lifetime, Present lifecycle, viewport, transform, scissor, Clear, cube and backbuffer readback
+gates are green.
+
+The diagnostic run passed **17/17** with strictly increasing `1 2 3` for target A/B/A, cursor reuse
+at 1 in later frames, and reserved readback completion. It introduced no diagnostic class; output
+contains the established RenderDoc `dlopen` warning, bgfx's renderer capability-probe warnings and
+the established shutdown uniform/allocator residual.
+
+Existing Bgfx ASan and UBSan trees were confirmed linked to `libasan.so.8` and `libubsan.so.1`.
+Each passed the capacity fixture, descriptor contract, GFX-195 control, pass-boundary suite and
+ordered-Clear suite **5/5**, with zero address or undefined-behaviour reports. ASan leak detection
+alone was disabled for the established bgfx/driver shutdown residual. Representative unchanged
+descriptor-capacity controls passed **29/29 each** on EasyGL, SDL_GPU and Vulkan.
+
+### Scope and findings
+
+Only Bgfx production, the dedicated Bgfx fixture/registration and these two ledgers changed.
+`audit/` is untouched. No other remediation ticket was begun.
 
 **No new findings were created.**
 
