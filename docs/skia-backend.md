@@ -105,6 +105,21 @@ source convention and rejects the rest. The source image's
 straight/premultiplied label remains CNA-owned; the blender alone cannot infer it from arbitrary
 RGBA bytes.
 
+### Colour-write and sample-mask investigation
+
+`Skia_ColorWriteMask_Raster` proves a direct raster building block for `ColorWriteChannels`: a
+runtime blender computes the normal premultiplied source-over result first and then chooses each
+of RGBA from that result or the original destination. All sixteen masks preserve their disabled
+destination bytes, including `None`. This is a feasibility result only. The public backend still
+rejects a non-`All` mask before drawing until SKIA-57 combines that selection with every accepted
+blend route and its established source convention; it must not apply a mask before blending.
+
+Raster `RenderTarget2D` has no physical samples: requests 0 and 1 apply a reported count of 0,
+while real MSAA requests are rejected at construction. Therefore `MultiSampleMask` has no
+per-sample object to select. The all-bits default remains accepted; every other public mask,
+including zero, is rejected rather than being silently ignored or pretending to provide coverage
+control.
+
 The current public texture-format policy is intentionally the existing CNA-wide policy:
 `SurfaceFormat::Color` is the only accepted format. Every other `SurfaceFormat` value is rejected
 by shared validation before a Skia allocation is attempted. Raster textures accept one-pixel and
@@ -126,8 +141,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers sixty-one SKIA-only CTests: three window-independent raster
-   surface pixel tests and fifty-eight display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers sixty-six SKIA-only CTests: six window-independent raster
+   pixel tests and sixty display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -255,5 +270,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     source/destination factors and five colour/alpha functions. It accepts only the four direct
     presets plus the SKIA-54 runtime tuple; every other combination has the deterministic error
     path rather than a silent `kSrcOver` fallback.
+42. `Skia_ColorWriteMask_Raster` runs a real post-blend runtime blender for all sixteen RGBA write
+    masks and checks raw premultiplied output bytes: each disabled component is retained from the
+    destination, including the zero-mask no-write case. `Skia_BlendMapping_Policy` then confirms
+    the public non-`All` mask and non-default sample mask reject until SKIA-57 composes the proven
+    path with the accepted blend mappings.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
