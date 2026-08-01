@@ -146,8 +146,9 @@ target_link_libraries(CNA
 # permanently-2D guard shares that diagnostic helper (the guard is inactive on SOFTWARE because
 # ThreeD is supported, but the static object still contains the symbol reference).
 #
-# GDI's private Software CPU rasterizer also calls CNA-owned math and colour implementations.
-# Without the declared cycle MinGW scans libCNA.a before that rasterizer exposes its references.
+# GDI's private Software CPU rasterizer is now compiled directly into the GDI archive and also
+# calls CNA-owned math and colour implementations. Without the declared cycle MinGW scans
+# libCNA.a before that rasterizer exposes its references.
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12"
    OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9"
@@ -165,11 +166,6 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
    OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2"
    OR CNA_GRAPHICS_BACKEND STREQUAL "GDI")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
-endif()
-
-# The separate Software core archive introduces those references after the GDI archive itself.
-if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
-    target_link_libraries(cna_backend_graphics_software_core PRIVATE CNA)
 endif()
 
 # D9-112: D3D9GraphicsBackend::CreateEffectBackend() (below) needs to construct a real

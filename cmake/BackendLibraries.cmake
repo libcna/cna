@@ -34,18 +34,24 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_include_directories(cna_backend_graphics_sdl_renderer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
-# GDI presents the Software backend's CPU framebuffer through classic Win32 GDI. Its own source
-# provides the factory while this core contributes only shared 2D rasterization; the SOFTWARE
-# factory is compile-definition guarded, so this does not introduce a second factory definition.
+# GDI presents the Software backend's CPU framebuffer through classic Win32 GDI. Keep this
+# dependency explicit: future Software translation units must not enter the 2D-only GDI build
+# without review. SoftwareGraphicsBackend.cpp is currently a monolith containing the required
+# framebuffer, texture, SpriteBatch and RenderTarget2D services as well as Software-only 3D/cube
+# code; there is no independently removable 3D translation unit. The SOFTWARE factory at its end
+# is guarded by CNA_BACKEND_SOFTWARE, so compiling it into the GDI backend adds no second factory
+# definition.
+set(CNA_GDI_SOFTWARE_SOURCES)
 if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
-    file(GLOB CNA_GDI_SOFTWARE_CORE_SOURCES "src/CNA/Internal/Backends/Software/*.cpp")
-    add_library(cna_backend_graphics_software_core STATIC ${CNA_GDI_SOFTWARE_CORE_SOURCES})
-    target_link_libraries(cna_backend_graphics_software_core PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
-    target_include_directories(cna_backend_graphics_software_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    set(CNA_GDI_SOFTWARE_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp"
+    )
 endif()
 
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
+list(APPEND BACKEND_SOURCES ${CNA_GDI_SOFTWARE_SOURCES})
 
 # plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectBackend.cpp calls
 # D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
@@ -86,7 +92,7 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "GLIDE")
     # application's existing Win32 HWND. Do not link or vendor a particular Glide emulator here.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
-    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 gdi32 cna_backend_graphics_software_core)
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 gdi32)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1" OR CNA_GRAPHICS_BACKEND STREQUAL "WEBGL2")
     target_link_libraries(${BACKEND_TARGET} PRIVATE easy-gl SDL3::SDL3)

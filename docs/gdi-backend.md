@@ -87,6 +87,13 @@ compatibility backend under validation, not yet as a release baseline.
   and forcibly disables depth state on every application. A `DepthStencilState` therefore cannot
   change SpriteBatch's ordinary submission order, while its independent stencil fields can still
   clip/mask a later 2D draw. New Software 3D methods cannot enter GDI through inheritance.
+- The GDI backend archive uses an explicit two-file Software dependency list
+  (`SoftwareFramebufferAllocation.cpp` and `SoftwareGraphicsBackend.cpp`); it does not glob the
+  Software directory and has no intermediate `software_core` archive. This prevents future
+  Software files from silently entering the Windows build. `SoftwareGraphicsBackend.cpp` still
+  contains both the required 2D code and unrelated Software 3D/cube code, so those sections are
+  compiled but remain unreachable behind the runtime boundary above. GDI-074 tracks physically
+  splitting that monolith.
 - A custom `ShaderEffect` throws `System::NotSupportedException` during construction on GDI. GDI
   does not create an invalid placeholder, accept shader source or uniforms, and then ignore them.
   `ColorMatrixEffect` is the sole fixed non-shader exception; every other custom `SpriteBatch`
@@ -216,6 +223,13 @@ The GitHub Actions workflow `GDI Windows CI (MSVC)` is deliberately manual (`wor
 Its one Windows job builds only CNA plus these focused executables and runs the complete `GDI`
 CTest label with native MSVC. It is a compiler and hidden-window correctness gate; it does not
 replace the visible lifecycle/DPI checklist required by GDI-061.
+
+GDI and the shared CPU sources live in one backend archive. CMake declares the real static-library
+cycle between that archive and `CNA`, so GNU/MinGW emits a portable repeated-archive link line
+without a third archive. The standalone SOFTWARE configuration declares its corresponding cycle
+centrally as well; its focused tests no longer depend on a GNU-only `--start-group` workaround.
+The local GCC and MinGW gates pass, but GDI-071 remains provisional until the first manual workflow
+run confirms this layout with native MSVC.
 
 Cross-built PE files are intentionally not registered as Linux CTest commands, so run the produced
 executables under a Wine setup with an available display:

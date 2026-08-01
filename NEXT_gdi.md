@@ -8,12 +8,14 @@
 
 ## Current focus
 
-- GDI-050 through GDI-060, GDI-067, and GDI-072 are committed; GDI-070 is implemented and
-  validated in the current working tree. The approved catch-up baseline is commit `48826e0b`;
+- GDI-050 through GDI-060, GDI-067, GDI-070, and GDI-072 are committed. The approved catch-up
+  baseline is commit `48826e0b`;
   later completed tasks are `4c512245`, `01873ca9`, `c8fd70d6`, `47fe3f1e`, and
-  `3096ab0c`, GDI-067 in `de79659d`, and GDI-072 in `517a0776`.
-- GDI-061 and GDI-062 require native visible Windows work. After committing GDI-070, the next
-  dependency-ordered autonomous task is GDI-071's explicit shared-core build boundary.
+  `3096ab0c`, GDI-067 in `de79659d`, GDI-072 in `517a0776`, and GDI-070 in `35c047a2`.
+- GDI-071's explicit shared-core source/archive boundary is implemented and locally validated in
+  the current tree. Its native-MSVC workflow result remains pending, so the plan status is 🟨.
+- GDI-061 and GDI-062 require native visible Windows work. After committing GDI-071, the next safe
+  implementation task is GDI-073's advertised 4x-MSAA contract audit.
 
 ## Completed in the current working tree
 
@@ -66,6 +68,12 @@
   2D-target, and state calls are forwarded, so future Software virtual methods cannot silently
   enter GDI. Every resource/3D entry remains explicit. The unsupported-feature executable now has
   42 public/direct boundary checks and a compile-time assertion forbidding Software inheritance.
+- GDI-071: the GDI build no longer globs the Software directory or creates a separate
+  `cna_backend_graphics_software_core` archive. Its one backend archive names exactly the two
+  required Software translation units, so future files require deliberate review. The link graph
+  is reduced to `CNA` ↔ GDI. A full independent SOFTWARE build exposed its own undeclared reverse
+  dependency on CNA (`ColorMatrixEffect::FillSpriteDrawParams`); that cycle is now declared
+  centrally, and Software tests no longer carry a GNU-only archive-group workaround.
 
 GDI-050 through GDI-054 and GDI-056 were committed together as the explicitly approved catch-up
 baseline. All later tasks use one task per commit.
@@ -74,6 +82,8 @@ baseline. All later tasks use one task per commit.
 
 - Native visible Windows lifecycle/DPI validation (GDI-061) cannot be completed in this Linux/Wine
   environment and must remain `needs_human` until recorded on Windows 10/11.
+- GDI-071 still needs the owner-approved manual `GDI Windows CI (MSVC)` workflow to pass before it
+  can move from 🟨 to ✅. Local validation covers native GCC SOFTWARE and MinGW GDI, not MSVC.
 - Native visible performance data (GDI-062) is likewise hardware/human gated. Do not use hidden
   Wine timings to authorize GDI-063 through GDI-066 performance changes.
 - The pre-existing native `.sdl-prebuilt-Linux-x86_64` install contains a zero-byte
@@ -95,6 +105,10 @@ baseline. All later tasks use one task per commit.
   target mip levels. Current production code and `plan_software.md` say those levels are generated
   on unbind; the representative 4x level-zero oracle passes, but the full supervisor fails its
   obsolete refusal assertions. This is outside GDI-067 and should be reconciled in Software scope.
+- `SoftwareGraphicsBackend.cpp` is still a 223-kB 2D/3D/cube monolith. The explicit GDI list stops
+  future translation units from entering accidentally, but it cannot omit the unrelated cube/3D
+  sections or their GCC `-Wstringop-overflow` warning without a source split. GDI-074 tracks that
+  larger cross-backend refactor.
 - Do not edit `NEXT.md`.
 
 ## Decisions
@@ -108,7 +122,10 @@ baseline. All later tasks use one task per commit.
 - 2026-08-01: GDI presentation environment settings are immutable per backend instance. Invalid
   values warn once at construction and fall back individually to nearest/disabled policy.
 - 2026-08-01: GDI's runtime contract uses composition, not inheritance from the full Software
-  backend. GDI-071 separately owns the remaining build-source/archive narrowing work.
+  backend.
+- 2026-08-01: GDI uses one backend archive with an explicit two-file Software source list. The
+  physical Software monolith split is a separate GDI-074 task; no claim is made that unrelated
+  cube/3D code has already disappeared from compilation.
 - Preserve XNA/FNA public API compatibility; backend-specific unsupported behavior must fail
   clearly without broadening the GDI 2D contract.
 
@@ -159,6 +176,18 @@ baseline. All later tasks use one task per commit.
   compile/link at `-j2`. All twelve ordinary executables and all three configuration variants pass
   in one Wine/Xvfb session after the composition change. The expanded unsupported-feature test
   passes all 42 public/direct boundary assertions.
+- GDI-071 focused MinGW build: CNA, all thirteen correctness executables, benchmark, and demo link
+  from the single five-object GDI archive at `-j2`; Ninja exposes no `software_core` target. The
+  final executable link line repeats only `libCNA.a` and `libcna_backend_graphics_gdi.a` for the
+  declared cycle. All twelve ordinary executables and all three configuration variants pass in
+  one Wine/Xvfb session.
+- GDI-071 independent SOFTWARE gate: the full native GCC build links after centrally declaring
+  `CNA` ↔ SOFTWARE, including the formerly failing `cna_xnb_audio_metadata_dump`; its test link
+  line is portable repeated archives with no `--start-group`. The 57-test `Software` label has
+  45 passes, 4 skips, and 8 current functional failures (`RenderTargetReadback`,
+  `ColorSpace_MidTone`, `PresentLifecycle`, `SpriteBatch3DOrder`, `FrontFaceWinding`,
+  `Deferred_Viewport`, `Deferred_Scissor`, and `DescriptorCapacityContract`). This task changes
+  only CMake link/source membership, not those runtime contracts.
 - Shared SOFTWARE gate: CNA plus eight focused executables build at `-j2`; smoke, rasterizer,
   depth-contract, depth-state, and depth/stencil-usage CTests pass. Under Xvfb the complete
   31-leg MSAA depth contract and 34-leg first-readback supervisor pass after resolving the real
@@ -166,7 +195,7 @@ baseline. All later tasks use one task per commit.
 - `GraphicsDeviceCapabilityTest.SupportsStencilBuffer`: pass under HEADLESS. The complete
   `GraphicsDeviceCapabilityTest.*` filter is 9 pass / 1 pre-existing configuration mismatch:
   `DoesNotSupportWireFrame` assumes EasyGL, while HEADLESS truthfully reports wireframe support.
-- `git diff --check`: pass for the complete GDI-070 change set.
+- `git diff --check`: pass for the complete GDI-071 change set.
 
 ## Useful commands
 
@@ -191,6 +220,7 @@ are maintained in `docs/gdi-backend.md`.
 
 ## Immediate next step
 
-Commit the validated GDI-070 composition boundary, then begin GDI-071 by replacing the GDI Software
-source glob with an explicit dependency list and auditing the static archive cycle. Keep physical
-multi-DPI/visible observations in GDI-061 and native performance decisions in GDI-062.
+Commit the locally validated GDI-071 boundary, then audit GDI-073's wireframe,
+`MultiSampleMask`, and stencil/sample semantics. Keep GDI-071 provisional until its manual native
+MSVC workflow passes, physical source splitting in GDI-074, visible lifecycle/DPI work in GDI-061,
+and native performance decisions in GDI-062.

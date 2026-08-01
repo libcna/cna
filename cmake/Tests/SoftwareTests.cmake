@@ -3,13 +3,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
 
     macro(cna_software_test target src)
         add_executable(${target} ${src})
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                SHARP_RUNTIME SDL3::SDL3)
-        else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-        endif()
+        # CnaLibrary.cmake declares the real CNA <-> Software static-library cycle, so every
+        # consumer gets a portable link line and these tests need no GNU-only archive group.
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
         endif()

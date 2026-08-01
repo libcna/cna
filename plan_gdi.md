@@ -9,7 +9,9 @@
 > put in the window.
 >
 > **Implementation update (2026-08-01 working tree):** GDI-050 through GDI-060, GDI-067, GDI-070,
-> and GDI-072 are implemented. The focused MinGW Release build, all thirteen GDI correctness
+> and GDI-072 are implemented. GDI-071's source/archive boundary is implemented and locally
+> verified with native GCC plus MinGW, but its first native-MSVC workflow result is still pending.
+> The focused MinGW Release build, all thirteen GDI correctness
 > executables, and all three configuration variants pass under Wine. The suite includes a real
 > memory-DC/DIBSection pixel oracle, complete public-path coverage for advertised features, exact
 > dirty-damage coverage, event/failure-retention integration, DPI-coordinate oracles, live
@@ -77,10 +79,14 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 
 - [`cmake/BackendSelection.cmake`](cmake/BackendSelection.cmake) hard-gates `GDI` to a Windows
   target and selects `cna_backend_graphics_gdi`.
-- [`cmake/BackendLibraries.cmake`](cmake/BackendLibraries.cmake) links SDL3, `gdi32`, and a
-  separately archived Software core. The core currently globs every Software `.cpp` file.
-- [`cmake/CnaLibrary.cmake`](cmake/CnaLibrary.cmake) declares the resulting static-library cycle
-  needed by GNU/MinGW archive scanning.
+- [`cmake/BackendLibraries.cmake`](cmake/BackendLibraries.cmake) puts the three GDI translation
+  units and an explicit, reviewed two-file Software dependency list in one GDI backend archive.
+  No Software glob or intermediate `software_core` archive remains. The required
+  `SoftwareGraphicsBackend.cpp` is still a 2D/3D/cube monolith; physically separating that source
+  is tracked by GDI-074 rather than hidden by the build description.
+- [`cmake/CnaLibrary.cmake`](cmake/CnaLibrary.cmake) declares the real `CNA` ↔ GDI and `CNA` ↔
+  SOFTWARE static-library cycles needed by GNU/MinGW archive scanning. Software tests no longer
+  carry their own GNU-only `--start-group` workaround.
 
 ### Raster and resource path
 
@@ -358,8 +364,18 @@ complete Software backend escapes; reviewed 2D operations are forwarded explicit
 volume resources, cube/MRT/array-slice bindings, effects, queries, buffers, depth-only operations,
 and every draw entry remain explicit `NotSupportedException` paths. A compile-time assertion
 forbids reintroducing Software inheritance. The expanded focused test exercises the public paths
-plus every direct resource/3D virtual boundary in 42 assertions. Narrowing the still-globbed
-Software archive is the separate GDI-071 build task.
+plus every direct resource/3D virtual boundary in 42 assertions.
+
+**GDI-071 resolution for the build boundary:** the GDI build no longer globs the Software
+directory or creates a third static archive. Its single backend archive names only
+`SoftwareFramebufferAllocation.cpp` and `SoftwareGraphicsBackend.cpp`, so future Software files
+cannot enter GDI without review, and the link graph is reduced to the honest `CNA` ↔ GDI cycle.
+An independent full GCC SOFTWARE build exposed the same undeclared reverse edge there
+(`ColorMatrixEffect::FillSpriteDrawParams`); declaring `CNA` ↔ SOFTWARE fixed ordinary executable
+links and removed the tests' GNU-only archive group. The complete focused MinGW build and all
+fifteen Wine/Xvfb cases pass, as does the full native GCC link. The remaining monolithic
+3D/cube compilation is tracked by GDI-074, and the native-MSVC result remains the only GDI-071
+verification gap.
 
 **GDI-072 resolution for the configuration portion:** each backend now owns one const
 `GdiConfiguration` snapshot. A pure parser accepts only `nearest`/`halftone` and `0`/`1`, preserves
@@ -439,9 +455,10 @@ means only the narrowed statement in this table, not overall release readiness.
 | # | Task | Status | Acceptance criteria |
 |---|---|---:|---|
 | GDI-070 | Replace inheritance from the whole Software 3D backend with an explicit CPU-2D component, or prove a guarded equivalent. | ✅ | GDI now derives directly from `IGraphicsBackend` and privately composes `GdiSoftware2DCore`; only reviewed 2D services are forwarded. A compile-time non-inheritance assertion plus a 42-check public/direct boundary test cover all resource factories, bindings, depth operations, and draw entries, so new Software virtuals cannot enter GDI implicitly. |
-| GDI-071 | Make the shared-core build boundary explicit. | ⬜ | Replace the GDI Software source glob with an explicit 2D-core target/source list, remove unrelated 3D/cube compilation where practical, and simplify the static archive cycle without reintroducing MinGW link failures. Build GDI and SOFTWARE independently with GCC/MinGW and MSVC. |
+| GDI-071 | Make the shared-core build boundary explicit. | 🟨 | The GDI Software glob and intermediate archive are gone: one GDI archive uses a reviewed two-file list, and future Software files cannot enter implicitly. The GNU/MinGW cycle is now only `CNA` ↔ GDI; the independently discovered `CNA` ↔ SOFTWARE edge is declared centrally and the per-test GNU linker group is gone. Full GCC SOFTWARE linking, focused MinGW GDI linking, and all fifteen Wine/Xvfb cases pass. `SoftwareGraphicsBackend.cpp` remains a 2D/3D/cube monolith (GDI-074), and the manual native-MSVC workflow must still pass before this task becomes ✅. |
 | GDI-072 | Capture typed GDI configuration once. | ✅ | `GdiConfiguration` captures filter/dirty/DWM once at construction; its pure strict parser aggregates sanitized invalid values into one warning and preserves safe defaults. Typed constructor-override and post-construction environment-mutation tests prove `Present()` uses only the immutable snapshot. |
 | GDI-073 | Finish the advertised 4x MSAA semantics. | ⬜ | Decide and test wireframe coverage, `MultiSampleMask`, and stencil interaction. Either implement sample-correct behavior for every advertised 2D path or explicitly narrow the capability/documentation so users cannot infer per-sample depth/stencil or anti-aliased wire edges. Keep RT MSAA false unless real sample storage is added. |
+| GDI-074 | Physically split the reusable Software 2D implementation. | ⬜ | Move the framebuffer, Texture2D, SpriteBatch, RenderTarget2D, and required shared helpers into independently buildable translation units without changing public behavior. GDI must then compile no Software cube/general-3D implementation or its warnings; SOFTWARE must retain the complete feature set. Validate focused GDI MinGW/Wine, native SOFTWARE GCC tests, and the manual MSVC gate before removing the documented monolith exception. |
 
 ---
 
@@ -455,8 +472,8 @@ means only the narrowed statement in this table, not overall release readiness.
 6. **Establish native repeatability:** ✅ GDI-057 through GDI-060; GDI-061 remains a visible
    native-Windows gate.
 7. **Measure a visible client:** GDI-062. Only then choose GDI-063 through GDI-066.
-8. **Reduce memory and architectural risk:** ✅ GDI-067, GDI-070, and GDI-072; GDI-071 and
-   GDI-073 remain.
+8. **Reduce memory and architectural risk:** ✅ GDI-067, GDI-070, and GDI-072; GDI-071 is locally
+   implemented and awaits native MSVC, while GDI-073 and GDI-074 remain.
 
 The GDI-014 and GDI-026 prerequisites are now satisfied by GDI-050 through GDI-054 and their
 focused automated tests. Dirty presentation remains opt-in until the visible native lifecycle gate
