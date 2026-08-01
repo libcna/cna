@@ -588,8 +588,9 @@
 
 ## Current task
 
-SKIA-95 implementation and validation are complete. Commit/push this checkpoint, then begin the
-strictly bounded SKIA-96 projected `SkVertices` spike; do not connect it to public 3D entry points.
+SKIA-96 implementation and validation are complete. Commit/push this checkpoint, then begin
+SKIA-97 only as an isolated CPU raster/depth/compositing spike; do not connect it to public 3D
+entry points.
 
 ## Completed in this session: SKIA-93
 
@@ -657,21 +658,49 @@ strictly bounded SKIA-96 projected `SkVertices` spike; do not connect it to publ
 - Extended `scripts/validate_skia_test_matrix.py` without a generic fallback. It maps the stable
   entry name plus its adjacent evidence, requires every feature ID to be documented and exercised,
   and fails an unrecognized `3d` entry. `--dump-3d` emits the exact live expansion for review.
-- The audit covers all 216/216 primary `3d` matrix entries plus a closed set of 16 relevant
+- The audit initially exposed three stale SKIA-2 classifications during source verification:
+  `EasyGL_TexturedQuad_Readback` is SpriteBatch/readback-only, while both `CubeVolume_*DataContract`
+  fixtures are transfer-only and already pass against bounded CPU storage. They are now correctly
+  `2d-direct`/`2d-emulation`, leaving 213 current primary `3d` entries.
+- The audit covers all 213/213 primary `3d` matrix entries plus a closed set of 16 relevant
   device-dependent cross-cuts: occlusion, depth formats, depth/MSAA, resolves/cube MSAA and
   anisotropic sampling. Presentation/reset/window/handle tests and DXT1 remain deliberately in
   their own phases.
 - `python3 -m py_compile scripts/validate_skia_test_matrix.py`, the direct validator and both
-  registered Skia audits pass. The validator reports 347 total entries and 232 SKIA-95 mappings
+  registered Skia audits pass. The validator reports 347 total entries and 229 SKIA-95 mappings
   across all 37 features. No product code or capability changed; `ThreeD` stays false.
   `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-96
+
+- Added the headless internal `Skia_ProjectedVertices_Spike`; no public Draw call, buffer, effect
+  or capability was changed. A non-trivial CNA row-vector WVP produces clip `(0,.25,.25,1)` and
+  CPU top-left raster `(32,24)` exactly. With equal clip W, a PCT triangle's RGB interpolation at
+  `(24.5,24.5)` is byte-exact `(80,88,88)`.
+- The same projected triangle with clip W `(1,4,1)` samples gradient byte 88 through SkVertices'
+  affine 2D coordinates, while EasyGL's unqualified GLSL varying requires perspective result 30.
+  This 58-byte difference is the first material mismatch and cannot be recovered after W is
+  discarded.
+- SkVertices also paints `(32,16)` for a vertex outside EasyGL/GL's `z >= -w` near plane, above
+  the correct intersections at Y=32, and paints both signs of triangle area. Homogeneous clipping
+  and configured culling would therefore be CPU responsibilities.
+- `docs/skia-skvertices-spike.md` records the source-level EasyGL comparison and exact measured
+  boundary. A direct SkVertices 3D bridge is unsound. SKIA-97 may proceed only as a separate CPU
+  rasterizer owning clipping, perspective varyings, coverage and depth, with Skia receiving a
+  completed colour image. `ThreeD` remains false and `NEXT.md` was not read or changed.
+- The focused test passes in Debug and Release and in an escalated ASan/LSan run with
+  `detect_leaks=1`; the sandboxed LSan attempt stopped at the environment's explicit ptrace
+  limitation before assertions. The complete Debug Skia suite passes 104/104 under Xvfb in
+  17.07 seconds with `--parallel 8` (11 Raster, 91 Display, two Audit). The Debug display cache was
+  restored to `:0`.
+
 ## Next candidates
 
-1. SKIA-96: prototype only one projected `VertexPositionColorTexture` TriangleList with controlled
-   interpolation, clipping, winding and transform comparisons; keep it below public API support.
-2. If the first observable mismatch makes the bridge unsound, record it precisely and feed that
-   result into SKIA-101 instead of weakening the oracle.
+1. SKIA-97: prototype a bounded CPU colour+depth triangle buffer with depth ordering, clear and
+   target switching, perspective-correct varyings and a measured Skia image handoff. It replaces,
+   rather than extends, SkVertices rasterization.
+2. Stop the CPU route and feed a precise rejection into SKIA-101 if memory, performance or
+   compositing semantics are not bounded; do not weaken the EasyGL oracle.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

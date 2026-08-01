@@ -432,7 +432,7 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     parity inventory to drift silently.
 60. `Skia_TestMatrix_Audit` inventories all 289 live EasyGL CTest registrations, two manual
     comparison executables, 17 golden PNGs, and 39 XNA-oracle scenes. The 347-entry matrix assigns
-    exactly one route to each item: 75 2D-direct, 31 2D-emulation, 216 3D, and 25 device-dependent.
+    exactly one route to each item: 76 2D-direct, 33 2D-emulation, 213 3D, and 25 device-dependent.
     The validator discovers registrations and directory contents rather than trusting recorded
     totals, so a newly added or removed EasyGL test/asset requires an explicit Skia decision.
 61. `Skia_TextureStorage_Policy` proves the 16384-axis and 256 MiB per-resource limits, checked
@@ -511,5 +511,19 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     geometry/depth/fog/property gate; `ThreeD` and `CustomEffects` remain false. Both focused
     display tests pass in Debug, Release and under ASan (`detect_leaks=0`). The complete Debug suite
     passes 103/103 in 12.86 seconds with eight-way parallelism (10 Raster, 91 Display, two Audit).
+70. `docs/skia-3d-call-effect-matrix.md` closes SKIA-95 with 37 stable renderer requirement IDs.
+    The extended test-matrix audit expands all 213 current 3D entries plus 16 exact
+    device-dependent depth/MSAA/anisotropy/query cross-cuts and fails unknown entries, undocumented
+    features or features with no live evidence. Source verification corrected three stale SKIA-2
+    classifications: the misleadingly named textured-quad fixture is SpriteBatch-only, and both
+    cube/volume data-contract fixtures are transfer-only. `--dump-3d` emits all 229 mappings.
+71. `Skia_ProjectedVertices_Spike` closes SKIA-96 below the public backend. CPU WVP/viewport and
+    equal-W PCT interpolation are exact, including RGB `(80,88,88)`. With the same projected
+    triangle and clip W `(1,4,1)`, SkVertices samples 88 while EasyGL's perspective-correct GLSL
+    contract requires 30. SkVertices also paints an apex outside `z >= -w` and both windings.
+    A direct SkVertices 3D bridge is therefore unsound; only a CPU rasterizer that owns clipping,
+    perspective varyings, coverage and depth may proceed to SKIA-97. The focused Raster test passes
+    in Debug, Release and ASan/LSan, and the complete Debug suite passes 104/104 in 17.07 seconds
+    (11 Raster, 91 Display, two Audit). `ThreeD` remains false.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

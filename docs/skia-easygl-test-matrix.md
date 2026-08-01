@@ -24,6 +24,7 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 |---|---|---|---|
 | `ctest:EasyGL_PixelTestGame_Smoke` | `ctest` | `2d-direct` | Reuse the backend-neutral pixel fixture; SKIA-7. |
 | `ctest:EasyGL_GoldenImage_Smoke` | `ctest` | `2d-direct` | Reuse golden comparison on raster output; SKIA-7. |
+| `ctest:EasyGL_TexturedQuad_Readback` | `ctest` | `2d-direct` | Despite its historical name, the source uses only SpriteBatch plus backbuffer readback; SKIA-32, SKIA-62, registration tracked by SKIA-106. |
 | `ctest:EasyGL_SpriteBatch_Rotation_Golden` | `ctest` | `2d-direct` | Existing Skia rotation/origin pixel coverage; SKIA-34. |
 | `ctest:EasyGL_TextureFilter_Linear_Golden` | `ctest` | `2d-direct` | Existing point/linear Skia sampling coverage; SKIA-43. |
 | `ctest:EasyGL_BlendState_Additive_Golden` | `ctest` | `2d-direct` | Existing Skia Additive route; SKIA-50. |
@@ -116,6 +117,8 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_Texture3D_Mip_RoundTrip` | `ctest` | `2d-emulation` | Bounded volume mip fixture passes on Skia; SKIA-82–84. |
 | `ctest:EasyGL_Texture3D_PartialBox_RoundTrip` | `ctest` | `2d-emulation` | Exact CPU sub-volume transfer fixture passes on Skia; SKIA-82–84. |
 | `ctest:EasyGL_Texture3D_PartialBox_Readback` | `ctest` | `2d-emulation` | Exact front-to-back CPU box readback fixture passes on Skia; SKIA-82–84. |
+| `ctest:EasyGL_CubeVolume_GetDataContract` | `ctest` | `2d-emulation` | Transfer-only exhaustive cube/volume readback fixture passes 56/56 on bounded CPU storage; SKIA-80–84. |
+| `ctest:EasyGL_CubeVolume_SetDataContract` | `ctest` | `2d-emulation` | Transfer-only exhaustive cube/volume upload fixture passes 56/56 on bounded CPU storage; SKIA-80–84. |
 | `ctest:EasyGL_RenderTargetCube_PluralBinding` | `ctest` | `2d-emulation` | Shared six-face singular/plural binding and explicit MRT-refusal fixture passes through CPU raster readback; SKIA-85–86. |
 | `ctest:EasyGL_RenderTargetCube_Properties` | `ctest` | `2d-emulation` | Shared public property fixture passes with real mips and truthful zero-sample clamping; SKIA-85–86. |
 | `ctest:EasyGL_RenderTargetCube_GetDataContract` | `ctest` | `2d-emulation` | Shared asymmetric rendered/uploaded face, mip, depth-interaction, lifetime, and readback contract passes; SKIA-85–86. |
@@ -130,7 +133,6 @@ emulator is tracked by SKIA-80–105.
 | Entry | Kind | Category | Skia route or evidence |
 |---|---|---|---|
 | `ctest:EasyGL_House3D_SmokeTest` | `ctest` | `3d` | No raster 3D pipeline; SKIA-95–103. |
-| `ctest:EasyGL_TexturedQuad_Readback` | `ctest` | `3d` | Uses vertex/index textured geometry. |
 | `ctest:EasyGL_BasicEffect_Golden` | `ctest` | `3d` | Stock BasicEffect/geometry path. |
 | `ctest:EasyGL_DepthStencilState_WriteEnable_Golden` | `ctest` | `3d` | Requires real depth storage. |
 | `ctest:EasyGL_RasterizerState_CullMode_Golden` | `ctest` | `3d` | Requires triangle winding/culling. |
@@ -293,13 +295,11 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_RenderTarget_FirstUse` | `ctest` | `3d` | Mixed target fixture requires 3D first-use legs. |
 | `ctest:EasyGL_SpriteBatch3DOrder` | `ctest` | `3d` | Explicit SpriteBatch/3D ordering. |
 | `ctest:EasyGL_FrontFaceWinding` | `ctest` | `3d` | Triangle front-face convention. |
-| `ctest:EasyGL_CubeVolume_GetDataContract` | `ctest` | `3d` | Cube and volume readback. |
 | `ctest:EasyGL_RenderTarget_DepthStencilUsage` | `ctest` | `3d` | Real target depth/stencil lifecycle. |
 | `ctest:EasyGL_GraphicsDevice_OrderedClear` | `ctest` | `3d` | Shared sequence contains 3D clear/draw legs. |
 | `ctest:EasyGL_Backbuffer_PassOrder` | `ctest` | `3d` | Shared sequence contains 3D pass legs. |
 | `ctest:EasyGL_Deferred_Viewport` | `ctest` | `3d` | Mixed deferred fixture requires 3D viewport legs. |
 | `ctest:EasyGL_Deferred_Scissor` | `ctest` | `3d` | Mixed deferred fixture requires 3D scissor legs. |
-| `ctest:EasyGL_CubeVolume_SetDataContract` | `ctest` | `3d` | Cube and volume upload. |
 
 ## Device-dependent registrations
 

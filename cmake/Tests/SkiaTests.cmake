@@ -140,6 +140,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_StockEffect_Boundary
                                    cna_test_skia_stock_effect_boundary)
 
+    # SKIA-96: an internal, headless SkVertices spike for exactly one CPU-projected
+    # VertexPositionColorTexture TriangleList. It measures equal-W interpolation and records the
+    # unequal-W, homogeneous-clipping and culling gaps; it is not a public Draw* implementation.
+    cna_skia_test(cna_test_skia_projected_vertices_spike
+                  examples/skia_projected_vertices_spike_test.cpp)
+    target_include_directories(cna_test_skia_projected_vertices_spike PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_ProjectedVertices_Spike
+                                  cna_test_skia_projected_vertices_spike)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.
