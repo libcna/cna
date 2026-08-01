@@ -4,7 +4,7 @@
 
 `CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create an OpenGL context and does not call the EasyGL backend.
 
-The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, tint, rotation, flips, and point/linear sampling with Clamp addressing. Mipmaps, Wrap/Mirror addressing, non-identity SpriteBatch transforms, offscreen targets, effects, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer; non-empty target bindings are not implemented yet.
+The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, tint, rotation, flips, and point/linear sampling with Clamp addressing. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. Mipmaps, Wrap/Mirror addressing, non-identity SpriteBatch transforms, effects, MRT, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
 
 ## Dependency policy
 
@@ -55,5 +55,6 @@ Raster uses premultiplied RGBA8888 inside Skia and normalizes readback into top-
 2. CNA configured with `CNA_GRAPHICS_BACKEND=SKIA`, the two explicit Skia paths, and no EasyGL target.
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
+5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

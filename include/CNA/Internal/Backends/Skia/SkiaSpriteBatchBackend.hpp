@@ -9,7 +9,7 @@ namespace CNA::Internal::Backends::Skia
     class SkiaSpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:
-        explicit SkiaSpriteBatchBackend(SkiaSurface& surface) : surface_(surface) {}
+        explicit SkiaSpriteBatchBackend(SkiaSurface*& activeSurface) : activeSurface_(&activeSurface) {}
 
         void Begin() override;
         void End() override;
@@ -26,7 +26,7 @@ namespace CNA::Internal::Backends::Skia
                   const Vector2& origin, SpriteEffects effects, float layerDepth) override;
 
     private:
-        SkiaSurface& surface_;
+        SkiaSurface** activeSurface_ = nullptr;
         bool begun_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         int textureFilter_ = 0;

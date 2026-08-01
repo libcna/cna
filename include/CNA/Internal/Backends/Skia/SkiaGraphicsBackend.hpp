@@ -38,6 +38,11 @@ namespace CNA::Internal::Backends::Skia
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int width, int height, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* renderTarget) override;
         void ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
@@ -65,6 +70,8 @@ namespace CNA::Internal::Backends::Skia
     private:
         void RecreateBackbuffer(int requestedWidth, int requestedHeight);
         void ApplyLogicalPresentation();
+        [[nodiscard]] SkiaSurface& ActiveSurface() noexcept { return *activeSurface_; }
+        [[nodiscard]] const SkiaSurface& ActiveSurface() const noexcept { return *activeSurface_; }
         [[nodiscard]] int LogicalWidth() const noexcept { return surface_.Width(); }
         [[nodiscard]] int LogicalHeight() const noexcept { return surface_.Height(); }
 
@@ -72,6 +79,7 @@ namespace CNA::Internal::Backends::Skia
         SDL_Renderer* renderer_ = nullptr;
         SDL_Texture* presentTexture_ = nullptr;
         SkiaSurface surface_;
+        SkiaSurface* activeSurface_ = &surface_;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int preferredVirtualHeight_ = 0;
     };

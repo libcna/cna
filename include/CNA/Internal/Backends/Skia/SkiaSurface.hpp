@@ -35,6 +35,12 @@ namespace CNA::Internal::Backends::Skia
         /// Returns false when the requested rectangle cannot be read; never partially writes.
         [[nodiscard]] bool ReadPixels(int x, int y, int width, int height,
                                       std::uint8_t* destination, int destinationRowBytes) const;
+        /// Replaces a complete rectangular region from tightly packed, top-row-first straight RGBA8 bytes.
+        [[nodiscard]] bool WritePixels(int x, int y, int width, int height,
+                                       const std::uint8_t* source, int sourceRowBytes);
+
+        /// Returns an immutable Skia snapshot suitable for sampling by a later canvas draw.
+        [[nodiscard]] sk_sp<SkImage> SnapshotImage() const;
 
         /// Produces a complete, tightly packed RGBA8 image for SDL presentation.
         [[nodiscard]] std::vector<std::uint8_t> SnapshotRgba() const;

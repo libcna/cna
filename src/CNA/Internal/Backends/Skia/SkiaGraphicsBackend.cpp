@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
 
@@ -98,7 +99,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::Clear(float r, float g, float b, float a)
     {
-        surface_.Clear(r, g, b, a);
+        ActiveSurface().Clear(r, g, b, a);
     }
 
     void SkiaGraphicsBackend::Present()
@@ -116,8 +117,8 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::GetViewportSize(int& width, int& height)
     {
-        width = LogicalWidth();
-        height = LogicalHeight();
+        width = ActiveSurface().Width();
+        height = ActiveSurface().Height();
     }
 
     void SkiaGraphicsBackend::SetVirtualResolution(int width, int height)
@@ -172,13 +173,41 @@ namespace CNA::Internal::Backends::Skia
 
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
-        return std::make_unique<SkiaSpriteBatchBackend>(surface_);
+        return std::make_unique<SkiaSpriteBatchBackend>(activeSurface_);
+    }
+
+    std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(
+        int width, int height, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        (void)depthFormat;
+        if (width <= 0 || height <= 0)
+            throw std::runtime_error("Skia RenderTarget2D dimensions must be positive.");
+        if (mipMap)
+            throw std::runtime_error("Skia raster RenderTarget2D mip chains are not implemented yet.");
+        if (multiSampleCount != 0)
+            throw std::runtime_error("Skia raster RenderTarget2D multisampling is not implemented yet.");
+        return std::make_unique<SkiaRenderTargetBackend>(width, height, preserveContents);
+    }
+
+    void SkiaGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* renderTarget)
+    {
+        if (!renderTarget)
+        {
+            activeSurface_ = &surface_;
+            return;
+        }
+
+        auto* skiaTarget = dynamic_cast<SkiaRenderTargetBackend*>(renderTarget);
+        if (!skiaTarget)
+            throw std::runtime_error("Skia cannot bind a render target created by a different backend.");
+        skiaTarget->PrepareForBind();
+        activeSurface_ = &skiaTarget->Surface();
     }
 
     void SkiaGraphicsBackend::ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels)
     {
-        surface_.Flush();
-        if (!surface_.ReadPixels(x, y, width, height, pixels, width * 4))
+        ActiveSurface().Flush();
+        if (!ActiveSurface().ReadPixels(x, y, width, height, pixels, width * 4))
             throw std::runtime_error("Skia ReadBackbuffer request is outside the raster backbuffer.");
     }
 
@@ -188,9 +217,17 @@ namespace CNA::Internal::Backends::Skia
         if (count < 0)
             throw std::runtime_error("Skia SetRenderTargets count must not be negative.");
         if (count == 0)
-            return; // The Skia raster backbuffer is already the active default target.
-        (void)renderTargets;
-        ThrowUnavailable("SetRenderTargets");
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (!renderTargets)
+            throw std::runtime_error("Skia SetRenderTargets received null descriptors with a positive count.");
+        if (count != 1)
+            throw std::runtime_error("Skia raster backend does not implement multiple render targets.");
+        if (renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error("Skia raster backend does not implement RenderTargetCube faces.");
+        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
     }
 
     bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability) const

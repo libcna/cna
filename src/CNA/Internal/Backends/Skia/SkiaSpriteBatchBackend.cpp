@@ -1,5 +1,5 @@
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
-#include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
@@ -101,18 +101,19 @@ namespace CNA::Internal::Backends::Skia
             return;
         }
 
-        const auto* skiaTexture = dynamic_cast<const SkiaTextureBackend*>(&texture);
-        if (!skiaTexture || !skiaTexture->Image())
-            throw std::runtime_error("Skia SpriteBatch can only draw Skia Texture2D resources.");
+        const auto* skiaImageSource = dynamic_cast<const SkiaImageSource*>(&texture);
+        const sk_sp<SkImage> image = skiaImageSource ? skiaImageSource->SnapshotImage() : nullptr;
+        if (!image)
+            throw std::runtime_error("Skia SpriteBatch can only draw Skia Texture2D or RenderTarget2D resources.");
         if (sourceRectangle.X < 0 || sourceRectangle.Y < 0
-            || sourceRectangle.X > skiaTexture->GetWidth() - sourceRectangle.Width
-            || sourceRectangle.Y > skiaTexture->GetHeight() - sourceRectangle.Height)
+            || sourceRectangle.X > texture.GetWidth() - sourceRectangle.Width
+            || sourceRectangle.Y > texture.GetHeight() - sourceRectangle.Height)
         {
             throw std::runtime_error("Skia SpriteBatch source rectangle is outside the texture while Clamp addressing is active.");
         }
 
         (void)layerDepth; // Shared SpriteBatch ordering determines call order before this backend is invoked.
-        SkCanvas* canvas = surface_.Canvas();
+        SkCanvas* canvas = activeSurface_ && *activeSurface_ ? (*activeSurface_)->Canvas() : nullptr;
         if (!canvas)
             throw std::runtime_error("Skia SpriteBatch has no active raster canvas.");
 
@@ -149,7 +150,7 @@ namespace CNA::Internal::Backends::Skia
                                                 static_cast<float>(sourceRectangle.Y),
                                                 sourceWidth, sourceHeight);
         const SkRect destination = SkRect::MakeXYWH(-origin.X, -origin.Y, sourceWidth, sourceHeight);
-        canvas->drawImageRect(skiaTexture->Image().get(), source, destination, ToSampling(textureFilter_),
+        canvas->drawImageRect(image.get(), source, destination, ToSampling(textureFilter_),
                               &paint, SkCanvas::kStrict_SrcRectConstraint);
     }
 } // namespace CNA::Internal::Backends::Skia

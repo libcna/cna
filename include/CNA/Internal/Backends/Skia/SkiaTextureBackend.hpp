@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 
 #include "include/core/SkImage.h"
 
@@ -16,7 +17,7 @@ namespace CNA::Internal::Backends::Skia
      * copy with an explicitly unpremultiplied image info, so its canvas pipeline performs normal
      * premultiplied compositing without changing the bytes Texture2D::GetData observes.
      */
-    class SkiaTextureBackend final : public ITextureBackend
+    class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource
     {
     public:
         explicit SkiaTextureBackend(const ImageData& data);
@@ -31,6 +32,7 @@ namespace CNA::Internal::Backends::Skia
                                    void* data, int dataLength) const override;
 
         [[nodiscard]] const sk_sp<SkImage>& Image() const noexcept { return image_; }
+        [[nodiscard]] sk_sp<SkImage> SnapshotImage() const override { return image_; }
 
     private:
         void RebuildImage();

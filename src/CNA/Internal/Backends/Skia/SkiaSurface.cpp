@@ -3,6 +3,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkPixmap.h"
 #include "include/core/SkSurface.h"
 
 #include <algorithm>
@@ -21,6 +22,11 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] SkImageInfo RgbaPremulInfo(int width, int height)
         {
             return SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+        }
+
+        [[nodiscard]] SkImageInfo RgbaUnpremulInfo(int width, int height)
+        {
+            return SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
         }
     }
 
@@ -66,8 +72,28 @@ namespace CNA::Internal::Backends::Skia
             || x > width_ - width || y > height_ - height || destinationRowBytes < width * 4)
             return false;
 
-        return surface_->readPixels(RgbaPremulInfo(width, height), destination,
+        return surface_->readPixels(RgbaUnpremulInfo(width, height), destination,
                                     static_cast<std::size_t>(destinationRowBytes), x, y);
+    }
+
+    bool SkiaSurface::WritePixels(int x, int y, int width, int height,
+                                  const std::uint8_t* source, int sourceRowBytes)
+    {
+        if (!surface_ || source == nullptr || width < 0 || height < 0 || x < 0 || y < 0
+            || x > width_ - width || y > height_ - height || sourceRowBytes < width * 4)
+        {
+            return false;
+        }
+
+        const SkPixmap pixmap(RgbaUnpremulInfo(width, height), source,
+                              static_cast<std::size_t>(sourceRowBytes));
+        surface_->writePixels(pixmap, x, y);
+        return true;
+    }
+
+    sk_sp<SkImage> SkiaSurface::SnapshotImage() const
+    {
+        return surface_ ? surface_->makeImageSnapshot() : nullptr;
     }
 
     std::vector<std::uint8_t> SkiaSurface::SnapshotRgba() const
