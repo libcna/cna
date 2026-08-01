@@ -369,14 +369,15 @@ namespace CNA::Internal::Backends::Gdi
     }
 
     std::unique_ptr<IRenderTargetBackend> GdiGraphicsBackend::CreateRenderTarget2D(
-        int width, int height, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/,
+        int width, int height, int /*depthFormat*/, bool /*preserveContents*/, bool mipMap,
         int /*multiSampleCount*/)
     {
-        // A 2D CPU surface is a useful SpriteBatch target, but GDI has no depth/stencil, mip-map
-        // generation or MSAA resource. This explicit construction prevents the reusable Software
-        // target from reporting a requested depth attachment as if GDI had one.
+        // A 2D CPU surface is a useful SpriteBatch target. It can generate an RGBA8 mip chain on
+        // unbind, but GDI still has no depth/stencil or MSAA resource. This explicit construction
+        // prevents the reusable Software target from reporting a requested depth attachment as if
+        // GDI had one.
         return std::make_unique<Software::SoftwareRenderTargetBackend>(
-            width, height, 0, false, 0, false);
+            width, height, 0, mipMap, 0, false);
     }
 
     std::unique_ptr<ITextureCubeBackend> GdiGraphicsBackend::CreateTextureCube(int, bool, int)

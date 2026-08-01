@@ -127,8 +127,9 @@ namespace CNA::Internal::Backends::Software
          * REMED-GFX-175. This is a count of levels whose pixels a caller actually supplied, not the
          * level count the public resource declares: a `Texture2D` created with `mipMap=true` whose
          * game only ever wrote level 0 reports 1 here, so the sampler cannot select a level nobody
-         * filled. The default of 1 keeps every resource that has no chain -- render targets, and any
-         * future colour surface -- behaving exactly as it did before mip selection existed.
+         * filled. The default of 1 keeps every resource that has no chain -- including a
+         * non-mipmapped render target and any future colour surface -- behaving exactly as it did
+         * before mip selection existed.
          *
          * @return The number of contiguously stored levels, always at least 1.
          */
@@ -281,7 +282,8 @@ namespace CNA::Internal::Backends::Software
          * applied. An unsupported or out-of-range request throws instead of leaving caller memory
          * silently unchanged.
          *
-         * @param level      Mip level; Software stores level 0 only.
+         * @param level      Mip level. Levels above zero are available only after a mipmapped
+         *                   target was unbound, which completes its CPU box-filter resolve.
          * @param x          Left edge of the requested rectangle, in pixels.
          * @param y          Top edge of the requested rectangle, in pixels.
          * @param w          Width of the requested rectangle, in pixels.
@@ -289,7 +291,8 @@ namespace CNA::Internal::Backends::Software
          * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
          * @param dataLength Capacity of @p data in bytes.
          * @throws System::ArgumentNullException if @p data is null.
-         * @throws System::NotSupportedException if @p level is above 0.
+         * @throws System::NotSupportedException if @p level is outside this target's chain, or
+         *         if a requested generated level is not ready because its render pass is active.
          * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle is
          *         empty or leaves the target, or @p dataLength is too small for the rectangle.
          * @return Always true -- REMED-GFX-127's "the whole region was written" report. Software's
@@ -309,28 +312,42 @@ namespace CNA::Internal::Backends::Software
          * @return The number of calls to GetData on this backend object.
          */
         [[nodiscard]] std::size_t GetReadbackCallCountEXT() const { return readbackCallCount_; }
-        void BindAsRenderTarget() override { bound_ = true; }
-        void UnbindAsRenderTarget() override { bound_ = false; }
+        void BindAsRenderTarget() override;
+        void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         { return hasRealDepthBuffer_ && depthFormatWasRequested; }
 
-        // SoftwareColorSurface -- the SAME storage the rasterizer writes into. A finished target is
-        // sampleable with no resolve, no shadow copy and no extra allocation; there is no second
-        // colour buffer that could drift out of sync with what was rendered.
+        // SoftwareColorSurface -- level 0 is the SAME storage the rasterizer writes into. A
+        // finished mipmapped target additionally exposes its generated box-filter levels, with no
+        // shadow copy of level 0 that could drift out of sync with what was rendered.
         [[nodiscard]] int ColorWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int ColorHeight() const override { return framebuffer_.height; }
         [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels() const override
         { return framebuffer_.color; }
+        [[nodiscard]] int ColorLevelCount() const override
+        { return mipLevelsReady_ ? levelCount_ : 1; }
+        [[nodiscard]] int ColorWidth(int level) const override;
+        [[nodiscard]] int ColorHeight(int level) const override;
+        [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels(int level) const override;
 
         [[nodiscard]] bool IsBound() const { return bound_; }
         [[nodiscard]] SoftwareFramebuffer& Framebuffer() { return framebuffer_; }
         [[nodiscard]] const SoftwareFramebuffer& Framebuffer() const { return framebuffer_; }
 
     private:
+        /// Regenerates levels 1..N from framebuffer level 0 with a clamped 2x2 RGBA8 box filter.
+        /// Called only as a render target leaves the active render pass.
+        void GenerateMipMaps();
+        [[nodiscard]] int MipWidth(int level) const;
+        [[nodiscard]] int MipHeight(int level) const;
+
         SoftwareFramebuffer framebuffer_;
         int depthFormat_ = 0;
         bool mipMap_ = false;
+        int levelCount_ = 1;
+        std::vector<std::vector<std::uint8_t>> mipLevels_; ///< levels 1..levelCount_-1
+        bool mipLevelsReady_ = false;
         int multiSampleCount_ = 0;
         bool hasRealDepthBuffer_ = true;
         bool bound_ = false;

@@ -10,7 +10,10 @@ display path; it does not create an SDL renderer, D3D device, OpenGL context or 
 
 - Supported: Clear, RGBA textures, SpriteBatch (including source rectangles, transforms, rotation,
   flips and full XNA 2D `BlendState` factors/equations), 2D render targets, backbuffer/read-target
-  readback, viewport/scissor, and CNA presentation modes.
+  readback, viewport/scissor, and CNA presentation modes. A `RenderTarget2D` created with
+  `mipMap=true` generates an RGBA8 mip chain when it is unbound using a clamped 2×2 box filter;
+  its completed levels can then be sampled and read back. Mips are deliberately unavailable while
+  that target is actively being rendered.
 - Not supported: vertex/index buffers, 3D draw calls, depth/stencil, MSAA, cube/3D textures,
   occlusion queries and custom effects. `SupportsCapability()` returns `false` and direct 3D API
   calls throw rather than silently rendering through the inherited CPU 3D code.
@@ -64,11 +67,11 @@ wine build-gdi/cna_demo_2d.exe
 The smoke executable creates a hidden SDL `HWND`, clears and reads an RGBA pixel, calls GDI
 `Present()`, and verifies that 3D stays unavailable.  It exits with status zero on success.  The
 2D regression executable adds byte-exact coverage for texture upload, source rectangles, rotation,
-both flips, Clamp/Wrap/Mirror sampling, render-target sampling, resize and presentation-coordinate
-transforms. It also covers Opaque, premultiplied `AlphaBlend`, straight-alpha `NonPremultiplied`,
-Additive saturation, independent colour/alpha equations and a dynamic `BlendFactor`. The 2D demo
-is the manual visual check: animated sprites should display, resizing should remain correct, and
-the window should close normally.
+both flips, Clamp/Wrap/Mirror sampling, render-target sampling and generated mips, resize and
+presentation-coordinate transforms. It also covers Opaque, premultiplied `AlphaBlend`, straight-alpha
+`NonPremultiplied`, Additive saturation, independent colour/alpha equations and a dynamic
+`BlendFactor`. The 2D demo is the manual visual check: animated sprites should display, resizing
+should remain correct, and the window should close normally.
 
 `cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
 CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run

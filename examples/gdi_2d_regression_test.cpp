@@ -238,7 +238,8 @@ namespace
         // Render-target writes are read back from their own CPU surface, then sampled into the
         // default backbuffer through the same SpriteBatch texture path as a regular texture.
         std::unique_ptr<IRenderTargetBackend> target =
-            backend.CreateRenderTarget2D(2, 2, /*DepthFormat::None*/ 0);
+            backend.CreateRenderTarget2D(2, 2, /*DepthFormat::None*/ 0,
+                                         /*preserveContents*/ false, /*mipMap*/ true);
         ok &= Expect(target != nullptr, "GDI must create a 2D render target.");
         if (target != nullptr)
         {
@@ -250,10 +251,104 @@ namespace
                          "render-target readback must report success.");
             ok &= ExpectPixel("render-target readback", targetPixel, green);
 
+            bool rejectedActiveMip = false;
+            try
+            {
+                std::array<std::uint8_t, 4> ignored{};
+                target->GetData(1, 0, 0, 1, 1, ignored.data(),
+                                static_cast<int>(ignored.size()));
+            }
+            catch (const std::exception&)
+            {
+                rejectedActiveMip = true;
+            }
+            ok &= Expect(rejectedActiveMip,
+                         "generated render-target mips must stay unavailable during an active pass.");
+
             backend.SetRenderTarget2D(nullptr);
+            std::array<std::uint8_t, 4> uniformMip{};
+            ok &= Expect(target->GetData(1, 0, 0, 1, 1, uniformMip.data(),
+                                         static_cast<int>(uniformMip.size())),
+                         "mipmapped render-target readback must report success after unbind.");
+            ok &= ExpectPixel("uniform render-target mip", uniformMip, green);
+
             backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
             Draw(backend, *target, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 2, 2), Color::White);
             ok &= ExpectPixel("render-target sampling", ReadPixel(backend, 1, 1), green);
+
+            // Regeneration occurs at the next render-pass boundary. The 1x1 mip of the 2x2
+            // atlas is a clamped 2x2 box average: (127,127,63,255), and a minified sample must
+            // use that generated level rather than stale data from the previous green pass.
+            backend.SetRenderTarget2D(target.get());
+            backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+            Draw(backend, *atlas, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 2, 2), Color::White);
+            backend.SetRenderTarget2D(nullptr);
+            std::array<std::uint8_t, 4> atlasMip{};
+            ok &= Expect(target->GetData(1, 0, 0, 1, 1, atlasMip.data(),
+                                         static_cast<int>(atlasMip.size())),
+                         "regenerated render-target mip readback must report success.");
+            ok &= ExpectPixel("render-target box-filter mip", atlasMip,
+                              Pixel{ 127, 127, 63, 255 }, 1);
+
+            backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+            Draw(backend, *target, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 2, 2), Color::White);
+            ok &= ExpectPixel("render-target mip sampling", ReadPixel(backend, 0, 0),
+                              Pixel{ 127, 127, 63, 255 }, 1);
+        }
+
+        // A non-power-of-two target must use the same floor-halved dimensions as Texture2D:
+        // 3x5 -> 1x2 -> 1x1. Its odd source extent is resolved by the clamped 2x2 box filter,
+        // not by allocating a differently shaped chain or reading outside its pixels.
+        std::unique_ptr<IRenderTargetBackend> oddTarget =
+            backend.CreateRenderTarget2D(3, 5, /*DepthFormat::None*/ 0,
+                                         /*preserveContents*/ false, /*mipMap*/ true);
+        ok &= Expect(oddTarget != nullptr, "GDI must create a non-power-of-two mipmapped target.");
+        if (oddTarget != nullptr)
+        {
+            std::array<std::uint8_t, 3 * 5 * 4> oddPixels{};
+            for (int y = 0; y < 5; ++y)
+            {
+                for (int x = 0; x < 3; ++x)
+                {
+                    const std::size_t index = static_cast<std::size_t>(y * 3 + x) * 4u;
+                    oddPixels[index + 0] = static_cast<std::uint8_t>(x * 40);
+                    oddPixels[index + 1] = static_cast<std::uint8_t>(y * 40);
+                    oddPixels[index + 2] = 0;
+                    oddPixels[index + 3] = 255;
+                }
+            }
+            oddTarget->UpdatePixels(oddPixels.data(), /*tight stride*/ 3 * 4);
+
+            std::array<std::uint8_t, 2 * 4> oddLevel1{};
+            ok &= Expect(oddTarget->GetData(1, 0, 0, 1, 2, oddLevel1.data(),
+                                             static_cast<int>(oddLevel1.size())),
+                         "3x5 render-target mip level 1 must be 1x2.");
+            ok &= ExpectPixel("odd render-target mip level 1 top",
+                              Pixel{ oddLevel1[0], oddLevel1[1], oddLevel1[2], oddLevel1[3] },
+                              Pixel{ 20, 20, 0, 255 });
+            ok &= ExpectPixel("odd render-target mip level 1 bottom",
+                              Pixel{ oddLevel1[4], oddLevel1[5], oddLevel1[6], oddLevel1[7] },
+                              Pixel{ 20, 100, 0, 255 });
+
+            std::array<std::uint8_t, 4> oddLevel2{};
+            ok &= Expect(oddTarget->GetData(2, 0, 0, 1, 1, oddLevel2.data(),
+                                             static_cast<int>(oddLevel2.size())),
+                         "3x5 render-target mip level 2 must be 1x1.");
+            ok &= ExpectPixel("odd render-target final mip", oddLevel2, Pixel{ 20, 60, 0, 255 });
+
+            bool rejectedOutsideLevel1 = false;
+            try
+            {
+                std::array<std::uint8_t, 4> ignored{};
+                oddTarget->GetData(1, 1, 0, 1, 1, ignored.data(),
+                                   static_cast<int>(ignored.size()));
+            }
+            catch (const std::exception&)
+            {
+                rejectedOutsideLevel1 = true;
+            }
+            ok &= Expect(rejectedOutsideLevel1,
+                         "3x5 render-target mip level 1 must reject x=1 outside its 1-pixel width.");
         }
 
         // Resizing changes the CPU backbuffer itself, not only the final window blit.
