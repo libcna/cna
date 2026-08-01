@@ -289,5 +289,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     deterministic public per-level target readback and invalidation after bind/upload. The raster
     backend consequently refuses a mipmapped target before construction, then proves a new
     level-0 target can render, read back, unbind, and sample normally.
+45. `Skia_Resize_Presentation` keeps a `RenderTarget2D` and `SpriteBatch` alive across an active-
+    target resize and two fullscreen/windowed presentation resets. It checks all three ordered
+    device-reset pairs, old/new presentation dimensions, retained target readback, new-backbuffer
+    sampling, and continued SpriteBatch output. Fullscreen asserts the stored public parameter;
+    Xvfb is not required to support a physical fullscreen mode switch.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

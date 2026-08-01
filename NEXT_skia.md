@@ -20,7 +20,7 @@
 - The most recent pushed commits are `50670060` (detach a destroyed bound render target),
   `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
   `SetData`).
-- `docs/skia-backend.md` records 67 Skia CTests: six raster-only and 61 display-required tests.
+- `docs/skia-backend.md` records 68 Skia CTests: six raster-only and 62 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -121,6 +121,16 @@
   unbinds it, and samples it through SpriteBatch. This confirms no partial target state leaks from
   the refusal.
 
+## Completed in this session: SKIA-71
+
+- Added `Skia_Resize_Presentation`, a 16-assertion public regression that resizes the backbuffer
+  while a preserve target is bound and a SpriteBatch already exists. It proves the target's
+  content, then its sampling on the fresh backbuffer, survive the resize; it also proves ordered
+  old/new `DeviceResetting`/`DeviceReset` observations.
+- The same test drives fullscreen on and off plus `Stretch`/`NativeBackBuffer` presentation modes.
+  It verifies the stored presentation contract and continued rendering, deliberately not assuming
+  that Xvfb implements the physical fullscreen window transition.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -154,19 +164,21 @@
 - SKIA-70 debug/ASan: `Skia_Texture2D_MipmapPolicy` passes all six checks under Xvfb in the normal
   and AddressSanitizer builds. A bare CTest invocation has no X11 server in this environment, as
   expected for the test's registered display requirement; the Xvfb invocation is the valid check.
+- SKIA-71 debug/ASan: `Skia_Resize_Presentation` passes all 16 checks under Xvfb in normal and
+  AddressSanitizer builds (`detect_leaks=0` only for the known process-exit display-stack residual).
 
 ## Current task
 
-Reassess the next incomplete 2D task after SKIA-70. Blend, write-mask, target-mipmap disposition,
-and raster state work are bounded and documented; choose the next plan row with an independently
-testable public contract.
+Reassess the next incomplete 2D task after SKIA-71. Blend, write-mask, target-mipmap disposition,
+resize/presentation, and raster state work are bounded and documented; choose the next plan row
+with an independently testable public contract.
 
 ## Next candidates
 
-1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely resize/
-   display-scale coverage (SKIA-71/72).
-2. SKIA-71/72: resize and display-scale regressions with live targets, once lifecycle ownership is
-   sound.
+1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely the
+   display-scale diagnostic (SKIA-72) or bounded target/snapshot cache work (SKIA-74).
+2. SKIA-72: display-scale regression with live presentation/readback coordinates; SKIA-74: inspect
+   current snapshot/resource ownership before introducing any cache policy.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to
    SKIA-16/SKIA-28 and is not yet implemented.
 
