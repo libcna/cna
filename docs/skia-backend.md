@@ -71,6 +71,16 @@ The backend records the actual applied value and reapplies it when the SDL prese
 This is not evidence for a future accelerated Skia surface, which must probe its own native swap
 or submit policy.
 
+Presentation keeps the preferred virtual width and height separate from the current raster size.
+Letterbox, Overscan, and Stretch retain the requested raster dimensions and delegate their scale
+and centred offset to SDL. NativeBackBuffer copies the raster at 1:1 output-pixel size into the
+top-left after clearing unused output black. FixedHeightDynamicWidth retains the preferred height
+and computes `round(outputWidth * preferredHeight / outputHeight)` for both the CPU surface and
+SDL logical presentation. A physical resize is detected by Clear, viewport query, or Present; the
+just-completed frame is presented first, then the raster is replaced for the next frame. Leaving
+the dynamic mode restores the preferred width. Window/logical transforms always use SDL's
+DPI-aware renderer-coordinate API, so they share the presentation scale and offsets exactly.
+
 The raster images and `SkSurface` objects are CPU-owned, so they have no GPU context handle to
 recreate. The test-only recovery seam therefore rebuilds the SDL renderer and its streaming
 presentation texture while retaining live raster textures, render targets, and their snapshots.
@@ -165,8 +175,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers sixty-seven SKIA-only CTests: six window-independent raster
-   pixel tests and sixty-one display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers 76 SKIA-only CTests: seven window-independent raster
+   tests and 69 display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -354,5 +364,11 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     checks each stored request and the actual SDL interval (Two may clamp from 2 to 1), rebuilds the
     presenter and verifies the selected value persists, then proves exact Clear/readback/Present.
     All fifteen checks pass in normal and AddressSanitizer builds.
+54. `Skia_PresentationModes` checks all five presentation modes against measured window/output
+    dimensions. Its 25 assertions cover requested and dynamically derived raster sizes, scale and
+    centred offsets, bidirectional logical/window round trips, exact Clear/readback/Present, a real
+    resize after mode switches, preferred-width restoration, and non-mutating invalid-mode
+    rejection. It passes normally and under AddressSanitizer together with the existing display-
+    scale, resize/reset, and presentation-edge regressions.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

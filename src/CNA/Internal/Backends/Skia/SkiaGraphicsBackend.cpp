@@ -107,6 +107,7 @@ namespace CNA::Internal::Backends::Skia
         : window_(window)
         , deviceEventCallback_(std::move(deviceEventCallback))
         , presentationMode_(presentationMode)
+        , preferredVirtualWidth_(virtualWidth)
         , preferredVirtualHeight_(virtualHeight)
     {
         if (!window_)
@@ -185,6 +186,31 @@ namespace CNA::Internal::Backends::Skia
         ApplyLogicalPresentation();
     }
 
+    void SkiaGraphicsBackend::RefreshDynamicBackbufferIfNeeded()
+    {
+        if (presentationMode_ != CnaPresentationMode::FixedHeightDynamicWidth
+            || targetBinding_->ActiveTarget() != nullptr || preferredVirtualHeight_ <= 0)
+        {
+            return;
+        }
+
+        int outputWidth = 0;
+        int outputHeight = 0;
+        SDL_GetRenderOutputSize(renderer_, &outputWidth, &outputHeight);
+        if (outputWidth <= 0 || outputHeight <= 0)
+            SDL_GetWindowSize(window_, &outputWidth, &outputHeight);
+        if (outputWidth <= 0 || outputHeight <= 0)
+            return;
+
+        const int desiredWidth = static_cast<int>(
+            static_cast<double>(outputWidth) * preferredVirtualHeight_ / outputHeight + 0.5);
+        if (desiredWidth > 0
+            && (desiredWidth != LogicalWidth() || preferredVirtualHeight_ != LogicalHeight()))
+        {
+            RecreateBackbuffer(preferredVirtualWidth_, preferredVirtualHeight_);
+        }
+    }
+
     void SkiaGraphicsBackend::RecreatePresentationTexture()
     {
         presentTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32,
@@ -244,6 +270,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGraphicsBackend::Clear(float r, float g, float b, float a)
     {
+        RefreshDynamicBackbufferIfNeeded();
         if (SkiaRenderTargetBackend* target = targetBinding_->ActiveTarget())
             target->InvalidateSnapshot();
         ActiveSurface().Clear(r, g, b, a);
@@ -255,29 +282,47 @@ namespace CNA::Internal::Backends::Skia
         const auto pixels = surface_.SnapshotRgba();
         if (!SDL_UpdateTexture(presentTexture_, nullptr, pixels.data(), LogicalWidth() * 4))
             throw std::runtime_error(std::string("Skia SDL_UpdateTexture failed: ") + SDL_GetError());
+        SDL_FRect nativeDestination{
+            0.0f, 0.0f, static_cast<float>(LogicalWidth()), static_cast<float>(LogicalHeight())};
+        const SDL_FRect* destination = presentationMode_ == CnaPresentationMode::NativeBackBuffer
+            ? &nativeDestination : nullptr;
         if (!SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255) || !SDL_RenderClear(renderer_)
-            || !SDL_RenderTexture(renderer_, presentTexture_, nullptr, nullptr) || !SDL_RenderPresent(renderer_))
+            || !SDL_RenderTexture(renderer_, presentTexture_, nullptr, destination)
+            || !SDL_RenderPresent(renderer_))
         {
             throw std::runtime_error(std::string("Skia SDL presentation failed: ") + SDL_GetError());
         }
+
+        // A resize can arrive between draws without a ClientSizeChanged notification. Preserve
+        // the just-completed frame, then make the CPU raster surface match the new dynamic width
+        // for the next frame. GraphicsDevice::Present immediately queries GetViewportSize(), so
+        // its public viewport observes this replacement in the same Present call.
+        RefreshDynamicBackbufferIfNeeded();
     }
 
     void SkiaGraphicsBackend::GetViewportSize(int& width, int& height)
     {
+        RefreshDynamicBackbufferIfNeeded();
         width = ActiveSurface().Width();
         height = ActiveSurface().Height();
     }
 
     void SkiaGraphicsBackend::SetVirtualResolution(int width, int height)
     {
+        preferredVirtualWidth_ = width;
         preferredVirtualHeight_ = height;
         RecreateBackbuffer(width, height);
     }
 
     void SkiaGraphicsBackend::SetPresentationMode(int mode)
     {
+        if (mode < static_cast<int>(CnaPresentationMode::Letterbox)
+            || mode > static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth))
+        {
+            throw std::out_of_range("Skia received an invalid presentation mode.");
+        }
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
-        RecreateBackbuffer(LogicalWidth(), preferredVirtualHeight_ > 0 ? preferredVirtualHeight_ : LogicalHeight());
+        RecreateBackbuffer(preferredVirtualWidth_, preferredVirtualHeight_);
     }
 
     void SkiaGraphicsBackend::SetSwapInterval(int interval)
@@ -362,6 +407,7 @@ namespace CNA::Internal::Backends::Skia
         if (!renderTarget)
         {
             targetBinding_->UnbindToBackbuffer();
+            RefreshDynamicBackbufferIfNeeded();
             TraceSkiaState("surface=backbuffer size=%dx%d", surface_.Width(), surface_.Height());
             return;
         }

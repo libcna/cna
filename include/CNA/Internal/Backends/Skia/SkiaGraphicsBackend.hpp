@@ -111,6 +111,7 @@ namespace CNA::Internal::Backends::Skia
 
     private:
         void RecreateBackbuffer(int requestedWidth, int requestedHeight);
+        void RefreshDynamicBackbufferIfNeeded();
         void RecreatePresentationRenderer();
         void RecreatePresentationTexture();
         void DestroyPresentationTexture() noexcept;
@@ -137,6 +138,7 @@ namespace CNA::Internal::Backends::Skia
         bool blendEnabled_ = true;
         SkiaRasterState rasterState_;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        int preferredVirtualWidth_ = 0;
         int preferredVirtualHeight_ = 0;
         int swapInterval_ = 1;
     };

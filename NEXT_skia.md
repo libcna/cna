@@ -19,7 +19,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 75 Skia CTests: seven raster-only and 68 display-required tests.
+- `docs/skia-backend.md` records 76 Skia CTests: seven raster-only and 69 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -225,6 +225,20 @@
   all transitions. This closes the selected raster policy only; a future accelerated mode needs
   an independent native-surface probe.
 
+## Completed in this session: SKIA-13 and SKIA-14
+
+- Fixed two stale presentation defects found by auditing the early lifecycle plan: a real window
+  resize now reallocates the CPU raster width in `FixedHeightDynamicWidth`, and leaving that mode
+  restores the stored preferred virtual width instead of retaining the previously derived width.
+- NativeBackBuffer presentation now copies the raster texture into an unscaled logical-sized
+  destination after clearing the remaining physical output black. Letterbox, Overscan, and Stretch
+  retain SDL's logical-presentation mapping; all coordinate conversion remains delegated to SDL's
+  DPI-aware window/render transform.
+- Added `Skia_PresentationModes`: 25 checks cover every mode's raster size, measured scale and
+  centred offset, bidirectional coordinate round trips, exact Clear/readback/Present, a real SDL
+  window resize after mode switches, surface reallocation, preferred-width restoration, and safe
+  rejection of an invalid mode. It passes under Xvfb normally and under AddressSanitizer.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -290,18 +304,23 @@
   definition tests pass 8/8 in 1.37 seconds.
 - SKIA-15: `Skia_PresentInterval` passes all 15 checks under Xvfb in normal and AddressSanitizer
   builds (`detect_leaks=0` for the known display-stack exit baseline).
+- SKIA-13/SKIA-14: `Skia_PresentationModes` passes 25/25 under Xvfb in normal and AddressSanitizer
+  builds. `Skia_DisplayScale` (10/10), `Skia_Resize_Presentation` (16/16), and
+  `Skia_Presentation_Edge` (4/4) also pass in both builds; the 2D demo completes its three-frame
+  smoke run from the build directory.
+- Full normal Skia milestone: all 76 labelled tests pass on one Xvfb server with CTest parallelism
+  2 (69 Display, seven Raster; 45.48 seconds real time). The temporary test display cache value was
+  restored to the repository's prior `:0` setting after the run.
 
 ## Current task
 
-Audit the remaining early lifecycle rows SKIA-13, SKIA-14, and SKIA-18 against the actual raster
-implementation. Several predate the completed vertical slice and may already be fulfilled by
-current code/tests; validate each claim before correcting a stale status or selecting a missing
-safe implementation task.
+Audit SKIA-18's active-surface, owner-thread, and destruction-order requirements against the
+existing weak target-binding lifetime design. Add only guards with independently testable failure
+behavior; do not make a throwing destructor or claim a GPU context for the raster path.
 
 ## Next candidates
 
-1. Audit the remaining incomplete SKIA-10 through SKIA-18 rows in dependency order, update stale plan evidence, and implement
-   only the independently observable gaps found by that audit.
+1. Complete the bounded SKIA-18 ownership/thread audit and its negative tests.
 2. Do not begin accelerated-MSAA/anisotropy rows until an accelerated Skia surface exists to
    probe; the selected raster path has no truthful capability to expose there.
 3. Keep the recovery boundary precise: raster resources survive SDL presenter reconstruction;
