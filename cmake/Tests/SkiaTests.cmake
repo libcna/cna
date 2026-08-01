@@ -174,6 +174,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_CpuGeometry_Spike
                                   cna_test_skia_cpu_geometry_spike)
 
+    # SKIA-100: one isolated unlit textured BasicEffect route over the CPU bridge, plus a closed
+    # stock-effect requirement inventory. This is feasibility evidence, not a public Draw path.
+    cna_skia_test(cna_test_skia_cpu_stock_effect_spike
+                  examples/skia_cpu_stock_effect_spike_test.cpp)
+    target_include_directories(cna_test_skia_cpu_stock_effect_spike PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_CpuStockEffect_Spike
+                                  cna_test_skia_cpu_stock_effect_spike)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

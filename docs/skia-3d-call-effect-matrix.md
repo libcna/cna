@@ -55,21 +55,21 @@ but none supplies the missing vertex/depth pipeline. No row permits setting
 | `3D-STATE-DEPTH` | Depth storage, clear, compare/write, target persistence and bias interaction. | No depth attachment; CPU feasibility is conditional SKIA-97. |
 | `3D-STATE-STENCIL` | Reference/masks, compare, operations, two-sided winding and colour-write interaction. | No stencil attachment; conditional on depth bridge, SKIA-98. |
 | `3D-STATE-CULL-FILL` | Front-face convention, all cull modes, solid/wireframe and raster bias. | SKIA-99 proves post-projection winding, all cull modes and wire expansion; depth bias/pixel rules remain absent. |
-| `3D-STATE-BLEND-COLOR` | Effect alpha/vertex colour, blend and colour-write interaction on geometry. | 2D blend pieces exist but 3D coverage/varyings do not; SKIA-99/SKIA-100. |
+| `3D-STATE-BLEND-COLOR` | Effect alpha/vertex colour, blend and colour-write interaction on geometry. | SKIA-100 proves opaque unlit material/vertex-colour bytes only; general blend/state ordering remains absent. |
 | `3D-STATE-MRT` | Multiple simultaneous colour outputs with atomic target binding. | Not representable by one raster canvas; exact refusal is proven by SKIA-87. |
 | `3D-STATE-MSAA` | Sample-count negotiation, depth coupling, resolve, mip readback and cube faces. | Raster requests above one sample reject; measured in SKIA-76/SKIA-77. |
 | `3D-STATE-ORDER` | Deferred source lifetime, target/backbuffer pass order and SpriteBatch/3D boundaries. | 2D ordering exists; mixed 3D ordering remains unsupported, SKIA-99/SKIA-102. |
 | `3D-VIEWPORT-SCISSOR` | Viewport/scissor application to projected geometry and deferred draws. | 2D canvas route exists; 3D mapping depends on SKIA-96/SKIA-99. |
-| `3D-FX-BASIC` | BasicEffect texture, vertex colour, alpha, lighting and shader combinations. | Properties exist; public draw path rejects. Family evaluation is SKIA-100. |
-| `3D-FX-ALPHATEST` | AlphaTestEffect compare modes, reference alpha, vertex colour and fog on geometry. | Fragment decision is proven only in isolation; complete route is SKIA-100. |
-| `3D-FX-DUAL` | Two independent 2D samplers, doubling equation, vertex colour, alpha and fog. | Fragment equation is proven only in isolation; complete route is SKIA-100. |
-| `3D-FX-ENVMAP` | EnvironmentMapEffect cube reflection, Fresnel, amount, eye/normal space and lighting. | Cube sampling and vertex transforms are absent; SKIA-100/SKIA-101. |
-| `3D-FX-SKINNED` | SkinnedEffect bone weights/matrices, vertex colour, lighting and fog. | No skinned vertex stage; SKIA-100/SKIA-101. |
-| `3D-FX-PBR` | PbrEffect and SkinnedPbrEffect material, lighting and skinning variants. | No PBR/skinned 3D pipeline; SKIA-100/SKIA-101. |
+| `3D-FX-BASIC` | BasicEffect texture, vertex colour, alpha, lighting and shader combinations. | SKIA-100 proves one unlit/no-fog textured PCT route; normal/lighting/fog/variants/public draw remain gaps. |
+| `3D-FX-ALPHATEST` | AlphaTestEffect compare modes, reference alpha, vertex colour and fog on geometry. | Compare/discard pieces are reusable, but depth/stencil integration, fog, exact coverage and public draw remain SKIA-101 costs. |
+| `3D-FX-DUAL` | Two independent 2D samplers, doubling equation, vertex colour, alpha and fog. | Two-child formula/address pieces are reusable; per-slot geometry sampling, fog, coverage and public draw remain gaps. |
+| `3D-FX-ENVMAP` | EnvironmentMapEffect cube reflection, Fresnel, amount, eye/normal space and lighting. | SKIA-100 matrix confirms cube direction sampling, normal/eye transforms, lighting/Fresnel and public draw are absent. |
+| `3D-FX-SKINNED` | SkinnedEffect bone weights/matrices, vertex colour, lighting and fog. | Layout/palette data exist; weighted position/normal/fog/lighting and public integration are absent. |
+| `3D-FX-PBR` | PbrEffect and SkinnedPbrEffect material, lighting and skinning variants. | Layout/storage pieces exist; TBN, five samplers, BRDF, optional skinning and public integration are absent. |
 | `3D-FX-CUSTOM` | Arbitrary EasyGL GLSL vertex+fragment programs and custom varyings/layouts. | Fragment-only tagged SkSL cannot preserve this contract; reject unless SKIA-101 funds a compiler/emulator. |
-| `3D-SHADE-LIGHT` | Normal transforms, directional/multiple lights, emissive, specular, Phong/Lambert and per-pixel variants. | No normal-varying/lighting pipeline; family evaluation is SKIA-100. |
-| `3D-SHADE-FOG` | View-space fog and effect-specific fog interpolation/composition. | No vertex-derived fog coordinate; family evaluation is SKIA-100. |
-| `3D-MODEL-SKIN` | Model meshes/effects, hierarchy, animation, avatars, skeletons and skin weights. | Content may load but its rendering path is absent; SKIA-99/SKIA-100. |
+| `3D-SHADE-LIGHT` | Normal transforms, directional/multiple lights, emissive, specular, Phong/Lambert and per-pixel variants. | SKIA-100 confirms forwarding alone is insufficient; no integrated CPU normal/lighting variant pipeline exists. |
+| `3D-SHADE-FOG` | View-space fog and effect-specific fog interpolation/composition. | Fog vectors exist in common code, but their pre/post-skin vertex evaluation, interpolation and fragment mix are absent. |
+| `3D-MODEL-SKIN` | Model meshes/effects, hierarchy, animation, avatars, skeletons and skin weights. | Layout/palette storage exists; SKIA-100 confirms weighted position/normal/tangent rendering is absent. |
 | `3D-QUERY-OCCLUSION` | Begin/End lifecycle, availability/nonblocking result and visible/depth-occluded PixelCount. | Capability is false; feasibility decision is SKIA-104, implementation/refusal is SKIA-105. |
 | `3D-RESOURCE-CONTRACT` | Missing bindings, null resources, disposed/dynamic lifetime, descriptor capacity and transfer ranges. | Existing failures must remain atomic; exhaustive uniform refusal is SKIA-102. |
 | `3D-TARGET-PASS` | Render-target/depth/cube binding, first use, clear, readback and producer/consumer transitions. | Colour-only 2D pieces exist; 3D attachment/pass behavior remains unsupported. |

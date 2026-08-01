@@ -554,5 +554,16 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     ASan was fixed; the final focused test passes in Debug, Release and leak-enabled ASan/LSan.
     The complete Debug suite passes 107/107 in 13.21 seconds (14 Raster, 91 Display, two Audit).
     `ThreeD`, depth/stencil and wireframe capability reporting remains false.
+75. `Skia_CpuStockEffect_Spike` closes SKIA-100 with one deliberately narrow unlit/no-fog
+    textured BasicEffect route. Its four PCT quadrants match every exact
+    `EasyGL_BasicEffect_Combined` pixel, an unequal-W triangle proves perspective texture
+    interpolation and depth retention, and the completed RGBA8 image reaches Skia without a
+    second shading pass. Missing texture, lighting/fog and unclipped input reject atomically.
+    `docs/skia-stock-effect-feasibility.md` separately classifies Basic, AlphaTest, DualTexture,
+    EnvironmentMap, Skinned, PBR and SkinnedPBR requirements across 21 closed component groups;
+    lighting/fog, cube sampling, skinning, PBR, sampler LOD, exact coverage, public ownership and
+    mixed ordering remain gaps. The focused test passes in Debug, Release and leak-enabled
+    ASan/LSan. The complete Debug suite passes 108/108 in 12.99 seconds (15 Raster, 91 Display,
+    two Audit). No 3D-related capability changes.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

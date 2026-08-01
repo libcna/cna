@@ -23,7 +23,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 107 Skia CTests: 14 raster-only, 91 display-required, and two
+- `docs/skia-backend.md` records 108 Skia CTests: 15 raster-only, 91 display-required, and two
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -589,9 +589,9 @@
 
 ## Current task
 
-SKIA-99 implementation and validation are complete. Commit/push this checkpoint, then begin
-SKIA-100 by prototyping one isolated textured BasicEffect route and separately mapping every
-remaining effect family. Do not connect the prototype to public draws or capability reporting.
+SKIA-100 implementation and validation are complete. Commit/push this checkpoint, then perform
+SKIA-101 as a complete maintainability/cost decision across all 37 renderer requirement IDs.
+Do not promote one successful BasicEffect route into public 3D support.
 
 ## Completed in this session: SKIA-93
 
@@ -774,14 +774,42 @@ remaining effect family. Do not connect the prototype to public draws or capabil
   (14 Raster, 91 Display, two Audit). Focused Debug/Release/ASan tests and both audits pass; Debug,
   Release and ASan display caches are `:0`. `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-100
+
+- Added the headless, internal `Skia_CpuStockEffect_Spike`. Its one accepted path is deliberately
+  narrow: already-clipped, unlit, no-fog textured BasicEffect PCT triangles with optional vertex
+  colour, point+clamp sampling, LessEqual depth and completed RGBA8 handoff to Skia. Axes are
+  1..16384 and each CPU texture/target refuses storage above 256 MiB before allocation.
+- Four quadrant draws use the exact 2x2 texture, vertex colour, diffuse/emissive material and
+  expected bytes from `EasyGL_BasicEffect_Combined`; all four match `(99,52,23)`, `(25,104,47)`,
+  `(49,26,93)` and `(74,78,70)`. A separate clip-W `(1,4,1)` triangle uses a four-texel strip:
+  reciprocal-W UV selects red at `(24,24)`, whereas affine interpolation would select green.
+  Depth remains exactly `0.5`, and Skia receives the finished pixels without re-shading.
+- Missing texture, enabled lighting/fog and a vertex outside homogeneous clip space reject before
+  touching sentinel colour or depth. The route does not guess partial clipping or silently omit
+  requested effect state.
+- Added `docs/skia-stock-effect-feasibility.md` with separate requirement matrices for
+  BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, PbrEffect
+  and SkinnedPbrEffect. A closed executable inventory classifies all 21 requirement groups exactly
+  once per family as reusable/prototype/gap and requires exact coverage, public integration and
+  mixed ordering to remain explicit gaps.
+- Lighting/fog, normal transforms, cube direction sampling, palette evaluation, PBR TBN/five-map
+  BRDF, sampler LOD, instancing, production coverage and public ownership are not inferred from
+  the unlit result. `ThreeD`, depth/stencil, wireframe and custom-effect capabilities stay false.
+- The focused test passes without compiler warnings in Debug and Release and in an escalated
+  leak-enabled ASan/LSan run. The complete Debug Skia suite passes 108/108 under Xvfb in 12.99
+  seconds with `--parallel 8` (15 Raster, 91 Display, two Audit). Debug, Release and ASan display
+  caches are `:0`; `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-100: prototype one textured BasicEffect route over the isolated CPU bridge, then build a
-   requirement matrix for BasicEffect lighting/fog and the alpha-test, dual-texture, environment,
-   skinned and PBR families. Reuse only components with exact evidence.
-2. SKIA-101: decide whether the combined CPU raster/input/effect design is complete and
-   maintainable, explicitly costing line/point raster rules, instancing, clipping/coverage,
-   texture LOD, state ordering and mixed 2D/3D presentation before any capability promotion.
+1. SKIA-101: write the evidence-backed ADR deciding whether the combined CPU raster/input/effect
+   design is complete and maintainable. It must account for every one of the 37 stable renderer
+   requirement IDs, including line/point coverage, instancing, clipping, sampler LOD, state/mixed
+   ordering, every effect family, custom vertex shaders, MRT, MSAA and queries.
+2. If SKIA-101 rejects full emulation, proceed to SKIA-102 and make every public 3D entry point
+   fail uniformly without disturbing proven 2D/cube-transfer behavior. If accepted, do not
+   implement from the current plan: SKIA-103 must first create the funded successor plan.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 
