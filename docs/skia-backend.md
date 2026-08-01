@@ -4,7 +4,7 @@
 
 `CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create an OpenGL context and does not call the EasyGL backend.
 
-The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, `Begin`'s 2D affine transform, scissor clipping, point/linear sampling with Clamp addressing, and `BlendState::{Opaque, AlphaBlend, NonPremultiplied, Additive}`. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. Mipmaps, Wrap/Mirror addressing, effects, MRT, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
+The implemented surface is intentionally small: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, `Begin`'s 2D affine transform, viewport and scissor clipping, point/linear sampling with Clamp addressing, and `BlendState::{Opaque, AlphaBlend, NonPremultiplied, Additive}`. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. Mipmaps, Wrap/Mirror addressing, effects, MRT, and all 3D APIs currently report a deterministic exception rather than being silently ignored. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
 
 ## Dependency policy
 
@@ -73,8 +73,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers forty-one SKIA-only CTests: two window-independent raster
-   surface pixel tests and thirty-nine display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers forty-three SKIA-only CTests: two window-independent raster
+   surface pixel tests and forty-one display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -125,5 +125,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
     submissions, without retaining a pointer to the caller's state object.
 20. `Skia_RenderTarget2D_Scissor` verifies target-local scissor coordinates, all four clip
     boundaries, target unbinding, and the disabled-scissor control through `RenderTarget2D::GetData`.
+21. `Skia_SpriteBatch_Viewport` verifies non-zero viewport placement and clipping on both surface
+    types. `Skia_Viewport_ProjectUnproject` then verifies a 2D orthographic `Project`/`Unproject`
+    round trip against the same live, offset `GraphicsDevice::Viewport` convention.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

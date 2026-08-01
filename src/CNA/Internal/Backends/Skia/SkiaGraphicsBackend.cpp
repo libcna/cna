@@ -318,6 +318,22 @@ namespace CNA::Internal::Backends::Skia
         rasterState_.scissorHeight = height;
     }
 
+    void SkiaGraphicsBackend::SetViewport(int x, int y, int width, int height,
+                                          float minDepth, float maxDepth)
+    {
+        // SpriteBatch is a top-left, 2D path. Its coordinates and Begin transform are viewport
+        // local; the viewport then positions and clips the resulting canvas geometry. Depth range
+        // has no observable meaning without a Skia depth buffer, but retaining this call's spatial
+        // state avoids the base class's former silent no-op.
+        (void)minDepth;
+        (void)maxDepth;
+        rasterState_.viewportSet = true;
+        rasterState_.viewportX = x;
+        rasterState_.viewportY = y;
+        rasterState_.viewportWidth = width;
+        rasterState_.viewportHeight = height;
+    }
+
     bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability) const
     {
         return false;

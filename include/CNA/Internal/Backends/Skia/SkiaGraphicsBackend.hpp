@@ -55,6 +55,7 @@ namespace CNA::Internal::Backends::Skia
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias, float slopeScaleDepthBias) override;
         void SetScissorRect(int x, int y, int width, int height) override;
+        void SetViewport(int x, int y, int width, int height, float minDepth, float maxDepth) override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;

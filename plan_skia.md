@@ -181,7 +181,7 @@ public CNA API.
 
 | ID | Task | Status | Acceptance evidence |
 |---|---|---|---|
-| SKIA-41 | Implement viewport and top-left coordinate normalization for backbuffer and every off-screen `SkSurface`. | ⬜ | Identical source/target orientation and `Project`/`Unproject` 2D checks. |
+| SKIA-41 | Implement viewport and top-left coordinate normalization for backbuffer and every off-screen `SkSurface`. | ✅ | `Skia_SpriteBatch_Viewport` verifies a non-zero, asymmetric viewport's local coordinates, all four boundaries, and identical backbuffer/target top-left orientation; `Skia_Viewport_ProjectUnproject` verifies the live viewport's 2D projection and round trips. |
 | SKIA-42 | Implement `SetScissorRect` with save/restore discipline so a changed scissor cannot leak between draws or targets. | ✅ | `Skia_SpriteBatch_RasterizerState` verifies scissor enable/disable across SpriteBatch modes, while `Skia_RenderTarget2D_Scissor` verifies an asymmetric target-local clip, its boundaries, target switching, and the disabled-scissor control. |
 | SKIA-43 | Map `SamplerState` point/linear filters to Skia sampling options and prove magnification/minification behavior. | ✅ | `Skia_TextureFilter_PointVsLinear` proves the texel-boundary difference under magnification; `Skia_TextureFilter_Minification` proves the same Point/Linear distinction when 2 source texels cover one destination pixel. |
 | SKIA-44 | Map `TextureAddressMode::Clamp`, `Wrap`, and `Mirror` independently on U/V, including negative coordinates and partial source rectangles. | ⬜ | Clamp/wrap/mirror edge and seam pixel suite passes. |

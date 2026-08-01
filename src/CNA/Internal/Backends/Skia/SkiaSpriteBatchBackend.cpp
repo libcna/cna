@@ -192,6 +192,17 @@ namespace CNA::Internal::Backends::Skia
         const float sourceWidth = static_cast<float>(sourceRectangle.Width);
         const float sourceHeight = static_cast<float>(sourceRectangle.Height);
         SkAutoCanvasRestore restore(canvas, true);
+        if (rasterState_ && rasterState_->viewportSet)
+        {
+            // XNA's viewport is target-space and SpriteBatch coordinates are local to it. Clip
+            // in target space before installing any per-sprite transform, then move the local
+            // origin to the viewport's top-left corner below.
+            canvas->clipRect(SkRect::MakeXYWH(static_cast<float>(rasterState_->viewportX),
+                                               static_cast<float>(rasterState_->viewportY),
+                                               static_cast<float>(rasterState_->viewportWidth),
+                                               static_cast<float>(rasterState_->viewportHeight)),
+                             SkClipOp::kIntersect, false);
+        }
         if (rasterState_ && rasterState_->scissorTestEnabled)
         {
             // ScissorRectangle lives in active-target pixel coordinates, not in the SpriteBatch
@@ -203,6 +214,9 @@ namespace CNA::Internal::Backends::Skia
                                                static_cast<float>(rasterState_->scissorHeight)),
                              SkClipOp::kIntersect, false);
         }
+        if (rasterState_ && rasterState_->viewportSet)
+            canvas->translate(static_cast<float>(rasterState_->viewportX),
+                              static_cast<float>(rasterState_->viewportY));
         // SkCanvas::concat pre-concatenates the matrix, making each following local sprite
         // transform run first and this Begin transform run second. That is XNA's ordering:
         // generate the sprite corner, then pass it through Vector2::Transform(matrix).

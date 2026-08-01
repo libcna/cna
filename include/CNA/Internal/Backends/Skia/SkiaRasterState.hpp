@@ -9,6 +9,11 @@ namespace CNA::Internal::Backends::Skia
      */
     struct SkiaRasterState
     {
+        bool viewportSet = false;
+        int viewportX = 0;
+        int viewportY = 0;
+        int viewportWidth = 0;
+        int viewportHeight = 0;
         bool scissorTestEnabled = false;
         int scissorX = 0;
         int scissorY = 0;
