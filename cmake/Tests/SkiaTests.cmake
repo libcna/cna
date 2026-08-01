@@ -135,6 +135,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spritebatch_rasterizerstate examples/software_spritebatch_rasterizerstate_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_RasterizerState cna_test_skia_spritebatch_rasterizerstate)
 
+    cna_skia_test(cna_test_skia_rasterizer_state_policy examples/skia_rasterizer_state_policy_test.cpp)
+    cna_register_skia_display_test(Skia_RasterizerState_Policy cna_test_skia_rasterizer_state_policy)
+
     cna_skia_test(cna_test_skia_spritebatch_viewport examples/skia_spritebatch_viewport_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_Viewport cna_test_skia_spritebatch_viewport)
 

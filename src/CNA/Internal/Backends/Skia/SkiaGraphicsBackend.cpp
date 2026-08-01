@@ -311,11 +311,20 @@ namespace CNA::Internal::Backends::Skia
     void SkiaGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                                    float depthBias, float slopeScaleDepthBias)
     {
+        constexpr int kFillModeSolid = 0;
+        if (fillMode != kFillModeSolid)
+        {
+            throw std::runtime_error(
+                "Skia raster backend does not implement RasterizerState::FillMode::WireFrame.");
+        }
+
         // Skia's SpriteBatch route is intrinsically filled 2D canvas geometry, without a depth
-        // buffer or face winding. ScissorTestEnable is the one RasterizerState member that has
-        // a direct 2D effect and is applied by SkiaSpriteBatchBackend for every draw.
+        // buffer or face winding.  CullMode, depth biases, and multisample policy only affect a
+        // 3D pipeline, which this backend does not advertise and whose draw entry points reject.
+        // ScissorTestEnable is the one RasterizerState member with a direct 2D effect and is
+        // applied by SkiaSpriteBatchBackend for every draw.  WireFrame is rejected above rather
+        // than silently approximating a textured sprite with filled canvas geometry.
         (void)cullMode;
-        (void)fillMode;
         (void)depthBias;
         (void)slopeScaleDepthBias;
         rasterState_.scissorTestEnabled = scissorTestEnable;
