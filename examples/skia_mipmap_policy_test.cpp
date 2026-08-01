@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-27: pin the public raster mip policy after the Skia API audit.
+// SKIA-27 / SKIA-70: pin the public raster mip policy after the Skia API audit.
 //
-// Skia's checked-in mip builder lives under src/core and is not a public raster-image upload API.
-// CNA deliberately does not bind that private/cache-owned implementation: every mipMap=true
-// Texture2D or RenderTarget2D request must instead fail as NotSupportedException before callers
-// can submit any pixel data. A subsequent level-0 upload/draw proves this refusal does not poison
-// the usable 2D path.
+// SkImage::withDefaultMipmaps() is public in the pinned Skia revision, but it returns an immutable
+// image snapshot.  Its public API neither exposes per-level raster readback nor defines the
+// invalidation/resolve contract CNA needs when a mutable SkSurface target is rebound, uploaded,
+// or read through Texture2D::GetData(level > 0).  CNA deliberately does not fabricate those
+// missing target semantics from private Skia internals: every mipMap=true Texture2D or
+// RenderTarget2D request fails as NotSupportedException before callers can submit any pixel data.
+// The follow-up level-0 texture and target cycles prove the refusal leaves normal draw/readback/
+// sampling behaviour usable.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -84,6 +87,14 @@ class SkiaMipmapPolicyTest final : public Game
         check(same(actual, expected), label);
     }
 
+    void checkTargetPixel(RenderTarget2D& target, int x, Color expected, const char* label)
+    {
+        Color actual(0, 0, 0, 0);
+        const Rectangle pixel(x, 0, 1, 1);
+        target.GetData(0, &pixel, &actual, 0, 1);
+        check(same(actual, expected), label);
+    }
+
 protected:
     void Initialize() override
     {
@@ -121,6 +132,23 @@ protected:
         spriteBatch_->End();
         checkPixel(1, kRed, "level-0 upload remains usable after rejected mip requests (red half)");
         checkPixel(3, kBlue, "level-0 upload remains usable after rejected mip requests (blue half)");
+
+        RenderTarget2D levelZeroTarget(device, 2, 1, false, SurfaceFormat::Color,
+                                       DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+        device.SetRenderTarget(&levelZeroTarget);
+        device.Clear(kRed);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        checkTargetPixel(levelZeroTarget, 0, kRed,
+                         "level-0 target remains readable after rejected mip-target construction");
+
+        device.Clear(Color(0, 0, 0, 255));
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
+                            const_cast<SamplerState*>(&SamplerState::PointClamp), nullptr, nullptr,
+                            nullptr, Matrix::getIdentityProperty());
+        spriteBatch_->Draw(levelZeroTarget, Rectangle(0, 0, 4, 2), Rectangle(0, 0, 2, 1), Color::White);
+        spriteBatch_->End();
+        checkPixel(1, kRed,
+                   "level-0 target remains sampleable after rejected mip-target construction");
         Exit();
     }
 

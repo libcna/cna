@@ -109,6 +109,18 @@
 - `ColorWriteChannels1-3` continue to reject because raster supports one target; non-default
   `MultiSampleMask` continues to reject because that target has zero raster samples.
 
+## Completed in this session: SKIA-70
+
+- Audited the pinned Skia headers: `SkImage::withDefaultMipmaps()` is public, but applies only to
+  an immutable image snapshot. It provides no public per-level raster readback and no target
+  lifecycle contract for invalidation after a mutable `SkSurface` bind or public `SetData` upload.
+  CNA must not invent those observable target semantics from Skia internals, so the existing
+  raster `mipMap=true` refusal remains the correct bounded outcome.
+- Extended `Skia_Texture2D_MipmapPolicy` beyond constructor rejection: after a rejected mipmapped
+  target it creates a normal level-0 target, Clear-draws it, reads it through `RenderTarget2D`,
+  unbinds it, and samples it through SpriteBatch. This confirms no partial target state leaks from
+  the refusal.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -139,17 +151,20 @@
 - SKIA-57 debug/ASan: the 112-case public channel-mask matrix passes under Xvfb in both normal and
   AddressSanitizer builds; the BlendState policy regression still rejects only the unproven blend
   tuples and non-default sample mask.
+- SKIA-70 debug/ASan: `Skia_Texture2D_MipmapPolicy` passes all six checks under Xvfb in the normal
+  and AddressSanitizer builds. A bare CTest invocation has no X11 server in this environment, as
+  expected for the test's registered display requirement; the Xvfb invocation is the valid check.
 
 ## Current task
 
-Reassess the next incomplete 2D task after SKIA-57. Blend, write-mask, and raster state work is
-now bounded and documented; choose the next plan row with an independently testable public
-contract.
+Reassess the next incomplete 2D task after SKIA-70. Blend, write-mask, target-mipmap disposition,
+and raster state work are bounded and documented; choose the next plan row with an independently
+testable public contract.
 
 ## Next candidates
 
 1. Audit remaining incomplete 2D plan rows and select the highest-value safe task; likely resize/
-   display-scale coverage (SKIA-71/72) or a precise raster target-mipmap disposition (SKIA-70).
+   display-scale coverage (SKIA-71/72).
 2. SKIA-71/72: resize and display-scale regressions with live targets, once lifecycle ownership is
    sound.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to

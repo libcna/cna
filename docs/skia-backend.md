@@ -210,9 +210,12 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 24. `Skia_SpriteBatch_Stress` reuses twelve textures and two preserve-content targets for 64 actual
     frames. Each frame switches A → B → backbuffer and makes 26 independent SpriteBatch sessions;
     the two target anchor pixels and a complete-backbuffer FNV-1a hash must remain stable.
-25. `Skia_Texture2D_MipmapPolicy` pins the raster decision after the Skia API audit: mipmapped
-    texture and render-target construction both raise `System::NotSupportedException`, while a
-    subsequent level-0 upload and Point sprite draw remain correct.
+25. `Skia_Texture2D_MipmapPolicy` pins the raster decision after the SKIA-70 API audit:
+    `SkImage::withDefaultMipmaps()` is public but immutable and does not provide the per-level
+    readback or mutable-target invalidation/resolve contract CNA exposes. Mipmapped texture and
+    render-target construction therefore both raise `System::NotSupportedException`; a following
+    level-0 texture upload/draw and a fresh target bind/Clear/readback/unbind/sample cycle remain
+    correct.
 26. `Skia_Sampler_MipmapFilterPolicy` verifies every mip-dependent `TextureFilter` value rejects
     during `SpriteBatch::Begin`, before any draw; it then reuses the same batch successfully with
     `PointClamp`.
@@ -281,5 +284,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     masks after every accepted blend route on the backbuffer, all sixteen on the destination-
     reading runtime route in RenderTarget2D, and alpha-bit selection with distinct 128/255 source
     and destination alpha values.
+44. `Skia_Texture2D_MipmapPolicy` also closes the target-mipmap investigation: the pinned public
+    Skia API can attach generated mips only to an immutable `SkImage` snapshot, while CNA requires
+    deterministic public per-level target readback and invalidation after bind/upload. The raster
+    backend consequently refuses a mipmapped target before construction, then proves a new
+    level-0 target can render, read back, unbind, and sample normally.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
