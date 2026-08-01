@@ -60,10 +60,14 @@ module**:
 * **MSAA render targets**: `RenderTarget2D`'s own `MultiSampleCount`, resolved into the target's
   colour texture before it is sampled or read back — unlike back-buffer MSAA, honoured on BOTH
   modules on this environment (a render target's sample count is read at its own construction, not
-  gated by swap-chain construction timing). See "Render targets" below.
+  gated by swap-chain construction timing). See "Render targets" below;
+* **mip-mapped render targets**: `RenderTarget2D`'s own `mipMap` flag, a real mip chain
+  regenerated with `LLGL::CommandBuffer::GenerateMips()` after every render pass the target
+  appears in, and `GetData(level)` real for any level in range. See "Render targets" below.
 
-**Not implemented:** mip-mapped render targets. Each either reports itself unsupported
-through `GraphicsDevice.SupportsCapability()` or throws — none of them silently does nothing.
+Every item this backend's design ever scoped for `RenderTarget2D` is now implemented; no
+`GraphicsDevice.SupportsCapability()`/throw gap remains for it specifically (`RenderTargetCube`/MRT
+still have their own smaller, documented scope boundaries -- see "Render targets" below).
 
 Both modules are covered by their own CTests, so neither can break unnoticed because the default
 preference happened to select the other one.
@@ -209,9 +213,10 @@ shared colour texture. A new `LlglBoundRenderTarget` common interface lets the b
 currently bound" state point at either a plain `RenderTarget2D`, one cube face, or (see below) an
 MRT bind, without any of the queue/replay code needing to know which -- the per-distinct-target
 render-pass grouping described below already keys purely off `LLGL::RenderTarget*` pointer
-identity, so this generalizes with no changes needed there. Mip-mapped render targets are not
-implemented; a `mipMap=true` `RenderTarget2D` is silently created with a single level, the same
-documented scope boundary `preserveContents` already has.
+identity, so this generalizes with no changes needed there. `RenderTargetCube`/MRT still do not
+support mip-mapping (a `mipMap=true` cube or an MRT slot is silently created with a single level,
+the same documented scope boundary `preserveContents` already has for both) -- see the dedicated
+`RenderTarget2D` mip-mapping paragraph below for what a plain `RenderTarget2D` now does with it.
 
 **`RenderTarget2D` `MultiSampleCount` is real.** `CreateRenderTarget2D`'s colour attachment uses
 LLGL's anonymous (textureless) multisampled attachment pattern when `multiSampleCount > 1`: the
@@ -235,6 +240,24 @@ difference from back-buffer MSAA — is honoured on BOTH modules on this project
 environment, not gated behind the same Vulkan-only limitation `Llgl_Msaa` documents for the swap
 chain. MRT binds and `RenderTargetCube` faces do not support MSAA yet (`LlglBoundRenderTarget::GetSampleCount()`
 defaults to 1/no-MSAA for both).
+
+**`RenderTarget2D` `mipMap` is real.** `CreateRenderTarget2D`'s colour texture is allocated with a
+full mip chain when `mipMap=true` (`RenderTarget2D.LevelCount`'s own `CalculateMipLevels(w, h)`
+formula, computed identically here and matching the Vulkan backend's own
+`CalculateVulkanRTMipLevels`) -- the render-target ATTACHMENT itself still only ever binds level 0
+(`LLGL::AttachmentDescriptor`'s own `mipLevel` default), and `RecordAndSubmitFrame()`/
+`CaptureBackbuffer()` call `LLGL::CommandBuffer::GenerateMips()` on the colour texture right after
+`EndRenderPass()` for any target that wants it -- the LLGL equivalent of the Vulkan backend's own
+`vkCmdBlitImage` cascade (`VulkanTargetPassEXT::MaybeGenerateMips`) and of EasyGL's
+`glGenerateMipmap`-on-unbind, but a single built-in LLGL call instead of a hand-rolled blit loop.
+Since a `RenderTarget2D` can be destroyed before the frame that references it is replayed, knowing
+WHICH texture to regenerate at replay time is captured onto each `FrameCommand` at QUEUE time
+(`mipRegenColorTexture`), mirroring `target`/`projectionBuffer`'s own existing pattern, rather than
+looked up live from whatever is currently bound. `GetData(level)` is real for any level in
+`[0, LevelCount)` now (previously a hard `level != 0` refusal) -- an out-of-range level throws
+`System::NotSupportedException` through the shared `Texture2D::GetData` layer, same as any other
+backend readback failure. MRT binds and `RenderTargetCube` faces do not support mip-mapping yet
+(`LlglBoundRenderTarget::GetMipRegenColorTextureEXT()` defaults to null for both).
 
 Two implementation choices are worth knowing if you are debugging a render-target frame:
 
@@ -594,6 +617,15 @@ but against an off-screen `RenderTarget2D` instead of the back buffer -- a singl
 `PixelTestGame` device suffices (no raw-`GraphicsDevice`-construction workaround needed, since a
 render target's own `MultiSampleCount` is read at its own construction), and unlike `Llgl_Msaa` the
 blended-edge check is not module-dependent here: it genuinely passes on both modules.
+`Llgl_RenderTarget2D_Mip` covers a real, correctly downsampled mip chain: a 7:1 asymmetric red/blue
+split rendered into a `mipMap=true` `RenderTarget2D`, read back directly at level 0 (crisp), an
+intermediate level that is an EXACT 1:1 downsample of the source pattern (still crisp, proving the
+cascade computed the right content, not just the right dimensions), and the coarsest 1x1 level
+(the whole image's true weighted average, proving the cascade runs all the way to the top) --
+adapted from `vulkan_rendertarget2d_mip_test.cpp`'s own technique but reading levels back directly
+via the now-real `GetData(level)` instead of forcing GPU LOD selection through an extreme
+minification draw. Also covers `GetData()` correctly rejecting a level outside `LevelCount`, on
+both a mip-mapped and a plain target.
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED

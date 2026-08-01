@@ -721,7 +721,7 @@ namespace CNA::Internal::Backends::Llgl
                                                       int width, int height, bool hasRealDepthBuffer,
                                                       LLGL::Buffer* spriteProjectionBuffer,
                                                       LlglGraphicsBackend* owner,
-                                                      int multiSampleCount)
+                                                      int multiSampleCount, int mipLevels)
         : renderSystem_(renderSystem)
         , renderTarget_(renderTarget)
         , colorTexture_(colorTexture)
@@ -732,6 +732,7 @@ namespace CNA::Internal::Backends::Llgl
         , spriteProjectionBuffer_(spriteProjectionBuffer)
         , owner_(owner)
         , multiSampleCount_(multiSampleCount > 0 ? multiSampleCount : 1)
+        , mipLevels_(mipLevels > 0 ? mipLevels : 1)
     {
         if (renderSystem_ == nullptr || renderTarget_ == nullptr || colorTexture_ == nullptr ||
             spriteProjectionBuffer_ == nullptr)
@@ -773,7 +774,7 @@ namespace CNA::Internal::Backends::Llgl
     bool LlglRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                            void* data, int dataLength) const
     {
-        if (data == nullptr || w <= 0 || h <= 0 || level != 0 ||
+        if (data == nullptr || w <= 0 || h <= 0 || level < 0 || level >= mipLevels_ ||
             renderSystem_ == nullptr || colorTexture_ == nullptr)
         {
             return false;
@@ -787,11 +788,14 @@ namespace CNA::Internal::Backends::Llgl
         // frameCommands_ -- unlike a plain Texture2D, which arrives through an immediate
         // WriteTexture. Reading the colour attachment before those are submitted would see
         // whatever the GPU allocator happened to leave there, not what was actually drawn.
+        // For a mip-mapped target (mipLevels_ > 1) this ALSO flushes the GenerateMips() call
+        // RecordAndSubmitFrame() queues right after level 0's own render pass -- level 1.. never
+        // has real content before that runs.
         if (owner_ != nullptr)
             owner_->FlushPendingFrameEXT();
 
         LLGL::TextureRegion region;
-        region.subresource.baseMipLevel = 0;
+        region.subresource.baseMipLevel = static_cast<std::uint32_t>(level);
         region.subresource.numMipLevels = 1;
         region.offset = {x, y, 0};
         region.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
@@ -3309,6 +3313,7 @@ namespace CNA::Internal::Backends::Llgl
         command.target = currentRenderTargetBackend_ != nullptr
             ? currentRenderTargetBackend_->GetLlglRenderTarget()
             : nullptr;
+        command.mipRegenColorTexture = GetActiveMipRegenColorTextureEXT();
         command.vertexBuffer = vertexBuffer.GetLlglBuffer();
         command.pipeline = AcquirePrimitivePipeline(vertexBuffer, primitive, scissorEnabled, textured,
                                                      lit, dualTexture, envMapping, skinned, pbr);
@@ -3845,6 +3850,7 @@ namespace CNA::Internal::Backends::Llgl
         command.target = currentRenderTargetBackend_ != nullptr
             ? currentRenderTargetBackend_->GetLlglRenderTarget()
             : nullptr;
+        command.mipRegenColorTexture = GetActiveMipRegenColorTextureEXT();
         command.clearFlags = flags;
         if (color != nullptr)
             std::memcpy(command.clearColor, color, sizeof(command.clearColor));
@@ -3864,6 +3870,7 @@ namespace CNA::Internal::Backends::Llgl
         command.target = currentRenderTargetBackend_ != nullptr
             ? currentRenderTargetBackend_->GetLlglRenderTarget()
             : nullptr;
+        command.mipRegenColorTexture = GetActiveMipRegenColorTextureEXT();
         command.queryHeap = queryHeap;
         frameCommands_.push_back(command);
     }
@@ -3878,6 +3885,7 @@ namespace CNA::Internal::Backends::Llgl
         command.target = currentRenderTargetBackend_ != nullptr
             ? currentRenderTargetBackend_->GetLlglRenderTarget()
             : nullptr;
+        command.mipRegenColorTexture = GetActiveMipRegenColorTextureEXT();
         command.queryHeap = queryHeap;
         frameCommands_.push_back(command);
     }
@@ -4065,6 +4073,7 @@ namespace CNA::Internal::Backends::Llgl
         command.target = currentRenderTargetBackend_ != nullptr
             ? currentRenderTargetBackend_->GetLlglRenderTarget()
             : nullptr;
+        command.mipRegenColorTexture = GetActiveMipRegenColorTextureEXT();
         command.texture = resolved.texture;
         command.sampler = AcquireSampler(filter, addressU, addressV, samplerMaxAnisotropy_);
 
@@ -4724,6 +4733,13 @@ namespace CNA::Internal::Backends::Llgl
                                                   static_cast<float>(resolution.height)});
             ReplayFrameCommandsList(bucket.commands);
             commands_->EndRenderPass();
+            // LLGL-26 mip-mapped render target follow-up: regenerate levels 1.. from the level 0
+            // this pass just rendered (or MSAA-resolved) into, the LLGL equivalent of the Vulkan
+            // backend's own vkCmdBlitImage cascade. Every command in one bucket shares the same
+            // target, so any one of them carries the same answer; GenerateMips() must run OUTSIDE
+            // the render pass it draws from (a transfer/compute-stage command, not a draw one).
+            if (LLGL::Texture* mipTexture = FindMipRegenColorTextureEXT(bucket))
+                commands_->GenerateMips(*mipTexture);
         }
         commands_->End();
         queue_->Submit(*commands_);
@@ -4819,6 +4835,9 @@ namespace CNA::Internal::Backends::Llgl
                 commands_->CopyTextureFromFramebuffer(*staging, region, LLGL::Offset2D{0, 0});
 
             commands_->EndRenderPass();
+            // See RecordAndSubmitFrame()'s own identical call for why this runs here.
+            if (LLGL::Texture* mipTexture = FindMipRegenColorTextureEXT(bucket))
+                commands_->GenerateMips(*mipTexture);
         }
         commands_->End();
         queue_->Submit(*commands_);
@@ -4938,7 +4957,7 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     std::unique_ptr<IRenderTargetBackend> LlglGraphicsBackend::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/,
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap,
         int multiSampleCount)
     {
         if (w <= 0 || h <= 0)
@@ -4949,6 +4968,23 @@ namespace CNA::Internal::Backends::Llgl
         // matching GetMultiSampleCount()'s own swap-chain precedent.
         const std::uint32_t requestedSamples =
             multiSampleCount > 1 ? static_cast<std::uint32_t>(multiSampleCount) : 1u;
+
+        // Same formula as RenderTarget2D.cpp's own CalculateMipLevels (and the Vulkan backend's
+        // identical CalculateVulkanRTMipLevels) -- must match exactly, since the XNA-level
+        // RenderTarget2D.LevelCount the game sees is computed independently, client-side, and
+        // GetData(level) below rejects anything this backend did not actually allocate.
+        int mipLevels = 1;
+        if (mipMap)
+        {
+            int mw = w, mh = h;
+            mipLevels = 1;
+            while (mw > 1 || mh > 1)
+            {
+                mw = std::max(1, mw / 2);
+                mh = std::max(1, mh / 2);
+                ++mipLevels;
+            }
+        }
 
         LLGL::TextureDescriptor colorDesc;
         colorDesc.type = LLGL::TextureType::Texture2D;
@@ -4963,7 +4999,12 @@ namespace CNA::Internal::Backends::Llgl
         // why every render target shares the back buffer's attachment signature.
         colorDesc.format = swapChain_->GetColorFormat();
         colorDesc.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
-        colorDesc.mipLevels = 1;
+        // A real mip chain when mipMap is requested (LLGL-26 mip-mapped render target follow-up):
+        // the render-target ATTACHMENT below still only ever binds level 0 (AttachmentDescriptor's
+        // own mipLevel default), and RecordAndSubmitFrame()/CaptureBackbuffer() regenerate levels
+        // 1.. from it via LLGL::CommandBuffer::GenerateMips() after every render pass this target
+        // appears in -- see this method's own header doc comment.
+        colorDesc.mipLevels = static_cast<std::uint32_t>(mipLevels);
         colorDesc.miscFlags = 0;
 
         LLGL::Texture* colorTexture = renderer_->CreateTexture(colorDesc);
@@ -5042,7 +5083,8 @@ namespace CNA::Internal::Backends::Llgl
 
         return std::make_unique<LlglRenderTargetBackend>(renderer_.get(), renderTarget, colorTexture,
                                                           nullptr, w, h, hasRealDepthBuffer,
-                                                          spriteProjectionBuffer, this, appliedSamples);
+                                                          spriteProjectionBuffer, this, appliedSamples,
+                                                          mipLevels);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> LlglGraphicsBackend::CreateRenderTargetCube(

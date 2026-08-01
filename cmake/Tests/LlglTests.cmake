@@ -188,6 +188,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-26 mip-mapped render target follow-up: a real, correctly downsampled mip chain in a
+    # RenderTarget2D's own colour texture, generated via LLGL::CommandBuffer::GenerateMips() right
+    # after every render pass a mip-mapped target appears in. Adapted from
+    # vulkan_rendertarget2d_mip_test.cpp's own asymmetric 7:1 split technique, reading levels back
+    # directly via the now-real GetData(level) instead of forcing GPU LOD selection. Plain
+    # RenderTarget2D works on both modules, so this gets an _OpenGL variant below too.
+    cna_llgl_test(cna_test_llgl_rendertarget2d_mip examples/llgl_rendertarget2d_mip_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTarget2D_Mip COMMAND cna_test_llgl_rendertarget2d_mip
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-17: the same two binaries, pinned to the OpenGL module instead of the default
     # (Vulkan-first) preference. Running only the default preference is what let the OpenGL module
     # clear correctly and draw nothing for as long as it did -- a module nothing exercises is a
@@ -259,6 +270,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_backend_test(NAME Llgl_Msaa_RenderTarget_OpenGL COMMAND cna_test_llgl_msaa_rendertarget
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_RenderTarget2D_Mip_OpenGL COMMAND cna_test_llgl_rendertarget2d_mip
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 endif()

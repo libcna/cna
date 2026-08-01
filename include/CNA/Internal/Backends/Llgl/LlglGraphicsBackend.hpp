@@ -394,6 +394,12 @@ namespace CNA::Internal::Backends::Llgl
          *  see `LlglGraphicsBackend::GetPrimarySampleCountEXT()`. Cube faces and MRT binds do not
          *  support MSAA yet, so the default of 1 (no MSAA) is correct for both without an override. */
         [[nodiscard]] virtual int GetSampleCount() const { return 1; }
+        /** @brief Returns the colour texture that needs its mip chain regenerated after this
+         *  target's render pass ends, or null when this target has no real mip chain to
+         *  regenerate (the common case: a plain single-level target, a cube face, or an MRT
+         *  bind, none of which support `mipMap` yet). Only `LlglRenderTargetBackend` overrides
+         *  this. See `LlglGraphicsBackend::RecordAndSubmitFrame()`'s own `GenerateMips()` call. */
+        [[nodiscard]] virtual LLGL::Texture* GetMipRegenColorTextureEXT() const { return nullptr; }
     };
 
     /**
@@ -441,12 +447,19 @@ namespace CNA::Internal::Backends::Llgl
          *        GetMultiSampleCount()`'s own documented FNA-parity semantics. 1 (not 0) means no
          *        MSAA; `GetMultiSampleCountProperty()` reports 0 in that case (see this class's
          *        own `GetMultiSampleCount()` override).
+         * @param mipLevels The number of mip levels @p colorTexture was actually created with
+         *        (matches `RenderTarget2D.LevelCount`'s own `CalculateMipLevels(width, height)`
+         *        formula, computed identically on the XNA side and here -- see
+         *        `LlglGraphicsBackend::CreateRenderTarget2D()`). 1 means no real mip chain; a
+         *        value greater than 1 makes `GetMipRegenColorTextureEXT()` return @p colorTexture
+         *        so `RecordAndSubmitFrame()`/`CaptureBackbuffer()` regenerate levels 1.. from the
+         *        just-rendered level 0 after every render pass this target appears in.
          */
         LlglRenderTargetBackend(LLGL::RenderSystem* renderSystem, LLGL::RenderTarget* renderTarget,
                                 LLGL::Texture* colorTexture, LLGL::Texture* depthTexture,
                                 int width, int height, bool hasRealDepthBuffer,
                                 LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner,
-                                int multiSampleCount = 1);
+                                int multiSampleCount = 1, int mipLevels = 1);
 
         /** @brief Releases the render target and its textures. */
         ~LlglRenderTargetBackend() override;
@@ -466,11 +479,14 @@ namespace CNA::Internal::Backends::Llgl
         /**
          * @brief Reads pixels back from the colour attachment.
          *
-         * @param level      Mip level to read; only level 0 exists on a render target today.
-         * @param x          Left edge of the region in pixels.
-         * @param y          Top edge of the region in pixels.
-         * @param w          Width of the region in pixels.
-         * @param h          Height of the region in pixels.
+         * @param level      Mip level to read; @p x/@p y/@p w/@p h are already in THAT level's own
+         *                   pixel space (the caller, `Texture2D::GetData()`, scales them down from
+         *                   level 0 before calling this). Returns false for a level outside
+         *                   `[0, mipLevels_)`.
+         * @param x          Left edge of the region in pixels, at @p level.
+         * @param y          Top edge of the region in pixels, at @p level.
+         * @param w          Width of the region in pixels, at @p level.
+         * @param h          Height of the region in pixels, at @p level.
          * @param data       Destination for tightly packed RGBA8 rows, top row first.
          * @param dataLength Size of @p data in bytes; must be at least w * h * 4.
          * @return True if the whole region was read back; false if it could not be.
@@ -511,6 +527,14 @@ namespace CNA::Internal::Backends::Llgl
          *  was actually built with (1 = no MSAA) -- see `LlglBoundRenderTarget::GetSampleCount()`. */
         [[nodiscard]] int GetSampleCount() const override { return multiSampleCount_; }
 
+        /** @brief Returns this target's own colour texture when it has a real mip chain
+         *  (`mipLevels_ > 1`), or null otherwise -- see `LlglBoundRenderTarget::
+         *  GetMipRegenColorTextureEXT()`'s own doc comment for why and how this is consumed. */
+        [[nodiscard]] LLGL::Texture* GetMipRegenColorTextureEXT() const override
+        {
+            return mipLevels_ > 1 ? colorTexture_ : nullptr;
+        }
+
     private:
         LLGL::RenderSystem* renderSystem_       = nullptr;
         LLGL::RenderTarget* renderTarget_        = nullptr;
@@ -522,6 +546,7 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
         LlglGraphicsBackend* owner_               = nullptr;
         int                 multiSampleCount_    = 1;
+        int                 mipLevels_           = 1;
     };
 
     /**
@@ -1257,13 +1282,24 @@ namespace CNA::Internal::Backends::Llgl
          * reality (`LLGL-23`): whether a request actually widens the sample count at all depends on
          * which renderer module is loaded.
          *
+         * @p mipMap is real too (LLGL-26 mip-mapped render target follow-up): the colour texture is
+         * allocated with a full mip chain (`RenderTarget2D.LevelCount`'s own `CalculateMipLevels`
+         * formula, computed identically here), the render-target ATTACHMENT itself binds only level
+         * 0 (`LLGL::AttachmentDescriptor::mipLevel` defaults to 0), and `RecordAndSubmitFrame()`/
+         * `CaptureBackbuffer()` call `LLGL::CommandBuffer::GenerateMips()` on the colour texture
+         * right after every render pass this target appears in, regenerating levels 1.. from
+         * whatever level 0 just had rendered into it -- the LLGL equivalent of the Vulkan backend's
+         * own `vkCmdBlitImage` cascade (`VulkanTargetPassEXT::MaybeGenerateMips`), and of EasyGL's
+         * `glGenerateMipmap`-on-unbind.
+         *
          * @param w                Width in pixels.
          * @param h                Height in pixels.
          * @param depthFormat      Raw `DepthFormat` ordinal; only used to decide whether a real
          *                         depth buffer is reported through `HasRealDepthBuffer`.
          * @param preserveContents Ignored in this first cut -- see this backend's render-pass
          *                         grouping note on `FrameCommandBucket`.
-         * @param mipMap           Ignored; not yet implemented.
+         * @param mipMap           Whether to allocate a full mip chain and regenerate it after
+         *                         every render pass. See this method's own doc comment above.
          * @param multiSampleCount Requested MSAA sample count; 0/1 means none. See this method's
          *                         own doc comment above for how the applied count is reported back.
          * @return The new render target backend.
@@ -1689,6 +1725,19 @@ namespace CNA::Internal::Backends::Llgl
             return swapChain_ != nullptr ? static_cast<int>(swapChain_->GetSamples()) : 1;
         }
 
+        /** @brief Returns the CURRENTLY bound target's colour texture when it has a real mip chain
+         *  to regenerate, or null otherwise (nothing bound, a single-level target, a cube face, or
+         *  an MRT bind). Captured onto every `FrameCommand` that names a target (`QueueClear`/
+         *  `QueueSpriteEXT`/`QueuePrimitives`/`QueueQueryBeginEXT`/`QueueQueryEndEXT`) at QUEUE
+         *  time, exactly like `command.target`/`projectionBuffer` already are -- the target may be
+         *  destroyed (and this accessor's own answer lost) before the frame that references it is
+         *  replayed. See `LlglBoundRenderTarget::GetMipRegenColorTextureEXT()`'s own doc comment. */
+        [[nodiscard]] LLGL::Texture* GetActiveMipRegenColorTextureEXT() const
+        {
+            return currentRenderTargetBackend_ != nullptr
+                ? currentRenderTargetBackend_->GetMipRegenColorTextureEXT() : nullptr;
+        }
+
         /** @brief Returns the loaded module's rendering capabilities, for `LlglEffectBackend` to
          *  decide whether it can hand its GLSL source to LLGL directly or must compile it to
          *  SPIR-V first. */
@@ -1781,6 +1830,13 @@ namespace CNA::Internal::Backends::Llgl
             Kind             kind         = Kind::Clear;
             /** @brief The render target this command draws into, or null for the swap chain. */
             LLGL::RenderTarget* target    = nullptr;
+            /** @brief This command's own target's colour texture, ONLY when that target has a
+             *  real mip chain to regenerate (null otherwise) -- captured at queue time from
+             *  `LlglGraphicsBackend::GetActiveMipRegenColorTextureEXT()`, exactly like `target`
+             *  itself, since the target may be destroyed before this command's frame replays.
+             *  `RecordAndSubmitFrame()`/`CaptureBackbuffer()` read it off any one command in a
+             *  target's own `FrameCommandBucket` once that target's render pass ends. */
+            LLGL::Texture*   mipRegenColorTexture = nullptr;
             long             clearFlags   = 0;
             float            clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
             float            clearDepth   = 1.0f;
@@ -1965,6 +2021,15 @@ namespace CNA::Internal::Backends::Llgl
         };
 
         [[nodiscard]] std::vector<FrameCommandBucket> GroupFrameCommandsByTargetEXT() const;
+        /** @brief Returns the colour texture to `GenerateMips()` after @p bucket's render pass
+         *  ends, or null when this bucket's target has no real mip chain -- every command sharing
+         *  one target carries the same `mipRegenColorTexture` answer (captured at queue time), so
+         *  the first one is enough. Shared by `RecordAndSubmitFrame()`/`CaptureBackbuffer()`, the
+         *  two places that record a `FrameCommandBucket`'s own render pass. */
+        [[nodiscard]] static LLGL::Texture* FindMipRegenColorTextureEXT(const FrameCommandBucket& bucket)
+        {
+            return bucket.commands.empty() ? nullptr : bucket.commands.front()->mipRegenColorTexture;
+        }
         void CaptureBackbuffer();
         void ReplayFrameCommandsList(const std::vector<const FrameCommand*>& commands);
         void ReleasePendingBuffers();
