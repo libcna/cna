@@ -1375,6 +1375,10 @@ class RenderTargetMsaaMipReadbackTest : public Game
     void LegH7()  { ChainLeg("H7",  5,  3, 0); }
     void LegH8()  { ChainLeg("H8",  8,  4, 0); }
     void LegH9()  { ChainLeg("H9", 13,  7, 0); }
+    // REMED-GFX-193: `mipMap=true` means the FNA-calculated chain, not "there must be a
+    // generated descendant".  A 1x1 target therefore has one public/native level whether or
+    // not MSAA applies.  H1 above is the MSAA route; this is its non-MSAA counterpart.
+    void LegH10() { ChainLeg("H10", 1, 1, 0); }
 
     // ================================================================ Group I: other routes
 
@@ -1612,6 +1616,7 @@ protected:
         runLeg("H7", &RenderTargetMsaaMipReadbackTest::LegH7);
         runLeg("H8", &RenderTargetMsaaMipReadbackTest::LegH8);
         runLeg("H9", &RenderTargetMsaaMipReadbackTest::LegH9);
+        runLeg("H10", &RenderTargetMsaaMipReadbackTest::LegH10);
 
         runLeg("I1", &RenderTargetMsaaMipReadbackTest::LegI1);
         runLeg("I2", &RenderTargetMsaaMipReadbackTest::LegI2);
@@ -1652,7 +1657,7 @@ namespace
         "E1", "E2", "E3",
         "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10",
         "G1", "G2", "G3", "G4", "G5",
-        "H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9",
+        "H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9", "H10",
         "I1", "I2",
     };
 

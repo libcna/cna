@@ -269,6 +269,10 @@ namespace CNA::Internal::Backends::SdlGpu
         int width = 0;
         int height = 0;
         bool mipMap = false;
+        // The native `num_levels` allocated for colorTexture.  The deferred pass-finalization
+        // path owns only this state (the public wrapper may already be gone), so it must use the
+        // allocation fact rather than mipMap alone before asking SDL to generate a chain.
+        int levelCount = 1;
         SDL_GPUTexture* colorTexture = nullptr;
         SDL_GPUTexture* msaaTexture = nullptr;
         SDL_GPUTexture* depthTexture = nullptr;

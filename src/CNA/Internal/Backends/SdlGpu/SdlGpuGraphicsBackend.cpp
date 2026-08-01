@@ -1845,10 +1845,10 @@ namespace CNA::Internal::Backends::SdlGpu
         // matches FNA3D's OPENGL_ResolveTarget semantics (mip chain regenerated once this target's
         // contents are final for the frame). Per segment, since each segment's result is what any
         // LATER segment or the swapchain pass may sample.
-        if (target->mipMap)
+        if (target->mipMap && target->levelCount > 1)
             SDL_GenerateMipmapsForGPUTexture(cmd, target->colorTexture);
         for (const auto& extra : segment.extraAttachments)
-            if (extra->mipMap)
+            if (extra->mipMap && extra->levelCount > 1)
                 SDL_GenerateMipmapsForGPUTexture(cmd, extra->colorTexture);
     }
 
@@ -6298,6 +6298,7 @@ namespace CNA::Internal::Backends::SdlGpu
         colorInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
         // REMED-GFX-186: what SDL really allocated, so GetData can refuse a level with no storage.
         levelCount_ = static_cast<int>(colorInfo.num_levels);
+        state_->levelCount = levelCount_;
         colorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;  // the sampleable texture itself is always single-sample
 
         state_->colorTexture = SDL_CreateGPUTexture(device, &colorInfo);
