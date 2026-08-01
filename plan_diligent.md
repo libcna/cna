@@ -4,12 +4,12 @@
 > top of it.** What that means concretely is in the "What the baseline actually does" section below
 > — read it before assuming parity with Vulkan/EasyGL/SDL_GPU, which this backend does **not** have.
 > `RenderTarget2D`/`RenderTargetCube`, `AlphaTestEffect`, `DualTextureEffect`,
-> `EnvironmentMapEffect`, `SkinnedEffect` (stride 52), `PbrEffect` (stride 48), several simultaneous
-> render targets, `OcclusionQuery`, MSAA (back buffer and `RenderTarget2D`, device-probed clamping)
-> and hardware instancing (`DrawInstancedPrimitivesEx`) are all implemented and verified on a real
-> (software) Vulkan device. Volume-texture sampling, MSAA on `RenderTargetCube`, custom
-> `ShaderEffect` programs and `SkinnedPbrEffect` are **not** implemented, and each one *refuses
-> loudly* rather than rendering a near-miss.
+> `EnvironmentMapEffect`, `SkinnedEffect` (stride 52), `PbrEffect`/`SkinnedPbrEffect` (strides 48/68),
+> several simultaneous render targets, `OcclusionQuery`, MSAA (back buffer and `RenderTarget2D`,
+> device-probed clamping) and hardware instancing (`DrawInstancedPrimitivesEx`) are all implemented
+> and verified on a real (software) Vulkan device. Volume-texture sampling, MSAA on
+> `RenderTargetCube` and custom `ShaderEffect` programs are **not** implemented, and each one
+> *refuses loudly* rather than rendering a near-miss.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -157,16 +157,16 @@ Implemented and exercised:
   stream at slot 0. Deliberately minimal, matching every other CNA backend's own baseline: no
   texture, no lighting, flat `g_DiffuseColor` output. `g_WorldViewProj` is repurposed to hold just
   `View * Projection` since there is no single shared `World` to fold in.
-- `PbrEffect` (`DILIGENT-36`, stride 48, unskinned): the glTF 2.0 metallic-roughness BRDF (GGX
-  distribution, Smith-Schlick-GGX visibility, Schlick Fresnel), five optional texture maps (base
-  colour, normal, metallic-roughness, emissive, occlusion) each falling back to their own glTF
-  "map absent" identity when unbound.
+- `PbrEffect`/`SkinnedPbrEffect` (`DILIGENT-36`, strides 48/68): the glTF 2.0 metallic-roughness
+  BRDF (GGX distribution, Smith-Schlick-GGX visibility, Schlick Fresnel), five optional texture
+  maps (base colour, normal, metallic-roughness, emissive, occlusion) each falling back to their
+  own glTF "map absent" identity when unbound. `SkinnedPbrEffect` combines the same BRDF with
+  `Skinned3D`'s bone-palette skinning.
 
 Deliberately refused (each throws, naming itself):
 
-- Custom `ShaderEffect` programs, `SkinnedPbrEffect`, `RenderTargetCube` MSAA, and
-  `SkinnedEffect`'s stride-56 vertex-colour variant. `SupportsCapability()` reports each of these
-  honestly.
+- Custom `ShaderEffect` programs, `RenderTargetCube` MSAA, and `SkinnedEffect`'s stride-56
+  vertex-colour variant. `SupportsCapability()` reports each of these honestly.
 
 ---
 
@@ -216,7 +216,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-33` | `DualTextureEffect` | ✅ | Two shader variants (stride 20 and 24) sharing one two-sampler pixel shader; the first layer is doubled before the modulate, as XNA does. Both layers share one UV set, matching every other CNA backend. Verified by `Diligent_DualTextureEnvMap` |
 | `DILIGENT-34` | `EnvironmentMapEffect` | ✅ | Reuses the lit vertex stage and adds a `TextureCube` sampler: reflection vector, flat or Fresnel-weighted blend factor, and the env-map specular term. Verified at amount 1 and amount 0 on the same geometry. Not byte-compared against FNA's `PSEnvMap` |
 | `DILIGENT-35` | `SkinnedEffect` (72-bone palette, stride 52) | ✅ | The palette lives in its own uniform buffer (4.5 KB is too much for the per-draw block); FNA's `WeightsPerVertex` truncation and the bone-skin ∘ world normal matrix are both honoured. Verified by `Diligent_Skinned`, including a trap bone the second weight pair must never reach. The stride-56 vertex-colour variant is not implemented |
-| `DILIGENT-36` | `PbrEffect`/`SkinnedPbrEffect` | 🟨 | `PbrEffect` (stride 48, unskinned) done and verified; `SkinnedPbrEffect` (stride 68, PBR+skinning combined) is not -- `DrawInternal()` throws its own name (`params.pbr && params.skinned`) rather than rendering a near-miss. New `ShaderVariant::Pbr3D`: glTF metallic-roughness BRDF (GGX/Trowbridge-Reitz distribution, Smith-Schlick-GGX visibility, Schlick Fresnel), ported term-for-term from this project's own established HLSL reference (`src/CNA/Internal/Backends/D3DCommon/shaders/pbr3d.vert.hlsl`/`pbr3d.frag.hlsl`) rather than re-derived from scratch. Five texture bindings (base colour + normal/metallic-roughness/emissive/occlusion maps, all four optional -- an unbound one falls back to its own glTF "absent" identity: flat tangent-space normal, or white since 1.0 is each of the other three's own no-op multiplier). A new, separate `PbrConstants` buffer (ambient/metallic/emissive/roughness) alongside the shared per-draw `Constants` block, because that block's own `g_EmissiveAmbient` folds ambient and emissive into one value -- PBR needs them apart (ambient scales albedo×occlusion, emissive is added standalone). Verified by `Diligent_Pbr` using the same analytically-hand-derived technique as `vulkan_pbreffect_handderived_test.cpp`: a flat quad viewed straight down -Z with light0 aimed the same way collapses every BRDF dot product to exactly 1 at the backbuffer's centre pixel, so the whole shader reduces to a closed-form constant independently re-derived in Python -- all 3 hand-derived cases (white/metallic=0, red/metallic=1, red/metallic=0) matched their predicted RGB values exactly, not just "looked plausibly lit" |
+| `DILIGENT-36` | `PbrEffect`/`SkinnedPbrEffect` | ✅ | `PbrEffect` (stride 48, unskinned) and `SkinnedPbrEffect` (stride 68, PBR+skinning combined) both done and verified. New `ShaderVariant::Pbr3D`: glTF metallic-roughness BRDF (GGX/Trowbridge-Reitz distribution, Smith-Schlick-GGX visibility, Schlick Fresnel), ported term-for-term from this project's own established HLSL reference (`src/CNA/Internal/Backends/D3DCommon/shaders/pbr3d.vert.hlsl`/`pbr3d.frag.hlsl`) rather than re-derived from scratch. Five texture bindings (base colour + normal/metallic-roughness/emissive/occlusion maps, all four optional -- an unbound one falls back to its own glTF "absent" identity: flat tangent-space normal, or white since 1.0 is each of the other three's own no-op multiplier). A new, separate `PbrConstants` buffer (ambient/metallic/emissive/roughness) alongside the shared per-draw `Constants` block, because that block's own `g_EmissiveAmbient` folds ambient and emissive into one value -- PBR needs them apart (ambient scales albedo×occlusion, emissive is added standalone). `ShaderVariant::SkinnedPbr3D` reuses `kPbrPixelHlsl` unchanged (skinning only affects the vertex stage) and mirrors `kSkinnedVertexHlsl`'s own skin-matrix/normal-composition convention (`(Normal * skinMatrix3x3) * InverseTranspose(World3x3)`, not a full inverse-transpose of `skin*World` -- a documented simplification this backend's own unskinned-lit skinning path already uses) rather than inventing a different one. Verified by `Diligent_Pbr` using the same analytically-hand-derived technique as `vulkan_pbreffect_handderived_test.cpp`: a flat quad viewed straight down -Z with light0 aimed the same way collapses every BRDF dot product to exactly 1 at the backbuffer's centre pixel, so the whole shader reduces to a closed-form constant independently re-derived in Python -- 3 hand-derived `PbrEffect` cases (white/metallic=0, red/metallic=1, red/metallic=0) matched their predicted RGB values exactly, and `SkinnedPbrEffect` with a single identity bone (a mathematical no-op skin transform) reproduces the white/metallic=0 case's value exactly, not just "looked plausibly lit" |
 | `DILIGENT-37` | Per-vertex lighting variant (`PreferPerPixelLighting == false`) | ✅ | Two new `ShaderVariant`s, `LitTexturedVertexLit3D` (stride 32, `BasicEffect`'s sibling to `LitTextured3D`) and `SkinnedVertexLit3D` (stride 52, `Skinned3D`'s sibling) -- selected in `DrawInternal()` when `lightingEnabled && !preferPerPixelLighting` (real XNA's own default). `EnvironmentMapEffect` has no `PreferPerPixelLighting` property in real XNA, so `envMapping` is checked first and always wins regardless of the flag. Both new vertex shaders extract kLitPixelHlsl's own inline Blinn-Phong math unchanged into a shared `ComputeVertexLighting()` helper and call it once per vertex instead of per pixel, handing the pixel stage pre-lit diffuse/specular varyings to Gouraud-interpolate -- same formula, only the evaluation frequency changes. Verified by `Diligent_VertexLit`: for a flat quad with one uniform normal, per-pixel and per-vertex evaluation have nothing to differ on, so `PreferPerPixelLighting=true` and `=false` must (and do) read back pixel-identical results, for both `BasicEffect` and `SkinnedEffect`. Found and fixed a real regression while landing this: `DrawInternal()`'s bone-palette upload was gated on `variant == ShaderVariant::Skinned3D` specifically, so once vertex-lit skinned draws started selecting `SkinnedVertexLit3D` instead (XNA's own default, i.e. the actually-more-common path) the bone buffer was silently never uploaded -- caught immediately by a DiligentCore validation assertion (`Diligent_Skinned` crashing with `SIGTRAP`) rather than silently, but still a real bug this task introduced and fixed before landing, not a pre-existing one. Also corrected `IGraphicsBackend.hpp`'s own `preferPerPixelLighting` doc comment, which claimed "every backend except D3D9" ignores the field -- already false for EasyGL/WebGPU before this task |
 
 ### Phase `DILIGENT-4` — remaining device surface
@@ -244,11 +244,11 @@ use:
 2. **Runs without a GPU** — `Diligent_DeviceSelection` exercises the device-preference and override
    parsing with no device created at all. ✅
 3. **Real device pixels** — a real Diligent device renders and a test asserts on read-back pixels.
-   ✅ **reached, on a software device**: all 15 `Diligent_*` CTest binaries (68 checks total —
+   ✅ **reached, on a software device**: all 15 `Diligent_*` CTest binaries (69 checks total —
    `Diligent_2D` 6, `Diligent_3D` 6, `Diligent_RenderTarget` 5, `Diligent_RenderTargetCube` 4,
    `Diligent_AlphaTestFog` 4, `Diligent_DualTextureEnvMap` 4, `Diligent_Skinned` 4, `Diligent_MRT` 4,
    `Diligent_OcclusionQuery` 4, `Diligent_MSAA` 5, `Diligent_Instanced` 4, `Diligent_DrawOffset` 5,
-   `Diligent_SetDataOptions` 4, `Diligent_VertexLit` 4, `Diligent_Pbr` 4) run against a genuine
+   `Diligent_SetDataOptions` 4, `Diligent_VertexLit` 4, `Diligent_Pbr` 5) run against a genuine
    Vulkan device provided by Mesa's `lavapipe` ICD under Xvfb. These are real
    draws through the real Vulkan engine — real pipelines, real HLSL→SPIR-V compilation, real depth
    testing — read back through `GraphicsDevice.GetBackBufferData`/`RenderTarget[Cube].GetData`, not

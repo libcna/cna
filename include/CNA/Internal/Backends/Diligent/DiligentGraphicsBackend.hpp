@@ -1383,6 +1383,7 @@ namespace CNA::Internal::Backends::Diligent
             LitTexturedVertexLit3D, ///< stride 32: LitTextured3D's PreferPerPixelLighting==false sibling
             SkinnedVertexLit3D,     ///< stride 52: Skinned3D's PreferPerPixelLighting==false sibling
             Pbr3D,                  ///< stride 48: PbrEffect's glTF metallic-roughness BRDF
+            SkinnedPbr3D,           ///< stride 68: Pbr3D combined with Skinned3D's bone palette
         };
 
         /** @brief Everything that distinguishes one Diligent pipeline state object from another. */

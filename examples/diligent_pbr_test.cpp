@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-36 (PbrEffect only -- SkinnedPbrEffect is not implemented on this
-// backend, see that task's own row): real-device proof of the glTF metallic-roughness BRDF, using
-// the same analytically hand-derived technique as vulkan_pbreffect_handderived_test.cpp.
+// plan_diligent.md DILIGENT-36: real-device proof of the glTF metallic-roughness BRDF (PbrEffect
+// and SkinnedPbrEffect), using the same analytically hand-derived technique as
+// vulkan_pbreffect_handderived_test.cpp.
 //
 // A flat quad (normal (0,0,1)) is viewed straight down -Z with the camera at (0,0,3) looking at
 // the origin, and light0's direction is also (0,0,-1). At the backbuffer's exact centre pixel the
@@ -11,11 +11,14 @@
 // constant, independently re-derived in Python from the same GGX/Smith-Schlick-GGX/Schlick-Fresnel
 // formula the shader implements (see each check's own comment), not just captured from one run.
 //
-// Check A -- white albedo, roughness=0.5, metallic=0.0: analytic value (91,91,91).
-// Check B -- red albedo, roughness=0.5, metallic=1.0 (fully metallic): analytic value (97,0,0).
-// Check C -- red albedo, roughness=0.5, metallic=0.0 (fully dielectric): analytic value (27,4,4),
-//   and genuinely differs from check B -- MetallicFactor actually changes the BRDF, not just a
-//   uniform that happens to be uploaded and ignored.
+// Check A -- PbrEffect, white albedo, roughness=0.5, metallic=0.0: analytic value (91,91,91).
+// Check B -- PbrEffect, red albedo, roughness=0.5, metallic=1.0 (fully metallic): analytic value
+//   (97,0,0).
+// Check C -- PbrEffect, red albedo, roughness=0.5, metallic=0.0 (fully dielectric): analytic value
+//   (27,4,4), and genuinely differs from check B -- MetallicFactor actually changes the BRDF, not
+//   just a uniform that happens to be uploaded and ignored.
+// Check D -- SkinnedPbrEffect, identical scene to check A, single identity bone (a mathematical
+//   no-op skin transform) -- must reproduce check A's own value exactly.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
 
@@ -31,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
@@ -47,7 +51,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSize = 64;
-    constexpr int kChecks = 4;
+    constexpr int kChecks = 5;
 
     // Stride 48: position/normal/tangent/uv, matching DiligentGraphicsBackend's own Pbr3D layout.
     struct PbrGpuVertex
@@ -68,6 +72,36 @@ namespace
             v.px = x; v.py = y; v.pz = 0.0f;
             v.nx = 0.0f; v.ny = 0.0f; v.nz = 1.0f;
             v.tx = 1.0f; v.ty = 0.0f; v.tz = 0.0f; v.tw = 1.0f;
+        };
+        fill(tl, -4.0f, 4.0f); tl.u = 0.0f; tl.v = 0.0f;
+        fill(bl, -4.0f, -4.0f); bl.u = 0.0f; bl.v = 1.0f;
+        fill(br, 4.0f, -4.0f); br.u = 1.0f; br.v = 1.0f;
+        fill(tr, 4.0f, 4.0f); tr.u = 1.0f; tr.v = 0.0f;
+        return {tl, bl, br, tl, br, tr};
+    }
+
+    // Stride 68: the PBR layout above with BlendWeight/BlendIndices appended, matching
+    // DiligentGraphicsBackend's own SkinnedPbr3D layout.
+    struct SkinnedPbrGpuVertex
+    {
+        float px, py, pz;
+        float nx, ny, nz;
+        float tx, ty, tz, tw;
+        float u, v;
+        float w0, w1, w2, w3;
+        std::uint8_t i0, i1, i2, i3;
+    };
+    static_assert(sizeof(SkinnedPbrGpuVertex) == 68, "skinned PBR vertex must be 68 bytes");
+
+    std::vector<SkinnedPbrGpuVertex> MakeSkinnedQuad()
+    {
+        SkinnedPbrGpuVertex tl{}, bl{}, br{}, tr{};
+        auto fill = [](SkinnedPbrGpuVertex& v, float x, float y) {
+            v.px = x; v.py = y; v.pz = 0.0f;
+            v.nx = 0.0f; v.ny = 0.0f; v.nz = 1.0f;
+            v.tx = 1.0f; v.ty = 0.0f; v.tz = 0.0f; v.tw = 1.0f;
+            v.w0 = 1.0f; v.w1 = v.w2 = v.w3 = 0.0f;
+            v.i0 = v.i1 = v.i2 = v.i3 = 0;
         };
         fill(tl, -4.0f, 4.0f); tl.u = 0.0f; tl.v = 0.0f;
         fill(bl, -4.0f, -4.0f); bl.u = 0.0f; bl.v = 1.0f;
@@ -144,6 +178,45 @@ class DiligentPbrTest : public Game
         return ReadCenter(device);
     }
 
+    // Renders the identical scene as RenderPbr(white, 0.0, 0.5, ...) via SkinnedPbrEffect with a
+    // single identity bone (weight 1.0 on bone 0, default Identity) -- a mathematical no-op skin
+    // transform, so the result must equal PbrEffect's own.
+    Color RenderSkinnedPbrIdentity(GraphicsDevice& device, Texture2D& albedo)
+    {
+        SkinnedPbrEffect effect(device);
+        effect.setTextureProperty(&albedo);
+        effect.setNormalMapProperty(nullptr);
+        effect.setMetallicFactorProperty(0.0f);
+        effect.setRoughnessFactorProperty(0.5f);
+        effect.setAmbientLightColorProperty(Vector3::Zero);
+        effect.DirectionalLight0.setEnabledProperty(true);
+        effect.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+        effect.DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        effect.DirectionalLight1.setEnabledProperty(false);
+        effect.DirectionalLight2.setEnabledProperty(false);
+        effect.setWorldProperty(Matrix::getIdentityProperty());
+        effect.setViewProperty(Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero,
+                                                     Vector3(0.0f, 1.0f, 0.0f)));
+        effect.setProjectionProperty(
+            Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));
+        effect.SetBoneTransforms(std::vector<Matrix>{Matrix::getIdentityProperty()});
+        effect.setWeightsPerVertexProperty(1);
+
+        auto verts = MakeSkinnedQuad();
+        VertexBuffer vb(device, static_cast<int>(verts.size()));
+        vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()),
+                      static_cast<int>(sizeof(SkinnedPbrGpuVertex)));
+
+        device.Clear(Color(0, 255, 0, 255));
+        device.SetDepthTestEnabled(false);
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.SetVertexBuffer(&vb);
+        effect.Apply();
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        return ReadCenter(device);
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -188,6 +261,12 @@ protected:
         Check(!Matches(b, c, 10),
               "metallic=1 differs from metallic=0 -- MetallicFactor genuinely changes the BRDF", b,
               "!= (27,4,4)");
+
+        // (D) SkinnedPbrEffect, identical scene to check A, single identity bone -- must reproduce
+        // check A's own value exactly (mathematical no-op skin transform).
+        const Color d = RenderSkinnedPbrIdentity(device, whiteTexture);
+        Check(Matches(d, a, 10),
+              "SkinnedPbrEffect identity bone reproduces PbrEffect's own (a) value", d, "== (a)");
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);
         result_ = passCount_ == kChecks ? 0 : 1;

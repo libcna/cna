@@ -609,6 +609,54 @@ void main(in PSInput psIn, out PSOutput psOut)
 }
 )";
 
+        /// SkinnedPbrEffect (stride 68: kPbrVertexHlsl's own layout with WeightsPerVertex-summed
+        /// bone skinning applied to Position/Normal/Tangent before the World transform, mirroring
+        /// kSkinnedVertexHlsl's own skinning math exactly). The pixel stage is pure PBR math with
+        /// no skinning awareness of its own -- kPbrPixelHlsl is reused unchanged.
+        constexpr const char* kSkinnedPbrVertexHlsl = R"(
+struct VSInput
+{
+    float3 Pos          : ATTRIB0;
+    float3 Normal       : ATTRIB1;
+    float4 Tangent      : ATTRIB2;
+    float2 UV           : ATTRIB3;
+    float4 BlendWeights : ATTRIB4;
+    uint4  BlendIndices : ATTRIB5;
+};
+
+struct PSInput
+{
+    float4 Pos      : SV_POSITION;
+    float3 Normal   : NORMAL;
+    float4 Tangent  : TANGENT;
+    float2 UV       : TEX_COORD;
+    float  FogKeep  : FOG_KEEP;
+    float3 WorldPos : WORLD_POS;
+};
+
+void main(in VSInput vsIn, out PSInput psIn)
+{
+    float4x4 skin = ComputeSkinMatrix(vsIn.BlendWeights, vsIn.BlendIndices, g_Flags.w);
+    float4 skinnedPos = mul(float4(vsIn.Pos, 1.0), skin);
+
+    psIn.Pos = mul(skinnedPos, g_WorldViewProj);
+
+    // Same composition kSkinnedVertexHlsl already uses: the skin matrix's own 3x3 applied first,
+    // then the inverse-transpose of World (not a full inverse-transpose of skin*World) -- a
+    // documented simplification shared with this backend's own unskinned-lit skinning path.
+    // InverseTranspose3x3() comes from kBonesHlsl (always prepended alongside ComputeSkinMatrix()
+    // for this variant), the same helper kSkinnedVertexHlsl itself already uses.
+    float3x3 skinNormalMat = (float3x3)skin;
+    float3x3 worldNormalMat = InverseTranspose3x3((float3x3)g_World);
+    psIn.Normal = normalize(mul(mul(vsIn.Normal, skinNormalMat), worldNormalMat));
+    psIn.Tangent = float4(mul(mul(vsIn.Tangent.xyz, skinNormalMat), (float3x3)g_World), vsIn.Tangent.w);
+
+    psIn.UV       = vsIn.UV;
+    psIn.WorldPos = mul(skinnedPos, g_World).xyz;
+    psIn.FogKeep  = ComputeFogKeep(skinnedPos.xyz);
+}
+)";
+
         constexpr const char* kDualTextureVertexHlsl = R"(
 struct VSInput
 {
@@ -3644,6 +3692,23 @@ float4 main(in PSInput psIn) : SV_Target
                 usesTexture = true;
                 usesPbr = true;
                 break;
+            case ShaderVariant::SkinnedPbr3D:
+                vertexSource = kSkinnedPbrVertexHlsl;
+                pixelSource = kPbrPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False}, // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False}, // Normal
+                    Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False}, // Tangent (xyz + sign)
+                    Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False}, // UV
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_FLOAT32, Dg::False}, // BlendWeights
+                    // Bone indices are indices, not a normalized colour: they must reach the
+                    // shader as the integers they are.
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8, Dg::False},   // BlendIndices
+                };
+                usesTexture = true;
+                usesPbr = true;
+                usesBones = true;
+                break;
         }
 
         const std::string vertexHlsl = std::string(kConstantsHlsl) + kVertexLightingHlsl +
@@ -4129,8 +4194,7 @@ float4 main(in PSInput psIn) : SV_Target
             // available variant instead would silently produce a different image, so the draw is
             // refused until the matching phase of plan_diligent.md lands.
             const char* unsupported = nullptr;
-            if (params->pbr && params->skinned)      unsupported = "SkinnedPbrEffect";
-            else if (params->customEffectBackend)    unsupported = "custom ShaderEffect programs";
+            if (params->customEffectBackend)         unsupported = "custom ShaderEffect programs";
             else if (params->instanceCount > 1)      unsupported = "hardware instancing";
             if (unsupported != nullptr)
                 throw std::runtime_error(std::string("CNA ") + kBackendName + " backend: " +
@@ -4167,6 +4231,7 @@ float4 main(in PSInput psIn) : SV_Target
                     : ShaderVariant::Skinned3D;
                 break;
             case 48: variant = ShaderVariant::Pbr3D; break;
+            case 68: variant = ShaderVariant::SkinnedPbr3D; break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
@@ -4174,17 +4239,20 @@ float4 main(in PSInput psIn) : SV_Target
         if (dualTexture && stride != 20 && stride != 24)
             throw std::runtime_error(
                 "CNA Diligent: DualTextureEffect needs a textured vertex layout (stride 20 or 24)");
-        if (params != nullptr && params->skinned && stride != 52)
+        if (params != nullptr && params->skinned && !params->pbr && stride != 52)
             throw std::runtime_error(
                 "CNA Diligent: SkinnedEffect needs a skinned vertex layout (stride 52)");
         if (params != nullptr && params->envMapping && stride != 32)
             throw std::runtime_error(
                 "CNA Diligent: EnvironmentMapEffect needs a position/normal/UV vertex layout "
                 "(stride 32)");
-        if (params != nullptr && params->pbr && stride != 48)
+        if (params != nullptr && params->pbr && !params->skinned && stride != 48)
             throw std::runtime_error(
                 "CNA Diligent: PbrEffect needs a position/normal/tangent/UV vertex layout "
                 "(stride 48)");
+        if (params != nullptr && params->pbr && params->skinned && stride != 68)
+            throw std::runtime_error(
+                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout (stride 68)");
 
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
@@ -4248,10 +4316,12 @@ float4 main(in PSInput psIn) : SV_Target
             constants.flags[1] = 1.0f;
         }
         UploadConstants(constants);
-        if ((variant == ShaderVariant::Skinned3D || variant == ShaderVariant::SkinnedVertexLit3D) &&
+        if ((variant == ShaderVariant::Skinned3D || variant == ShaderVariant::SkinnedVertexLit3D ||
+            variant == ShaderVariant::SkinnedPbr3D) &&
             params != nullptr)
             UploadBoneTransforms(*params);
-        if (variant == ShaderVariant::Pbr3D && params != nullptr)
+        if ((variant == ShaderVariant::Pbr3D || variant == ShaderVariant::SkinnedPbr3D) &&
+            params != nullptr)
             UploadPbrConstants(*params);
 
         CachedPipeline& pipeline = GetOrCreatePipeline(MakePipelineKey(variant, primitive));
