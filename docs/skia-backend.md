@@ -73,8 +73,8 @@ limit before allocation. Mipmapped texture construction is also rejected before 
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers twenty-six SKIA-only CTests: one window-independent raster
-   surface pixel test and twenty-five display-required public tests. The raster test passes without a
+6. `cmake/Tests/SkiaTests.cmake` registers thirty-one SKIA-only CTests: one window-independent raster
+   surface pixel test and thirty display-required public tests. The raster test passes without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -104,5 +104,9 @@ limit before allocation. Mipmapped texture construction is also rejected before 
     rather than selecting a fixed sampling mode.
 13. `Skia_SpriteBatch_SamplerTransition` proves that successive SpriteBatch Begin blocks replace
     their sampler state (Point → Linear → Point) without leaking the previous filter.
+14. `Skia_SpriteFont_SingleGlyph`, `Skia_SpriteFont_MultiGlyphSpacing`,
+    `Skia_SpriteFont_Newline`, `Skia_SpriteFont_DefaultChar`, and `Skia_SpriteFont_Effects`
+    confirm that shared SpriteFont atlas layout—not Skia text APIs—renders glyphs, spacing,
+    line advances, fallback glyphs, scale/origin, and flips correctly.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

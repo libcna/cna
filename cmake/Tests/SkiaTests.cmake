@@ -118,6 +118,21 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spritebatch_sampler_transition examples/skia_spritebatch_sampler_transition_test.cpp)
     cna_register_skia_display_test(Skia_SpriteBatch_SamplerTransition cna_test_skia_spritebatch_sampler_transition)
 
+    cna_skia_test(cna_test_skia_spritefont_single_glyph examples/sdlrenderer_spritefont_single_glyph_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteFont_SingleGlyph cna_test_skia_spritefont_single_glyph)
+
+    cna_skia_test(cna_test_skia_spritefont_multiglyph_spacing examples/sdlrenderer_spritefont_multiglyph_spacing_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteFont_MultiGlyphSpacing cna_test_skia_spritefont_multiglyph_spacing)
+
+    cna_skia_test(cna_test_skia_spritefont_newline examples/sdlrenderer_spritefont_newline_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteFont_Newline cna_test_skia_spritefont_newline)
+
+    cna_skia_test(cna_test_skia_spritefont_default_char examples/sdlrenderer_spritefont_default_char_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteFont_DefaultChar cna_test_skia_spritefont_default_char)
+
+    cna_skia_test(cna_test_skia_spritefont_effects examples/sdlrenderer_spritefont_effects_test.cpp)
+    cna_register_skia_display_test(Skia_SpriteFont_Effects cna_test_skia_spritefont_effects)
+
     if(TARGET cna_demo_2d)
         cna_register_skia_display_test(Skia_Demo2D_Smoke cna_demo_2d --smoke 3)
     endif()

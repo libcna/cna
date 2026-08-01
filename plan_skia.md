@@ -173,7 +173,7 @@ public CNA API.
 | SKIA-35 | Apply the `SpriteBatch::Begin` transform matrix in the same order as EasyGL/XNA, including non-identity affine transforms. | ⬜ | Matrix/order test and golden diagnostic scene pass. |
 | SKIA-36 | Preserve `SpriteSortMode` and `layerDepth` ordering semantics in shared batching/backend submission. | ✅ | `Skia_SpriteBatch_DeferredOrder`, `Skia_SpriteBatch_ImmediateFlush`, `Skia_SpriteBatch_LayerDepth`, and `Skia_SpriteBatch_TextureSort` verify call order, immediate dispatch, both depth orders, and texture grouping against Skia pixels. |
 | SKIA-37 | Implement clipping of destination/source rectangles and ensure no sampling outside a requested source rectangle under linear filtering. | ⬜ | Bleed/seam tests pass at each source edge. |
-| SKIA-38 | Verify the existing SpriteFont atlas path through Skia without replacing XNA glyph metrics/layout with Skia text APIs. | ⬜ | Single glyph, spacing, newline, default-character, rotation, and flip tests pass. |
+| SKIA-38 | Verify the existing SpriteFont atlas path through Skia without replacing XNA glyph metrics/layout with Skia text APIs. | ✅ | `Skia_SpriteFont_SingleGlyph`, `MultiGlyphSpacing`, `Newline`, `DefaultChar`, and `Effects` verify the existing atlas glyph metrics, fallback, spacing, line advance, scale/origin, and flip path through Skia SpriteBatch. |
 | SKIA-39 | Audit every public SpriteBatch `Draw`/`DrawString` overload against the common layer and run it under `SKIA`. | ⬜ | No overload is a backend-local no-op; all relevant existing tests run. |
 | SKIA-40 | Add a stress test for many Begin/Draw/End blocks, many textures, and repeated target changes. | ⬜ | Stable pixel hash and bounded resource/cache growth over repeated frames. |
 
