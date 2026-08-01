@@ -137,6 +137,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_spritefont_effects examples/sdlrenderer_spritefont_effects_test.cpp)
     cna_register_skia_display_test(Skia_SpriteFont_Effects cna_test_skia_spritefont_effects)
 
+    cna_skia_test(cna_test_skia_rendertarget_sample examples/sdlrenderer_rendertarget2d_sample_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTarget2D_SampleAfterUnbind cna_test_skia_rendertarget_sample)
+
+    cna_skia_test(cna_test_skia_rendertarget_usage examples/sdlrenderer_rendertarget_usage_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTarget2D_Usage cna_test_skia_rendertarget_usage)
+
+    cna_skia_test(cna_test_skia_getbackbuffer_after_rt_unbind examples/sdlrenderer_getbackbufferdata_after_rt_unbind_test.cpp)
+    cna_register_skia_display_test(Skia_GetBackBufferData_AfterRtUnbind cna_test_skia_getbackbuffer_after_rt_unbind)
+
+    cna_skia_test(cna_test_skia_rendertarget_readback examples/skia_rendertarget_readback_test.cpp)
+    cna_register_skia_display_test(Skia_RenderTarget2D_Readback cna_test_skia_rendertarget_readback)
+
     if(TARGET cna_demo_2d)
         cna_register_skia_display_test(Skia_Demo2D_Smoke cna_demo_2d --smoke 3)
     endif()

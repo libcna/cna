@@ -206,10 +206,10 @@ public CNA API.
 
 | ID | Task | Status | Acceptance evidence |
 |---|---|---|---|
-| SKIA-61 | Implement `SkiaRenderTargetBackend` with a distinct `SkSurface`, texture/snapshot view, and safe ownership relation to `SkiaGraphicsBackend`. | ⬜ | Bind/draw/unbind/sample test proves no alias/lifetime bug. |
+| SKIA-61 | Implement `SkiaRenderTargetBackend` with a distinct `SkSurface`, texture/snapshot view, and safe ownership relation to `SkiaGraphicsBackend`. | ✅ | `Skia_RenderTarget2D_SampleAfterUnbind` renders a non-uniform target, unbinds it, and samples its distinct snapshot as a SpriteBatch texture. |
 | SKIA-62 | Implement `SetRenderTarget2D(nullptr)` restoration and target-switch finalization/flush behavior. | ⬜ | Target A → B → backbuffer ordering test has expected independent pixels. |
-| SKIA-63 | Implement `RenderTargetUsage::PreserveContents` and `DiscardContents` according to CNA's pass boundary contract. | ⬜ | Rebind/partial-redraw test proves both paths. |
-| SKIA-64 | Implement RenderTarget2D `GetData` for full and partial rectangles, normalizing row order once and only once. | ⬜ | Rendered-pixel and partial-region readback tests pass; invalid request leaves caller data untouched. |
+| SKIA-63 | Implement `RenderTargetUsage::PreserveContents` and `DiscardContents` according to CNA's pass boundary contract. | ✅ | `Skia_RenderTarget2D_Usage` verifies a rebind discards the prior contents only for `DiscardContents`, preserving the same contents otherwise. |
+| SKIA-64 | Implement RenderTarget2D `GetData` for full and partial rectangles, normalizing row order once and only once. | ✅ | `Skia_RenderTarget2D_Readback` verifies rendered full-level top-row-first data and a partial rectangle; target readback transfer contracts also run in `Skia_Texture2D_GetDataContract`. |
 | SKIA-65 | Implement RenderTarget2D `SetData`, mip behavior, and device recreation, or reject each unsupported level precisely. | ⬜ | Round-trip tests cover CPU upload, rendered content, and loss recovery. |
 | SKIA-66 | Establish and implement RenderTarget2D depth-format behavior for the initial 2D scope; never claim a real depth buffer merely because one was requested. | ⬜ | `HasRealDepthBuffer`, ClearOptions, and construction tests agree. |
 | SKIA-67 | Implement/verify target multi-sample-count selection, resolve timing, readback, and `MultiSampleCount` reporting on accelerated surfaces. | ⬜ | Sample-count clamp plus resolve/readback test passes, or target creation fails/reports zero by documented policy. |
