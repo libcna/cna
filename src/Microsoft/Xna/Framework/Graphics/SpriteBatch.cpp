@@ -178,7 +178,6 @@ namespace Microsoft::Xna::Framework::Graphics
         transformMatrix_ = transformMatrix;
         sortMode_        = sortMode;
         spriteQueue_.clear();
-        begun            = true;
 
         if (backend_)
         {
@@ -192,6 +191,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                             static_cast<int>(effectiveSampler.getAddressVProperty()));
             backend_->Begin();
         }
+        // Backend setup can reject an unsupported requested state (for example Skia's mip-only
+        // sampler filters). Publish a successful Begin only after that setup completes, so the
+        // same SpriteBatch remains reusable after the caller catches the exception.
+        begun = true;
     }
 
     void SpriteBatch::End()

@@ -13,6 +13,7 @@
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkShader.h"
 #include "include/effects/SkRuntimeEffect.h"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -27,13 +28,20 @@ namespace CNA::Internal::Backends::Skia
             {
                 case 0: // Linear
                 case 2: // Anisotropic (the raster path has no anisotropy control)
-                case 3: // LinearMipPoint
-                case 7: // MinPointMagLinearMipLinear
-                case 8: // MinPointMagLinearMipPoint
                     return SkSamplingOptions(SkFilterMode::kLinear);
-                default:
+                case 1: // Point
                     return SkSamplingOptions(SkFilterMode::kNearest);
+                default:
+                    throw std::runtime_error("Skia SpriteBatch received an invalid texture filter.");
             }
+        }
+
+        [[nodiscard]] bool RequiresMipmaps(int textureFilter)
+        {
+            // TextureFilter ordinals 3--8 each name a point or linear mip-level selection rule.
+            // SKIA-27 deliberately rejects every public mip chain in the raster backend, so mapping
+            // any of them to level-0 sampling would silently change the requested contract.
+            return textureFilter >= 3 && textureFilter <= 8;
         }
 
         [[nodiscard]] bool IsFlipped(SpriteEffects effects, SpriteEffects flag)
@@ -135,6 +143,11 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaSpriteBatchBackend::SetSamplerFilter(int textureFilter)
     {
+        if (RequiresMipmaps(textureFilter))
+            throw System::NotSupportedException(
+                "Skia raster SpriteBatch does not support TextureFilter mip modes because mip chains "
+                "are unavailable; use Linear, Point, or Anisotropic.");
+        (void)ToSampling(textureFilter);
         textureFilter_ = textureFilter;
     }
 
