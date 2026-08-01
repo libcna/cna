@@ -6,6 +6,8 @@
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
 #include "System/NotSupportedException.hpp"
 
+#include "include/effects/SkRuntimeEffect.h"
+
 #include <algorithm>
 #include <stdexcept>
 #include <string>
@@ -35,6 +37,45 @@ namespace CNA::Internal::Backends::Skia
                 case CnaPresentationMode::FixedHeightDynamicWidth: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
             }
             return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+        }
+
+        [[nodiscard]] bool IsDestinationColorPrototype(
+            int colorSrcBlend, int alphaSrcBlend,
+            int colorDstBlend, int alphaDstBlend,
+            int colorBlendFunc, int alphaBlendFunc) noexcept
+        {
+            // Blend::DestinationColor / Blend::One / Blend::Zero / Blend::Zero, with Add for
+            // both branches.  This has a genuine independent alpha branch and no blend constant,
+            // making it the bounded public SKIA-54 probe for the runtime-blender route.
+            return colorSrcBlend == 6 && alphaSrcBlend == 0
+                && colorDstBlend == 1 && alphaDstBlend == 1
+                && colorBlendFunc == 0 && alphaBlendFunc == 0;
+        }
+
+        [[nodiscard]] const sk_sp<SkRuntimeEffect>& DestinationColorPrototypeEffect()
+        {
+            static const sk_sp<SkRuntimeEffect> effect = []
+            {
+                const auto result = SkRuntimeEffect::MakeForBlender(SkString(R"(
+                    half4 main(half4 src, half4 dst) {
+                        // XNA: RGB = src * DestinationColor, alpha = src * One + dst * Zero.
+                        return half4(src.rgb * dst.rgb, src.a);
+                    }
+                )"));
+                if (!result.effect)
+                {
+                    throw std::runtime_error(
+                        std::string("Skia failed to compile the SKIA-54 runtime blender: ")
+                        + result.errorText.c_str());
+                }
+                return result.effect;
+            }();
+            return effect;
+        }
+
+        [[nodiscard]] sk_sp<SkBlender> MakeDestinationColorPrototypeBlender()
+        {
+            return DestinationColorPrototypeEffect()->makeBlender(nullptr);
         }
     }
 
@@ -182,7 +223,8 @@ namespace CNA::Internal::Backends::Skia
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<SkiaSpriteBatchBackend>(targetBinding_->ActiveSurfaceRef(), spriteBlendMode_,
-                                                        spriteSourceAlphaConvention_, rasterState_);
+                                                        spriteCustomBlender_, spriteSourceAlphaConvention_,
+                                                        rasterState_);
     }
 
     std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(
@@ -247,11 +289,9 @@ namespace CNA::Internal::Backends::Skia
                                                int colorBlendFunc, int alphaBlendFunc,
                                                const BlendWriteState& writeState)
     {
-        // SkCanvas supports one compositing mode per paint.  The table records only public XNA
-        // BlendState presets whose source-alpha convention is known.  A custom factor tuple does
-        // not say whether Texture2D's RGBA bytes are straight or premultiplied, so choosing a
-        // superficially similar SkBlendMode for it would change observable output; SKIA-53--55
-        // own that independent-alpha/emulation investigation.
+        // The table records only public XNA BlendState presets whose source-alpha convention is
+        // known. SKIA-54 adds one separately proven runtime-blender tuple below; it is deliberately
+        // narrow until the full factor/function generator has public target/readback evidence.
         constexpr int kColorWriteAll = 15;
 
         for (int mask : writeState.colorWriteChannels)
@@ -263,23 +303,39 @@ namespace CNA::Internal::Backends::Skia
             throw std::runtime_error("Skia raster backend does not implement non-default MultiSampleMask values.");
         const SkiaBlendMapping* mapping = FindSkiaDirectBlendMapping(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
-        if (!mapping)
+        const bool destinationColorPrototype = !mapping && IsDestinationColorPrototype(
+            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
+        if (!mapping && !destinationColorPrototype)
             throw std::runtime_error(DescribeUnsupportedSkiaBlendState(
                 colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                 colorBlendFunc, alphaBlendFunc));
 
-        configuredSpriteBlendMode_ = mapping->mode;
-        configuredSpriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
+        if (mapping)
+        {
+            configuredSpriteBlendMode_ = mapping->mode;
+            configuredSpriteCustomBlender_.reset();
+            configuredSpriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
+        }
+        else
+        {
+            configuredSpriteBlendMode_ = SkBlendMode::kSrcOver;
+            configuredSpriteCustomBlender_ = MakeDestinationColorPrototypeBlender();
+            // This first public runtime-blender state is pixel-proven only for opaque source
+            // content. Retain CNA's established premultiplied label instead of guessing how a
+            // general custom BlendState intends its Texture2D bytes to be interpreted.
+            configuredSpriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
+        }
         if (blendEnabled_)
         {
-            spriteBlendMode_ = mapping->mode;
-            spriteSourceAlphaConvention_ = mapping->sourceAlphaConvention;
+            spriteBlendMode_ = configuredSpriteBlendMode_;
+            spriteCustomBlender_ = configuredSpriteCustomBlender_;
+            spriteSourceAlphaConvention_ = configuredSpriteSourceAlphaConvention_;
         }
-        TraceSkiaState("blend preset=%s mode=%d source-alpha=%s enabled=%s", mapping->name,
-                       static_cast<int>(mapping->mode),
-                       mapping->sourceAlphaConvention == SkiaSourceAlphaConvention::Premultiplied
-                           ? "premultiplied"
-                           : "straight",
+        TraceSkiaState("blend mapping=%s mode=%d source-alpha=%s enabled=%s",
+                       mapping ? mapping->name : "DestinationColorPrototype",
+                       static_cast<int>(configuredSpriteBlendMode_),
+                       configuredSpriteSourceAlphaConvention_ == SkiaSourceAlphaConvention::Premultiplied
+                           ? "premultiplied" : "straight",
                        blendEnabled_ ? "true" : "false");
     }
 
@@ -348,8 +404,10 @@ namespace CNA::Internal::Backends::Skia
         if (enabled)
         {
             spriteBlendMode_ = configuredSpriteBlendMode_;
+            spriteCustomBlender_ = configuredSpriteCustomBlender_;
             spriteSourceAlphaConvention_ = configuredSpriteSourceAlphaConvention_;
-            TraceSkiaState("blend enabled=true mode=%d", static_cast<int>(spriteBlendMode_));
+            TraceSkiaState("blend enabled=true mode=%d runtime-blender=%s",
+                           static_cast<int>(spriteBlendMode_), spriteCustomBlender_ ? "true" : "false");
             return;
         }
 
@@ -357,6 +415,7 @@ namespace CNA::Internal::Backends::Skia
         // destination. Keep the same source labelling as BlendState::Opaque so tint/alpha obey the
         // already-tested opaque path rather than a new alpha convention.
         spriteBlendMode_ = SkBlendMode::kSrc;
+        spriteCustomBlender_.reset();
         spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
         TraceSkiaState("blend enabled=false mode=%d", static_cast<int>(spriteBlendMode_));
     }

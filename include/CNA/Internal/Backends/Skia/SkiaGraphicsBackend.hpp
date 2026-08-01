@@ -7,6 +7,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include <SDL3/SDL.h>
+#include "include/core/SkBlender.h"
 #include "include/core/SkBlendMode.h"
 
 #include <memory>
@@ -93,8 +94,10 @@ namespace CNA::Internal::Backends::Skia
         SkiaSurface surface_;
         std::shared_ptr<SkiaRenderTargetBinding> targetBinding_ = std::make_shared<SkiaRenderTargetBinding>();
         SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
+        sk_sp<SkBlender> spriteCustomBlender_;
         SkiaSourceAlphaConvention spriteSourceAlphaConvention_ = SkiaSourceAlphaConvention::Premultiplied;
         SkBlendMode configuredSpriteBlendMode_ = SkBlendMode::kSrcOver;
+        sk_sp<SkBlender> configuredSpriteCustomBlender_;
         SkiaSourceAlphaConvention configuredSpriteSourceAlphaConvention_
             = SkiaSourceAlphaConvention::Premultiplied;
         bool blendEnabled_ = true;

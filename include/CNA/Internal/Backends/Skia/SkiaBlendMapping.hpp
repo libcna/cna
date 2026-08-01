@@ -93,8 +93,8 @@ namespace CNA::Internal::Backends::Skia
         int colorDestinationBlend, int alphaDestinationBlend,
         int colorBlendFunction, int alphaBlendFunction)
     {
-        return std::string("Skia raster backend supports only the direct Opaque, AlphaBlend, NonPremultiplied, ")
-            + "and Additive BlendState mappings; received color(source="
+        return std::string("Skia raster backend has no tested direct or runtime-blender mapping for ")
+            + "this BlendState; received color(source="
             + SkiaBlendFactorName(colorSourceBlend) + ", destination="
             + SkiaBlendFactorName(colorDestinationBlend) + ", function="
             + SkiaBlendFunctionName(colorBlendFunction) + "), alpha(source="

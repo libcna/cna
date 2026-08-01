@@ -20,7 +20,7 @@
 - The most recent pushed commits are `50670060` (detach a destroyed bound render target),
   `280d05e8` (raster MSAA policy), and `042be59a` (preserve a RenderTarget2D backend during
   `SetData`).
-- `docs/skia-backend.md` records 64 Skia CTests: five raster-only and 59 display-required tests.
+- `docs/skia-backend.md` records 65 Skia CTests: five raster-only and 60 display-required tests.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-69
@@ -60,6 +60,20 @@
 - Updated SKIA-54 to prototype this direct runtime blender first. An isolated layer is now a
   fallback only if the direct public SpriteBatch path cannot preserve the contract.
 
+## Completed in this session: SKIA-54
+
+- Added an evidence-bounded public `SkRuntimeEffect` blender for one non-preset state:
+  `ColorSource=DestinationColor`, `ColorDestination=Zero`, `AlphaSource=One`,
+  `AlphaDestination=Zero`, with Add equations. Its alpha branch is independent of RGB, and its
+  destination term comes from Skia's actual active canvas.
+- `Skia_RuntimeBlender_Policy` proves `(100,0,0,255)` from source tint `(128,255,128,255)` over
+  a red `(200,0,0,255)` destination on the backbuffer, through `RenderTarget2D::GetData`, and
+  after sampling the target again. The test's final Opaque draw also proves no custom blender leaks
+  into the following standard batch.
+- The prototype deliberately uses the established premultiplied source label and opaque test data.
+  It does not make arbitrary custom BlendStates supported; SKIA-55 must generate and test the
+  complete validated matrix, including non-opaque conventions and blend constants.
+
 ## Validation this session
 
 - Configured persistent `cmake-build-skia` and `cmake-build-skia-asan` with `CNA_USE_CCACHE=OFF`.
@@ -80,17 +94,19 @@
   residual above is unchanged and is not suppressed more broadly.
 - SKIA-53 debug build: `Skia_RuntimeBlender_Raster` passes through CTest (four assertions). Its
   direct output verifies both source/destination access and the non-premultiplied-result boundary.
+- SKIA-54 debug build: `Skia_RuntimeBlender_Policy` passes all three public assertions under
+  `xvfb-run -a`; the existing unmapped-state policy still passes after the new narrow mapping.
 
 ## Current task
 
-SKIA-54: prototype the direct runtime blender through public SpriteBatch, including a non-preset
-BlendState, destination reads, and RenderTarget2D sampling/readback. Do not advertise custom
-states until this public evidence exists.
+SKIA-55: replace SKIA-54's one-state runtime-blender prototype with a bounded, table-driven
+generator for every proven factor/function combination, or retain deterministic rejection for a
+combination that fails the expanded pixel matrix.
 
 ## Next candidates
 
-1. Complete SKIA-54's direct public runtime-blender prototype; use an isolated layer only if the
-   direct route fails a documented target/readback contract.
+1. Complete SKIA-55's public custom-blend matrix, starting with opaque source/destination cases
+   from the existing EasyGL/Vulkan tests and preserving explicit alpha-convention boundaries.
 2. SKIA-71/72: resize and display-scale regressions with live targets, once lifecycle ownership is
    sound.
 3. Keep SKIA-65 open: level-0 `SetData` is complete, but device/context recreation belongs to

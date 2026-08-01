@@ -5,6 +5,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
+#include "include/core/SkBlender.h"
 #include "include/core/SkBlendMode.h"
 
 namespace CNA::Internal::Backends::Skia
@@ -14,10 +15,12 @@ namespace CNA::Internal::Backends::Skia
     {
     public:
         SkiaSpriteBatchBackend(SkiaSurface*& activeSurface, const SkBlendMode& blendMode,
+                               const sk_sp<SkBlender>& customBlender,
                                const SkiaSourceAlphaConvention& sourceAlphaConvention,
                                const SkiaRasterState& rasterState)
             : activeSurface_(&activeSurface), blendMode_(&blendMode)
-            , sourceAlphaConvention_(&sourceAlphaConvention), rasterState_(&rasterState) {}
+            , customBlender_(&customBlender), sourceAlphaConvention_(&sourceAlphaConvention)
+            , rasterState_(&rasterState) {}
 
         void Begin() override;
         void End() override;
@@ -36,6 +39,7 @@ namespace CNA::Internal::Backends::Skia
     private:
         SkiaSurface** activeSurface_ = nullptr;
         const SkBlendMode* blendMode_ = nullptr;
+        const sk_sp<SkBlender>* customBlender_ = nullptr;
         const SkiaSourceAlphaConvention* sourceAlphaConvention_ = nullptr;
         const SkiaRasterState* rasterState_ = nullptr;
         bool begun_ = false;

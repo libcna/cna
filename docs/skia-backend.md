@@ -66,10 +66,12 @@ table maps only the four public tuples whose source convention is already define
 `kSrc` with premultiplied bytes, `AlphaBlend` to `kSrcOver` with premultiplied bytes,
 `NonPremultiplied` to `kSrcOver` with straight bytes, and `Additive` to `kPlus` with straight
 bytes. A custom `BlendState` carries factors and equations but no source-byte alpha label, so the
-raster backend rejects every tuple outside that table before drawing and names the requested
-factors/functions. It must not silently pick a superficially similar `SkBlendMode`; SKIA-53
-identified a direct runtime-blender path, while SKIA-54–55 will prove and expose only the
-combinations that retain the public target/readback contract.
+raster backend must not silently pick a superficially similar `SkBlendMode`. SKIA-54 additionally
+accepts one independently proven runtime-blender tuple: colour
+`DestinationColor`/`Zero`, alpha `One`/`Zero`, both `Add`; it uses premultiplied source bytes and
+is proven only with opaque source/destination input. Every other tuple outside the four presets
+still fails before drawing and names the requested factors/functions. SKIA-55 will expose only
+the combinations that retain the public target/readback contract.
 direct `SkiaSurface::WritePixels`/`ReadPixels` round trip is
 different by design: converting through Skia's 8-bit premultiplied storage has deterministic
 integer unpremultiplication rounding for semi-transparent texels. The raster test records this
@@ -86,18 +88,21 @@ the resulting `SkBlender` through `SkPaint::setBlender`. It can write separate R
 expressions, use an RGBA uniform for `BlendFactor`, calculate `SourceAlphaSaturation` as
 `min(src.a, 1-dst.a)` for RGB (and `1` for alpha), and use `+`, `-`, reversed `-`, `min`, or `max`
 for the five XNA equations. Thus every current `Blend` and `BlendFunction` ordinal has an
-algebraic direct-runtime-blender expression; this is not a claim that the public backend has
-implemented those expressions yet.
+algebraic direct-runtime-blender expression. This is not a claim that the public backend has
+implemented the full matrix yet.
 
 `Skia_RuntimeBlender_Raster` proves this interface on the selected CPU raster path: it composites
 different RGB and alpha equations from the real source/destination canvas values. It also proves
 that the raster pipeline retains a deliberately non-premultiplied output. That is required before
 supporting an XNA state that leaves RGB while setting output alpha to zero, but it means later
 public work must preserve that data through `RenderTarget2D`, readback, sampling, and SDL
-presentation. Runtime Effects are documented by Skia itself as experimental, so their use stays
-behind the explicit `SKIA` backend and requires the focused public regression in SKIA-54 before
-custom states are advertised. The source image's straight/premultiplied label remains CNA-owned;
-the blender alone cannot infer it from arbitrary RGBA bytes.
+presentation. `Skia_RuntimeBlender_Policy` now proves that a public SpriteBatch state with colour
+`DestinationColor`/`Zero` and independent alpha `One`/`Zero` is exact for opaque source and
+destination on the backbuffer, a `RenderTarget2D` readback, and a subsequent target sample.
+Runtime Effects are documented by Skia itself as experimental, so their use stays behind the
+explicit `SKIA` backend while SKIA-55 fills the complete matrix. The source image's
+straight/premultiplied label remains CNA-owned; the blender alone cannot infer it from arbitrary
+RGBA bytes.
 
 The current public texture-format policy is intentionally the existing CNA-wide policy:
 `SurfaceFormat::Color` is the only accepted format. Every other `SurfaceFormat` value is rejected
@@ -241,5 +246,9 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     independent RGB/alpha expression against an actual raster destination, and proves the selected
     Skia raster pipeline preserves an intentional non-premultiplied output rather than silently
     replacing it with SourceOver or clamping RGB to alpha.
+40. `Skia_RuntimeBlender_Policy` moves the first non-preset runtime blender through the public
+    SpriteBatch path. It proves a destination-reading, independent-alpha state on the backbuffer,
+    then on RenderTarget2D readback and target sampling, without retaining the custom blender for a
+    following Opaque sampling draw.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
