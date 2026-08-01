@@ -1,5 +1,8 @@
 #include "CNA/Internal/Backends/Glide/GlideGraphicsBackend.hpp"
-#include "CNA/Internal/Backends/Glide/GlideAbiLoader.hpp"
+#include "CNA/Internal/Backends/Glide/GlideAbi.hpp"
+#include "CNA/Internal/Backends/Glide/GlideLighting.hpp"
+#include "CNA/Internal/Backends/Glide/GlidePrimitiveClip.hpp"
+#include "CNA/Internal/Backends/Glide/GlideTextureMip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideVertexLayout.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 
@@ -29,16 +32,18 @@ namespace CNA::Internal::Backends::Glide
 {
     namespace
     {
-        using FxBool = std::uint32_t;
-        using FxU32 = std::uint32_t;
-        using FxI32 = std::int32_t;
+        using Abi::FxBool;
+        using Abi::FxI32;
+        using Abi::FxU32;
+        using Abi::GlideResolution;
+        using Abi::GlideTexInfo;
+        using Abi::GlideVertex;
 
         constexpr FxBool kFxFalse = 0;
         constexpr FxBool kFxTrue = 1;
 
-        // The values below are part of the public Glide 3.x ABI. Keep this deliberately small
-        // hand-written declaration set instead of vendoring Glide headers: dgVoodoo2 remains an
-        // external runtime and CNA must not inherit or redistribute its SDK/license material.
+        // The values below are part of the public Glide 3.x ABI. Function signatures and native
+        // layouts live in GlideAbi.hpp so the independent x86 fake-DLL contract can audit them.
         constexpr FxI32 kResolution640x480 = 0x7;
         constexpr FxI32 kResolution800x600 = 0x8;
         constexpr FxI32 kRefresh60Hz = 0x0;
@@ -48,6 +53,8 @@ namespace CNA::Internal::Backends::Glide
         constexpr FxI32 kCullDisable = 0x0;
         constexpr FxI32 kCullNegative = 0x1;
         constexpr FxI32 kCullPositive = 0x2;
+        constexpr FxI32 kPrimitivePoints = 0x0;
+        constexpr FxI32 kPrimitiveLines = 0x2;
         constexpr FxI32 kPrimitiveTriangles = 0x6;
         constexpr FxU32 kWindowCoords = 0x00;
         constexpr FxI32 kQueryAny = -1;
@@ -103,51 +110,6 @@ namespace CNA::Internal::Backends::Glide
         constexpr FxI32 kBlendInverseSourceColor = 0x6;
         constexpr FxI32 kBlendInverseDestinationAlpha = 0x7;
         constexpr FxI32 kBlendAlphaSaturate = 0xf;
-
-        struct GlideTexInfo
-        {
-            FxI32 smallLodLog2;
-            FxI32 largeLodLog2;
-            FxI32 aspectRatioLog2;
-            FxI32 format;
-            void* data;
-        };
-
-        struct GlideResolution
-        {
-            FxI32 resolution;
-            FxI32 refresh;
-            FxI32 numColorBuffers;
-            FxI32 numAuxBuffers;
-        };
-
-        struct GlideVertex
-        {
-            float x;
-            float y;
-            float ooz;
-            float oow;
-            float r;
-            float g;
-            float b;
-            float a;
-            float z;
-            float sow;
-            float tow;
-            float tmuOow;
-        };
-
-        static_assert(offsetof(GlideVertex, x) == 0);
-        static_assert(offsetof(GlideVertex, r) == 16);
-        static_assert(offsetof(GlideVertex, a) == 28);
-        static_assert(offsetof(GlideVertex, sow) == 36);
-#if !defined(_WIN64)
-        // The loader declarations intentionally do not vendor a Glide SDK. Keep the ABI-critical
-        // data layouts checked in the x86 target that is allowed to load this backend.
-        static_assert(sizeof(GlideTexInfo) == 20);
-        static_assert(sizeof(GlideResolution) == 16);
-        static_assert(sizeof(GlideVertex) == 48);
-#endif
 
         [[nodiscard]] std::string LastWin32Error(const char* action)
         {
@@ -255,15 +217,6 @@ namespace CNA::Internal::Backends::Glide
             }
         }
 
-        [[nodiscard]] std::uint16_t RgbaToArgb4444(const std::uint8_t* rgba)
-        {
-            return static_cast<std::uint16_t>(
-                (static_cast<std::uint16_t>(rgba[3] >> 4) << 12) |
-                (static_cast<std::uint16_t>(rgba[0] >> 4) << 8) |
-                (static_cast<std::uint16_t>(rgba[1] >> 4) << 4) |
-                static_cast<std::uint16_t>(rgba[2] >> 4));
-        }
-
         [[nodiscard]] FxU32 PackArgb(float r, float g, float b, float a)
         {
             const auto pack = [](float component) -> FxU32
@@ -350,58 +303,27 @@ namespace CNA::Internal::Backends::Glide
             {
                 throw std::runtime_error("GLIDE primitiveCount must be positive");
             }
+            std::int64_t count = 0;
             switch (primitive)
             {
-                case PrimitiveType::TriangleList: return primitiveCount * 3;
-                case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+                case PrimitiveType::TriangleList: count = static_cast<std::int64_t>(primitiveCount) * 3; break;
+                case PrimitiveType::TriangleStrip: count = static_cast<std::int64_t>(primitiveCount) + 2; break;
+                case PrimitiveType::LineList: count = static_cast<std::int64_t>(primitiveCount) * 2; break;
+                case PrimitiveType::LineStrip: count = static_cast<std::int64_t>(primitiveCount) + 1; break;
+                case PrimitiveType::PointListEXT: count = primitiveCount; break;
                 default:
-                    throw std::runtime_error(
-                        "GLIDE fixed-function 3D supports only PrimitiveType::TriangleList and TriangleStrip");
+                    throw std::runtime_error("GLIDE 3D received an unknown primitive topology");
             }
+            if (count > std::numeric_limits<int>::max())
+            {
+                throw std::runtime_error("GLIDE primitiveCount overflows its vertex count");
+            }
+            return static_cast<int>(count);
         }
 
-        class GlideApi
+        class GlideApi final : public Abi::GlideApiFunctions
         {
         public:
-            using Context = void*;
-            using GlideInitFn = void (WINAPI*)();
-            using GlideShutdownFn = void (WINAPI*)();
-            using QueryResolutionsFn = FxI32 (WINAPI*)(const GlideResolution*, GlideResolution*);
-            using GetFn = FxI32 (WINAPI*)(FxI32, FxI32, FxI32*);
-            using SstWinOpenFn = Context (WINAPI*)(FxU32, FxI32, FxI32, FxI32, FxI32, int, int);
-            using SstWinCloseFn = FxBool (WINAPI*)(Context);
-            using BufferClearFn = void (WINAPI*)(FxU32, std::uint8_t, std::uint16_t);
-            using BufferSwapFn = void (WINAPI*)(FxU32);
-            using RenderBufferFn = void (WINAPI*)(FxI32);
-            using FinishFn = void (WINAPI*)();
-            using ClipWindowFn = void (WINAPI*)(FxU32, FxU32, FxU32, FxU32);
-            using CoordinateSpaceFn = void (WINAPI*)(FxU32);
-            using CullModeFn = void (WINAPI*)(FxI32);
-            using VertexLayoutFn = void (WINAPI*)(FxU32, FxI32, FxU32);
-            using DrawTriangleFn = void (WINAPI*)(const void*, const void*, const void*);
-            using DrawVertexArrayFn = void (WINAPI*)(FxI32, FxU32, void**);
-            using DrawVertexArrayContiguousFn = void (WINAPI*)(FxI32, FxU32, void*, FxU32);
-            using ColorCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxBool);
-            using AlphaCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxBool);
-            using AlphaTestFunctionFn = void (WINAPI*)(FxI32);
-            using AlphaTestReferenceValueFn = void (WINAPI*)(std::uint8_t);
-            using AlphaBlendFunctionFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32);
-            using ColorMaskFn = void (WINAPI*)(FxBool, FxBool);
-            using DepthBufferModeFn = void (WINAPI*)(FxI32);
-            using DepthBufferFunctionFn = void (WINAPI*)(FxI32);
-            using DepthMaskFn = void (WINAPI*)(FxBool);
-            using TexMinAddressFn = FxU32 (WINAPI*)(FxI32);
-            using TexMaxAddressFn = FxU32 (WINAPI*)(FxI32);
-            using TexTextureMemRequiredFn = FxU32 (WINAPI*)(FxU32, GlideTexInfo*);
-            using TexDownloadMipMapFn = void (WINAPI*)(FxI32, FxU32, FxU32, GlideTexInfo*);
-            using TexSourceFn = void (WINAPI*)(FxI32, FxU32, FxU32, GlideTexInfo*);
-            using TexFilterModeFn = void (WINAPI*)(FxI32, FxI32, FxI32);
-            using TexClampModeFn = void (WINAPI*)(FxI32, FxI32, FxI32);
-            using TexMipMapModeFn = void (WINAPI*)(FxI32, FxI32, FxBool);
-            using TexLodBiasValueFn = void (WINAPI*)(FxI32, float);
-            using TexCombineFn = void (WINAPI*)(FxI32, FxI32, FxI32, FxI32, FxI32, FxBool, FxBool);
-            using LfbReadRegionFn = FxBool (WINAPI*)(FxI32, FxU32, FxU32, FxU32, FxU32, FxU32, void*);
-
             GlideApi() = default;
             ~GlideApi()
             {
@@ -448,90 +370,10 @@ namespace CNA::Internal::Backends::Glide
                     }
                 }
 
-                grGlideInit = Required<GlideInitFn>("grGlideInit", 0);
-                grGlideShutdown = Required<GlideShutdownFn>("grGlideShutdown", 0);
-                grQueryResolutions = Required<QueryResolutionsFn>("grQueryResolutions", 8);
-                grGet = Required<GetFn>("grGet", 12);
-                grSstWinOpen = Required<SstWinOpenFn>("grSstWinOpen", 28);
-                grSstWinClose = Required<SstWinCloseFn>("grSstWinClose", 4);
-                grBufferClear = Required<BufferClearFn>("grBufferClear", 12);
-                grBufferSwap = Required<BufferSwapFn>("grBufferSwap", 4);
-                grRenderBuffer = Required<RenderBufferFn>("grRenderBuffer", 4);
-                grFinish = Required<FinishFn>("grFinish", 0);
-                grClipWindow = Required<ClipWindowFn>("grClipWindow", 16);
-                grCoordinateSpace = Required<CoordinateSpaceFn>("grCoordinateSpace", 4);
-                grCullMode = Required<CullModeFn>("grCullMode", 4);
-                grVertexLayout = Required<VertexLayoutFn>("grVertexLayout", 12);
-                grDrawTriangle = Required<DrawTriangleFn>("grDrawTriangle", 12);
-                grDrawVertexArray = Required<DrawVertexArrayFn>("grDrawVertexArray", 12);
-                grDrawVertexArrayContiguous = Required<DrawVertexArrayContiguousFn>("grDrawVertexArrayContiguous", 16);
-                grColorCombine = Required<ColorCombineFn>("grColorCombine", 20);
-                grAlphaCombine = Required<AlphaCombineFn>("grAlphaCombine", 20);
-                grAlphaTestFunction = Required<AlphaTestFunctionFn>("grAlphaTestFunction", 4);
-                grAlphaTestReferenceValue = Required<AlphaTestReferenceValueFn>("grAlphaTestReferenceValue", 4);
-                grAlphaBlendFunction = Required<AlphaBlendFunctionFn>("grAlphaBlendFunction", 16);
-                grColorMask = Required<ColorMaskFn>("grColorMask", 8);
-                grDepthBufferMode = Required<DepthBufferModeFn>("grDepthBufferMode", 4);
-                grDepthBufferFunction = Required<DepthBufferFunctionFn>("grDepthBufferFunction", 4);
-                grDepthMask = Required<DepthMaskFn>("grDepthMask", 4);
-                grTexMinAddress = Required<TexMinAddressFn>("grTexMinAddress", 4);
-                grTexMaxAddress = Required<TexMaxAddressFn>("grTexMaxAddress", 4);
-                grTexTextureMemRequired = Required<TexTextureMemRequiredFn>("grTexTextureMemRequired", 8);
-                grTexDownloadMipMap = Required<TexDownloadMipMapFn>("grTexDownloadMipMap", 16);
-                grTexSource = Required<TexSourceFn>("grTexSource", 16);
-                grTexFilterMode = Required<TexFilterModeFn>("grTexFilterMode", 12);
-                grTexClampMode = Required<TexClampModeFn>("grTexClampMode", 12);
-                grTexMipMapMode = Required<TexMipMapModeFn>("grTexMipMapMode", 12);
-                grTexLodBiasValue = Required<TexLodBiasValueFn>("grTexLodBiasValue", 8);
-                grTexCombine = Required<TexCombineFn>("grTexCombine", 28);
-                grLfbReadRegion = Required<LfbReadRegionFn>("grLfbReadRegion", 28);
+                Resolve(module_);
             }
-
-            GlideInitFn grGlideInit = nullptr;
-            GlideShutdownFn grGlideShutdown = nullptr;
-            QueryResolutionsFn grQueryResolutions = nullptr;
-            GetFn grGet = nullptr;
-            SstWinOpenFn grSstWinOpen = nullptr;
-            SstWinCloseFn grSstWinClose = nullptr;
-            BufferClearFn grBufferClear = nullptr;
-            BufferSwapFn grBufferSwap = nullptr;
-            RenderBufferFn grRenderBuffer = nullptr;
-            FinishFn grFinish = nullptr;
-            ClipWindowFn grClipWindow = nullptr;
-            CoordinateSpaceFn grCoordinateSpace = nullptr;
-            CullModeFn grCullMode = nullptr;
-            VertexLayoutFn grVertexLayout = nullptr;
-            DrawTriangleFn grDrawTriangle = nullptr;
-            DrawVertexArrayFn grDrawVertexArray = nullptr;
-            DrawVertexArrayContiguousFn grDrawVertexArrayContiguous = nullptr;
-            ColorCombineFn grColorCombine = nullptr;
-            AlphaCombineFn grAlphaCombine = nullptr;
-            AlphaTestFunctionFn grAlphaTestFunction = nullptr;
-            AlphaTestReferenceValueFn grAlphaTestReferenceValue = nullptr;
-            AlphaBlendFunctionFn grAlphaBlendFunction = nullptr;
-            ColorMaskFn grColorMask = nullptr;
-            DepthBufferModeFn grDepthBufferMode = nullptr;
-            DepthBufferFunctionFn grDepthBufferFunction = nullptr;
-            DepthMaskFn grDepthMask = nullptr;
-            TexMinAddressFn grTexMinAddress = nullptr;
-            TexMaxAddressFn grTexMaxAddress = nullptr;
-            TexTextureMemRequiredFn grTexTextureMemRequired = nullptr;
-            TexDownloadMipMapFn grTexDownloadMipMap = nullptr;
-            TexSourceFn grTexSource = nullptr;
-            TexFilterModeFn grTexFilterMode = nullptr;
-            TexClampModeFn grTexClampMode = nullptr;
-            TexMipMapModeFn grTexMipMapMode = nullptr;
-            TexLodBiasValueFn grTexLodBiasValue = nullptr;
-            TexCombineFn grTexCombine = nullptr;
-            LfbReadRegionFn grLfbReadRegion = nullptr;
 
         private:
-            template <typename T>
-            [[nodiscard]] T Required(const char* name, unsigned int stdcallBytes) const
-            {
-                return reinterpret_cast<T>(ResolveGlideExport(module_, name, stdcallBytes));
-            }
-
             HMODULE module_ = nullptr;
         };
 
@@ -989,6 +831,7 @@ namespace CNA::Internal::Backends::Glide
             : impl_(owner.impl_)
             , width_(data.width)
             , height_(data.height)
+            , mipLevels_(data.mipLevels)
         {
             if (width_ <= 0 || height_ <= 0)
             {
@@ -998,6 +841,14 @@ namespace CNA::Internal::Backends::Glide
             if (width_ > kMaximumLogicalTextureDimension || height_ > kMaximumLogicalTextureDimension)
             {
                 throw std::runtime_error("GLIDE logical texture exceeds CNA's 16384-pixel dimension limit");
+            }
+            if (mipLevels_ <= 0)
+            {
+                throw std::runtime_error("GLIDE texture declares an invalid mip-level count");
+            }
+            if (mipLevels_ > GlideMipLevelCountForDimensions(width_, height_))
+            {
+                throw std::runtime_error("GLIDE texture declares more mip levels than its dimensions permit");
             }
             const std::size_t width = static_cast<std::size_t>(width_);
             const std::size_t height = static_cast<std::size_t>(height_);
@@ -1075,13 +926,34 @@ namespace CNA::Internal::Backends::Glide
 
         void UpdatePixelsLevel(int level, const std::uint8_t* rgba, int levelWidth, int levelHeight) override
         {
-            if (level != 0 || levelWidth != width_ || levelHeight != height_)
+            if (level == 0)
             {
-                throw std::runtime_error(
-                    "GLIDE tiled textures generate their native mip chain from a complete level-0 upload; "
-                    "partial explicit mip uploads are not representable across tile boundaries");
+                if (levelWidth != width_ || levelHeight != height_)
+                {
+                    throw std::runtime_error("GLIDE level-zero upload dimensions do not match its texture");
+                }
+                UpdatePixels(rgba, width_ * 4);
+                return;
             }
-            UpdatePixels(rgba, width_ * 4);
+            if (rgba == nullptr || level < 0 || level >= mipLevels_ ||
+                levelWidth != MipDimension(width_, level) || levelHeight != MipDimension(height_, level))
+            {
+                throw std::runtime_error("GLIDE explicit mip upload has an invalid level or dimensions");
+            }
+            const std::size_t byteCount = static_cast<std::size_t>(levelWidth) * levelHeight * 4u;
+            explicitMipLevels_.resize(static_cast<std::size_t>(level + 1));
+            explicitMipLevels_[level].assign(rgba, rgba + byteCount);
+
+            // Every native tile references the same logical pyramid. Rebuild it before replacing
+            // tile data so this explicit source level, lower generated levels and tile gutters all
+            // change atomically after the existing Glide FIFO has consumed prior draws.
+            GetImpl().api.grFinish();
+            BuildLogicalMipChain(uploadedAddressU_, uploadedAddressV_);
+            for (Tile& tile : tiles_)
+            {
+                ConvertTileToGlideTexels(tile, uploadedAddressU_, uploadedAddressV_);
+                Upload(tile);
+            }
         }
 
         [[nodiscard]] const std::vector<Tile>& Tiles() const { return tiles_; }
@@ -1117,6 +989,33 @@ namespace CNA::Internal::Backends::Glide
             std::vector<std::uint16_t> texels;
         };
 
+        [[nodiscard]] static int MipDimension(int dimension, int level)
+        {
+            for (int index = 0; index < level; ++index)
+            {
+                dimension = std::max(1, dimension / 2);
+            }
+            return dimension;
+        }
+
+        void ApplyExplicitMipLevel(LogicalMipLevel& level, int levelIndex, int addressU, int addressV) const
+        {
+            if (levelIndex >= static_cast<int>(explicitMipLevels_.size()) || explicitMipLevels_[levelIndex].empty())
+            {
+                return;
+            }
+            const int sourceWidth = MipDimension(width_, levelIndex);
+            const int sourceHeight = MipDimension(height_, levelIndex);
+            const std::vector<std::uint8_t>& source = explicitMipLevels_[levelIndex];
+            const std::size_t requiredBytes = static_cast<std::size_t>(sourceWidth) * sourceHeight * 4u;
+            if (source.size() != requiredBytes)
+            {
+                throw std::runtime_error("GLIDE retained explicit mip data has an invalid byte count");
+            }
+            level.texels = BuildAddressedGlideArgb4444Mip(
+                source.data(), sourceWidth, sourceHeight, level.width, level.height, addressU, addressV);
+        }
+
         void BuildLogicalMipChain(int addressU, int addressV)
         {
             logicalMipLevels_.clear();
@@ -1126,17 +1025,8 @@ namespace CNA::Internal::Backends::Glide
             // gives every physical tile the same source mip texels at a shared logical boundary.
             level.width = NextPowerOfTwo(width_, 16384);
             level.height = NextPowerOfTwo(height_, 16384);
-            level.texels.resize(static_cast<std::size_t>(level.width) * level.height);
-            for (int y = 0; y < level.height; ++y)
-            {
-                const int sourceY = AddressTexel(y, height_, addressV);
-                for (int x = 0; x < level.width; ++x)
-                {
-                    const int sourceX = AddressTexel(x, width_, addressU);
-                    level.texels[static_cast<std::size_t>(y) * level.width + x] = RgbaToArgb4444(
-                        rgba_.data() + (static_cast<std::size_t>(sourceY) * width_ + sourceX) * 4u);
-                }
-            }
+            level.texels = BuildAddressedGlideArgb4444Mip(
+                rgba_.data(), width_, height_, level.width, level.height, addressU, addressV);
             logicalMipLevels_.push_back(std::move(level));
 
             while (logicalMipLevels_.back().width != 1 || logicalMipLevels_.back().height != 1)
@@ -1170,6 +1060,7 @@ namespace CNA::Internal::Backends::Glide
                             (((channels[2] + 2) / 4) << 4) | ((channels[3] + 2) / 4));
                     }
                 }
+                ApplyExplicitMipLevel(next, static_cast<int>(logicalMipLevels_.size()), addressU, addressV);
                 logicalMipLevels_.push_back(std::move(next));
             }
         }
@@ -1254,36 +1145,6 @@ namespace CNA::Internal::Backends::Glide
             }
         }
 
-        [[nodiscard]] static int AddressTexel(int coordinate, int dimension, int addressMode)
-        {
-            if (dimension <= 0)
-            {
-                throw std::runtime_error("GLIDE texture address conversion received an invalid dimension");
-            }
-            switch (addressMode)
-            {
-                case 0: // TextureAddressMode::Wrap
-                {
-                    int result = coordinate % dimension;
-                    return result < 0 ? result + dimension : result;
-                }
-                case 1: // TextureAddressMode::Clamp
-                    return std::clamp(coordinate, 0, dimension - 1);
-                case 2: // TextureAddressMode::Mirror
-                {
-                    const int period = dimension * 2;
-                    int reflected = coordinate % period;
-                    if (reflected < 0)
-                    {
-                        reflected += period;
-                    }
-                    return reflected < dimension ? reflected : period - 1 - reflected;
-                }
-                default:
-                    throw std::runtime_error("GLIDE backend received an unknown TextureAddressMode value");
-            }
-        }
-
         [[nodiscard]] static int FloorDivide(int numerator, int denominator)
         {
             if (denominator <= 0)
@@ -1316,10 +1177,10 @@ namespace CNA::Internal::Backends::Glide
                 const int logicalOriginY = FloorDivide(tile.sourceY - tile.gutterTop, texelScale);
                 for (int y = 0; y < levelHeight; ++y)
                 {
-                    const int sourceY = AddressTexel(logicalOriginY + y, logicalLevel.height, addressV);
+                    const int sourceY = AddressGlideTextureTexel(logicalOriginY + y, logicalLevel.height, addressV);
                     for (int x = 0; x < levelWidth; ++x)
                     {
-                        const int sourceX = AddressTexel(logicalOriginX + x, logicalLevel.width, addressU);
+                        const int sourceX = AddressGlideTextureTexel(logicalOriginX + x, logicalLevel.width, addressU);
                         tile.nativeTexels.push_back(logicalLevel.texels[
                             static_cast<std::size_t>(sourceY) * logicalLevel.width + sourceX]);
                     }
@@ -1356,9 +1217,11 @@ namespace CNA::Internal::Backends::Glide
         std::weak_ptr<GlideGraphicsBackend::Impl> impl_;
         int width_ = 0;
         int height_ = 0;
+        int mipLevels_ = 1;
         int uploadedAddressU_ = 1;
         int uploadedAddressV_ = 1;
         std::vector<std::uint8_t> rgba_;
+        std::vector<std::vector<std::uint8_t>> explicitMipLevels_;
         std::vector<LogicalMipLevel> logicalMipLevels_;
         std::vector<Tile> tiles_;
 
@@ -2021,29 +1884,7 @@ namespace CNA::Internal::Backends::Glide
 
     namespace
     {
-        struct CpuVertex
-        {
-            float clipX = 0.0f;
-            float clipY = 0.0f;
-            float clipZ = 0.0f;
-            float clipW = 0.0f;
-            float r = 255.0f;
-            float g = 255.0f;
-            float b = 255.0f;
-            float a = 255.0f;
-            float u = 0.0f;
-            float v = 0.0f;
-        };
-
-        [[nodiscard]] CpuVertex Interpolate(const CpuVertex& from, const CpuVertex& to, float amount)
-        {
-            const auto lerp = [amount](float a, float b) { return a + (b - a) * amount; };
-            return CpuVertex{
-                lerp(from.clipX, to.clipX), lerp(from.clipY, to.clipY),
-                lerp(from.clipZ, to.clipZ), lerp(from.clipW, to.clipW),
-                lerp(from.r, to.r), lerp(from.g, to.g), lerp(from.b, to.b), lerp(from.a, to.a),
-                lerp(from.u, to.u), lerp(from.v, to.v)};
-        }
+        using CpuVertex = GlideClipVertex;
 
         template <typename Distance>
         [[nodiscard]] std::vector<CpuVertex> ClipPolygon(const std::vector<CpuVertex>& input, Distance distance)
@@ -2065,7 +1906,8 @@ namespace CNA::Internal::Backends::Glide
                     const float denominator = previousDistance - currentDistance;
                     if (std::abs(denominator) > 0.0000001f)
                     {
-                        output.push_back(Interpolate(previous, current, previousDistance / denominator));
+                        output.push_back(InterpolateGlideClipVertex(
+                            previous, current, previousDistance / denominator));
                     }
                 }
                 if (currentInside)
@@ -2176,13 +2018,17 @@ namespace CNA::Internal::Backends::Glide
             return result;
         }
 
-        [[nodiscard]] bool HasFiniteClipCoordinates(const CpuVertex& vertex)
+        [[nodiscard]] bool TileOwnsGlideTextureCoordinate(
+            const GlideTextureBackend::Tile& tile, const GlideTextureBackend& texture, float u, float v)
         {
-            return std::isfinite(vertex.clipX) && std::isfinite(vertex.clipY) &&
-                   std::isfinite(vertex.clipZ) && std::isfinite(vertex.clipW) &&
-                   std::isfinite(vertex.r) && std::isfinite(vertex.g) &&
-                   std::isfinite(vertex.b) && std::isfinite(vertex.a) &&
-                   std::isfinite(vertex.u) && std::isfinite(vertex.v);
+            const auto owns = [](float coordinate, int sourceBegin, int sourceLength, int fullLength)
+            {
+                const float begin = static_cast<float>(sourceBegin) / fullLength;
+                const float end = static_cast<float>(sourceBegin + sourceLength) / fullLength;
+                return coordinate >= begin && (coordinate < end || end == 1.0f);
+            };
+            return owns(u, tile.sourceX, tile.sourceWidth, texture.GetWidth()) &&
+                   owns(v, tile.sourceY, tile.sourceHeight, texture.GetHeight());
         }
 
         [[nodiscard]] float ClampUnit(float value)
@@ -2295,28 +2141,29 @@ namespace CNA::Internal::Backends::Glide
         // the transpose of World^{-1}; using World's upper 3x3 is only correct for rigid or
         // uniform-scale transforms and visibly bends directional lighting otherwise.
         std::array<float, 9> normalMatrix{};
+        GlideBasicEffectLightingState lightingState{};
         if (params.lightingEnabled)
         {
-            const float determinant =
-                world.M11 * (world.M22 * world.M33 - world.M23 * world.M32) -
-                world.M12 * (world.M21 * world.M33 - world.M23 * world.M31) +
-                world.M13 * (world.M21 * world.M32 - world.M22 * world.M31);
-            if (!std::isfinite(determinant) || std::abs(determinant) <= 0.000001f)
-            {
-                throw std::runtime_error(
-                    "GLIDE vertex-lit BasicEffect cannot transform normals through a singular World matrix");
-            }
-            const float inverseDeterminant = 1.0f / determinant;
-            // Row-major entries of transpose(inverse(World3x3)).
-            normalMatrix = {
-                (world.M22 * world.M33 - world.M23 * world.M32) * inverseDeterminant,
-                (world.M12 * world.M33 - world.M13 * world.M32) * -inverseDeterminant,
-                (world.M12 * world.M23 - world.M13 * world.M22) * inverseDeterminant,
-                (world.M21 * world.M33 - world.M23 * world.M31) * -inverseDeterminant,
-                (world.M11 * world.M33 - world.M13 * world.M31) * inverseDeterminant,
-                (world.M11 * world.M32 - world.M12 * world.M31) * -inverseDeterminant,
-                (world.M11 * world.M23 - world.M13 * world.M21) * -inverseDeterminant,
-                (world.M11 * world.M22 - world.M12 * world.M21) * inverseDeterminant};
+            normalMatrix = InvertGlideLightingWorld3x3({
+                world.M11, world.M12, world.M13,
+                world.M21, world.M22, world.M23,
+                world.M31, world.M32, world.M33});
+            lightingState.ambient = {params.ambientColor[0], params.ambientColor[1], params.ambientColor[2]};
+            lightingState.eyePosition = {
+                params.eyePositionWorld[0], params.eyePositionWorld[1], params.eyePositionWorld[2]};
+            lightingState.materialSpecular = {
+                params.specularColor[0], params.specularColor[1], params.specularColor[2]};
+            lightingState.lights = {{
+                {{params.light0Dir[0], params.light0Dir[1], params.light0Dir[2]},
+                 {params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2]},
+                 {params.light0Specular[0], params.light0Specular[1], params.light0Specular[2]}},
+                {{params.light1Dir[0], params.light1Dir[1], params.light1Dir[2]},
+                 {params.light1Diffuse[0], params.light1Diffuse[1], params.light1Diffuse[2]},
+                 {params.light1Specular[0], params.light1Specular[1], params.light1Specular[2]}},
+                {{params.light2Dir[0], params.light2Dir[1], params.light2Dir[2]},
+                 {params.light2Diffuse[0], params.light2Diffuse[1], params.light2Diffuse[2]},
+                 {params.light2Specular[0], params.light2Specular[1], params.light2Specular[2]}}}};
+            lightingState.specularPower = params.specularPower;
         }
         const auto readVertex = [&](int vertexIndex) -> CpuVertex
         {
@@ -2358,41 +2205,41 @@ namespace CNA::Internal::Backends::Glide
             {
                 r = g = b = a = 1.0f;
             }
+            const GlideLightingVector vertexColor{r, g, b};
             r *= params.diffuseColor[0];
             g *= params.diffuseColor[1];
             b *= params.diffuseColor[2];
             a *= params.diffuseColor[3];
             if (params.lightingEnabled)
             {
-                const float worldNx = nx * normalMatrix[0] + ny * normalMatrix[3] + nz * normalMatrix[6];
-                const float worldNy = nx * normalMatrix[1] + ny * normalMatrix[4] + nz * normalMatrix[7];
-                const float worldNz = nx * normalMatrix[2] + ny * normalMatrix[5] + nz * normalMatrix[8];
-                const float length = std::sqrt(worldNx * worldNx + worldNy * worldNy + worldNz * worldNz);
-                if (length <= 0.000001f)
+                const GlideLightingVector worldNormal = TransformGlideLightingNormal({nx, ny, nz}, normalMatrix);
+                if (DotGlideLightingVectors(worldNormal, worldNormal) <= 0.0f)
                 {
                     throw std::runtime_error("GLIDE vertex-lit BasicEffect received a zero-length transformed normal");
                 }
-                const auto light = [&](const float (&direction)[3], const float (&diffuse)[3], int component) -> float
-                {
-                    const float amount = std::max(0.0f, -(worldNx * direction[0] + worldNy * direction[1] + worldNz * direction[2]) / length);
-                    return diffuse[component] * amount;
-                };
-                const auto illumination = [&](int component) -> float
-                {
-                    return params.ambientColor[component] + light(params.light0Dir, params.light0Diffuse, component) +
-                           light(params.light1Dir, params.light1Diffuse, component) + light(params.light2Dir, params.light2Diffuse, component);
-                };
-                r = r * illumination(0) + params.emissiveColor[0];
-                g = g * illumination(1) + params.emissiveColor[1];
-                b = b * illumination(2) + params.emissiveColor[2];
+                const GlideLightingVector worldPosition{
+                    x * world.M11 + y * world.M21 + z * world.M31 + world.M41,
+                    x * world.M12 + y * world.M22 + z * world.M32 + world.M42,
+                    x * world.M13 + y * world.M23 + z * world.M33 + world.M43};
+                const GlideBasicEffectLightingResult lighting =
+                    EvaluateGlideBasicEffectLighting(lightingState, worldPosition, worldNormal);
+                const GlideLightingVector color = ComposeGlideBasicEffectLitColor(
+                    {r, g, b}, lighting,
+                    {params.emissiveColor[0] * vertexColor.x, params.emissiveColor[1] * vertexColor.y,
+                     params.emissiveColor[2] * vertexColor.z},
+                    a);
+                r = color.x;
+                g = color.y;
+                b = color.z;
             }
             if (params.fogEnabled)
             {
                 const float fogAmount = ClampUnit(x * params.fogVector[0] + y * params.fogVector[1] + z * params.fogVector[2] + params.fogVector[3]);
-                const float keep = 1.0f - fogAmount;
-                r = r * keep + params.fogColor[0] * (1.0f - keep);
-                g = g * keep + params.fogColor[1] * (1.0f - keep);
-                b = b * keep + params.fogColor[2] * (1.0f - keep);
+                const GlideLightingVector fogged = ApplyGlideBasicEffectFog(
+                    {r, g, b}, a, {params.fogColor[0], params.fogColor[1], params.fogColor[2]}, fogAmount);
+                r = fogged.x;
+                g = fogged.y;
+                b = fogged.z;
             }
             CpuVertex result{
                 x * wvp.M11 + y * wvp.M21 + z * wvp.M31 + wvp.M41,
@@ -2400,7 +2247,7 @@ namespace CNA::Internal::Backends::Glide
                 x * wvp.M13 + y * wvp.M23 + z * wvp.M33 + wvp.M43,
                 x * wvp.M14 + y * wvp.M24 + z * wvp.M34 + wvp.M44,
                 ClampUnit(r) * 255.0f, ClampUnit(g) * 255.0f, ClampUnit(b) * 255.0f, ClampUnit(a) * 255.0f, u, v};
-            if (!HasFiniteClipCoordinates(result))
+            if (!HasFiniteGlideClipCoordinates(result))
             {
                 throw std::runtime_error("GLIDE 3D draw received non-finite transformed vertex data");
             }
@@ -2408,7 +2255,7 @@ namespace CNA::Internal::Backends::Glide
         };
         const auto makeGlideVertex = [&](const CpuVertex& input, const GlideTextureBackend::Tile* tile) -> GlideVertex
         {
-            if (input.clipW <= 0.000001f)
+            if (input.clipW < kGlideMinimumPositiveClipW)
             {
                 throw std::runtime_error("GLIDE frustum clipper emitted a non-positive homogeneous W");
             }
@@ -2431,6 +2278,177 @@ namespace CNA::Internal::Backends::Glide
                 input.r, input.g, input.b, input.a, ndcZ,
                 s * reciprocalW, t * reciprocalW, reciprocalW};
         };
+        const bool pointPrimitive = primitive == PrimitiveType::PointListEXT;
+        const bool linePrimitive = primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip;
+        if (pointPrimitive || linePrimitive)
+        {
+            // A clipped LineStrip can become several disjoint runs (and a textured line can be
+            // split again at logical tile/address boundaries). Submit those runs as GR_LINES so a
+            // later piece never gains an unintended connection to an earlier visible one.
+            const FxI32 nativePrimitive = pointPrimitive ? kPrimitivePoints : kPrimitiveLines;
+            constexpr std::size_t kMaximumBatchedPrimitiveVertices = 2u * 1024u;
+            std::vector<GlideVertex> pendingPrimitiveVertices;
+            const auto flushPrimitiveBatch = [&]
+            {
+                if (pendingPrimitiveVertices.empty())
+                {
+                    return;
+                }
+                impl_->api.grDrawVertexArrayContiguous(
+                    nativePrimitive, static_cast<FxU32>(pendingPrimitiveVertices.size()),
+                    pendingPrimitiveVertices.data(), static_cast<FxU32>(sizeof(GlideVertex)));
+                pendingPrimitiveVertices.clear();
+            };
+            const auto drawPoint = [&](const CpuVertex& point, const GlideTextureBackend::Tile* tile)
+            {
+                pendingPrimitiveVertices.push_back(makeGlideVertex(point, tile));
+                if (pendingPrimitiveVertices.size() >= kMaximumBatchedPrimitiveVertices)
+                {
+                    flushPrimitiveBatch();
+                }
+            };
+            const auto drawSegment = [&](const GlideClipSegment& segment, const GlideTextureBackend::Tile* tile)
+            {
+                pendingPrimitiveVertices.push_back(makeGlideVertex(segment.first, tile));
+                pendingPrimitiveVertices.push_back(makeGlideVertex(segment.second, tile));
+                if (pendingPrimitiveVertices.size() >= kMaximumBatchedPrimitiveVertices)
+                {
+                    flushPrimitiveBatch();
+                }
+            };
+            if (textured)
+            {
+                impl_->ConfigureSpriteCombiner();
+                const GlideSamplerSettings sampler = ToGlideSamplerSettings(impl_->samplerFilter);
+                for (const GlideTextureBackend::Tile& tile : texture->Tiles())
+                {
+                    impl_->api.grTexSource(
+                        0, tile.range.address, kMipMapBoth, const_cast<GlideTexInfo*>(&tile.nativeInfo));
+                    impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
+                    impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
+                    impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
+                    impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
+                    if (pointPrimitive)
+                    {
+                        for (int point = 0; point < primitiveCount; ++point)
+                        {
+                            CpuVertex input = readVertex(vertexStart + point);
+                            if (!IsGlidePointInsideFrustum(input))
+                            {
+                                continue;
+                            }
+                            input.u = MapGlideTextureCoordinateToUnit(input.u, impl_->samplerAddressU);
+                            input.v = MapGlideTextureCoordinateToUnit(input.v, impl_->samplerAddressV);
+                            if (TileOwnsGlideTextureCoordinate(tile, *texture, input.u, input.v))
+                            {
+                                drawPoint(input, &tile);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (int line = 0; line < primitiveCount; ++line)
+                        {
+                            const int offset = vertexStart +
+                                (primitive == PrimitiveType::LineList ? line * 2 : line);
+                            const std::optional<GlideClipSegment> frustumSegment = ClipGlideSegmentToFrustum(
+                                readVertex(offset), readVertex(offset + 1));
+                            if (!frustumSegment)
+                            {
+                                continue;
+                            }
+                            const float u0 = static_cast<float>(tile.sourceX) / texture->GetWidth();
+                            const float u1 = static_cast<float>(tile.sourceX + tile.sourceWidth) / texture->GetWidth();
+                            const float v0 = static_cast<float>(tile.sourceY) / texture->GetHeight();
+                            const float v1 = static_cast<float>(tile.sourceY + tile.sourceHeight) / texture->GetHeight();
+                            const std::vector<TextureAddressSegment> uSegments = MakeTextureAddressSegments(
+                                impl_->samplerAddressU, std::min(frustumSegment->first.u, frustumSegment->second.u),
+                                std::max(frustumSegment->first.u, frustumSegment->second.u), u0, u1);
+                            const std::vector<TextureAddressSegment> vSegments = MakeTextureAddressSegments(
+                                impl_->samplerAddressV, std::min(frustumSegment->first.v, frustumSegment->second.v),
+                                std::max(frustumSegment->first.v, frustumSegment->second.v), v0, v1);
+                            for (const TextureAddressSegment& uSegment : uSegments)
+                            {
+                                const std::optional<GlideClipSegment> uClipped = ClipGlideSegmentToHalfSpace(
+                                    *frustumSegment,
+                                    [uSegment](const CpuVertex& vertex) { return vertex.u - uSegment.lower; });
+                                if (!uClipped)
+                                {
+                                    continue;
+                                }
+                                const std::optional<GlideClipSegment> uBounded = ClipGlideSegmentToHalfSpace(
+                                    *uClipped,
+                                    [uSegment](const CpuVertex& vertex) { return uSegment.upper - vertex.u; });
+                                if (!uBounded)
+                                {
+                                    continue;
+                                }
+                                for (const TextureAddressSegment& vSegment : vSegments)
+                                {
+                                    const std::optional<GlideClipSegment> vClipped = ClipGlideSegmentToHalfSpace(
+                                        *uBounded,
+                                        [vSegment](const CpuVertex& vertex) { return vertex.v - vSegment.lower; });
+                                    if (!vClipped)
+                                    {
+                                        continue;
+                                    }
+                                    const std::optional<GlideClipSegment> tileSegment = ClipGlideSegmentToHalfSpace(
+                                        *vClipped,
+                                        [vSegment](const CpuVertex& vertex) { return vSegment.upper - vertex.v; });
+                                    if (!tileSegment)
+                                    {
+                                        continue;
+                                    }
+                                    GlideClipSegment mapped = *tileSegment;
+                                    mapped.first.u = mapped.first.u * uSegment.scale + uSegment.offset;
+                                    mapped.second.u = mapped.second.u * uSegment.scale + uSegment.offset;
+                                    mapped.first.v = mapped.first.v * vSegment.scale + vSegment.offset;
+                                    mapped.second.v = mapped.second.v * vSegment.scale + vSegment.offset;
+                                    const float midpointU = (mapped.first.u + mapped.second.u) * 0.5f;
+                                    const float midpointV = (mapped.first.v + mapped.second.v) * 0.5f;
+                                    if (TileOwnsGlideTextureCoordinate(tile, *texture, midpointU, midpointV))
+                                    {
+                                        drawSegment(mapped, &tile);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    flushPrimitiveBatch();
+                }
+            }
+            else
+            {
+                impl_->ConfigureColoredCombiner();
+                if (pointPrimitive)
+                {
+                    for (int point = 0; point < primitiveCount; ++point)
+                    {
+                        const CpuVertex input = readVertex(vertexStart + point);
+                        if (IsGlidePointInsideFrustum(input))
+                        {
+                            drawPoint(input, nullptr);
+                        }
+                    }
+                }
+                else
+                {
+                    for (int line = 0; line < primitiveCount; ++line)
+                    {
+                        const int offset = vertexStart +
+                            (primitive == PrimitiveType::LineList ? line * 2 : line);
+                        const std::optional<GlideClipSegment> segment = ClipGlideSegmentToFrustum(
+                            readVertex(offset), readVertex(offset + 1));
+                        if (segment)
+                        {
+                            drawSegment(*segment, nullptr);
+                        }
+                    }
+                }
+                flushPrimitiveBatch();
+            }
+            return;
+        }
         std::vector<GlideVertex> pendingTriangles;
         constexpr std::size_t kMaximumBatchedVertices = 3u * 1024u;
         const auto flushTriangleBatch = [&]

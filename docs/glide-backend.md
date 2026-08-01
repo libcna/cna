@@ -51,22 +51,30 @@ normal CTest because CNA cannot provide or configure the external emulator.
 
 ## Supported fixed-function scope
 
-- `Clear`, `Present`, `SpriteBatch`, `Texture2D` upload/update, point/bilinear filtering, and
-  clamp/wrap/mirror addressing.
+- `Clear`, `Present`, `SpriteBatch`, full and partial `Texture2D::SetData` uploads on every
+  declared mip level, point/bilinear filtering, and clamp/wrap/mirror addressing. The shared
+  texture layer supplies Glide a complete updated mip image after a rectangle write; Glide
+  retains explicit lower levels and rebuilds its tiled ARGB4444 pyramid after FIFO completion.
+  Runtime image capture of this path remains part of the hardware/emulator release gate.
 - Fixed-function 3D `VertexPositionColor`, `VertexPositionTexture`,
   `VertexPositionColorTexture`, and vertex-lit `VertexPositionNormalTexture` triangle lists/strips,
-  indexed or non-indexed. Compatible custom `VertexDeclaration`s may place `Position0` (Vector3),
+  `LineList`, `LineStrip`, and `PointListEXT`, indexed or non-indexed. Triangles use
+  `GR_TRIANGLES`; points use `GR_POINTS`; and independent or clipped line-strip runs use
+  `GR_LINES`, so clipping cannot join disjoint visible runs. Compatible custom `VertexDeclaration`s may place `Position0` (Vector3),
   `Color0` (Color), `Normal0` (Vector3), and `TextureCoordinate0` (Vector2) at arbitrary offsets
   in the declared stride; all other semantics/formats are rejected rather than misread. CNA
-  CPU-transforms and clips the triangle in homogeneous XNA space; Glide then rasterizes every
-  resulting fan triangle with its native depth, TMU, alpha-test and blending pipeline. Texture
+  CPU-transforms and clips triangles, lines and points in homogeneous XNA space; Glide then
+  rasterizes the resulting primitives with its native depth, TMU, alpha-test and blending pipeline.
+  The point/line implementation has portable clip tests, while its native image capture remains a
+  release-validation item. Texture
   parameters are submitted as perspective-correct `s/w`, `t/w`, `1/w`. `Viewport` XY, depth range
   and the intersection of viewport/scissor are applied before native rasterization.
-- Unlit BasicEffect material/vertex colour, and the documented per-vertex directional-diffuse
-  BasicEffect subset (ambient/emissive included). Per-pixel lighting and specular are rejected.
-  CNA computes vertex lighting and its `fogVector` on the CPU, then hands the iterated RGB to
-  Glide; this is required because Glide's depth-table fog cannot represent an arbitrary XNA fog
-  vector. It is a documented approximation, not a hidden fallback renderer.
+- Unlit BasicEffect material/vertex colour, and the documented per-vertex directional BasicEffect
+  subset (ambient, emissive, and three-light Blinn-Phong specular included). Per-pixel lighting
+  is rejected. CNA computes vertex lighting and its `fogVector` on the CPU, then hands the
+  iterated RGB to Glide; this is required because Glide's depth-table fog cannot represent an
+  arbitrary XNA fog vector. The CPU specular arithmetic has deterministic unit coverage; image
+  capture on a real Glide runtime remains a release-validation item, not a fallback renderer.
 - Color-only and color-plus-depth clears, native depth-test/depth-write/depth-compare, native
   culling, AlphaTestEffect's discrete alpha comparisons, and blend enable/disable. Glide has a
   depth buffer but no stencil buffer: common `GraphicsDevice::Clear(Color)` clears colour and
@@ -93,8 +101,8 @@ normal CTest because CNA cannot provide or configure the external emulator.
 ## Deliberate boundaries
 
 - The 3D path is deliberately fixed-function: arbitrary shader Effects, multi-texture effects,
-  environment mapping, PBR, skinning, instancing, lines/points, per-pixel lighting and specular
-  remain unsupported and report that explicitly. It is not a shader-emulation layer.
+  environment mapping, PBR, skinning, instancing and per-pixel lighting remain
+  unsupported and report that explicitly. It is not a shader-emulation layer.
 - Render targets, multisampling, texture cubes/volumes, stencil, occlusion queries, and custom
   SpriteBatch effects are unsupported by this native Glide scope and report that explicitly.
 - Only additive blend equations are available in this scope. The standard source/destination blend

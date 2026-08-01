@@ -28,8 +28,8 @@ renderer.
   Glide `s/w`, `t/w`, and `1/w`. Indexed versions expand the index stream before the same real
   triangle submission.
 - [x] The documented fixed-function `BasicEffect` subset: unlit diffuse/vertex-colour, or
-  `VertexPositionNormalTexture` directional **per-vertex** diffuse lighting with ambient and
-  emissive terms. It deliberately rejects specular and `PreferPerPixelLighting`.
+  `VertexPositionNormalTexture` directional **per-vertex** diffuse and Blinn-Phong specular
+  lighting with ambient and emissive terms. It deliberately rejects `PreferPerPixelLighting`.
 - [x] AlphaTestEffect's discrete alpha-test encoding maps to `grAlphaTestFunction` and
   `grAlphaTestReferenceValue`; cull and depth-compare states map to their native Glide equivalents.
 - [x] Logical textures are tiled to the runtime-reported `GR_MAX_TEXTURE_SIZE`, each tile is padded
@@ -83,8 +83,10 @@ renderer.
 - [x] **GLIDE-AUD-003 — Fence texture mutation/reuse and make resource lifetime safe.** `UpdatePixels()` and address-mode rebuilds now finish the FIFO before replacing TMU contents; destruction finishes before returning ranges. Textures keep only a weak native-state reference, so backend-first teardown is safe instead of dereferencing a destroyed backend.
 - [x] **GLIDE-AUD-004 — Correct per-vertex lighting for non-uniform world transforms.** BasicEffect lighting now uses the transpose of the inverse World 3×3 and rejects singular/non-finite normal transforms with a clear error.
 - [x] **GLIDE-AUD-005 — Make reset, virtual resolution and presentation policy honest.** Glide explicitly supports only `NativeBackBuffer` and swap intervals 0/1. Resize remains an atomic fit-or-throw operation, which `GraphicsDevice::SetVirtualResolution()` already commits only after backend success.
-- [ ] **GLIDE-AUD-006 — Add an automated native-ABI contract test.** The backend deliberately hand-declares Glide 3.x types, numeric constants, layouts and stdcall byte counts. Factor the loader-facing declarations into a small auditable unit and test them against a purpose-built x86 fake `glide3x.dll` that records calls, including undecorated and decorated exports, `grSstWinOpen`, vertex layout, combiner state, texture calls, clear/readback and shutdown ordering. This must run without dgVoodoo and without the external `sharp-runtime` i686 executable dependency. **Implementation staged:** `GlideAbiLoader.hpp` now owns the decorated-export resolver, and a self-contained x86 fake DLL + Wine-run loader contract verifies undecorated lookup, `name@N` stdcall lookup, missing-export rejection, and recorder-visible init/open/layout/combiner/TMU/clear/readback/shutdown ABI calls without CNA/sharp-runtime. The next stage must make the fake DLL record the complete real renderer call sequence.
-- [ ] **GLIDE-AUD-007 — Expand rendering regressions beyond the nine smoke probes.** Add deterministic pixel probes/golden captures for all alpha-test compare functions, source/destination blend factors, depth compare/write combinations, cull modes, colour-mask groups, scissor, indexed strips, fog, and BasicEffect lighting. Include NPOT and multi-tile textures under Point/Linear × Clamp/Wrap/Mirror, with minification and texture updates. Run the visual subset on both dgVoodoo and, when available, real Voodoo hardware; record emulator/version, tolerance and known intentional ARGB4444/RGB565 differences.
+- [ ] **GLIDE-AUD-006 — Add an automated native-ABI contract test.** The backend deliberately hand-declares Glide 3.x types, numeric constants, layouts and stdcall byte counts. Factor the loader-facing declarations into a small auditable unit and test them against a purpose-built x86 fake `glide3x.dll` that records calls, including undecorated and decorated exports, `grSstWinOpen`, vertex layout, combiner state, texture calls, clear/readback and shutdown ordering. This must run without dgVoodoo and without the external `sharp-runtime` i686 executable dependency. **Implementation staged:** `GlideAbi.hpp` now owns every renderer-facing signature and native layout; the independent x86 fake DLL + Wine contract resolves the complete 37-export surface, checks undecorated and `name@N` stdcall lookup plus missing-export rejection, and calls every resolved signature while the fake recorder proves each entry point was reached. The actual CNA renderer still cannot be instantiated in that target because the sibling i686 `sharp-runtime` build fails on `__int128`; when that dependency is portable, the next stage must use the recorder to assert the real initialization, draw, texture, clear/readback and teardown sequences and their values/order.
+- [ ] **GLIDE-AUD-006 follow-up — real renderer fake-DLL sequence.** **needs_external_dependency:** the sibling `../sharp-runtime` must first build for i686 MinGW without `__int128`. Then link CNA against the fake DLL and assert real call order/values for startup, primitive modes, texture updates, clear/readback and shutdown.
+- [ ] **GLIDE-AUD-007 — Expand rendering regressions beyond the nine smoke probes.** Add deterministic pixel probes/golden captures for all alpha-test compare functions, source/destination blend factors, depth compare/write combinations, cull modes, colour-mask groups, scissor, indexed strips, point/line clipping and joins, fog, and BasicEffect lighting. Include NPOT and multi-tile textures under Point/Linear × Clamp/Wrap/Mirror, with minification and texture updates. Run the visual subset on both dgVoodoo and, when available, real Voodoo hardware; record emulator/version, tolerance and known intentional ARGB4444/RGB565 differences.
+- [ ] **GLIDE-AUD-007 execution — native image suite.** **needs_external_dependency:** requires the same runnable i686 CNA executable plus a caller-provided dgVoodoo or Voodoo runtime; no emulator DLL is bundled or configured by CNA.
 - [x] **GLIDE-AUD-008 — Harden texture input and TMU allocation failure paths.** Texture creation rejects undersized RGBA8 input, oversized logical dimensions and overflowing byte counts; TMU range allocation/coalescing now uses checked 64-bit intermediates. Failure-injection coverage remains part of the fake-DLL harness in GLIDE-AUD-006.
 - [x] **GLIDE-AUD-009 — Batch native submissions without crossing state boundaries.** Compatible
   3D fan triangles now accumulate in bounded (1024-triangle) submission-order batches and use
@@ -107,10 +109,17 @@ needed capability, must retain a clear failure on older hardware, and needs an x
 plus a dgVoodoo/real-hardware visual test before it can be advertised as supported.
 
 - [ ] **GLIDE-FUT-001 — Add the remaining native primitive topologies.** Implement
-  `PointList`, `LineList`, and `LineStrip` through Glide's point/line/vertex-array primitive
+  `PointListEXT`, `LineList`, and `LineStrip` through Glide's point/line/vertex-array primitive
   modes, with the same finite-input and homogeneous CPU clipping rules as triangles. Investigate
   `FillMode::WireFrame` only as an explicitly tested triangle-edge conversion; retain rejection if
   Glide line rasterization cannot meet CNA's culling, clipping, and duplicate-edge semantics.
+  **Implementation staged:** `GR_POINTS` and `GR_LINES` are now emitted through the contiguous
+  vertex-array ABI. The standalone point/segment clipper rejects non-finite input, clips every
+  XNA frustum plane before division, retains a positive-W margin and interpolates colour/UV data;
+  texture-address/tile splits are emitted as independent lines so a clipped `LineStrip` cannot
+  reconnect disjoint runs. Four portable clip probes and the i686 source compile pass. Fake-DLL
+  draw-mode/value capture and dgVoodoo/real-Voodoo point-size, line-rasterization, blend-at-joint,
+  cull and tiled-texture image tests are still required before release validation.
 - [ ] **GLIDE-FUT-002 — Decode compatible custom vertex declarations rather than accepting only
   known packed structs.** Build a validated declaration/offset reader for position, colour,
   normal, and texture-coordinate 0 at arbitrary legal offsets and strides. Feed it into the
@@ -123,6 +132,12 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   material specular colour/power and all enabled directional lights), add it to the iterated
   Glide RGB result, and add golden tests for non-uniform worlds and multiple lights. Keep
   `PreferPerPixelLighting` rejected: Glide has no per-pixel programmable lighting.
+  **Implementation staged:** the CPU path now evaluates FNA's three-light Blinn-Phong term,
+  applies it before alpha-aware fog, and corrects the inverse-transpose normal cofactors.
+  Six portable unit probes cover a front/back light, three-light sum, non-uniform scale,
+  vertex-colour/emissive/specular order and fog. The recorder cannot yet drive the full CNA
+  backend, so a fake-DLL renderer-sequence assertion and dgVoodoo/real-Voodoo image capture
+  remain required before this capability is release-validated.
 - [ ] **GLIDE-FUT-004 — Use a second TMU when the selected runtime actually has one.** Add
   per-TMU texture memory allocators/residency, two-texture tiled draw partitioning and the exact
   fixed-function combiner for `DualTextureEffect` / texture slot 1. Gate it on `GR_NUM_TMU >= 2`,
@@ -134,17 +149,43 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   silently ignoring either property. **Implementation staged:** the common hand-off now forwards
   both values, Glide maps finite native-range `[-8, 7.75]` LOD bias through `grTexLodBiasValue`
   for sprites and 3D tiles, and explicitly rejects non-zero `MaxMipLevel` until it can be
-  represented without changing the selected mip chain.
+  represented without changing the selected mip chain. **Audit (2026-08-01):** the Glide 3.0
+  programming guide confirms that `GrTexInfo.smallLodLog2`/`largeLodLog2` describe the entire
+  downloaded/source LOD range, not a separate sampler clamp. CNA's logical texture may have
+  differently sized physical edge tiles; changing `smallLodLog2` by the same XNA level on each
+  tile therefore clamps distinct native LOD ranges and can select different logical images at a
+  seam. Keep the rejection until a fake-renderer capture and dgVoodoo/real-hardware test establish
+  a tile-invariant mapping (or a reallocation/source-range design) for `MaxMipLevel`.
 - [ ] **GLIDE-FUT-006 — Support explicit and partial `Texture2D::SetData` updates.** Retain
   CPU copies for every supplied mip level, update rectangles, regenerate only the affected
   derived levels/gutters, fence before re-download, and preserve explicit mip data instead of
   treating every update as a level-0 full-image upload. This also removes the current shared
-  `Texture2D` partial-update limitation for Glide-backed textures.
+  `Texture2D` partial-update limitation for Glide-backed textures. **Implementation staged:**
+  shared `Texture2D` already reconstructs a complete current mip after a rectangle write, and a
+  full level-zero `SetData` now updates an existing backend in place rather than discarding its
+  lower subresources. Glide now retains each supplied lower-level RGBA8 image, expands it
+  address-mode-correctly into the
+  shared power-of-two logical pyramid, regenerates downstream derived levels and re-downloads
+  the existing tiles after `grFinish`. Level-zero updates preserve explicitly supplied lower
+  mips, and construction rejects a mip count beyond the logical dimensions. Portable tests cover
+  RGBA8→ARGB4444 conversion, full-chain counts, and Wrap/Clamp/Mirror expansion/mapping. Full
+  fake-renderer sequencing and dgVoodoo/real-Voodoo minification/update captures remain needed,
+  as does a performance pass to regenerate only the affected derived levels rather than the
+  presently correct full shared pyramid.
 - [ ] **GLIDE-FUT-007 — Select the best native texture encoding per logical texture.** Keep a
   deterministic RGBA8 source copy, then use RGB565 for provably opaque data, ARGB1555 for binary
   alpha and ARGB4444 for fractional alpha, with a documented reallocation rule if later updates
   change the alpha class. Compare sampling/blending captures against the existing ARGB4444
   baseline; do not enable palette/NCC compression merely as an undocumented lossy shortcut.
+  **Audit (2026-08-01):** the Glide 3.0 guide confirms that RGB565, ARGB1555 and ARGB4444 are all
+  16-bit texture formats, but only RGB565 is safe from a proven-opaque source without inspecting
+  the full chain. The current 2x2 generated-mip path averages alpha, so a binary-alpha base level
+  can produce fractional-alpha derived levels; selecting ARGB1555 from level zero alone would
+  silently turn those values into a one-bit mask. A future classifier must inspect every explicit
+  and generated logical mip after address padding (or adopt a separately validated alpha-coverage
+  rule), then fence and atomically re-download the new format descriptor/source data. Matching
+  element width suggests the TMU byte range may be reusable, but that still needs a fake-DLL
+  memory/value capture and sampling/blending images before any format is enabled.
 - [ ] **GLIDE-FUT-008 — Calibrate constant depth bias.** Establish, on real Voodoo and dgVoodoo,
   the conversion between CNA's normalized `RasterizerState::DepthBias` and Glide's integer depth
   bias for both Z and W depth modes, including sign, clamp and viewport-depth interaction. Support

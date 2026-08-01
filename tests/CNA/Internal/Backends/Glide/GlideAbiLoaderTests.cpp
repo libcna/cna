@@ -1,5 +1,6 @@
-#include "CNA/Internal/Backends/Glide/GlideAbiLoader.hpp"
+#include "CNA/Internal/Backends/Glide/GlideAbi.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstdio>
 
@@ -16,15 +17,7 @@ int main()
         using PlainFn = int (*)();
         using StdcallFn = int (WINAPI*)(int);
         using VoidFn = void (WINAPI*)();
-        using WinOpenFn = void* (WINAPI*)(std::uint32_t, int, int, int, int, int, int);
-        using VertexLayoutFn = void (WINAPI*)(std::uint32_t, int, std::uint32_t);
-        using ColorCombineFn = void (WINAPI*)(int, int, int, int, std::uint32_t);
-        using TexSourceFn = void (WINAPI*)(int, std::uint32_t, std::uint32_t, void*);
-        using ClearFn = void (WINAPI*)(std::uint32_t, std::uint8_t, std::uint16_t);
-        using ReadbackFn = std::uint32_t (WINAPI*)(int, std::uint32_t, std::uint32_t,
-                                                    std::uint32_t, std::uint32_t, std::uint32_t, void*);
-        using DrawContiguousFn = void (WINAPI*)(int, std::uint32_t, void*, std::uint32_t);
-        using MaskFn = unsigned int (WINAPI*)();
+        using MaskFn = std::uint64_t (WINAPI*)();
         const auto plain = reinterpret_cast<PlainFn>(
             CNA::Internal::Backends::Glide::ResolveGlideExport(module, "GlideAbiPlainProbe", 0));
         const auto stdcall = reinterpret_cast<StdcallFn>(
@@ -35,35 +28,91 @@ int main()
             FreeLibrary(module);
             return 2;
         }
-        const auto resolve = [&](const char* name, unsigned int bytes)
+
+        reinterpret_cast<VoidFn>(
+            CNA::Internal::Backends::Glide::ResolveGlideExport(module, "FakeGlideReset", 0))();
+        CNA::Internal::Backends::Glide::Abi::GlideApiFunctions glide;
+        glide.Resolve(module);
+
+        using namespace CNA::Internal::Backends::Glide::Abi;
+        GlideResolution resolution{};
+        FxI32 capability = 0;
+        GlideTexInfo textureInfo{0, 0, 0, 0, nullptr};
+        GlideVertex vertex{};
+        void* vertexPointers[] = {&vertex};
+        std::array<std::uint8_t, 2> readback{};
+
+        glide.grGlideInit();
+        glide.grQueryResolutions(nullptr, &resolution);
+        if (glide.grGet(0x13, static_cast<FxI32>(sizeof(capability)), &capability) != sizeof(capability) ||
+            capability != 1)
         {
-            return CNA::Internal::Backends::Glide::ResolveGlideExport(module, name, bytes);
-        };
-        reinterpret_cast<VoidFn>(resolve("FakeGlideReset", 0))();
-        reinterpret_cast<VoidFn>(resolve("grGlideInit", 0))();
-        if (reinterpret_cast<WinOpenFn>(resolve("grSstWinOpen", 28))(0, 7, 0, 0, 0, 2, 1) == nullptr)
-        {
+            std::fputs("fake Glide grGet contract returned an unexpected value\n", stderr);
             FreeLibrary(module);
             return 5;
         }
-        reinterpret_cast<VertexLayoutFn>(resolve("grVertexLayout", 12))(1, 0, 1);
-        reinterpret_cast<ColorCombineFn>(resolve("grColorCombine", 20))(1, 0, 0, 2, 0);
-        reinterpret_cast<TexSourceFn>(resolve("grTexSource", 16))(0, 0, 3, nullptr);
-        reinterpret_cast<DrawContiguousFn>(resolve("grDrawVertexArrayContiguous", 16))(6, 0, nullptr, 48);
-        reinterpret_cast<ClearFn>(resolve("grBufferClear", 12))(0, 0, 0);
-        if (reinterpret_cast<ReadbackFn>(resolve("grLfbReadRegion", 28))(0, 0, 0, 1, 1, 2, nullptr) != 1)
+        const GlideApiFunctions::Context context = glide.grSstWinOpen(0, 7, 0, 0, 0, 2, 1);
+        if (context == nullptr)
         {
             FreeLibrary(module);
             return 6;
         }
-        reinterpret_cast<VoidFn>(resolve("grGlideShutdown", 0))();
-        constexpr unsigned int expectedMask = 0xff;
-        if (reinterpret_cast<MaskFn>(resolve("FakeGlideCallMask", 0))() != expectedMask)
+        glide.grBufferClear(0, 0, 0);
+        glide.grBufferSwap(0);
+        glide.grRenderBuffer(1);
+        glide.grFinish();
+        glide.grClipWindow(0, 0, 1, 1);
+        glide.grCoordinateSpace(0);
+        glide.grCullMode(0);
+        glide.grVertexLayout(1, 0, 1);
+        glide.grDrawTriangle(&vertex, &vertex, &vertex);
+        glide.grDrawVertexArray(6, 1, vertexPointers);
+        glide.grDrawVertexArrayContiguous(6, 1, &vertex, sizeof(vertex));
+        glide.grColorCombine(1, 0, 0, 2, 0);
+        glide.grAlphaCombine(1, 0, 0, 2, 0);
+        glide.grAlphaTestFunction(7);
+        glide.grAlphaTestReferenceValue(0);
+        glide.grAlphaBlendFunction(4, 0, 4, 0);
+        glide.grColorMask(1, 1);
+        glide.grDepthBufferMode(1);
+        glide.grDepthBufferFunction(3);
+        glide.grDepthMask(1);
+        if (glide.grTexMinAddress(0) != 0 || glide.grTexMaxAddress(0) != 4u * 1024u * 1024u ||
+            glide.grTexTextureMemRequired(0, &textureInfo) != 4)
         {
-            std::fputs("fake Glide recorder did not observe the complete ABI call sequence\n", stderr);
+            std::fputs("fake Glide texture-memory contract returned an unexpected value\n", stderr);
             FreeLibrary(module);
             return 7;
         }
+        glide.grTexDownloadMipMap(0, 0, 3, &textureInfo);
+        glide.grTexSource(0, 0, 3, &textureInfo);
+        glide.grTexFilterMode(0, 0, 0);
+        glide.grTexClampMode(0, 1, 1);
+        glide.grTexMipMapMode(0, 1, 1);
+        glide.grTexLodBiasValue(0, 0.0f);
+        glide.grTexCombine(0, 1, 8, 1, 8, 0, 0);
+        if (glide.grLfbReadRegion(0, 0, 0, 1, 1, 2, readback.data()) != 1)
+        {
+            FreeLibrary(module);
+            return 8;
+        }
+        if (glide.grSstWinClose(context) != 1)
+        {
+            FreeLibrary(module);
+            return 9;
+        }
+        glide.grGlideShutdown();
+
+        constexpr std::uint64_t expectedMask = (std::uint64_t{1} << 37) - 1;
+        const auto callMask = reinterpret_cast<MaskFn>(
+            CNA::Internal::Backends::Glide::ResolveGlideExport(module, "FakeGlideCallMask", 0));
+        if (callMask() != expectedMask)
+        {
+            std::fputs("fake Glide recorder did not observe every renderer-facing ABI call\n", stderr);
+            FreeLibrary(module);
+            return 10;
+        }
+
         bool missingRejected = false;
         try
         {
