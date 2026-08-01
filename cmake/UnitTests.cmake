@@ -260,7 +260,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     # plan_dx.md DX-15 follow-up + plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):
-    # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12 MinGW cross-targets,
+    # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12/Direct2D MinGW cross-targets,
     # gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate tests
     # -- and any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below) does the
     # same at run time. All three need the same Wine wrapper D3D9_Smoke/D3D11_Smoke/D3D12_Smoke
@@ -327,6 +327,12 @@ if(CNA_BUILD_TESTS)
             # real D3D10 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-d3d10.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
+            # Direct2D creates its own D3D11 device internally.  Use the established Wine+DXVK
+            # prefix, but skip the D3D11-specific log gate: d2d1.dll, not this test executable,
+            # owns the native device creation and decides its concrete renderer.
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
         endif()
     endif()
 

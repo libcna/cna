@@ -60,6 +60,7 @@ namespace
             case GraphicsBackendType::Software:    return "SOFTWARE";
             case GraphicsBackendType::D3D11:       return "D3D11";
             case GraphicsBackendType::D3D12:       return "D3D12";
+            case GraphicsBackendType::Direct2D:    return "DIRECT2D";
             case GraphicsBackendType::Canvas:      return "CANVAS";
             case GraphicsBackendType::Skia:        return "SKIA";
             case GraphicsBackendType::Ascii:       return "ASCII";

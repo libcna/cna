@@ -185,6 +185,10 @@ include(cmake/Tests/D3D11Tests.cmake)
 # Wine+vkd3d-proton dev loop, a distinct Wine prefix from D3D11's DXVK one).
 include(cmake/Tests/D3D12Tests.cmake)
 
+# Direct2D 1.1 is a Windows-only 2D backend. Its tests use the same native-Windows/Wine+DXVK
+# execution model as D3D11 because Direct2D owns a real D3D11/DXGI presentation surface.
+include(cmake/Tests/Direct2DTests.cmake)
+
 # plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) backend.
 # Deliberately NOT registered as a CTest (mirrors cna_diag_software's/d3d12_swapchain_diag's own
 # "real executable, not a ctest" precedent above): SDL_Init(SDL_INIT_VIDEO) itself throws under

@@ -167,6 +167,10 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in
     # isolation by D3D11's own DX-14-compile/DX-58 precedent.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
+    # Direct2D 1.1 presents through a BGRA-capable D3D11/DXGI flip-model swap chain. d2d1 is
+    # the renderer; d3d11/dxgi provide only the device and presentation surface it targets.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d2d1 d3d11 dxgi)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # plan_canvas.md design decision 2: reuses the existing SDL-created window/canvas element,
     # so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.
