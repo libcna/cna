@@ -185,7 +185,10 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
 - [ ] **GLIDE-FUT-017 — Add adapter and runtime diagnostics for deployability.** Report selected
   Glide DLL/version, board/TMU count, queried resolution list, texture limits, extension decisions,
   memory use/evictions and rejected CNA features through an opt-in diagnostic channel. Keep the
-  data free of raw pointers and use it in the smoke-test failure report.
+  data free of raw pointers and use it in the smoke-test failure report. **Implementation staged:**
+  `CNA_GLIDE_DIAGNOSTICS=1` now reports the runtime path, selected virtual/native mode, TMU count,
+  texture limits and TMU0 capacity. Version/board enumeration, extension/eviction decisions and
+  smoke-test integration remain pending.
 - [ ] **GLIDE-FUT-018 — Build a hardware compatibility matrix and release gate.** Automate the
   fake-DLL ABI suite, then record results separately for Voodoo Graphics, Voodoo2 and dgVoodoo
   versions on supported 32-bit Windows setups. The matrix must state which FUT capabilities were

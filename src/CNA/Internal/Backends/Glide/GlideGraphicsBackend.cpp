@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
@@ -410,6 +411,17 @@ namespace CNA::Internal::Backends::Glide
             GlideApi(const GlideApi&) = delete;
             GlideApi& operator=(const GlideApi&) = delete;
 
+            [[nodiscard]] std::string ModulePath() const
+            {
+                char path[MAX_PATH]{};
+                const DWORD length = GetModuleFileNameA(module_, path, static_cast<DWORD>(std::size(path)));
+                if (length == 0 || length >= std::size(path))
+                {
+                    return "<unavailable>";
+                }
+                return std::string(path, path + length);
+            }
+
             void Load()
             {
                 const char* explicitPath = std::getenv("CNA_GLIDE3X_DLL");
@@ -646,6 +658,7 @@ namespace CNA::Internal::Backends::Glide
                     throw std::runtime_error("Glide TMU0 reported an unrepresentable texture-memory range");
                 }
                 freeTextureRanges.push_back(TextureRange{minAddress, static_cast<FxU32>(rangeSize)});
+                LogStartupDiagnostics();
             }
             catch (...)
             {
@@ -708,6 +721,21 @@ namespace CNA::Internal::Backends::Glide
             {
                 throw std::runtime_error("The loaded Glide runtime exposes no texture mapping units");
             }
+        }
+
+        void LogStartupDiagnostics() const
+        {
+            if (!diagnosticsEnabled)
+            {
+                return;
+            }
+            const std::uint64_t tmu0Bytes = freeTextureRanges.empty() ? 0u : freeTextureRanges.front().size;
+            std::fprintf(stderr,
+                         "[CNA GLIDE] runtime=%s, virtual=%dx%d, native=%dx%d, TMUs=%d, "
+                         "maxTexture=%d, maxAspectLog2=%d, TMU0Bytes=%llu\n",
+                         api.ModulePath().c_str(), virtualWidth, virtualHeight, nativeWidth, nativeHeight,
+                         textureUnitCount, maxTextureDimension, maxTextureAspectLog2,
+                         static_cast<unsigned long long>(tmu0Bytes));
         }
 
         void ConfigureSpriteCombiner()
@@ -906,6 +934,11 @@ namespace CNA::Internal::Backends::Glide
         }
 
         GlideApi api;
+        bool diagnosticsEnabled = []
+        {
+            const char* value = std::getenv("CNA_GLIDE_DIAGNOSTICS");
+            return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
+        }();
         SDL_Window* window = nullptr;
         GlideApi::Context context = nullptr;
         bool glideInitialized = false;

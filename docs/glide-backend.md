@@ -14,6 +14,10 @@ rejected rather than silently ignored. A later virtual-resolution change is acce
 fits the Glide mode selected at startup, so `GraphicsDevice` retains its previous public size if
 the backend rejects it.
 
+Set `CNA_GLIDE_DIAGNOSTICS=1` to print the loaded runtime path, selected virtual/native mode,
+TMU count, texture limits and usable TMU0 bytes at startup. The report contains no native pointer
+values and is intended for emulator/hardware bug reports.
+
 ## Build
 
 The backend is hard-gated to the native 32-bit Windows ABI. From Linux, use the i686 MinGW-w64
