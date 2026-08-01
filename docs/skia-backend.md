@@ -534,5 +534,14 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     only the isolated stencil prerequisite advances to SKIA-98. The focused test passes in Debug,
     Release and ASan/LSan; the complete Debug suite passes 105/105 in 13.14 seconds (12 Raster,
     91 Display, two Audit).
+73. `Skia_CpuStencil_Spike` closes the isolated SKIA-98 prerequisite without exposing an
+    attachment or public draw path. Its exhaustive 8-bit value matrices cover all eight compare
+    functions and all eight wrap/saturate/reference operations through discriminating read/write
+    masks (4,194,304 cases each). Branch tests prove stencil-fail/depth-fail/pass ordering,
+    disabled bypass, narrow masks, the EasyGL two-sided `0x06` versus one-sided `0x04` result, all
+    16 `ColorWriteChannels` masks and clear independence. Adding stencil to the candidate
+    RGBA8+float-depth layout would cost nine CPU bytes/pixel. The focused test passes in Debug,
+    Release and leak-enabled ASan; the complete Debug suite passes 106/106 in 13.28 seconds
+    (13 Raster, 91 Display, two Audit). Public depth/stencil and `ThreeD` capabilities remain false.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

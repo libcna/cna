@@ -12,8 +12,9 @@
 - Repository policy for this work: leave the unrelated historical `NEXT.md` unchanged.  Record
   Skia continuity only in this file.
 - Build policy: configure persistent in-repository Skia builds in `cmake-build-skia*`; every build
-  uses at most eight jobs (`--parallel 8`). No subagents are used, so the global eight-core pool is
-  never shared concurrently. Windowed tests run with `xvfb-run -a` when a real display is unavailable.
+  uses at most eight jobs (`--parallel 8`). No subagents are used; concurrent focused compiles are
+  allowed only when their combined active work remains within the global eight-core pool. Windowed
+  tests run with `xvfb-run -a` when a real display is unavailable.
 
 ## Completed baseline
 
@@ -22,7 +23,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 99 Skia CTests: nine raster-only, 88 display-required, and two
+- `docs/skia-backend.md` records 106 Skia CTests: 13 raster-only, 91 display-required, and two
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -588,9 +589,9 @@
 
 ## Current task
 
-SKIA-97 implementation and validation are complete. Commit/push this checkpoint, then begin
-SKIA-98 only as an isolated CPU stencil micro-suite; do not connect it to public depth/stencil or
-3D entry points.
+SKIA-98 implementation and validation are complete. Commit/push this checkpoint, then begin
+SKIA-99 only as an isolated CPU vertex/index/primitive feasibility suite; do not connect it to
+public buffers, Draw calls, depth/stencil, or 3D capability reporting.
 
 ## Completed in this session: SKIA-93
 
@@ -718,12 +719,39 @@ SKIA-98 only as an isolated CPU stencil micro-suite; do not connect it to public
   The complete Debug Skia suite passes 105/105 under Xvfb in 13.14 seconds with `--parallel 8`
   (12 Raster, 91 Display, two Audit). Debug, Release and ASan display caches are `:0`.
 
+## Completed in this session: SKIA-98
+
+- Added the headless, internal `Skia_CpuStencil_Spike`. It models the low eight bits of
+  Depth24Stencil8 after SKIA-97's CPU bridge and remains disconnected from every public Draw call,
+  attachment and capability.
+- All eight `CompareFunction` values run over every reference/stored byte pair and eight
+  discriminating read masks. All eight `StencilOperation` values likewise run over every
+  stored/reference byte pair and eight write masks, including wrapping, saturation, replacement
+  and inversion. Both matrices pass 4,194,304 cases.
+- The state-machine checks separately prove stencil-fail, depth-fail and full-pass ordering;
+  rejected fragments cannot write colour/depth. Disabled stencil bypass, narrow read/write masks,
+  default public state values, and clear independence all match the EasyGL source contract.
+- Two-sided selection reproduces the existing EasyGL fixture exactly: the counter-clockwise fail
+  operation turns `0x05` into `0x06`, while disabling two-sided mode selects the ordinary pass
+  operation and yields `0x04`. All 16 `ColorWriteChannels` masks independently preserve successful
+  depth/stencil writes.
+- `docs/skia-cpu-stencil-spike.md` records the ordering oracle, matrix and boundary. A candidate
+  RGBA8+float-depth+stencil target would own nine bytes/pixel (2,073,600 B at 640×360). This is
+  feasibility evidence only: format precision, raster state, MSAA, vertex data, effects and public
+  ownership remain unimplemented; `ThreeD` and depth/stencil capabilities stay false.
+- The focused test passes without compiler warnings in Debug and Release and in an escalated
+  leak-enabled ASan run. The complete Debug Skia suite passes 106/106 under Xvfb in 13.28 seconds
+  with `--parallel 8` (13 Raster, 91 Display, two Audit). Debug, Release and ASan display caches are
+  `:0`; `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-98: extend only the isolated CPU target with stencil compare/operations/read-write masks,
-   two-sided face selection and colour-write interaction; cover the complete micro-matrix.
-2. Stop the CPU route and feed a precise rejection into SKIA-101 if stencil state or handoff
-   semantics are not bounded; do not weaken the EasyGL oracle.
+1. SKIA-99: inventory every declared CNA vertex layout and public vertex/index/DrawUser validation
+   rule, then add an isolated CPU upload/primitive-expansion/cull/fill micro-suite in dependency
+   order.
+2. Stop the CPU route and feed a precise rejection into SKIA-101 if the complete layout,
+   primitive, winding, wireframe or range contract cannot remain bounded; do not weaken the
+   EasyGL oracle.
 3. Keep GLSL vertex stages, SPIR-V, cube/volume children, MRT and untagged content unsupported;
    never widen the tagged contract merely to silence a fixture.
 

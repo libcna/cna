@@ -158,6 +158,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_CpuDepthRaster_Spike
                                   cna_test_skia_cpu_depth_raster_spike)
 
+    # SKIA-98: extend only the isolated CPU bridge with the complete 8-bit stencil state machine:
+    # compare/operation matrices, masks, fail/depth-fail/pass ordering, two-sided state and colour
+    # write interaction. It remains disconnected from public Draw* and capability reporting.
+    cna_skia_test(cna_test_skia_cpu_stencil_spike
+                  examples/skia_cpu_stencil_spike_test.cpp)
+    cna_register_skia_raster_test(Skia_CpuStencil_Spike
+                                  cna_test_skia_cpu_stencil_spike)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.
