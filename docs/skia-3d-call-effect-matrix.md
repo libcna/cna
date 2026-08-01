@@ -72,7 +72,7 @@ but none supplies the missing vertex/depth pipeline. The accepted
 | `3D-SHADE-LIGHT` | Normal transforms, directional/multiple lights, emissive, specular, Phong/Lambert and per-pixel variants. | SKIA-100 confirms forwarding alone is insufficient; no integrated CPU normal/lighting variant pipeline exists. |
 | `3D-SHADE-FOG` | View-space fog and effect-specific fog interpolation/composition. | Fog vectors exist in common code, but their pre/post-skin vertex evaluation, interpolation and fragment mix are absent. |
 | `3D-MODEL-SKIN` | Model meshes/effects, hierarchy, animation, avatars, skeletons and skin weights. | Layout/palette storage exists; SKIA-100 confirms weighted position/normal/tangent rendering is absent. |
-| `3D-QUERY-OCCLUSION` | Begin/End lifecycle, availability/nonblocking result and visible/depth-occluded PixelCount. | Capability is false; feasibility decision is SKIA-104, implementation/refusal is SKIA-105. |
+| `3D-QUERY-OCCLUSION` | Begin/End lifecycle, availability/nonblocking result and visible/depth-occluded PixelCount. | SKIA-104 proves raster emulation unsound; SKIA-105 retains false/zero properties, throwing lifecycle and false capability. |
 | `3D-RESOURCE-CONTRACT` | Missing bindings, null resources, disposed/dynamic lifetime, descriptor capacity and transfer ranges. | Existing failures must remain atomic; exhaustive uniform refusal is SKIA-102. |
 | `3D-TARGET-PASS` | Render-target/depth/cube binding, first use, clear, readback and producer/consumer transitions. | Colour-only 2D pieces exist; 3D attachment/pass behavior remains unsupported. |
 

@@ -31,10 +31,10 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IIndexBufferBackend::SetData32WithOptions/3` | Streams 32-bit indices; dynamic-buffer tests. | No raster 3D index pipeline. | `unsupported` | SKIA-95 |
 | `IIndexBufferBackend::GetIndexCount/0` | Reports uploaded index capacity. | Resource creation is rejected first. | `unsupported` | SKIA-95 |
 | `IIndexBufferBackend::IsThirtyTwoBit/0` | Selects GL index element type. | Resource creation is rejected first. | `unsupported` | SKIA-95 |
-| `IOcclusionQueryBackend::Begin/0` | Begins a GL samples-passed query; query tests. | No raster visibility-query surface. | `unsupported` | SKIA-104–105 |
-| `IOcclusionQueryBackend::End/0` | Ends the active GL query. | No raster visibility-query surface. | `unsupported` | SKIA-104–105 |
-| `IOcclusionQueryBackend::IsComplete/0` | Polls GL query availability. | Query construction is refused. | `unsupported` | SKIA-104–105 |
-| `IOcclusionQueryBackend::PixelCount/0` | Returns EasyGL's boolean samples-passed result. | No semantically sound count is invented. | `unsupported` | SKIA-104–105 |
+| `IOcclusionQueryBackend::Begin/0` | Begins a GL samples-passed query; query tests. | Refusal object throws the stable no-3D diagnostic. | `unsupported` | SKIA-102, SKIA-104–105 |
+| `IOcclusionQueryBackend::End/0` | Ends the active GL query. | Refusal object throws the stable no-3D diagnostic. | `unsupported` | SKIA-102, SKIA-104–105 |
+| `IOcclusionQueryBackend::IsComplete/0` | Polls GL query availability. | Refusal object safely returns false without blocking. | `unsupported` | SKIA-102, SKIA-104–105 |
+| `IOcclusionQueryBackend::PixelCount/0` | Returns EasyGL's boolean samples-passed result. | Refusal object returns zero; no unsound framebuffer-derived count is invented. | `unsupported` | SKIA-102, SKIA-104–105 |
 | `ITextureCubeBackend::SetData/8` | Uploads one GL cube-face region; cube transfer tests. | Exact bounded CPU face/mip/rectangle storage. | `implemented` | SKIA-80–84; shared 56-check write audit |
 | `ITextureCubeBackend::GetData/8` | Reads one cube-face region; cube readback tests. | Exact bounded CPU readback; no fabricated pixels. | `implemented` | SKIA-80–84; shared 56-check read audit |
 | `ITextureCubeBackend::BindGL/0` | Binds the cube GL target. | No GL/native cube handle exists. | `unsupported` | SKIA-80–84 |
@@ -102,7 +102,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates level-zero CPU Skia images. | `bounded` | SKIA-22–30 |
 | `IGraphicsBackend::CreateSpriteBatch/0` | Allocates EasyGL sprite renderer state. | Allocates checked SkCanvas adapter. | `implemented` | SKIA-31–40 |
 | `IGraphicsBackend::ReadBackbuffer/5` | Reads GL framebuffer top-left RGBA. | Exact active-surface RGBA8 readback. | `implemented` | SKIA-7, SKIA-62 |
-| `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Creates a refusal object: safe false/zero properties; Begin/End throw. | `unsupported` | SKIA-102, SKIA-104–105 |
+| `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Creates a refusal object: safe false/zero properties; Begin/End throw after SKIA-104 disproves raster emulation. | `unsupported` | SKIA-102, SKIA-104–105 |
 | `IGraphicsBackend::CreateTexture3D/5` | Allocates GL volume texture/mips. | Creates bounded CPU voxel/mip storage only. | `bounded` | SKIA-82–84; `Skia_TextureStorage_Policy` |
 | `IGraphicsBackend::CreateTextureCube/3` | Allocates GL cube texture/mips. | Creates six bounded CPU faces/mips only. | `bounded` | SKIA-80–84; `Skia_TextureStorage_Policy` |
 | `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Level-zero color target only. | `bounded` | SKIA-61–79 |
@@ -158,7 +158,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsCapability::MultipleRenderTargets` | EasyGL advertises normalized MRT binding. | Raster backend reports false; single-colour replay cannot implement distinct MRT slot outputs. | `unsupported` | SKIA-87–88; `Skia_MRT_Rejection` |
 | `GraphicsCapability::AnisotropicFiltering` | EasyGL reports device anisotropy. | Raster backend reports false. | `unsupported` | SKIA-78–79 |
 | `GraphicsCapability::WireFrame` | EasyGL supports GL line polygon mode where available. | Raster backend reports false and rejects wireframe. | `unsupported` | SKIA-58, SKIA-97 |
-| `GraphicsCapability::OcclusionQuery` | EasyGL reports query API availability. | Raster backend reports false. | `unsupported` | SKIA-104–105 |
+| `GraphicsCapability::OcclusionQuery` | EasyGL reports query API availability. | Raster backend reports false; final-pixel differences cannot observe samples passed. | `unsupported` | SKIA-104–105 |
 | `GraphicsCapability::CustomEffects` | EasyGL compiles custom GLSL effects. | False: the explicit bounded SkSL SpriteBatch extension is not arbitrary GLSL compatibility. | `unsupported` | SKIA-89–94 |
 | `GraphicsCapability::Texture3D` | EasyGL exposes GL volume textures. | True for persistent CPU transfer/readback storage only; no sampling claim. | `bounded` | SKIA-82–84; `Skia_GraphicsCapability` |
 

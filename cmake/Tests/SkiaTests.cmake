@@ -195,6 +195,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_3d_refusal examples/skia_3d_refusal_test.cpp)
     cna_register_skia_display_test(Skia_3D_Refusal cna_test_skia_3d_refusal)
 
+    # SKIA-104: a headless negative feasibility spike. Raster framebuffer differences cannot
+    # distinguish a fully covered same-colour/destination-preserving draw from zero coverage and
+    # cannot recover repeated sample counts, so they are not an occlusion-query implementation.
+    cna_skia_test(cna_test_skia_occlusion_query_feasibility
+                  examples/skia_occlusion_query_feasibility_test.cpp)
+    target_include_directories(cna_test_skia_occlusion_query_feasibility
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_OcclusionQuery_Feasibility
+                                  cna_test_skia_occlusion_query_feasibility)
+
     # SKIA-80--SKIA-84: cube/volume resources are bounded CPU transfer storage, not shader-
     # sampleable 3D resources. The direct raster test proves the allocation/validation policy;
     # shared public tests prove every face, mip, rectangle, slice, box, and failure contract.

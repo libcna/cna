@@ -1,7 +1,8 @@
 # OcclusionQuery: support and limitations
 
-Covers `Microsoft::Xna::Framework::Graphics::OcclusionQuery` across all 4 backends. Written as the
-closing documentation task for Phase 50 (Tasks 441-450), which audited FNA's real API surface,
+Covers `Microsoft::Xna::Framework::Graphics::OcclusionQuery` across the original four-backend
+audit and the later Skia raster decision. Written as the closing documentation task for Phase 50
+(Tasks 441-450), which audited FNA's real API surface,
 verified CNA's own `Begin()`/`End()`/`IsComplete()`/`PixelCount()` behavior against it, added real
 pixel/query correctness tests, and implemented a genuine fix on Bgfx. Vulkan's own real
 architecture blocker (Task 447), investigated without guessing at the time, was later fully
@@ -47,6 +48,7 @@ matching `End()`) via a 50-iteration stress test — no crash, no resource-track
 | **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | None (matches FNA) | ✅ Verified both directions plus multi-draw-span (Task 854) — genuinely discriminating in this sandbox (Mesa Lavapipe) | **Fully correct** |
 | **Bgfx** | ✅ Yes (Task 448) — real `bgfx::submit(id, program, occlusionQuery)` attachment | None (matches FNA) | ⚠️ Not verifiable in this sandbox (see below); dedicated-view gap open (Task 917) | **Fixed, with caveats** |
 | **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only backend, Task 727) |
+| **Skia raster** | N/A — no 3D submission/depth surface | N/A | Raster emulation disproved (SKIA-104) | **Correctly unsupported** (SKIA-105) |
 
 ### EasyGL — fully correct
 
@@ -146,6 +148,16 @@ specific software-rendering sandbox couldn't verify anyway.
 this 2D-only backend's established "throw at construction for unsupported 3D constructs" pattern.
 Since construction itself throws, `Begin()`/`End()` are unreachable — consistent, no gap.
 
+### Skia raster — correctly unsupported
+
+The selected CPU raster `SkCanvas` exposes completed colour pixels, not per-draw samples that pass
+depth/stencil testing. `Skia_OcclusionQuery_Feasibility` proves framebuffer differences cannot
+even recover EasyGL's boolean result: a full same-colour/destination-preserving draw and a draw with
+zero coverage have byte-identical output. The pinned raster build excludes Ganesh/Graphite and has
+no depth attachment. A safe refusal object therefore reports false/zero properties while Begin/End
+throw the stable Skia 3D diagnostic; capability reporting stays false. The complete reasoning is in
+`docs/skia-occlusion-query-feasibility.md`.
+
 ## Summary
 
 | Area | Status |
@@ -156,3 +168,4 @@ Since construction itself throws, `Begin()`/`End()` are unreachable — consiste
 | Vulkan | ✅ Real per-draw-call query correlation implemented (Task 447/854, 2026-07-10); pixel/query correctness verified both directions plus multi-draw-span, genuinely discriminating in this sandbox |
 | Bgfx | ✅ Wiring fixed per bgfx's documented API (Task 448); pixel-level correctness unverifiable in this sandbox; dedicated-view gap for true scene-depth correctness still open (Task 917) |
 | SDL_Renderer | ✅ Correctly throws at construction (2D-only backend, Task 727) |
+| Skia raster | ✅ Framebuffer/mask/GPU alternatives audited; deterministic false/zero/throw refusal retained (SKIA-104–105) |

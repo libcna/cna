@@ -51,4 +51,5 @@ public state cache unchanged.
 
 This contract does not turn cube/volume transfer storage into shader sampling, does not claim a
 depth attachment, and does not promote stock effects. The only true capability in the 3D-adjacent
-set remains bounded CPU `Texture3D` storage.
+set remains bounded CPU `Texture3D` storage. See `skia-occlusion-query-feasibility.md` for the
+SKIA-104 proof that final raster pixels cannot supply a samples-passed query.

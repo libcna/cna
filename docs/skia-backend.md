@@ -585,5 +585,14 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     rejected reference-stencil update no longer corrupts the public cache. The fixture passes
     25/25 in Debug, Release and ASan; the complete Debug Skia suite passes 110/110 in 13.47 seconds
     (15 Raster, 92 Display, three Audit). See `docs/skia-3d-refusal.md`.
+78. `Skia_OcclusionQuery_Feasibility` closes SKIA-104 by proving final-pixel comparison cannot
+    distinguish full positive coverage from zero coverage: same-colour and destination-preserving
+    full-target draws are byte-identical to an out-of-bounds draw, and repeated submissions cannot
+    be recovered from the final image. The raster canvas has no depth/samples-passed query; the
+    pinned build excludes the Graphite/Vulkan submission statistic. SKIA-105 therefore retains the
+    SKIA-102 false/zero property object with throwing Begin/End and false capability. See
+    `docs/skia-occlusion-query-feasibility.md`. The seven-check spike passes in Debug, Release and
+    leak-enabled ASan/LSan; the complete Debug suite passes 111/111 in 13.74 seconds (16 Raster,
+    92 Display, three Audit).
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

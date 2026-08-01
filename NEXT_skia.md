@@ -855,15 +855,39 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   three source audits pass. Debug, Release and ASan display caches are restored to `:0`;
   `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-104 and SKIA-105
+
+- Audited the public/FNA-shaped API, EasyGL's real `GL_ANY_SAMPLES_PASSED` route and the pinned Skia
+  source. The selected artifact disables Ganesh, Graphite, OpenGL, Vulkan and Dawn; raster
+  `SkCanvas` exposes final colour pixels but no per-draw coverage/depth query. Graphite's optional
+  Vulkan submission statistic is neither linked nor scoped around CPU canvas draws.
+- Added the display-free `Skia_OcclusionQuery_Feasibility` proof. A full-target same-colour draw,
+  a full-target destination-preserving draw and a zero-coverage out-of-bounds draw leave identical
+  RGBA8 output; one/two full-target submissions also have identical final pixels. Consequently a
+  framebuffer-difference result cannot implement even EasyGL's boolean samples-passed contract.
+- `docs/skia-occlusion-query-feasibility.md` also rejects auxiliary mask replay because SkCanvas
+  has no post-draw coverage callback or depth attachment, and rejects a hidden Graphite/GL/Vulkan
+  context because it cannot observe CPU raster work and would introduce a second ownership model.
+  Supplying complete geometry/clip/shader/depth instrumentation is the software renderer already
+  rejected by SKIA-101.
+- SKIA-105 therefore keeps `GraphicsCapability::OcclusionQuery=false`. The refusal object landed in
+  SKIA-102: property polling is safe and nonblocking (`false`/`0`), while Begin/End throw the stable
+  Skia 3D diagnostic. The parity ledger, 3D call/effect matrix and cross-backend query documentation
+  now record the final decision.
+- The seven-check feasibility test passes in Debug and Release and in an escalated ASan/LSan run
+  with leak detection enabled. The first sandboxed LSan invocation stopped before assertions with
+  the environment's explicit ptrace diagnostic. The complete Debug Skia suite passes 111/111
+  under Xvfb in 13.74 seconds with `--parallel 8` (16 Raster, 92 Display, three Audit). Debug,
+  Release and ASan display caches are `:0`; `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-104: determine whether Begin/End/nonblocking/PixelCount occlusion semantics can be correct
-   without a 3D submission bridge; document counterexamples if framebuffer-difference emulation is
-   unsound.
-2. SKIA-105: retain the deterministic refusal object if SKIA-104 rejects emulation, and align the
-   capability ledger, tests and user-facing documentation with that final decision.
-3. SKIA-106: audit and register genuinely reusable 2D EasyGL examples under the Skia label without
+1. SKIA-106: audit and register genuinely reusable 2D EasyGL examples under the Skia label without
    pulling GPU-only or 3D paths into this backend.
+2. SKIA-107: reconcile the requested Skia-specific ownership/recovery/alpha/state/capability tests
+   with the large existing suite and add only missing sabotage-sensitive coverage.
+3. Reassess earlier open architecture rows (especially SKIA-5/6/76/77) against the accepted
+   raster-only ADR before doing the final release-gate tasks.
 
 ## Known boundaries / assumptions
 
