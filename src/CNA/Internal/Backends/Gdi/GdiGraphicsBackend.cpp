@@ -76,6 +76,20 @@ namespace CNA::Internal::Backends::Gdi
             return COLORONCOLOR;
         }
 
+        [[nodiscard]] bool IsDirtyPresentationRequested()
+        {
+            const char* value = std::getenv("CNA_GDI_DIRTY_PRESENTATION");
+            return value != nullptr && std::string_view(value) == "1";
+        }
+
+        [[nodiscard]] bool IsIdentityMatrix(const Matrix& matrix)
+        {
+            return matrix.M11 == 1.0f && matrix.M12 == 0.0f && matrix.M13 == 0.0f && matrix.M14 == 0.0f &&
+                   matrix.M21 == 0.0f && matrix.M22 == 1.0f && matrix.M23 == 0.0f && matrix.M24 == 0.0f &&
+                   matrix.M31 == 0.0f && matrix.M32 == 0.0f && matrix.M33 == 1.0f && matrix.M34 == 0.0f &&
+                   matrix.M41 == 0.0f && matrix.M42 == 0.0f && matrix.M43 == 0.0f && matrix.M44 == 1.0f;
+        }
+
         /// DwmFlush is a compositor pacing hint, not a swap interval. Keep it strictly opt-in:
         /// it can block until DWM accepts the next composition batch, which is useful for modest
         /// compatibility applications but is an unwanted latency policy by default. Loading it at
@@ -112,9 +126,13 @@ namespace CNA::Internal::Backends::Gdi
         {
         public:
             explicit GdiSpriteBatchBackend(std::unique_ptr<ISpriteBatchBackend> inner,
-                                           std::function<void()> synchronizeBackbuffer)
+                                           std::function<void()> synchronizeBackbuffer,
+                                           std::function<void(const Rectangle&)> markDirty,
+                                           std::function<void()> markFullyDirty)
                 : inner_(std::move(inner))
                 , synchronizeBackbuffer_(std::move(synchronizeBackbuffer))
+                , markDirty_(std::move(markDirty))
+                , markFullyDirty_(std::move(markFullyDirty))
             {
                 if (!inner_)
                     throw std::runtime_error("GDI failed to create its CPU SpriteBatch backend.");
@@ -126,7 +144,11 @@ namespace CNA::Internal::Backends::Gdi
                 inner_->Begin();
             }
             void End() override { inner_->End(); }
-            void SetTransformMatrix(const Matrix& matrix) override { inner_->SetTransformMatrix(matrix); }
+            void SetTransformMatrix(const Matrix& matrix) override
+            {
+                transformIsIdentity_ = IsIdentityMatrix(matrix);
+                inner_->SetTransformMatrix(matrix);
+            }
             void SetCustomEffect(Effect* effect) override
             {
                 if (effect != nullptr &&
@@ -144,12 +166,15 @@ namespace CNA::Internal::Backends::Gdi
             void Draw(const ITextureBackend& texture, float x, float y) override
             {
                 synchronizeBackbuffer_();
+                MarkDraw(Rectangle(static_cast<int>(x), static_cast<int>(y),
+                                   texture.GetWidth(), texture.GetHeight()), 0.0f);
                 inner_->Draw(texture, x, y);
             }
             void Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
                       const Rectangle& sourceRectangle, const Color& color) override
             {
                 synchronizeBackbuffer_();
+                MarkDraw(destinationRectangle, 0.0f);
                 inner_->Draw(texture, destinationRectangle, sourceRectangle, color);
             }
             void Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
@@ -157,13 +182,31 @@ namespace CNA::Internal::Backends::Gdi
                       const Vector2& origin, SpriteEffects effects, float layerDepth) override
             {
                 synchronizeBackbuffer_();
+                MarkDraw(destinationRectangle, rotation);
                 inner_->Draw(texture, destinationRectangle, sourceRectangle, color, rotation,
                              origin, effects, layerDepth);
             }
 
         private:
+            void MarkDraw(const Rectangle& destination, float rotation)
+            {
+                // The supplied destination is a complete damage bound only for an axis-aligned,
+                // untransformed sprite. Rotation and a SpriteBatch matrix can move pixels outside
+                // it, so they deliberately select the safe full-frame fallback.
+                if (!transformIsIdentity_ || rotation != 0.0f ||
+                    destination.Width < 0 || destination.Height < 0)
+                {
+                    markFullyDirty_();
+                    return;
+                }
+                markDirty_(destination);
+            }
+
             std::unique_ptr<ISpriteBatchBackend> inner_;
             std::function<void()> synchronizeBackbuffer_;
+            std::function<void(const Rectangle&)> markDirty_;
+            std::function<void()> markFullyDirty_;
+            bool transformIsIdentity_ = true;
         };
     } // namespace
 
@@ -250,6 +293,7 @@ namespace CNA::Internal::Backends::Gdi
             (backbuffer.width != logicalWidth || backbuffer.height != logicalHeight))
         {
             Software::SoftwareGraphicsBackend::SetVirtualResolution(logicalWidth, logicalHeight);
+            MarkBackbufferFullyDirty();
         }
     }
 
@@ -257,6 +301,8 @@ namespace CNA::Internal::Backends::Gdi
     {
         SynchronizeBackbufferSize();
         Software::SoftwareGraphicsBackend::Clear(r, g, b, a);
+        if (renderingToBackbuffer_)
+            MarkBackbufferFullyDirty();
     }
 
     void GdiGraphicsBackend::Present()
@@ -286,10 +332,33 @@ namespace CNA::Internal::Backends::Gdi
                 return;
             }
 
-            // Make letterbox bars and unused NativeBackBuffer space deterministic.  Overscan and
-            // Stretch cover the full client area, so this is just an inexpensive full-window fill.
-            const RECT clientRect{ 0, 0, clientWidth, clientHeight };
-            FillRect(deviceContext, &clientRect, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+            // Partial display is valid only for an unchanged 1:1 presentation. Any scaling,
+            // invalidated native client region, clear, resize, rotation or unknown draw damage
+            // falls back to a complete blit so stale pixels can never survive.
+            const bool clientNeedsRepair =
+                GetUpdateRect(static_cast<HWND>(nativeWindow_), nullptr, FALSE) != FALSE;
+            const bool canPresentPartial = IsDirtyPresentationRequested() && !clientNeedsRepair &&
+                !backbufferFullyDirty_ && backbufferDirtyValid_ &&
+                destination.width == backbuffer.width && destination.height == backbuffer.height;
+            const bool mustPresentFull = !IsDirtyPresentationRequested() || clientNeedsRepair ||
+                backbufferFullyDirty_ ||
+                destination.width != backbuffer.width || destination.height != backbuffer.height;
+
+            if (!mustPresentFull && !canPresentPartial)
+            {
+                // The CPU backbuffer and client area are already synchronized. Avoid a redundant
+                // GDI call when opt-in dirty presentation sees no new CPU damage.
+                ReleaseDC(static_cast<HWND>(nativeWindow_), deviceContext);
+                return;
+            }
+
+            if (mustPresentFull)
+            {
+                // Make letterbox bars and unused NativeBackBuffer space deterministic. Overscan
+                // and Stretch cover the full client area, so this is just an inexpensive fill.
+                const RECT clientRect{ 0, 0, clientWidth, clientHeight };
+                FillRect(deviceContext, &clientRect, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+            }
 
             RgbaBitmapInfo bitmapInfo{};
             bitmapInfo.header.biSize = sizeof(BITMAPINFOHEADER);
@@ -305,7 +374,19 @@ namespace CNA::Internal::Backends::Gdi
             // StretchDIBits path in this common case, while retaining exactly the same top-down
             // RGBA BI_BITFIELDS layout. It also covers aspect-correct letterboxing where the
             // calculated destination happens to be 1:1.
-            if (destination.width == backbuffer.width && destination.height == backbuffer.height)
+            if (canPresentPartial)
+            {
+                const int copiedLines = SetDIBitsToDevice(
+                    deviceContext, destination.x + backbufferDirtyX_, destination.y + backbufferDirtyY_,
+                    backbufferDirtyWidth_, backbufferDirtyHeight_, backbufferDirtyX_, backbufferDirtyY_,
+                    static_cast<UINT>(backbufferDirtyY_), static_cast<UINT>(backbufferDirtyHeight_),
+                    backbuffer.color.data(),
+                    reinterpret_cast<const BITMAPINFO*>(&bitmapInfo), DIB_RGB_COLORS);
+                if (copiedLines != backbufferDirtyHeight_)
+                    throw std::runtime_error(
+                        "GDI SetDIBitsToDevice failed while presenting a dirty 2D rectangle.");
+            }
+            else if (destination.width == backbuffer.width && destination.height == backbuffer.height)
             {
                 const int copiedLines = SetDIBitsToDevice(
                     deviceContext, destination.x, destination.y, backbuffer.width, backbuffer.height,
@@ -334,6 +415,7 @@ namespace CNA::Internal::Backends::Gdi
 
             GdiFlush();
             ApplyOptionalDwmPacing();
+            ResetBackbufferDamage();
             ReleaseDC(static_cast<HWND>(nativeWindow_), deviceContext);
         }
         catch (...)
@@ -360,12 +442,14 @@ namespace CNA::Internal::Backends::Gdi
         requestedVirtualWidth_ = width;
         requestedVirtualHeight_ = height;
         SynchronizeBackbufferSize();
+        MarkBackbufferFullyDirty();
     }
 
     void GdiGraphicsBackend::SetPresentationMode(int mode)
     {
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
         SynchronizeBackbufferSize();
+        MarkBackbufferFullyDirty();
     }
 
     void GdiGraphicsBackend::SetSwapInterval(int /*interval*/)
@@ -442,7 +526,65 @@ namespace CNA::Internal::Backends::Gdi
     {
         return std::make_unique<GdiSpriteBatchBackend>(
             Software::SoftwareGraphicsBackend::CreateSpriteBatch(),
-            [this] { SynchronizeBackbufferSize(); });
+            [this] { SynchronizeBackbufferSize(); },
+            [this](const Rectangle& rectangle) { MarkBackbufferDirty(rectangle); },
+            [this] { MarkBackbufferFullyDirty(); });
+    }
+
+    void GdiGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* target)
+    {
+        Software::SoftwareGraphicsBackend::SetRenderTarget2D(target);
+        renderingToBackbuffer_ = target == nullptr;
+    }
+
+    void GdiGraphicsBackend::MarkBackbufferDirty(const Rectangle& rectangle)
+    {
+        if (!renderingToBackbuffer_ || backbufferFullyDirty_ ||
+            rectangle.Width <= 0 || rectangle.Height <= 0)
+            return;
+
+        const Software::SoftwareFramebuffer& backbuffer = BackbufferFramebuffer();
+        const int left = std::clamp(rectangle.X, 0, backbuffer.width);
+        const int top = std::clamp(rectangle.Y, 0, backbuffer.height);
+        const int right = std::clamp(rectangle.X + rectangle.Width, 0, backbuffer.width);
+        const int bottom = std::clamp(rectangle.Y + rectangle.Height, 0, backbuffer.height);
+        if (right <= left || bottom <= top)
+            return;
+
+        if (!backbufferDirtyValid_)
+        {
+            backbufferDirtyX_ = left;
+            backbufferDirtyY_ = top;
+            backbufferDirtyWidth_ = right - left;
+            backbufferDirtyHeight_ = bottom - top;
+            backbufferDirtyValid_ = true;
+            return;
+        }
+
+        const int unionRight = std::max(backbufferDirtyX_ + backbufferDirtyWidth_, right);
+        const int unionBottom = std::max(backbufferDirtyY_ + backbufferDirtyHeight_, bottom);
+        backbufferDirtyX_ = std::min(backbufferDirtyX_, left);
+        backbufferDirtyY_ = std::min(backbufferDirtyY_, top);
+        backbufferDirtyWidth_ = unionRight - backbufferDirtyX_;
+        backbufferDirtyHeight_ = unionBottom - backbufferDirtyY_;
+    }
+
+    void GdiGraphicsBackend::MarkBackbufferFullyDirty()
+    {
+        if (!renderingToBackbuffer_)
+            return;
+        backbufferFullyDirty_ = true;
+        backbufferDirtyValid_ = true;
+    }
+
+    void GdiGraphicsBackend::ResetBackbufferDamage()
+    {
+        backbufferFullyDirty_ = false;
+        backbufferDirtyValid_ = false;
+        backbufferDirtyX_ = 0;
+        backbufferDirtyY_ = 0;
+        backbufferDirtyWidth_ = 0;
+        backbufferDirtyHeight_ = 0;
     }
 
     std::unique_ptr<IRenderTargetBackend> GdiGraphicsBackend::CreateRenderTarget2D(

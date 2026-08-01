@@ -430,6 +430,19 @@ namespace
                      "letterbox bar must not map to a logical coordinate.");
 
         backend.Present();
+
+        // When CNA_GDI_DIRTY_PRESENTATION=1 is set, this is an eligible 1:1 UI update: the
+        // initial clear/present must be full, then only the new small sprite can be sent to GDI.
+        // The same test deliberately remains valid with the opt-in disabled, where both presents
+        // use the conservative full-frame path.
+        ok &= Expect(SDL_SetWindowSize(window, 16, 8), "SDL_SetWindowSize for dirty present failed.");
+        ok &= Expect(SDL_SyncWindow(window), "SDL_SyncWindow for dirty present failed.");
+        backend.SetPresentationMode(static_cast<int>(CnaPresentationMode::Stretch));
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.Present();
+        Draw(backend, *atlas, Rectangle(7, 3, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        backend.Present();
+        ok &= ExpectPixel("dirty presentation updated sprite", ReadPixel(backend, 7, 3), red);
         return ok;
     }
 } // namespace

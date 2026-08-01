@@ -63,6 +63,21 @@ Only the exact value `halftone` selects GDI's `HALFTONE` stretch mode; absent or
 keeps the nearest-neighbour default. The option has no effect when the backbuffer is already
 presented 1:1.
 
+For retained-mode UI-like workloads, `CNA_GDI_DIRTY_PRESENTATION=1` opts into a conservative
+dirty-rectangle blit. It sends only the union of simple axis-aligned SpriteBatch destinations when
+the output is 1:1. A clear, resize, presentation-mode change, scaling, rotation, non-identity
+SpriteBatch transform or an invalidated Win32 client region automatically falls back to a complete
+frame, so no stale pixels remain. It defaults off; use it only after measuring your actual UI:
+
+```bash
+CNA_GDI_DIRTY_PRESENTATION=1 wine build-gdi/cna_demo_2d.exe
+```
+
+GDI-011 was evaluated but deliberately does **not** use a persistent `DIBSection`: the CPU
+rasterizer already owns the RGBA8 vector, so a DIBSection would add a full backbuffer copy before
+every blit. The measured presentation time is tiny compared with CPU rasterization; the 1:1
+`SetDIBitsToDevice` path avoids scaling without that additional copy.
+
 GDI has no swap interval. An application that prefers best-effort compositor pacing may opt in to
 one `DwmFlush()` after every GDI present:
 

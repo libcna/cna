@@ -48,6 +48,7 @@ namespace CNA::Internal::Backends::Gdi
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(
             int w, int h, int depthFormat, bool preserveContents = false,
             bool mipMap = false, int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* target) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
@@ -98,11 +99,21 @@ namespace CNA::Internal::Backends::Gdi
         void SynchronizeBackbufferSize();
         void GetLogicalSize(int& width, int& height) const;
         bool GetClientSize(int& width, int& height) const;
+        void MarkBackbufferDirty(const Rectangle& rectangle);
+        void MarkBackbufferFullyDirty();
+        void ResetBackbufferDamage();
 
         SDL_Window* window_ = nullptr;
         void* nativeWindow_ = nullptr;
         int requestedVirtualWidth_ = 0;
         int requestedVirtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        bool renderingToBackbuffer_ = true;
+        bool backbufferFullyDirty_ = true;
+        bool backbufferDirtyValid_ = true;
+        int backbufferDirtyX_ = 0;
+        int backbufferDirtyY_ = 0;
+        int backbufferDirtyWidth_ = 0;
+        int backbufferDirtyHeight_ = 0;
     };
 } // namespace CNA::Internal::Backends::Gdi
