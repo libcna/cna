@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
 #include <SDL3/SDL.h>
+#include "include/core/SkBlendMode.h"
 
 #include <memory>
 
@@ -45,6 +46,10 @@ namespace CNA::Internal::Backends::Skia
         void SetRenderTarget2D(IRenderTargetBackend* renderTarget) override;
         void ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels) override;
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
 
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
@@ -80,6 +85,7 @@ namespace CNA::Internal::Backends::Skia
         SDL_Texture* presentTexture_ = nullptr;
         SkiaSurface surface_;
         SkiaSurface* activeSurface_ = &surface_;
+        SkBlendMode spriteBlendMode_ = SkBlendMode::kSrcOver;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int preferredVirtualHeight_ = 0;
     };

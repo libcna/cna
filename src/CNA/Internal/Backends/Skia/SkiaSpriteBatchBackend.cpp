@@ -118,6 +118,7 @@ namespace CNA::Internal::Backends::Skia
             throw std::runtime_error("Skia SpriteBatch has no active raster canvas.");
 
         SkPaint paint;
+        paint.setBlendMode(blendMode_ ? *blendMode_ : SkBlendMode::kSrcOver);
         const SkColor tint = SkColorSetARGB(color.getAProperty(), color.getRProperty(),
                                             color.getGProperty(), color.getBProperty());
         if (tint != SK_ColorWHITE)

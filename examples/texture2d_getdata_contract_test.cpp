@@ -133,6 +133,9 @@ namespace
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "CANVAS";
+#elif defined(CNA_BACKEND_SKIA)
+    constexpr RtContract kRtContract = RtContract::Exact;
+    constexpr const char* kBackendName = "SKIA";
 #else
 #error "REMED-GFX-127: this backend has no declared Texture2D::GetData render-target contract."
 #endif

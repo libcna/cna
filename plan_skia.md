@@ -144,7 +144,7 @@ public CNA API.
 | SKIA-16 | Wire `DeviceResetting`/`DeviceReset` and resource recreation to resize/context-loss events. | ⬜ | Event-order test and rendered texture/target recovery test pass. |
 | SKIA-17 | Add a startup diagnostic/capability report (Skia revision, surface mode, colour type, actual samples, optional anisotropy). | ⬜ | One concise, testable report; never logs private pointers or floods per frame. |
 | SKIA-18 | Add backend-local ownership assertions for active surface, current thread/context, and backend destruction ordering. | ⬜ | Negative tests fail safely rather than corrupting state. |
-| SKIA-19 | Add `cmake/Tests/SkiaTests.cmake` with separate raster, accelerated, and display-required registration helpers. | ⬜ | Tests compile only for `SKIA`; headless tests are not falsely registered as display tests. |
+| SKIA-19 | Add `cmake/Tests/SkiaTests.cmake` with separate raster, accelerated, and display-required registration helpers. | ✅ | `cmake/Tests/SkiaTests.cmake` provides separate helpers and registers five SKIA-only CTests. `Skia_Surface_Raster` runs without a display; the four windowed tests are explicitly labelled `Display` and use `CNA_TEST_DISPLAY`. |
 | SKIA-20 | Verify clean configuration and a full non-Skia compile matrix after the new selection branch exists. | ⬜ | Each currently supported selected backend still configures and builds its CNA target. |
 
 ## Phase S2 — 2D surfaces, images, and Texture2D transfers
@@ -153,8 +153,8 @@ public CNA API.
 |---|---|---|---|
 | SKIA-21 | Define `SkiaSurface` APIs for canvas access, flush/submit, snapshots, normalized RGBA8 readback, and target identity. | ⬜ | Unit tests cover lifetime and all pixel-origin conversions. |
 | SKIA-22 | Implement `SkiaTextureBackend` for immutable/mutable `Texture2D` images and `UpdatePixels`/`UpdatePixelsLevel`. | ✅ | C++23 raster smoke created, drew, and fully updated a `SkiaTextureBackend`; each RGBA8 pixel exactly matched the post-draw `SkiaSurface` readback. Level 0 is implemented; mip uploads reject explicitly pending SKIA-27. |
-| SKIA-23 | Preserve or deliberately synchronize the CPU pixel shadow required by public `Texture2D::GetData`; do not return invented transparent pixels. | ⬜ | Full and partial GetData tests prove updated bytes and failure behavior. |
-| SKIA-24 | Implement exact `SetData` transfer-range/offset/rectangle rules and `SetDataOptions` decision for 2D textures. | ⬜ | Existing backend-agnostic contract tests plus malformed-range tests pass. |
+| SKIA-23 | Preserve or deliberately synchronize the CPU pixel shadow required by public `Texture2D::GetData`; do not return invented transparent pixels. | ✅ | `Skia_Texture2D_GetDataContract` passes 40 checks: full/partial reads, CPU updates, two live textures, target reads, and malformed/disposed requests all preserve the declared contract. |
+| SKIA-24 | Implement exact `SetData` transfer-range/offset/rectangle rules and `SetDataOptions` decision for 2D textures. | ✅ | `Skia_Texture2D_GetDataTransferRange` passes 70 checks for full/rectangle reads, destination offsets, excess/undersized capacity, overflow, and the explicit mip-construction rejection policy. |
 | SKIA-25 | Establish the texture `SurfaceFormat` matrix against CNA's current public validation; map supported format/alpha/color-space storage without widening API claims accidentally. | ⬜ | Each accepted format round-trips and each unsupported format throws at the same layer as other backends. |
 | SKIA-26 | Implement NPOT images, one-pixel textures, and large-but-valid dimensions with device-limit validation. | ⬜ | NPOT/pixel-edge tests and precise oversized-texture exception. |
 | SKIA-27 | Implement or explicitly reject 2D mip-chain allocation, upload, sampling, and generation after a Skia API/device probe. | ⬜ | Mip-level round-trip and visual minification test, or documented `NotSupportedException` before any data is accepted. |

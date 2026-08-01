@@ -119,18 +119,20 @@ namespace
     };
 
     /**
-     * @brief Whether this backend can store a mip level above 0 at all.
+     * @brief The exact policy used when an application requests a 2D mip chain.
      *
      * Declared, not probed, for the same reason as RtContract: three backends document that their
      * 2D texture API has no mip chain (SDL_Renderer, the ASCII backend that wraps it, and DX3's
-     * IDirectDrawSurface), and Canvas the same. On those, `SetData(level=1, ...)` must raise that
-     * documented rejection -- which this file ASSERTS rather than stepping around, so a backend
-     * that later gains mip storage fails here and forces this declaration to be updated.
+     * IDirectDrawSurface), and Canvas the same. Most still create a mipmapped resource and reject
+     * `SetData(level=1, ...)`; SKIA instead rejects the mipmapped resource at construction, before
+     * it accepts any data. Both are honest policies, but their observable public contracts differ
+     * and must not be conflated by a test that accidentally terminates before it can report either.
      */
-    enum class MipUpload
+    enum class MipPolicy
     {
         Supported,
-        Unsupported,
+        RejectUpload,
+        RejectConstruction,
     };
 
 #if defined(CNA_BACKEND_HEADLESS)
@@ -138,59 +140,63 @@ namespace
     // content it could honestly return (REMED-GFX-127 / REMED-GFX-162).
     constexpr RtContract kRtContract = RtContract::Unsupported;
     constexpr const char* kBackendName = "HEADLESS";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_SOFTWARE)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "SOFTWARE";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "EASYGL";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_BGFX)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "BGFX";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_VULKAN)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "VULKAN";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_WEBGPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "WEBGPU";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_SDL_GPU)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "SDL_GPU";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "SDL_RENDERER";
-    constexpr MipUpload kMipUpload = MipUpload::Unsupported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
 #elif defined(CNA_BACKEND_ASCII)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "ASCII";
-    constexpr MipUpload kMipUpload = MipUpload::Unsupported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
 #elif defined(CNA_BACKEND_FREEDIRECT)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "FREEDIRECT";
-    constexpr MipUpload kMipUpload = MipUpload::Unsupported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
 #elif defined(CNA_BACKEND_D3D9)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "D3D9";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_D3D11)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "D3D11";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_D3D12)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "D3D12";
-    constexpr MipUpload kMipUpload = MipUpload::Supported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #elif defined(CNA_BACKEND_CANVAS)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "CANVAS";
-    constexpr MipUpload kMipUpload = MipUpload::Unsupported;
+    constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
+#elif defined(CNA_BACKEND_SKIA)
+    constexpr RtContract kRtContract = RtContract::Exact;
+    constexpr const char* kBackendName = "SKIA";
+    constexpr MipPolicy kMipPolicy = MipPolicy::RejectConstruction;
 #else
 #error "REMED-GFX-149: this backend has no declared Texture2D::GetData render-target contract."
 #endif
@@ -780,6 +786,18 @@ class Texture2DGetDataTransferRangeTest : public Game
         //      is rejected by the backends that validate it (WebGPU, bgfx) and is not what this
         //      check is about.
         {
+            if (kMipPolicy == MipPolicy::RejectConstruction)
+            {
+                const Outcome creation = Attempt([&] {
+                    Texture2D rejectedMipTexture(dev, kTexW, kTexH, true, SurfaceFormat::Color);
+                    (void)rejectedMipTexture;
+                });
+                check(creation.threw,
+                      "R12 this backend rejects mipmapped Texture2D construction before accepting data" +
+                          (creation.threw ? " (" + creation.what + ")"
+                                           : std::string(" -- but construction SUCCEEDED")));
+                return;
+            }
             Texture2D mipTex(dev, kTexW, kTexH, true, SurfaceFormat::Color);
             mipTex.SetData(0, nullptr, pattern.data(), 0, kTexN);
 
@@ -792,7 +810,7 @@ class Texture2DGetDataTransferRangeTest : public Game
             const Outcome upload = Attempt([&] {
                 mipTex.SetData(1, nullptr, mip.data(), 0, static_cast<int>(mip.size()));
             });
-            if (kMipUpload == MipUpload::Unsupported)
+            if (kMipPolicy == MipPolicy::RejectUpload)
             {
                 // Pinned, not skipped: this backend's 2D texture API documents that it has no mip
                 // chain, so the level-1 upload must raise that rejection. If it ever succeeds, this
@@ -1036,10 +1054,11 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         ResetState(dev);
 
-        std::printf("backend=%s declaredRenderTargetReadback=%s declaredMipUpload=%s "
+        std::printf("backend=%s declaredRenderTargetReadback=%s declaredMipPolicy=%s "
                     "texture=%dx%d renderTarget=%dx%d\n",
                     kBackendName, kRtContract == RtContract::Exact ? "exact" : "unsupported",
-                    kMipUpload == MipUpload::Supported ? "supported" : "unsupported",
+                    kMipPolicy == MipPolicy::Supported ? "supported"
+                        : (kMipPolicy == MipPolicy::RejectConstruction ? "reject-construction" : "reject-upload"),
                     kTexW, kTexH, kRtW, kRtH);
 
         SectionT(dev);

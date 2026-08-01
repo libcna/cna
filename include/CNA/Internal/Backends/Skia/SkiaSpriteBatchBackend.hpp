@@ -3,13 +3,16 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
 
+#include "include/core/SkBlendMode.h"
+
 namespace CNA::Internal::Backends::Skia
 {
     /** Immediate SkCanvas implementation of the level-0 SpriteBatch path. */
     class SkiaSpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:
-        explicit SkiaSpriteBatchBackend(SkiaSurface*& activeSurface) : activeSurface_(&activeSurface) {}
+        SkiaSpriteBatchBackend(SkiaSurface*& activeSurface, const SkBlendMode& blendMode)
+            : activeSurface_(&activeSurface), blendMode_(&blendMode) {}
 
         void Begin() override;
         void End() override;
@@ -27,6 +30,7 @@ namespace CNA::Internal::Backends::Skia
 
     private:
         SkiaSurface** activeSurface_ = nullptr;
+        const SkBlendMode* blendMode_ = nullptr;
         bool begun_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
         int textureFilter_ = 0;

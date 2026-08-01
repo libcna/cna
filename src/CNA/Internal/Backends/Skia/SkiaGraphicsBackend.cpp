@@ -173,7 +173,7 @@ namespace CNA::Internal::Backends::Skia
 
     std::unique_ptr<ISpriteBatchBackend> SkiaGraphicsBackend::CreateSpriteBatch()
     {
-        return std::make_unique<SkiaSpriteBatchBackend>(activeSurface_);
+        return std::make_unique<SkiaSpriteBatchBackend>(activeSurface_, spriteBlendMode_);
     }
 
     std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(
@@ -228,6 +228,53 @@ namespace CNA::Internal::Backends::Skia
         if (renderTargets[0].IsRenderTargetCubeFace())
             throw std::runtime_error("Skia raster backend does not implement RenderTargetCube faces.");
         SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+    }
+
+    void SkiaGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                               int colorDstBlend, int alphaDstBlend,
+                                               int colorBlendFunc, int alphaBlendFunc,
+                                               const BlendWriteState& writeState)
+    {
+        // SkCanvas supports one compositing mode per paint. Map only the standard XNA formulas
+        // whose premultiplied Skia counterpart is exact; other factor/function combinations are
+        // deliberately rejected until SKIA-51--57 establish an equivalent path.
+        constexpr int kBlendOne = 0;
+        constexpr int kBlendZero = 1;
+        constexpr int kBlendSourceAlpha = 4;
+        constexpr int kBlendInverseSourceAlpha = 5;
+        constexpr int kBlendFunctionAdd = 0;
+        constexpr int kColorWriteAll = 15;
+
+        for (int mask : writeState.colorWriteChannels)
+        {
+            if (mask != kColorWriteAll)
+                throw std::runtime_error("Skia raster backend does not implement ColorWriteChannels masks yet.");
+        }
+        if (writeState.multiSampleMask != ~0u)
+            throw std::runtime_error("Skia raster backend does not implement non-default MultiSampleMask values.");
+        if (colorBlendFunc != kBlendFunctionAdd || alphaBlendFunc != kBlendFunctionAdd)
+            throw std::runtime_error("Skia raster backend does not implement non-additive BlendState functions yet.");
+
+        const bool opaque = colorSrcBlend == kBlendOne && alphaSrcBlend == kBlendOne
+            && colorDstBlend == kBlendZero && alphaDstBlend == kBlendZero;
+        const bool alphaBlend = colorSrcBlend == kBlendOne && alphaSrcBlend == kBlendOne
+            && colorDstBlend == kBlendInverseSourceAlpha && alphaDstBlend == kBlendInverseSourceAlpha;
+        const bool nonPremultiplied = colorSrcBlend == kBlendSourceAlpha && alphaSrcBlend == kBlendSourceAlpha
+            && colorDstBlend == kBlendInverseSourceAlpha && alphaDstBlend == kBlendInverseSourceAlpha;
+
+        if (opaque)
+        {
+            spriteBlendMode_ = SkBlendMode::kSrc;
+            return;
+        }
+        if (alphaBlend || nonPremultiplied)
+        {
+            // Skia normalizes an unpremultiplied image to its native premultiplied pipeline before
+            // applying SourceOver, so this expresses both XNA alpha presets at the canvas boundary.
+            spriteBlendMode_ = SkBlendMode::kSrcOver;
+            return;
+        }
+        throw std::runtime_error("Skia raster backend does not implement this BlendState yet.");
     }
 
     bool SkiaGraphicsBackend::SupportsCapability(CNA::GraphicsCapability) const
