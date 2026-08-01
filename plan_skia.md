@@ -160,7 +160,7 @@ public CNA API.
 | SKIA-27 | Implement or explicitly reject 2D mip-chain allocation, upload, sampling, and generation after a Skia API/device probe. | ⬜ | Mip-level round-trip and visual minification test, or documented `NotSupportedException` before any data is accepted. |
 | SKIA-28 | Implement texture recreation after device/context loss from CPU shadows, including all stored mip levels. | ⬜ | Context-loss test shows correct post-recovery pixels and no stale Skia handle. |
 | SKIA-29 | Implement Texture2D disposal/double-disposal/bound-resource safeguards. | ⬜ | Existing disposed-resource, move-semantics, and leak tests pass under ASan/LSan. |
-| SKIA-30 | Add direct tests for RGBA premultiplication, unpremultiplication, colour-space conversion, and row stride at the CNA–Skia boundary. | ⬜ | Hand-authored semi-transparent pixels match exact expected channels. |
+| SKIA-30 | Add direct tests for RGBA premultiplication, unpremultiplication, colour-space conversion, and row stride at the CNA–Skia boundary. | ✅ | Headless `Skia_Texture_AlphaBoundary` checks exact semi-transparent compositing for both declared source-alpha conventions and verifies an RGBA8 strided upload ignores row padding in public readback. |
 
 ## Phase S3 — SpriteBatch and SpriteFont baseline
 

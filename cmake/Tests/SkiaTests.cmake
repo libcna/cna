@@ -42,6 +42,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_include_directories(cna_test_skia_surface_raster PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_raster_test(Skia_Surface_Raster cna_test_skia_surface_raster)
 
+    cna_skia_test(cna_test_skia_texture_alpha_boundary examples/skia_texture_alpha_boundary_test.cpp)
+    target_include_directories(cna_test_skia_texture_alpha_boundary PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_Texture_AlphaBoundary cna_test_skia_texture_alpha_boundary)
+
     cna_skia_test(cna_test_skia_graphics_capability examples/skia_graphics_capability_test.cpp)
     cna_register_skia_display_test(Skia_GraphicsCapability cna_test_skia_graphics_capability)
 
