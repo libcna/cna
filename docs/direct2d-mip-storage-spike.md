@@ -7,10 +7,11 @@ application drawing API.
 ## Proven level-0 path
 
 `Direct2D_2DParity` already renders into a level-0 `RenderTarget2D`, unbinds it, samples it through
-`SpriteBatch`, and reads it through the normal public CPU-readback route on native Direct2D. The
-Wine run keeps the rendering/sample part and skips only `CopyFromRenderTarget`, which WineD3D
-returns as `E_NOTIMPL`. That makes the existing bitmap/target/readback lifetime a suitable level-0
-foundation; mips must extend it rather than replace it.
+`SpriteBatch`, and reads it through the normal public CPU-readback route. Native Direct2D uses
+`CopyFromRenderTarget`; WineD3D returns `E_NOTIMPL` there but implements `CopyFromBitmap`, so the
+backend falls back to that current-target bitmap route before mapping the CPU-readable bitmap. That
+makes the existing bitmap/target/readback lifetime a suitable level-0 foundation; mips must extend
+it rather than replace it.
 
 ## Chosen storage model
 
@@ -42,6 +43,6 @@ conversion as level-zero readback.
 - The same image-brush/effect path used for decorated render-target sprites will consume the
   selected per-level `ID2D1Bitmap1`; it remains a Direct2D effect graph, never a D3D11 compositor.
 
-`Direct2D_2DParity` now covers level 0/1/2 RenderTarget2D sampling after unbind and, on native
-Windows Direct2D, exact `GetData` of generated lower levels. WineD3D continues to skip only the
-CPU `CopyFromRenderTarget` checks because it reports `E_NOTIMPL` for that API.
+`Direct2D_2DParity` covers level 0/1/2 RenderTarget2D sampling after unbind and exact `GetData` of
+generated lower levels. The `CopyFromBitmap` fallback keeps those readback checks active under
+WineD3D too.

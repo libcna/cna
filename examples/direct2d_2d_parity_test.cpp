@@ -95,11 +95,6 @@ protected:
         done_ = true;
         auto& device = getGraphicsDeviceProperty();
         bool passed = true;
-        // Wine's Direct2D implementation renders this test correctly but leaves
-        // ID2D1Bitmap::CopyFromRenderTarget as E_NOTIMPL.  Native Windows keeps both probes
-        // enabled; the cross-Wine CTest deliberately retains the rest of this public 2D matrix.
-        const bool verifyCpuRenderTargetReadback =
-            std::getenv("CNA_DIRECT2D_SKIP_CPU_RENDER_TARGET_READBACK") == nullptr;
         // WineD3D also does not register Direct2D's built-in ColorMatrix effect.  The native
         // Windows test retains this full GPU-only RT decoration matrix.
         const bool verifyRenderTargetDecoration =
@@ -152,45 +147,39 @@ protected:
         sprites_->End();
 
         const Rectangle targetRegion(1, 1, 1, 1);
-        if (verifyCpuRenderTargetReadback)
-        {
-            // While a 2D target is active, the public readback must observe that target rather
-            // than the stale swap chain. This is a second route through the same Direct2D CPU
-            // bitmap path and specifically covers D2D-3's active-target semantics.
-            Color activeTargetPixel(0, 0, 0, 0);
-            device.GetBackBufferData(&targetRegion, &activeTargetPixel, 0, 1);
-            const bool activeReadbackMatches = Matches(activeTargetPixel, Color(255, 0, 0, 255));
-            std::printf("[%s] active RenderTarget2D GetBackBufferData: got=(%d,%d,%d,%d), expected red\n",
-                        activeReadbackMatches ? "PASS" : "FAIL",
-                        activeTargetPixel.getRProperty(), activeTargetPixel.getGProperty(),
-                        activeTargetPixel.getBProperty(), activeTargetPixel.getAProperty());
-            passed = passed && activeReadbackMatches;
-        }
-        else
-        {
-            std::printf("[SKIP] active RenderTarget2D CPU readback (Wine Direct2D lacks CopyFromRenderTarget)\n");
-        }
+        // While a 2D target is active, the public readback must observe that target rather
+        // than the stale swap chain. This is a second route through the same Direct2D CPU
+        // bitmap path and specifically covers D2D-3's active-target semantics.
+        Color activeTargetPixel(0, 0, 0, 0);
+        device.GetBackBufferData(&targetRegion, &activeTargetPixel, 0, 1);
+        const bool activeReadbackMatches = Matches(activeTargetPixel, Color(255, 0, 0, 255));
+        std::printf("[%s] active RenderTarget2D GetBackBufferData: got=(%d,%d,%d,%d), expected red\n",
+                    activeReadbackMatches ? "PASS" : "FAIL",
+                    activeTargetPixel.getRProperty(), activeTargetPixel.getGProperty(),
+                    activeTargetPixel.getBProperty(), activeTargetPixel.getAProperty());
+        passed = passed && activeReadbackMatches;
 
         device.SetRenderTarget(nullptr);
 
         // RenderTarget2D has no CPU shadow. This must exercise Direct2DRenderTargetBackend's
-        // CopyFromRenderTarget -> CPU_READ bitmap -> Map path rather than the ordinary Texture2D
-        // shadow-data path.
-        if (verifyCpuRenderTargetReadback)
-        {
-            Color targetPixel(0, 0, 0, 0);
-            target.GetData(0, &targetRegion, &targetPixel, 0, 1);
-            const bool targetReadbackMatches = Matches(targetPixel, Color(255, 0, 0, 255));
-            std::printf("[%s] RenderTarget2D direct GetData: got=(%d,%d,%d,%d), expected red\n",
-                        targetReadbackMatches ? "PASS" : "FAIL",
-                        targetPixel.getRProperty(), targetPixel.getGProperty(),
-                        targetPixel.getBProperty(), targetPixel.getAProperty());
-            passed = passed && targetReadbackMatches;
-        }
-        else
-        {
-            std::printf("[SKIP] RenderTarget2D direct GetData (Wine Direct2D lacks CopyFromRenderTarget)\n");
-        }
+        // CopyFromRenderTarget/CopyFromBitmap -> CPU_READ bitmap -> Map path rather than the
+        // ordinary Texture2D shadow-data path.
+        Color targetPixel(0, 0, 0, 0);
+        target.GetData(0, &targetRegion, &targetPixel, 0, 1);
+        const bool targetReadbackMatches = Matches(targetPixel, Color(255, 0, 0, 255));
+        std::printf("[%s] RenderTarget2D direct GetData: got=(%d,%d,%d,%d), expected red\n",
+                    targetReadbackMatches ? "PASS" : "FAIL",
+                    targetPixel.getRProperty(), targetPixel.getGProperty(),
+                    targetPixel.getBProperty(), targetPixel.getAProperty());
+        passed = passed && targetReadbackMatches;
+        std::vector<Color> fullTargetPixels(8 * 8, Color::Transparent);
+        target.GetData(fullTargetPixels.data(), 0, static_cast<int>(fullTargetPixels.size()));
+        const bool fullTargetReadbackMatches =
+            Matches(fullTargetPixels[1 + 1 * 8], Color(255, 0, 0, 255)) &&
+            Matches(fullTargetPixels[7 + 7 * 8], Color(0, 0, 255, 255));
+        std::printf("[%s] RenderTarget2D full GetData retains red marker and blue background\n",
+                    fullTargetReadbackMatches ? "PASS" : "FAIL");
+        passed = passed && fullTargetReadbackMatches;
 
         device.Clear(Color::Black);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
@@ -295,6 +284,14 @@ protected:
         linearMirror.setFilterProperty(TextureFilter::Linear);
         linearMirror.setAddressUProperty(TextureAddressMode::Mirror);
         linearMirror.setAddressVProperty(TextureAddressMode::Clamp);
+        SamplerState linearWrapRows;
+        linearWrapRows.setFilterProperty(TextureFilter::Linear);
+        linearWrapRows.setAddressUProperty(TextureAddressMode::Clamp);
+        linearWrapRows.setAddressVProperty(TextureAddressMode::Wrap);
+        SamplerState linearMirrorRows;
+        linearMirrorRows.setFilterProperty(TextureFilter::Linear);
+        linearMirrorRows.setAddressUProperty(TextureAddressMode::Clamp);
+        linearMirrorRows.setAddressVProperty(TextureAddressMode::Mirror);
 
         RenderTarget2D samplerRowsTarget(device, 1, 2);
         device.SetRenderTarget(&samplerRowsTarget);
@@ -322,10 +319,22 @@ protected:
                            0.0f, Vector2::Zero, effects, 0.0f);
             sprites_->End();
         };
-        const auto drawOutsideLinear = [&](SamplerState& sampler, int y) {
+        const auto drawOutsideLinear = [&](SamplerState& sampler, int y,
+                                           SpriteEffects effects = SpriteEffects::None) {
             sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
-            sprites_->Draw(*twoTexels_, Rectangle(0, y, 16, 1), Rectangle(-1, 0, 4, 1), Color::White);
-            sprites_->Draw(samplerTarget, Rectangle(16, y, 16, 1), Rectangle(-1, 0, 4, 1), Color::White);
+            sprites_->Draw(*twoTexels_, Rectangle(0, y, 16, 1), Rectangle(-1, 0, 4, 1), Color::White,
+                           0.0f, Vector2::Zero, effects, 0.0f);
+            sprites_->Draw(samplerTarget, Rectangle(16, y, 16, 1), Rectangle(-1, 0, 4, 1), Color::White,
+                           0.0f, Vector2::Zero, effects, 0.0f);
+            sprites_->End();
+        };
+        const auto drawOutsideLinearRows = [&](SamplerState& sampler, int y,
+                                               SpriteEffects effects = SpriteEffects::None) {
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &sampler, nullptr, nullptr);
+            sprites_->Draw(*twoRows_, Rectangle(32, y, 1, 8), Rectangle(0, -1, 1, 4), Color::White,
+                           0.0f, Vector2::Zero, effects, 0.0f);
+            sprites_->Draw(samplerRowsTarget, Rectangle(40, y, 1, 8), Rectangle(0, -1, 1, 4), Color::White,
+                           0.0f, Vector2::Zero, effects, 0.0f);
             sprites_->End();
         };
         device.Clear(Color::Black);
@@ -408,6 +417,51 @@ protected:
         std::printf("[%s] Linear sampler produces an interpolated Wrap sample\n",
                     interpolationObserved ? "PASS" : "FAIL");
         passed = passed && interpolationObserved;
+        // The same parity matrix through the V coordinate. Draw it after the point-source probes
+        // above have been read, because it intentionally reuses their narrow right-side columns.
+        drawOutsideLinearRows(linearClamp, 0);
+        drawOutsideLinearRows(linearWrapRows, 8);
+        drawOutsideLinearRows(linearMirrorRows, 16);
+        const auto checkLinearVerticalParity = [&](const char* mode, int y, int sampleY) {
+            Color ordinary(0, 0, 0, 0);
+            Color target(0, 0, 0, 0);
+            const Rectangle ordinaryRegion(32, y + sampleY, 1, 1);
+            const Rectangle targetRegion(40, y + sampleY, 1, 1);
+            device.GetBackBufferData(&ordinaryRegion, &ordinary, 0, 1);
+            device.GetBackBufferData(&targetRegion, &target, 0, 1);
+            const bool same = Matches(ordinary, target);
+            std::printf("[%s] Linear vertical %s Texture2D/RenderTarget2D parity y=%d: ordinary=(%d,%d,%d,%d), target=(%d,%d,%d,%d)\n",
+                        same ? "PASS" : "FAIL", mode, y + sampleY,
+                        ordinary.getRProperty(), ordinary.getGProperty(), ordinary.getBProperty(), ordinary.getAProperty(),
+                        target.getRProperty(), target.getGProperty(), target.getBProperty(), target.getAProperty());
+            passed = passed && same;
+        };
+        for (int sampleY : {1, 3, 5, 7})
+        {
+            checkLinearVerticalParity("Clamp", 0, sampleY);
+            checkLinearVerticalParity("Wrap", 8, sampleY);
+            checkLinearVerticalParity("Mirror", 16, sampleY);
+        }
+        // Source-origin correction must happen before the brush reflection. Exercise that rule
+        // with the interpolation path too, after all non-flipped samples have been observed.
+        drawOutsideLinear(linearClamp, 0, SpriteEffects::FlipHorizontally);
+        drawOutsideLinear(linearWrap, 1, SpriteEffects::FlipHorizontally);
+        drawOutsideLinear(linearMirror, 2, SpriteEffects::FlipHorizontally);
+        for (int x : {1, 3, 5, 7, 9, 11, 13, 15})
+        {
+            checkLinearParity("Clamp FlipH", 0, x);
+            checkLinearParity("Wrap FlipH", 1, x);
+            checkLinearParity("Mirror FlipH", 2, x);
+        }
+        drawOutsideLinearRows(linearClamp, 0, SpriteEffects::FlipVertically);
+        drawOutsideLinearRows(linearWrapRows, 8, SpriteEffects::FlipVertically);
+        drawOutsideLinearRows(linearMirrorRows, 16, SpriteEffects::FlipVertically);
+        for (int sampleY : {1, 3, 5, 7})
+        {
+            checkLinearVerticalParity("Clamp FlipV", 0, sampleY);
+            checkLinearVerticalParity("Wrap FlipV", 8, sampleY);
+            checkLinearVerticalParity("Mirror FlipV", 16, sampleY);
+        }
 
         // 7. A recorded scissor rectangle must only affect SpriteBatch once RasterizerState
         // explicitly enables its test. Clear deliberately ignores it, so both branches begin
@@ -494,6 +548,8 @@ protected:
             device, 1, 1, std::vector<uint8_t>{255, 0, 0, 128});
         const Color blendBackground(20, 40, 80, 255);
         const Color halfRedOverBackground(138, 20, 40, 255);
+        const Color halfAlphaTint(255, 255, 255, 128);
+        const Color quarterRedOverBackground(79, 30, 60, 255);
 
         device.Clear(blendBackground);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
@@ -503,6 +559,17 @@ protected:
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied, &point, nullptr, &scissorDisabled);
         sprites_->Draw(straightHalfRed, Rectangle(8, 0, 4, 4),
                        Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        // Color.A has to attenuate both the premultiplied RGB value and alpha for source-over
+        // and Plus. It must still attenuate the copied alpha for Opaque while leaving that
+        // preset's RGB source factor equal to one.
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(premultipliedHalfRed, Rectangle(0, 4, 4, 4),
+                       Rectangle(0, 0, 1, 1), halfAlphaTint);
+        sprites_->End();
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(straightHalfRed, Rectangle(8, 4, 4, 4),
+                       Rectangle(0, 0, 1, 1), halfAlphaTint);
         sprites_->End();
         if (verifyAdvancedBlend)
         {
@@ -514,13 +581,25 @@ protected:
             sprites_->Draw(premultipliedHalfRed, Rectangle(24, 0, 4, 4),
                            Rectangle(0, 0, 1, 1), Color::White);
             sprites_->End();
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Additive, &point, nullptr, &scissorDisabled);
+            sprites_->Draw(premultipliedHalfRed, Rectangle(16, 4, 4, 4),
+                           Rectangle(0, 0, 1, 1), halfAlphaTint);
+            sprites_->End();
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+            sprites_->Draw(premultipliedHalfRed, Rectangle(24, 4, 4, 4),
+                           Rectangle(0, 0, 1, 1), halfAlphaTint);
+            sprites_->End();
         }
         check("AlphaBlend premultiplied texture", 1, 1, halfRedOverBackground);
         check("NonPremultiplied straight texture", 9, 1, halfRedOverBackground);
+        check("AlphaBlend texture Color.A", 1, 5, quarterRedOverBackground);
+        check("NonPremultiplied texture Color.A", 9, 5, quarterRedOverBackground);
         if (verifyAdvancedBlend)
         {
             check("Additive premultiplied texture", 17, 1, Color(148, 40, 80, 255));
             check("Opaque copies premultiplied source", 25, 1, Color(128, 0, 0, 128));
+            check("Additive texture Color.A", 17, 5, Color(84, 40, 80, 255));
+            check("Opaque texture Color.A", 25, 5, Color(128, 0, 0, 64));
         }
         else
         {
@@ -540,6 +619,57 @@ protected:
         sprites_->Draw(blendTarget, Rectangle(32, 0, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
         sprites_->End();
         check("AlphaBlend RenderTarget2D destination", 33, 1, halfRedOverBackground);
+
+        // A render target has no CPU shadow, so this exercises the image-brush path as a blend
+        // source. Write the same premultiplied (128,0,0,128) source as the texture above through
+        // AlphaBlend over transparency; Clear's ColorF input is straight-alpha instead.
+        RenderTarget2D blendSourceTarget(device, 1, 1);
+        device.SetRenderTarget(&blendSourceTarget);
+        device.Clear(Color::Transparent);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(premultipliedHalfRed, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        device.SetRenderTarget(nullptr);
+        device.Clear(blendBackground);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(blendSourceTarget, Rectangle(0, 4, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("AlphaBlend RenderTarget2D source", 1, 5, halfRedOverBackground);
+        if (verifyAdvancedBlend)
+        {
+            device.Clear(blendBackground);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Additive, &point, nullptr, &scissorDisabled);
+            sprites_->Draw(blendSourceTarget, Rectangle(0, 4, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+            sprites_->End();
+            check("Additive RenderTarget2D source", 1, 5, Color(148, 40, 80, 255));
+
+            device.Clear(blendBackground);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+            sprites_->Draw(blendSourceTarget, Rectangle(0, 4, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+            sprites_->End();
+            check("Opaque RenderTarget2D source", 1, 5, Color(128, 0, 0, 128));
+        }
+        if (verifyRenderTargetDecoration)
+        {
+            device.Clear(blendBackground);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &point, nullptr, &scissorDisabled);
+            sprites_->Draw(blendSourceTarget, Rectangle(0, 4, 4, 4), Rectangle(0, 0, 1, 1), halfAlphaTint);
+            sprites_->End();
+            check("AlphaBlend RenderTarget2D source Color.A", 1, 5, quarterRedOverBackground);
+
+            // NonPremultiplied declares its RT input to be straight-alpha data. Its stored
+            // premultiplied red is therefore premultiplied once more before source-over.
+            device.Clear(blendBackground);
+            sprites_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied, &point, nullptr,
+                            &scissorDisabled);
+            sprites_->Draw(blendSourceTarget, Rectangle(0, 4, 4, 4), Rectangle(0, 0, 1, 1), halfAlphaTint);
+            sprites_->End();
+            check("NonPremultiplied RenderTarget2D source Color.A", 1, 5, Color(47, 30, 60, 255));
+        }
+        else
+        {
+            std::printf("[SKIP] RenderTarget2D source Color.A/NonPremultiplied (Wine Direct2D lacks ColorMatrix)\n");
+        }
 
         // 10. A mipmapped Texture2D owns one Direct2D bitmap per initialized level. SpriteBatch
         // chooses the nearest populated level during minification, rather than sampling an
@@ -570,22 +700,16 @@ protected:
         device.SetRenderTarget(&mipRenderTarget);
         device.Clear(renderTargetMipColor);
         device.SetRenderTarget(nullptr);
-        if (verifyCpuRenderTargetReadback)
-        {
-            Color mipLevelOne(0, 0, 0, 0);
-            Color mipLevelTwo(0, 0, 0, 0);
-            mipRenderTarget.GetData(1, nullptr, &mipLevelOne, 0, 1);
-            mipRenderTarget.GetData(2, nullptr, &mipLevelTwo, 0, 1);
-            const bool mipOneMatches = Matches(mipLevelOne, renderTargetMipColor);
-            const bool mipTwoMatches = Matches(mipLevelTwo, renderTargetMipColor);
-            std::printf("[%s] RenderTarget2D mip GetData level 1\n", mipOneMatches ? "PASS" : "FAIL");
-            std::printf("[%s] RenderTarget2D mip GetData level 2\n", mipTwoMatches ? "PASS" : "FAIL");
-            passed = passed && mipOneMatches && mipTwoMatches;
-        }
-        else
-        {
-            std::printf("[SKIP] RenderTarget2D mip GetData (Wine Direct2D lacks CopyFromRenderTarget)\n");
-        }
+        Color mipLevelOne(0, 0, 0, 0);
+        Color mipLevelTwo(0, 0, 0, 0);
+        const Rectangle oneMipTexel(0, 0, 1, 1);
+        mipRenderTarget.GetData(1, &oneMipTexel, &mipLevelOne, 0, 1);
+        mipRenderTarget.GetData(2, &oneMipTexel, &mipLevelTwo, 0, 1);
+        const bool mipOneMatches = Matches(mipLevelOne, renderTargetMipColor);
+        const bool mipTwoMatches = Matches(mipLevelTwo, renderTargetMipColor);
+        std::printf("[%s] RenderTarget2D mip GetData level 1\n", mipOneMatches ? "PASS" : "FAIL");
+        std::printf("[%s] RenderTarget2D mip GetData level 2\n", mipTwoMatches ? "PASS" : "FAIL");
+        passed = passed && mipOneMatches && mipTwoMatches;
         device.Clear(Color::Black);
         sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
         sprites_->Draw(mipRenderTarget, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
@@ -664,7 +788,40 @@ protected:
         check("Context recovery new Texture2D", 1, 1, Color(40, 180, 90, 255));
         device.SetContextRecoveryEnabled(true);
 
-        // 13. GraphicsCapability currently contains only optional 3D-pipeline facilities. The
+        // 13. Resize through the public GraphicsDeviceManager path. Direct2D has to recreate
+        // its DXGI target lazily for the newly sized SDL client area, then keep the logical
+        // NativeBackBuffer viewport/readback contract coherent for subsequent SpriteBatch work.
+        manager_->setPreferredBackBufferWidthProperty(40);
+        manager_->setPreferredBackBufferHeightProperty(24);
+        manager_->ApplyChanges();
+        const bool resizedPresentationParameters =
+            device.getPresentationParametersProperty().getBackBufferWidthProperty() == 40 &&
+            device.getPresentationParametersProperty().getBackBufferHeightProperty() == 24;
+        const bool resizedViewport = device.getViewportProperty().getWidthProperty() == 40 &&
+            device.getViewportProperty().getHeightProperty() == 24;
+        std::printf("[%s] Direct2D resize updates presentation parameters to 40x24\n",
+                    resizedPresentationParameters ? "PASS" : "FAIL");
+        std::printf("[%s] Direct2D resize updates NativeBackBuffer viewport to 40x24\n",
+                    resizedViewport ? "PASS" : "FAIL");
+        passed = passed && resizedPresentationParameters && resizedViewport;
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D resize draws on recreated swap chain", 1, 1, Color::White);
+        check("Direct2D resize preserves resized bounds", 4, 1, Color::Black);
+
+        // 14. Direct2D primitive antialiasing is not a requested sample-count pipeline. The
+        // backend deliberately clamps both the swap chain and every 2D render target to zero
+        // samples instead of quietly introducing a D3D11 multisample resolve pass.
+        RenderTarget2D requestedMsaaTarget(device, 4, 4, false, SurfaceFormat::Color,
+                                           DepthFormat::None, 4);
+        const bool msaaTargetCorrectlyRejected = requestedMsaaTarget.getMultiSampleCountProperty() == 0;
+        std::printf("[%s] Direct2D RenderTarget2D clamps requested 4x MSAA to 0\n",
+                    msaaTargetCorrectlyRejected ? "PASS" : "FAIL");
+        passed = passed && msaaTargetCorrectlyRejected;
+
+        // GraphicsCapability currently contains only optional 3D-pipeline facilities. The
         // Direct2D backend must report none of them: owning D3D11/DXGI presentation resources
         // does not turn this deliberately 2D-only backend into a second D3D11 renderer.
         constexpr std::array unsupportedCapabilities{
@@ -686,7 +843,7 @@ protected:
             passed = passed && correctlyRejected;
         }
 
-        // 14. Unsupported output-mask and blend-factor state must fail explicitly instead of
+        // 15. Unsupported output-mask and blend-factor state must fail explicitly instead of
         // silently rendering an approximation. Standard SpriteBatch presets above still use the
         // all-channel/all-sample defaults and therefore remain valid.
         const auto expectNamedBlendRejection = [&](const char* label, const auto& action) {

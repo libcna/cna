@@ -36,12 +36,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DIRECT2D")
     if(CMAKE_CROSSCOMPILING)
         set(_direct2d_2d_parity_command ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh
             $<TARGET_FILE:cna_test_direct2d_2d_parity>)
-        # WineD3D's d2d1.dll implements the render path but reports E_NOTIMPL for
-        # ID2D1Bitmap::CopyFromRenderTarget, does not register ColorMatrix, and ignores PLUS/
-        # SOURCE_COPY DrawImage composite modes. Keep all ordinary render/sampling probes active
-        # here and reserve those native Direct2D-specific matrices for the Windows runtime.
+        # WineD3D's d2d1.dll implements the render/readback path through CopyFromBitmap fallback,
+        # but does not register ColorMatrix and ignores PLUS/SOURCE_COPY DrawImage composite modes.
+        # Keep the public RT-readback matrix active and reserve only those two native Direct2D-
+        # specific matrices for the Windows runtime.
         set(_direct2d_2d_parity_environment
-            "CNA_D3D11_SKIP_DXVK_GATE=1;CNA_DIRECT2D_SKIP_CPU_RENDER_TARGET_READBACK=1;CNA_DIRECT2D_SKIP_RENDER_TARGET_DECORATION=1;CNA_DIRECT2D_SKIP_ADVANCED_BLEND=1")
+            "CNA_D3D11_SKIP_DXVK_GATE=1;CNA_DIRECT2D_SKIP_RENDER_TARGET_DECORATION=1;CNA_DIRECT2D_SKIP_ADVANCED_BLEND=1")
     else()
         set(_direct2d_2d_parity_command $<TARGET_FILE:cna_test_direct2d_2d_parity>)
         unset(_direct2d_2d_parity_environment)

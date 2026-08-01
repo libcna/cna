@@ -256,8 +256,8 @@ namespace CNA::Internal::Backends::Direct2D
         void EnsureMainTargetSize();
         void EndDrawing(const char* operation);
         /// Copies a render target through a temporary Direct2D CPU-readable bitmap. This is a
-        /// 2D-only path: Direct2D requires CPU_READ bitmaps to be populated by CopyFromRenderTarget
-        /// before Map(READ), and the source must be the currently bound device-context target.
+        /// 2D-only path: CopyFromRenderTarget is the native route; CopyFromBitmap is a narrower
+        /// fallback for a runtime that exposes the current target bitmap but not the former call.
         void GenerateRenderTargetMipLevels(Direct2DRenderTargetBackend& renderTarget);
         void ReadRenderTargetPixels(const Direct2DRenderTargetBackend& renderTarget, int level, int x, int y,
                                     int width, int height, uint8_t* pixels);

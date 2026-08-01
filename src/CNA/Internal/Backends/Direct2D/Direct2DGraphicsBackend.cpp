@@ -830,8 +830,20 @@ namespace CNA::Internal::Backends::Direct2D
         const D2D1_RECT_U source = D2D1::RectU(
             static_cast<UINT32>(x), static_cast<UINT32>(y),
             static_cast<UINT32>(x + width), static_cast<UINT32>(y + height));
-        ThrowIfFailed(readableBitmap->CopyFromRenderTarget(nullptr, d2dContext_.Get(), &source),
-                      "ID2D1Bitmap::CopyFromRenderTarget(readback)");
+        HRESULT copyResult = readableBitmap->CopyFromRenderTarget(nullptr, d2dContext_.Get(), &source);
+        if (copyResult == E_NOTIMPL)
+        {
+            // WineD3D 10 implements the Direct2D target bitmap itself but leaves
+            // CopyFromRenderTarget as E_NOTIMPL.  The current target is already the exact bitmap
+            // selected by ReadRenderTargetPixels/ReadBackbuffer, so retain the same 2D-only
+            // semantics with the bitmap-to-bitmap form when a runtime supports that narrower API.
+            ComPtr<ID2D1Image> currentTarget;
+            d2dContext_->GetTarget(&currentTarget);
+            ComPtr<ID2D1Bitmap> currentTargetBitmap;
+            if (currentTarget && SUCCEEDED(currentTarget.As(&currentTargetBitmap)))
+                copyResult = readableBitmap->CopyFromBitmap(nullptr, currentTargetBitmap.Get(), &source);
+        }
+        ThrowIfFailed(copyResult, "ID2D1Bitmap::CopyFromRenderTarget/CopyFromBitmap(readback)");
 
         D2D1_MAPPED_RECT mapped{};
         ThrowIfFailed(readableBitmap->Map(D2D1_MAP_OPTIONS_READ, &mapped),
