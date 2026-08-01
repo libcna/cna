@@ -212,13 +212,13 @@ preference order and the `CNA_DILIGENT_DEVICE` override. It needs no GPU, no win
 ctest --test-dir cmake-build-diligent -R DiligentDeviceSelection --output-on-failure
 ```
 
-Eighteen further binaries are the real-device pixel proofs (79 checks total): `Diligent_2D` (6),
+Nineteen further binaries are the real-device pixel proofs (80 checks total): `Diligent_2D` (6),
 `Diligent_3D` (6), `Diligent_RenderTarget` (5), `Diligent_RenderTargetCube` (4),
 `Diligent_AlphaTestFog` (4), `Diligent_DualTextureEnvMap` (6), `Diligent_Skinned` (4),
 `Diligent_MRT` (4), `Diligent_OcclusionQuery` (4), `Diligent_MSAA` (5), `Diligent_Instanced` (4),
 `Diligent_DrawOffset` (5), `Diligent_SetDataOptions` (4), `Diligent_VertexLit` (4),
-`Diligent_Pbr` (5), `Diligent_DepthBias` (4), `Diligent_ReferenceStencil` (1) and
-`Diligent_FillMode` (3). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
+`Diligent_Pbr` (5), `Diligent_DepthBias` (4), `Diligent_ReferenceStencil` (1),
+`Diligent_FillMode` (3) and `Diligent_Anisotropic` (1). They clear, draw `SpriteBatch` quads and 3D primitives on the back buffer and
 into off-screen 2D/cube targets, and assert on pixels (or query results) read back through
 `GraphicsDevice.GetBackBufferData` / `RenderTarget2D.GetData` / `RenderTargetCube.GetData` /
 `OcclusionQuery`. `Diligent_MSAA` uses a diagonal-edge differential (binary transition with MSAA
@@ -254,8 +254,13 @@ unlike EasyGL/Bgfx's still-open, universal no-backend-connection gap (Task 872).
 `Diligent_FillMode` (`DILIGENT-51`) proves `FillMode::WireFrame` genuinely rasterizes only triangle
 edges (a full-viewport triangle's centre pixel reads back as the clear colour, not the fill colour,
 and reverting to `FillMode::Solid` restores the fill), ruling out both a silent solid-fill fallback
-and a fully-blank draw. 78 of the 79 checks pass against a real Vulkan device; the one known failure
-is left visible rather than masked. On a machine with no usable device the
+and a fully-blank draw. `Diligent_Anisotropic` (`DILIGENT-52`) follows this project's own
+established scope for anisotropic filtering tests (Task 299's own header explains a true visual
+quality comparison is inherently driver-dependent and fragile to assert precisely): requesting
+`SamplerState.MaxAnisotropy=9999`, far beyond any real GPU's limit and beyond this backend's own
+clamp, does not crash and still produces a genuinely sampled result. 79 of the 80 checks pass
+against a real Vulkan device; the one known failure is left visible rather than masked. On a
+machine with no usable device the
 binaries exit 77 and print `[SKIP] CNA Diligent smoke`, which CTest reports as a skip — reporting a
 pass with nothing rendered would be dishonest.
 
