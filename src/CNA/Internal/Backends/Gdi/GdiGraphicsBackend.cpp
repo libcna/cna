@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -65,9 +66,9 @@ namespace CNA::Internal::Backends::Gdi
             throw std::runtime_error(std::string("GDI (Win32 2D) does not support 3D: ") + methodName);
         }
 
-        /// Delegates the shared CPU rasterizer SpriteBatch implementation while making its one
-        /// 3D-only feature explicit: SoftwareSpriteBatchBackend would otherwise accept a custom
-        /// Effect and ignore it, which is not an honest GDI contract.
+        /// Delegates the shared CPU rasterizer SpriteBatch implementation while accepting exactly
+        /// GDI-022's fixed CPU ColorMatrixEffect. Every other custom Effect is rejected, rather
+        /// than accepted and ignored as if GDI had a programmable shader path.
         class GdiSpriteBatchBackend final : public ISpriteBatchBackend
         {
         public:
@@ -89,10 +90,12 @@ namespace CNA::Internal::Backends::Gdi
             void SetTransformMatrix(const Matrix& matrix) override { inner_->SetTransformMatrix(matrix); }
             void SetCustomEffect(Effect* effect) override
             {
-                if (effect != nullptr)
+                if (effect != nullptr &&
+                    dynamic_cast<Microsoft::Xna::Framework::Graphics::ColorMatrixEffect*>(effect) == nullptr)
                     throw std::runtime_error(
-                        "GDI (Win32 2D) does not support custom SpriteBatch effects.");
-                inner_->SetCustomEffect(nullptr);
+                        "GDI (Win32 2D) supports only the fixed ColorMatrixEffect for SpriteBatch; "
+                        "custom shader effects are unsupported.");
+                inner_->SetCustomEffect(effect);
             }
             void SetSamplerFilter(int textureFilter) override { inner_->SetSamplerFilter(textureFilter); }
             void SetSamplerAddressMode(int addressU, int addressV) override

@@ -803,6 +803,14 @@ namespace CNA::Internal::Backends
         const ITextureBackend*     texture1 = nullptr;      ///< Texture unit 1 (DualTextureEffect second layer), or null
         const ITextureCubeBackend* envMap   = nullptr;      ///< Cube map for EnvironmentMapEffect, or null
         float diffuseColor[4]  = {1,1,1,1};                ///< RGBA 0..1
+        /// CNA's fixed ColorMatrixEffect, used only by the shared CPU SpriteBatch path. The
+        /// matrix is row-major and transforms the post-texture/post-tint source before blending:
+        /// out[row] = dot(colorMatrix[row], sourceRGBA) + colorOffset[row], clamped to [0,1].
+        /// Other backends deliberately leave this false rather than pretending to execute it.
+        bool cpu2DColorMatrixEnabled = false;
+        float cpu2DColorMatrix[16] = {
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        float cpu2DColorOffset[4] = {0,0,0,0};
         float ambientColor[3]  = {0,0,0};                   ///< RGB 0..1 (BasicEffect path)
         float light0Dir[3]     = {0,-1,0};                  ///< World-space, pre-normalized
         float light0Diffuse[3] = {1,1,1};                   ///< RGB 0..1

@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/ArgumentNullException.hpp"
@@ -1741,6 +1742,25 @@ namespace CNA::Internal::Backends::Software
             b *= ctx.params.diffuseColor[2];
             a *= ctx.params.diffuseColor[3];
 
+            // GDI-022: ColorMatrixEffect is intentionally a small fixed CPU SpriteBatch effect,
+            // not a shader language. It acts after the ordinary texture/tint calculation and
+            // before stock-effect additions and BlendState, so its output is the source colour
+            // consumed by the normal XNA blend implementation.
+            if (ctx.params.cpu2DColorMatrixEnabled)
+            {
+                const float source[4] = { r, g, b, a };
+                const auto transform = [&](int row) {
+                    const float* m = ctx.params.cpu2DColorMatrix + row * 4;
+                    return std::clamp(m[0] * source[0] + m[1] * source[1] +
+                                      m[2] * source[2] + m[3] * source[3] +
+                                      ctx.params.cpu2DColorOffset[row], 0.0f, 1.0f);
+                };
+                r = transform(0);
+                g = transform(1);
+                b = transform(2);
+                a = transform(3);
+            }
+
             if (ctx.useEnvMap)
             {
                 // EnvironmentMapEffect (SOFTWARE-82), FNA's PSEnvMap/PSEnvMapSpecular formula, minus
@@ -2790,6 +2810,12 @@ namespace CNA::Internal::Backends::Software
         // the shared one already accepted it.
         spriteParams.texture0 = &texture;
         spriteParams.textureEnabled = true;
+        // A `ColorMatrixEffect` is the sole custom Effect GDI/SOFTWARE accepts for SpriteBatch.
+        // ShaderEffect stays rejected by GDI; every unrelated Effect keeps the regular sprite
+        // path rather than being misidentified as a programmable shader.
+        if (const auto* colorMatrix =
+                dynamic_cast<const Microsoft::Xna::Framework::Graphics::ColorMatrixEffect*>(customEffect_))
+            colorMatrix->FillSpriteDrawParams(spriteParams);
         // REMED-GFX-082: honor RasterizerState.FillMode for the sprite's two quad triangles too. Each
         // draws ALL THREE of its edges (kEdgeAll), so a wireframe sprite shows its quad outline plus
         // the internal triangle-split diagonal -- real submitted geometry, matching D3D11/FNA (not

@@ -14,12 +14,17 @@ display path; it does not create an SDL renderer, D3D device, OpenGL context or 
   `mipMap=true` generates an RGBA8 mip chain when it is unbound using a clamped 2×2 box filter;
   its completed levels can then be sampled and read back. Mips are deliberately unavailable while
   that target is actively being rendered.
+- `ColorMatrixEffect` is the one fixed CPU effect admitted by `SpriteBatch::Begin(..., &effect)`.
+  It transforms the sampled-and-tinted RGBA source by a row-major 4×4 matrix plus RGBA offset,
+  clamps each result to `[0,1]`, then uses the ordinary `BlendState`. `SetGrayscale()` selects
+  Rec.709 luma and preserves alpha. Its cost is one 4×4 transform per covered sprite pixel
+  (16 multiplies, 16 additions and 4 clamps), with no intermediate render target or allocation.
 - Not supported: vertex/index buffers, 3D draw calls, depth/stencil, MSAA, cube/3D textures,
-  occlusion queries and custom effects. `SupportsCapability()` returns `false` and direct 3D API
-  calls throw rather than silently rendering through the inherited CPU 3D code.
+  occlusion queries and arbitrary custom effects. `SupportsCapability()` returns `false` and
+  direct 3D API calls throw rather than silently rendering through the inherited CPU 3D code.
 - A custom `ShaderEffect` is deliberately invalid on GDI (`CreateEffectBackend()` returns null).
-  GDI does not accept shader source or uniforms and then ignore them; only a future separately
-  documented fixed CPU 2D effect API could extend this boundary.
+  GDI does not accept shader source or uniforms and then ignore them. `ColorMatrixEffect` is the
+  sole fixed non-shader exception; every other custom `SpriteBatch` effect is rejected.
 - `PresentInterval` is ignored because GDI has no swap-chain interval control. The backbuffer is
   single-sampled.
 
@@ -46,7 +51,7 @@ cmake -S . -B build-gdi \
   -DCNA_BUILD_EXAMPLES=ON \
   -DCNA_MAX_VENDORED_BUILD_JOBS=2
 CMAKE_BUILD_PARALLEL_LEVEL=2 cmake --build build-gdi \
-  --target cna_test_gdi_smoke cna_test_gdi_2d_regression cna_bench_gdi_2d cna_demo_2d -j2
+  --target cna_test_gdi_smoke cna_test_gdi_2d_regression cna_test_gdi_colormatrix_effect cna_bench_gdi_2d cna_demo_2d -j2
 ```
 
 The backend is hard-gated to Windows targets. `cna_test_gdi_smoke` runs automatically as `GDI_Smoke`
@@ -57,12 +62,14 @@ available display:
 # Native Windows
 build-gdi\\cna_test_gdi_smoke.exe
 build-gdi\\cna_test_gdi_2d_regression.exe
+build-gdi\\cna_test_gdi_colormatrix_effect.exe
 build-gdi\\cna_bench_gdi_2d.exe --frames 4
 build-gdi\\cna_demo_2d.exe
 
 # Linux host, MinGW cross-build, with a real graphical Wine display
 wine build-gdi/cna_test_gdi_smoke.exe
 wine build-gdi/cna_test_gdi_2d_regression.exe
+wine build-gdi/cna_test_gdi_colormatrix_effect.exe
 wine build-gdi/cna_bench_gdi_2d.exe --frames 4
 wine build-gdi/cna_demo_2d.exe
 ```
@@ -76,6 +83,12 @@ presentation-coordinate transforms. It also covers Opaque, premultiplied `AlphaB
 `BlendFactor`, plus the explicit custom-`ShaderEffect` rejection. The 2D demo is the manual visual
 check: animated sprites should display, resizing should remain correct, and the window should close
 normally.
+
+`cna_test_gdi_colormatrix_effect` is a high-level hidden-window integration test. It drives the
+public `GraphicsDevice`, `Texture2D` and `SpriteBatch` APIs, then proves `ColorMatrixEffect`'s
+Rec.709 grayscale, arbitrary channel matrix/offset and alpha preservation through readback. It
+also proves the fixed effect did not broaden the contract by checking that `ShaderEffect` is still
+rejected.
 
 `cna_bench_gdi_2d` is a short, manual benchmark (four measured frames by default) that reports
 CPU raster time and GDI `Present()` time separately for 800×600 and 1280×720 scenes. Always run

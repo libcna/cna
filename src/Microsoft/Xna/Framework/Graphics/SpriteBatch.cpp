@@ -181,15 +181,30 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (backend_)
         {
-            backend_->SetCustomEffect(customEffect_);
-            backend_->SetTransformMatrix(transformMatrix_);
-            // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
-            // resolved state is always (re-)applied — never left over from a previous Begin().
-            const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
-            backend_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
-            backend_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
-                                            static_cast<int>(effectiveSampler.getAddressVProperty()));
-            backend_->Begin();
+            try
+            {
+                backend_->SetCustomEffect(customEffect_);
+                backend_->SetTransformMatrix(transformMatrix_);
+                // Matches FNA: a null samplerState defaults to SamplerState.LinearClamp, and the
+                // resolved state is always (re-)applied — never left over from a previous Begin().
+                const SamplerState& effectiveSampler = samplerState ? *samplerState : SamplerState::LinearClamp;
+                backend_->SetSamplerFilter(static_cast<int>(effectiveSampler.getFilterProperty()));
+                backend_->SetSamplerAddressMode(static_cast<int>(effectiveSampler.getAddressUProperty()),
+                                                static_cast<int>(effectiveSampler.getAddressVProperty()));
+                backend_->Begin();
+            }
+            catch (...)
+            {
+                // A rejected custom effect used to leave `begun` true even though the backend never
+                // began. Clear the retained front-end state as well, so callers can catch the
+                // honest capability exception and begin a valid batch immediately afterwards.
+                try { backend_->SetCustomEffect(nullptr); }
+                catch (...) {}
+                customEffect_ = nullptr;
+                spriteQueue_.clear();
+                begun = false;
+                throw;
+            }
         }
         // Backend setup can reject an unsupported requested state (for example Skia's mip-only
         // sampler filters). Publish a successful Begin only after that setup completes, so the

@@ -20,6 +20,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "GDI")
 
     cna_add_gdi_test(cna_test_gdi_smoke examples/gdi_smoke_test.cpp)
     cna_add_gdi_test(cna_test_gdi_2d_regression examples/gdi_2d_regression_test.cpp)
+    cna_add_gdi_test(cna_test_gdi_colormatrix_effect examples/gdi_colormatrix_effect_test.cpp)
     # Benchmark target, deliberately not a CTest: wall-clock performance depends on the Win32/Wine
     # display compositor and the host CPU. It reports CPU raster and GDI Present separately.
     cna_add_gdi_test(cna_bench_gdi_2d examples/gdi_2d_benchmark.cpp)
@@ -31,6 +32,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "GDI")
         cna_register_backend_test(NAME GDI_Smoke COMMAND cna_test_gdi_smoke
             TIMEOUT 30 LABELS "GDI")
         cna_register_backend_test(NAME GDI_2D_Regression COMMAND cna_test_gdi_2d_regression
+            TIMEOUT 30 LABELS "GDI")
+        cna_register_backend_test(NAME GDI_ColorMatrixEffect COMMAND cna_test_gdi_colormatrix_effect
             TIMEOUT 30 LABELS "GDI")
     endif()
 endif()
