@@ -89,8 +89,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers fifty-eight SKIA-only CTests: two window-independent raster
-   surface pixel tests and fifty-six display-required public tests. The raster tests pass without a
+6. `cmake/Tests/SkiaTests.cmake` registers fifty-nine SKIA-only CTests: two window-independent raster
+   surface pixel tests and fifty-seven display-required public tests. The raster tests pass without a
    display. The capability test verifies every current `GraphicsCapability` is false and 3D calls
    still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
@@ -192,5 +192,8 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 35. `Skia_RenderTarget2D_SetData` proves full and partial level-0 uploads update the existing
     target surface without replacing its backend identity, preserves untouched pixels, round-trips
     through public readback, and rejects level 1 and mipmapped-target requests precisely.
+36. `Skia_RenderTarget2D_MsaaPolicy` fixes the raster MSAA contract: requests 0 and 1 report 0,
+    while normalized real MSAA requests (2, 3, and 4) fail before target creation and the
+    corresponding capability remains false.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
