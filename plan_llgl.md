@@ -505,6 +505,54 @@ work:
 
 ---
 
+## Phase LLGL-7 — Wiring the remaining shared cross-backend test suite (not started)
+
+Found by diffing `cmake/Tests/EasyGLTests.cmake` against `cmake/Tests/LlglTests.cmake`
+(`comm -23` on the sorted `examples/*.cpp` basenames each references), then filtering to files
+registered on **3 or more** backends total (EasyGL plus at least 2 others) to isolate genuinely
+shared, cross-backend oracles from EasyGL's own large body of `easygl_*`-prefixed, EasyGL-only
+tests (which are not gaps -- they were never meant to run anywhere else). ~36 files qualify.
+
+Two files were already closing this same gap for the `RenderTargetCube` family specifically before
+this phase started (`LLGL-36`, done): `rendertargetcube_getdata_contract_test.cpp`,
+`rendertargetcube_usage_test.cpp`, `rendertargetcube_msaa_face_test.cpp` -- not repeated here.
+
+**Explicitly out of scope for this phase**: `avatar_attach_part_integration_test.cpp`,
+`avatar_real_render_integration_test.cpp`, `avatar_tint_routing_integration_test.cpp` (registered
+on EasyGL + Vulkan only). These need real `AvatarRenderer` rendering support
+(`EnableRealRenderingEXT`/`AttachPartEXT`/`PartTintEXT`), which this backend has ZERO of --
+`grep -rln "AvatarRenderer" src/CNA/Internal/Backends/Llgl/` returns nothing. That is a whole new
+subsystem, not a test-wiring task, and belongs in its own future phase if ever pursued.
+
+Each file falls into one of two shapes, found by grepping each file's own `CNA_BACKEND_` reference
+count (`grep -c "CNA_BACKEND_" examples/<file>.cpp`):
+
+* **Plain registration (0 references)** -- an ordinary `Game`-subclass test with no per-backend
+  `Contract` struct at all; wiring it up is just `cna_llgl_test()` + `cna_register_backend_test()`
+  plus a build+run to confirm it passes as-is, no capability claims to write.
+* **Contract-branch (1+ references)** -- the same `Contract`-struct-per-`CNA_BACKEND_XXX` pattern
+  `LLGL-36`'s three `RenderTargetCube` oracles already used: a NEW, independently-verified
+  `CNA_BACKEND_LLGL` branch must be written and empirically checked field-by-field (build, run,
+  read the actual behaviour) before registering -- copying another backend's branch, or guessing,
+  is exactly the "a wrong `Contract` claim is worse than no entry" mistake `LLGL-36`'s own
+  investigation avoided. These files are large (600-2300 lines each) and often encode multiple
+  independent findings from OTHER backends' own past investigations (REMED-GFX-*/CNB-*/Task-*
+  numbers) -- read each one's own header comment before writing the branch, the same way `LLGL-36`
+  read `rendertargetcube_msaa_face_test.cpp`'s own header before concluding it could not honestly
+  be registered without first re-checking whether `LLGL-36`'s own `preserves` finding still applied
+  (it did, and the file WAS registerable in the end -- the lesson is "read first," not "expect no").
+
+| # | Task | Files | Status | Notes |
+| --- | --- | --- | --- | --- |
+| LLGL-39 | Plain-registration batch (no `CNA_BACKEND_` branches needed). | `spritebatch_custom_viewport_test.cpp`, `rendertargetcube_plural_binding_test.cpp`, `viewport_reset_after_resize_test.cpp`, `spritebatch_viewport_switch_test.cpp`, `rendertarget2d_depth_test.cpp`, `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `graphicsdevice_clear_depth_test.cpp`, `rendertarget_viewport_scissor_reset_test.cpp`, `skinnedeffect_lighting_conformance_test.cpp`, `rasterizerstate_cullmode_camera_test.cpp` | ⬜ | 10 files. Straightforward: register, build, run, confirm PASS; if one genuinely fails on this backend, that is itself a new finding to record here, not silently swept aside. |
+| LLGL-40 | Back buffer contract-branch batch. | `backbuffer_pass_order_test.cpp`, `backbuffer_readback_dimension_test.cpp`, `backbuffer_headless_reject_test.cpp`, `backbuffer_first_read_test.cpp` | ⬜ | 4 files, each needs its own verified `CNA_BACKEND_LLGL` `Contract` branch. |
+| LLGL-41 | `RenderTarget`/`RenderTargetCube` contract-branch batch. | `rendertarget_pass_boundary_test.cpp`, `rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`, `rendertarget_sampling_orientation_test.cpp`, `rendertarget_producer_consumer_test.cpp`, `rendertarget_first_use_test.cpp`, `rendertarget_backbuffer_consumer_test.cpp`, `bound_target_lifetime_test.cpp` | ⬜ | 8 files. `rendertarget_depthstencil_usage_test.cpp` is the plain-`RenderTarget2D` depth/stencil sibling of the cube-specific preservation findings `LLGL-36` already made -- expect (but still verify, do not assume) the same incidental-preservation-within-an-unflushed-frame behaviour to apply here too. |
+| LLGL-42 | Texture/`TextureCube`/`Texture3D` contract-branch batch. | `texturecube_texture3d_setdata_contract_test.cpp`, `texturecube_texture3d_getdata_contract_test.cpp`, `texture2d_getdata_transfer_range_test.cpp`, `texture2d_getdata_contract_test.cpp`, `texture_filter_ordinal_contract_test.cpp`, `point_sampling_contract_test.cpp`, `colorspace_midtone_contract_test.cpp` | ⬜ | 7 files. |
+| LLGL-43 | Deferred-capture / `SpriteBatch` viewport contract-branch batch. | `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `deferred_source_lifetime_test.cpp`, `spritebatch_3d_order_test.cpp` | ⬜ | 4 files. |
+| LLGL-44 | Misc state contract-branch batch. | `graphicsdevice_ordered_clear_test.cpp`, `frontface_winding_test.cpp`, `stock_effect_sampler_contract_test.cpp` | ⬜ | 3 files. |
+
+---
+
 ## Closing notes
 
 The 2D baseline is real and pixel-verified on both renderer modules — but on one platform, and
