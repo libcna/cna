@@ -144,6 +144,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_ColorSpace_MidTone COMMAND cna_test_software_colorspace_midtone
         TIMEOUT 120 LABELS "Software")
 
+    # REMED-GFX-148: Additive is SourceAlpha/One for both colour and alpha. Pixel-exact matrix over
+    # backbuffer/RT, all effect-aware draw paths, preset/state transitions, repeated draws/frames,
+    # deferred state capture, destination loading, clamping, disposal, and teardown.
+    cna_software_test(cna_test_software_additive_blend_contract
+        examples/additive_blend_contract_test.cpp)
+    cna_register_backend_test(NAME Software_AdditiveBlendContract
+        COMMAND cna_test_software_additive_blend_contract
+        TIMEOUT 120 LABELS "Software")
+
     # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
     # as an ordinary Texture2D holding identical bytes. Registered here as a cross-backend control:
     # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's

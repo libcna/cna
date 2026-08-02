@@ -160,7 +160,7 @@ protected:
         dev.setDepthStencilStateProperty(DepthStencilState::None);
 
         const Color D(10, 20, 30, 40);       // destination (clear) colour
-        const Color S(200, 100, 50, 220);    // opaque source colour
+        const Color S(200, 100, 50, 220);    // source colour (valid premultiplied channels: RGB <= A)
 
         // ===== Phase 9: exact per-channel masks (Opaque, blend off), 3D colored path =====
         struct Case { ColorWriteChannels cw; int r, g, b, a; const char* name; };
@@ -186,19 +186,17 @@ protected:
         }
 
         // ===== Phase 10: mask applies AFTER blending (enabled channels blend, disabled keep dest) =
-        // Software's v1 blend is simplified straight-over: result = src*srcAlpha + dst*(1-srcAlpha)
-        // on the enabled channels. Sa=220/255~=0.863, so with mask = Red|Blue:
-        //   blended R = 200*0.863 + 10*0.137 ~= 173
-        //   blended B =  50*0.863 + 30*0.137 ~=  47
+        // AlphaBlend is premultiplied source + destination*(1-sourceAlpha) on the enabled
+        // channels. Sa=220/255, so the backend clamps in float and converts once at the end:
+        //   blended R = 200 + 10*(35/255) -> 201
+        //   blended B =  50 + 30*(35/255) ->  54
         // Green/Alpha are masked off -> keep dest 20 / 40 (identity, NOT zeroed). The point is that a
         // disabled channel keeps the destination while enabled channels take the BLENDED value.
         {
             dev.Clear(D);
             DrawColorSprite(dev, S, MakeBlend(ColorWriteChannels::Red | ColorWriteChannels::Blue, true));
             const Color px = CenterPixel(dev);
-            const bool redBlended  = px.getRProperty() >= 169 && px.getRProperty() <= 177; // ~173
-            const bool blueBlended = px.getBProperty() >= 43  && px.getBProperty() <= 51;  // ~47
-            check(redBlended && blueBlended && px.getGProperty() == 20 && px.getAProperty() == 40,
+            check(Eq(px, 201, 20, 54, 40),
                   "Phase10 mask-after-blend: R/B take the blended value, G(=20)/A(=40) kept from dest: " + Str(px));
         }
 

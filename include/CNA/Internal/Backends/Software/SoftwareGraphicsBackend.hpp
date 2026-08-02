@@ -163,6 +163,31 @@ namespace CNA::Internal::Backends::Software
         int addressV = 1;
     };
 
+    /**
+     * @brief REMED-GFX-148: one complete XNA BlendState captured for a Software draw.
+     *
+     * The six raw ordinals are kept together so the CPU fragment stage cannot collapse distinct
+     * presets to one boolean or resolve a later live device state. Defaults are the complete
+     * Opaque identity: One/Zero with Add, independently for colour and alpha.
+     */
+    struct SoftwareBlendState
+    {
+        int colorSource = 0;
+        int alphaSource = 0;
+        int colorDestination = 1;
+        int alphaDestination = 1;
+        int colorFunction = 0;
+        int alphaFunction = 0;
+
+        /** @brief Whether this is the exact Opaque identity, including both functions. */
+        [[nodiscard]] bool IsOpaqueIdentity() const
+        {
+            return colorSource == 0 && alphaSource == 0 &&
+                   colorDestination == 1 && alphaDestination == 1 &&
+                   colorFunction == 0 && alphaFunction == 0;
+        }
+    };
+
     class SoftwareTextureBackend : public ITextureBackend, public SoftwareColorSurface
     {
     public:
@@ -529,6 +554,7 @@ namespace CNA::Internal::Backends::Software
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
@@ -586,11 +612,9 @@ namespace CNA::Internal::Backends::Software
         /// none is bound) -- real, CPU-owned pixel/depth storage.
         [[nodiscard]] SoftwareFramebuffer& CurrentFramebuffer();
         [[nodiscard]] const SoftwareFramebuffer& CurrentFramebuffer() const;
-        /// Whether the current BlendState is anything other than the Opaque preset (design
-        /// decision 7: only Opaque/AlphaBlend are distinguished in v1). Used by
-        /// SoftwareSpriteBatchBackend to decide whether to alpha-blend its own quads, since
-        /// SpriteBatch::Begin() applies its BlendState the same way any other draw does.
-        [[nodiscard]] bool IsBlendEnabled() const { return blendEnabled_; }
+        /// REMED-GFX-148: complete BlendState and constant factor captured by a SpriteBatch draw.
+        [[nodiscard]] const SoftwareBlendState& GetBlendState() const { return blendState_; }
+        [[nodiscard]] const std::array<float, 4>& GetBlendFactor() const { return blendFactor_; }
         [[nodiscard]] bool IsDepthTestEnabled() const { return depthTestEnabled_; }
         /// REMED-GFX-030: whether passing fragments may update the active target's depth buffer.
         /// Kept independent from depth testing so DepthRead can compare against existing depth
@@ -690,9 +714,12 @@ namespace CNA::Internal::Backends::Software
         /// None preset function. ApplyDepthStencilState validates all public values 0..7 rather than
         /// silently approximating an unknown value.
         int depthCompareFunction_ = 3;
-        /// Opaque (false) vs. simplified AlphaBlend (true) -- design decision 7. Defaults to
-        /// false, matching real XNA/FNA's own default GraphicsDevice.BlendState (Opaque).
-        bool blendEnabled_ = false;
+        /// REMED-GFX-148: all four blend factors and both functions. The former boolean discarded
+        /// every distinction except exact Opaque versus "anything else", forcing Additive,
+        /// AlphaBlend and NonPremultiplied through one hard-coded straight-alpha equation.
+        SoftwareBlendState blendState_{};
+        /// GraphicsDevice.BlendFactor, snapshotted beside blendState_ for each Software draw.
+        std::array<float, 4> blendFactor_{1.0f, 1.0f, 1.0f, 1.0f};
         /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState, slot 0 (bit0=R,
         /// bit1=G, bit2=B, bit3=A). Defaults to 15 (All), matching XNA's default BlendState.
         int colorWriteMask_ = 15;

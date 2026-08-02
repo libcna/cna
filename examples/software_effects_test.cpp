@@ -184,7 +184,7 @@ protected:
                   "BasicEffect.DiffuseColor=(0.5,0,0) modulates a white texture to half-intensity red");
         }
 
-        // Checks C/D: Opaque ignores source alpha; AlphaBlend actually blends.
+        // Checks C/D: Opaque ignores source alpha; AlphaBlend consumes premultiplied colour.
         {
             const VertexPositionColor halfAlphaRed[6] = {
                 { Vector3(-1.0f,  1.0f, 0.5f), Color(255, 0, 0, 128) },
@@ -193,6 +193,14 @@ protected:
                 { Vector3( 1.0f,  1.0f, 0.5f), Color(255, 0, 0, 128) },
                 { Vector3(-1.0f, -1.0f, 0.5f), Color(255, 0, 0, 128) },
                 { Vector3( 1.0f, -1.0f, 0.5f), Color(255, 0, 0, 128) },
+            };
+            const VertexPositionColor premultipliedHalfAlphaRed[6] = {
+                { Vector3(-1.0f,  1.0f, 0.5f), Color(128, 0, 0, 128) },
+                { Vector3(-1.0f, -1.0f, 0.5f), Color(128, 0, 0, 128) },
+                { Vector3( 1.0f,  1.0f, 0.5f), Color(128, 0, 0, 128) },
+                { Vector3( 1.0f,  1.0f, 0.5f), Color(128, 0, 0, 128) },
+                { Vector3(-1.0f, -1.0f, 0.5f), Color(128, 0, 0, 128) },
+                { Vector3( 1.0f, -1.0f, 0.5f), Color(128, 0, 0, 128) },
             };
             BasicEffect fx(dev);
             fx.VertexColorEnabled = true;
@@ -217,18 +225,21 @@ protected:
             dev.Clear(Color::Blue, 1.0f);
             {
                 VertexBuffer vb(dev, 6);
-                vb.SetData(halfAlphaRed, 6);
+                vb.SetData(premultipliedHalfAlphaRed, 6);
                 dev.setBlendStateProperty(BlendState::AlphaBlend);
                 dev.SetVertexBuffer(&vb);
                 dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
                 dev.SetVertexBuffer(nullptr);
             }
             const Color blendedResult = ReadPixel(dev, 32, 32);
-            // Expected ~= src*srcAlpha + dst*(1-srcAlpha) = (255,0,0)*0.502 + (0,0,255)*0.498
-            //          ~= (128, 0, 127).
-            Check(!(blendedResult.getRProperty() >= 250) && blendedResult.getRProperty() > 90 &&
-                  blendedResult.getBProperty() > 90 && blendedResult.getBProperty() < 180,
-                  "BlendState::AlphaBlend actually blends -- the same half-alpha red quad now shows a real red/blue mix");
+            std::printf("[INFO] AlphaBlend exact pixel (%d,%d,%d,%d)\n",
+                        blendedResult.getRProperty(), blendedResult.getGProperty(),
+                        blendedResult.getBProperty(), blendedResult.getAProperty());
+            // AlphaBlend is One/InverseSourceAlpha for both colour and alpha. The source colour is
+            // therefore premultiplied exactly once before submission, and the byte result is exact.
+            Check(blendedResult.getRProperty() == 128 && blendedResult.getGProperty() == 0 &&
+                  blendedResult.getBProperty() == 126 && blendedResult.getAProperty() == 255,
+                  "BlendState::AlphaBlend applies premultiplied source + inverse-alpha destination exactly");
             dev.setBlendStateProperty(BlendState::Opaque);
         }
 

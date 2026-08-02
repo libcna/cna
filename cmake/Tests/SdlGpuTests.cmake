@@ -294,6 +294,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_ColorSpace_MidTone COMMAND cna_test_sdlgpu_colorspace_midtone
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    cna_sdlgpu_test(cna_test_sdlgpu_additive_blend_contract
+        examples/additive_blend_contract_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_AdditiveBlendContract
+        COMMAND cna_test_sdlgpu_additive_blend_contract
+        TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
     # as an ordinary Texture2D holding identical bytes. Registered here as a cross-backend control:
     # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's

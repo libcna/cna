@@ -58,6 +58,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_ColorSpace_MidTone COMMAND cna_test_headless_colorspace_midtone
         TIMEOUT 120 LABELS "Headless")
 
+    cna_headless_test(cna_test_headless_additive_blend_contract
+        examples/additive_blend_contract_test.cpp)
+    cna_register_backend_test(NAME Headless_AdditiveBlendContract
+        COMMAND cna_test_headless_additive_blend_contract
+        TIMEOUT 120 LABELS "Headless")
+
     # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
     # as an ordinary Texture2D holding identical bytes. Registered here as a cross-backend control:
     # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's

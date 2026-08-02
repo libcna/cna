@@ -61,6 +61,68 @@ namespace CNA::Internal::Backends::Software
             int compareFunction = 3; // CompareFunction::LessEqual
         };
 
+        /// REMED-GFX-148: one component of an XNA Blend factor vector. SourceColor and
+        /// DestinationColor naturally select alpha when channel==3; SourceAlphaSaturation's alpha
+        /// component is One, matching the public Blend definition and native backend mappings.
+        float BlendFactorComponent(int factor, int channel,
+                                   const std::array<float, 4>& source,
+                                   const std::array<float, 4>& destination,
+                                   const std::array<float, 4>& constant)
+        {
+            switch (factor)
+            {
+                case 0: return 1.0f;                              // One
+                case 1: return 0.0f;                              // Zero
+                case 2: return source[channel];                   // SourceColor
+                case 3: return 1.0f - source[channel];            // InverseSourceColor
+                case 4: return source[3];                         // SourceAlpha
+                case 5: return 1.0f - source[3];                  // InverseSourceAlpha
+                case 6: return destination[channel];              // DestinationColor
+                case 7: return 1.0f - destination[channel];       // InverseDestinationColor
+                case 8: return destination[3];                    // DestinationAlpha
+                case 9: return 1.0f - destination[3];             // InverseDestinationAlpha
+                case 10: return constant[channel];                // BlendFactor
+                case 11: return 1.0f - constant[channel];         // InverseBlendFactor
+                case 12: return channel == 3                      // SourceAlphaSaturation
+                    ? 1.0f
+                    : std::min(source[3], 1.0f - source[3]);
+                default:
+                    throw std::runtime_error(
+                        "SoftwareGraphicsBackend: unsupported Blend factor ordinal");
+            }
+        }
+
+        /// REMED-GFX-148: applies the independently selected colour/alpha BlendFunction after
+        /// both terms have been multiplied by their own factors. Clamping deliberately remains at
+        /// the caller, after the function and before the established RGBA8 conversion.
+        float ApplyBlendFunction(int function, float sourceTerm, float destinationTerm)
+        {
+            switch (function)
+            {
+                case 0: return sourceTerm + destinationTerm;                 // Add
+                case 1: return sourceTerm - destinationTerm;                 // Subtract
+                case 2: return destinationTerm - sourceTerm;                 // ReverseSubtract
+                case 3: return std::max(sourceTerm, destinationTerm);        // Max
+                case 4: return std::min(sourceTerm, destinationTerm);        // Min
+                default:
+                    throw std::runtime_error(
+                        "SoftwareGraphicsBackend: unsupported BlendFunction ordinal");
+            }
+        }
+
+        float BlendComponent(int channel, int sourceFactor, int destinationFactor,
+                             int function,
+                             const std::array<float, 4>& source,
+                             const std::array<float, 4>& destination,
+                             const std::array<float, 4>& constant)
+        {
+            const float sourceTerm = source[channel] *
+                BlendFactorComponent(sourceFactor, channel, source, destination, constant);
+            const float destinationTerm = destination[channel] *
+                BlendFactorComponent(destinationFactor, channel, source, destination, constant);
+            return std::clamp(ApplyBlendFunction(function, sourceTerm, destinationTerm), 0.0f, 1.0f);
+        }
+
         /// REMED-GFX-030: XNA/FNA compares the incoming fragment depth (left operand) with the
         /// currently stored depth (right operand). Every public CompareFunction is mapped explicitly;
         /// an invalid ordinal is rejected instead of silently falling back to a different relation.
@@ -1539,7 +1601,8 @@ namespace CNA::Internal::Backends::Software
             bool useDualTexture;
             bool useEnvMap;
             bool needUV;
-            bool blendEnabled;
+            SoftwareBlendState blendState;
+            std::array<float, 4> blendFactor;
             RasterDepthState depthState; // REMED-GFX-030: per-draw test/write/function snapshot
             int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
             unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
@@ -1686,7 +1749,7 @@ namespace CNA::Internal::Backends::Software
             // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
             // path writes every channel exactly as before.
             float outR, outG, outB, outA;
-            if (!ctx.blendEnabled)
+            if (ctx.blendState.IsOpaqueIdentity())
             {
                 outR = std::clamp(r, 0.0f, 1.0f);
                 outG = std::clamp(g, 0.0f, 1.0f);
@@ -1695,19 +1758,34 @@ namespace CNA::Internal::Backends::Software
             }
             else
             {
-                // Simplified "over" alpha compositing (design decision 7): result =
-                // src*srcAlpha + dst*(1-srcAlpha) on all 4 channels -- one formula covering
-                // AlphaBlend/NonPremultiplied/Additive-ish real BlendState presets alike, an
-                // intentional v1 simplification rather than a full blend-equation interpreter.
-                const float dstR = fb.color[colorIndex + 0] / 255.0f;
-                const float dstG = fb.color[colorIndex + 1] / 255.0f;
-                const float dstB = fb.color[colorIndex + 2] / 255.0f;
-                const float dstA = fb.color[colorIndex + 3] / 255.0f;
-                const float invA = 1.0f - a;
-                outR = std::clamp(r * a + dstR * invA, 0.0f, 1.0f);
-                outG = std::clamp(g * a + dstG * invA, 0.0f, 1.0f);
-                outB = std::clamp(b * a + dstB * invA, 0.0f, 1.0f);
-                outA = std::clamp(a + dstA * invA, 0.0f, 1.0f);
+                // REMED-GFX-148: load the actual destination bytes before any conversion, multiply
+                // source and destination by their independently selected factors, apply separate
+                // colour/alpha functions, then clamp. The established byte conversion below stays
+                // last. For Additive this is rgb=src.rgb*src.a+dst.rgb and
+                // a=src.a*src.a+dst.a -- never the old straight-alpha "over" equation.
+                const std::array<float, 4> source{r, g, b, a};
+                const std::array<float, 4> destination{
+                    fb.color[colorIndex + 0] / 255.0f,
+                    fb.color[colorIndex + 1] / 255.0f,
+                    fb.color[colorIndex + 2] / 255.0f,
+                    fb.color[colorIndex + 3] / 255.0f,
+                };
+                outR = BlendComponent(0, ctx.blendState.colorSource,
+                                      ctx.blendState.colorDestination,
+                                      ctx.blendState.colorFunction,
+                                      source, destination, ctx.blendFactor);
+                outG = BlendComponent(1, ctx.blendState.colorSource,
+                                      ctx.blendState.colorDestination,
+                                      ctx.blendState.colorFunction,
+                                      source, destination, ctx.blendFactor);
+                outB = BlendComponent(2, ctx.blendState.colorSource,
+                                      ctx.blendState.colorDestination,
+                                      ctx.blendState.colorFunction,
+                                      source, destination, ctx.blendFactor);
+                outA = BlendComponent(3, ctx.blendState.alphaSource,
+                                      ctx.blendState.alphaDestination,
+                                      ctx.blendState.alphaFunction,
+                                      source, destination, ctx.blendFactor);
             }
             if (ColorWriteHasRed  (ctx.colorWriteMask)) fb.color[colorIndex + 0] = static_cast<std::uint8_t>(outR * 255.0f);
             if (ColorWriteHasGreen(ctx.colorWriteMask)) fb.color[colorIndex + 1] = static_cast<std::uint8_t>(outG * 255.0f);
@@ -1717,7 +1795,7 @@ namespace CNA::Internal::Backends::Software
 
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
         /// SpriteBatch paths: adds nearest-neighbor texture sampling, diffuseColor modulation, and
-        /// a simplified Opaque/AlphaBlend choice (design decisions 7/6) on top of RasterizeTriangle's
+        /// the complete XNA BlendState equation on top of RasterizeTriangle's
         /// depth-tested, perspective-correct color interpolation. Backface culling per `cullMode`
         /// (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()). `params.dualTexture`/`envMapping`
         /// (SOFTWARE-82) select DualTextureEffect's second-texture blend or EnvironmentMapEffect's
@@ -1726,7 +1804,8 @@ namespace CNA::Internal::Backends::Software
         /// engine in v1), so the "lit" base color is just vertexColor*diffuseColor*texture0, the
         /// same simplification already used for the plain BasicEffect path.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
-                                     bool blendEnabled,
+                                     const SoftwareBlendState& blendState,
+                                     const std::array<float, 4>& blendFactor,
                                      int cullMode, float depthBias, float slopeScaleDepthBias,
                                      const GpuDrawParams& params, const RasterClipRect& clip,
                                      const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
@@ -1767,7 +1846,8 @@ namespace CNA::Internal::Backends::Software
                                         std::max(1, envMap->GetSize()))
                 : 1.0f;
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
-                                    needUV, blendEnabled, depthState, colorWriteMask, multiSampleMask,
+                                    needUV, blendState, blendFactor,
+                                    depthState, colorWriteMask, multiSampleMask,
                                     sampler0, sampler1, magnify0, magnify1,
                                     LodFromTexelRate(rho0), LodFromTexelRate(rho1),
                                     !(rhoCube > 1.0f), LodFromTexelRate(rhoCube)};
@@ -2508,7 +2588,8 @@ namespace CNA::Internal::Backends::Software
         const RasterDepthState depthState{owner_.IsDepthTestEnabled(),
                                           owner_.IsDepthWriteEnabled(),
                                           owner_.GetDepthCompareFunction()};
-        const bool blendEnabled = owner_.IsBlendEnabled();
+        const SoftwareBlendState blendState = owner_.GetBlendState();
+        const std::array<float, 4> blendFactor = owner_.GetBlendFactor();
         const int cullMode = owner_.GetCullMode();
         // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
         // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
@@ -2541,11 +2622,13 @@ namespace CNA::Internal::Backends::Software
         // Begin always re-applies it, so it cannot leak in from a previous batch, and passing it
         // here rather than through the device slots means a sprite batch cannot leak it out either.
         const SoftwareSamplerState spriteSampler = GetSamplerState();
-        RasterizeTriangleShaded(fb, depthState, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
+        RasterizeTriangleShaded(fb, depthState, blendState, blendFactor,
+                                cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
                                 owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
                                 spriteSampler, spriteSampler, wire, kEdgeAll);
-        RasterizeTriangleShaded(fb, depthState, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
+        RasterizeTriangleShaded(fb, depthState, blendState, blendFactor,
+                                cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
                                 owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(),
                                 spriteSampler, spriteSampler, wire, kEdgeAll);
@@ -2701,20 +2784,36 @@ namespace CNA::Internal::Backends::Software
     }
 
     void SoftwareGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
-                                                  int colorDstBlend, int alphaDstBlend, int, int,
+                                                  int colorDstBlend, int alphaDstBlend,
+                                                  int colorBlendFunc, int alphaBlendFunc,
                                                   const BlendWriteState& writeState)
     {
-        // Blend::One=0, Blend::Zero=1 -> Opaque preset (src=One, dst=Zero), the only combination
-        // v1 treats as "no blending" -- matches EasyGLGraphicsBackend::ApplyBlendState's own exact
-        // Opaque-detection formula (design decision 7: only Opaque/AlphaBlend distinguished in v1;
-        // any other combination is treated as the simplified AlphaBlend case).
-        blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
-                          alphaSrcBlend == 0 && alphaDstBlend == 1);
+        // REMED-GFX-148: retain the complete state instead of reducing it to Opaque/non-Opaque.
+        // Reject unknown ordinals at state application so no fragment can fail halfway through a
+        // draw. Public Blend and BlendFunction currently define exactly 0..12 and 0..4.
+        const auto validFactor = [](int value) { return value >= 0 && value <= 12; };
+        if (!validFactor(colorSrcBlend) || !validFactor(alphaSrcBlend) ||
+            !validFactor(colorDstBlend) || !validFactor(alphaDstBlend))
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::ApplyBlendState: unsupported Blend factor ordinal");
+        if (colorBlendFunc < 0 || colorBlendFunc > 4 ||
+            alphaBlendFunc < 0 || alphaBlendFunc > 4)
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::ApplyBlendState: unsupported BlendFunction ordinal");
+        blendState_ = SoftwareBlendState{colorSrcBlend, alphaSrcBlend,
+                                         colorDstBlend, alphaDstBlend,
+                                         colorBlendFunc, alphaBlendFunc};
         // REMED-GFX-077: Software has one active colour buffer (no MRT), so only slot-0's write mask
         // applies; the CPU fragment writers (WriteColoredFragment/WriteShadedFragment) gate each
         // channel by it. Single-sample ⇒ only MultiSampleMask bit 0 is meaningful.
         colorWriteMask_  = writeState.colorWriteChannels[0];
         multiSampleMask_ = writeState.multiSampleMask;
+    }
+
+    void SoftwareGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        blendFactor_ = {std::clamp(r, 0.0f, 1.0f), std::clamp(g, 0.0f, 1.0f),
+                        std::clamp(b, 0.0f, 1.0f), std::clamp(a, 0.0f, 1.0f)};
     }
 
     void SoftwareGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
@@ -3047,7 +3146,7 @@ namespace CNA::Internal::Backends::Software
 
     // Phase S5/S6 (SOFTWARE-40..43, 50): the effect-aware draw path -- stride-inferred vertex
     // layout (design decision 2), nearest-neighbor/bilinear texture sampling, diffuseColor
-    // modulation, and the simplified Opaque/AlphaBlend choice (design decision 7).
+    // modulation, and the complete colour/alpha BlendState equation.
     // dualTexture/envMapping/skinned are supported (SOFTWARE-82; strides 32/52, see
     // BuildGenericClipVertex/RasterizeTriangleShaded) but without any per-light diffuse lighting
     // sum -- lightingEnabled/fogEnabled remain out of scope for v1 (design decision 6).
@@ -3110,6 +3209,10 @@ namespace CNA::Internal::Backends::Software
         const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
             return base + static_cast<std::size_t>(vertexStart + local) * stride;
         };
+        // REMED-GFX-148: snapshot both static BlendState and dynamic BlendFactor once for this
+        // public draw, beside the depth-state snapshot above.
+        const SoftwareBlendState blendState = blendState_;
+        const std::array<float, 4> blendFactor = blendFactor_;
 
         for (int i = 0; i < primitiveCount; ++i)
         {
@@ -3135,12 +3238,12 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
+            RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
                                     GetSamplerState(0), GetSamplerState(1), wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
+                RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
                                         GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);
@@ -3213,6 +3316,9 @@ namespace CNA::Internal::Backends::Software
                     DecodeIndexElement(ibBase, thirtyTwoBit, startIndex + local)) + baseVertex;
             return vbBase + static_cast<std::size_t>(vertexIndex) * stride;
         };
+        // REMED-GFX-148: one by-value state snapshot for the complete indexed public draw.
+        const SoftwareBlendState blendState = blendState_;
+        const std::array<float, 4> blendFactor = blendFactor_;
 
         for (int i = 0; i < primitiveCount; ++i)
         {
@@ -3238,12 +3344,12 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
+            RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_,
                                     GetSamplerState(0), GetSamplerState(1), wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
+                RasterizeTriangleShaded(fb, depthState, blendState, blendFactor, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_,
                                         GetSamplerState(0), GetSamplerState(1), wire, kEdgeV1V2 | kEdgeV2V0);

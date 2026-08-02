@@ -1175,6 +1175,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_ColorSpace_MidTone COMMAND cna_test_vulkan_colorspace_midtone
             TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        cna_vulkan_test(cna_test_vulkan_additive_blend_contract
+            examples/additive_blend_contract_test.cpp)
+        cna_register_backend_test(NAME Vulkan_AdditiveBlendContract
+            COMMAND cna_test_vulkan_additive_blend_contract
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-147: a RenderTarget2D used as a texture must sample in the same logical orientation
         # as an ordinary Texture2D holding identical bytes. Registered here as a cross-backend control:
         # the defect was EasyGL-local (an OpenGL framebuffer's origin is bottom-left, so a target's

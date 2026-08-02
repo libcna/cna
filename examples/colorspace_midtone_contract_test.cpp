@@ -152,7 +152,7 @@ namespace
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr bool kCubeSupported = false;
     constexpr RtSampleOrientation kRtSampleOrientation = RtSampleOrientation::TopDown;
-    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourceOnly;
+    constexpr AdditiveContract kAdditiveContract = AdditiveContract::SourcePlusDestination;
     constexpr const char* kBackendName = "SOFTWARE";
 #elif defined(CNA_BACKEND_EASYGL)
     constexpr RtContract kRtContract = RtContract::Exact;
