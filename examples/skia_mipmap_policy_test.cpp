@@ -5,7 +5,7 @@
 // image snapshot.  Its public API neither exposes per-level raster readback nor defines the
 // invalidation/resolve contract CNA needs when a mutable SkSurface target is rebound or uploaded.
 // SKIA-126 now allocates a CNA-owned zeroed Texture2D chain while RenderTarget2D stays rejected
-// until SKIA-131. Mip-filter sampling remains rejected until SKIA-129. This transition test proves
+// until SKIA-131. Texture2D mip-filter sampling is implemented by SKIA-129. This transition test proves
 // a mipped texture's level-zero path and the ordinary target path remain usable around the retained
 // target refusal.
 

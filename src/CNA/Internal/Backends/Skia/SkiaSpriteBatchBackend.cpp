@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaSpriteBatchBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaEffectBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaMipSampling.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterTarget.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSourceAlphaPolicy.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
@@ -17,9 +18,10 @@
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkShader.h"
 #include "include/effects/SkRuntimeEffect.h"
-#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 
@@ -27,26 +29,11 @@ namespace CNA::Internal::Backends::Skia
 {
     namespace
     {
-        [[nodiscard]] SkSamplingOptions ToSampling(int textureFilter)
+        [[nodiscard]] SkSamplingOptions ToSampling(SkiaWithinLevelFilter filter)
         {
-            switch (textureFilter)
-            {
-                case 0: // Linear
-                case 2: // Anisotropic: SKIA-78/79's documented raster Linear fallback.
-                    return SkSamplingOptions(SkFilterMode::kLinear);
-                case 1: // Point
-                    return SkSamplingOptions(SkFilterMode::kNearest);
-                default:
-                    throw std::runtime_error("Skia SpriteBatch received an invalid texture filter.");
-            }
-        }
-
-        [[nodiscard]] bool RequiresMipmaps(int textureFilter)
-        {
-            // TextureFilter ordinals 3--8 each name a point or linear mip-level selection rule.
-            // SKIA-27 deliberately rejects every public mip chain in the raster backend, so mapping
-            // any of them to level-0 sampling would silently change the requested contract.
-            return textureFilter >= 3 && textureFilter <= 8;
+            return SkSamplingOptions(filter == SkiaWithinLevelFilter::Point
+                ? SkFilterMode::kNearest
+                : SkFilterMode::kLinear);
         }
 
         [[nodiscard]] const char* SamplerFilterName(int textureFilter)
@@ -56,8 +43,150 @@ namespace CNA::Internal::Backends::Skia
                 case 0: return "Linear";
                 case 1: return "Point";
                 case 2: return "Anisotropic";
+                case 3: return "LinearMipPoint";
+                case 4: return "PointMipLinear";
+                case 5: return "MinLinearMagPointMipLinear";
+                case 6: return "MinLinearMagPointMipPoint";
+                case 7: return "MinPointMagLinearMipLinear";
+                case 8: return "MinPointMagLinearMipPoint";
                 default: return "invalid";
             }
+        }
+
+        struct MipBlendUniforms final
+        {
+            float lowerScaleOffset[4] {};
+            float upperScaleOffset[4] {};
+            float lowerBounds[4] {};
+            float upperBounds[4] {};
+            float upperWeight = 0.0f;
+        };
+
+        [[nodiscard]] const sk_sp<SkRuntimeEffect>& MipBlendEffect()
+        {
+            static const sk_sp<SkRuntimeEffect> effect = []
+            {
+                auto result = SkRuntimeEffect::MakeForShader(SkString(R"(
+                    uniform shader lowerLevel;
+                    uniform shader upperLevel;
+                    uniform float4 lowerScaleOffset;
+                    uniform float4 upperScaleOffset;
+                    uniform float4 lowerBounds;
+                    uniform float4 upperBounds;
+                    uniform float upperWeight;
+                    half4 main(float2 sourcePixel) {
+                        float2 lowerCoord = clamp(
+                            sourcePixel * lowerScaleOffset.xy + lowerScaleOffset.zw,
+                            lowerBounds.xy, lowerBounds.zw);
+                        float2 upperCoord = clamp(
+                            sourcePixel * upperScaleOffset.xy + upperScaleOffset.zw,
+                            upperBounds.xy, upperBounds.zw);
+                        half4 lower = lowerLevel.eval(lowerCoord);
+                        half4 upper = upperLevel.eval(upperCoord);
+                        return lower + (upper - lower) * half(upperWeight);
+                    }
+                )"));
+                if (!result.effect || result.effect->uniformSize() != sizeof(MipBlendUniforms))
+                    throw std::runtime_error("Skia failed to compile the bounded mip blend shader.");
+                return std::move(result.effect);
+            }();
+            return effect;
+        }
+
+        void FillMipCoordinates(float output[4], const SkImage& image,
+                                int baseWidth, int baseHeight,
+                                const Rectangle& sourceRectangle, const Vector2& origin)
+        {
+            const float scaleX = static_cast<float>(image.width()) / baseWidth;
+            const float scaleY = static_cast<float>(image.height()) / baseHeight;
+            output[0] = scaleX;
+            output[1] = scaleY;
+            output[2] = (static_cast<float>(sourceRectangle.X) + origin.X) * scaleX;
+            output[3] = (static_cast<float>(sourceRectangle.Y) + origin.Y) * scaleY;
+        }
+
+        void FillMipBounds(float output[4], const SkImage& image,
+                           int baseWidth, int baseHeight,
+                           const Rectangle& sourceRectangle, bool strictSource)
+        {
+            if (!strictSource)
+            {
+                constexpr float kUnbounded = 1.0e20f;
+                output[0] = -kUnbounded;
+                output[1] = -kUnbounded;
+                output[2] = kUnbounded;
+                output[3] = kUnbounded;
+                return;
+            }
+
+            const float scaleX = static_cast<float>(image.width()) / baseWidth;
+            const float scaleY = static_cast<float>(image.height()) / baseHeight;
+            const float leftEdge = static_cast<float>(sourceRectangle.X) * scaleX;
+            const float topEdge = static_cast<float>(sourceRectangle.Y) * scaleY;
+            const float rightEdge = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) * scaleX;
+            const float bottomEdge = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) * scaleY;
+            output[0] = std::min(leftEdge + 0.5f, (leftEdge + rightEdge) * 0.5f);
+            output[1] = std::min(topEdge + 0.5f, (topEdge + bottomEdge) * 0.5f);
+            output[2] = std::max(rightEdge - 0.5f, (leftEdge + rightEdge) * 0.5f);
+            output[3] = std::max(bottomEdge - 0.5f, (topEdge + bottomEdge) * 0.5f);
+        }
+
+        [[nodiscard]] SkMatrix MipLocalMatrix(const SkImage& image,
+                                              int baseWidth, int baseHeight,
+                                              const Rectangle& sourceRectangle,
+                                              const Vector2& origin)
+        {
+            SkMatrix result;
+            result.setAll(
+                static_cast<float>(baseWidth) / image.width(), 0.0f,
+                -static_cast<float>(sourceRectangle.X) - origin.X,
+                0.0f, static_cast<float>(baseHeight) / image.height(),
+                -static_cast<float>(sourceRectangle.Y) - origin.Y,
+                0.0f, 0.0f, 1.0f);
+            return result;
+        }
+
+        [[nodiscard]] SkRect MipSourceRect(const SkImage& image,
+                                           int baseWidth, int baseHeight,
+                                           const Rectangle& sourceRectangle)
+        {
+            const float scaleX = static_cast<float>(image.width()) / baseWidth;
+            const float scaleY = static_cast<float>(image.height()) / baseHeight;
+            return SkRect::MakeXYWH(
+                static_cast<float>(sourceRectangle.X) * scaleX,
+                static_cast<float>(sourceRectangle.Y) * scaleY,
+                static_cast<float>(sourceRectangle.Width) * scaleX,
+                static_cast<float>(sourceRectangle.Height) * scaleY);
+        }
+
+        [[nodiscard]] sk_sp<SkShader> MakeMipBlendShader(
+            const sk_sp<SkImage>& lowerImage, const sk_sp<SkImage>& upperImage,
+            int baseWidth, int baseHeight, const Rectangle& sourceRectangle,
+            const Vector2& origin, SkTileMode tileU, SkTileMode tileV,
+            const SkSamplingOptions& sampling, float upperWeight, bool strictSource)
+        {
+            if (!lowerImage || !upperImage)
+                return nullptr;
+            std::array<sk_sp<SkShader>, 2> children = {
+                lowerImage->makeShader(tileU, tileV, sampling),
+                upperImage->makeShader(tileU, tileV, sampling),
+            };
+            if (!children[0] || !children[1])
+                return nullptr;
+
+            MipBlendUniforms uniforms;
+            FillMipCoordinates(uniforms.lowerScaleOffset, *lowerImage,
+                               baseWidth, baseHeight, sourceRectangle, origin);
+            FillMipCoordinates(uniforms.upperScaleOffset, *upperImage,
+                               baseWidth, baseHeight, sourceRectangle, origin);
+            FillMipBounds(uniforms.lowerBounds, *lowerImage,
+                          baseWidth, baseHeight, sourceRectangle, strictSource);
+            FillMipBounds(uniforms.upperBounds, *upperImage,
+                          baseWidth, baseHeight, sourceRectangle, strictSource);
+            uniforms.upperWeight = upperWeight;
+            return MipBlendEffect()->makeShader(
+                SkData::MakeWithCopy(&uniforms, sizeof(uniforms)),
+                children.data(), children.size());
         }
 
         [[nodiscard]] bool IsFlipped(SpriteEffects effects, SpriteEffects flag)
@@ -200,11 +329,7 @@ namespace CNA::Internal::Backends::Skia
     void SkiaSpriteBatchBackend::SetSamplerFilter(int textureFilter)
     {
         (void)LockBinding("SpriteBatch::SetSamplerFilter");
-        if (RequiresMipmaps(textureFilter))
-            throw System::NotSupportedException(
-                "Skia raster SpriteBatch does not support TextureFilter mip modes because mip chains "
-                "are unavailable; use Linear, Point, or Anisotropic.");
-        (void)ToSampling(textureFilter);
+        (void)DecodeSkiaMipFilter(textureFilter);
         textureFilter_ = textureFilter;
         TraceSkiaState("sampler filter=%s", SamplerFilterName(textureFilter));
     }
@@ -260,10 +385,7 @@ namespace CNA::Internal::Backends::Skia
         const SkiaSourceAlphaConvention sourceAlphaConvention = sourceAlphaConvention_
             ? *sourceAlphaConvention_
             : SkiaSourceAlphaConvention::Premultiplied;
-        const sk_sp<SkImage> image = skiaImageSource
-            ? skiaImageSource->SnapshotImage(sourceAlphaConvention)
-            : nullptr;
-        if (!image)
+        if (!skiaImageSource || skiaImageSource->MipLevelCountEXT() <= 0)
             throw std::runtime_error("Skia SpriteBatch can only draw Skia Texture2D or RenderTarget2D resources.");
         const bool sourceInBounds = sourceRectangle.X >= 0 && sourceRectangle.Y >= 0
             && sourceRectangle.X <= texture.GetWidth() - sourceRectangle.Width
@@ -334,22 +456,46 @@ namespace CNA::Internal::Backends::Skia
             canvas->translate(0.0f, -localCenterY);
         }
 
-        const SkRect source = SkRect::MakeXYWH(static_cast<float>(sourceRectangle.X),
-                                                static_cast<float>(sourceRectangle.Y),
-                                                sourceWidth, sourceHeight);
+        const SkiaMipFilter mipFilter = DecodeSkiaMipFilter(textureFilter_);
+        const SkiaMipSelection mipSelection = SelectSkiaMipLevels(
+            mipFilter, skiaImageSource->MipLevelCountEXT(),
+            SkiaTexelRate(canvas->getLocalToDeviceAs3x3()));
+        const SkSamplingOptions sampling = ToSampling(mipSelection.withinLevel);
+        const sk_sp<SkImage> lowerImage = skiaImageSource->SnapshotMipLevelEXT(
+            mipSelection.lowerLevel, sourceAlphaConvention);
+        const sk_sp<SkImage> upperImage = mipSelection.upperLevel != mipSelection.lowerLevel
+            ? skiaImageSource->SnapshotMipLevelEXT(
+                mipSelection.upperLevel, sourceAlphaConvention)
+            : nullptr;
+        if (!lowerImage || (mipSelection.upperLevel != mipSelection.lowerLevel && !upperImage))
+            throw std::runtime_error("Skia SpriteBatch failed to snapshot the selected texture mip level.");
+
+        const bool strictSource = sourceInBounds && addressU_ == 1 && addressV_ == 1;
+        const SkRect source = MipSourceRect(
+            *lowerImage, texture.GetWidth(), texture.GetHeight(), sourceRectangle);
         const SkRect destination = SkRect::MakeXYWH(-origin.X, -origin.Y, sourceWidth, sourceHeight);
-        const SkSamplingOptions sampling = ToSampling(textureFilter_);
+        sk_sp<SkShader> primary;
+        if (upperImage)
+        {
+            primary = MakeMipBlendShader(
+                lowerImage, upperImage, texture.GetWidth(), texture.GetHeight(),
+                sourceRectangle, origin, ToTileMode(addressU_), ToTileMode(addressV_),
+                sampling, mipSelection.upperWeight, strictSource);
+        }
+        else if (customEffect_ || !strictSource)
+        {
+            primary = lowerImage->makeShader(
+                ToTileMode(addressU_), ToTileMode(addressV_), sampling,
+                MipLocalMatrix(*lowerImage, texture.GetWidth(), texture.GetHeight(),
+                               sourceRectangle, origin));
+        }
+
         if (customEffect_)
         {
             // The child shader uses the same source-pixel coordinate mapping and public sampler
             // state as the already-proven tiled stock path. The runtime shader itself receives
             // local source-pixel coordinates; cnaTexture0.eval(p) therefore reaches the matching
             // texture coordinate even for transformed/flipped/extended source rectangles.
-            const SkMatrix shaderMatrix = SkMatrix::Translate(
-                -static_cast<float>(sourceRectangle.X) - origin.X,
-                -static_cast<float>(sourceRectangle.Y) - origin.Y);
-            sk_sp<SkShader> primary = image->makeShader(
-                ToTileMode(addressU_), ToTileMode(addressV_), sampling, shaderMatrix);
             if (!primary)
                 throw std::runtime_error("Skia failed to create the custom effect's cnaTexture0 child.");
 
@@ -363,11 +509,19 @@ namespace CNA::Internal::Backends::Skia
             canvas->drawRect(destination, paint);
             return;
         }
-        if (sourceInBounds && addressU_ == 1 && addressV_ == 1)
+        if (upperImage)
+        {
+            if (!primary)
+                throw std::runtime_error("Skia failed to instantiate the mip interpolation shader.");
+            paint.setShader(std::move(primary));
+            canvas->drawRect(destination, paint);
+            return;
+        }
+        if (strictSource)
         {
             // Strict source clipping is more precise than a clamp shader for atlas sub-rectangles:
             // with Linear filtering it prevents neighbouring texels from bleeding into the crop.
-            canvas->drawImageRect(image.get(), source, destination, sampling,
+            canvas->drawImageRect(lowerImage.get(), source, destination, sampling,
                                   &paint, SkCanvas::kStrict_SrcRectConstraint);
             return;
         }
@@ -377,13 +531,9 @@ namespace CNA::Internal::Backends::Skia
         // applies its inverse while evaluating a canvas point, hence the negative offset. This
         // lets source rectangles legitimately extend before or past the image bounds, just like
         // XNA SpriteBatch UVs, while the destination rect still bounds the painted geometry.
-        const SkMatrix shaderMatrix = SkMatrix::Translate(-static_cast<float>(sourceRectangle.X) - origin.X,
-                                                           -static_cast<float>(sourceRectangle.Y) - origin.Y);
-        const sk_sp<SkShader> shader = image->makeShader(ToTileMode(addressU_), ToTileMode(addressV_),
-                                                          sampling, shaderMatrix);
-        if (!shader)
+        if (!primary)
             throw std::runtime_error("Skia failed to create the SpriteBatch image shader.");
-        paint.setShader(shader);
+        paint.setShader(std::move(primary));
         canvas->drawRect(destination, paint);
     }
 } // namespace CNA::Internal::Backends::Skia

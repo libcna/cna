@@ -65,14 +65,15 @@ result blindly.
 ## Selected raster anisotropy policy
 
 The pinned raster route has no device anisotropy query or anisotropic footprint control and reports
-`GraphicsCapability::AnisotropicFiltering=false`. For SpriteBatch's level-zero 2D path,
-`TextureFilter::Anisotropic` uses the documented `Linear` fallback. `MaxAnisotropy` therefore does
-not change pixels. Mip-dependent filter ordinals still reject because mutable mip chains and LOD
-selection are unavailable; all 3D stock-effect sampling rejects at the common 3D boundary.
+`GraphicsCapability::AnisotropicFiltering=false`. For SpriteBatch's complete Texture2D chain,
+`TextureFilter::Anisotropic` uses the documented `Linear` fallback, including Linear's mip
+interpolation. `MaxAnisotropy` therefore does not change pixels. SKIA-129 implements all other
+min/mag/mip ordinal combinations in bounded raster code; all 3D stock-effect sampling still
+rejects at the common 3D boundary.
 
-`Skia_Sampler_MipmapFilterPolicy` renders a non-uniform 2×2 texture and proves byte-identical
-Linear output for Anisotropic requests with `MaxAnisotropy` 1, 4, and 9999, while the capability
-remains false. This distinguishes a deliberate fallback from a claimed/clamped hardware feature.
+`Skia_Sampler_MipmapFilterPolicy` proves byte-identical complete-Linear output for Anisotropic,
+including fractional mip interpolation, while the capability remains false. This distinguishes a
+deliberate fallback from a claimed/clamped hardware feature.
 A future GPU mode must probe its native maximum and replace this result only after a real
 minification/LOD fixture passes.
 

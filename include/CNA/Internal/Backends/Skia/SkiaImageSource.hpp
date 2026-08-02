@@ -47,5 +47,11 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] virtual SkiaSourceStorageAlpha StorageAlphaEXT() const noexcept = 0;
         [[nodiscard]] virtual sk_sp<SkImage> SnapshotImage(
             SkiaSourceAlphaConvention alphaConvention) const = 0;
+        [[nodiscard]] virtual int MipLevelCountEXT() const noexcept { return 1; }
+        [[nodiscard]] virtual sk_sp<SkImage> SnapshotMipLevelEXT(
+            int level, SkiaSourceAlphaConvention alphaConvention) const
+        {
+            return level == 0 ? SnapshotImage(alphaConvention) : nullptr;
+        }
     };
 } // namespace CNA::Internal::Backends::Skia

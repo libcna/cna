@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
 
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkData.h"
 #include "include/core/SkPixmap.h"
 #include "System/NotSupportedException.hpp"
 
@@ -169,6 +170,25 @@ namespace CNA::Internal::Backends::Skia
                 == SkiaWorkingSourceRoute::PreserveDeclaredComponents
             ? premultipliedImage_
             : straightImage_;
+    }
+
+    sk_sp<SkImage> SkiaTextureBackend::SnapshotMipLevelEXT(
+        int level, SkiaSourceAlphaConvention alphaConvention) const
+    {
+        if (level < 0 || level >= mipChain_->LevelCount())
+            return nullptr;
+        if (level == 0)
+            return SnapshotImage(alphaConvention);
+
+        const SkiaMipLevel2D& mip = mipChain_->Level(level);
+        const SkImageInfo info = ResolveSkiaWorkingSourceRoute(StorageAlphaEXT(), alphaConvention)
+                == SkiaWorkingSourceRoute::PreserveDeclaredComponents
+            ? RgbaPremulInfo(mip.width, mip.height)
+            : RgbaUnpremulInfo(mip.width, mip.height);
+        // The chain has stable addresses and outlives this temporary image. No pixel copy or
+        // retained per-draw cache is needed; UpdatePixels cannot overlap a synchronous raster draw.
+        return SkImages::RasterFromData(
+            info, SkData::MakeWithoutCopy(mipChain_->LevelData(level), mip.bytes), mip.rowBytes);
     }
 
     void SkiaTextureBackend::RebuildImage()

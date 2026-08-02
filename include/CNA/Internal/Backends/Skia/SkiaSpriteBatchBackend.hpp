@@ -15,7 +15,7 @@ namespace CNA::Internal::Backends::Skia
 {
     class SkiaEffectBackend;
 
-    /** Immediate SkCanvas implementation of the level-0 SpriteBatch path. */
+    /** Immediate SkCanvas implementation of the bounded 2D SpriteBatch and mip-sampling path. */
     class SkiaSpriteBatchBackend final : public ISpriteBatchBackend
     {
     public:

@@ -31,9 +31,9 @@ authoritative compact capability boundary; later sections explain the individual
 |---|---|---|---|
 | Clear, present, resize, five presentation modes, coordinate transforms and backbuffer readback | Verified direct CPU surface plus SDL presentation | Direct raster implementation; SDL uploads the completed image and is not a Skia GPU mode. | [SKIA-7, SKIA-13–17, SKIA-71–72](../plan_skia.md); `Skia_PresentationModes`, `Skia_Resize_Presentation`, `Skia_DisplayScale` |
 | `SpriteBatch` draw overloads, sorting, transforms, source rectangles, tint, flips and `SpriteFont` | Verified direct 2D path | Direct `SkCanvas` image operations preserve the shared XNA-shaped batching and font-atlas layout. | [SKIA-31–40](../plan_skia.md); [2D EasyGL registration](skia-2d-easygl-registration.md); [XNA oracle](skia-xna-oracle.md) |
-| Point/linear filtering, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear and tile modes map directly. Level-zero Anisotropic is byte-identical to the documented Linear fallback; the capability stays false and mip-dependent modes reject. | [SKIA-43–46, SKIA-70, SKIA-78–79](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_Sampler_MipmapFilterPolicy` |
+| All nine TextureFilter ordinals, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear tile sampling is direct; affine mip LOD and inter-level interpolation are bounded raster routes. Anisotropic is byte-identical to complete Linear while the capability stays false. | [SKIA-43–46, SKIA-70, SKIA-78–79, SKIA-129](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy` |
 | Blend presets, arbitrary raster states, and target-0 colour-write masks | Verified direct/generated runtime-blender path | All 714,025 valid factor/function tuples, independent RGB/alpha equations, live constants, and all target-0 masks draw. Invalid raw selectors and sample/MRT-only state reject before drawing. | [SKIA-47–57, SKIA-108, SKIA-119–124](../plan_skia.md); [generated blender](skia-generated-blender.md); `Skia_BlendMapping_Raster`, `Skia_GeneratedBlend_PublicCorpus` |
-| `Texture2D` image path, checked mip allocation, transfer and generation | Verified direct/bounded CPU path | Level zero owns the two established Skia images; `mipMap=true` owns/reports a complete CNA chain, every level supports exact full/partial SetData/GetData, and changed parents deterministically generate only unauthored descendants. Mip sampling remains staged as SKIA-129. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–128](../plan_skia.md); [resource policy](skia-successor-resource-oracles.md); `Skia_Texture2D_MipConstruction`, `Skia_Texture2D_MipTransfer`, `Skia_Texture2D_MipGeneration` |
+| `Texture2D` image path, checked mip allocation, transfer, generation and sampling | Verified direct/bounded CPU path | `mipMap=true` owns/reports a complete CNA chain; every level transfers exactly, changed parents generate only unauthored descendants, and synchronous no-copy views feed all nine min/mag/mip combinations. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–129](../plan_skia.md); [resource policy](skia-successor-resource-oracles.md); `Skia_Texture2D_MipGeneration`, `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy` |
 | `RenderTarget2D` colour rendering, readback, sampling and Preserve/Discard | Verified direct level-0 raster target | Direct `SkSurface`; real depth, mip chains and MSAA are unavailable rather than fabricated. | [SKIA-61–75](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_DepthPolicy`, `Skia_RenderTarget2D_MsaaPolicy` |
 | `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
 | `RenderTargetCube` face rendering, transfers, Preserve/Discard and generated mips | Verified bounded six-surface 2D emulation | Each face is an independent raster target. Cube sampling, real depth and real MSAA reject explicitly. | [SKIA-85–86](../plan_skia.md); `Skia_RenderTargetCube_Policy` and four shared cube contracts |
@@ -236,12 +236,15 @@ CNA-owned chain: all levels are allocated contiguously, zero initialized, and re
 public `LevelCount`. Only level zero is converted into the two alpha-labelled Skia images at this
 checkpoint. Full and partial upload/readback preserve exact bytes at every level. Changed levels
 area-box-generate only following unauthored descendants; any full or partial caller write becomes
-an ownership barrier and preserves explicitly written bytes across later ancestor uploads. Mip
-sampling remains SKIA-129. `mipMap=true` `RenderTarget2D` construction still raises
+an ownership barrier and preserves explicitly written bytes across later ancestor uploads.
+SKIA-129 exposes every level as a synchronous no-copy raster image and decomposes all nine public
+filters into independent minification, magnification, and mip components. Affine screen-space rho
+selects or brackets the real chain; one bounded runtime shader performs inter-level interpolation
+before tint/effect/blend, with normalized odd-level coordinates and strict crop bounds.
+`mipMap=true` `RenderTarget2D` construction still raises
 `System::NotSupportedException` until the separate stable-surface work in SKIA-131. CNA does not
-bind Skia's private `src/core` mip builder. The six `TextureFilter` values that name a mip selection
-rule are likewise rejected during `SpriteBatch::Begin`; they are never silently treated as a
-level-zero Point or Linear request.
+bind Skia's private `src/core` mip builder. TextureCube/Texture3D sampling and render-target mips
+remain separate unsupported routes; Texture2D mip sampling does not widen those claims.
 
 ## Verification recorded for the initial slice
 
@@ -322,10 +325,10 @@ level-zero Point or Linear request.
     render-target construction therefore both raise `System::NotSupportedException`; a following
     level-0 texture upload/draw and a fresh target bind/Clear/readback/unbind/sample cycle remain
     correct.
-26. `Skia_Sampler_MipmapFilterPolicy` verifies every mip-dependent `TextureFilter` value rejects
-    during `SpriteBatch::Begin`, before any draw. It then renders a non-uniform 2×2 source and
-    proves Anisotropic with `MaxAnisotropy` 1, 4, and 9999 is byte-identical to the documented
-    Linear fallback while the capability remains false, before reusing the batch with PointClamp.
+26. `Skia_Sampler_MipmapFilterPolicy` originally fixed the baseline refusal. SKIA-129 supersedes
+    it with public pixels for all nine TextureFilter ordinals, exact/fractional LOD, independent
+    min/mag components, generated and later-authored levels, NPOT, source crops, Begin transform,
+    Clamp/Wrap/Mirror, and complete-Linear Anisotropic fallback while capability remains false.
 27. `Skia_BlendEnabled_State` verifies `SetBlendEnabled(false)` makes sprites replace their
     destination, `Clear` remains an unconditional surface clear, and re-enabling restores the
     previously configured `BlendState::AlphaBlend` composition.
@@ -710,8 +713,9 @@ level-zero Point or Linear request.
 86. The accepted SKIA-5/6 surface ADR selects CPU raster for this release. Ganesh/OpenGL is only
     the first future acceleration candidate and must prove ownership, flush/swap, readback,
     resize, context loss, and CPU/GPU parity through a successor plan. SKIA-76/77 prove the
-    zero-sample MSAA clamp/refusal matrix; SKIA-78/79 prove the level-zero Anisotropic-to-Linear
-    fallback at three requested qualities while both capabilities remain false.
+    zero-sample MSAA clamp/refusal matrix; SKIA-78/79 prove the baseline level-zero
+    Anisotropic-to-Linear fallback at three requested qualities while both capabilities remain
+    false, and SKIA-129 later extends that exact fallback through the complete mip chain.
 87. SKIA-114 passes the final release gate: all 114 plan rows, all nine capability values, and all
     direct/bounded/refused feature families are audited. The complete Debug suite passes 133/133
     on real display `:0` in 61.14 seconds (16 Raster, 113 Display, four Audit); the final two policy
@@ -771,7 +775,14 @@ level-zero Point or Linear request.
     Changed parents rebuild only dirty unauthored descendants; full or partial caller writes become
     ownership barriers, partial promotion preserves untouched generated texels, and later ancestor
     uploads cannot replace explicit levels. Generation counters prove no redundant rebuilds across
-    a 7×5→3×2→1×1 chain. Mip-filter sampling remains the explicit SKIA-129 boundary.
+    a 7×5→3×2→1×1 chain. Mip-filter sampling remains the explicit SKIA-129 boundary at this
+    historical checkpoint.
+97. SKIA-129 adds `SkiaMipSampling` and closes Texture2D mip filtering. All nine public ordinals
+    retain independent min/mag/mip components; inverse-affine rho, real-chain clamping, downward
+    nearest half ties, and adjacent-level weights are display-free scalar evidence. Higher levels
+    use zero-copy synchronous views, while a fixed two-child shader interpolates before the rest of
+    the paint pipeline. Public pixels cover generated and explicit updates, NPOT, strict source
+    crops, Begin scale, Clamp/Wrap/Mirror, and exact complete-Linear anisotropy fallback.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

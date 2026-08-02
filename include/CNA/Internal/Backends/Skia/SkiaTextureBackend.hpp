@@ -19,8 +19,8 @@ namespace CNA::Internal::Backends::Skia
      * mipChain_ stays in CNA's top-row-first RGBA8 convention. The two level-0 Skia snapshots label
      * those bytes for the two XNA source-alpha conventions; the active BlendState selects one at
      * draw time without rewriting public data. Every level supports exact CPU upload/readback.
-     * Unauthored descendants are generated deterministically; mip-filter sampling is staged by
-     * SKIA-129.
+     * Unauthored descendants are generated deterministically and exposed as stable zero-copy
+     * raster views for the bounded SpriteBatch mip sampler.
      */
     class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource
     {
@@ -48,8 +48,10 @@ namespace CNA::Internal::Backends::Skia
         }
         [[nodiscard]] sk_sp<SkImage> SnapshotImage(
             SkiaSourceAlphaConvention alphaConvention) const override;
+        [[nodiscard]] sk_sp<SkImage> SnapshotMipLevelEXT(
+            int level, SkiaSourceAlphaConvention alphaConvention) const override;
 
-        NOXNA [[nodiscard]] int MipLevelCountEXT() const noexcept
+        NOXNA [[nodiscard]] int MipLevelCountEXT() const noexcept override
         {
             return mipChain_ ? mipChain_->LevelCount() : 0;
         }

@@ -86,7 +86,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `ISpriteBatchBackend::End/0` | Flushes/ends sprite submission. | Ends checked canvas session. | `implemented` | SKIA-31 |
 | `ISpriteBatchBackend::SetTransformMatrix/1` | Applies sprite transform in GL shader. | Applies equivalent SkCanvas transform. | `implemented` | SKIA-35 |
 | `ISpriteBatchBackend::SetCustomEffect/1` | Selects a custom EasyGL effect. | Null/exact stock SpriteEffect use built-in paint; valid tagged SkSL uses runtime shader; stock 3D effects identify the missing primitive route and other custom effects reject. | `bounded` | SKIA-89–94; both SkSL tests; `Skia_SpriteEffect_Alias`; `Skia_StockEffect_Boundary` |
-| `ISpriteBatchBackend::SetSamplerFilter/1` | Selects GL point/linear/mip filtering. | Point/linear work; level-zero Anisotropic uses the tested Linear fallback; mip filters reject. | `bounded` | SKIA-43, SKIA-70, SKIA-78–79 |
+| `ISpriteBatchBackend::SetSamplerFilter/1` | Selects GL point/linear/mip filtering. | All nine ordinals preserve independent min/mag/mip components over the complete Texture2D chain; Anisotropic is exactly the complete Linear fallback and remains capability-false. | `bounded` | SKIA-43, SKIA-70, SKIA-78–79, SKIA-129; `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy` |
 | `ISpriteBatchBackend::SetSamplerAddressMode/2` | Selects GL clamp/wrap/mirror axes. | Both axes implemented in Skia shader. | `implemented` | SKIA-44–46 |
 | `ISpriteBatchBackend::Draw/3` | Draws a texture at point position. | Direct canvas image draw. | `implemented` | SKIA-32 |
 | `ISpriteBatchBackend::Draw/4` | Draws destination/source/tint rectangles. | Direct canvas image draw. | `implemented` | SKIA-32–33 |
@@ -104,7 +104,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::TransformLogicalToWindow/4` | Converts inverse EasyGL presentation mapping. | Uses SDL's DPI-aware inverse mapping. | `implemented` | SKIA-14, SKIA-72 |
 | `IGraphicsBackend::GetWindowInternal/0` | Returns the owned SDL window. | Returns the checked presenter window. | `internal` | SKIA-12, SKIA-18 |
 | `IGraphicsBackend::GetRendererInternal/0` | EasyGL has no SDL renderer. | Returns owned SDL presenter renderer. | `internal` | SKIA-12, SKIA-18 |
-| `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates the complete checked zeroed 2D mip chain and level-zero alpha-labelled Skia images; every level transfers exactly and unauthored descendants generate deterministically, while sampling remains bounded. | `bounded` | SKIA-22–30, SKIA-125–128 |
+| `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates the complete checked zeroed 2D mip chain and level-zero alpha-labelled Skia images; every level transfers, generates, and samples through bounded zero-copy raster views. | `bounded` | SKIA-22–30, SKIA-125–129 |
 | `IGraphicsBackend::CreateSpriteBatch/0` | Allocates EasyGL sprite renderer state. | Allocates checked SkCanvas adapter. | `implemented` | SKIA-31–40 |
 | `IGraphicsBackend::ReadBackbuffer/5` | Reads GL framebuffer top-left RGBA. | Exact active-surface RGBA8 readback. | `implemented` | SKIA-7, SKIA-62 |
 | `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Creates a refusal object: safe false/zero properties; Begin/End throw after SKIA-104 disproves raster emulation. | `unsupported` | SKIA-102, SKIA-104–105 |
@@ -119,7 +119,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | All 714,025 valid factor/function tuples and target-0 masks draw; invalid raw selectors, target-1/2/3 masks, and non-default sample masks reject atomically. | `bounded` | SKIA-47–57, SKIA-119–124 |
 | `IGraphicsBackend::ApplyDepthStencilState/16` | Applies complete GL depth/stencil state. | Disabled None is valid 2D state; any active depth/write/stencil mode rejects. | `unsupported` | SKIA-97–98, SKIA-102 |
 | `IGraphicsBackend::ApplyRasterizerState/5` | Applies GL cull/fill/scissor/bias. | 2D solid/scissor only; wireframe rejects. | `bounded` | SKIA-41, SKIA-58 |
-| `IGraphicsBackend::ApplySamplerState/5` | Applies per-slot GL filter/address/anisotropy. | Sprite slot point/linear/address work; level-zero Anisotropic is a documented Linear fallback, not an advertised device feature. | `bounded` | SKIA-43–46, SKIA-78–79 |
+| `IGraphicsBackend::ApplySamplerState/5` | Applies per-slot GL filter/address/anisotropy. | Sprite Texture2D slot implements all min/mag/mip combinations and addressing; Anisotropic is a complete-Linear fallback, not an advertised device feature. | `bounded` | SKIA-43–46, SKIA-78–79, SKIA-129 |
 | `IGraphicsBackend::SetBlendFactor/4` | Sets GL constant blend color. | Rebuilds the active generated blender transactionally with the live RGBA constant. | `implemented` | SKIA-120–124 |
 | `IGraphicsBackend::SetReferenceStencil/1` | Updates GL stencil reference. | Zero accompanies disabled 2D state; nonzero rejects. | `unsupported` | SKIA-98, SKIA-102 |
 | `IGraphicsBackend::SetScissorRect/4` | Updates GL scissor. | Updates active top-left Skia clip state. | `implemented` | SKIA-41, SKIA-59 |

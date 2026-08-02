@@ -122,6 +122,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_mip_chain_2d examples/skia_mip_chain_2d_test.cpp)
     cna_register_skia_raster_test(Skia_MipChain2D_Raster cna_test_skia_mip_chain_2d)
 
+    cna_skia_test(cna_test_skia_mip_sampling_raster examples/skia_mip_sampling_raster_test.cpp)
+    target_include_directories(cna_test_skia_mip_sampling_raster PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_MipSampling_Raster cna_test_skia_mip_sampling_raster)
+
     cna_skia_test(cna_test_skia_lifecycle examples/skia_lifecycle_test.cpp)
     target_include_directories(cna_test_skia_lifecycle PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_display_test(Skia_Lifecycle cna_test_skia_lifecycle)

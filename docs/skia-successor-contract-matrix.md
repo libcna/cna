@@ -58,15 +58,15 @@ stale, duplicated, malformed, or unrouted entries.
 | `BLENDFUNC-ReverseSubtract` | Subtract source term from destination term. | refused | SKIA-120 | Public color/alpha scenes prove clamping against the scalar oracle. |
 | `BLENDFUNC-Max` | Componentwise maximum of source and destination; EasyGL/OpenGL ignores factors. | refused | SKIA-120 | Public color/alpha scenes prove the factor-independent EasyGL equation. |
 | `BLENDFUNC-Min` | Componentwise minimum of source and destination; EasyGL/OpenGL ignores factors. | refused | SKIA-120 | Public color/alpha scenes prove the factor-independent EasyGL equation. |
-| `FILTER-Linear` | Bilinear texel sampling without mip selection. | supported | SKIA-129 | Preserve existing exact magnification/minification pixels. |
-| `FILTER-Point` | Nearest texel sampling without mip selection. | supported | SKIA-129 | Preserve existing exact coordinate and tile-mode pixels. |
+| `FILTER-Linear` | Bilinear texel and linear mip sampling. | supported | SKIA-129 | Exact old magnification/minification pixels remain; a real chain now brackets fractional LOD. |
+| `FILTER-Point` | Nearest texel and nearest mip sampling. | supported | SKIA-129 | Exact old coordinate/tile pixels remain; a real chain now selects the nearest level. |
 | `FILTER-Anisotropic` | Device anisotropic footprint up to MaxAnisotropy. | fallback | SKIA-165 | Raster stays Linear fallback; Ganesh must prove a distinct device result. |
-| `FILTER-LinearMipPoint` | Linear texels and nearest mip level. | refused | SKIA-129 | Requires mutable mip chain plus exact derivative/LOD selection. |
-| `FILTER-PointMipLinear` | Point texels and interpolation between mip levels. | refused | SKIA-129 | Requires mutable mip chain plus exact derivative/LOD selection. |
-| `FILTER-MinLinearMagPointMipLinear` | Linear minification, point magnification, linear mip blend. | refused | SKIA-129 | Min/mag split and mip blend require separate scale oracles. |
-| `FILTER-MinLinearMagPointMipPoint` | Linear minification, point magnification, nearest mip. | refused | SKIA-129 | Min/mag split and nearest mip require separate scale oracles. |
-| `FILTER-MinPointMagLinearMipLinear` | Point minification, linear magnification, linear mip blend. | refused | SKIA-129 | Min/mag split and mip blend require separate scale oracles. |
-| `FILTER-MinPointMagLinearMipPoint` | Point minification, linear magnification, nearest mip. | refused | SKIA-129 | Min/mag split and nearest mip require separate scale oracles. |
+| `FILTER-LinearMipPoint` | Linear texels and nearest mip level. | refused | SKIA-129 | Baseline refusal is superseded by affine LOD, exact integer-level, half-tie, and public pixel evidence. |
+| `FILTER-PointMipLinear` | Point texels and interpolation between mip levels. | refused | SKIA-129 | Baseline refusal is superseded by bounded two-level interpolation and ±1 byte public evidence. |
+| `FILTER-MinLinearMagPointMipLinear` | Linear minification, point magnification, linear mip blend. | refused | SKIA-129 | Baseline refusal is superseded by independent min/mag and fractional-LOD public oracles. |
+| `FILTER-MinLinearMagPointMipPoint` | Linear minification, point magnification, nearest mip. | refused | SKIA-129 | Baseline refusal is superseded by independent min/mag and nearest-level public oracles. |
+| `FILTER-MinPointMagLinearMipLinear` | Point minification, linear magnification, linear mip blend. | refused | SKIA-129 | Baseline refusal is superseded by independent min/mag and fractional-LOD public oracles. |
+| `FILTER-MinPointMagLinearMipPoint` | Point minification, linear magnification, nearest mip. | refused | SKIA-129 | Baseline refusal is superseded by independent min/mag and nearest-level public oracles. |
 | `CAP-ThreeD` | Complete public 3D renderer. | refused | SKIA-170 | Successor 2D/GPU work does not reopen the accepted 3D ADR implicitly. |
 | `CAP-DepthStencilBuffer` | Real target depth/stencil attachment. | refused | SKIA-170 | MSAA/Ganesh does not imply depth/stencil support. |
 | `CAP-MultiSampleAntiAliasing` | Real sample count above one. | refused | SKIA-164 | Ganesh probe must control reporting; raster remains false. |
@@ -80,7 +80,7 @@ stale, duplicated, malformed, or unrouted entries.
 | `MIP-TEXTURE2D-TRANSFER` | Full/partial SetData/GetData for each mip. | refused | SKIA-127 | The baseline refusal is superseded by shared range coverage plus direct odd/NPOT level, byte, lifetime and atomic-failure evidence. |
 | `MIP-TEXTURE2D-GENERATION` | Dirty descendant generation after upload. | refused | SKIA-128 | Baseline refusal is superseded by exact odd/NPOT straight-RGBA area-box bytes, dirty-generation counts, and explicit-level ownership barriers. |
 | `MIP-RENDERTARGET2D` | Render, upload, readback and sample mutable target mips. | refused | SKIA-131–132 | Existing target policy proves atomic refusal and recovery. |
-| `MIP-SAMPLING-LOD` | Min/mag and mip-level selection/interpolation. | refused | SKIA-129 | Scale-transform oracle must distinguish every TextureFilter value. |
+| `MIP-SAMPLING-LOD` | Min/mag and mip-level selection/interpolation. | refused | SKIA-129 | Baseline refusal is superseded by all-nine decomposition, affine rho, NPOT, source/crop, transform, addressing and interpolation evidence. |
 | `FORMAT-RENDERTARGET` | Per-format renderability independent of texture sampling. | refused | SKIA-142 | Every enum needs direct route or pre-allocation refusal. |
 | `FORMAT-CONTENT` | XNB/DDS level and compressed block preservation. | bounded | SKIA-130–141 | Existing Color DDS path and cube content fixtures are reusable evidence. |
 | `EFFECT-LANGUAGE` | Untagged EasyGL GLSL versus explicit SkSL identity. | bounded | SKIA-152–155 | Existing v1 marker prevents language guessing. |
