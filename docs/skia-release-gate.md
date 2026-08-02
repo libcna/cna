@@ -62,7 +62,8 @@ audit can pass.
 | Explicit `CNA_SKIA_SKSL_V1` SpriteBatch fragment effects | Bounded opt-in extension | compiler/ABI/uniform/texture/security-limit tests |
 | Mipmapped Texture2D construction/storage/generation/sampling | Bounded CNA-owned CPU chain and synchronous raster views | exact level/property/transfer/generation plus affine LOD, mip interpolation, strict crops, addressing, generated-level and stale-cache evidence |
 | Texture2D per-mip transfer | Direct checked CPU-chain transfer | exact full/partial SetData/GetData at every valid level; invalid requests and caller memory remain unchanged |
-| RenderTarget2D mips and non-Color formats | Refused after focused feasibility/policy work | stable pre-draw or construction diagnostics and recovery tests |
+| RenderTarget2D mip storage/transfer/sampling | Bounded CNA-owned surfaces and exact shadows; rendered-descendant generation pending | `Skia_RenderTarget2D_MipStorage`; SKIA-131–132 |
+| Non-Color target formats | Refused pending the format phase | stable pre-allocation diagnostics; SKIA-142–143 |
 | MRT, depth/stencil, wireframe, 3D, stock 3D effects, cube/volume sampling, queries | Refused after emulation investigation | MRT/3D/query ADRs and atomic refusal suite |
 | Ganesh/Graphite acceleration | Not selected or advertised | surface-mode ADR; zero `Accelerated` CTests in the raster build |
 
@@ -103,6 +104,13 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   truncated, and cross-boundary fixtures follow the documented non-fabrication policy. Eighteen
   existing XNB and FromStream format/resize regressions pass on Xvfb. All builds use at most
   `--parallel 2`.
+- SKIA-131 storage checkpoint: `Skia_RenderTarget2D_MipStorage`, the transition mip policy, and
+  target SetData pass 3/3 in Debug, Release, and ASan+UBSan (`detect_leaks=0` only for the known
+  external Mesa GLX residual). Sixteen existing target, mip-sampler, pass-boundary, and recovery
+  regressions pass on virtual `:99`; all builds use at most `--parallel 2`. Full rendered-level
+  descendant invalidation/generation remains SKIA-132 and is not claimed here. The complete Debug
+  Skia suite then passes 148/148 sequentially: 21 Raster, 122 Display, and five Audit tests in
+  215.52 seconds.
 - `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`, and
   `Skia_ReleaseGate_Audit`: PASS.
 - Updated `Skia_Sampler_MipmapFilterPolicy` and `Skia_RenderTarget2D_MsaaPolicy`: 2/2 PASS on the

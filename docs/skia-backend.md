@@ -34,7 +34,7 @@ authoritative compact capability boundary; later sections explain the individual
 | All nine TextureFilter ordinals, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear tile sampling is direct; affine mip LOD and inter-level interpolation are bounded raster routes. Anisotropic is byte-identical to complete Linear while the capability stays false. | [SKIA-43–46, SKIA-70, SKIA-78–79, SKIA-129](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy` |
 | Blend presets, arbitrary raster states, and target-0 colour-write masks | Verified direct/generated runtime-blender path | All 714,025 valid factor/function tuples, independent RGB/alpha equations, live constants, and all target-0 masks draw. Invalid raw selectors and sample/MRT-only state reject before drawing. | [SKIA-47–57, SKIA-108, SKIA-119–124](../plan_skia.md); [generated blender](skia-generated-blender.md); `Skia_BlendMapping_Raster`, `Skia_GeneratedBlend_PublicCorpus` |
 | `Texture2D` image path, checked mip allocation, transfer, generation, sampling and content loading | Verified direct/bounded CPU path | `mipMap=true` owns/reports a complete CNA chain; every level transfers exactly, changed parents generate only unauthored descendants, synchronous no-copy views feed all nine min/mag/mip combinations, and exact DDS/XNB level spans upload as authored barriers. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–130](../plan_skia.md); [resource policy](skia-successor-resource-oracles.md); `Skia_Texture2D_MipGeneration`, `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy`, `Skia_Texture2D_ContentMips` |
-| `RenderTarget2D` colour rendering, readback, sampling and Preserve/Discard | Verified direct level-0 raster target | Direct `SkSurface`; real depth, mip chains and MSAA are unavailable rather than fabricated. | [SKIA-61–75](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_DepthPolicy`, `Skia_RenderTarget2D_MsaaPolicy` |
+| `RenderTarget2D` colour rendering, per-level transfer/sampling, and Preserve/Discard | Verified bounded raster target | Level zero is a directly bindable `SkSurface`; mipmapped targets own stable isolated surfaces and exact canonical shadows at every level. Automatic rendered-descendant generation remains SKIA-132. Real depth and MSAA stay unavailable rather than fabricated. | [SKIA-61–75, SKIA-131–132](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_MipStorage`, `Skia_RenderTarget2D_MsaaPolicy` |
 | `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
 | `RenderTargetCube` face rendering, transfers, Preserve/Discard and generated mips | Verified bounded six-surface 2D emulation | Each face is an independent raster target. Cube sampling, real depth and real MSAA reject explicitly. | [SKIA-85–86](../plan_skia.md); `Skia_RenderTargetCube_Policy` and four shared cube contracts |
 | Multiple render targets | Unsupported | Direct support is absent because `SkCanvas` has one colour result; replay emulation was evaluated and rejected because distinct shader outputs for slots 0–3 cannot be reproduced. Empty or one-target plural binding remains supported. | [SKIA-87–88](../plan_skia.md); `Skia_MRT_Rejection` |
@@ -241,10 +241,14 @@ SKIA-129 exposes every level as a synchronous no-copy raster image and decompose
 filters into independent minification, magnification, and mip components. Affine screen-space rho
 selects or brackets the real chain; one bounded runtime shader performs inter-level interpolation
 before tint/effect/blend, with normalized odd-level coordinates and strict crop bounds.
-`mipMap=true` `RenderTarget2D` construction still raises
-`System::NotSupportedException` until the separate stable-surface work in SKIA-131. CNA does not
-bind Skia's private `src/core` mip builder. TextureCube/Texture3D sampling and render-target mips
-remain separate unsupported routes; Texture2D mip sampling does not widen those claims.
+SKIA-131 gives `RenderTarget2D(mipMap=true)` one stable raster surface and one exact canonical
+straight-RGBA shadow per complete floor-halved level. Only level zero is bindable, matching the
+public XNA target API; every level is independently uploadable, readable and sampleable, and a
+single cross-level immutable snapshot cache prevents retained-cache growth. The combined surface
+plus shadow footprint is checked against 256 MiB before allocation. A rendered level-zero pass
+does not yet regenerate descendants: that pass-boundary invalidation rule is deliberately isolated
+in SKIA-132. CNA still does not bind Skia's private `src/core` mip builder, and cube/volume sampling
+remains a separate unsupported route.
 
 ## Verification recorded for the initial slice
 
@@ -789,6 +793,11 @@ remain separate unsupported routes; Texture2D mip sampling does not widen those 
     declarations before absent levels can be generated; success and failure both return Skia
     resource counters to baseline. Compressed input is decoded to the backend's current canonical
     RGBA8 `Color` storage, so this does not pre-claim SKIA-134–141's wider public formats.
+99. `Skia_RenderTarget2D_MipStorage` closes SKIA-131's storage slice. An 8×8 target owns four
+    isolated surfaces plus four canonical shadows, round-trips translucent and partial higher-mip
+    uploads exactly, keeps one level-identified snapshot cache, binds/draws only level zero, samples
+    the authored 1×1 level under minification, and preserves higher levels across level-zero
+    Preserve/Discard cycles. Combined over-budget storage rejects before allocation/accounting.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-27 / SKIA-70 / SKIA-126: retain the target/sampler refusal while Texture2D storage opens.
+// SKIA-27 / SKIA-70 / SKIA-126 / SKIA-131: transition policy for complete 2D mip storage.
 //
 // SkImage::withDefaultMipmaps() is public in the pinned Skia revision, but it returns an immutable
 // image snapshot.  Its public API neither exposes per-level raster readback nor defines the
 // invalidation/resolve contract CNA needs when a mutable SkSurface target is rebound or uploaded.
-// SKIA-126 now allocates a CNA-owned zeroed Texture2D chain while RenderTarget2D stays rejected
-// until SKIA-131. Texture2D mip-filter sampling is implemented by SKIA-129. This transition test proves
-// a mipped texture's level-zero path and the ordinary target path remain usable around the retained
-// target refusal.
+// SKIA-126 allocates a CNA-owned Texture2D chain, SKIA-129 samples it, and SKIA-131 gives
+// RenderTarget2D the same stable per-level addressing. Automatic target descendant generation is
+// deliberately the next transition, SKIA-132.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -23,7 +22,6 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
-#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -45,23 +43,6 @@ namespace
             && left.getAProperty() == right.getAProperty();
     }
 
-    template <typename F>
-    [[nodiscard]] bool throwsNotSupported(F&& operation)
-    {
-        try
-        {
-            operation();
-        }
-        catch (const System::NotSupportedException&)
-        {
-            return true;
-        }
-        catch (...)
-        {
-            return false;
-        }
-        return false;
-    }
 }
 
 class SkiaMipmapPolicyTest final : public Game
@@ -111,12 +92,11 @@ protected:
         Texture2D mippedTexture(device, 4, 4, true, SurfaceFormat::Color);
         check(mippedTexture.getLevelCountProperty() == 3,
               "Texture2D mipMap=true allocates and reports the complete 4x4 chain");
-        check(throwsNotSupported([&] {
-                  RenderTarget2D rejected(device, 4, 4, true, SurfaceFormat::Color,
-                                          DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
-                  (void)rejected;
-              }),
-              "RenderTarget2D mipMap=true rejects with NotSupportedException");
+        RenderTarget2D mippedTarget(device, 4, 4, true, SurfaceFormat::Color,
+                                    DepthFormat::None, 0,
+                                    RenderTargetUsage::PreserveContents);
+        check(mippedTarget.getLevelCountProperty() == 3,
+              "RenderTarget2D mipMap=true allocates and reports the complete 4x4 chain");
 
         const std::vector<Color> pixels = {
             kRed, kRed, kBlue, kBlue,
@@ -141,7 +121,7 @@ protected:
         device.Clear(kRed);
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         checkTargetPixel(levelZeroTarget, 0, kRed,
-                         "level-0 target remains readable after rejected mip-target construction");
+                         "level-0 target remains readable after mip-target construction");
 
         device.Clear(Color(0, 0, 0, 255));
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
@@ -150,7 +130,7 @@ protected:
         spriteBatch_->Draw(levelZeroTarget, Rectangle(0, 0, 4, 2), Rectangle(0, 0, 2, 1), Color::White);
         spriteBatch_->End();
         checkPixel(1, kRed,
-                   "level-0 target remains sampleable after rejected mip-target construction");
+                   "level-0 target remains sampleable after mip-target construction");
         Exit();
     }
 

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-65 partial slice: level-0 RenderTarget2D uploads replace its SkSurface, including a
-// partial update. Raster mip targets are rejected at construction and level 1 is invalid.
+// SKIA-65 / SKIA-131: RenderTarget2D uploads replace the addressed stable mip surface.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -11,7 +10,6 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
-#include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -87,17 +85,15 @@ protected:
         }
         Check(invalidLevelRejected, "level 1 upload is rejected for a non-mip raster target");
 
-        bool mipTargetRejected = false;
-        try
-        {
-            RenderTarget2D mipTarget(device, 4, 4, true, SurfaceFormat::Color, DepthFormat::None);
-            (void)mipTarget;
-        }
-        catch (const System::NotSupportedException&)
-        {
-            mipTargetRejected = true;
-        }
-        Check(mipTargetRejected, "mipmapped raster RenderTarget2D construction is rejected precisely");
+        RenderTarget2D mipTarget(device, 4, 4, true, SurfaceFormat::Color, DepthFormat::None);
+        const Color mipPixels[] { kRed, kBlue, kBlue, kRed };
+        mipTarget.SetData(1, nullptr, mipPixels, 0, 4);
+        Color mipReadback[4] { kBlue, kBlue, kBlue, kBlue };
+        mipTarget.GetData(1, nullptr, mipReadback, 0, 4);
+        Check(mipTarget.getLevelCountProperty() == 3
+                  && Same(mipReadback[0], kRed) && Same(mipReadback[1], kBlue)
+                  && Same(mipReadback[2], kBlue) && Same(mipReadback[3], kRed),
+              "mipmapped raster RenderTarget2D stores and reads level 1 exactly");
         Exit();
     }
 

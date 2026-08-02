@@ -1412,10 +1412,36 @@ level-boundary contract.
   on virtual `:99`: 21 Raster, 121 Display and five Audit, in 197.99 seconds. Every build used
   `--parallel 2`; no real display or subagent was used, and `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-131
+
+- `SkiaRenderTargetBackend` now preflights and owns a complete floor-halved target chain: one
+  stable premultiplied raster surface and one exact canonical straight-RGBA shadow per level.
+  Their combined retained storage must fit the shared 256-MiB per-resource ceiling before any
+  allocation or resource-counter registration.
+- The public target still binds only level zero, matching XNA, while full/partial transfer,
+  backend readback, `HasDefinedMipLevel`, image snapshots and SpriteBatch LOD sampling address
+  every valid level independently. A single level-tagged immutable snapshot cache stays bounded
+  across the whole chain.
+- Level-zero Clear/draw marks the live surface dirty and synchronizes exact public readback at the
+  pass boundary. It deliberately does not regenerate descendants yet; that invalidation and
+  generation policy is the next task, SKIA-132. Preserve/Discard affect the bindable level without
+  aliasing higher storage.
+- Added `Skia_RenderTarget2D_MipStorage`, covering four-level properties/accounting, exact
+  translucent full/partial transfer, distinct snapshot dimensions/identity, viewport/scissor
+  reset, Clear/SpriteBatch output, Preserve/Discard isolation, public 1×1 mip selection,
+  over-budget failure atomicity, and complete resource release. The old transition-policy and
+  SetData fixtures now require target mip support rather than refusal.
+- The three focused tests pass in Debug and Release and under ASan+UBSan with only the documented
+  external Mesa GLX leak check disabled. Sixteen existing target, mip-sampler, pass-boundary and
+  presenter-recovery regressions pass on virtual `:99`. The complete Debug Skia suite passes
+  148/148 sequentially on the same virtual display: 21 Raster, 122 Display, and five Audit tests in
+  215.52 seconds. Every build used `--parallel 2`; no real display or subagent was used, and
+  `NEXT.md` remained untouched.
+
 ## Next candidates
 
-1. SKIA-131–133: implement mutable RenderTarget2D mip storage, pass-boundary generation and the
-   complete mip lifecycle/release gate.
+1. SKIA-132–133: implement deterministic RenderTarget2D descendant invalidation/generation and
+   close the complete mip lifecycle/release gate.
 2. SKIA-134–158: implement formats, bounded cube/volume
    sampling, and wider explicit 2D
    effects in dependency order.
@@ -1433,8 +1459,9 @@ level-boundary contract.
 - Mipmapped Texture2D construction, exact level reporting, full/partial transfer at every level,
   deterministic generation with explicit-level ownership barriers, and all nine TextureFilter
   sampling routes are supported. Complete DDS/XNB chains preserve authored levels; partial asset
-  prefixes reject rather than fabricating their suffix. Mipmapped RenderTarget2D remains
-  rejected until SKIA-131.
+  prefixes reject rather than fabricating their suffix. Mipmapped RenderTarget2D now has stable
+  per-level surfaces, exact transfer/readback and sampling; rendered descendant regeneration is
+  deliberately pending SKIA-132.
 - `docs/graphics-backend-feature-matrix.md` contains a separate verified Skia CPU-raster companion
   table, not an established GPU/3D column. Keep its task/test evidence synchronized with the live
   capability ledger and do not copy aspirational accelerated claims into it.

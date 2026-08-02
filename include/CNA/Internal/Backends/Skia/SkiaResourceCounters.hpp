@@ -11,11 +11,12 @@ namespace CNA::Internal::Backends::Skia
      *
      * These are live backend-owned objects, not Skia allocator totals: a public Texture2D owns two
      * alpha-labelled SkImages, CPU-only cube/volume resources report their exact RGBA8 vectors, a
-     * public RenderTarget2D owns one raster surface, a RenderTargetCube reports its six surfaces
-     * plus exact transfer shadows across the mip chain, and each 2D target is allowed at most one
-     * cached immutable sampling snapshot. CNA-owned 2D mip chains report their one contiguous
-     * allocation independently from derived SkImage views. Bounded caches are released on the
-     * next target write and with their wrappers.
+     * public RenderTarget2D reports every raster surface in its chain, a RenderTargetCube reports
+     * its six surfaces plus exact transfer shadows across the mip chain, and each 2D target is
+     * allowed at most one cached immutable sampling snapshot across all levels. CNA-owned 2D mip
+     * chains report their one contiguous canonical allocation independently from derived SkImage
+     * views and target surfaces. Bounded caches are released on the next write to their level,
+     * when another level is selected, and with their wrappers.
      */
     struct SkiaResourceStats final
     {
@@ -83,10 +84,23 @@ namespace CNA::Internal::Backends::Skia
             stats_.targetSurfaceBytes += RgbaBytes(width, height);
         }
 
+        /** Registers the already-checked sum of every surface in a 2D target. */
+        void AddRenderTarget(std::size_t surfaceBytes) noexcept
+        {
+            ++stats_.renderTargets;
+            stats_.targetSurfaceBytes += surfaceBytes;
+        }
+
         void RemoveRenderTarget(int width, int height) noexcept
         {
             --stats_.renderTargets;
             stats_.targetSurfaceBytes -= RgbaBytes(width, height);
+        }
+
+        void RemoveRenderTarget(std::size_t surfaceBytes) noexcept
+        {
+            --stats_.renderTargets;
+            stats_.targetSurfaceBytes -= surfaceBytes;
         }
 
         void AddRenderTargetCube(std::size_t bytes) noexcept
