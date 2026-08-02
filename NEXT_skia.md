@@ -1466,13 +1466,31 @@ level-boundary contract.
   tests pass in Release and under ASan+UBSan with only the documented external Mesa GLX leak check
   disabled. No real display or subagent was used, and `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-133
+
+- The complete sequential Debug Skia release gate passes 150/150 on virtual `:99` in 202.09
+  seconds: 21 Raster, 124 Display and five Audit tests. This includes the full Texture2D and
+  RenderTarget2D mip lifecycle, unchanged EasyGL parity source, all target regressions, context
+  recovery, resource accounting and the 2D demo smoke.
+- Performance/lifecycle controls remain bounded: `Skia_SpriteBatch_Stress` passes in 2.19 seconds,
+  `Skia_ResourceBudget` in 3.86 seconds, and both target mip fixtures return surface, chain and
+  snapshot counters exactly to baseline. The complete Debug tree builds with `--parallel 2`.
+- The five focused Texture2D generation, target storage/generation/SetData and EasyGL mip-complete
+  fixtures pass 5/5 in Release and 5/5 under ASan+UBSan. Leak detection is disabled only for the
+  already documented external Mesa GLX process-exit residual; no CNA/Skia sanitizer finding occurs.
+- Capability and contract documents now mark all eight non-anisotropic TextureFilter routes plus
+  Texture2D/RenderTarget2D construction, transfer, generation and LOD sampling as supported. The
+  promotion remains explicitly Color-only, zero-sample, 2D raster; formats, real anisotropy/MSAA,
+  MRT outputs, cube/volume sampling, 3D and Ganesh stay in their later plan phases.
+- No real display or subagent was used, all compilation stayed at two jobs, and `NEXT.md` remained
+  untouched.
+
 ## Next candidates
 
-1. SKIA-133: run the complete Debug Skia suite plus final resource/performance/Release/sanitizer
-   closure, then freeze the finished 2D mip capability documentation.
-2. SKIA-134–158: implement formats, bounded cube/volume
-   sampling, and wider explicit 2D
-   effects in dependency order.
+1. SKIA-134–143: implement truthful non-Color Texture2D/content/RenderTarget2D formats in dependency
+   order, retaining exact pre-allocation refusals until each format passes transfer and pixels.
+2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
+   order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
 4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded

@@ -9,6 +9,10 @@ SKIA-170 remains the final gate for the successor set as a whole.
 SKIA-124 arbitrary-raster-blend promotion: PASS. This promotes one bounded feature inside the
 experimental Skia backend; it does not mark the successor expansion complete.
 
+SKIA-133 mutable 2D mip promotion: PASS. Texture2D and Color RenderTarget2D complete-chain
+construction, transfer, generation and sampling are promoted for the CPU-raster backend. This
+does not promote non-Color formats, MSAA, 3D, cube/volume sampling or the successor set as a whole.
+
 Scope: experimental `CNA_GRAPHICS_BACKEND=SKIA` CPU-raster 2D backend at the SKIA-114 checkpoint.
 This is not a Ganesh/Graphite, general 3D, or full EasyGL feature-equivalence claim.
 
@@ -117,8 +121,14 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   fixtures pass in Release and under ASan+UBSan (`detect_leaks=0` only for the documented external
   Mesa GLX residual). Exact dirty-generation counts, failed-bind atomicity, self-sampling ordering
   and dirty presenter recovery are covered. SKIA-133 owns the final full-suite/release closure.
-- `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`, and
-  `Skia_ReleaseGate_Audit`: PASS.
+- SKIA-133 mutable-2D-mip promotion: complete sequential Debug Skia suite 150/150 PASS on virtual
+  `:99` in 202.09 seconds (21 Raster, 124 Display, five Audit). `Skia_SpriteBatch_Stress` passes in
+  2.19 seconds and `Skia_ResourceBudget` in 3.86 seconds; target mip fixtures return chain, surface
+  and snapshot counters to baseline. The five focused generation/storage/SetData/EasyGL-parity
+  tests pass in Release and under ASan+UBSan (`detect_leaks=0` only for the documented external
+  Mesa GLX residual). The complete tree builds with `--parallel 2`; no real display is used.
+- `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`,
+  `Skia_ReleaseGate_Audit`, and `Skia_SuccessorContracts_Audit`: PASS.
 - Updated `Skia_Sampler_MipmapFilterPolicy` and `Skia_RenderTarget2D_MsaaPolicy`: 2/2 PASS on the
   real display after adding exact anisotropy fallback and full sample-count matrices.
 - Complete Debug Skia suite: 133/133 PASS on real display `:0` in 61.14 seconds with

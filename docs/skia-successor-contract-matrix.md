@@ -61,12 +61,12 @@ stale, duplicated, malformed, or unrouted entries.
 | `FILTER-Linear` | Bilinear texel and linear mip sampling. | supported | SKIA-129 | Exact old magnification/minification pixels remain; a real chain now brackets fractional LOD. |
 | `FILTER-Point` | Nearest texel and nearest mip sampling. | supported | SKIA-129 | Exact old coordinate/tile pixels remain; a real chain now selects the nearest level. |
 | `FILTER-Anisotropic` | Device anisotropic footprint up to MaxAnisotropy. | fallback | SKIA-165 | Raster stays Linear fallback; Ganesh must prove a distinct device result. |
-| `FILTER-LinearMipPoint` | Linear texels and nearest mip level. | refused | SKIA-129 | Baseline refusal is superseded by affine LOD, exact integer-level, half-tie, and public pixel evidence. |
-| `FILTER-PointMipLinear` | Point texels and interpolation between mip levels. | refused | SKIA-129 | Baseline refusal is superseded by bounded two-level interpolation and ±1 byte public evidence. |
-| `FILTER-MinLinearMagPointMipLinear` | Linear minification, point magnification, linear mip blend. | refused | SKIA-129 | Baseline refusal is superseded by independent min/mag and fractional-LOD public oracles. |
-| `FILTER-MinLinearMagPointMipPoint` | Linear minification, point magnification, nearest mip. | refused | SKIA-129 | Baseline refusal is superseded by independent min/mag and nearest-level public oracles. |
-| `FILTER-MinPointMagLinearMipLinear` | Point minification, linear magnification, linear mip blend. | refused | SKIA-129 | Baseline refusal is superseded by independent min/mag and fractional-LOD public oracles. |
-| `FILTER-MinPointMagLinearMipPoint` | Point minification, linear magnification, nearest mip. | refused | SKIA-129 | Baseline refusal is superseded by independent min/mag and nearest-level public oracles. |
+| `FILTER-LinearMipPoint` | Linear texels and nearest mip level. | supported | SKIA-129 | Affine LOD, exact integer-level, half-tie and public pixel evidence pass. |
+| `FILTER-PointMipLinear` | Point texels and interpolation between mip levels. | supported | SKIA-129 | Bounded two-level interpolation and ±1 byte public evidence pass. |
+| `FILTER-MinLinearMagPointMipLinear` | Linear minification, point magnification, linear mip blend. | supported | SKIA-129 | Independent min/mag and fractional-LOD public oracles pass. |
+| `FILTER-MinLinearMagPointMipPoint` | Linear minification, point magnification, nearest mip. | supported | SKIA-129 | Independent min/mag and nearest-level public oracles pass. |
+| `FILTER-MinPointMagLinearMipLinear` | Point minification, linear magnification, linear mip blend. | supported | SKIA-129 | Independent min/mag and fractional-LOD public oracles pass. |
+| `FILTER-MinPointMagLinearMipPoint` | Point minification, linear magnification, nearest mip. | supported | SKIA-129 | Independent min/mag and nearest-level public oracles pass. |
 | `CAP-ThreeD` | Complete public 3D renderer. | refused | SKIA-170 | Successor 2D/GPU work does not reopen the accepted 3D ADR implicitly. |
 | `CAP-DepthStencilBuffer` | Real target depth/stencil attachment. | refused | SKIA-170 | MSAA/Ganesh does not imply depth/stencil support. |
 | `CAP-MultiSampleAntiAliasing` | Real sample count above one. | refused | SKIA-164 | Ganesh probe must control reporting; raster remains false. |
@@ -76,11 +76,11 @@ stale, duplicated, malformed, or unrouted entries.
 | `CAP-OcclusionQuery` | Real samples-passed query. | refused | SKIA-170 | Remains part of accepted query refusal. |
 | `CAP-CustomEffects` | Complete custom-effect contract represented by the enum. | bounded | SKIA-152–158 | Explicit fragment SkSL v1 is narrower and currently reports false. |
 | `CAP-Texture3D` | Persistent volume storage; sampling is a separate contract. | transfer-only | SKIA-144–151 | Baseline true value stays storage-only until sampling has explicit evidence. |
-| `MIP-TEXTURE2D-CONSTRUCTION` | Mipmapped construction, dimensions, count and zero initialization. | refused | SKIA-125–126 | The baseline refusal is superseded by the checked complete-chain construction and property tests. |
-| `MIP-TEXTURE2D-TRANSFER` | Full/partial SetData/GetData for each mip. | refused | SKIA-127 | The baseline refusal is superseded by shared range coverage plus direct odd/NPOT level, byte, lifetime and atomic-failure evidence. |
-| `MIP-TEXTURE2D-GENERATION` | Dirty descendant generation after upload. | refused | SKIA-128 | Baseline refusal is superseded by exact odd/NPOT straight-RGBA area-box bytes, dirty-generation counts, and explicit-level ownership barriers. |
+| `MIP-TEXTURE2D-CONSTRUCTION` | Mipmapped construction, dimensions, count and zero initialization. | supported | SKIA-125–126 | Checked complete-chain construction and property tests pass. |
+| `MIP-TEXTURE2D-TRANSFER` | Full/partial SetData/GetData for each mip. | supported | SKIA-127 | Shared range coverage plus direct odd/NPOT level, byte, lifetime and atomic-failure evidence pass. |
+| `MIP-TEXTURE2D-GENERATION` | Dirty descendant generation after upload. | supported | SKIA-128 | Exact odd/NPOT straight-RGBA area-box bytes, dirty-generation counts and explicit-level ownership barriers pass. |
 | `MIP-RENDERTARGET2D` | Render, upload, readback and sample mutable target mips. | supported | SKIA-131–132 | Stable surfaces and exact shadows back every level; parent uploads and level-zero passes deterministically regenerate their dirty suffix once at upload or resolve barriers. |
-| `MIP-SAMPLING-LOD` | Min/mag and mip-level selection/interpolation. | refused | SKIA-129 | Baseline refusal is superseded by all-nine decomposition, affine rho, NPOT, source/crop, transform, addressing and interpolation evidence. |
+| `MIP-SAMPLING-LOD` | Min/mag and mip-level selection/interpolation. | supported | SKIA-129 | All-nine decomposition, affine rho, NPOT, source/crop, transform, addressing and interpolation evidence pass. |
 | `FORMAT-RENDERTARGET` | Per-format renderability independent of texture sampling. | refused | SKIA-142 | Every enum needs direct route or pre-allocation refusal. |
 | `FORMAT-CONTENT` | XNB/DDS level and compressed block preservation. | bounded | SKIA-130–141 | SKIA-130 preserves complete DDS DXT1/DXT3/DXT5 and XNB Color/DXT5 chains as canonical RGBA8, rejects malformed boundaries, and keeps single-level assets single-level; native wider public formats remain SKIA-134–141. |
 | `EFFECT-LANGUAGE` | Untagged EasyGL GLSL versus explicit SkSL identity. | bounded | SKIA-152–155 | Existing v1 marker prevents language guessing. |

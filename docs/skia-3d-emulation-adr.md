@@ -98,8 +98,8 @@ Dispositions have exact meanings:
 | `3D-TEXTURE-2D` | `2d-only` | Texture2D and SpriteBatch sampling are proven; geometry derivatives/LOD are not. | Retain 2D texture APIs, reject their use by public 3D draws. |
 | `3D-TEXTURE-CUBE` | `transfer-only` | Six-face/mip CPU transfer storage and face rendering exist; direction sampling does not. | Retain transfers/face targets, reject cube shader binding/sampling. |
 | `3D-TEXTURE-VOLUME` | `transfer-only` | Mip/slice/box CPU transfer storage exists; 3D-coordinate filtering does not. | Retain transfers, reject volume shader binding/sampling. |
-| `3D-SAMPLER-MIP` | `reject` | Raster Texture2D mipmaps and geometry derivative/LOD selection are unsupported. | Preserve mip/filter refusal and never substitute level zero silently. |
-| `3D-SAMPLER-ANISOTROPY` | `reject` | SKIA-79 proves capability false and an exact Linear fallback only for level-zero SpriteBatch; the stock-3D route remains absent. | Keep 3D sampling rejected and do not reinterpret the 2D fallback as hardware anisotropy. |
+| `3D-SAMPLER-MIP` | `reject` | Raster 2D SpriteBatch mipmaps and affine LOD are supported, but geometry derivatives and the public 3D sampler/effect route remain absent. | Retain the verified 2D mip route; reject 3D sampling and never substitute level zero silently. |
+| `3D-SAMPLER-ANISOTROPY` | `reject` | The capability is false and SpriteBatch has an exact complete-Linear fallback including mips; the stock-3D route remains absent. | Keep 3D sampling rejected and do not reinterpret the 2D fallback as hardware anisotropy. |
 | `3D-STATE-DEPTH` | `prototype-only` | SKIA-97 proves one float LessEqual/write buffer, not public depth formats/bias. | Reject depth attachments/3D clears through a consistent boundary. |
 | `3D-STATE-STENCIL` | `prototype-only` | SKIA-98 proves the 8-bit state machine but no public attachment. | Reject public stencil attachment/use while retaining false capability. |
 | `3D-STATE-CULL-FILL` | `prototype-only` | SKIA-99 proves winding/cull/wire assembly, not pixel rules or bias. | Reject public 3D draw; do not advertise wireframe. |

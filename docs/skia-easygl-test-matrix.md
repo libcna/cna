@@ -44,7 +44,7 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_SpriteBatch_LayerDepthOrder` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_SpriteBatch_LayerDepth`; SKIA-36, SKIA-106. |
 | `ctest:EasyGL_TransformMatrix_Translation` | `ctest` | `2d-direct` | Existing affine transform coverage; SKIA-35. |
 | `ctest:EasyGL_Texture2D_PartialRect_RoundTrip` | `ctest` | `2d-direct` | Exact source runs as `Skia_Contract_Texture2D_PartialRect`; SKIA-24, SKIA-109. |
-| `ctest:EasyGL_Texture2D_Mip_RoundTrip` | `ctest` | `2d-direct` | Direct 2D feature with explicit raster mip refusal; SKIA-27. |
+| `ctest:EasyGL_Texture2D_Mip_RoundTrip` | `ctest` | `2d-direct` | Exact source also runs as `Skia_Texture2D_MipRoundTrip`; every addressed level round-trips. SKIA-127. |
 | `ctest:EasyGL_SurfaceFormat_Throws` | `ctest` | `2d-direct` | Exact source runs as `Skia_Contract_SurfaceFormat`; SKIA-25, SKIA-109. |
 | `ctest:EasyGL_RenderTargetUsage` | `ctest` | `2d-direct` | Preserve/discard is directly testable; SKIA-64. |
 | `ctest:EasyGL_RT_Roundtrip` | `ctest` | `2d-direct` | Existing bind/read/sample round trip; SKIA-61–63. |
@@ -81,7 +81,7 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_SpriteBatch_BlendStateLeak` | `ctest` | `2d-direct` | Existing Skia state-transition coverage; SKIA-59. |
 | `ctest:EasyGL_SpriteBatch_CustomViewport` | `ctest` | `2d-direct` | Direct canvas viewport path; SKIA-42. |
 | `ctest:EasyGL_SpriteBatch_ViewportSwitch` | `ctest` | `2d-direct` | Direct target-local viewport reset; SKIA-42, SKIA-61. |
-| `ctest:EasyGL_InvalidMipLevel` | `ctest` | `2d-direct` | Explicit invalid/raster-mip refusal; SKIA-27, SKIA-70. |
+| `ctest:EasyGL_InvalidMipLevel` | `ctest` | `2d-direct` | Valid complete-chain levels transfer; invalid level/range requests reject before mutation. SKIA-127, SKIA-132. |
 | `ctest:EasyGL_BackbufferReadbackDimension` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_BackbufferReadbackDimension`, including immediate grow/shrink readback; SKIA-7, SKIA-62, SKIA-106. |
 | `ctest:EasyGL_BackbufferFirstRead` | `ctest` | `2d-direct` | Exact fork-isolated source runs as `Skia_Contract_BackbufferFirstRead`; SKIA-13, SKIA-109. |
 | `ctest:EasyGL_BackbufferReject` | `ctest` | `2d-direct` | Exact validation/destination-integrity source runs as `Skia_Contract_BackbufferReject`; SKIA-21, SKIA-62, SKIA-109. |

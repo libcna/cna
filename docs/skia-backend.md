@@ -327,11 +327,10 @@ route.
 24. `Skia_SpriteBatch_Stress` reuses twelve textures and two preserve-content targets for 64 actual
     frames. Each frame switches A → B → backbuffer and makes 26 independent SpriteBatch sessions;
     the two target anchor pixels and a complete-backbuffer FNV-1a hash must remain stable.
-25. `Skia_Texture2D_MipmapPolicy` pins the raster decision after the SKIA-70 API audit:
-    `SkImage::withDefaultMipmaps()` is public but immutable and does not provide the per-level
-    readback or mutable-target invalidation/resolve contract CNA exposes. Mipmapped texture and
-    render-target construction therefore both raise `System::NotSupportedException`; a following
-    level-0 texture upload/draw and a fresh target bind/Clear/readback/unbind/sample cycle remain
+25. `Skia_Texture2D_MipmapPolicy` originally pinned the bounded refusal after the SKIA-70 API
+    audit: `SkImage::withDefaultMipmaps()` is immutable and cannot provide CNA's mutable contract.
+    SKIA-125–132 supersede that transition with CNA-owned complete texture/target chains while the
+    unchanged level-zero upload/draw and target bind/Clear/readback/unbind/sample controls remain
     correct.
 26. `Skia_Sampler_MipmapFilterPolicy` originally fixed the baseline refusal. SKIA-129 supersedes
     it with public pixels for all nine TextureFilter ordinals, exact/fractional LOD, independent
@@ -368,8 +367,9 @@ route.
     frame presents its fresh colour, and a disposed-texture draw failure followed by `Present`
     retains the current clear rather than reviving an older frame.
 35. `Skia_RenderTarget2D_SetData` proves full and partial level-0 uploads update the existing
-    target surface without replacing its backend identity, preserves untouched pixels, round-trips
-    through public readback, and rejects level 1 and mipmapped-target requests precisely.
+    target surface without replacing its backend identity, preserve untouched pixels and
+    round-trip through public readback. SKIA-131 adds exact level-1 transfer and SKIA-132 makes the
+    live backend authoritative after descendant regeneration.
 36. `Skia_RenderTarget2D_MsaaPolicy` fixes the raster MSAA contract: backbuffer requests
     0/1/2/4/4096 all write back the actual zero count; target requests 0 and 1 report 0, while
     normalized real or oversized requests 2/3/4/4096 fail before allocation. The capability stays
@@ -809,6 +809,11 @@ route.
     self-sampling leaves the destination dirty, failed foreign/cross-device binds are atomic, and
     presenter recovery preserves a live dirty chain. The unchanged EasyGL mip-completeness source
     also passes as `Skia_EasyGL_RenderTarget2D_MipComplete`.
+101. SKIA-133 promotes the complete mutable 2D mip slice after the sequential Debug suite passes
+    150/150 on virtual `:99` in 202.09 seconds (21 Raster, 124 Display, five Audit). The focused
+    generation/storage/SetData/EasyGL-parity set passes 5/5 in Release and 5/5 under ASan+UBSan;
+    stress, resource-budget, target counter release and demo smoke remain green. Every build uses
+    at most two parallel jobs.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.
