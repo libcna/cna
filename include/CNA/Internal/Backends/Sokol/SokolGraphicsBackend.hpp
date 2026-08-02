@@ -528,6 +528,12 @@ namespace CNA::Internal::Backends::Sokol
          */
         NOXNA [[nodiscard]] std::uint32_t GetViewIdEXT() const { return viewId_; }
 
+        /**
+         * @brief Returns the raw sokol_gfx image handle id backing this cube texture. NOXNA.
+         * @return sg_image id, or 0 when creation failed.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetImageIdEXT() const { return imageId_; }
+
     private:
         /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mip
         /// dimension helper.
@@ -831,6 +837,16 @@ namespace CNA::Internal::Backends::Sokol
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
         /**
+         * @brief Sets a custom `ShaderEffect` to use for sprite rendering instead of the built-in
+         * sprite shader (plan_sokol.md SOKOL-28), or null to restore it. Flushes any pending
+         * sprites first, matching `EasyGLSpriteBatchBackend::SetCustomEffect`'s own contract: a
+         * flush must happen while the OLD effect (or lack of one) is still in effect, not the new
+         * one.
+         * @param effect Custom effect, or null for the built-in sprite shader.
+         */
+        void SetCustomEffect(Effect* effect) override;
+
+        /**
          * @brief Draws a whole texture at the given position, untinted.
          * @param texture Source texture.
          * @param x       Destination left edge, in pixels.
@@ -881,6 +897,9 @@ namespace CNA::Internal::Backends::Sokol
         int pendingFilter_ = 0;   // TextureFilter::Linear
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1; // TextureAddressMode::Clamp
+        /// Non-owning; see SetCustomEffect()'s own doc comment. Null selects the built-in sprite
+        /// shader (SOKOL-16..21's cna_sprite_shader_desc).
+        Effect* customEffect_ = nullptr;
     };
 
     /**
@@ -948,6 +967,103 @@ namespace CNA::Internal::Backends::Sokol
         /// code (and this file's own IsComplete()/PixelCount() callers) legitimately asks before
         /// the first End() -- so IsComplete()/PixelCount() only ever query GL once this is true.
         bool hasResult_ = false;
+    };
+
+    /**
+     * @brief Backend handle for a custom `ShaderEffect`: real runtime GLSL compilation via raw GL
+     * calls bracketed by `sg_reset_state_cache()` (plan_sokol.md SOKOL-28), GL-only (matching
+     * `ReadBackbuffer`/`SokolOcclusionQueryBackend`'s own `CNA_SOKOL_HAS_GL_READBACK` boundary).
+     *
+     * A custom-effect draw bypasses `sg_shader`/`sg_pipeline` entirely: sokol_gfx's own uniform
+     * model is block-oriented and slot-numbered (`sg_apply_uniforms(slot, wholeBlob)`), incompatible
+     * with `IEffectBackend`'s per-name, call-anytime `SetUniformXxx()` contract without a runtime
+     * GLSL-uniform-block parser this codebase has no other use for. Instead this class issues real
+     * `glCreateProgram`/`glCompileShader`/`glLinkProgram` at `CompileProgram()` time and
+     * `glUseProgram`/`glGetUniformLocation`/`glUniform*`/`glDrawArrays`/`glDrawElements` directly
+     * against the live GL context sokol_gfx itself renders through -- explicitly supported by
+     * sokol_gfx's own documented "call `sg_reset_state_cache()` after calling native 3D-API
+     * functions, and before calling any sokol_gfx function" interleaving contract, the same escape
+     * hatch `ReadBackbuffer`/`SokolOcclusionQueryBackend` already use for their own raw GL calls
+     * (those never mutate program/VAO binding state the way a custom draw does, so they need no
+     * `sg_reset_state_cache()` of their own -- this class's draw-time bracketing, in
+     * `SokolGraphicsBackend::DrawColored3D`, is new).
+     *
+     * Ported from `EasyGLEffectBackend`'s own shape and behaviour: no upfront reflection, each
+     * `SetUniformXxx()` call does its own `glGetUniformLocation()` lookup and silently no-ops for
+     * an unknown name. Vertex attributes use the SAME "`layout(location=N)` == Nth field of the
+     * `VertexDeclaration`" fixed-position convention `EasyGLGraphicsBackend::ApplyLayout()` already
+     * established, not name-based reflection -- matching the caller-supplied GLSL's own expected
+     * contract 1:1 with no new parsing/reflection code needed for attributes either.
+     *
+     * `BindTexture3D()` is not overridden (the interface's own silent no-op default applies):
+     * `SokolTexture3DBackend` has no real `sg_image` to query a GL texture handle from (it remains
+     * a pure CPU-shadow store, unaffected by this task).
+     */
+    class SokolEffectBackend : public IEffectBackend
+    {
+    public:
+        SokolEffectBackend() = default;
+
+        /** @brief Deletes the compiled GL program, if any. */
+        ~SokolEffectBackend() override;
+
+        SokolEffectBackend(const SokolEffectBackend&) = delete;
+        SokolEffectBackend& operator=(const SokolEffectBackend&) = delete;
+
+        bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
+        void Bind() override;
+        void Unbind() override;
+        [[nodiscard]] bool IsValid() const override;
+        [[nodiscard]] std::string GetCompileError() const override;
+        void SetUniformFloat(const char* name, float value) override;
+        void SetUniformInt(const char* name, int value) override;
+        void SetUniformVec2(const char* name, float x, float y) override;
+        void SetUniformVec3(const char* name, float x, float y, float z) override;
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
+        void SetUniformMat4(const char* name, const float* matrix) override;
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        void BindTexture(int unit, ITextureBackend* texture) override;
+        void BindTextureCube(int unit, ITextureCubeBackend* texture) override;
+
+        /**
+         * @brief Issues the raw `glActiveTexture`/`glBindTexture`/`glBindSampler` calls for every
+         * texture unit `BindTexture()`/`BindTextureCube()` recorded since the last call. NOXNA,
+         * called by `SokolGraphicsBackend::DrawCustomEffect3D`/`DrawSpriteRunEXT`.
+         *
+         * `BindTexture()`/`BindTextureCube()` only ever RECORD a pending bind rather than applying
+         * it immediately: real XNA/`ShaderEffect` usage calls `Effect::Apply()` -- which does not
+         * bind this backend's GL program or textures at all, only `Effect::OnApply()`/
+         * `SetCurrentEffect()` -- then `SetTexture()`/`SetUniformXxx()`, all *before* the actual
+         * draw call. If those bound textures immediately, `BeginPassIfNeeded()` (called much later,
+         * inside the eventual draw) would run its own sokol_gfx pass-begin logic in between,
+         * observed to clear/reassign GL texture-unit bindings sokol_gfx itself does not know this
+         * class ever made -- silently unbinding them before the draw ever samples them (found via
+         * `GL_TEXTURE_BINDING_2D` reading back 0 at draw time despite a successful earlier bind, no
+         * GL error either side). Deferring the real GL calls to right before the draw --
+         * specifically after `BeginPassIfNeeded()`/`sg_reset_state_cache()` have already run --
+         * avoids the whole class of ordering bug, mirroring sokol_gfx's own
+         * record-now/apply-at-`sg_apply_bindings()`-time binding model. `SetUniformXxx()` needs no
+         * equivalent deferral: it uses `glProgramUniform*` (writes directly to the named program
+         * object's own uniform storage, independent of any current GL binding state), immune to
+         * this timing issue by construction.
+         */
+        NOXNA void ApplyPendingTextureBindsEXT();
+
+    private:
+        /// One texture unit's pending raw-GL bind, recorded by BindTexture()/BindTextureCube() and
+        /// realized by ApplyPendingTextureBindsEXT() -- see that method's own doc comment for why
+        /// this is deferred rather than applied immediately.
+        struct PendingTextureBind
+        {
+            int unit;
+            std::uint32_t imageId;
+            bool isCube;
+        };
+
+        std::uint32_t programId_ = 0;
+        std::string compileError_;
+        std::vector<PendingTextureBind> pendingTextureBinds_;
     };
 
     /**
@@ -1134,6 +1250,22 @@ namespace CNA::Internal::Backends::Sokol
          * @return The new occlusion query backend, or null on a non-GL `CNA_SOKOL_API`.
          */
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+
+        /**
+         * @brief Compiles a custom `ShaderEffect` from raw GLSL source (plan_sokol.md SOKOL-28).
+         *
+         * GL-only (see `SokolEffectBackend`'s own doc comment for why); on a non-GL
+         * `CNA_SOKOL_API`, `SokolEffectBackend::CompileProgram` deterministically fails and
+         * `IsValid()` returns false rather than this factory returning null, matching
+         * `ShaderEffect`'s own "compile failure surfaces through `IsValid()`/`GetCompileError()`,
+         * not a null backend" contract.
+         *
+         * @param vertSrc GLSL vertex shader source.
+         * @param fragSrc GLSL fragment shader source.
+         * @return The new effect backend (never null; check `IsValid()`).
+         */
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
 
         /**
          * @brief Creates a sokol_gfx-backed SpriteBatch.
@@ -1499,11 +1631,17 @@ namespace CNA::Internal::Backends::Sokol
          * @param filter   Raw TextureFilter value.
          * @param addressU Raw TextureAddressMode value for U.
          * @param addressV Raw TextureAddressMode value for V.
+         * @param customEffect Custom `ShaderEffect` bound via `SpriteBatch.Begin(..., effect)`
+         *                     (plan_sokol.md SOKOL-28), or null for the built-in sprite shader. A
+         *                     non-null but invalid (failed-to-compile) effect falls back to the
+         *                     built-in shader too, matching `EasyGLSpriteBatchBackend::FlushBatch`'s
+         *                     own `backend && backend->IsValid()` gate.
          */
         NOXNA void DrawSpriteRunEXT(const ITextureBackend& texture,
                                     const std::vector<SokolSpriteBatchBackend::Vertex>& vertices,
                                     const Matrix& transform,
-                                    int filter, int addressU, int addressV);
+                                    int filter, int addressU, int addressV,
+                                    Effect* customEffect = nullptr);
 
         /**
          * @brief Returns the logical (virtual) presentation size. NOXNA.
@@ -1765,6 +1903,23 @@ namespace CNA::Internal::Backends::Sokol
                            PrimitiveType primitive,
                            int primitiveCount,
                            const GpuDrawParams& params);
+        /**
+         * @brief Custom-`ShaderEffect` 3D draw (plan_sokol.md SOKOL-28): bypasses `sg_pipeline`
+         * entirely via raw GL calls bracketed by `sg_reset_state_cache()`. See
+         * `SokolEffectBackend`'s own doc comment for why. Attribute layout comes from
+         * @p declaration when non-null with at least one element, else the same fixed set of
+         * recognised undeclared-VertexBuffer byte strides (16/20/24/32/52) the stock-effect
+         * `Shader3DKind` dispatch's own fallback switch recognises -- throws for anything else.
+         */
+        void DrawCustomEffect3D(const SokolVertexBufferBackend& vb,
+                                const SokolIndexBufferBackend* ib,
+                                const VertexDeclaration* declaration,
+                                const Matrix& world,
+                                const Matrix& view,
+                                const Matrix& projection,
+                                PrimitiveType primitive,
+                                int primitiveCount,
+                                const GpuDrawParams& params);
         [[nodiscard]] std::uint32_t Get3DPipeline(const Pipeline3DKey& key);
         [[nodiscard]] std::uint32_t GetInstanced3DPipeline(const PipelineInstanced3DKey& key);
         [[nodiscard]] SokolTextureBackend& GetDefaultWhiteTexture();
@@ -1898,6 +2053,11 @@ namespace CNA::Internal::Backends::Sokol
         std::uint32_t skinned3dShaderId_ = 0;
         std::uint32_t instanced3dShaderId_ = 0;
         std::uint32_t envmap3dShaderId_ = 0;
+        /// Raw GL VAO used only by the custom-`ShaderEffect` draw path (plan_sokol.md SOKOL-28) --
+        /// sokol_gfx's own pipeline objects own their vertex layout state internally and are not
+        /// reused here, since a custom-effect draw bypasses sg_pipeline entirely. Created lazily on
+        /// first use, destroyed alongside the rest of this backend's GL resources.
+        std::uint32_t customEffectVaoId_ = 0;
         /// Lazily created 1x1 opaque-white texture, bound by the Lit shader whenever
         /// GpuDrawParams::textureEnabled is false -- lets one shader serve both "textured and lit"
         /// and "vertex-coloured and lit" (the multiply is then a no-op), the same convention the

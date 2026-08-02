@@ -3,6 +3,7 @@
 #include "CNA/Internal/Backends/Sokol/SokolGraphicsBackend.hpp"
 
 #include "CNA/Internal/Backends/Common/NotYetImplemented.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
 #include "sokol_log.h"
 #include "sokol_gfx.h"
@@ -241,6 +242,128 @@ namespace CNA::Internal::Backends::Sokol
             return SG_VERTEXFORMAT_INVALID;
         }
 
+#if CNA_SOKOL_HAS_GL_READBACK
+        /// Raw-GL topology for the custom-ShaderEffect draw path (plan_sokol.md SOKOL-28), which
+        /// bypasses sg_pipeline entirely and so cannot use ToPrimitiveType()'s sg_primitive_type
+        /// result -- the same PrimitiveType-to-topology mapping, just for glDrawArrays/glDrawElements
+        /// instead of sg_draw().
+        GLenum ToGLPrimitiveTopology(Microsoft::Xna::Framework::Graphics::PrimitiveType primitive)
+        {
+            using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+            switch (primitive)
+            {
+                case PrimitiveType::TriangleList:  return GL_TRIANGLES;
+                case PrimitiveType::TriangleStrip: return GL_TRIANGLE_STRIP;
+                case PrimitiveType::LineList:      return GL_LINES;
+                case PrimitiveType::LineStrip:     return GL_LINE_STRIP;
+                case PrimitiveType::PointListEXT:  return GL_POINTS;
+            }
+            return GL_TRIANGLES;
+        }
+
+        /// The raw-GL attribute shape needed to bind one VertexElement for the custom-ShaderEffect
+        /// draw path: component count, GL scalar type, whether values are normalized to [0,1]/
+        /// [-1,1], and whether the attribute must be read as a true integer
+        /// (glVertexAttribIPointer) rather than converted to float (glVertexAttribPointer). Mirrors
+        /// EasyGLGraphicsBackend::DescribeVertexElementFormat()'s identical table -- Byte4 is the
+        /// one format needing the integer path (XNA's own BLENDINDICES-style format, matching this
+        /// backend's own skinned3d.glsl blendindices0 finding: SOKOL-35's `in uvec4` discovery).
+        struct CustomEffectAttribFormat
+        {
+            int componentCount;
+            GLenum type;
+            bool normalized;
+            bool isInteger;
+        };
+
+        CustomEffectAttribFormat DescribeCustomEffectVertexFormat(
+            Microsoft::Xna::Framework::Graphics::VertexElementFormat format)
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+            switch (format)
+            {
+                case VertexElementFormat::Single:           return {1, GL_FLOAT,         false, false};
+                case VertexElementFormat::Vector2:          return {2, GL_FLOAT,         false, false};
+                case VertexElementFormat::Vector3:          return {3, GL_FLOAT,         false, false};
+                case VertexElementFormat::Vector4:          return {4, GL_FLOAT,         false, false};
+                case VertexElementFormat::Color:            return {4, GL_UNSIGNED_BYTE, true,  false};
+                case VertexElementFormat::Byte4:            return {4, GL_UNSIGNED_BYTE, false, true};
+                case VertexElementFormat::Short2:           return {2, GL_SHORT,         false, false};
+                case VertexElementFormat::Short4:           return {4, GL_SHORT,         false, false};
+                case VertexElementFormat::NormalizedShort2: return {2, GL_SHORT,         true,  false};
+                case VertexElementFormat::NormalizedShort4: return {4, GL_SHORT,         true,  false};
+                case VertexElementFormat::HalfVector2:      return {2, GL_HALF_FLOAT,    false, false};
+                case VertexElementFormat::HalfVector4:      return {4, GL_HALF_FLOAT,    false, false};
+            }
+            return {3, GL_FLOAT, false, false};
+        }
+
+        /// One resolved vertex attribute for the custom-ShaderEffect draw path: byte offset plus
+        /// the GL shape DescribeCustomEffectVertexFormat() already computes.
+        struct CustomEffectAttribLayout
+        {
+            int offset;
+            CustomEffectAttribFormat desc;
+        };
+
+        /// Resolves the full ordered attribute layout for a custom-ShaderEffect 3D draw
+        /// (plan_sokol.md SOKOL-28): from the real VertexDeclaration when one was supplied, else
+        /// the same fixed set of recognised undeclared-VertexBuffer byte strides
+        /// EasyGLGraphicsBackend::ApplyLayout()'s own fallback switch uses (in the same field
+        /// order) -- VertexBuffer's own NOXNA-tagged auto-detect constructor stores a
+        /// default-constructed, ELEMENT-LESS VertexDeclaration (see DrawColored3D's own identical
+        /// comment on this), which is what examples/easygl_shadereffect_3d_test.cpp's
+        /// VertexPositionNormalTexture buffer actually has. Returns empty for neither case, so the
+        /// caller can throw a clear error rather than binding a garbage layout.
+        std::vector<CustomEffectAttribLayout> BuildCustomEffectAttribLayoutEXT(
+            const VertexDeclaration* declaration, int fallbackStride)
+        {
+            std::vector<CustomEffectAttribLayout> result;
+            if (declaration != nullptr && !declaration->GetVertexElements().empty())
+            {
+                for (const auto& element : declaration->GetVertexElements())
+                {
+                    result.push_back({element.getOffsetProperty(),
+                                      DescribeCustomEffectVertexFormat(
+                                          element.getVertexElementFormatProperty())});
+                }
+                return result;
+            }
+
+            switch (fallbackStride)
+            {
+                case 16: // VertexPositionColor: float3 position, ubyte4n color
+                    result.push_back({0,  {3, GL_FLOAT, false, false}});
+                    result.push_back({12, {4, GL_UNSIGNED_BYTE, true, false}});
+                    break;
+                case 20: // VertexPositionTexture: float3 position, float2 texcoord
+                    result.push_back({0,  {3, GL_FLOAT, false, false}});
+                    result.push_back({12, {2, GL_FLOAT, false, false}});
+                    break;
+                case 24: // VertexPositionColorTexture: float3 position, ubyte4n color, float2 texcoord
+                    result.push_back({0,  {3, GL_FLOAT, false, false}});
+                    result.push_back({12, {4, GL_UNSIGNED_BYTE, true, false}});
+                    result.push_back({16, {2, GL_FLOAT, false, false}});
+                    break;
+                case 32: // VertexPositionNormalTexture: float3 position, float3 normal, float2 texcoord
+                    result.push_back({0,  {3, GL_FLOAT, false, false}});
+                    result.push_back({12, {3, GL_FLOAT, false, false}});
+                    result.push_back({24, {2, GL_FLOAT, false, false}});
+                    break;
+                case 52: // VertexPositionNormalTextureSkinned: + float4 weights, ubyte4 indices
+                    result.push_back({0,  {3, GL_FLOAT, false, false}});
+                    result.push_back({12, {3, GL_FLOAT, false, false}});
+                    result.push_back({24, {2, GL_FLOAT, false, false}});
+                    result.push_back({32, {4, GL_FLOAT, false, false}});
+                    result.push_back({48, {4, GL_UNSIGNED_BYTE, false, true}});
+                    break;
+                default:
+                    break;
+            }
+            return result;
+        }
+#endif
+
         sg_buffer MakeBufferHandle(std::uint32_t id) { sg_buffer handle; handle.id = id; return handle; }
         sg_image MakeImageHandle(std::uint32_t id) { sg_image handle; handle.id = id; return handle; }
         sg_view MakeViewHandle(std::uint32_t id) { sg_view handle; handle.id = id; return handle; }
@@ -279,6 +402,32 @@ namespace CNA::Internal::Backends::Sokol
                 return plain->GetViewIdEXT();
             if (const auto* renderTarget = dynamic_cast<const SokolRenderTargetCubeBackend*>(&cube))
                 return renderTarget->GetTextureViewIdEXT();
+            throw std::runtime_error(
+                std::string("Sokol backend: ") + context + " was handed a foreign texture-cube backend");
+        }
+
+        /// Same shape as ResolveSampledTextureViewId, but resolves the underlying sg_image id
+        /// rather than a sampling view -- needed by SokolEffectBackend::BindTexture() (plan_sokol.md
+        /// SOKOL-28), which queries the raw GL texture handle via sg_gl_query_image_info() and has
+        /// no use for a view (custom-effect texture binds are raw glBindTexture calls, not
+        /// sg_bindings).
+        std::uint32_t ResolveSampledTextureImageId(const ITextureBackend& texture, const char* context)
+        {
+            if (const auto* plain = dynamic_cast<const SokolTextureBackend*>(&texture))
+                return plain->GetImageIdEXT();
+            if (const auto* renderTarget = dynamic_cast<const SokolRenderTargetBackend*>(&texture))
+                return renderTarget->GetColorImageIdEXT();
+            throw std::runtime_error(
+                std::string("Sokol backend: ") + context + " was handed a foreign texture backend");
+        }
+
+        /// Cube-texture analog of ResolveSampledTextureImageId.
+        std::uint32_t ResolveSampledCubeImageId(const ITextureCubeBackend& cube, const char* context)
+        {
+            if (const auto* plain = dynamic_cast<const SokolTextureCubeBackend*>(&cube))
+                return plain->GetImageIdEXT();
+            if (const auto* renderTarget = dynamic_cast<const SokolRenderTargetCubeBackend*>(&cube))
+                return renderTarget->GetImageIdEXT();
             throw std::runtime_error(
                 std::string("Sokol backend: ") + context + " was handed a foreign texture-cube backend");
         }
@@ -1420,6 +1569,248 @@ namespace CNA::Internal::Backends::Sokol
     }
 
     // ---------------------------------------------------------------------------------------
+    // SokolEffectBackend
+    // ---------------------------------------------------------------------------------------
+
+    SokolEffectBackend::~SokolEffectBackend()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ != 0) glDeleteProgram(programId_);
+#endif
+    }
+
+    bool SokolEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
+    {
+        compileError_.clear();
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ != 0)
+        {
+            glDeleteProgram(programId_);
+            programId_ = 0;
+        }
+
+        auto compileStage = [](GLenum stage, const std::string& src,
+                               const char* stageName, std::string& error) -> GLuint
+        {
+            const GLuint shader = glCreateShader(stage);
+            const char* srcPtr = src.c_str();
+            const auto srcLen = static_cast<GLint>(src.size());
+            glShaderSource(shader, 1, &srcPtr, &srcLen);
+            glCompileShader(shader);
+            GLint status = GL_FALSE;
+            glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+            if (status == GL_FALSE)
+            {
+                GLint logLen = 0;
+                glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLen);
+                std::string log(static_cast<std::size_t>(std::max(logLen, 1)), '\0');
+                glGetShaderInfoLog(shader, logLen, nullptr, log.data());
+                error = std::string(stageName) + ": " + log.c_str();
+                glDeleteShader(shader);
+                return 0;
+            }
+            return shader;
+        };
+
+        const GLuint vs = compileStage(GL_VERTEX_SHADER, vertSrc, "VS", compileError_);
+        if (vs == 0) return false;
+        const GLuint fs = compileStage(GL_FRAGMENT_SHADER, fragSrc, "FS", compileError_);
+        if (fs == 0)
+        {
+            glDeleteShader(vs);
+            return false;
+        }
+
+        const GLuint program = glCreateProgram();
+        glAttachShader(program, vs);
+        glAttachShader(program, fs);
+        glLinkProgram(program);
+        // The shaders themselves are no longer needed once linked -- glDeleteShader on an attached
+        // shader only marks it for deletion; GL keeps it alive until glDetachShader/program
+        // destruction, so this is safe to do unconditionally here.
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+
+        GLint linkStatus = GL_FALSE;
+        glGetProgramiv(program, GL_LINK_STATUS, &linkStatus);
+        if (linkStatus == GL_FALSE)
+        {
+            GLint logLen = 0;
+            glGetProgramiv(program, GL_INFO_LOG_LENGTH, &logLen);
+            std::string log(static_cast<std::size_t>(std::max(logLen, 1)), '\0');
+            glGetProgramInfoLog(program, logLen, nullptr, log.data());
+            compileError_ = std::string("Link: ") + log.c_str();
+            glDeleteProgram(program);
+            return false;
+        }
+
+        programId_ = program;
+        return true;
+#else
+        compileError_ =
+            "Sokol backend: custom ShaderEffect compilation requires CNA_SOKOL_API=GLCORE";
+        return false;
+#endif
+    }
+
+    void SokolEffectBackend::Bind()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ != 0) glUseProgram(programId_);
+#endif
+    }
+
+    void SokolEffectBackend::Unbind()
+    {
+        // No unbind needed -- the next Bind() or sg_reset_state_cache()-bracketed sokol_gfx draw
+        // overrides the current program regardless, matching EasyGLEffectBackend::Unbind()'s own
+        // no-op.
+    }
+
+    bool SokolEffectBackend::IsValid() const
+    {
+        return programId_ != 0;
+    }
+
+    std::string SokolEffectBackend::GetCompileError() const
+    {
+        return compileError_;
+    }
+
+    // SetUniformXxx all use glProgramUniform* (GL 4.1 core, ARB_separate_shader_objects) rather
+    // than plain glUniform*: the latter writes to whatever program glUseProgram last bound, not
+    // necessarily this one, and IEffectBackend's contract explicitly allows a caller to set
+    // uniforms at any time relative to Bind() (real XNA/ShaderEffect code calls Effect::Apply()
+    // -- which does NOT bind this backend's GL program at all, only Effect::OnApply()/
+    // SetCurrentEffect() -- then SetTexture()/SetUniformXxx(), all before the actual draw call
+    // that finally calls Bind()). glProgramUniform* writes directly to the named program object
+    // regardless of what is currently bound, matching that call order exactly. This is the same
+    // gap Bind()-then-set ordering has that EasyGLEffectBackend's own program wrapper avoids the
+    // identical way.
+
+    void SokolEffectBackend::SetUniformFloat(const char* name, float value)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ == 0) return;
+        const GLint loc = glGetUniformLocation(programId_, name);
+        if (loc >= 0) glProgramUniform1f(programId_, loc, value);
+#endif
+    }
+
+    void SokolEffectBackend::SetUniformInt(const char* name, int value)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ == 0) return;
+        const GLint loc = glGetUniformLocation(programId_, name);
+        if (loc >= 0) glProgramUniform1i(programId_, loc, value);
+#endif
+    }
+
+    void SokolEffectBackend::SetUniformVec2(const char* name, float x, float y)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ == 0) return;
+        const GLint loc = glGetUniformLocation(programId_, name);
+        if (loc >= 0) glProgramUniform2f(programId_, loc, x, y);
+#endif
+    }
+
+    void SokolEffectBackend::SetUniformVec3(const char* name, float x, float y, float z)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ == 0) return;
+        const GLint loc = glGetUniformLocation(programId_, name);
+        if (loc >= 0) glProgramUniform3f(programId_, loc, x, y, z);
+#endif
+    }
+
+    void SokolEffectBackend::SetUniformVec4(const char* name, float x, float y, float z, float w)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ == 0) return;
+        const GLint loc = glGetUniformLocation(programId_, name);
+        if (loc >= 0) glProgramUniform4f(programId_, loc, x, y, z, w);
+#endif
+    }
+
+    void SokolEffectBackend::SetUniformMat4(const char* name, const float* matrix)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ == 0) return;
+        const GLint loc = glGetUniformLocation(programId_, name);
+        if (loc >= 0) glProgramUniformMatrix4fv(programId_, loc, 1, GL_FALSE, matrix);
+#endif
+    }
+
+    void SokolEffectBackend::SetUniformFloatArray(const char* name, const float* values, int count)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ == 0 || count <= 0) return;
+        const GLint loc = glGetUniformLocation(programId_, name);
+        if (loc >= 0) glProgramUniform1fv(programId_, loc, count, values);
+#endif
+    }
+
+    void SokolEffectBackend::SetUniformVec2Array(const char* name, const float* values, int count)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (programId_ == 0 || count <= 0) return;
+        const GLint loc = glGetUniformLocation(programId_, name);
+        if (loc >= 0) glProgramUniform2fv(programId_, loc, count, values);
+#endif
+    }
+
+    void SokolEffectBackend::BindTexture(int unit, ITextureBackend* texture)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (texture == nullptr) return;
+        const std::uint32_t imageId =
+            ResolveSampledTextureImageId(*texture, "a custom-effect texture bind");
+        // Recorded, not applied immediately -- see ApplyPendingTextureBindsEXT()'s own doc comment
+        // for why.
+        for (auto& pending : pendingTextureBinds_)
+        {
+            if (pending.unit == unit) { pending.imageId = imageId; pending.isCube = false; return; }
+        }
+        pendingTextureBinds_.push_back({unit, imageId, false});
+#endif
+    }
+
+    void SokolEffectBackend::BindTextureCube(int unit, ITextureCubeBackend* texture)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (texture == nullptr) return;
+        const std::uint32_t imageId =
+            ResolveSampledCubeImageId(*texture, "a custom-effect cube-texture bind");
+        for (auto& pending : pendingTextureBinds_)
+        {
+            if (pending.unit == unit) { pending.imageId = imageId; pending.isCube = true; return; }
+        }
+        pendingTextureBinds_.push_back({unit, imageId, true});
+#endif
+    }
+
+    void SokolEffectBackend::ApplyPendingTextureBindsEXT()
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        for (const PendingTextureBind& pending : pendingTextureBinds_)
+        {
+            const sg_gl_image_info info = sg_gl_query_image_info(MakeImageHandle(pending.imageId));
+            const GLuint texId = info.tex[info.active_slot];
+            if (texId == 0) continue;
+            glActiveTexture(GL_TEXTURE0 + static_cast<GLenum>(pending.unit));
+            // Clears whatever sampler object a prior sg_apply_bindings() left bound to this unit,
+            // so this texture samples with its own default GL parameters rather than inheriting
+            // stale sokol_gfx sampler state (sokol_gfx's GL backend binds sampler objects via
+            // glBindSampler(), not glTexParameteri() per-texture).
+            glBindSampler(static_cast<GLuint>(pending.unit), 0);
+            glBindTexture(pending.isCube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D, texId);
+        }
+        glActiveTexture(GL_TEXTURE0);
+#endif
+    }
+
+    // ---------------------------------------------------------------------------------------
     // SokolSpriteBatchBackend
     // ---------------------------------------------------------------------------------------
 
@@ -1445,6 +1836,18 @@ namespace CNA::Internal::Backends::Sokol
 
     void SokolSpriteBatchBackend::SetTransformMatrix(const Matrix& m) { transform_ = m; }
 
+    void SokolSpriteBatchBackend::SetCustomEffect(Effect* effect)
+    {
+        if (customEffect_ != effect)
+        {
+            // Flush while the OLD effect (or lack of one) is still in effect, matching
+            // EasyGLSpriteBatchBackend::SetCustomEffect's own contract -- otherwise pending sprites
+            // drawn under the previous shader would flush under the new one instead.
+            FlushBatch();
+            customEffect_ = effect;
+        }
+    }
+
     void SokolSpriteBatchBackend::SetSamplerFilter(int textureFilter) { pendingFilter_ = textureFilter; }
 
     void SokolSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
@@ -1463,7 +1866,7 @@ namespace CNA::Internal::Backends::Sokol
         }
 
         backend_.DrawSpriteRunEXT(*currentTexture_, pendingVertices_, transform_,
-                                  pendingFilter_, pendingAddressU_, pendingAddressV_);
+                                  pendingFilter_, pendingAddressU_, pendingAddressV_, customEffect_);
         pendingVertices_.clear();
         currentTexture_ = nullptr;
     }
@@ -1856,6 +2259,15 @@ namespace CNA::Internal::Backends::Sokol
         // this member's own destructor runs (member destruction happens after this body, in
         // reverse declaration order -- after sg_shutdown() below, not before it).
         defaultWhiteTexture_.reset();
+#if CNA_SOKOL_HAS_GL_READBACK
+        // Raw GL object, not tracked by sokol_gfx at all -- must be freed while the GL context is
+        // still current, same reasoning as defaultWhiteTexture_ above.
+        if (customEffectVaoId_ != 0)
+        {
+            glDeleteVertexArrays(1, &customEffectVaoId_);
+            customEffectVaoId_ = 0;
+        }
+#endif
         if (sg_isvalid()) sg_shutdown();
         if (glContext_ != nullptr)
         {
@@ -2429,6 +2841,14 @@ namespace CNA::Internal::Backends::Sokol
 #endif
     }
 
+    std::unique_ptr<IEffectBackend> SokolGraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<SokolEffectBackend>();
+        backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
+    }
+
     std::unique_ptr<ISpriteBatchBackend> SokolGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<SokolSpriteBatchBackend>(*this);
@@ -2813,11 +3233,10 @@ namespace CNA::Internal::Backends::Sokol
         const ITextureBackend& texture,
         const std::vector<SokolSpriteBatchBackend::Vertex>& vertices,
         const Matrix& transform,
-        int filter, int addressU, int addressV)
+        int filter, int addressU, int addressV,
+        Effect* customEffect)
     {
         if (vertices.empty()) return;
-
-        const std::uint32_t textureViewId = ResolveSampledTextureViewId(texture, "SpriteBatch");
 
         BeginPassIfNeeded();
 
@@ -2860,6 +3279,79 @@ namespace CNA::Internal::Backends::Sokol
             -1.0f, 1.0f);
         const Matrix combined = transform * ortho;
 
+        const int quadCount = static_cast<int>(vertices.size()) / kSpriteVerticesPerQuad;
+
+#if CNA_SOKOL_HAS_GL_READBACK
+        // plan_sokol.md SOKOL-28: a custom ShaderEffect bound via SpriteBatch.Begin(..., effect)
+        // bypasses sg_pipeline/sg_bindings entirely, the same raw-GL-bracketed-by-
+        // sg_reset_state_cache() shape DrawCustomEffect3D uses for the 3D draw path -- see
+        // SokolEffectBackend's own doc comment for why. Binds the SAME compiled program the
+        // Effect itself owns (Effect::GetEffectBackendPtr()) rather than a second, independent
+        // copy, so any ShaderEffect::SetUniformXxx() call the caller already made (which writes to
+        // that program) is visible to this draw -- matching EasyGLSpriteBatchBackend::FlushBatch's
+        // own "bind the SAME compiled program the Effect itself owns" reasoning.
+        SokolEffectBackend* effectBackend = nullptr;
+        if (customEffect != nullptr)
+        {
+            effectBackend = dynamic_cast<SokolEffectBackend*>(customEffect->GetEffectBackendPtr());
+            if (effectBackend != nullptr && !effectBackend->IsValid())
+                effectBackend = nullptr;
+        }
+        if (effectBackend != nullptr)
+        {
+            sg_reset_state_cache();
+
+            effectBackend->Bind();
+            float projCM[16];
+            combined.ToColumnMajor(projCM);
+            effectBackend->SetUniformMat4("projection", projCM);
+
+            const std::uint32_t imageId = ResolveSampledTextureImageId(texture, "SpriteBatch");
+            const sg_gl_image_info imageInfo = sg_gl_query_image_info(MakeImageHandle(imageId));
+            const GLuint texId = imageInfo.tex[imageInfo.active_slot];
+            const sg_gl_sampler_info samplerInfo =
+                sg_gl_query_sampler_info(MakeSamplerHandle(GetSampler(filter, addressU, addressV, 1)));
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, texId);
+            glBindSampler(0, samplerInfo.smp);
+
+            if (customEffectVaoId_ == 0) glGenVertexArrays(1, &customEffectVaoId_);
+            glBindVertexArray(customEffectVaoId_);
+
+            const sg_gl_buffer_info vbInfo = sg_gl_query_buffer_info(vertexBuffer);
+            glBindBuffer(GL_ARRAY_BUFFER, vbInfo.buf[vbInfo.active_slot]);
+            // Matches easygl_shader_effect_test.cpp's own expected attribute contract exactly:
+            // location 0 = vec2 aPos, 1 = vec2 aTexCoord, 2 = vec4 aColor -- the same layout
+            // EasyGLSpriteBatchBackend's own VAO uses for both its built-in and custom-effect
+            // sprite draws, so a GLSL source already written against that backend's convention
+            // works unmodified here too.
+            constexpr auto kVertexStride = static_cast<GLsizei>(sizeof(SokolSpriteBatchBackend::Vertex));
+            const auto base = static_cast<std::uintptr_t>(vertexOffset);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, kVertexStride,
+                                  reinterpret_cast<const void*>(base + offsetof(SokolSpriteBatchBackend::Vertex, x)));
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, kVertexStride,
+                                  reinterpret_cast<const void*>(base + offsetof(SokolSpriteBatchBackend::Vertex, u)));
+            glEnableVertexAttribArray(2);
+            glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, kVertexStride,
+                                  reinterpret_cast<const void*>(base + offsetof(SokolSpriteBatchBackend::Vertex, r)));
+
+            const sg_gl_buffer_info ibInfo =
+                sg_gl_query_buffer_info(MakeBufferHandle(spriteIndexBufferId_));
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibInfo.buf[ibInfo.active_slot]);
+            glDrawElements(GL_TRIANGLES, quadCount * kSpriteIndicesPerQuad, GL_UNSIGNED_SHORT, nullptr);
+
+            glBindVertexArray(0);
+            sg_reset_state_cache();
+            return;
+        }
+#else
+        (void)customEffect;
+#endif
+
+        const std::uint32_t textureViewId = ResolveSampledTextureViewId(texture, "SpriteBatch");
+
         cna_sprite_vs_params_t params{};
         combined.ToColumnMajor(params.mvp);
 
@@ -2883,7 +3375,6 @@ namespace CNA::Internal::Backends::Sokol
         sg_range fsRange{&fsParams, sizeof(fsParams)};
         sg_apply_uniforms(UB_cna_sprite_fs_params, &fsRange);
 
-        const int quadCount = static_cast<int>(vertices.size()) / kSpriteVerticesPerQuad;
         sg_draw(0, quadCount * kSpriteIndicesPerQuad, 1);
     }
 
@@ -3308,15 +3799,14 @@ namespace CNA::Internal::Backends::Sokol
 
         // Everything this backend cannot shade yet is refused here rather than rendered as an
         // untextured, unlit approximation that would look plausible and be wrong. Plain texturing
-        // (SOKOL-21), lighting (SOKOL-21), dual-texturing (SOKOL-33), skinning (SOKOL-35) and
-        // environment mapping (SOKOL-34) are real below; PBR is a distinct stock effect with its
-        // own vertex/uniform contract this backend does not implement yet.
+        // (SOKOL-21), lighting (SOKOL-21), dual-texturing (SOKOL-33), skinning (SOKOL-35),
+        // environment mapping (SOKOL-34) and custom ShaderEffect draws (SOKOL-28) are real below;
+        // PBR is a distinct stock effect with its own vertex/uniform contract this backend does
+        // not implement yet.
         if (params.pbr)
         {
             NotYetImplemented(kBackendName, "PBR 3D draws");
         }
-        if (params.customEffectBackend != nullptr)
-            NotYetImplemented(kBackendName, "custom ShaderEffect draws");
         if (params.instanceCount > 1)
             NotYetImplemented(kBackendName, "instanced draws");
 
@@ -3331,6 +3821,13 @@ namespace CNA::Internal::Backends::Sokol
         {
             ib = static_cast<const SokolIndexBufferBackend*>(ibIn);
             if (ib->GetBufferIdEXT() == 0 || ib->GetIndexCount() <= 0) return;
+        }
+
+        if (params.customEffectBackend != nullptr)
+        {
+            DrawCustomEffect3D(vb, ib, declaration, world, view, projection, primitive,
+                               primitiveCount, params);
+            return;
         }
 
         const Shader3DKind kind = params.envMapping      ? Shader3DKind::EnvMapped
@@ -3987,6 +4484,118 @@ namespace CNA::Internal::Backends::Sokol
         sg_draw(baseElement, elementCount, 1);
     }
 
+    void SokolGraphicsBackend::DrawCustomEffect3D(const SokolVertexBufferBackend& vb,
+                                                  const SokolIndexBufferBackend* ib,
+                                                  const VertexDeclaration* declaration,
+                                                  const Matrix& world,
+                                                  const Matrix& view,
+                                                  const Matrix& projection,
+                                                  PrimitiveType primitive,
+                                                  int primitiveCount,
+                                                  const GpuDrawParams& params)
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        const bool hasDeclaration = declaration != nullptr && !declaration->GetVertexElements().empty();
+        const int stride = hasDeclaration ? declaration->getVertexStrideProperty()
+                                          : static_cast<int>(vb.GetStrideEXT());
+        const std::vector<CustomEffectAttribLayout> layout =
+            BuildCustomEffectAttribLayoutEXT(declaration, stride);
+        if (layout.empty())
+        {
+            throw std::runtime_error(
+                "Sokol backend: a custom ShaderEffect draw needs an explicit VertexDeclaration or "
+                "one of this backend's recognised undeclared-VertexBuffer strides (16/20/24/32/52)");
+        }
+
+        BeginPassIfNeeded();
+        // Everything below is a raw GL call bypassing sg_pipeline/sg_bindings entirely (see
+        // SokolEffectBackend's own doc comment for why) -- bracketed by sg_reset_state_cache() on
+        // both sides per sokol_gfx.h's own documented interleaving contract, so sokol_gfx's next
+        // sg_apply_pipeline()/sg_apply_bindings() call (from a later stock-effect or sprite draw)
+        // does not skip a GL call it thinks is already in effect from before this detour.
+        sg_reset_state_cache();
+
+        if (customEffectVaoId_ == 0) glGenVertexArrays(1, &customEffectVaoId_);
+        glBindVertexArray(customEffectVaoId_);
+
+        const sg_gl_buffer_info vbInfo = sg_gl_query_buffer_info(MakeBufferHandle(vb.GetBufferIdEXT()));
+        const GLuint vbGlId = vbInfo.buf[vbInfo.active_slot];
+        glBindBuffer(GL_ARRAY_BUFFER, vbGlId);
+
+        // Attribute location = the element's own index within the resolved layout, matching
+        // EasyGLGraphicsBackend::ApplyLayout()'s established "layout(location=N) == Nth field of
+        // the declaration" convention -- the caller's own GLSL is expected to declare its inputs
+        // in the same order, not by name.
+        for (std::size_t i = 0; i < layout.size(); ++i)
+        {
+            const CustomEffectAttribLayout& entry = layout[i];
+            const auto location = static_cast<GLuint>(i);
+            const void* offset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(entry.offset));
+            glEnableVertexAttribArray(location);
+            if (entry.desc.isInteger)
+                glVertexAttribIPointer(location, entry.desc.componentCount, entry.desc.type, stride,
+                                       offset);
+            else
+                glVertexAttribPointer(location, entry.desc.componentCount, entry.desc.type,
+                                      entry.desc.normalized ? GL_TRUE : GL_FALSE, stride, offset);
+        }
+
+        // Matches EasyGLGraphicsBackend's own BindCustomEffectMatrices(): World/View/Projection by
+        // fixed name, the convention every original XNA sample's own .fx source already declares.
+        // Bind() (glUseProgram) must happen before ApplyPendingTextureBindsEXT() below only in the
+        // sense that both must happen before the draw -- SetUniformXxx() itself needs no particular
+        // order relative to Bind() (see SetUniformXxx's own comment on glProgramUniform*), but a
+        // real GL draw call does need a program actually bound via glUseProgram.
+        auto* effectBackend = static_cast<SokolEffectBackend*>(params.customEffectBackend);
+        effectBackend->Bind();
+        float worldCM[16];
+        float viewCM[16];
+        float projCM[16];
+        world.ToColumnMajor(worldCM);
+        view.ToColumnMajor(viewCM);
+        projection.ToColumnMajor(projCM);
+        effectBackend->SetUniformMat4("World", worldCM);
+        effectBackend->SetUniformMat4("View", viewCM);
+        effectBackend->SetUniformMat4("Projection", projCM);
+        // Realizes every BindTexture()/BindTextureCube() call the caller made earlier (e.g. via
+        // ShaderEffect::SetTexture() before this draw call was ever reached) -- see
+        // ApplyPendingTextureBindsEXT()'s own doc comment for why this can only safely happen here,
+        // not at BindTexture() call time.
+        effectBackend->ApplyPendingTextureBindsEXT();
+
+        const GLenum topology = ToGLPrimitiveTopology(primitive);
+        const int elementCount = ElementCountForPrimitives(primitive, primitiveCount);
+        if (ib != nullptr)
+        {
+            const sg_gl_buffer_info ibInfo =
+                sg_gl_query_buffer_info(MakeBufferHandle(ib->GetBufferIdEXT()));
+            const GLuint ibGlId = ibInfo.buf[ibInfo.active_slot];
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibGlId);
+            const GLenum indexType = ib->IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+            const int indexSize = ib->IsThirtyTwoBit() ? 4 : 2;
+            const void* indexOffset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSize));
+            if (params.baseVertex == 0)
+                glDrawElements(topology, elementCount, indexType, indexOffset);
+            else
+                glDrawElementsBaseVertex(topology, elementCount, indexType, indexOffset,
+                                         params.baseVertex);
+        }
+        else
+        {
+            glDrawArrays(topology, params.vertexStart, elementCount);
+        }
+
+        glBindVertexArray(0);
+        sg_reset_state_cache();
+#else
+        (void)vb; (void)ib; (void)declaration; (void)world; (void)view; (void)projection;
+        (void)primitive; (void)primitiveCount; (void)params;
+        NotYetImplemented(kBackendName, "custom ShaderEffect draws (non-GL CNA_SOKOL_API)");
+#endif
+    }
+
     void SokolGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                                      const Matrix& world,
                                                      const Matrix& view,
@@ -4185,11 +4794,16 @@ namespace CNA::Internal::Backends::Sokol
             // SokolTextureCubeBackend -- no sg_image, since nothing samples a volume texture yet.
             case CNA::GraphicsCapability::Texture3D:
                 return true;
+            // Real as of SOKOL-28, GL-only: SokolEffectBackend compiles real GLSL at runtime via
+            // raw glCreateShader/glCompileShader/glLinkProgram, the same GL-only boundary
+            // OcclusionQuery above already declares (SokolEffectBackend::CompileProgram
+            // deterministically fails, and IsValid() reports false, on any other CNA_SOKOL_API).
+            case CNA::GraphicsCapability::CustomEffects:
+                return CNA_SOKOL_HAS_GL_READBACK != 0;
             // The remaining boundary. Each needs a phase that is not implemented yet -- see
             // plan_sokol.md; every one fails loudly rather than silently no-opping.
             case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::WireFrame:
-            case CNA::GraphicsCapability::CustomEffects:
                 return false;
         }
         return false;

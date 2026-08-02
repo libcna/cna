@@ -222,4 +222,21 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_environmentmapeffect_alphascaledlerp
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-28: custom ShaderEffect via SpriteBatch.Begin(effect). Task 132's own
+    # backend-agnostic oracle (no CNA_BACKEND_* conditionals, already registered for EasyGL),
+    # reused here rather than duplicated -- its fixed location=0/1/2 attribute convention matches
+    # SokolSpriteBatchBackend's own raw-GL custom-effect draw path exactly.
+    cna_sokol_test(cna_test_sokol_shader_effect examples/easygl_shader_effect_test.cpp)
+    cna_register_backend_test(NAME Sokol_ShaderEffect_SpriteBatch COMMAND cna_test_sokol_shader_effect
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-28: custom ShaderEffect via a real 3D GraphicsDevice::DrawIndexedPrimitives
+    # call (not just SpriteBatch). Task 1079's own backend-agnostic oracle (no CNA_BACKEND_*
+    # conditionals, already registered for EasyGL), reused here rather than duplicated.
+    cna_sokol_test(cna_test_sokol_shader_effect_3d examples/easygl_shadereffect_3d_test.cpp)
+    cna_register_backend_test(NAME Sokol_ShaderEffect_3D COMMAND cna_test_sokol_shader_effect_3d
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

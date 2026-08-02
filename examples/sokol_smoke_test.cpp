@@ -124,7 +124,7 @@ class SokolSmokeTest : public Game
             // Real as of SOKOL-20 -- vertex/index buffers and depth-tested colored draws exist.
             && backend.SupportsCapability(GraphicsCapability::ThreeD)
             && !backend.SupportsCapability(GraphicsCapability::MultipleRenderTargets)
-            && !backend.SupportsCapability(GraphicsCapability::CustomEffects)
+            && backend.SupportsCapability(GraphicsCapability::CustomEffects)
             // Real as of SOKOL-27 -- SokolTexture3DBackend is a CPU-shadow store, same shape as
             // TextureCube's.
             && backend.SupportsCapability(GraphicsCapability::Texture3D)
