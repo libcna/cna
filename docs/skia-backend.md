@@ -9,6 +9,13 @@ does not call the EasyGL backend. SDL may internally choose an accelerated rende
 present the completed CPU image; that platform-dependent presenter is not a Skia GPU execution
 mode.
 
+SKIA-1–114 remain the signed raster baseline while the active SKIA-115–170 successor expansion is
+unadvertised work in progress. Its checked routing inventory is
+[`skia-successor-contract-matrix.md`](skia-successor-contract-matrix.md), and every new storage or
+oracle route is governed by
+[`skia-successor-resource-oracles.md`](skia-successor-resource-oracles.md). Baseline capability
+claims below change only after the successor release gate passes.
+
 The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback,
 logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, CPU-raster
 `RenderTarget2D`, and `SpriteBatch` drawing work. A newly created or resized backbuffer starts

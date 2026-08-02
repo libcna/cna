@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
 
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
@@ -28,18 +29,25 @@ namespace CNA::Internal::Backends::Skia
                                            std::shared_ptr<SkiaResourceCounters> resourceCounters)
         : width_(data.width)
         , height_(data.height)
-        , rawPixels_(data.pixels)
         , resourceCounters_(std::move(resourceCounters))
     {
         if (width_ <= 0 || height_ <= 0)
             throw std::runtime_error("Skia Texture2D dimensions must be positive.");
-        const std::size_t requiredBytes = static_cast<std::size_t>(width_) * height_ * 4u;
-        if (rawPixels_.size() != requiredBytes)
+        std::size_t requiredBytes = 0;
+        if (!CheckedTexelBytes2D(static_cast<std::size_t>(width_),
+                                 static_cast<std::size_t>(height_), 4u, requiredBytes)
+            || requiredBytes > kSkiaCpuTextureStorageLimitBytes)
+        {
+            throw System::NotSupportedException(
+                "Skia Texture2D exceeds the checked 256 MiB per-resource CPU storage limit.");
+        }
+        if (data.pixels.size() != requiredBytes)
             throw std::runtime_error("Skia Texture2D requires exactly width * height * 4 RGBA8 bytes.");
         if (data.mipLevels != 1)
             throw System::NotSupportedException(
                 "Skia raster Texture2D does not implement public mip chains; mipMap=true is rejected "
                 "before texture data can be uploaded.");
+        rawPixels_ = data.pixels;
         RebuildImage();
         if (resourceCounters_)
         {
@@ -83,9 +91,12 @@ namespace CNA::Internal::Backends::Skia
     bool SkiaTextureBackend::GetData(int level, int x, int y, int width, int height,
                                      void* data, int dataLength) const
     {
+        std::size_t requiredBytes = 0;
         if (level != 0 || !data || width < 0 || height < 0 || x < 0 || y < 0
             || x > width_ - width || y > height_ - height
-            || dataLength < width * height * 4)
+            || !CheckedTexelBytes2D(static_cast<std::size_t>(width),
+                                    static_cast<std::size_t>(height), 4u, requiredBytes)
+            || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
         {
             return false;
         }

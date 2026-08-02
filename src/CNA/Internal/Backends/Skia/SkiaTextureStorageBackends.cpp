@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -13,31 +12,11 @@ namespace CNA::Internal::Backends::Skia
 {
     namespace
     {
-        [[nodiscard]] bool CheckedMultiply(std::size_t left, std::size_t right,
-                                           std::size_t& result) noexcept
-        {
-            if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left)
-                return false;
-            result = left * right;
-            return true;
-        }
-
-        [[nodiscard]] bool CheckedAdd(std::size_t left, std::size_t right,
-                                      std::size_t& result) noexcept
-        {
-            if (right > std::numeric_limits<std::size_t>::max() - left)
-                return false;
-            result = left + right;
-            return true;
-        }
-
         [[nodiscard]] std::size_t RgbaBytes2D(int width, int height)
         {
-            std::size_t pixels = 0;
             std::size_t bytes = 0;
-            if (!CheckedMultiply(static_cast<std::size_t>(width),
-                                 static_cast<std::size_t>(height), pixels)
-                || !CheckedMultiply(pixels, 4u, bytes))
+            if (!CheckedTexelBytes2D(static_cast<std::size_t>(width),
+                                     static_cast<std::size_t>(height), 4u, bytes))
             {
                 throw System::NotSupportedException(
                     "Skia CPU texture storage size overflows the host address space.");
@@ -47,9 +26,10 @@ namespace CNA::Internal::Backends::Skia
 
         [[nodiscard]] std::size_t RgbaBytes3D(int width, int height, int depth)
         {
-            std::size_t sliceBytes = RgbaBytes2D(width, height);
             std::size_t bytes = 0;
-            if (!CheckedMultiply(sliceBytes, static_cast<std::size_t>(depth), bytes))
+            if (!CheckedTexelBytes3D(static_cast<std::size_t>(width),
+                                     static_cast<std::size_t>(height),
+                                     static_cast<std::size_t>(depth), 4u, bytes))
             {
                 throw System::NotSupportedException(
                     "Skia CPU volume texture storage size overflows the host address space.");
@@ -75,7 +55,7 @@ namespace CNA::Internal::Backends::Skia
         void AddToBudget(std::size_t bytes, std::size_t& total, const char* resource)
         {
             std::size_t next = 0;
-            if (!CheckedAdd(total, bytes, next) || next > kSkiaCpuTextureStorageLimitBytes)
+            if (!CheckedSkiaResourceAccumulate(total, bytes, next))
             {
                 throw System::NotSupportedException(
                     std::string("Skia ") + resource + " exceeds the 256 MiB per-resource CPU "
@@ -113,24 +93,31 @@ namespace CNA::Internal::Backends::Skia
         ValidateAxis(size, "TextureCube", "face size");
 
         int dimension = size;
+        std::vector<std::pair<int, std::size_t>> layout;
         do
         {
             const std::size_t faceBytes = RgbaBytes2D(dimension, dimension);
             std::size_t levelBytes = 0;
-            if (!CheckedMultiply(faceBytes, 6u, levelBytes))
+            if (!CheckedSizeMultiply(faceBytes, 6u, levelBytes))
             {
                 throw System::NotSupportedException(
                     "Skia TextureCube storage size overflows the host address space.");
             }
             AddToBudget(levelBytes, storageBytes_, "TextureCube");
+            layout.emplace_back(dimension, faceBytes);
+            dimension = std::max(1, dimension / 2);
+        }
+        while (mipMap && layout.back().first > 1);
+
+        levels_.reserve(layout.size());
+        for (const auto& [levelDimension, faceBytes] : layout)
+        {
             Level level;
-            level.dimension = dimension;
+            level.dimension = levelDimension;
             for (auto& face : level.faces)
                 face.assign(faceBytes, 0u);
             levels_.push_back(std::move(level));
-            dimension = std::max(1, dimension / 2);
         }
-        while (mipMap && levels_.back().dimension > 1);
 
         if (resourceCounters_)
         {
@@ -221,21 +208,35 @@ namespace CNA::Internal::Backends::Skia
         int levelWidth = width;
         int levelHeight = height;
         int levelDepth = depth;
+        struct LevelLayout final
+        {
+            int width;
+            int height;
+            int depth;
+            std::size_t bytes;
+        };
+        std::vector<LevelLayout> layout;
         do
         {
             const std::size_t levelBytes = RgbaBytes3D(levelWidth, levelHeight, levelDepth);
             AddToBudget(levelBytes, storageBytes_, "Texture3D");
-            Level level;
-            level.width = levelWidth;
-            level.height = levelHeight;
-            level.depth = levelDepth;
-            level.voxels.assign(levelBytes, 0u);
-            levels_.push_back(std::move(level));
+            layout.push_back({levelWidth, levelHeight, levelDepth, levelBytes});
             levelWidth = std::max(1, levelWidth / 2);
             levelHeight = std::max(1, levelHeight / 2);
             levelDepth = std::max(1, levelDepth / 2);
         }
-        while (mipMap && (levels_.back().width > 1 || levels_.back().height > 1));
+        while (mipMap && (layout.back().width > 1 || layout.back().height > 1));
+
+        levels_.reserve(layout.size());
+        for (const LevelLayout& levelLayout : layout)
+        {
+            Level level;
+            level.width = levelLayout.width;
+            level.height = levelLayout.height;
+            level.depth = levelLayout.depth;
+            level.voxels.assign(levelLayout.bytes, 0u);
+            levels_.push_back(std::move(level));
+        }
 
         if (resourceCounters_)
         {

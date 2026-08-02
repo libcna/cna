@@ -4,7 +4,6 @@
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -13,31 +12,11 @@ namespace CNA::Internal::Backends::Skia
 {
     namespace
     {
-        [[nodiscard]] bool CheckedMultiply(std::size_t left, std::size_t right,
-                                           std::size_t& result) noexcept
-        {
-            if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left)
-                return false;
-            result = left * right;
-            return true;
-        }
-
-        [[nodiscard]] bool CheckedAdd(std::size_t left, std::size_t right,
-                                      std::size_t& result) noexcept
-        {
-            if (right > std::numeric_limits<std::size_t>::max() - left)
-                return false;
-            result = left + right;
-            return true;
-        }
-
         [[nodiscard]] std::size_t FaceRgbaBytes(int dimension)
         {
-            std::size_t pixels = 0;
             std::size_t bytes = 0;
-            if (!CheckedMultiply(static_cast<std::size_t>(dimension),
-                                 static_cast<std::size_t>(dimension), pixels)
-                || !CheckedMultiply(pixels, 4u, bytes))
+            if (!CheckedTexelBytes2D(static_cast<std::size_t>(dimension),
+                                     static_cast<std::size_t>(dimension), 4u, bytes))
             {
                 throw System::NotSupportedException(
                     "Skia RenderTargetCube size overflows the host address space.");
@@ -49,7 +28,7 @@ namespace CNA::Internal::Backends::Skia
         {
             std::size_t bytes = 0;
             // Six SkSurface pixel stores plus six canonical straight-RGBA transfer shadows.
-            if (!CheckedMultiply(FaceRgbaBytes(dimension), 12u, bytes))
+            if (!CheckedSizeMultiply(FaceRgbaBytes(dimension), 12u, bytes))
             {
                 throw System::NotSupportedException(
                     "Skia RenderTargetCube size overflows the host address space.");
@@ -89,8 +68,7 @@ namespace CNA::Internal::Backends::Skia
         {
             const std::size_t levelBytes = SixFaceSurfaceAndShadowBytes(dimension);
             std::size_t nextTotal = 0;
-            if (!CheckedAdd(storageBytes_, levelBytes, nextTotal)
-                || nextTotal > kSkiaCpuTextureStorageLimitBytes)
+            if (!CheckedSkiaResourceAccumulate(storageBytes_, levelBytes, nextTotal))
             {
                 throw System::NotSupportedException(
                     "Skia RenderTargetCube exceeds the 256 MiB per-resource CPU storage limit.");

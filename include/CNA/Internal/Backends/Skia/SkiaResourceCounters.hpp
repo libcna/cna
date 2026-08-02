@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+
 #include <cstddef>
 
 namespace CNA::Internal::Backends::Skia
@@ -113,9 +115,11 @@ namespace CNA::Internal::Backends::Skia
     private:
         [[nodiscard]] static std::size_t RgbaBytes(int width, int height) noexcept
         {
+            std::size_t bytes = 0;
             return width > 0 && height > 0
-                ? static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u
-                : 0u;
+                && CheckedTexelBytes2D(static_cast<std::size_t>(width),
+                                       static_cast<std::size_t>(height), 4u, bytes)
+                ? bytes : 0u;
         }
 
         SkiaResourceStats stats_;

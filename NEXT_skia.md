@@ -12,10 +12,9 @@
   not widen the sampling/depth/MSAA claims.
 - Repository policy for this work: leave the unrelated historical `NEXT.md` unchanged.  Record
   Skia continuity only in this file.
-- Build policy: configure persistent in-repository Skia builds in `cmake-build-skia*`; every build
-  uses at most eight jobs (`--parallel 8`). No subagents are used; concurrent focused compiles are
-  allowed only when their combined active work remains within the global eight-core pool. Windowed
-  tests run with `xvfb-run -a` when a real display is unavailable.
+- Build policy: configure persistent in-repository Skia builds in `cmake-build-skia*`; every future
+  build uses at most two jobs (`--parallel 2`). No subagents or concurrent compiles are used.
+  Windowed tests and demos run on virtual X11 through Xvfb, never on the real `:0` display.
 
 ## Completed baseline
 
@@ -25,7 +24,7 @@
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
 - The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
-  134: the same 16 raster-only and 113 display-required tests plus five display-free source audits.
+  135: 17 raster-only, 113 display-required tests, and five display-free source audits.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
@@ -590,8 +589,8 @@
 
 ## Current task
 
-SKIA-115–117 are complete. Continue with SKIA-118's shared resource/oracle boundary and then the
-raster arbitrary-blend implementation in SKIA-119–124.
+SKIA-115–118 are complete. Continue with the raster arbitrary-blend implementation in
+SKIA-119–124, beginning with the exact straight/premultiplied source convention.
 
 ## Completed in this session: SKIA-93
 
@@ -1144,15 +1143,38 @@ raster arbitrary-blend implementation in SKIA-119–124.
   selects 134 tests after adding the fifth audit. All existing parity/release/3D/test-matrix audits
   remain green, `git diff --check` passes, and `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-118
+
+- Added `SkiaResourcePolicy.hpp` as the single code source for the 16,384-axis, 256-MiB per-resource,
+  64-KiB SkSL source, 16-KiB reflected-uniform, 64-uniform and eight-child ceilings. Shared checked
+  add, multiply, 2D/3D texel-size and budget-accumulation helpers never publish a partial result on
+  overflow or limit failure.
+- Replaced duplicate cube/volume and RenderTargetCube arithmetic with those helpers, moved SkSL
+  constants to the common policy, made resource-counter arithmetic use it, and added checked
+  Texture2D/RenderTarget2D readback sizes. `SkiaSurface` and Texture2D now reject over-axis or
+  over-budget allocation before asking Skia to allocate.
+- Added `examples/common/SkiaSuccessorOracle.hpp` and
+  `docs/skia-successor-resource-oracles.md`. Public transfer, readback and point sampling are exact;
+  bilinear RGB may differ by one only in a declared footprint with exact alpha; coverage RGBA may
+  differ by one only on enumerated edges; float transfers are bit exact; finite shader arithmetic
+  uses `max(1e-6, abs(reference)*1e-5)`. Eight unique scenes cross and cover every successor family.
+- Added display-free `Skia_SuccessorResource_Policy`. It and the two related storage policy tests
+  pass 3/3 in Debug, Release and ASan+UBSan (`detect_leaks=0`, `halt_on_error=1`). All 22 Audit+
+  Raster tests pass; five focused public readback/resource tests pass; the full Debug build and
+  complete 135/135 suite pass (17 Raster, 113 Display, five Audit). The final complete run finished
+  on real `:0` before the user's later instruction; the final two focused readback regressions pass
+  2/2 under Xvfb, and all future windowed runs use virtual X11 only.
+- Compilation for the SKIA-118 changes used `--parallel 2` after the user reduced the global CPU
+  ceiling. `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-118: build the shared successor resource/oracle boundary.
-2. SKIA-119–124: complete arbitrary raster blend states before starting mip/format storage work.
-3. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
+1. SKIA-119–124: complete arbitrary raster blend states before starting mip/format storage work.
+2. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
    effects in dependency order.
-4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-5. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions

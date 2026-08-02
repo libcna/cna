@@ -370,6 +370,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_texture_storage_policy examples/skia_texture_storage_policy_test.cpp)
     cna_register_skia_raster_test(Skia_TextureStorage_Policy cna_test_skia_texture_storage_policy)
 
+    cna_skia_test(cna_test_skia_successor_resource_policy
+                  examples/skia_successor_resource_policy_test.cpp)
+    cna_register_skia_raster_test(Skia_SuccessorResource_Policy
+                                  cna_test_skia_successor_resource_policy)
+
     cna_skia_test(cna_test_skia_rendertargetcube_policy
                   examples/skia_rendertargetcube_policy_test.cpp)
     target_include_directories(cna_test_skia_rendertargetcube_policy PRIVATE "${CNA_SKIA_ROOT}")

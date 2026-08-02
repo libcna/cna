@@ -2,6 +2,7 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
 
 #include <array>
 #include <cstddef>
@@ -11,12 +12,6 @@
 
 namespace CNA::Internal::Backends::Skia
 {
-    /** Maximum CPU memory committed by one emulated cube or volume texture. */
-    inline constexpr std::size_t kSkiaCpuTextureStorageLimitBytes = 256u * 1024u * 1024u;
-
-    /** Maximum accepted edge/axis, matching GraphicsDevice's existing texture ceiling. */
-    inline constexpr int kSkiaCpuTextureMaximumAxis = 16384;
-
     /** Six-face, per-mip RGBA8 storage. It deliberately provides no shader-sampling binding. */
     class SkiaTextureCubeBackend final : public ITextureCubeBackend
     {

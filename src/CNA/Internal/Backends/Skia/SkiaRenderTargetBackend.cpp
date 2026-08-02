@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
 
 #include <cstdint>
 #include <stdexcept>
@@ -42,8 +43,11 @@ namespace CNA::Internal::Backends::Skia
     bool SkiaRenderTargetBackend::GetData(int level, int x, int y, int width, int height,
                                           void* data, int dataLength) const
     {
+        std::size_t requiredBytes = 0;
         if (level != 0 || data == nullptr || width < 0 || height < 0
-            || dataLength < width * height * 4)
+            || !CheckedTexelBytes2D(static_cast<std::size_t>(width),
+                                    static_cast<std::size_t>(height), 4u, requiredBytes)
+            || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
         {
             return false;
         }

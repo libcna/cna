@@ -1,4 +1,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+
+#include "System/NotSupportedException.hpp"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
@@ -55,6 +58,15 @@ namespace CNA::Internal::Backends::Skia
     {
         if (width <= 0 || height <= 0)
             throw std::runtime_error("Skia raster surface dimensions must be positive.");
+        std::size_t bytes = 0;
+        if (!IsValidSkiaResourceAxis(width) || !IsValidSkiaResourceAxis(height)
+            || !CheckedTexelBytes2D(static_cast<std::size_t>(width),
+                                    static_cast<std::size_t>(height), 4u, bytes)
+            || bytes > kSkiaCpuTextureStorageLimitBytes)
+        {
+            throw System::NotSupportedException(
+                "Skia raster surface exceeds the checked 16384-axis/256-MiB resource policy.");
+        }
 
         auto nextSurface = SkSurfaces::Raster(RgbaPremulInfo(width, height));
         if (!nextSurface)

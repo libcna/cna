@@ -1,6 +1,6 @@
 # docs/ index
 
-96 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+97 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -32,7 +32,9 @@ on it) rather than assuming either way.
   [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md); the final CPU-raster checklist is
   [`skia-release-gate.md`](skia-release-gate.md). The checked routing inventory for the active
   post-baseline expansion is
-  [`skia-successor-contract-matrix.md`](skia-successor-contract-matrix.md).
+  [`skia-successor-contract-matrix.md`](skia-successor-contract-matrix.md); its shared checked
+  allocation and oracle rules are
+  [`skia-successor-resource-oracles.md`](skia-successor-resource-oracles.md).
 - **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
   2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.

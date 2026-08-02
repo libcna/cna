@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
 
 #include "include/core/SkRefCnt.h"
 
@@ -24,11 +25,6 @@ namespace CNA::Internal::Backends::Skia
      * is exactly this marker. The second string is then a SkSL 100 runtime-shader program.
      */
     inline constexpr std::string_view kSkiaSkslSpriteEffectMarkerEXT = "CNA_SKIA_SKSL_V1";
-    inline constexpr std::size_t kSkiaSkslMaxSourceBytesEXT = 64u * 1024u;
-    inline constexpr std::size_t kSkiaSkslMaxUniformBytesEXT = 16u * 1024u;
-    inline constexpr std::size_t kSkiaSkslMaxUniformCountEXT = 64u;
-    inline constexpr int kSkiaSkslMaxTextureUnitEXT = 7;
-
     /** Bounded SkRuntimeEffect adapter for the explicitly tagged 2D SpriteBatch ABI. */
     class SkiaEffectBackend final : public IEffectBackend
     {
