@@ -6,6 +6,10 @@ public backend/resource interfaces in `IGraphicsBackend.hpp`, every `GraphicsCap
 public non-deleted `GraphicsDevice` method declaration. Overloads use `name/arity`; when that is
 still ambiguous, `#N` is their declaration order in the audited header.
 
+The current audited inventory contains 248 entries: 130 backend/resource methods, nine
+`GraphicsCapability` values, and 109 public `GraphicsDevice` declarations. The number is descriptive;
+the validator derives the authoritative live set from the headers.
+
 Statuses have exact meanings:
 
 - `implemented`: the selected raster Skia backend covers the complete currently reachable entry;
@@ -142,7 +146,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::SupportsCapability/1` | Reports EasyGL compile/device features. | True only for storage-only Texture3D; GPU/3D entries false. | `implemented` | SKIA-17, SKIA-84, capability rows below |
 | `IGraphicsBackend::GetMaxTextureDimension/0` | Reports GL maximum texture axis. | Reports bounded raster maximum. | `implemented` | SKIA-26 |
 | `IGraphicsBackend::SetStringMarkerEXT/1` | Inserts GL debug marker where available. | Intentional no-op without GPU stream. | `internal` | SKIA-60 |
-| `IGraphicsBackend::DebugSimulateContextLoss/0` | Drives EasyGL recovery seam. | Rebuilds SDL presenter, retains raster resources. | `implemented` | SKIA-16, SKIA-65 |
+| `IGraphicsBackend::DebugSimulateContextLoss/0` | Drives EasyGL recovery seam. | Rebuilds SDL presenter, retains raster resources. | `implemented` | SKIA-16, SKIA-65, SKIA-110; 64-cycle `Skia_ResourceBudget` |
 | `IGraphicsBackend::DebugRestoreContext/0` | Drives EasyGL restore seam. | Rebuilds SDL presenter, retains raster resources. | `implemented` | SKIA-16, SKIA-65 |
 | `IGraphicsBackend::RegisterForWindow/2` | Common SDL window-to-backend registry. | Same checked registry path. | `internal` | SKIA-12, SKIA-18 |
 | `IGraphicsBackend::UnregisterForWindow/1` | Removes common window registry entry. | Transactional teardown and rollback. | `internal` | SKIA-12 |
@@ -169,7 +173,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::GraphicsDevice/0` | Common device creates the selected EasyGL backend/window. | Creates the selected Skia backend transactionally. | `implemented` | SKIA-10–12 |
 | `GraphicsDevice::GraphicsDevice/3` | Creates EasyGL with adapter/profile/parameters. | Same common parameters select raster presentation. | `implemented` | SKIA-10–15 |
 | `GraphicsDevice::getIsDisposedProperty/0` | Common lifetime state around EasyGL teardown. | Same resource-first Skia teardown state. | `implemented` | SKIA-12, SKIA-29 |
-| `GraphicsDevice::getGraphicsDeviceStatusProperty/0` | Reflects backend device events. | Remains Normal across synchronous presenter recovery. | `implemented` | SKIA-16 |
+| `GraphicsDevice::getGraphicsDeviceStatusProperty/0` | Reflects backend device events. | Remains Normal across synchronous presenter recovery. | `implemented` | SKIA-16, SKIA-110; 64-cycle `Skia_ResourceBudget` |
 | `GraphicsDevice::getAdapterProperty/0` | Common adapter metadata used by EasyGL. | Same common adapter metadata. | `implemented` | SKIA-10 |
 | `GraphicsDevice::getGraphicsProfileProperty/0` | Common profile selected for EasyGL validation. | Same public profile metadata; capabilities remain truthful. | `implemented` | SKIA-10, SKIA-17 |
 | `GraphicsDevice::getPresentationParametersProperty/0#1` | Mutable common presentation state. | Reflects applied Skia logical/present interval values. | `implemented` | SKIA-13–15 |

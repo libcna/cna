@@ -1,4 +1,4 @@
-# Established graphics backend feature matrix — SDL_Renderer, EasyGL, Vulkan, Bgfx, D3D9, D3D11, D3D12
+# Graphics backend feature matrix — established GPU paths and Skia raster 2D
 
 Master, up-to-date cross-backend feature matrix for CNA's established backends, written for
 Task 451 (Phase 51), extended 2026-07-14 with a `D3D11` column (`../plan_dx.md`, Phase DX11
@@ -60,6 +60,42 @@ that could honestly be marked ✅ under this doc's "a real, GPU-facing pixel/beh
 exercised it" bar. It compiles and links against a patched Wicked Engine and its device-independent
 logic is unit tested; that is all. Revisit once `plan_wicked.md` `WICKED-18`/`WICKED-74` have been
 run on a GPU host. See [`wicked-backend.md`](wicked-backend.md) for its current capability boundary.
+
+The experimental **Skia** backend is also not promoted to a column in the established-backend
+tables below: the selected artifact is a CPU-raster 2D implementation, not a GPU/3D peer. Its
+verified subset is nevertheless broad enough to require a precise cross-reference, so the
+companion table below maps the same feature families without implying full 3D parity. For this
+table, ✅ means complete within the stated 2D contract, ⚠️ means a deliberately bounded direct or
+emulated route, and ❌ means direct support was absent and the named emulation was evaluated and
+rejected. The full row-per-API inventory is the 248-entry
+[`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md).
+
+## Skia CPU-raster 2D companion matrix (SKIA-111)
+
+| Feature family | Skia | Direct/emulation decision | Verification evidence |
+|---|---|---|---|
+| `SpriteBatch` overloads, sorting, rotation/flip/scale/crop | ✅ | Direct `SkCanvas` 2D route; no backend-local public-overload shortcuts. | [SKIA-31–40](../plan_skia.md), [2D registrations](skia-2d-easygl-registration.md), [XNA oracle](skia-xna-oracle.md) |
+| Custom `Effect` in `SpriteBatch.Begin` | ⚠️ | Exact stock `SpriteEffect` plus explicit `CNA_SKIA_SKSL_V1` fragment SkSL; arbitrary EasyGL GLSL and vertex/3D effects reject after staged emulation analysis. | [SKIA-89–94](../plan_skia.md), [effects boundary](skia-effects.md), `Skia_SkSL_UniformTexture` |
+| `SpriteFont` properties, glyph layout, fallback, newline and effects | ✅ | Shared font-atlas layout drawn through the direct sprite route; Skia text APIs are deliberately not substituted. | [SKIA-38, SKIA-109](../plan_skia.md), `Skia_Contract_SpriteFontProperties`, five `Skia_SpriteFont_*` tests |
+| Clamp/Wrap/Mirror U/V and point/linear filtering | ✅ | Direct Skia tile/filter modes, independently selected per axis. | [SKIA-43–46, SKIA-106, SKIA-108](../plan_skia.md), `Skia_TextureAddressAxes` |
+| `RenderTarget2D` colour/readback/sampling/usage | ✅ | Direct level-0 `SkSurface`; target switching and lifetime are checked. | [SKIA-61–75](../plan_skia.md), `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_Lifetime` |
+| `RenderTargetCube` face rendering/readback/usage/mips | ⚠️ | Six independent 2D raster surfaces with CPU-generated box mips; no cube sampler, depth or MSAA claim. | [SKIA-85–86](../plan_skia.md), `Skia_RenderTargetCube_Policy` and four shared cube contracts |
+| Multiple render targets | ❌ | `SkCanvas` has one colour result; replay emulation was evaluated and cannot reproduce distinct outputs for slots 0–3. Empty or one-target plural binding works. | [SKIA-87–88](../plan_skia.md), `Skia_MRT_Rejection` |
+| MSAA backbuffer/targets | ❌ | Selected raster `SkSurface` owns zero physical samples. Requests above one reject; a fake resolve or multisample mask is not exposed. | [SKIA-56, SKIA-76–77, SKIA-85–86](../plan_skia.md), `Skia_RenderTarget2D_MsaaPolicy` |
+| Mutable `RenderTarget2D` mip chain | ❌ | Skia default immutable mip generation was evaluated; it cannot supply CNA's mutable per-level/readback target contract. | [SKIA-70](../plan_skia.md), `Skia_Texture2D_MipmapPolicy` |
+| `Texture2D` level-0 Set/Get/partial/NPOT sampling | ✅ | Exact CPU shadow plus direct raster image path; transfer and validation contracts share sources with EasyGL. | [SKIA-22–30, SKIA-106, SKIA-109](../plan_skia.md), [API contract comparison](skia-api-contract-comparison.md) |
+| `Texture2D` mip levels above zero | ❌ | `withDefaultMipmaps()` was evaluated and cannot expose CNA's mutable per-level contract; construction or mip-dependent sampling rejects. | [SKIA-27, SKIA-45, SKIA-70](../plan_skia.md), `Skia_Sampler_MipmapFilterPolicy` |
+| `TextureCube`/`Texture3D` Set/Get including mips | ⚠️ | Exact bounded CPU face/voxel transfer storage; this capability does not imply shader sampling. | [SKIA-80–84](../plan_skia.md), [texture storage policy](skia-texture-storage.md), shared 56-check contracts |
+| Cube/volume texture sampling | ❌ | No compatible Skia raster sampler or accepted CNA 3D effect route; CPU transfer storage cannot emulate directional/volume sampling. | [SKIA-82–84, SKIA-101–102](../plan_skia.md), [3D ADR](skia-3d-emulation-adr.md), `Skia_3D_Refusal` |
+| Non-`Color` surface formats | ❌ | Selected surfaces are RGBA8888; format-conversion emulation is not advertised because the public resource format/storage contract would differ. | [SKIA-25, SKIA-109](../plan_skia.md), `Skia_Contract_SurfaceFormat` |
+| Blend presets/custom state and colour-write masks | ⚠️ | Four presets, one proven custom tuple and all target-0 masks use direct/runtime-blender routes; every other tuple rejects after exhaustive selection testing. | [SKIA-47–57, SKIA-108](../plan_skia.md), [XNA oracle](skia-xna-oracle.md), `Skia_BlendMapping_Raster` |
+| Depth/stencil state and clears | ❌ | Disabled `None` is valid 2D state, but there is no attachment. CPU depth/stencil prototypes passed in isolation; product emulation was rejected as a separate software renderer. | [SKIA-67, SKIA-97–102](../plan_skia.md), [3D ADR](skia-3d-emulation-adr.md), `Skia_3D_Refusal` |
+| Rasterizer state | ⚠️ | Solid fill and scissor are meaningful in 2D. Wireframe, culling/depth bias as 3D features reject or stay unadvertised after geometry-emulation evaluation. | [SKIA-41–42, SKIA-58, SKIA-99–102](../plan_skia.md), `Skia_RasterizerState_Policy` |
+| Sampler slots/anisotropy/mip filtering | ⚠️ | Sprite slot point/linear plus Clamp/Wrap/Mirror are exact; mip filters, anisotropy and 3D sampler binding reject because the raster resources lack those facilities. | [SKIA-43–46, SKIA-70, SKIA-78–79, SKIA-102](../plan_skia.md), `Skia_Sampler_MipmapFilterPolicy` |
+| `ReferenceStencil` and stencil-only clear | ❌ | Zero is accepted only with disabled state; nonzero/active stencil rejects atomically. No attachment exists, and CPU-stencil product emulation was rejected by the 3D ADR. | [SKIA-67, SKIA-98, SKIA-101–102](../plan_skia.md), `Skia_3D_Refusal` |
+| `OcclusionQuery` | ❌ | Raster final pixels cannot distinguish positive from zero coverage. Framebuffer diff, replay and hidden-GPU routes were evaluated and rejected. | [SKIA-104–105](../plan_skia.md), [feasibility report](skia-occlusion-query-feasibility.md) |
+| 3D primitive/model rendering and stock 3D effects | ❌ | Direct selected-raster support is absent. SkVertices plus CPU depth/stencil/geometry/effect prototypes were evaluated; completing them would duplicate a software renderer. | [SKIA-95–103](../plan_skia.md), [3D ADR](skia-3d-emulation-adr.md), `Skia_3D_Refusal` |
+| Presentation recovery and resource lifetime | ✅ | Presenter-only reconstruction retains CPU surfaces/resources and emits Resetting→Reset; 64 repeated cycles are sanitizer-checked. No GPU `DeviceLost` event is fabricated. | [SKIA-16, SKIA-28, SKIA-65, SKIA-74, SKIA-110](../plan_skia.md), [sanitizer validation](skia-sanitizer-validation.md) |
 
 **Supersedes `docs/coverage.md`**, which is dated 2026-06-21
 and predates almost this entire session's work

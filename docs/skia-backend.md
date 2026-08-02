@@ -4,10 +4,35 @@
 
 `CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create or use a Skia OpenGL/GPU context and does not call the EasyGL backend. SDL may internally choose an accelerated renderer solely to present the completed CPU image; that platform-dependent presenter is not a Skia GPU execution mode.
 
-The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback, logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, basic CPU-raster `RenderTarget2D`, and immediate `SpriteBatch` drawing work. The SpriteBatch slice covers destination/source rectangles, XNA-convention tint, rotation, flips, `Begin`'s 2D affine transform, viewport and scissor clipping, point/linear sampling, and independent Clamp/Wrap/Mirror U/V addressing, as well as `BlendState::{Opaque, AlphaBlend, NonPremultiplied, Additive}`. A newly created or resized backbuffer starts transparent black, so a zero-draw `Present` never exposes allocator data. A `RenderTarget2D` can be bound as the active canvas, read back, and sampled as a sprite once unbound; no depth, mipmap, or MSAA attachment is claimed. A requested `DepthFormat` remains public construction metadata for API compatibility, but `HasRealDepthBuffer` stays false and depth/stencil-only clears have no colour effect. Plain `TextureCube` and `Texture3D` have bounded CPU-only face/voxel storage for exact transfer, readback, mip, and DDS-loading contracts; they cannot be sampled. `RenderTargetCube` additionally has a bounded six-surface 2D emulation with exact face rendering, uploads/readback, Preserve/Discard, and generated mip levels. It has no cube sampler, real depth, or real MSAA. The complete storage/sampling boundary and 256 MiB policy are in [`skia-texture-storage.md`](skia-texture-storage.md). Effects, cube/volume sampling, and all 3D draw APIs currently report a deterministic exception rather than being silently ignored. MRT also rejects atomically: a `SkCanvas` draw has one result colour and cannot reproduce distinct `ShaderEffect` outputs for slots 0–3. `SetRenderTargets(nullptr, 0)` restores the default raster backbuffer.
+The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback,
+logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, CPU-raster
+`RenderTarget2D`, and `SpriteBatch` drawing work. A newly created or resized backbuffer starts
+transparent black, so a zero-draw `Present` never exposes allocator data. Plain `TextureCube` and
+`Texture3D` provide bounded CPU transfer storage but cannot be sampled. `RenderTargetCube` is a
+six-surface 2D emulation. Unsupported stock 3D effects, cube/volume sampling, and all 3D draw APIs
+report one deterministic exception rather than being silently ignored. The table below is the
+authoritative compact capability boundary; later sections explain the individual decisions.
+
+## Verified capability boundary
+
+| CNA feature | Current Skia route | Direct/emulation decision | Evidence |
+|---|---|---|---|
+| Clear, present, resize, five presentation modes, coordinate transforms and backbuffer readback | Verified direct CPU surface plus SDL presentation | Direct raster implementation; SDL uploads the completed image and is not a Skia GPU mode. | [SKIA-7, SKIA-13–17, SKIA-71–72](../plan_skia.md); `Skia_PresentationModes`, `Skia_Resize_Presentation`, `Skia_DisplayScale` |
+| `SpriteBatch` draw overloads, sorting, transforms, source rectangles, tint, flips and `SpriteFont` | Verified direct 2D path | Direct `SkCanvas` image operations preserve the shared XNA-shaped batching and font-atlas layout. | [SKIA-31–40](../plan_skia.md); [2D EasyGL registration](skia-2d-easygl-registration.md); [XNA oracle](skia-xna-oracle.md) |
+| Point/linear filtering and independent Clamp/Wrap/Mirror U/V | Verified direct 2D path | Direct Skia sampling/tile modes; mip-dependent and anisotropic modes reject because the selected raster resources have no mip sampler. | [SKIA-43–46, SKIA-70, SKIA-78–79](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_Sampler_MipmapFilterPolicy` |
+| Blend presets and target-0 colour-write masks | Verified bounded direct/runtime-blender path | `Opaque` and `AlphaBlend` use direct modes; XNA's independent alpha, one custom tuple, and masks use pixel-proven SkSL blenders. Every other tuple rejects before drawing. | [SKIA-47–57, SKIA-108](../plan_skia.md); [XNA oracle](skia-xna-oracle.md); `Skia_BlendMapping_Raster`, `Skia_ColorWrite_Policy` |
+| `Texture2D` level-0 upload, partial transfer, readback and NPOT sampling | Verified direct CPU image path | Direct CPU shadow plus Skia image; mip levels above zero reject after `withDefaultMipmaps()` was evaluated and found unable to provide CNA's mutable per-level contract. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109](../plan_skia.md); [API contract comparison](skia-api-contract-comparison.md) |
+| `RenderTarget2D` colour rendering, readback, sampling and Preserve/Discard | Verified direct level-0 raster target | Direct `SkSurface`; real depth, mip chains and MSAA are unavailable rather than fabricated. | [SKIA-61–75](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_DepthPolicy`, `Skia_RenderTarget2D_MsaaPolicy` |
+| `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
+| `RenderTargetCube` face rendering, transfers, Preserve/Discard and generated mips | Verified bounded six-surface 2D emulation | Each face is an independent raster target. Cube sampling, real depth and real MSAA reject explicitly. | [SKIA-85–86](../plan_skia.md); `Skia_RenderTargetCube_Policy` and four shared cube contracts |
+| Multiple render targets | Unsupported | Direct support is absent because `SkCanvas` has one colour result; replay emulation was evaluated and rejected because distinct shader outputs for slots 0–3 cannot be reproduced. Empty or one-target plural binding remains supported. | [SKIA-87–88](../plan_skia.md); `Skia_MRT_Rejection` |
+| Stock `SpriteEffect` and explicit custom 2D fragment SkSL | Verified bounded path | Stock `SpriteEffect` aliases the default batch path. Only the `CNA_SKIA_SKSL_V1` fragment-only ABI is accepted; arbitrary EasyGL GLSL and vertex/3D effects reject after staged emulation investigation. | [SKIA-89–94](../plan_skia.md); [effects boundary](skia-effects.md) |
+| Real depth/stencil, MSAA, wireframe, 3D draws, models and cube/volume sampling | Unsupported | Direct selected-raster support is absent. SkVertices and CPU depth/stencil/geometry/effect prototypes were evaluated; completing them would be a separate software renderer, so production emulation was rejected. | [SKIA-95–103](../plan_skia.md); [3D emulation ADR](skia-3d-emulation-adr.md); `Skia_3D_Refusal` |
+| Occlusion queries | Unsupported | Skia raster exposes no samples-passed query. Framebuffer-diff, replay and hidden-GPU emulations were evaluated and rejected as observably incorrect; properties safely return false/zero and Begin/End reject. | [SKIA-104–105](../plan_skia.md); [occlusion-query feasibility](skia-occlusion-query-feasibility.md) |
+| Ganesh/Graphite accelerated Skia mode | Not implemented or advertised | The pinned artifact disables Ganesh, Graphite, GL, Vulkan and Dawn. A direct accelerated integration and its reset/interoperability contract remain open in SKIA-5/6; no raster-to-GPU emulation is claimed. | [SKIA-5–6, SKIA-107, SKIA-110](../plan_skia.md); [verification boundary](skia-verification-boundary.md); [sanitizer validation](skia-sanitizer-validation.md) |
 
 The complete API-level comparison with EasyGL is maintained in
-[`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md). Its 247 rows cover every current
+[`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md). Its 248 rows cover every current
 backend/resource method, capability value, and public `GraphicsDevice` declaration; the registered
 `Skia_ParityLedger_Audit` test prevents those headers and their classifications from drifting.
 The companion [`skia-easygl-test-matrix.md`](skia-easygl-test-matrix.md) classifies all 347 current
@@ -84,8 +109,8 @@ state leakage rather than application logging.
 | Mode | Status | Presentation | 3D/depth/stencil |
 |---|---|---|---|
 | Raster | Implemented first slice | `SkSurface` readback to SDL streaming texture | Unsupported |
-| Ganesh/OpenGL | Not implemented | Requires a separately owned current GL context and framebuffer wrapper | Not claimed |
-| Graphite/Vulkan/Metal/Dawn | Not investigated | No selected interop or reset contract | Not claimed |
+| Ganesh/OpenGL | Not implemented; SKIA-5/6 open | Direct context/framebuffer ownership and reset interop remain unevaluated | Not claimed |
+| Graphite/Vulkan/Metal/Dawn | Not implemented; pinned artifact disables them | No direct interop evaluation or selected reset contract; no emulation claimed | Not claimed |
 
 Raster uses premultiplied RGBA8888 inside Skia and normalizes readback into top-row-first RGBA8 bytes for SDL. A future GPU path must preserve that contract and pass the same pixel tests; it may not silently change reported capabilities mid-frame.
 
@@ -427,7 +452,7 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     normally and under ASan.
 59. `Skia_ParityLedger_Audit` extracts eleven backend/resource interfaces, all nine capability
     values, and every public non-deleted `GraphicsDevice` method from the live headers. It matches
-    all 247 entries against `docs/skia-easygl-parity-ledger.md`, whose rows record EasyGL behavior
+    all 248 entries against `docs/skia-easygl-parity-ledger.md`, whose rows record EasyGL behavior
     and tests, the bounded Skia result/plan, final status, and evidence. Missing, stale, duplicate,
     malformed, empty, or unknown-status rows fail the display-free audit instead of allowing the
     parity inventory to drift silently.

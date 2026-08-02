@@ -1004,12 +1004,34 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   Debug, Release, sanitizer, and EasyGL display caches are restored to `:0`; `NEXT.md` was not read
   or changed.
 
+## Completed in this session: SKIA-111
+
+- Added an authoritative, evidence-linked capability boundary to `docs/skia-backend.md` and a
+  dedicated Skia CPU-raster companion matrix to `docs/graphics-backend-feature-matrix.md`. Every
+  advertised 2D family names its direct or bounded-emulation route and live task/test evidence;
+  every excluded GPU/3D family records whether direct support is absent and which emulation was
+  evaluated or remains open. The tables do not promote Skia to an established GPU/3D column.
+- Corrected the live parity inventory from 247 to 248 entries (130 backend/resource methods, nine
+  capabilities, 109 public device declarations) and the test-matrix distribution to 69
+  `2d-direct`, 33 `2d-emulation`, 220 `3d`, and 25 `device-dependent`. The ledger now cites
+  SKIA-110's 64 presenter-recovery cycles for the recovery and device-status entries.
+- README, the docs index, and CLAUDE now expose `CNA_GRAPHICS_BACKEND=SKIA` as a distinct pinned
+  external CPU-raster backend and link the exact boundary. Public `GraphicsCapability` comments no
+  longer imply that all non-SDL backends support 3D and explicitly say Skia's true `Texture3D`
+  result means transfer/readback storage, not shader sampling.
+- The Debug build completes with `--parallel 8`; all three source audits pass, and the complete
+  Skia suite passes 132/132 under Xvfb in 22.48 seconds (16 Raster, 113 Display, three Audit). An
+  initial run overlapped the tail of the broad public-header relink and saw four transient
+  permission-denied starts; after Ninja reached a no-work state, the clean full rerun had zero
+  failures. The persistent display cache is restored to `:0`; `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-111: synchronize public backend/capability documentation with verified behavior only.
-2. SKIA-112: add fresh-checkout developer build/test instructions after the verified capability
+1. SKIA-112: add fresh-checkout developer build/test instructions now that the verified capability
    documents agree.
-3. Reassess earlier open architecture rows (especially SKIA-5/6/76/77) against the accepted
+2. SKIA-113: perform the clean-worktree/fresh-configure cross-backend smoke after the developer
+   procedure is reproducible.
+3. Reassess earlier open architecture rows (especially SKIA-5/6) against the accepted
    raster-only ADR before doing the final release-gate tasks.
 
 ## Known boundaries / assumptions
@@ -1017,6 +1039,7 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
 - The Skia path is raster-only.  Its current requested MSAA 0/1 reports 0; requests normalizing
   to 2+ are rejected and the capability remains false.
 - Mipmapped textures and render targets are intentionally rejected by the public raster policy.
-- `docs/graphics-backend-feature-matrix.md` currently contains no Skia entry.  Update it only
-  with verified facts during the documentation/release-gate tasks; do not copy aspirational claims.
+- `docs/graphics-backend-feature-matrix.md` contains a separate verified Skia CPU-raster companion
+  table, not an established GPU/3D column. Keep its task/test evidence synchronized with the live
+  capability ledger and do not copy aspirational accelerated claims into it.
 - `NEXT.md` deliberately remains untouched at the user's request.
