@@ -2472,7 +2472,7 @@ existing task.
 | REMED-GFX-120 | SDL_GPU's point-topology graphics pipelines raise `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because its SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-117 validation inspection | **OPEN — SDL_GPU COUNTERPART OF REMED-GFX-115; PIXELS CORRECT ON THE TESTED DRIVER, POINT SIZE FORMALLY UNDEFINED WITHOUT `maintenance5`.** |
 | REMED-GFX-121 | Bgfx's non-GLSL renderers transpose the per-instance world matrix: `vs_instanced3d.sc` builds it with the raw `mat4(i_data0..i_data3)` constructor instead of bgfx's `mtxFromCols()`. | MEDIUM | P2 | REMED-GFX-118 Vulkan route | **OPEN — A/B-PROVEN PRE-EXISTING; INSTANCE 0 IS CORRECT AND EVERY LATER INSTANCE IS PROJECTED SOMEWHERE UNPREDICTABLE ON GENUINE BGFX VULKAN; PINNED BY A COMMITTED PER-RENDERER TEST.** |
 | REMED-GFX-122 | EasyGL's stock and custom-effect instanced routes now preserve public index, vertex-binding and instance-binding offsets plus exact step rate. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **DONE 2026-08-02 — EXACT PRE-FIX PIN FLIPPED; START INDEX, BASE VERTEX, MESH/INSTANCE ELEMENT OFFSETS, DECLARATION POINTERS, INSTANCE FREQUENCY AND VAO RETURN STATE ARE CORRECT; EASYGL 17/17, SERIAL SHARD 21/21, SANITIZERS/DIAGNOSTICS/CONTROLS CLEAN.** |
-| REMED-GFX-123 | D3D11 and D3D12 issue `DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0)`, dropping public `startIndex` and `baseVertex` on the instanced path. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — REMED-GFX-020/060'S OFFSET DEFECT IN THE ONE D3D PATH THOSE TASKS DID NOT COVER; D3D11 MEASURED 3/16 UNDER WINE+DXVK, D3D12 INSPECTION-ONLY.** |
+| REMED-GFX-123 | D3D11 and D3D12 instanced draws now carry public `startIndex`, `baseVertex`, both binding element offsets and `InstanceFrequency` to the native draw, with the layout/PSO cache keyed on the step rate. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **DONE 2026-08-02 — CLASSIFIED PER BACKEND, NOT AS ONE CAUSE: D3D11 HARDCODED THE `IASetVertexBuffers` OFFSETS, THE INSTANCE STRIDE AND A SINGLE STEP-RATE-1 LAYOUT; D3D12'S VIEWS HAVE NO OFFSET FIELD AND ITS PSO BAKED THE RATE IN. D3D11 3/17 → 17/17 UNDER WINE (BUILTIN D3D11, NOT DXVK — DXVK'S `dxgi` IS BROKEN UNDER XVFB); D3D12 INSPECTION + CLEAN CROSS-BUILD, RUNTIME A/B-PROVEN STILL BLOCKED BY REMED-BUILD-012. SPAWNED REMED-GFX-199, REMED-GFX-200.** |
 | REMED-GFX-124 | Software render targets could be neither read back nor sampled: `SoftwareRenderTargetBackend` implemented no `ITextureBackend::GetData` and was not a `SoftwareTextureBackend`. | MEDIUM | P2 | REMED-GFX-119 render-target control | **DONE 2026-07-27 — TWO INDEPENDENT DEFECTS, ONE ARCHITECTURAL CAUSE: THE TARGET'S COLOUR STORAGE WAS REACHABLE THROUGH NO INTERFACE ANY CONSUMER USED. THE INHERITED READBACK SYMPTOM WAS WRONG IN THE WORSE DIRECTION — `Texture2D::GetData` ZERO-INITIALIZES THE SCRATCH BUFFER IT HANDS THE BACKEND, SO A NO-OP BACKEND RETURNS A FABRICATED, FULLY WRITTEN TRANSPARENT-BLACK FRAME AND THE "DID GETDATA WRITE ANYTHING?" SENTINEL CHECK PASSES PRE-FIX. FIXED BY ONE SHARED READ-ONLY `SoftwareColorSurface` CAPABILITY IMPLEMENTED BY BOTH TEXTURE AND TARGET (NO DUPLICATE BUFFER, NO RESOLVE, NO COPY PER SAMPLE) PLUS A REAL `GetData` OVERRIDE OVER THE SAME STORAGE. NEW SUITE 88/88, A/B 32/88 PRE-FIX; `ctest -L Software` 17/17; ASAN/UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-126/127/128.** |
 | REMED-GFX-125 | The XNA vertex structs build `getVertexDeclarationStatic()` from `sizeof(T)`, which includes the `IVertexType` virtual base's vtable, so the declared `VertexStride` exceeds the GPU layout. | MEDIUM | P2 | REMED-GFX-119 stride coverage | **DONE 2026-07-27 — ALL SEVEN BUILT-IN DECLARATIONS NOW TAKE THEIR STRIDE FROM `sizeof(stream)` AND EVERY ELEMENT OFFSET FROM `offsetof(stream, member)` OF ONE SHARED PACKED STRUCTURE PER TYPE, SO A STRIDE AND ITS ELEMENT LAYOUT CANNOT DIVERGE; A STRIDE-ONLY PATCH WOULD HAVE BEEN A HALF-FIX, SO EIGHT TYPED EXPLICIT-DECLARATION `DrawUser` OVERLOADS CONVERT AN OBJECT ARRAY INTO THAT STREAM EXACTLY ONCE AND THE RAW `const void*` OVERLOADS KEEP THEIR UNCHANGED CALLER-PACKED CONTRACT; DECLARATION AND 64-BIT RANGE VALIDATION ADDED WHERE A `vertexOffset` OF `0x7FFFFFF0` PREVIOUSLY DUMPED CORE; `VertexBuffer` PROVEN UNAFFECTED; 24/24 ON SEVEN RENDERING BACKENDS, SANITIZERS CLEAN, NO ABI OR PUBLIC-FIELD CHANGE.** |
 | REMED-GFX-126 | Software reports a `MultiSampleCount` it never implements: `SoftwareRenderTargetBackend::GetMultiSampleCount()` returns the requested power-of-two-rounded count although the rasterizer writes one sample per pixel and stores no per-sample data. | LOW | P3 | REMED-GFX-124 multisample boundary | **OPEN — CONTRADICTS `IRenderTargetBackend::GetMultiSampleCount`'S OWN "0 IF NOT SUPPORTED BY THIS BACKEND" CONTRACT AND FNA'S `FNA3D_GetMaxMultiSampleCount` SEMANTICS; READBACK AND SAMPLING ARE UNAFFECTED, SO THIS IS A REPORTING DEFECT. VALUE PINNED BY `Software_RenderTargetReadback` CHECK H3.** |
@@ -23930,3 +23930,228 @@ working faces/mips/GetData, and every other backend's production are preserved. 
 952 depth-format fixture was not modified. `audit/` is untouched, and no next ticket was begun.
 
 **No new findings were created.**
+
+---
+
+## REMED-GFX-123 — D3D11 and D3D12 instanced draw offsets (DONE 2026-08-02)
+
+### Recorded status, reproducer and authoritative contract
+
+Both ledgers were read before production was edited. `REMEDIATION_INDEX.md` recorded GFX-123 as
+**OPEN**, MEDIUM/GRAPHICS; `REMEDIATION_PROGRESS.md` recorded it MEDIUM/P2, depending on
+REMED-GFX-118's cross-backend controls, with the reproducer *"measured on D3D11 (Wine + DXVK) by
+temporarily widening REMED-GFX-118's regression guard: **3/16**, with a `startIndex`-only request
+rendering the element-zero prefix"* and D3D12 *"inspection-only (runtime blocked by
+REMED-BUILD-012)"*. GFX-118's own record additionally noted that no red test was ever committed for
+it, and that D3D9 already honours both offsets in its own instanced path (REMED-GFX-060), making
+this the one D3D path the earlier offset tasks did not cover.
+
+The authoritative contract is the one GFX-106/107/118 established and `GraphicsDevice::
+DrawInstancedPrimitives` validates: `startIndex` is an index **element** offset; `baseVertex` is
+added to each decoded index exactly once; `primitiveCount` fixes the consumed index count;
+`minVertexIndex`/`numVertices` are hints; `instanceCount` never widens or narrows the geometry range
+and the range never changes the instance count; `VertexBufferBinding.VertexOffset` is a vertex
+**element** offset on each stream independently; and `InstanceFrequency` is the number of drawn
+instances that share one per-instance record.
+
+### The ticket named one symptom; the two backends do not share a root cause
+
+The recorded symptom — `DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0)` — was real on
+both. Classifying them independently (as required) showed the shared symptom sits on a **different
+mechanism per backend**, and that each backend additionally dropped three offsets the ticket never
+named. Nothing here was inferred from the other backend's code.
+
+| Axis | D3D11 before | D3D12 before |
+|---|---|---|
+| `startIndex` | `StartIndexLocation` literal `0` | `StartIndexLocation` literal `0` |
+| `baseVertex` | `BaseVertexLocation` literal `0` | `BaseVertexLocation` literal `0` |
+| per-vertex `VertexOffset` | `IASetVertexBuffers` offsets array literal `{0, 0}` | no offset field exists on a `D3D12_VERTEX_BUFFER_VIEW` at all — a whole-buffer view was bound |
+| per-instance `VertexOffset` | same literal `{0, 0}` | same whole-buffer view |
+| instance stride | hardcoded `kInstanceStride = 64`, ignoring the bound stream's own | correct already (`GetViewEXT()` reports `stride_`) |
+| `InstanceFrequency` | `InstanceDataStepRate` baked as `1` into **one** cached `ID3D11InputLayout` | baked as `1` into **one** cached PSO |
+| byte/element | the two are the same object in D3D11 (a byte offset), so the conversion had no home | ditto, via `BufferLocation` |
+| device teardown | no cache-clearing recovery path exists in this backend (unchanged) | `RecreateDeviceEXT` reset the single PSO |
+
+Two further axes were **measured correct and left alone**: D3D11 sets viewport, scissor, blend,
+depth-stencil and rasterizer state eagerly in its setters rather than per draw, so the instanced path
+inherits them correctly (`InstancedDrawRespectsViewportAndScissor` and
+`InstancedDrawAppliesExplicitStateWithoutChangingItsRange` both pass); and the ordinary D3D11 draw
+rebinds slot 0 and its own input layout, so the instanced draw leaves nothing behind that a later
+ordinary draw can read (asserted by the middle leg of the new binding oracle).
+
+### The correction
+
+`startIndex`/`baseVertex` now reach both native draws, exactly the model REMED-GFX-020 established
+for these backends' ordinary indexed path. Both binding element offsets are converted to bytes with
+**each stream's own stride, exactly once, only at the native binding** — a D3D11
+`IASetVertexBuffers` byte offset, and on D3D12 a new `AdvanceVertexBufferView` that moves
+`BufferLocation` forward and shrinks `SizeInBytes` by the same 64-bit byte count so the view never
+claims to run past the resource. `InstanceFrequency` becomes `InstanceDataStepRate`, and the D3D11
+input-layout cache and the D3D12 instanced-PSO cache are keyed on it (`std::unordered_map<UINT, …>`,
+one or two entries in practice) so an alternating frequency can neither reuse a stale rate nor build
+a native object per draw. D3D11 also takes the per-instance stride from the bound stream, which is
+the same quantity the element→byte conversion needs. `StartInstanceLocation` stays `0` on both: the
+per-instance stream's start is already in its binding, and adding it again would apply one public
+offset twice. D3D12's `RecreateDeviceEXT` clears the whole PSO map, not one entry.
+
+No CPU repacking, no duplicated geometry, no per-draw native object, no extra submission, no added
+frame, `Present`, retry, sleep or wait, no shader or bytecode change, no public API change, and no
+other backend's production touched.
+
+### Runtime classification and A/B
+
+**D3D11 — measured, 3/17 → 17/17.** Same binary, same fixture, production reverted per file with
+`git checkout HEAD -- <two files>` and rebuilt (never a stash, never a tree checkout). The pre-fix
+3/17 reproduces GFX-118's recorded 3/16 exactly, one test wider. The pre-fix failure signatures
+separate the mechanisms by hand rather than lumping them:
+
+- `InstancedDrawHonorsNonzeroStartIndex` — slots 4-6 requested, **slots 0-2 rendered**: 7405 lit
+  pixels inside the excluded columns `[0,457)`, first at `(171,24)`. That is *wrong first index*
+  (element-zero prefix), not a wrong base vertex and not a missing draw.
+- `D3DHonorsBindingOffsetsAndInstanceFrequency` — one cell map naming three defects at once:
+
+  ```
+  band 0: 0 0 0 0 0 0 2468      slot 6 = the MESH PREFIX DECOY  -> per-vertex VertexOffset ignored
+  band 1: 0 0 0 0 0 0 2468      four bands lit, not two         -> step rate 1, not 2
+  band 2: 0 0 0 0 0 0 2468      band 3 lit                      -> instance VertexOffset ignored
+  band 3: 0 0 0 0 0 0 2468         (record 0 = RowTranslation(3))
+  ```
+
+  Post-fix the same request lights slot 3 in bands 0-1 only. A byte-vs-element mix-up cannot produce
+  that: reading offset `3` as *bytes* lands three quarters of the way through one 16-byte vertex.
+
+**The runtime route was Wine's builtin D3D11, not DXVK — stated plainly rather than glossed.**
+DXVK 2.6.0's `dxgi` still aborts SDL's video init under Xvfb (`readMonitorEdidFromKey: Failed to get
+EDID reg key size` → `SDL_InitSubSystem(SDL_INIT_VIDEO) failed: No displays available`), and `:0` was
+forbidden this session. This is the environment, A/B-proven three ways: the **untouched, known-good**
+`cna_test_d3d11_smoke.exe` fails identically; SDL initialises and creates its window the moment
+`dxgi` is Wine builtin (failing later only at `CreateSwapChainForHwnd`, as expected without native
+DXGI); and `DXVK_FILTER_DEVICE_NAME=llvmpipe` does not help, confirming it is GPU-independent.
+Injecting a valid 128-byte EDID into the Wine registry and onto the Xvfb RandR output both failed to
+persist — Wine rewrites `BAD_EDID` from an X server that exposes none. **No DXVK-backed D3D11 result
+is claimed.** Under Wine's own D3D11 the offsets, base vertex, first index, instance offset and step
+rate are nevertheless genuine Direct3D 11 input-assembler semantics, which is what this ticket is
+about.
+
+**D3D12 — inspection plus a clean cross-build; runtime still blocked, A/B-proven.** The offscreen
+D3D12 route works here (`cna_test_d3d12_smoke.exe` is ALL PASS through real vkd3d-proton 3.1.0), but
+the windowed `GraphicsDevice` route that the instanced suite needs dies immediately after device
+init (exit 5). **The same test with this task's two D3D12 files reverted to HEAD and rebuilt dies at
+the identical point with the identical exit code** — REMED-BUILD-012, pre-existing, not this change.
+D3D12 therefore gets a correct-by-inspection classification and a clean cross-build, and is reported
+as such.
+
+### Coverage
+
+The permanent suite now compiles for D3D11 and D3D12 (17 tests each). REMED-GFX-122's
+`EasyGLHonorsBindingOffsetsAndInstanceFrequency` **keeps its name**; its body moved into a shared
+fixture oracle so the new `D3DHonorsBindingOffsetsAndInstanceFrequency` asserts the identical
+contract instead of a paraphrase of it. The oracle is compiled only for the backends actually
+corrected to honour binding offsets (EasyGL, D3D11, D3D12) — asserting it on the others would be
+declaring a contract nobody has measured. The instance axis gained count **3**, the value that tells
+an off-by-one in a step-rate or instance-offset conversion apart from a power-of-two coincidence.
+
+| Required axis | Where it is asserted |
+|---|---|
+| zero / nonzero vertex offset | 16 shared tests at 0; oracle at 3 |
+| zero / nonzero `startIndex` | zero-offset control; `…HonorsNonzeroStartIndex`; oracle at 9 |
+| zero / nonzero `baseVertex` | zero-offset control; `…HonorsNonzeroBaseVertex`; `…StartIndexAndBaseVertexTogether` |
+| 16-bit / 32-bit indices | `…ThirtyTwoBitIndicesHonorTheSameElementRange` vs the rest |
+| instance counts 1-4 | `InstanceCountIsIndependentOfTheGeometryRange` {1,2,3,4} |
+| nonzero instance-buffer offset | oracle, instance `VertexOffset=1` |
+| `InstanceFrequency` 1 and 2 | 1 throughout the suite; 2 in the oracle |
+| multiple vertex streams | every instanced draw binds two |
+| static and dynamic buffers | `InstancedDynamicBuffersHonorRangeAndInstances`; oracle mixes a static mesh with a dynamic instance stream |
+| A→B→A state reuse | `DeferredInstancedDrawsAtoBtoAKeepTheirOwnParameters` |
+| instanced → ordinary → instanced | oracle's three legs |
+| backbuffer and `RenderTarget2D` | `InstancedDrawIntoRenderTargetKeepsItsRangeAndInstances` |
+| disposal and device teardown | `DisposingAfterQueuedInstancedDrawsIsSafe`; `SourceUpdatesAfterAQueuedInstancedDrawDoNotAlterIt`; D3D12 `RecreateDeviceEXT` clears the PSO map |
+
+The oracle distinguishes every failure mode the task required: element-zero geometry (slot 6/slot 0
+prefix decoys), wrong base vertex vs wrong first index (separated by the two single-axis tests plus
+their combination), ignored instance offset (band 3), byte/element confusion (offset 3 read as bytes
+cannot land on a vertex boundary), stale layout/PSO (the A→B→A leg), and wrong step rate (four lit
+bands instead of two).
+
+### Results
+
+| Route | Result |
+|---|---|
+| **D3D11** instanced suite, Wine builtin D3D11, `:99` | **3/17 pre-fix → 17/17 post-fix** |
+| D3D11 range/declaration/buffer/validation gates | **139/139** (instanced, non-indexed range, indexed deferred, `VertexDeclarationTest` = GFX-125 packed layouts, `VertexBufferBinding*`, empty-data buffers, device validation, point list) |
+| D3D11 full `CnaTests` | **5610 passed**, 15 skipped, 14 failed — see below |
+| **D3D12** cross-build | clean; windowed runtime blocked, A/B-proven pre-existing |
+| EasyGL, `:101` | **157/157** (includes the GFX-122 pin on its new shared body) |
+| Bgfx, `:101` | **176/176** |
+| Vulkan, `:101` | **142/142** |
+| SDL_GPU, `:101` | **102/102** |
+| WebGPU, `:101` | 164/165 |
+| Software | 129/131 (1 skip) |
+| Headless | 99/100 |
+| **D3D9**, Wine + **genuine DXVK 2.6.0**, `:99` | **16/16** |
+| EasyGL **ASan**, instanced suite | **17/17**, `ERROR: AddressSanitizer` count **0** |
+| Vulkan **UBSan**, instanced suite | **16/16**, `runtime error` count **0** |
+
+The three residual control failures are all the single documented
+`GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` MRT gap already recorded in
+this ledger for Software/Headless. The D3D11 full-suite failures are `MediaLibraryTestFixture` (×6),
+`PictureLibraryIndexTest` (×3), `AudioTagParserTest.ReadsNonAsciiVorbisCommentTitleCorrectly` —
+Wine-only fixture/locale failures that pass natively — plus the four GFX-118 already recorded as
+pre-existing (`CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` = REMED-GFX-036,
+`XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`, which fails on native
+EasyGL too). **None of the 14 can reach this change**: exactly two files in the repository call
+`DrawInstancedPrimitives`, and neither is among them.
+
+Sanitizers cannot reach the changed production itself — D3D11/D3D12 are mingw-w64 Windows
+cross-builds with no ASan/UBSan support in this toolchain. What the ASan/UBSan runs above do prove is
+the shared fixture change, including the new instance count 3 and the refactored oracle.
+
+### Preserved
+
+GFX-113 (non-indexed `vertexStart`/`primitiveCount`) and GFX-118 (Bgfx instanced range) pass inside
+the D3D11 139/139 and the Bgfx 176/176; GFX-122 keeps its pin name, its assertions and its EasyGL
+157/157, now as this task's cross-backend reference; GFX-125's packed layouts pass via
+`VertexDeclarationTest` on every route measured; every non-instanced D3D11/D3D12 path is untouched
+(the diff is confined to `DrawInstancedPrimitivesEx` and the instanced layout/PSO helpers); and
+GFX-123's own scope boundary held — the ordinary-route gap found on the way out was recorded as a
+finding, not fixed here.
+
+### Environment
+
+Build directories: pre-existing `cmake-build-d3d11-mingw`, `cmake-build-d3d12-mingw`,
+`cmake-build-d3d9-mingw`, `cmake-build-debug`, `cmake-build-vulkan`, `cmake-build-bgfx`,
+`cmake-build-sdlgpu`, `cmake-build-webgpu`, `cmake-build-software`, `cmake-build-headless`,
+`cmake-build-easygl-asan`, `cmake-build-vulkan-ubsan` — all incremental, all with `ccache`, none
+created, cleaned or deleted, nothing built under `/tmp`. Compilation `-j8` (this session's ceiling),
+dropped to `-j4` above 78 °C and `-j3` for sanitizer builds; graphics tests run serially. Thermals:
+started 58 °C, steady 67-79 °C, one excursion to **86.6 °C** after which **all work stopped** until
+the package returned to 55 °C; 90 °C was never approached. Displays: `:99` for every Wine route,
+`:101` for every native route, `SDL_VIDEODRIVER=dummy` for Software/Headless. **`:0` was never
+used.** No `git stash`, no destructive git command, no `audit/` change. The one throwaway probe
+(a RandR EDID injector, built in `build-probe/`) was deleted after it disproved its hypothesis.
+
+### New findings
+
+Two independent findings were allocated. Neither can honestly be folded into an instanced-offset
+correction, and neither was begun.
+
+- **REMED-GFX-199** — D3D12's instanced PSO writes `desc.RTVFormats[0] = boundColorFormat_` but is
+  cached by step rate alone, while every *ordinary* D3D12 draw resolves through
+  `psoCache_.GetOrCreate(…, boundColorFormat_, boundDsvFormat_)` where the format **is** in the key.
+  An instanced draw into an off-screen target of a different `SurfaceFormat` than the first one bound
+  therefore reuses a PSO built for the earlier format. Distinct from REMED-GFX-077, which documents
+  the same PSO's hardcoded *blend/write* state — the render-target format is a different axis.
+  Inspection-only while REMED-BUILD-012 blocks the runtime.
+- **REMED-GFX-200** — `VertexBufferBinding.VertexOffset` never reaches any backend on the ordinary
+  routes. `GraphicsDevice::DrawPrimitives`, `DrawIndexedPrimitives` and the `DrawUser*` family build
+  a fresh `GpuDrawParams`, call `FillGpuDrawParams` and leave `vertexBufferOffset` at `0`; only
+  `DrawInstancedPrimitives` populates it. The offset is dropped in the shared public layer above the
+  backends, so it is not a D3D defect and no backend-local fix can reach it.
+
+### Commits
+
+- `bf92691e fix(Task REMED-GFX-123): honor D3D11/D3D12 instanced draw offsets`
+- `docs(remediation): record GFX-123 completion` (this record)
+
+Both GPG-signed. No shader, bytecode or other generated artifact changed.
