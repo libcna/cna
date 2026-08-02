@@ -157,6 +157,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-34: RenderTargetCube MSAA -- mirrors CreateRenderTarget2D's own LLGL-26 MSAA follow-up
+    # architecture (anonymous per-face multisampled colour attachment resolving into the cube's own
+    # single-sample colour texture at the relevant arrayLayer) plus a real, shared, explicitly-owned
+    # Texture2DMS depth texture across all 6 faces (promoted to MSAA samples, mirroring the Vulkan
+    # backend's own VulkanRenderTargetCubeBackend depthImage_ precedent) instead of the plain
+    # Texture2D used when MSAA is not requested. No _OpenGL variant, same hasCubeTextures reason as
+    # Llgl_RenderTargetCube above.
+    cna_llgl_test(cna_test_llgl_msaa_rendertargetcube examples/llgl_msaa_rendertargetcube_test.cpp)
+    cna_register_backend_test(NAME Llgl_Msaa_RenderTargetCube COMMAND cna_test_llgl_msaa_rendertargetcube
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-26 MRT follow-up: RenderTarget2D-slots-only, SpriteBatch/custom-ShaderEffect-only first
     # cut -- see LlglMRTBinding's own doc comment in LlglGraphicsBackend.hpp for the scope
     # boundary. RenderTarget2D (unlike RenderTargetCube) works on both modules, so this gets an

@@ -817,7 +817,7 @@ namespace CNA::Internal::Backends::Llgl
     LlglRenderTargetCubeBackend::LlglRenderTargetCubeBackend(
         LLGL::RenderSystem* renderSystem, LLGL::Texture* cubeTexture, LLGL::Texture* depthTexture,
         const std::array<LLGL::RenderTarget*, 6>& faceTargets, int size, bool hasRealDepthBuffer,
-        LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner)
+        LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner, int multiSampleCount)
         : renderSystem_(renderSystem)
         , cubeTexture_(cubeTexture)
         , depthTexture_(depthTexture)
@@ -826,6 +826,7 @@ namespace CNA::Internal::Backends::Llgl
         , hasRealDepthBuffer_(hasRealDepthBuffer)
         , spriteProjectionBuffer_(spriteProjectionBuffer)
         , owner_(owner)
+        , multiSampleCount_(multiSampleCount > 0 ? multiSampleCount : 1)
     {
         if (renderSystem_ == nullptr || cubeTexture_ == nullptr || depthTexture_ == nullptr ||
             spriteProjectionBuffer_ == nullptr)
@@ -840,7 +841,8 @@ namespace CNA::Internal::Backends::Llgl
                     std::string(kBackendName) + " backend: render target cube creation failed");
             }
             faceBindings_[static_cast<std::size_t>(face)] = LlglRenderTargetCubeFaceBinding(
-                faceTargets_[static_cast<std::size_t>(face)], size_, spriteProjectionBuffer_);
+                faceTargets_[static_cast<std::size_t>(face)], size_, spriteProjectionBuffer_,
+                multiSampleCount_);
         }
     }
 
@@ -5147,10 +5149,16 @@ namespace CNA::Internal::Backends::Llgl
 
     std::unique_ptr<IRenderTargetCubeBackend> LlglGraphicsBackend::CreateRenderTargetCube(
         int size, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/,
-        int /*multiSampleCount*/)
+        int multiSampleCount)
     {
         if (size <= 0)
             throw std::runtime_error(std::string(kBackendName) + " backend: render target cube has no pixels");
+
+        // Requested sample count (LLGL-34, mirrors CreateRenderTarget2D's own LLGL-26 MSAA
+        // follow-up) -- the REAL, device-clamped value is read back from face 0's own created
+        // LLGL::RenderTarget below (GetSamples()), not assumed from this request.
+        const std::uint32_t requestedSamples =
+            multiSampleCount > 1 ? static_cast<std::uint32_t>(multiSampleCount) : 1u;
 
         LLGL::TextureDescriptor colorDesc;
         colorDesc.type = LLGL::TextureType::TextureCube;
@@ -5158,7 +5166,10 @@ namespace CNA::Internal::Backends::Llgl
                               LLGL::BindFlags::CopySrc;
         // Matches the swap chain's own colour format, exactly like CreateRenderTarget2D -- every
         // cached sprite/primitive pipeline needs a matching attachment signature to be reusable
-        // across render passes.
+        // across render passes. Always single-sample: when MSAA is requested this becomes the
+        // RESOLVE target for each face's own anonymous multisampled colour attachment below,
+        // exactly like CreateRenderTarget2D's own colorTexture never being the multisampled
+        // attachment itself.
         colorDesc.format = swapChain_->GetColorFormat();
         colorDesc.extent = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size), 1};
         colorDesc.arrayLayers = 6;
@@ -5174,15 +5185,29 @@ namespace CNA::Internal::Backends::Llgl
 
         // ONE shared depth/stencil texture for the whole cube -- matches FNA's own RenderTargetCube,
         // which allocates exactly one depth/stencil buffer regardless of face count, mirrored by the
-        // Vulkan backend's own precedent. Unlike CreateRenderTarget2D's anonymous (textureless)
-        // attachment, this needs to be a real, explicitly-owned texture so all 6 face
-        // AttachmentDescriptors can reference the SAME one.
+        // Vulkan backend's own precedent (VulkanRenderTargetCubeBackend's own depthImage_, "promoted
+        // to MSAA samples when this cube engages MSAA"). Unlike CreateRenderTarget2D's anonymous
+        // (textureless) attachment, this needs to be a real, explicitly-owned texture so all 6 face
+        // AttachmentDescriptors can reference the SAME one -- including under MSAA (LLGL-34): a
+        // real explicit multisampled texture needs LLGL::TextureType::Texture2DMS rather than
+        // Texture2D (TextureDescriptor::samples "is only used for multi-sampled textures", i.e.
+        // Texture2DMS/Texture2DMSArray -- confirmed by reading LLGL's own TextureFlags.h), so the
+        // type switches along with requestedSamples; every attachment referencing this texture
+        // below must (and does) share its exact sample count, per LLGL's own RenderTargetFlags.h
+        // ("this texture must have the same number of samples as specified by
+        // RenderTargetDescriptor::samples"). Depth content is not preserved/shared ACROSS separate
+        // binds of different faces any more than it ever was (each face's own render pass is the
+        // only thing that ever reads it back), so promoting this one texture to MSAA changes memory
+        // footprint only, not any game-visible behaviour.
         LLGL::TextureDescriptor depthDesc;
-        depthDesc.type = LLGL::TextureType::Texture2D;
+        depthDesc.type = requestedSamples > 1 ? LLGL::TextureType::Texture2DMS : LLGL::TextureType::Texture2D;
         depthDesc.bindFlags = LLGL::BindFlags::DepthStencilAttachment;
         depthDesc.format = swapChain_->GetDepthStencilFormat();
         depthDesc.extent = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size), 1};
+        // Texture2DMS/Texture2DMSArray require mipLevels to be 0 or 1 (TextureDescriptor's own doc
+        // comment) -- 1 already satisfies both this and the single-sample path's own requirement.
         depthDesc.mipLevels = 1;
+        depthDesc.samples = requestedSamples;
         depthDesc.miscFlags = 0;
 
         LLGL::Texture* depthTexture = renderer_->CreateTexture(depthDesc);
@@ -5198,10 +5223,27 @@ namespace CNA::Internal::Backends::Llgl
         {
             LLGL::RenderTargetDescriptor targetDesc;
             targetDesc.resolution = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size)};
+            targetDesc.samples = requestedSamples;
             // The project's own face order (0=+X..5=-Z) already matches the array-layer convention
             // LLGL documents for cube textures -- no remapping needed, same as LlglTextureCubeBackend.
-            targetDesc.colorAttachments[0] =
-                LLGL::AttachmentDescriptor{cubeTexture, 0, static_cast<std::uint32_t>(face)};
+            if (requestedSamples > 1)
+            {
+                // Anonymous (textureless) multisampled colour attachment, one per face -- LLGL
+                // allocates and owns each face's own transient MSAA storage internally (never
+                // shared across faces, unlike the depth texture above: each face is a SEPARATE
+                // LLGL::RenderTarget, and colour is resolved into the persistent cubeTexture at the
+                // end of every render pass anyway, so per-face transient storage costs nothing
+                // extra worth avoiding). Mirrors CreateRenderTarget2D's own anonymous MSAA colour
+                // attachment exactly.
+                targetDesc.colorAttachments[0] = LLGL::AttachmentDescriptor{colorDesc.format};
+                targetDesc.resolveAttachments[0] =
+                    LLGL::AttachmentDescriptor{cubeTexture, 0, static_cast<std::uint32_t>(face)};
+            }
+            else
+            {
+                targetDesc.colorAttachments[0] =
+                    LLGL::AttachmentDescriptor{cubeTexture, 0, static_cast<std::uint32_t>(face)};
+            }
             targetDesc.depthStencilAttachment = LLGL::AttachmentDescriptor{depthTexture};
 
             LLGL::RenderTarget* faceTarget = renderer_->CreateRenderTarget(targetDesc);
@@ -5217,6 +5259,12 @@ namespace CNA::Internal::Backends::Llgl
             }
             faceTargets[static_cast<std::size_t>(face)] = faceTarget;
         }
+
+        // The REAL, device-clamped sample count -- every face was created from the same targetDesc
+        // request, so face 0's own applied value is correct for all 6 (matches CreateRenderTarget2D's
+        // own GetSamples() readback precedent).
+        const int appliedSamples =
+            static_cast<int>(faceTargets[0]->GetSamples());
 
         // Shared by all 6 faces: a cube face is always square, and a face's resolution never
         // changes after construction, so one projection buffer serves every face -- same reasoning
@@ -5245,7 +5293,7 @@ namespace CNA::Internal::Backends::Llgl
 
         return std::make_unique<LlglRenderTargetCubeBackend>(
             renderer_.get(), cubeTexture, depthTexture, faceTargets, size, hasRealDepthBuffer,
-            spriteProjectionBuffer, this);
+            spriteProjectionBuffer, this, appliedSamples);
     }
 
     void LlglGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)

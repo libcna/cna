@@ -238,8 +238,26 @@ read at ITS OWN construction, so it works through the ordinary `Game` + `new Ren
 flow with no raw-`GraphicsDevice`-construction workaround needed, and — a genuine, positive
 difference from back-buffer MSAA — is honoured on BOTH modules on this project's own test
 environment, not gated behind the same Vulkan-only limitation `Llgl_Msaa` documents for the swap
-chain. MRT binds and `RenderTargetCube` faces do not support MSAA yet (`LlglBoundRenderTarget::GetSampleCount()`
-defaults to 1/no-MSAA for both).
+chain. MRT binds do not support MSAA yet (`LlglBoundRenderTarget::GetSampleCount()` defaults to
+1/no-MSAA); `RenderTargetCube` faces do now, see below.
+
+**`RenderTargetCube` `MultiSampleCount` is real too (LLGL-34).** Colour follows the exact same
+anonymous-attachment-plus-resolve pattern as `RenderTarget2D` above, just once per face (6 separate
+`LLGL::RenderTarget`s, so LLGL allocates 6 independent, transient anonymous MSAA colour buffers --
+never shared, which costs nothing extra since every one of them resolves into the cube's own
+persistent, single-sample colour texture at the end of its own render pass anyway). The shared
+depth/stencil texture (one for the whole cube, matching FNA's own convention -- see below) needed a
+different treatment: LLGL requires a real, explicitly-referenced attachment texture to carry the
+SAME sample count as the `RenderTargetDescriptor` using it, and `TextureDescriptor::samples` only
+takes effect for `LLGL::TextureType::Texture2DMS`/`Texture2DMSArray` -- so the shared depth texture's
+own type switches to `Texture2DMS` (instead of plain `Texture2D`) whenever MSAA is requested,
+mirroring the Vulkan backend's own `VulkanRenderTargetCubeBackend::depthImage_`, "promoted to MSAA
+samples when this cube engages MSAA". `RenderTargetCube.MultiSampleCount`/`GetMultiSampleCount()`
+now report a real, device-clamped value (previously always 0), and every face's own
+`LlglRenderTargetCubeFaceBinding::GetSampleCount()` reports it too, so pipelines drawn into an MSAA
+cube face are built with the matching sample count exactly like an MSAA `RenderTarget2D`. Verified
+by `Llgl_Msaa_RenderTargetCube`: on this project's own Vulkan module, MSAA into a cube face resolves
+genuinely (a real antialiased edge, not merely "didn't crash") -- see "Tests" below.
 
 **`BlendState.MultiSampleMask` is real (LLGL-33), module-dependent.** A `multiSampleMask_` member
 (default `0xFFFFFFFF`, matching `BlendWriteState`'s own default) is set from
@@ -628,6 +646,12 @@ adapted with only the class name/comment changed) from the Vulkan backend's own 
 "SkinnedEffect" above. `Llgl_RenderTargetCube` covers 6 independent per-face draw/`GetData()` round
 trips plus sampling the result through `EnvironmentMapEffect`; like the `EnvironmentMapEffect` test
 it has no `_OpenGL` twin, for the same `hasCubeTextures` reason.
+`Llgl_Msaa_RenderTargetCube` (LLGL-34) reuses `Llgl_Msaa_RenderTarget`'s own diagonal-edge technique
+against one cube face (`CubeMapFace::PositiveX`) instead of a plain `RenderTarget2D`: a hard,
+unblended edge with `MultiSampleCount=0`, and (module-dependent, like `Llgl_Msaa_RenderTarget`) a
+genuinely blended edge once MSAA is requested and honoured -- on this project's own test
+environment it passes all 7 checks on the Vulkan module, the same module every other
+`RenderTargetCube` test here already depends on; no `_OpenGL` twin, same `hasCubeTextures` reason.
 `Llgl_MRT` covers a real 2-output custom `ShaderEffect` writing two DIFFERENT values to two
 simultaneously bound `RenderTarget2D` slots from the SAME draw call, a 3D colour-only draw throwing
 while the MRT set is bound, back-buffer isolation, that an ordinary single-target draw still works

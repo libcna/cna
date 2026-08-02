@@ -391,8 +391,9 @@ namespace CNA::Internal::Backends::Llgl
          *  was built with (1 = no MSAA). A pipeline drawn against this target must be built with a
          *  matching `rasterizer.multiSampleEnabled`/sample count, or a software Vulkan module can
          *  silently rasterize single-sample into a multisampled framebuffer instead of erroring --
-         *  see `LlglGraphicsBackend::GetPrimarySampleCountEXT()`. Cube faces and MRT binds do not
-         *  support MSAA yet, so the default of 1 (no MSAA) is correct for both without an override. */
+         *  see `LlglGraphicsBackend::GetPrimarySampleCountEXT()`. Cube faces support MSAA now
+         *  (LLGL-34, see `LlglRenderTargetCubeFaceBinding`'s own override); MRT binds do not yet,
+         *  so the default of 1 (no MSAA) remains correct for those without an override. */
         [[nodiscard]] virtual int GetSampleCount() const { return 1; }
         /** @brief Returns the colour texture that needs its mip chain regenerated after this
          *  target's render pass ends, or null when this target has no real mip chain to
@@ -563,8 +564,9 @@ namespace CNA::Internal::Backends::Llgl
     public:
         LlglRenderTargetCubeFaceBinding() = default;
         LlglRenderTargetCubeFaceBinding(LLGL::RenderTarget* renderTarget, int size,
-                                        LLGL::Buffer* spriteProjectionBuffer)
+                                        LLGL::Buffer* spriteProjectionBuffer, int sampleCount = 1)
             : renderTarget_(renderTarget), size_(size), spriteProjectionBuffer_(spriteProjectionBuffer)
+            , sampleCount_(sampleCount > 0 ? sampleCount : 1)
         {
         }
 
@@ -572,11 +574,15 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] int GetWidth() const override { return size_; }
         [[nodiscard]] int GetHeight() const override { return size_; }
         [[nodiscard]] LLGL::Buffer* GetSpriteProjectionBuffer() const override { return spriteProjectionBuffer_; }
+        /** @brief Returns this face's own real, device-clamped sample count (LLGL-34; 1 = no MSAA)
+         *  -- see `LlglBoundRenderTarget::GetSampleCount()`'s own doc comment. */
+        [[nodiscard]] int GetSampleCount() const override { return sampleCount_; }
 
     private:
         LLGL::RenderTarget* renderTarget_ = nullptr;
         int                 size_         = 0;
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
+        int                 sampleCount_  = 1;
     };
 
     /**
@@ -617,12 +623,17 @@ namespace CNA::Internal::Backends::Llgl
          *        square) and a face's resolution never changes after construction.
          * @param owner Backend whose frame this target may be referenced by; the destructor defers
          *        releasing the underlying LLGL objects to it, exactly like `LlglRenderTargetBackend`.
+         * @param multiSampleCount The REAL, device-clamped sample count every face's own
+         *        `LLGL::RenderTarget` was actually created with (`faceTargets[0]->GetSamples()`,
+         *        since all 6 share one request) -- matches `LlglRenderTargetBackend`'s own
+         *        constructor parameter (LLGL-34). 1 (not 0) means no MSAA.
          */
         LlglRenderTargetCubeBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* cubeTexture,
                                     LLGL::Texture* depthTexture,
                                     const std::array<LLGL::RenderTarget*, 6>& faceTargets,
                                     int size, bool hasRealDepthBuffer,
-                                    LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner);
+                                    LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner,
+                                    int multiSampleCount = 1);
 
         /** @brief Releases the six render targets and the shared cube/depth textures and buffer. */
         ~LlglRenderTargetCubeBackend() override;
@@ -643,6 +654,14 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override
         {
             return hasRealDepthBuffer_;
+        }
+
+        /** @brief Returns the real, device-clamped MSAA sample count (0 = none), matching
+         *  `RenderTargetCube.MultiSampleCount`'s own FNA-parity semantics (LLGL-34) -- see
+         *  `LlglRenderTargetBackend::GetMultiSampleCount()`'s own identical convention. */
+        [[nodiscard]] int GetMultiSampleCount() const override
+        {
+            return multiSampleCount_ > 1 ? multiSampleCount_ : 0;
         }
 
         /**
@@ -680,6 +699,7 @@ namespace CNA::Internal::Backends::Llgl
         bool                hasRealDepthBuffer_ = false;
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
         LlglGraphicsBackend* owner_              = nullptr;
+        int                 multiSampleCount_   = 1;
     };
 
     /**
