@@ -24,9 +24,9 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 133 Skia CTests: 16 raster-only, 113 display-required, and four
-  display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
-  directory, per `CLAUDE.md`.
+- The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
+  134: the same 16 raster-only and 113 display-required tests plus five display-free source audits.
+  Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
 
@@ -590,8 +590,8 @@
 
 ## Current task
 
-SKIA-115/116 are complete. Continue with SKIA-117's exact contract inventory, SKIA-118's shared
-resource/oracle boundary, and then the raster arbitrary-blend implementation in SKIA-119–124.
+SKIA-115–117 are complete. Continue with SKIA-118's shared resource/oracle boundary and then the
+raster arbitrary-blend implementation in SKIA-119–124.
 
 ## Completed in this session: SKIA-93
 
@@ -1128,9 +1128,25 @@ resource/oracle boundary, and then the raster arbitrary-blend implementation in 
   tasks, and 9/9 baseline capabilities. Registered `Skia_ReleaseGate_Audit` passes as a display-free
   CTest. No product capability or rendering behavior changed, and `NEXT.md` was not touched.
 
+## Completed in this session: SKIA-117
+
+- Added `docs/skia-successor-contract-matrix.md` as the exact routing inventory for post-baseline
+  work. Its 87 rows cover all 27 live `SurfaceFormat` values, 13 blend factors, five blend
+  functions, nine texture filters, nine graphics capabilities, and 24 mip/effect/sampling/GPU/
+  resource cross-feature contracts. Each row records the verified baseline disposition, one
+  SKIA-118–170 owner, and existing evidence or an exact acceptance requirement.
+- Added and registered display-free `Skia_SuccessorContracts_Audit`. It derives enum membership
+  directly from the public headers; rejects missing, stale, duplicate, malformed, empty, or
+  out-of-range rows; verifies the allowed baseline vocabulary; and proves that every successor
+  task SKIA-118–170 has at least one route. The direct audit reports 87/87 and all five registered
+  Audit CTests pass.
+- The Debug tree reconfigured and built successfully with `--parallel 8`; `ctest -N -L Skia`
+  selects 134 tests after adding the fifth audit. All existing parity/release/3D/test-matrix audits
+  remain green, `git diff --check` passes, and `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-117/118: build the successor contract/resource/oracle inventory.
+1. SKIA-118: build the shared successor resource/oracle boundary.
 2. SKIA-119–124: complete arbitrary raster blend states before starting mip/format storage work.
 3. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
    effects in dependency order.
