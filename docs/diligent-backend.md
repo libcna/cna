@@ -193,15 +193,27 @@ Not implemented — each **throws with its own name** rather than rendering an a
   render-target tracking). This fixes `SpriteBatch.Draw` with a `sourceRectangle` and
   `DualTextureEffect`'s second layer; two related-but-distinct symptoms remain open --
   sampling an unbound `RenderTarget2D` and `RenderTarget2D` MSAA resolve still fail under GL, evidently
-  a different trigger not yet root-caused. `SkinnedEffect`'s vertex shader still fails to convert to
-  GLSL at all (a local `float4x4` variable never gets translated, unlike the same type inside a
-  constant buffer) -- unchanged, and the same failure now also confirmed on `PbrEffect`'s and the
-  per-vertex-lighting shader family's own vertex shaders. A broader manual sweep this session also
-  found `Diligent_ReferenceStencil`, `SpriteFont`'s `FlipVertically` check, hardware instancing,
-  `DrawIndexedPrimitives`' `baseVertex` case, `Texture2D` NPOT sampling through a real draw, and
-  `RenderTarget2D` mip-generation's "level 0 unaffected" check all fail under GL too -- none
-  investigated yet. OpenGL device-type support is meaningfully less complete than a first glance at
-  this backend's Vulkan-verified feature list would suggest.
+  a different trigger not yet root-caused.
+
+  A second real, confirmed upstream bug was also root-caused and fixed this session:
+  `SkinnedEffect`'s (and, previously undiscovered, `PbrEffect`'s and the per-vertex-lighting shader
+  family's) vertex shaders failed to convert to GLSL at all. HLSL2GLSL cannot correctly convert a
+  C-style matrix-truncation cast, `(float3x3)someFloat4x4Expr`, unless the source expression is a
+  bare, directly-reflectable symbol. Fixed by avoiding the cast syntax entirely: `(float3x3)m` for a
+  `row_major float4x4 m` is exactly equivalent, at the HLSL language level, to the explicit
+  constructor call `float3x3(m[0].xyz, m[1].xyz, m[2].xyz)` -- a pure syntactic rewrite with no
+  semantic change (indexing `m[row]` always returns a row vector regardless of storage packing),
+  confirmed by re-running every affected shader's own Vulkan-device tests and seeing byte-identical
+  pixel output to before. `Diligent_Skinned` now compiles and passes 4/4 under GL (previously didn't
+  compile at all). `Diligent_VertexLit`/`Diligent_Pbr` now compile and run too, but expose *separate,
+  newly-visible* numeric mismatches -- per-vertex-vs-per-pixel lighting disagreement and an
+  off-magnitude analytic BRDF result -- not yet root-caused, out of this fix's own scope.
+
+  A broader manual sweep this session also found `Diligent_ReferenceStencil`, `SpriteFont`'s
+  `FlipVertically` check, hardware instancing, `DrawIndexedPrimitives`' `baseVertex` case, `Texture2D`
+  NPOT sampling through a real draw, and `RenderTarget2D` mip-generation's "level 0 unaffected" check
+  all fail under GL too -- none investigated yet. OpenGL device-type support is meaningfully less
+  complete than a first glance at this backend's Vulkan-verified feature list would suggest.
 - **Direct3D 11/12 are code paths only.** They compile only in a Windows-targeting build and have
   not been run.
 - **Depth-stencil is always `D24_UNORM_S8_UINT`**, regardless of the requested `DepthFormat`.

@@ -455,8 +455,8 @@ void main(in VSInput vsIn, out PSInput psIn)
     psIn.Pos = mul(skinnedPos, g_WorldViewProj);
     float3 worldPos = mul(skinnedPos, g_World).xyz;
 
-    float3 skinnedNormal = mul(vsIn.Normal, (float3x3)skin);
-    float3 normal = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)g_World)));
+    float3 skinnedNormal = mul(vsIn.Normal, float3x3(skin[0].xyz, skin[1].xyz, skin[2].xyz));
+    float3 normal = normalize(mul(skinnedNormal, InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz))));
     ComputeVertexLighting(worldPos, normal, psIn.LitDiffuse, psIn.LitSpecular);
     psIn.UV      = vsIn.UV;
     psIn.FogKeep = ComputeFogKeep(skinnedPos.xyz);
@@ -501,13 +501,13 @@ void main(in VSInput vsIn, out PSInput psIn)
 {
     psIn.Pos = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj);
 
-    float3x3 normalMatrix = PbrInverseTranspose3x3((float3x3)g_World);
+    float3x3 normalMatrix = PbrInverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz));
     psIn.Normal = normalize(mul(vsIn.Normal, normalMatrix));
 
     // Tangent transforms as a plain direction under World (not the inverse-transpose used for the
     // normal above) -- correct for uniform-scale World transforms, matching this backend's own
     // established pbr3d.vert.hlsl reference exactly.
-    psIn.Tangent = float4(mul(vsIn.Tangent.xyz, (float3x3)g_World), vsIn.Tangent.w);
+    psIn.Tangent = float4(mul(vsIn.Tangent.xyz, float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz)), vsIn.Tangent.w);
 
     psIn.UV       = vsIn.UV;
     psIn.WorldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
@@ -646,10 +646,10 @@ void main(in VSInput vsIn, out PSInput psIn)
     // documented simplification shared with this backend's own unskinned-lit skinning path.
     // InverseTranspose3x3() comes from kBonesHlsl (always prepended alongside ComputeSkinMatrix()
     // for this variant), the same helper kSkinnedVertexHlsl itself already uses.
-    float3x3 skinNormalMat = (float3x3)skin;
-    float3x3 worldNormalMat = InverseTranspose3x3((float3x3)g_World);
+    float3x3 skinNormalMat = float3x3(skin[0].xyz, skin[1].xyz, skin[2].xyz);
+    float3x3 worldNormalMat = InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz));
     psIn.Normal = normalize(mul(mul(vsIn.Normal, skinNormalMat), worldNormalMat));
-    psIn.Tangent = float4(mul(mul(vsIn.Tangent.xyz, skinNormalMat), (float3x3)g_World), vsIn.Tangent.w);
+    psIn.Tangent = float4(mul(mul(vsIn.Tangent.xyz, skinNormalMat), float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz)), vsIn.Tangent.w);
 
     psIn.UV       = vsIn.UV;
     psIn.WorldPos = mul(skinnedPos, g_World).xyz;
@@ -847,8 +847,8 @@ void main(in VSInput vsIn, out PSInput psIn)
     psIn.Pos      = mul(skinnedPos, g_WorldViewProj);
     psIn.WorldPos = mul(skinnedPos, g_World).xyz;
 
-    float3 skinnedNormal = mul(vsIn.Normal, (float3x3)skin);
-    psIn.Normal   = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)g_World)));
+    float3 skinnedNormal = mul(vsIn.Normal, float3x3(skin[0].xyz, skin[1].xyz, skin[2].xyz));
+    psIn.Normal   = normalize(mul(skinnedNormal, InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz))));
     psIn.UV       = vsIn.UV;
     psIn.FogKeep  = ComputeFogKeep(skinnedPos.xyz);
 }
