@@ -1528,9 +1528,36 @@ level-boundary contract.
   that synchronization, the complete sequential Debug Skia suite passes 152/152 on virtual `:99`
   in 198.13 seconds: 21 Raster, 125 Display, and six Audit tests.
 
+## Completed in this session: SKIA-136
+
+- Skia `Texture2D` now accepts `ColorBgraEXT` and `ColorSrgbEXT` in addition to the previously
+  promoted formats. Their public `Color` transfer overload treats R/G/B/A properties as the four
+  exact raw transfer bytes: BGRA sampling maps those bytes through native `kBGRA_8888`, while sRGB
+  sampling preserves encoded storage and decodes RGB exactly once. The support is compiled only in
+  the Skia backend and does not widen shared EasyGL/other-backend constructor behavior.
+- `kSRGBA_8888` performs the transfer-function decode while gathering. The image is therefore
+  tagged with linear-sRGB working metadata, not an encoded sRGB profile: explicit raster probes
+  show encoded `(128,64,32)` becoming linear `(55,13,4)` within one byte, and an explicit sRGB
+  destination returning `(128,64,32)` without double conversion. Alpha stays linear.
+- Generated `ColorBgraEXT` mips average all four raw byte channels with the established area box.
+  Generated `ColorSrgbEXT` mips decode RGB, area-average in linear light, re-encode once, and
+  independently average alpha; a 50/50 black/white 2x2 level produces encoded RGB 188 and alpha
+  112. Full/partial transfers, caller guards, failed-write atomicity, and resource counters remain
+  exact.
+- Added `Skia_Texture2D_ColourFormats` with 31 checks covering transfer layout, native metadata,
+  mip policy, explicit linear/sRGB destinations, public SpriteBatch pixels, target refusal and
+  lifecycle. Updated the shared surface-format constructor contract and reduced the Skia
+  creation-time refusal matrix from 23 to 21 rows. `RenderTarget2D`, `TextureCube`, and `Texture3D`
+  still reject these non-Color routes pending their own tasks.
+- The new fixture, refusal matrix, and shared constructor contract pass 3/3 in Debug, Release and
+  ASan+UBSan on virtual display `:99`; all 12 focused construction unit tests and all six audits
+  pass. The complete Debug tree builds with `--parallel 2`, and the complete sequential Skia suite
+  passes 153/153 in 238.67 seconds: 21 Raster, 126 Display and six Audit tests. No real display or
+  subagent was used, and `NEXT.md` remained untouched.
+
 ## Next candidates
 
-1. SKIA-136–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
+1. SKIA-137–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
    order, retaining exact pre-allocation refusals until each format passes transfer and pixels.
 2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.

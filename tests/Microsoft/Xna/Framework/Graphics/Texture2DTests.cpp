@@ -459,6 +459,8 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra4444
             || format == SurfaceFormat::Rgba1010102
+            || format == SurfaceFormat::ColorBgraEXT
+            || format == SurfaceFormat::ColorSrgbEXT
 #endif
             ;
         if (supported)

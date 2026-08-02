@@ -454,6 +454,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_Texture2D_PackedFormats
                                    cna_test_skia_texture2d_packed_formats)
 
+    # SKIA-136: exact BGRA/sRGB transfer bytes, native image metadata, linear-light sRGB mips,
+    # explicit linear/sRGB destination probes, SpriteBatch sampling, and target refusal gates.
+    cna_skia_test(cna_test_skia_texture2d_colour_formats
+                  examples/skia_texture2d_colour_formats_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_colour_formats
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_ColourFormats
+                                   cna_test_skia_texture2d_colour_formats)
+
     cna_skia_test(cna_test_skia_texture2d_dispose examples/sdlrenderer_texture2d_dispose_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Dispose cna_test_skia_texture2d_dispose)
 

@@ -5,7 +5,7 @@
 // Tests Texture2D, Texture3D, and TextureCube constructors against
 // representative unsupported formats (sRGB, HDR, compressed, packed).
 // SurfaceFormat::Color must NOT throw; the Skia build also verifies its
-// explicitly supported SKIA-135 packed Texture2D formats.
+// explicitly supported SKIA-135/136 packed and colour Texture2D formats.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -84,11 +84,17 @@ protected:
             TextureCube t(dev, 2, false, SurfaceFormat::Color);
         });
 
-        // ── sRGB / EXT formats must throw (Task 176 focus) ───────────────────
+        // ── sRGB / EXT formats follow backend-specific promotion gates ──────
 
+#if defined(CNA_BACKEND_SKIA)
+        expectNoThrow("Texture2D ColorSrgbEXT", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
+        });
+#else
         expectThrows("Texture2D ColorSrgbEXT", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
+#endif
         expectThrows("Texture2D Bc7EXT", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7EXT);
         });
@@ -98,9 +104,15 @@ protected:
         expectThrows("Texture2D Dxt5SrgbEXT", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5SrgbEXT);
         });
+#if defined(CNA_BACKEND_SKIA)
+        expectNoThrow("Texture2D ColorBgraEXT", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorBgraEXT);
+        });
+#else
         expectThrows("Texture2D ColorBgraEXT", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorBgraEXT);
         });
+#endif
         expectThrows("TextureCube ColorSrgbEXT", [&]{
             TextureCube t(dev, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
@@ -123,8 +135,8 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
         });
 #if defined(CNA_BACKEND_SKIA)
-        // SKIA-135 promotes these packed formats for Texture2D only.  The other
-        // backends that share this contract test retain the Color-only boundary.
+        // SKIA-135 promotes these packed formats for Texture2D only. The SKIA-136
+        // colour formats were handled above; other backends retain the Color-only boundary.
         expectNoThrow("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });

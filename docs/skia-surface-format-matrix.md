@@ -1,14 +1,15 @@
 # Skia `SurfaceFormat` contract matrix
 
-Status: normative SKIA-134 contract; SKIA-135 packed Texture2D routes promoted
+Status: normative SKIA-134 contract; SKIA-135/136 Texture2D routes promoted
 
 This matrix fixes the byte and sampling contract for every public format.
 It is based on CNA's `SurfaceFormat`, `Texture::GetBlockSizeSquaredEXT` and
 `Texture::GetFormatSizeEXT`, the CNA packed-vector implementations, and FNA/FNA3D's OpenGL
-transfer mappings. `Skia representation` names the pinned CPU-raster building block. SKIA-135 now
-enables `Bgr565`, `Bgra4444`, and `Rgba1010102` for Skia `Texture2D` only after their transfer and
-pixel gates passed. Every other non-`Color` texture row remains refused until its owner passes;
-non-`Color` render targets remain independently refused pending SKIA-142.
+transfer mappings. `Skia representation` names the pinned CPU-raster building block. SKIA-135/136
+now enable `Bgr565`, `Bgra4444`, `Rgba1010102`, `ColorBgraEXT`, and `ColorSrgbEXT` for Skia
+`Texture2D` only after their transfer and pixel gates passed. Every other non-`Color` texture row
+remains refused until its owner passes; non-`Color` render targets remain independently refused
+pending SKIA-142.
 
 All multi-byte words and IEEE values below use the little-endian host layout required by the
 pinned Skia raster artifact. A future big-endian build must add explicit byte conversion or refuse
@@ -44,8 +45,8 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
 | 17 | `HalfVector2` | 1 | 4 | LE IEEE binary16 R, G | RG float, B=0, A=1 | `kR16G16_float` exact words | renderable; direct raster candidate | direct | SKIA-138 |
 | 18 | `HalfVector4` | 1 | 8 | LE IEEE binary16 R, G, B, A | RGBA float | `kRGBA_F16` exact words | renderable; direct raster candidate | direct | SKIA-138 |
 | 19 | `HdrBlendable` | 1 | 8 | LE IEEE binary16 R, G, B, A | RGBA float with HDR blending | `kRGBA_F16` exact words | renderable; direct raster candidate with blend oracle | direct | SKIA-138 |
-| 20 | `ColorBgraEXT` | 1 | 4 | bytes B8, G8, R8, A8 | RGBA UNORM after B/R mapping | `kBGRA_8888` exact bytes | FNA coerces to Color; Skia refuses target | direct-texture-only | SKIA-136 |
-| 21 | `ColorSrgbEXT` | 1 | 4 | bytes sR8, sG8, sB8, A8 | linear RGB after one sRGB decode, A UNORM | `kSRGBA_8888` with explicit sRGB colour space, subject to raster probe | FNA conditionally renderable; Skia conversion candidate | colour-space | SKIA-136 |
+| 20 | `ColorBgraEXT` | 1 | 4 | bytes B8, G8, R8, A8 | RGBA UNORM after B/R mapping | promoted Texture2D `kBGRA_8888` exact bytes | FNA coerces to Color; Skia refuses target | direct-texture-only | SKIA-136 |
+| 21 | `ColorSrgbEXT` | 1 | 4 | bytes sR8, sG8, sB8, A8 | linear RGB after one sRGB decode, A UNORM | promoted Texture2D `kSRGBA_8888` plus linear-sRGB working metadata | FNA conditionally renderable; Skia target remains refused pending SKIA-142 | colour-space | SKIA-136 |
 | 22 | `Dxt5SrgbEXT` | 16 | 16 | one BC3 block per 4x4 texels with sRGB RGB | linear RGB after BC3 decode and one sRGB decode, A UNORM | exact block shadow plus bounded RGBA8 sRGB decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
 | 23 | `Bc7EXT` | 16 | 16 | one BC7 block per 4x4 texels | RGBA UNORM | exact block shadow plus license-compatible bounded decoder | FNA coerces to Color; Skia refuses target | decoder-required | SKIA-141 |
 | 24 | `Bc7SrgbEXT` | 16 | 16 | one BC7 block per 4x4 texels with sRGB RGB | linear RGB after BC7 decode and one sRGB decode, A UNORM | exact block shadow plus license-compatible bounded sRGB decoder | FNA coerces to Color; Skia refuses target | decoder-required | SKIA-141 |
@@ -68,3 +69,6 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
   zero fill, or stale RGBA8 content is an acceptable fallback.
 - Format promotion is per route. Texture sampling support never implies renderability, and
   renderability never implies backbuffer-format support.
+- Pinned `kSRGBA_8888` itself decodes encoded RGB while gathering. Its Skia colour-space metadata
+  therefore describes the post-gather linear-sRGB working values, not the encoded storage. A
+  linear destination performs no second decode; an explicit sRGB destination encodes exactly once.

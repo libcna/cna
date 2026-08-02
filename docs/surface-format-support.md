@@ -5,9 +5,9 @@
 
 > Skia successor note (SKIA-134): this historical cross-backend document does not define the Skia
 > implementation routes. The checked, current 27-value Skia contract is
-> [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). SKIA-135 has promoted
-> `Bgr565`, `Bgra4444`, and `Rgba1010102` for Skia `Texture2D`; the remaining format gates are
-> tracked by SKIA-136–143.
+> [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). SKIA-135/136 have promoted
+> `Bgr565`, `Bgra4444`, `Rgba1010102`, `ColorBgraEXT`, and `ColorSrgbEXT` for Skia `Texture2D`;
+> the remaining format gates are tracked by SKIA-137–143.
 
 ---
 

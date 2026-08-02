@@ -85,7 +85,9 @@ namespace Microsoft::Xna::Framework::Graphics
         if (format == SurfaceFormat::Color
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra4444
-            || format == SurfaceFormat::Rgba1010102)
+            || format == SurfaceFormat::Rgba1010102
+            || format == SurfaceFormat::ColorBgraEXT
+            || format == SurfaceFormat::ColorSrgbEXT)
         {
             return;
         }
@@ -93,6 +95,18 @@ namespace Microsoft::Xna::Framework::Graphics
             "Skia Texture2D SurfaceFormat has not passed its promotion gate.");
 #else
         Texture::ValidateFormat(format);
+#endif
+    }
+
+    [[nodiscard]] static bool IsColorTransferFormatEXT(SurfaceFormat format) noexcept
+    {
+        if (format == SurfaceFormat::Color)
+            return true;
+#ifdef CNA_BACKEND_SKIA
+        return format == SurfaceFormat::ColorBgraEXT
+            || format == SurfaceFormat::ColorSrgbEXT;
+#else
+        return false;
 #endif
     }
 
@@ -290,9 +304,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetData(const Color* data, int elementCount)
     {
-        if (format_ != SurfaceFormat::Color)
+        if (!IsColorTransferFormatEXT(format_))
             throw std::invalid_argument(
-                "Texture2D::SetData: Color data requires SurfaceFormat::Color");
+                "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!graphicsDevice_ || !data || elementCount <= 0) return;
         const int total = width * height;
         if (elementCount < total)
@@ -301,6 +315,7 @@ namespace Microsoft::Xna::Framework::Graphics
         img.width     = width;
         img.height    = height;
         img.mipLevels = levelCount_;
+        img.surfaceFormat = static_cast<int>(format_);
         img.pixels.resize(static_cast<std::size_t>(total) * 4);
         for (int i = 0; i < total; ++i)
         {
@@ -338,9 +353,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect,
                             const Color* data, int startIndex, int elementCount)
     {
-        if (format_ != SurfaceFormat::Color)
+        if (!IsColorTransferFormatEXT(format_))
             throw std::invalid_argument(
-                "Texture2D::SetData: Color data requires SurfaceFormat::Color");
+                "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
         if (startIndex < 0)
@@ -447,6 +462,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 img.width     = width;
                 img.height    = height;
                 img.mipLevels = levelCount_;
+                img.surfaceFormat = static_cast<int>(format_);
                 img.pixels    = buf;
                 backend_   = graphicsDevice_->GetBackend().CreateTexture(img);
                 backend_->ShareCpuPixels(cpuPixels_);
@@ -780,9 +796,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::GetData(Color* data, int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Color)
+        if (!IsColorTransferFormatEXT(format_))
             throw std::invalid_argument(
-                "Texture2D::GetData: Color data requires SurfaceFormat::Color");
+                "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("data must not be null and elementCount must be > 0");
         if (startIndex < 0)
@@ -859,9 +875,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect,
                             Color* data, int startIndex, int elementCount) const
     {
-        if (format_ != SurfaceFormat::Color)
+        if (!IsColorTransferFormatEXT(format_))
             throw std::invalid_argument(
-                "Texture2D::GetData: Color data requires SurfaceFormat::Color");
+                "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
         if (startIndex < 0)

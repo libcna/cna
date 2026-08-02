@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// Public Texture2D refusal matrix for the SKIA raster backend. Color and the three SKIA-135
-// packed formats are covered positively by skia_texture2d_packed_formats_test.cpp; every other
+// Public Texture2D refusal matrix for the SKIA raster backend. Color, the three SKIA-135 packed
+// formats, and the two SKIA-136 colour formats have dedicated positive fixtures; every other
 // format remains a creation-time refusal, while valid dimensions reach the declared device limit.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -102,7 +102,7 @@ private:
         const char* name;
     };
 
-    static const std::array<FormatCase, 23>& UnsupportedFormats()
+    static const std::array<FormatCase, 21>& UnsupportedFormats()
     {
         static constexpr std::array formats{
             FormatCase{SurfaceFormat::Bgra5551, "Bgra5551"},
@@ -121,8 +121,6 @@ private:
             FormatCase{SurfaceFormat::HalfVector2, "HalfVector2"},
             FormatCase{SurfaceFormat::HalfVector4, "HalfVector4"},
             FormatCase{SurfaceFormat::HdrBlendable, "HdrBlendable"},
-            FormatCase{SurfaceFormat::ColorBgraEXT, "ColorBgraEXT"},
-            FormatCase{SurfaceFormat::ColorSrgbEXT, "ColorSrgbEXT"},
             FormatCase{SurfaceFormat::Dxt5SrgbEXT, "Dxt5SrgbEXT"},
             FormatCase{SurfaceFormat::Bc7EXT, "Bc7EXT"},
             FormatCase{SurfaceFormat::Bc7SrgbEXT, "Bc7SrgbEXT"},

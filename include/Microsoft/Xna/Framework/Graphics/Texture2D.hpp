@@ -97,14 +97,18 @@ namespace Microsoft::Xna::Framework::Graphics
         // Format and LevelCount are inherited from Texture.
 
         /**
-         * @brief Uploads pixel data to the texture.
+         * @brief Uploads pixel data to a Color-compatible texture.
+         *
+         * In a Skia build, ColorBgraEXT and ColorSrgbEXT also use this overload. Each Color's
+         * R/G/B/A properties name the four raw transfer bytes in order; ColorBgraEXT sampling
+         * therefore interprets those bytes as B/G/R/A, while ColorSrgbEXT decodes RGB once.
          * @param data         Pointer to the Color array.
          * @param elementCount Number of Color elements to upload.
          */
         void SetData(const Color* data, int elementCount);
 
         /**
-         * @brief Uploads pixel data to a specific mip level and optional sub-rectangle.
+         * @brief Uploads raw Color-compatible data to a mip level and optional sub-rectangle.
          * @param level        Mip level to write (0 = full size).
          * @param rect         Sub-rectangle to update, or nullptr for the entire level.
          * @param data         Pointer to the Color array.
@@ -147,7 +151,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
-         * @brief Reads pixel data from the texture into the provided array.
+         * @brief Reads raw Color-compatible bytes from the texture into the provided array.
          * @param data         Output array to receive the pixel data.
          * @param startIndex   First element in @p data to write to.
          * @param elementCount Number of Color elements to read.
@@ -155,14 +159,14 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(Color* data, int startIndex, int elementCount) const;
 
         /**
-         * @brief Reads all pixel data from the texture into the provided array.
+         * @brief Reads all raw Color-compatible bytes from the texture into the provided array.
          * @param data         Output array to receive the pixel data.
          * @param elementCount Number of Color elements to read.
          */
         void GetData(Color* data, int elementCount) const;
 
         /**
-         * @brief Reads pixel data from a specific mip level and optional sub-rectangle.
+         * @brief Reads raw Color-compatible bytes from a mip level or sub-rectangle.
          * @param level        Mip level to read (0 = full size).
          * @param rect         Sub-rectangle to read, or nullptr for the entire level.
          * @param data         Output array to receive the pixel data.

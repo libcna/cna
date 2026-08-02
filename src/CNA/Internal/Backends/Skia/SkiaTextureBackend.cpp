@@ -1,12 +1,14 @@
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
 
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkData.h"
 #include "include/core/SkPixmap.h"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 #include <utility>
@@ -17,12 +19,14 @@ namespace CNA::Internal::Backends::Skia
 
     namespace
     {
-        [[nodiscard]] bool IsSupportedPackedFormat(SurfaceFormat format) noexcept
+        [[nodiscard]] bool IsSupportedTextureFormat(SurfaceFormat format) noexcept
         {
             return format == SurfaceFormat::Color
                 || format == SurfaceFormat::Bgr565
                 || format == SurfaceFormat::Bgra4444
-                || format == SurfaceFormat::Rgba1010102;
+                || format == SurfaceFormat::Rgba1010102
+                || format == SurfaceFormat::ColorBgraEXT
+                || format == SurfaceFormat::ColorSrgbEXT;
         }
 
         [[nodiscard]] std::size_t BytesPerTexel(SurfaceFormat format)
@@ -31,6 +35,8 @@ namespace CNA::Internal::Backends::Skia
             {
                 case SurfaceFormat::Color:
                 case SurfaceFormat::Rgba1010102:
+                case SurfaceFormat::ColorBgraEXT:
+                case SurfaceFormat::ColorSrgbEXT:
                     return 4u;
                 case SurfaceFormat::Bgr565:
                 case SurfaceFormat::Bgra4444:
@@ -41,7 +47,7 @@ namespace CNA::Internal::Backends::Skia
             }
         }
 
-        [[nodiscard]] SkImageInfo PackedImageInfo(
+        [[nodiscard]] SkImageInfo TextureImageInfo(
             SurfaceFormat format, int width, int height, SkAlphaType alphaType)
         {
             switch (format)
@@ -60,6 +66,17 @@ namespace CNA::Internal::Backends::Skia
                 case SurfaceFormat::Rgba1010102:
                     return SkImageInfo::Make(
                         width, height, kRGBA_1010102_SkColorType, alphaType);
+                case SurfaceFormat::ColorBgraEXT:
+                    return SkImageInfo::Make(
+                        width, height, kBGRA_8888_SkColorType, alphaType);
+                case SurfaceFormat::ColorSrgbEXT:
+                    // kSRGBA_8888 performs the sRGB transfer decode while gathering texels.
+                    // Describe the gathered working components as linear-sRGB so drawing to a
+                    // linear destination does not decode them a second time, while an explicit
+                    // sRGB destination re-encodes them exactly once.
+                    return SkImageInfo::Make(
+                        width, height, kSRGBA_8888_SkColorType, alphaType,
+                        SkColorSpace::MakeSRGBLinear());
                 default:
                     throw System::NotSupportedException(
                         "Skia Texture2D has no image info for this SurfaceFormat.");
@@ -126,12 +143,12 @@ namespace CNA::Internal::Backends::Skia
                 const std::vector<std::uint8_t> rgba =
                     DecodeBgra4444(pixels, width, height, rowBytes);
                 const SkPixmap pixmap(
-                    PackedImageInfo(format, width, height, alphaType), rgba.data(),
+                    TextureImageInfo(format, width, height, alphaType), rgba.data(),
                     static_cast<std::size_t>(width) * 4u);
                 return SkImages::RasterFromPixmapCopy(pixmap);
             }
             const SkPixmap pixmap(
-                PackedImageInfo(format, width, height, alphaType), pixels, rowBytes);
+                TextureImageInfo(format, width, height, alphaType), pixels, rowBytes);
             return SkImages::RasterFromPixmapCopy(pixmap);
         }
 
@@ -142,8 +159,73 @@ namespace CNA::Internal::Backends::Skia
             if (format == SurfaceFormat::Bgra4444)
                 return MakePackedImageCopy(format, pixels, width, height, rowBytes, alphaType);
             return SkImages::RasterFromData(
-                PackedImageInfo(format, width, height, alphaType),
+                TextureImageInfo(format, width, height, alphaType),
                 SkData::MakeWithoutCopy(pixels, byteCount), rowBytes);
+        }
+
+        [[nodiscard]] double SrgbByteToLinear(std::uint8_t value) noexcept
+        {
+            const double encoded = static_cast<double>(value) / 255.0;
+            return encoded <= 0.04045
+                ? encoded / 12.92
+                : std::pow((encoded + 0.055) / 1.055, 2.4);
+        }
+
+        [[nodiscard]] std::uint8_t LinearToSrgbByte(double value) noexcept
+        {
+            const double linear = std::clamp(value, 0.0, 1.0);
+            const double encoded = linear <= 0.0031308
+                ? linear * 12.92
+                : 1.055 * std::pow(linear, 1.0 / 2.4) - 0.055;
+            return static_cast<std::uint8_t>(
+                std::clamp(std::lround(encoded * 255.0), 0l, 255l));
+        }
+
+        void GenerateSrgbMipLevel(SkiaMipChain2D& chain, int level)
+        {
+            const SkiaMipLevel2D& source = chain.Level(level - 1);
+            const SkiaMipLevel2D& target = chain.Level(level);
+            const std::uint8_t* sourcePixels = chain.LevelData(level - 1);
+            std::uint8_t* targetPixels = chain.LevelData(level);
+            for (int y = 0; y < target.height; ++y)
+            {
+                const int y0 = static_cast<int>(
+                    static_cast<std::int64_t>(y) * source.height / target.height);
+                const int y1 = static_cast<int>(
+                    static_cast<std::int64_t>(y + 1) * source.height / target.height);
+                for (int x = 0; x < target.width; ++x)
+                {
+                    const int x0 = static_cast<int>(
+                        static_cast<std::int64_t>(x) * source.width / target.width);
+                    const int x1 = static_cast<int>(
+                        static_cast<std::int64_t>(x + 1) * source.width / target.width);
+                    const std::uint64_t sampleCount = static_cast<std::uint64_t>(
+                        (x1 - x0) * (y1 - y0));
+                    double linearSums[3] = {0.0, 0.0, 0.0};
+                    std::uint64_t alphaSum = 0u;
+                    for (int sourceY = y0; sourceY < y1; ++sourceY)
+                    {
+                        for (int sourceX = x0; sourceX < x1; ++sourceX)
+                        {
+                            const std::uint8_t* texel = sourcePixels
+                                + static_cast<std::size_t>(sourceY) * source.rowBytes
+                                + static_cast<std::size_t>(sourceX) * 4u;
+                            linearSums[0] += SrgbByteToLinear(texel[0]);
+                            linearSums[1] += SrgbByteToLinear(texel[1]);
+                            linearSums[2] += SrgbByteToLinear(texel[2]);
+                            alphaSum += texel[3];
+                        }
+                    }
+                    std::uint8_t* output = targetPixels
+                        + static_cast<std::size_t>(y) * target.rowBytes
+                        + static_cast<std::size_t>(x) * 4u;
+                    output[0] = LinearToSrgbByte(linearSums[0] / sampleCount);
+                    output[1] = LinearToSrgbByte(linearSums[1] / sampleCount);
+                    output[2] = LinearToSrgbByte(linearSums[2] / sampleCount);
+                    output[3] = static_cast<std::uint8_t>(
+                        (alphaSum + sampleCount / 2u) / sampleCount);
+                }
+            }
         }
     }
 
@@ -156,7 +238,7 @@ namespace CNA::Internal::Backends::Skia
     {
         if (width_ <= 0 || height_ <= 0)
             throw std::runtime_error("Skia Texture2D dimensions must be positive.");
-        if (!IsSupportedPackedFormat(format_))
+        if (!IsSupportedTextureFormat(format_))
             throw System::NotSupportedException(
                 "Skia Texture2D SurfaceFormat has not passed its promotion gate.");
         bytesPerTexel_ = BytesPerTexel(format_);
@@ -374,9 +456,14 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaTextureBackend::GenerateMipLevel(int level)
     {
-        if (format_ == SurfaceFormat::Color)
+        if (format_ == SurfaceFormat::Color || format_ == SurfaceFormat::ColorBgraEXT)
         {
             GenerateSkiaRgba8MipLevel(*mipChain_, level);
+            return;
+        }
+        if (format_ == SurfaceFormat::ColorSrgbEXT)
+        {
+            GenerateSrgbMipLevel(*mipChain_, level);
             return;
         }
 

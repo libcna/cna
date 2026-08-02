@@ -37,8 +37,8 @@ the compact successor index; the format matrix is the normative input for SKIA-1
 | `FMT-HalfVector2` | Two IEEE half channels and raw sampling. | refused | SKIA-138 | Use R16G16 float storage where compatible. |
 | `FMT-HalfVector4` | Four IEEE half channels and HDR sampling. | refused | SKIA-138 | Use RGBA_F16 storage with explicit alpha/color-space policy. |
 | `FMT-HdrBlendable` | Blendable HDR half-float surface. | refused | SKIA-138 | Must separately prove transfer, blending and render-target support. |
-| `FMT-ColorBgraEXT` | BGRA8 XNA3 transfer layout and ordinary color sampling. | refused | SKIA-136 | Map BGRA storage without red/blue swaps or changed public bytes. |
-| `FMT-ColorSrgbEXT` | RGBA8 sRGB transfer with linear shader sampling. | refused | SKIA-136 | Prove one and only one transfer-function conversion. |
+| `FMT-ColorBgraEXT` | BGRA8 XNA3 transfer layout and ordinary color sampling. | refused | SKIA-136 | Promoted for Texture2D: exact B/G/R/A transfer bytes use `kBGRA_8888`, sample with the required B/R mapping, and generate byte-domain mips; targets stay refused. |
+| `FMT-ColorSrgbEXT` | RGBA8 sRGB transfer with linear shader sampling. | refused | SKIA-136 | Promoted for Texture2D: exact encoded bytes, linear-light RGB mips, linear alpha, and explicit linear/sRGB destinations prove one decode and at most one re-encode; targets stay refused. |
 | `FMT-Dxt5SrgbEXT` | BC3 blocks with sRGB RGB sampling and linear alpha. | refused | SKIA-140 | Combine exact compressed shadow with explicit sRGB decoded image. |
 | `FMT-Bc7EXT` | BC7 block transfer, modes and sampled pixels. | refused | SKIA-141 | Requires a bounded license-compatible conformant decoder. |
 | `FMT-Bc7SrgbEXT` | BC7 blocks with sRGB RGB sampling. | refused | SKIA-141 | Decoder and color-space path must be proven together. |
