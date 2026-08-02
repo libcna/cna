@@ -73,6 +73,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Instanced draws (`GraphicsDevice.DrawInstancedPrimitives`) | ✅ | `Sokol_Instanced3D` (WEBGPU-27/38/68's own backend-agnostic oracle, reused unmodified) -- 5/5 checks pass: 3 distinct instances each paint their own screen-space quad with the exact shared `DiffuseColor`, a region far from all 3 stays untouched, and `instanceVb == nullptr` falls back to a real non-instanced draw instead of throwing. A dedicated `instanced3d.glsl` shader (flat `DiffuseColor` only, no vertex colour/texturing/lighting -- the same scope reduction `VulkanGraphicsBackend`'s own instanced3d shaders already make) reads per-vertex Position from buffer slot 0 and a per-instance World matrix (4 vec4 columns, `step_func = SG_VERTEXSTEP_PER_INSTANCE`) from slot 1 -- the first Sokol feature to use a non-zero vertex-buffer slot |
 | `EnvironmentMapEffect` (reflection cube mapping, always textured and lit, no vertex colour) | ✅ | `Sokol_EnvironmentMapEffect_AlphaScaledLerp` (Task 891's own backend-agnostic oracle, reused unmodified) -- 2/2 checks pass, including the discriminating translucent-effect case (the FNA-correct alpha-scaled cube sample, not the old-bug unscaled value). The reflection vector and Fresnel blend factor are computed per-vertex then Gouraud-interpolated (matching real XNA); diffuse lighting is computed per-fragment. `SokolTextureCubeBackend` was promoted from a pure CPU-shadow store to a real `sg_image`/`sg_view` cube texture as part of this task -- the first Sokol consumer of cube sampling |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `GraphicsDevice.Draw*` with a bound `ShaderEffect` | ✅ | `Sokol_ShaderEffect_SpriteBatch` (Task 132's own oracle) and `Sokol_ShaderEffect_3D` (Task 1079's own oracle), both reused unmodified -- real runtime GLSL compilation (`SokolEffectBackend`, raw `glCreateShader`/`glCompileShader`/`glLinkProgram`), bypassing `sg_shader`/`sg_pipeline` entirely via raw GL calls bracketed by `sg_reset_state_cache()`. GL-only, the same boundary `OcclusionQuery`/`ReadBackbuffer` already declare |
+| MRT (`SetRenderTargets` with 2-4 `RenderTarget2D` targets bound together) | ✅ | `Sokol_MRT` (REMED-GFX-016's own backend-agnostic four-output-`ShaderEffect` oracle, reused unmodified) -- 20/20 checks: ordered 1-4 targets, distinct per-slot outputs, immediate producer-to-consumer sampling, per-slot `ColorWriteChannels0..3`, first-target depth ownership, attachment-set transitions, `RenderTargetUsage` Discard/Preserve, and true MRT MSAA with independent per-slot resolve. A real multi-attachment `sg_pass` -- slot 0 owns depth/size/sample-count (matching `EasyGLGraphicsBackend`'s identical MRT convention); a `RenderTargetCube` face combined with other targets in one set is not implemented. Both the custom-effect draw path and every stock pipeline (sprite/3D/instanced) work while MRT is bound -- a stock draw's single-output shader writes attachment 0 only, exactly like EasyGL |
 
 ## What does not work yet
 
@@ -83,7 +84,6 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
 | Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |
 | `RenderTargetCube` MSAA | `multiSampleCount` is always silently clamped to 1/ignored -- **a permanent sokol_gfx API boundary, not a "not implemented yet" gap**: its own validation layer hard-rejects a `SG_IMAGETYPE_CUBE` image with `sample_count > 1` (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed empirically (a real `[sg][panic]` validation abort) while prototyping the same per-face multisample + resolve layout `RenderTarget2D` uses. The same kind of declared boundary `WebGPUGraphicsBackend`/`D3D9RenderTargetCubeBackend` report for their own reasons | `SOKOL-26` (closed as a permanent gap) |
-| MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented` | `SOKOL-26` |
 | `RasterizerState.FillMode` (`WireFrame`) | accepted and ignored — sokol_gfx exposes no polygon fill mode at all, unlike EasyGL's CPU-side triangle-to-`GL_LINES` re-expansion at draw time (not implemented here). A permanent, not-just-"not yet" gap | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
@@ -182,6 +182,7 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_EnvironmentMapEffect_AlphaScaledLerp` | 2, incl. the discriminating alpha-scaled-cube-sample proof | all pass |
 | `Sokol_ShaderEffect_SpriteBatch` | 1, exact centre/background colours | all pass |
 | `Sokol_ShaderEffect_3D` | 2, incl. the discriminating World-rotated-away (N·L clamped) proof | all pass |
+| `Sokol_MRT` | 20, incl. 1-4 ordered targets, distinct per-slot outputs, per-slot `ColorWriteChannels0..3`, first-target depth ownership, attachment-set transitions, `RenderTargetUsage` Discard/Preserve, and true MRT MSAA with independent per-slot resolve | all pass |
 | `Sokol_OcclusionQuery_Cycle` | Begin/End/IsComplete/PixelCount plus every invalid-call-sequence and dispose-while-active case | all pass |
 | `Sokol_OcclusionQuery_VisibleQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_OcclusionQuery_OccludedQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
@@ -195,11 +196,10 @@ every one of their checks that reads a render target's content does so through a
 mirror and the Clear()-only-producer bug described above, both invisible while `GetData()` still
 threw `System::NotSupportedException` unconditionally.
 
-The full `CnaTests` suite also runs under this backend. Note that the shared suite gates several
-capability-dependent expectations on an explicit list of backend macros (`kCubeStorageSupported`
-and friends); `CNA_BACKEND_SOKOL` was added to those lists for the cube-texture and multi-render-
-target gaps documented above, exactly as `SDL_RENDERER`/`ASCII`/`CANVAS`/`DX3`/`HEADLESS` already
-are.
+The full `CnaTests` suite also runs under this backend. `SetRenderTargets_FourTargets_DoesNotThrow`
+(`GraphicsDeviceValidationTests.cpp`) no longer lists `CNA_BACKEND_SOKOL` among the single-target-
+only backends (`SDL_RENDERER`/`ASCII`/`DX3`) as of `SOKOL-26`'s MRT support -- 4 real targets bind
+cleanly here now, exactly like EasyGL/Vulkan/D3D11.
 
 ### Environment note
 

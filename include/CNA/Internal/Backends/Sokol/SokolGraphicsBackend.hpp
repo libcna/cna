@@ -1355,7 +1355,10 @@ namespace CNA::Internal::Backends::Sokol
 
         /**
          * @brief Binds a render-target set. A single RenderTarget2D, a single RenderTargetCube
-         * face, or the back buffer (null / count 0) is supported; MRT is not implemented yet.
+         * face, the back buffer (null / count 0), or 2-4 RenderTarget2D targets bound together
+         * (plan_sokol.md SOKOL-26 MRT) is supported. A RenderTargetCube face combined with any
+         * other target in the same set is not implemented (matches EasyGLGraphicsBackend's own
+         * choice to reject that combination outright).
          * @param renderTargets Ordered attachment descriptors, or null for the back buffer.
          * @param count         Number of attachments; 0 restores the back buffer.
          */
@@ -1677,6 +1680,9 @@ namespace CNA::Internal::Backends::Sokol
             /// match the pass it draws into, and a RenderTarget2D's MSAA count is independent of
             /// both the swapchain's and every other render target's.
             int sampleCount;
+            /// See Pipeline3DKey's identical field (plan_sokol.md SOKOL-26 MRT): sokol_gfx requires
+            /// a pipeline's color_count to exactly match the active pass's real attachment count.
+            int colorAttachmentCount;
 
             bool operator==(const PipelineKey& other) const;
         };
@@ -1780,6 +1786,14 @@ namespace CNA::Internal::Backends::Sokol
             /// into the pipeline object and rejects a mismatch against the pass it draws into
             /// (plan_sokol.md SOKOL-26).
             int sampleCount;
+            /// plan_sokol.md SOKOL-26 MRT: sokol_gfx requires a pipeline's color_count to exactly
+            /// match the active pass's real attachment count (1 for a single target/the swapchain,
+            /// 2-4 while a multi-render-target set is bound). Every stock 3D fragment shader has
+            /// only ever declared output location 0 (see DrawColored3D's own comment), so slots
+            /// beyond 0 simply receive no write from this pipeline -- matching
+            /// EasyGLGraphicsBackend's identical "the 2D/3D stock pipeline writes colour attachment
+            /// 0 only" MRT behaviour.
+            int colorAttachmentCount;
             int cullMode;
             int primitiveType;
             /// Raw sg_index_type: sokol_gfx bakes the index type into the pipeline, and rejects
@@ -1855,6 +1869,8 @@ namespace CNA::Internal::Backends::Sokol
             float depthBias;
             float slopeScaleDepthBias;
             int sampleCount;
+            /// See Pipeline3DKey's identical field (plan_sokol.md SOKOL-26 MRT).
+            int colorAttachmentCount;
             int cullMode;
             int primitiveType;
             int indexType;
@@ -1935,6 +1951,19 @@ namespace CNA::Internal::Backends::Sokol
         /// Cube-face counterpart of BindSingleRenderTarget2D -- mutually exclusive with it, so each
         /// clears the other's tracking field.
         void BindRenderTargetCubeFace(SokolRenderTargetCubeBackend* rt, int face);
+        /// MRT counterpart of BindSingleRenderTarget2D (plan_sokol.md SOKOL-26): @p targets.size()
+        /// is always >= 2 (SetRenderTargets already special-cases count == 1). targets[0] becomes
+        /// currentRenderTarget_ -- so every existing depth/sample-count/size/mip-regen path that
+        /// already reads currentRenderTarget_ continues to answer about "the" target that owns
+        /// those properties, matching this backend's (and EasyGLGraphicsBackend's) "slot 0 owns
+        /// depth, size and sample count" MRT convention -- and targets[1..] become mrtExtraTargets_.
+        void BindRenderTargets2D(const std::vector<SokolRenderTargetBackend*>& targets);
+        /// Regenerates the mip chain (if any) of every render target about to be replaced by the
+        /// next bind -- currentRenderTarget_, currentRenderTargetCube_ and every entry of
+        /// mrtExtraTargets_ -- shared by BindSingleRenderTarget2D, BindRenderTargetCubeFace and
+        /// BindRenderTargets2D so each keeps identical "regenerate the OUTGOING target's mips"
+        /// behaviour regardless of which bind path is switching away from it.
+        void RegenerateOutgoingMipsIfNeededEXT();
         /// Returns the size (in pixels) of whatever is currently the draw/clear target: the bound
         /// render target when one is active, otherwise the window's physical size. RT pixel space
         /// has no logical/physical distinction (no letterboxing), unlike the back buffer.
@@ -1952,6 +1981,11 @@ namespace CNA::Internal::Backends::Sokol
         /// DrawColored3D's Pipeline3DKey construction, mirroring
         /// CurrentPassHasDepthStencilAttachmentEXT's rationale.
         [[nodiscard]] int CurrentPassSampleCountEXT() const;
+        /// Returns the active pass's real colour-attachment count: 1 for a single target or the
+        /// swapchain, 2-4 while a multi-render-target set is bound (plan_sokol.md SOKOL-26 MRT).
+        /// sokol_gfx requires a pipeline's color_count to exactly match the pass it draws into, the
+        /// same reasoning CurrentPassSampleCountEXT's own doc comment gives for sample_count.
+        [[nodiscard]] int CurrentPassColorAttachmentCountEXT() const;
 
         SDL_Window* window_ = nullptr;
         void* glContext_ = nullptr;
@@ -1974,6 +2008,11 @@ namespace CNA::Internal::Backends::Sokol
         /// Which face of currentRenderTargetCube_ is the active colour attachment. Meaningless
         /// while currentRenderTargetCube_ is null.
         int currentRenderTargetCubeFace_ = 0;
+        /// plan_sokol.md SOKOL-26 MRT: slots 1..N-1 of a multi-render-target bind, empty when not
+        /// MRT. Slot 0 stays currentRenderTarget_ (see BindRenderTargets2D's own comment) --
+        /// mutually exclusive with currentRenderTargetCube_ being non-null, since a RenderTargetCube
+        /// face combined with any other target in one set is not implemented.
+        std::vector<SokolRenderTargetBackend*> mrtExtraTargets_;
         /// Pending pass action for the next BeginPassIfNeeded(), reset to "load" after each use so
         /// only an explicit Clear* call ever discards existing content.
         bool pendingClearColor_ = false;
@@ -1989,7 +2028,14 @@ namespace CNA::Internal::Backends::Sokol
         int blendAlphaDst_ = 1;   // Blend::Zero
         int blendColorFunc_ = 0;  // BlendFunction::Add
         int blendAlphaFunc_ = 0;  // BlendFunction::Add
-        int colorWriteChannels_ = 15;
+        /// Per-attachment ColorWriteChannels0..3 (plan_sokol.md SOKOL-26 MRT); slot 0 is what every
+        /// stock-effect Pipeline3DKey/PipelineKey/PipelineInstanced3DKey still reads (see
+        /// DrawColored3D/GetSpritePipeline/DrawInstancedPrimitivesEx), slots 1-3 are only consulted
+        /// by DrawCustomEffect3D's own raw-GL glColorMaski calls while more than one render target
+        /// is bound -- a stock-pipeline draw while MRT is active is refused outright (see
+        /// DrawColored3D/DrawSpriteRunEXT's own MRT guards), so slots 1-3 have no pipeline-key
+        /// consumer to keep in sync with.
+        int colorWriteChannels_[4] = {15, 15, 15, 15};
         bool blendEnabled_ = false;
         float blendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 

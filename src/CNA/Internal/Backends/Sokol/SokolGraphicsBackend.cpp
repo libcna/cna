@@ -261,6 +261,26 @@ namespace CNA::Internal::Backends::Sokol
             return GL_TRIANGLES;
         }
 
+        /// Raw-GL depth-compare function for the custom-ShaderEffect draw path (plan_sokol.md
+        /// SOKOL-26 MRT depth-ownership test), which bypasses sg_pipeline entirely and so cannot
+        /// use ToCompareFunc()'s sg_compare_func result -- the same CompareFunction-ordinal mapping
+        /// ToCompareFunc() uses, just for glDepthFunc() instead of sg_depth_state.compare.
+        GLenum ToGLCompareFunc(int compareFunction)
+        {
+            switch (compareFunction)
+            {
+                case 0:  return GL_ALWAYS;   // CompareFunction::Always
+                case 1:  return GL_NEVER;    // Never
+                case 2:  return GL_LESS;     // Less
+                case 3:  return GL_LEQUAL;   // LessEqual
+                case 4:  return GL_EQUAL;    // Equal
+                case 5:  return GL_GEQUAL;   // GreaterEqual
+                case 6:  return GL_GREATER;  // Greater
+                case 7:  return GL_NOTEQUAL; // NotEqual
+                default: return GL_LEQUAL;
+            }
+        }
+
         /// The raw-GL attribute shape needed to bind one VertexElement for the custom-ShaderEffect
         /// draw path: component count, GL scalar type, whether values are normalized to [0,1]/
         /// [-1,1], and whether the attribute must be read as a true integer
@@ -1983,7 +2003,8 @@ namespace CNA::Internal::Backends::Sokol
             && depthWriteEnabled == other.depthWriteEnabled
             && depthFunc == other.depthFunc
             && hasDepthAttachment == other.hasDepthAttachment
-            && sampleCount == other.sampleCount;
+            && sampleCount == other.sampleCount
+            && colorAttachmentCount == other.colorAttachmentCount;
     }
 
     std::size_t SokolGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const
@@ -2005,6 +2026,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.depthFunc));
         mix(static_cast<std::size_t>(key.hasDepthAttachment));
         mix(static_cast<std::size_t>(key.sampleCount));
+        mix(static_cast<std::size_t>(key.colorAttachmentCount));
         return hash;
     }
 
@@ -2039,6 +2061,7 @@ namespace CNA::Internal::Backends::Sokol
             && depthBias == other.depthBias
             && slopeScaleDepthBias == other.slopeScaleDepthBias
             && sampleCount == other.sampleCount
+            && colorAttachmentCount == other.colorAttachmentCount
             && cullMode == other.cullMode
             && primitiveType == other.primitiveType
             && indexType == other.indexType
@@ -2092,6 +2115,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(std::hash<float>{}(key.depthBias));
         mix(std::hash<float>{}(key.slopeScaleDepthBias));
         mix(static_cast<std::size_t>(key.sampleCount));
+        mix(static_cast<std::size_t>(key.colorAttachmentCount));
         mix(static_cast<std::size_t>(key.cullMode));
         mix(static_cast<std::size_t>(key.primitiveType));
         mix(static_cast<std::size_t>(key.indexType));
@@ -2142,6 +2166,7 @@ namespace CNA::Internal::Backends::Sokol
             && depthBias == other.depthBias
             && slopeScaleDepthBias == other.slopeScaleDepthBias
             && sampleCount == other.sampleCount
+            && colorAttachmentCount == other.colorAttachmentCount
             && cullMode == other.cullMode
             && primitiveType == other.primitiveType
             && indexType == other.indexType
@@ -2185,6 +2210,7 @@ namespace CNA::Internal::Backends::Sokol
         mix(std::hash<float>{}(key.depthBias));
         mix(std::hash<float>{}(key.slopeScaleDepthBias));
         mix(static_cast<std::size_t>(key.sampleCount));
+        mix(static_cast<std::size_t>(key.colorAttachmentCount));
         mix(static_cast<std::size_t>(key.cullMode));
         mix(static_cast<std::size_t>(key.primitiveType));
         mix(static_cast<std::size_t>(key.indexType));
@@ -2528,6 +2554,33 @@ namespace CNA::Internal::Backends::Sokol
                 pass.attachments.resolves[0] = MakeViewHandle(resolveAttachmentViewId);
                 pass.action.colors[0].store_action = SG_STOREACTION_DONTCARE;
             }
+
+            // plan_sokol.md SOKOL-26 MRT: slots 1..N-1, only ever populated when currentRenderTarget_
+            // is the primary 2D target (mrtExtraTargets_ is never non-empty alongside a bound cube
+            // face). Every slot shares the SAME pending clear colour as slot 0 -- ClearOptions has no
+            // per-attachment granularity in XNA, so device.Clear() clears every active MRT attachment
+            // identically, matching easygl_mrt_test.cpp's own "DiscardContents clears every active
+            // MRT attachment" expectation.
+            for (std::size_t i = 0; i < mrtExtraTargets_.size(); ++i)
+            {
+                SokolRenderTargetBackend* extra = mrtExtraTargets_[i];
+                const int slot = static_cast<int>(i) + 1;
+                pass.action.colors[slot].load_action =
+                    pendingClearColor_ ? SG_LOADACTION_CLEAR : SG_LOADACTION_LOAD;
+                pass.action.colors[slot].store_action = SG_STOREACTION_STORE;
+                pass.action.colors[slot].clear_value.r = pendingClear_[0];
+                pass.action.colors[slot].clear_value.g = pendingClear_[1];
+                pass.action.colors[slot].clear_value.b = pendingClear_[2];
+                pass.action.colors[slot].clear_value.a = pendingClear_[3];
+                pass.attachments.colors[slot] = MakeViewHandle(extra->GetColorAttachmentViewIdEXT());
+                const std::uint32_t extraResolveId = extra->GetResolveAttachmentViewIdEXT();
+                if (extraResolveId != 0)
+                {
+                    pass.attachments.resolves[slot] = MakeViewHandle(extraResolveId);
+                    pass.action.colors[slot].store_action = SG_STOREACTION_DONTCARE;
+                }
+            }
+
             pass.label = currentRenderTargetCube_ != nullptr
                 ? "cna_render_target_cube_pass" : "cna_render_target_pass";
         }
@@ -2666,6 +2719,14 @@ namespace CNA::Internal::Backends::Sokol
             return rtSampleCount > 1 ? rtSampleCount : 1;
         }
         return sampleCount_;
+    }
+
+    int SokolGraphicsBackend::CurrentPassColorAttachmentCountEXT() const
+    {
+        // mrtExtraTargets_ is only ever populated alongside currentRenderTarget_ (slot 0) -- a
+        // RenderTargetCube face combined with other targets in one set is not implemented (see
+        // SetRenderTargets's own comment), and the swapchain is never MRT.
+        return 1 + static_cast<int>(mrtExtraTargets_.size());
     }
 
     // ---------------------------------------------------------------------------------------
@@ -2904,9 +2965,22 @@ namespace CNA::Internal::Backends::Sokol
     // SokolGraphicsBackend -- state
     // ---------------------------------------------------------------------------------------
 
+    void SokolGraphicsBackend::RegenerateOutgoingMipsIfNeededEXT()
+    {
+        // Regenerate the OUTGOING target's mip chain now that its content is flushed
+        // (plan_sokol.md SOKOL-39), mirroring EasyGLRenderTargetBackend's own "auto-generate on
+        // unbind" contract. No-op on a target that was not created with mipMap=true.
+        if (currentRenderTarget_ != nullptr) currentRenderTarget_->RegenerateMipmapsIfNeededEXT();
+        if (currentRenderTargetCube_ != nullptr) currentRenderTargetCube_->RegenerateMipmapsIfNeededEXT();
+        for (SokolRenderTargetBackend* extra : mrtExtraTargets_)
+            extra->RegenerateMipmapsIfNeededEXT();
+    }
+
     void SokolGraphicsBackend::BindSingleRenderTarget2D(SokolRenderTargetBackend* rt)
     {
-        if (currentRenderTarget_ == rt && currentRenderTargetCube_ == nullptr) return;
+        if (currentRenderTarget_ == rt && currentRenderTargetCube_ == nullptr
+            && mrtExtraTargets_.empty())
+            return;
         // Mirrors Present()'s identical "begin before ending" comment: a Clear() queued against the
         // target about to be replaced, with no draw ever following it, never called
         // BeginPassIfNeeded() at all -- with no pass ever opened, EndPassIfActive() alone would
@@ -2916,13 +2990,10 @@ namespace CNA::Internal::Backends::Sokol
         if (pendingClearColor_ || pendingClearDepth_ || pendingClearStencil_)
             BeginPassIfNeeded();
         EndPassIfActive();
-        // Regenerate the OUTGOING target's mip chain now that its content is flushed
-        // (plan_sokol.md SOKOL-39), mirroring EasyGLRenderTargetBackend's own "auto-generate on
-        // unbind" contract. No-op on a target that was not created with mipMap=true.
-        if (currentRenderTarget_ != nullptr) currentRenderTarget_->RegenerateMipmapsIfNeededEXT();
-        if (currentRenderTargetCube_ != nullptr) currentRenderTargetCube_->RegenerateMipmapsIfNeededEXT();
+        RegenerateOutgoingMipsIfNeededEXT();
         currentRenderTarget_ = rt;
         currentRenderTargetCube_ = nullptr;
+        mrtExtraTargets_.clear();
         // Any pending Clear* from before this bind belongs to whatever was previously active
         // (the back buffer, or a different target); GraphicsDevice always issues its own
         // DiscardContents Clear() AFTER this call returns (see GraphicsDevice::SetRenderTarget(s)'s
@@ -2935,18 +3006,38 @@ namespace CNA::Internal::Backends::Sokol
     void SokolGraphicsBackend::BindRenderTargetCubeFace(SokolRenderTargetCubeBackend* rt, int face)
     {
         if (currentRenderTargetCube_ == rt && currentRenderTargetCubeFace_ == face
-            && currentRenderTarget_ == nullptr)
+            && currentRenderTarget_ == nullptr && mrtExtraTargets_.empty())
             return;
         // See BindSingleRenderTarget2D's identical comment.
         if (pendingClearColor_ || pendingClearDepth_ || pendingClearStencil_)
             BeginPassIfNeeded();
         EndPassIfActive();
-        // See BindSingleRenderTarget2D's identical mip-regeneration comment.
-        if (currentRenderTarget_ != nullptr) currentRenderTarget_->RegenerateMipmapsIfNeededEXT();
-        if (currentRenderTargetCube_ != nullptr) currentRenderTargetCube_->RegenerateMipmapsIfNeededEXT();
+        RegenerateOutgoingMipsIfNeededEXT();
         currentRenderTarget_ = nullptr;
         currentRenderTargetCube_ = rt;
         currentRenderTargetCubeFace_ = face;
+        mrtExtraTargets_.clear();
+        // See BindSingleRenderTarget2D's identical comment.
+        pendingClearColor_ = false;
+        pendingClearDepth_ = false;
+        pendingClearStencil_ = false;
+    }
+
+    void SokolGraphicsBackend::BindRenderTargets2D(const std::vector<SokolRenderTargetBackend*>& targets)
+    {
+        // targets.size() >= 2 always -- SetRenderTargets already special-cases count == 1.
+        if (currentRenderTarget_ == targets[0] && currentRenderTargetCube_ == nullptr
+            && mrtExtraTargets_.size() == targets.size() - 1
+            && std::equal(mrtExtraTargets_.begin(), mrtExtraTargets_.end(), targets.begin() + 1))
+            return;
+        // See BindSingleRenderTarget2D's identical comment.
+        if (pendingClearColor_ || pendingClearDepth_ || pendingClearStencil_)
+            BeginPassIfNeeded();
+        EndPassIfActive();
+        RegenerateOutgoingMipsIfNeededEXT();
+        currentRenderTarget_ = targets[0];
+        currentRenderTargetCube_ = nullptr;
+        mrtExtraTargets_.assign(targets.begin() + 1, targets.end());
         // See BindSingleRenderTarget2D's identical comment.
         pendingClearColor_ = false;
         pendingClearDepth_ = false;
@@ -2966,18 +3057,35 @@ namespace CNA::Internal::Backends::Sokol
             BindSingleRenderTarget2D(nullptr);
             return;
         }
-        if (count > 1)
-            NotYetImplemented(kBackendName, "multiple render targets (MRT)");
-        if (renderTargets[0].IsRenderTargetCubeFace())
+        if (count == 1)
         {
-            BindRenderTargetCubeFace(
-                static_cast<SokolRenderTargetCubeBackend*>(renderTargets[0].GetRenderTargetCube()),
-                renderTargets[0].GetCubeFace());
+            if (renderTargets[0].IsRenderTargetCubeFace())
+            {
+                BindRenderTargetCubeFace(
+                    static_cast<SokolRenderTargetCubeBackend*>(renderTargets[0].GetRenderTargetCube()),
+                    renderTargets[0].GetCubeFace());
+                return;
+            }
+
+            BindSingleRenderTarget2D(
+                static_cast<SokolRenderTargetBackend*>(renderTargets[0].GetRenderTarget2D()));
             return;
         }
 
-        BindSingleRenderTarget2D(
-            static_cast<SokolRenderTargetBackend*>(renderTargets[0].GetRenderTarget2D()));
+        // plan_sokol.md SOKOL-26 MRT: RenderTarget2D-only, matching EasyGLGraphicsBackend's own
+        // choice to reject a RenderTargetCube face inside a multi-slot set entirely (dimensions,
+        // applied-sample-count and duplicate-subresource checks already happened generically in
+        // GraphicsDevice::SetRenderTargets before this backend is ever reached).
+        std::vector<SokolRenderTargetBackend*> targets;
+        targets.reserve(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i)
+        {
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                NotYetImplemented(kBackendName,
+                    "a RenderTargetCube face bound alongside other render targets in one MRT set");
+            targets.push_back(static_cast<SokolRenderTargetBackend*>(renderTargets[i].GetRenderTarget2D()));
+        }
+        BindRenderTargets2D(targets);
     }
 
     void SokolGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -2991,7 +3099,10 @@ namespace CNA::Internal::Backends::Sokol
         blendAlphaDst_ = alphaDstBlend;
         blendColorFunc_ = colorBlendFunc;
         blendAlphaFunc_ = alphaBlendFunc;
-        colorWriteChannels_ = writeState.colorWriteChannels[0];
+        colorWriteChannels_[0] = writeState.colorWriteChannels[0];
+        colorWriteChannels_[1] = writeState.colorWriteChannels[1];
+        colorWriteChannels_[2] = writeState.colorWriteChannels[2];
+        colorWriteChannels_[3] = writeState.colorWriteChannels[3];
 
         // XNA has no separate "blending on" switch: Opaque is expressed as One/Zero/Add, which is
         // exactly a disabled blend unit, so it is detected rather than requiring a second call.
@@ -3134,12 +3245,16 @@ namespace CNA::Internal::Backends::Sokol
         // Likewise: a SpriteBatch draw into a multisampled RenderTarget2D hits the identical
         // sample_count mismatch the 3D pipelines guard against (plan_sokol.md SOKOL-26).
         const int sampleCount = CurrentPassSampleCountEXT();
+        // plan_sokol.md SOKOL-26 MRT: a SpriteBatch draw into a bound multi-render-target set hits
+        // the identical color_count mismatch the 3D pipelines guard against -- see this pipeline's
+        // own desc.color_count/desc.colors[] loop below.
+        const int colorAttachmentCount = CurrentPassColorAttachmentCountEXT();
 
         const PipelineKey key{
             blendColorSrc_, blendAlphaSrc_, blendColorDst_, blendAlphaDst_,
-            blendColorFunc_, blendAlphaFunc_, colorWriteChannels_,
+            blendColorFunc_, blendAlphaFunc_, colorWriteChannels_[0],
             blendEnabled_, depthTestEnabled_, depthWriteEnabled_, depthFunc_, hasDepthAttachment,
-            sampleCount};
+            sampleCount, colorAttachmentCount};
 
         if (const auto found = pipelineCache_.find(key); found != pipelineCache_.end())
             return found->second;
@@ -3172,16 +3287,24 @@ namespace CNA::Internal::Backends::Sokol
             desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
             desc.depth.write_enabled = false;
         }
-        desc.color_count = 1;
-        desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
-        desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
-        desc.colors[0].blend.enabled = key.blendEnabled;
-        desc.colors[0].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
-        desc.colors[0].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
-        desc.colors[0].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
-        desc.colors[0].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
-        desc.colors[0].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
-        desc.colors[0].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        // plan_sokol.md SOKOL-26 MRT: sokol_gfx requires color_count to exactly match the active
+        // pass's real attachment count. sprite3d.glsl (like every stock fragment shader) has only
+        // ever declared output location 0, so slots 1..N-1 simply receive no write from this
+        // pipeline -- matching EasyGLGraphicsBackend's identical "the 2D pipeline writes colour
+        // attachment 0 only" MRT behaviour (see rendertarget_pass_boundary_test.cpp's own M2 check).
+        desc.color_count = key.colorAttachmentCount;
+        for (int slot = 0; slot < key.colorAttachmentCount; ++slot)
+        {
+            desc.colors[slot].pixel_format = SG_PIXELFORMAT_RGBA8;
+            desc.colors[slot].write_mask = ToColorMask(key.colorWriteChannels);
+            desc.colors[slot].blend.enabled = key.blendEnabled;
+            desc.colors[slot].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
+            desc.colors[slot].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
+            desc.colors[slot].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
+            desc.colors[slot].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
+            desc.colors[slot].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
+            desc.colors[slot].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        }
         desc.blend_color.r = blendFactor_[0];
         desc.blend_color.g = blendFactor_[1];
         desc.blend_color.b = blendFactor_[2];
@@ -3653,16 +3776,22 @@ namespace CNA::Internal::Backends::Sokol
         // depth.pixel_format is NONE, unlike compare/write_enabled).
         desc.depth.bias = key.depthBias;
         desc.depth.bias_slope_scale = key.slopeScaleDepthBias;
-        desc.color_count = 1;
-        desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
-        desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
-        desc.colors[0].blend.enabled = key.blendEnabled;
-        desc.colors[0].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
-        desc.colors[0].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
-        desc.colors[0].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
-        desc.colors[0].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
-        desc.colors[0].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
-        desc.colors[0].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        // plan_sokol.md SOKOL-26 MRT: see GetSpritePipeline's identical comment -- every stock 3D
+        // fragment shader (colored3d/textured3d/lit3d/dualtextured3d/skinned3d/envmap3d.glsl) has
+        // only ever declared output location 0, so slots 1..N-1 simply receive no write.
+        desc.color_count = key.colorAttachmentCount;
+        for (int slot = 0; slot < key.colorAttachmentCount; ++slot)
+        {
+            desc.colors[slot].pixel_format = SG_PIXELFORMAT_RGBA8;
+            desc.colors[slot].write_mask = ToColorMask(key.colorWriteChannels);
+            desc.colors[slot].blend.enabled = key.blendEnabled;
+            desc.colors[slot].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
+            desc.colors[slot].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
+            desc.colors[slot].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
+            desc.colors[slot].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
+            desc.colors[slot].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
+            desc.colors[slot].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        }
         desc.blend_color.r = blendFactor_[0];
         desc.blend_color.g = blendFactor_[1];
         desc.blend_color.b = blendFactor_[2];
@@ -3748,16 +3877,21 @@ namespace CNA::Internal::Backends::Sokol
         }
         desc.depth.bias = key.depthBias;
         desc.depth.bias_slope_scale = key.slopeScaleDepthBias;
-        desc.color_count = 1;
-        desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
-        desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
-        desc.colors[0].blend.enabled = key.blendEnabled;
-        desc.colors[0].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
-        desc.colors[0].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
-        desc.colors[0].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
-        desc.colors[0].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
-        desc.colors[0].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
-        desc.colors[0].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        // plan_sokol.md SOKOL-26 MRT: see GetSpritePipeline's identical comment -- instanced3d.glsl
+        // has only ever declared output location 0, so slots 1..N-1 simply receive no write.
+        desc.color_count = key.colorAttachmentCount;
+        for (int slot = 0; slot < key.colorAttachmentCount; ++slot)
+        {
+            desc.colors[slot].pixel_format = SG_PIXELFORMAT_RGBA8;
+            desc.colors[slot].write_mask = ToColorMask(key.colorWriteChannels);
+            desc.colors[slot].blend.enabled = key.blendEnabled;
+            desc.colors[slot].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
+            desc.colors[slot].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
+            desc.colors[slot].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
+            desc.colors[slot].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
+            desc.colors[slot].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
+            desc.colors[slot].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        }
         desc.blend_color.r = blendFactor_[0];
         desc.blend_color.g = blendFactor_[1];
         desc.blend_color.b = blendFactor_[2];
@@ -3845,7 +3979,7 @@ namespace CNA::Internal::Backends::Sokol
         key.alphaDstBlend = blendAlphaDst_;
         key.colorBlendFunc = blendColorFunc_;
         key.alphaBlendFunc = blendAlphaFunc_;
-        key.colorWriteChannels = colorWriteChannels_;
+        key.colorWriteChannels = colorWriteChannels_[0];
         key.blendEnabled = blendEnabled_;
         key.depthTestEnabled = depthTestEnabled_;
         key.depthWriteEnabled = depthWriteEnabled_;
@@ -3853,6 +3987,7 @@ namespace CNA::Internal::Backends::Sokol
         key.cullMode = cullMode_;
         key.hasDepthAttachment = CurrentPassHasDepthStencilAttachmentEXT();
         key.sampleCount = CurrentPassSampleCountEXT();
+        key.colorAttachmentCount = CurrentPassColorAttachmentCountEXT();
         key.stencilEnabled = stencilEnabled_;
         key.stencilFunc = stencilFunc_;
         key.stencilPass = stencilPass_;
@@ -4564,6 +4699,43 @@ namespace CNA::Internal::Backends::Sokol
         // not at BindTexture() call time.
         effectBackend->ApplyPendingTextureBindsEXT();
 
+        // Real depth-test/write state -- a genuine gap independent of MRT: this raw-GL draw
+        // bypasses sg_pipeline entirely, so DepthStencilState was never applied to anything for it,
+        // unlike every stock-effect/sprite pipeline (Get3DPipeline/GetSpritePipeline bake
+        // depthTestEnabled_/depthWriteEnabled_/depthFunc_ into desc.depth). Mirrors those pipelines'
+        // own semantics exactly: with no real depth-stencil attachment in the current pass, the test
+        // is disabled outright (matching XNA's no-op-if-no-depth-buffer behaviour); with one,
+        // GL_DEPTH_TEST stays enabled with compare=ALWAYS/write=false whenever depthTestEnabled_ is
+        // false, the same "functionally disabled but not GL_DEPTH_TEST-disabled" shape
+        // Get3DPipeline's own desc.depth.compare/write_enabled branch uses. Exercised end-to-end by
+        // easygl_mrt_test.cpp's own TestDepthOwnership (plan_sokol.md SOKOL-26).
+        if (CurrentPassHasDepthStencilAttachmentEXT())
+        {
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(depthTestEnabled_ ? ToGLCompareFunc(depthFunc_) : GL_ALWAYS);
+            glDepthMask((depthTestEnabled_ && depthWriteEnabled_) ? GL_TRUE : GL_FALSE);
+        }
+        else
+        {
+            glDisable(GL_DEPTH_TEST);
+            glDepthMask(GL_TRUE);
+        }
+
+        // ColorWriteChannels0..3 (plan_sokol.md SOKOL-26 MRT): this raw-GL draw bypasses
+        // sg_pipeline entirely, so BlendState's write masks are never baked into anything sokol_gfx
+        // applies for it -- glColorMaski per active attachment slot is the only way to honour them
+        // here. Reset to all-enabled afterward so a later sg_apply_pipeline-based draw (which only
+        // ever manages slot 0's write mask through its own pipeline state) never inherits a
+        // restricted mask on a slot beyond 0.
+        const int activeColorAttachments = 1 + static_cast<int>(mrtExtraTargets_.size());
+        for (int slot = 0; slot < activeColorAttachments; ++slot)
+        {
+            const int mask = colorWriteChannels_[slot];
+            glColorMaski(static_cast<GLuint>(slot),
+                        (mask & 1) != 0 ? GL_TRUE : GL_FALSE, (mask & 2) != 0 ? GL_TRUE : GL_FALSE,
+                        (mask & 4) != 0 ? GL_TRUE : GL_FALSE, (mask & 8) != 0 ? GL_TRUE : GL_FALSE);
+        }
+
         const GLenum topology = ToGLPrimitiveTopology(primitive);
         const int elementCount = ElementCountForPrimitives(primitive, primitiveCount);
         if (ib != nullptr)
@@ -4586,6 +4758,9 @@ namespace CNA::Internal::Backends::Sokol
         {
             glDrawArrays(topology, params.vertexStart, elementCount);
         }
+
+        for (int slot = 0; slot < activeColorAttachments; ++slot)
+            glColorMaski(static_cast<GLuint>(slot), GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
         glBindVertexArray(0);
         sg_reset_state_cache();
@@ -4682,7 +4857,7 @@ namespace CNA::Internal::Backends::Sokol
         key.alphaDstBlend = blendAlphaDst_;
         key.colorBlendFunc = blendColorFunc_;
         key.alphaBlendFunc = blendAlphaFunc_;
-        key.colorWriteChannels = colorWriteChannels_;
+        key.colorWriteChannels = colorWriteChannels_[0];
         key.blendEnabled = blendEnabled_;
         key.depthTestEnabled = depthTestEnabled_;
         key.depthWriteEnabled = depthWriteEnabled_;
@@ -4690,6 +4865,7 @@ namespace CNA::Internal::Backends::Sokol
         key.cullMode = cullMode_;
         key.hasDepthAttachment = CurrentPassHasDepthStencilAttachmentEXT();
         key.sampleCount = CurrentPassSampleCountEXT();
+        key.colorAttachmentCount = CurrentPassColorAttachmentCountEXT();
         key.stencilEnabled = stencilEnabled_;
         key.stencilFunc = stencilFunc_;
         key.stencilPass = stencilPass_;
@@ -4800,9 +4976,15 @@ namespace CNA::Internal::Backends::Sokol
             // deterministically fails, and IsValid() reports false, on any other CNA_SOKOL_API).
             case CNA::GraphicsCapability::CustomEffects:
                 return CNA_SOKOL_HAS_GL_READBACK != 0;
+            // Real as of SOKOL-26 MRT: 2-4 RenderTarget2D targets bound together via a real
+            // multi-attachment sg_pass, verified with a custom ShaderEffect writing distinct
+            // per-slot outputs (only a custom effect can usefully target a slot beyond 0 -- see
+            // DrawColored3D/DrawSpriteRunEXT's own MRT guards for why a stock-pipeline draw while
+            // MRT is bound is still refused).
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+                return true;
             // The remaining boundary. Each needs a phase that is not implemented yet -- see
             // plan_sokol.md; every one fails loudly rather than silently no-opping.
-            case CNA::GraphicsCapability::MultipleRenderTargets:
             case CNA::GraphicsCapability::WireFrame:
                 return false;
         }

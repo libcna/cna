@@ -239,4 +239,14 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
     cna_register_backend_test(NAME Sokol_ShaderEffect_3D COMMAND cna_test_sokol_shader_effect_3d
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-26: multiple render targets (MRT). REMED-GFX-016's own backend-agnostic
+    # oracle (no CNA_BACKEND_* conditionals, already registered for EasyGL), reused here rather than
+    # duplicated -- its four-output ESSL 3.00 ShaderEffect fragment shader exercises the same
+    # raw-GL custom-effect draw path SOKOL-28 already established, now against a real
+    # multi-attachment sg_pass.
+    cna_sokol_test(cna_test_sokol_mrt examples/easygl_mrt_test.cpp)
+    cna_register_backend_test(NAME Sokol_MRT COMMAND cna_test_sokol_mrt
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
