@@ -169,6 +169,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-35: RenderTargetCube mip-mapping -- mirrors CreateRenderTarget2D's own LLGL-26
+    # mip-mapped-render-target follow-up architecture (a real mip chain on the shared cube colour
+    # texture, each per-face attachment still binding only level 0, GenerateMips() called after
+    # every face's own render pass ends). No _OpenGL variant, same hasCubeTextures reason as
+    # Llgl_RenderTargetCube above.
+    cna_llgl_test(cna_test_llgl_mip_rendertargetcube examples/llgl_mip_rendertargetcube_test.cpp)
+    cna_register_backend_test(NAME Llgl_Mip_RenderTargetCube COMMAND cna_test_llgl_mip_rendertargetcube
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-26 MRT follow-up: RenderTarget2D-slots-only, SpriteBatch/custom-ShaderEffect-only first
     # cut -- see LlglMRTBinding's own doc comment in LlglGraphicsBackend.hpp for the scope
     # boundary. RenderTarget2D (unlike RenderTargetCube) works on both modules, so this gets an

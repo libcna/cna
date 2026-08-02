@@ -817,7 +817,8 @@ namespace CNA::Internal::Backends::Llgl
     LlglRenderTargetCubeBackend::LlglRenderTargetCubeBackend(
         LLGL::RenderSystem* renderSystem, LLGL::Texture* cubeTexture, LLGL::Texture* depthTexture,
         const std::array<LLGL::RenderTarget*, 6>& faceTargets, int size, bool hasRealDepthBuffer,
-        LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner, int multiSampleCount)
+        LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner, int multiSampleCount,
+        int mipLevels)
         : renderSystem_(renderSystem)
         , cubeTexture_(cubeTexture)
         , depthTexture_(depthTexture)
@@ -827,6 +828,7 @@ namespace CNA::Internal::Backends::Llgl
         , spriteProjectionBuffer_(spriteProjectionBuffer)
         , owner_(owner)
         , multiSampleCount_(multiSampleCount > 0 ? multiSampleCount : 1)
+        , mipLevels_(mipLevels > 0 ? mipLevels : 1)
     {
         if (renderSystem_ == nullptr || cubeTexture_ == nullptr || depthTexture_ == nullptr ||
             spriteProjectionBuffer_ == nullptr)
@@ -842,7 +844,7 @@ namespace CNA::Internal::Backends::Llgl
             }
             faceBindings_[static_cast<std::size_t>(face)] = LlglRenderTargetCubeFaceBinding(
                 faceTargets_[static_cast<std::size_t>(face)], size_, spriteProjectionBuffer_,
-                multiSampleCount_);
+                multiSampleCount_, mipLevels_ > 1 ? cubeTexture_ : nullptr);
         }
     }
 
@@ -886,8 +888,8 @@ namespace CNA::Internal::Backends::Llgl
     bool LlglRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
                                               void* data, int dataLength) const
     {
-        if (data == nullptr || w <= 0 || h <= 0 || face < 0 || face >= 6 || level != 0 ||
-            renderSystem_ == nullptr || cubeTexture_ == nullptr)
+        if (data == nullptr || w <= 0 || h <= 0 || face < 0 || face >= 6 ||
+            level < 0 || level >= mipLevels_ || renderSystem_ == nullptr || cubeTexture_ == nullptr)
         {
             return false;
         }
@@ -898,14 +900,16 @@ namespace CNA::Internal::Backends::Llgl
 
         // Same reasoning as LlglRenderTargetBackend::GetData: this face's content comes only from
         // draws recorded into the owning backend's frameCommands_, so those must reach the GPU
-        // before reading the colour attachment back.
+        // before reading the colour attachment back. For a mip-mapped cube (mipLevels_ > 1) this
+        // ALSO flushes the GenerateMips() call RecordAndSubmitFrame() queues right after level 0's
+        // own render pass -- level 1.. never has real content before that runs.
         if (owner_ != nullptr)
             owner_->FlushPendingFrameEXT();
 
         LLGL::TextureRegion region;
         region.subresource.baseArrayLayer = static_cast<std::uint32_t>(face);
         region.subresource.numArrayLayers = 1;
-        region.subresource.baseMipLevel = 0;
+        region.subresource.baseMipLevel = static_cast<std::uint32_t>(level);
         region.subresource.numMipLevels = 1;
         region.offset = {x, y, 0};
         region.extent = {static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
@@ -5148,7 +5152,7 @@ namespace CNA::Internal::Backends::Llgl
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> LlglGraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/,
+        int size, int depthFormat, bool /*preserveContents*/, bool mipMap,
         int multiSampleCount)
     {
         if (size <= 0)
@@ -5159,6 +5163,24 @@ namespace CNA::Internal::Backends::Llgl
         // LLGL::RenderTarget below (GetSamples()), not assumed from this request.
         const std::uint32_t requestedSamples =
             multiSampleCount > 1 ? static_cast<std::uint32_t>(multiSampleCount) : 1u;
+
+        // Same formula as CreateRenderTarget2D's own LLGL-26 mip-mapped-render-target follow-up
+        // (RenderTarget2D.cpp's own CalculateMipLevels, cube faces mirrored identically by
+        // RenderTargetCube.cpp's own CalculateMipLevels(size) since a cube face is always square)
+        // -- must match exactly, since the XNA-level RenderTargetCube.LevelCount the game sees is
+        // computed independently, client-side, and GetData(level) below rejects anything this
+        // backend did not actually allocate.
+        int mipLevels = 1;
+        if (mipMap)
+        {
+            int m = size;
+            mipLevels = 1;
+            while (m > 1)
+            {
+                m = std::max(1, m / 2);
+                ++mipLevels;
+            }
+        }
 
         LLGL::TextureDescriptor colorDesc;
         colorDesc.type = LLGL::TextureType::TextureCube;
@@ -5173,7 +5195,14 @@ namespace CNA::Internal::Backends::Llgl
         colorDesc.format = swapChain_->GetColorFormat();
         colorDesc.extent = {static_cast<std::uint32_t>(size), static_cast<std::uint32_t>(size), 1};
         colorDesc.arrayLayers = 6;
-        colorDesc.mipLevels = 1;
+        // A real mip chain when mipMap is requested (LLGL-35, mirrors CreateRenderTarget2D's own
+        // LLGL-26 mip-mapped render target follow-up): each face's own render-target ATTACHMENT
+        // below still only ever binds level 0 (AttachmentDescriptor's own mipLevel default), and
+        // RecordAndSubmitFrame()/CaptureBackbuffer() regenerate levels 1.. from it via
+        // LLGL::CommandBuffer::GenerateMips() after every render pass any face of this cube
+        // appears in -- see LlglRenderTargetCubeFaceBinding's own GetMipRegenColorTextureEXT()
+        // override for why this happens once PER FACE bound in a frame rather than once per cube.
+        colorDesc.mipLevels = static_cast<std::uint32_t>(mipLevels);
         colorDesc.miscFlags = 0;
 
         LLGL::Texture* cubeTexture = renderer_->CreateTexture(colorDesc);
@@ -5293,7 +5322,7 @@ namespace CNA::Internal::Backends::Llgl
 
         return std::make_unique<LlglRenderTargetCubeBackend>(
             renderer_.get(), cubeTexture, depthTexture, faceTargets, size, hasRealDepthBuffer,
-            spriteProjectionBuffer, this, appliedSamples);
+            spriteProjectionBuffer, this, appliedSamples, mipLevels);
     }
 
     void LlglGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)

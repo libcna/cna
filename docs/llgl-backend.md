@@ -293,8 +293,27 @@ WHICH texture to regenerate at replay time is captured onto each `FrameCommand` 
 looked up live from whatever is currently bound. `GetData(level)` is real for any level in
 `[0, LevelCount)` now (previously a hard `level != 0` refusal) -- an out-of-range level throws
 `System::NotSupportedException` through the shared `Texture2D::GetData` layer, same as any other
-backend readback failure. MRT binds and `RenderTargetCube` faces do not support mip-mapping yet
-(`LlglBoundRenderTarget::GetMipRegenColorTextureEXT()` defaults to null for both).
+backend readback failure. MRT binds do not support mip-mapping yet
+(`LlglBoundRenderTarget::GetMipRegenColorTextureEXT()` defaults to null); `RenderTargetCube` faces
+do now, see below.
+
+**`RenderTargetCube` `mipMap` is real too (LLGL-35).** The shared cube colour texture is allocated
+with a full mip chain when `mipMap=true` (`RenderTargetCube.LevelCount`'s own
+`CalculateMipLevels(size)` formula, computed identically here), and each of the 6 per-face
+attachments still only ever binds level 0, exactly like `CreateRenderTarget2D` above. One real LLGL
+API constraint shapes how regeneration works here: `LLGL::CommandBuffer::GenerateMips(Texture&,
+const TextureSubresource&)`'s own `baseArrayLayer` field is documented as ignored for a plain,
+non-array `LLGL::TextureType::TextureCube` (only `TextureCubeArray` honours it), so there is no
+cheaper, single-face-only regeneration call available -- every `GenerateMips()` call on the cube's
+colour texture regenerates every face's own mip chain from that face's own current level-0 content,
+regardless of which face's render pass just ended. `LlglRenderTargetCubeFaceBinding::
+GetMipRegenColorTextureEXT()` (LLGL-35) therefore returns the SAME shared texture pointer for all 6
+faces, so drawing into multiple faces in one frame calls the whole-cube regeneration once per face
+bound -- redundant work (`Llgl_Mip_RenderTargetCube`'s own single-face test does not exercise this
+multi-face cost directly) but not incorrect, since each call is a faithful, idempotent
+regeneration of every face's own content. `RenderTargetCube::GetData(face, level, ...)` is real for
+any level in `[0, LevelCount)` now (previously a hard `level != 0` refusal), matching
+`RenderTarget2D::GetData(level)`'s own convention exactly.
 
 Two implementation choices are worth knowing if you are debugging a render-target frame:
 
@@ -652,6 +671,13 @@ unblended edge with `MultiSampleCount=0`, and (module-dependent, like `Llgl_Msaa
 genuinely blended edge once MSAA is requested and honoured -- on this project's own test
 environment it passes all 7 checks on the Vulkan module, the same module every other
 `RenderTargetCube` test here already depends on; no `_OpenGL` twin, same `hasCubeTextures` reason.
+`Llgl_Mip_RenderTargetCube` (LLGL-35) reuses `Llgl_RenderTarget2D_Mip`'s own asymmetric-split
+technique against one cube face: a 7:1 red/blue split rendered into a `mipMap=true`
+`RenderTargetCube`, read back directly at level 0 (crisp), an intermediate level that is an EXACT
+1:1 downsample of the source pattern, and the coarsest 1x1 level (the whole image's true weighted
+average) -- proving the downsample cascade computed the right content, not just the right
+dimensions, and that a non-mipmapped cube (and an out-of-range level on a mipmapped one) both
+correctly reject `GetData()`; no `_OpenGL` twin, same `hasCubeTextures` reason.
 `Llgl_MRT` covers a real 2-output custom `ShaderEffect` writing two DIFFERENT values to two
 simultaneously bound `RenderTarget2D` slots from the SAME draw call, a 3D colour-only draw throwing
 while the MRT set is bound, back-buffer isolation, that an ordinary single-target draw still works

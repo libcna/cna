@@ -563,10 +563,17 @@ namespace CNA::Internal::Backends::Llgl
     {
     public:
         LlglRenderTargetCubeFaceBinding() = default;
+        /**
+         * @param mipRegenColorTexture The cube's own SHARED colour texture when it has a real mip
+         *        chain (`mipLevels_ > 1` on the owning `LlglRenderTargetCubeBackend`), or null
+         *        otherwise -- see this class's own `GetMipRegenColorTextureEXT()` override (LLGL-35).
+         */
         LlglRenderTargetCubeFaceBinding(LLGL::RenderTarget* renderTarget, int size,
-                                        LLGL::Buffer* spriteProjectionBuffer, int sampleCount = 1)
+                                        LLGL::Buffer* spriteProjectionBuffer, int sampleCount = 1,
+                                        LLGL::Texture* mipRegenColorTexture = nullptr)
             : renderTarget_(renderTarget), size_(size), spriteProjectionBuffer_(spriteProjectionBuffer)
             , sampleCount_(sampleCount > 0 ? sampleCount : 1)
+            , mipRegenColorTexture_(mipRegenColorTexture)
         {
         }
 
@@ -577,12 +584,29 @@ namespace CNA::Internal::Backends::Llgl
         /** @brief Returns this face's own real, device-clamped sample count (LLGL-34; 1 = no MSAA)
          *  -- see `LlglBoundRenderTarget::GetSampleCount()`'s own doc comment. */
         [[nodiscard]] int GetSampleCount() const override { return sampleCount_; }
+        /** @brief Returns the cube's own SHARED colour texture when it has a real mip chain, or
+         *  null otherwise (LLGL-35). Unlike `LlglRenderTargetBackend`'s own override, this is NOT
+         *  unique per binding -- every one of the 6 `LlglRenderTargetCubeFaceBinding`s sharing one
+         *  cube returns the SAME texture pointer, since `GenerateMips()` on
+         *  `LLGL::TextureType::TextureCube` always regenerates every face's own mip chain at once
+         *  (a plain, non-array `TextureCube`'s `TextureSubresource::baseArrayLayer` is documented
+         *  as ignored, unlike `TextureCubeArray` -- confirmed by reading LLGL's own
+         *  TextureFlags.h -- so there is no cheaper, single-face-only regeneration call available).
+         *  Whichever face's render pass ends first in a given frame regenerates the whole cube's
+         *  mip chain from every face's own CURRENT level-0 content; every other face bound in the
+         *  same frame repeats the same whole-cube call again, which is redundant but not incorrect
+         *  -- see `LlglGraphicsBackend::CreateRenderTargetCube()`'s own doc comment. */
+        [[nodiscard]] LLGL::Texture* GetMipRegenColorTextureEXT() const override
+        {
+            return mipRegenColorTexture_;
+        }
 
     private:
         LLGL::RenderTarget* renderTarget_ = nullptr;
         int                 size_         = 0;
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
         int                 sampleCount_  = 1;
+        LLGL::Texture*      mipRegenColorTexture_ = nullptr;
     };
 
     /**
@@ -627,13 +651,20 @@ namespace CNA::Internal::Backends::Llgl
          *        `LLGL::RenderTarget` was actually created with (`faceTargets[0]->GetSamples()`,
          *        since all 6 share one request) -- matches `LlglRenderTargetBackend`'s own
          *        constructor parameter (LLGL-34). 1 (not 0) means no MSAA.
+         * @param mipLevels The number of mip levels @p cubeTexture was actually created with
+         *        (matches `RenderTargetCube.LevelCount`'s own `CalculateMipLevels(size)` formula,
+         *        computed identically on the XNA side and here -- see
+         *        `LlglGraphicsBackend::CreateRenderTargetCube()`). 1 means no real mip chain; a
+         *        value greater than 1 makes every `LlglRenderTargetCubeFaceBinding`'s own
+         *        `GetMipRegenColorTextureEXT()` return @p cubeTexture, matching
+         *        `LlglRenderTargetBackend`'s own constructor parameter (LLGL-35).
          */
         LlglRenderTargetCubeBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* cubeTexture,
                                     LLGL::Texture* depthTexture,
                                     const std::array<LLGL::RenderTarget*, 6>& faceTargets,
                                     int size, bool hasRealDepthBuffer,
                                     LLGL::Buffer* spriteProjectionBuffer, LlglGraphicsBackend* owner,
-                                    int multiSampleCount = 1);
+                                    int multiSampleCount = 1, int mipLevels = 1);
 
         /** @brief Releases the six render targets and the shared cube/depth textures and buffer. */
         ~LlglRenderTargetCubeBackend() override;
@@ -668,8 +699,11 @@ namespace CNA::Internal::Backends::Llgl
          * @brief Reads pixels back from one face of the colour attachment.
          *
          * @param face       Which face to read (0=+X..5=-Z).
-         * @param level      Mip level to read; only level 0 exists on a render target today.
-         * @param x          Left edge of the region in pixels.
+         * @param level      Mip level to read; @p x/@p y/@p w/@p h are already in THAT level's own
+         *                   pixel space (the caller, `TextureCube::GetData()`, scales them down
+         *                   from level 0 before calling this). Returns false for a level outside
+         *                   `[0, mipLevels_)` (LLGL-35; previously any non-zero level).
+         * @param x          Left edge of the region in pixels, at @p level.
          * @param y          Top edge of the region in pixels.
          * @param w          Width of the region in pixels.
          * @param h          Height of the region in pixels.
@@ -700,6 +734,7 @@ namespace CNA::Internal::Backends::Llgl
         LLGL::Buffer*       spriteProjectionBuffer_ = nullptr;
         LlglGraphicsBackend* owner_              = nullptr;
         int                 multiSampleCount_   = 1;
+        int                 mipLevels_          = 1;
     };
 
     /**
