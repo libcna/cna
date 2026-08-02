@@ -3,20 +3,24 @@
 //
 // Verifies that GraphicsDevice throws the correct exception types for:
 //   1. SetVertexBuffers with more than 16 bindings (ArgumentOutOfRangeException)
-//   2. GetBackBufferData with null data pointer (std::invalid_argument)
-//   3. Present() while a render target is bound (InvalidOperationException)
+//   2. SetVertexBuffers with null entries (ArgumentNullException)
+//   3. GetBackBufferData with null data pointer (std::invalid_argument)
+//   4. Present() while a render target is bound (InvalidOperationException)
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -50,18 +54,46 @@ protected:
             check(threw, "SetVertexBuffers(17) throws ArgumentOutOfRangeException");
         }
 
-        // 2. SetVertexBuffers with 16 bindings must NOT throw
+        // 2. The count limit is checked before entry validity: 16 default/null bindings must
+        // reach the shared null-entry guard rather than being accepted or misreported as >16.
         {
-            std::vector<VertexBufferBinding> maxOk(16);
+            bool threwNull = false;
+            try { device.SetVertexBuffers(std::vector<VertexBufferBinding>(16)); }
+            catch (const System::ArgumentNullException&) { threwNull = true; }
+            catch (...) {}
+            check(threwNull, "SetVertexBuffers(16 null entries) throws ArgumentNullException");
+        }
+
+        // 3. Sixteen LIVE bindings are valid on a 3D backend. Raster-only Skia instead proves
+        // its already-declared resource boundary; the count/null validation above remains shared.
+#if defined(CNA_BACKEND_SKIA)
+        {
+            bool refused = false;
+            try { VertexBuffer value(device, 1); }
+            catch (const std::runtime_error& error)
+            {
+                refused = std::string(error.what()) ==
+                    "Skia (raster 2D) does not support 3D: CreateVertexBuffer";
+            }
+            catch (...) {}
+            check(refused, "Skia refuses the live-binding resource through its stable 3D boundary");
+            device.SetVertexBuffers({});
+        }
+#else
+        {
+            VertexBuffer buffer(device, 1);
+            std::vector<VertexBufferBinding> maxOk;
+            maxOk.reserve(16);
+            for (int i = 0; i < 16; ++i) maxOk.emplace_back(&buffer);
             bool threw = false;
             try { device.SetVertexBuffers(maxOk); }
             catch (...) { threw = true; }
-            check(!threw, "SetVertexBuffers(16) does not throw");
-            // Restore to empty
+            check(!threw, "SetVertexBuffers(16 live bindings) does not throw");
             device.SetVertexBuffers({});
         }
+#endif
 
-        // 3. GetBackBufferData with null data must throw std::invalid_argument
+        // 4. GetBackBufferData with null data must throw std::invalid_argument
         {
             bool threw = false;
             try { device.GetBackBufferData(static_cast<Color*>(nullptr), 0); }
@@ -70,7 +102,7 @@ protected:
             check(threw, "GetBackBufferData(nullptr) throws invalid_argument");
         }
 
-        // 4. Present while a render target is bound must throw InvalidOperationException
+        // 5. Present while a render target is bound must throw InvalidOperationException
         {
             auto rt = std::make_unique<RenderTarget2D>(device, 64, 64);
             device.SetRenderTarget(rt.get());

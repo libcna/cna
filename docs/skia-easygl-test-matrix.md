@@ -35,7 +35,7 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_RenderTarget2D_Golden` | `ctest` | `2d-direct` | Shared zero-tolerance target golden already runs on Skia; SKIA-75. |
 | `ctest:EasyGL_RenderTarget2D_MipComplete` | `ctest` | `2d-direct` | Direct 2D feature with explicit raster mip refusal; SKIA-70. |
 | `ctest:EasyGL_RenderTarget_ViewportScissorReset` | `ctest` | `2d-direct` | Existing target-local viewport/scissor coverage; SKIA-41–42. |
-| `ctest:EasyGL_SpriteFont_Properties` | `ctest` | `2d-direct` | Common atlas metrics; Skia glyph fixtures cover rendering; SKIA-38. |
+| `ctest:EasyGL_SpriteFont_Properties` | `ctest` | `2d-direct` | Exact source runs as `Skia_Contract_SpriteFontProperties`; SKIA-38, SKIA-109. |
 | `ctest:EasyGL_SpriteEffects_Flip` | `ctest` | `2d-direct` | Existing flip coverage; SKIA-34. |
 | `ctest:EasyGL_SpriteBatch_RotationAroundOrigin` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_SpriteBatch_Rotation`; SKIA-34, SKIA-106. |
 | `ctest:EasyGL_SpriteBatch_ScaleOverloads` | `ctest` | `2d-direct` | Existing overload and scale coverage; SKIA-32, SKIA-39. |
@@ -43,24 +43,24 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_SpriteBatch_SourceRectangleCropping` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_SpriteBatch_SourceRect`; SKIA-32, SKIA-37, SKIA-106. |
 | `ctest:EasyGL_SpriteBatch_LayerDepthOrder` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_SpriteBatch_LayerDepth`; SKIA-36, SKIA-106. |
 | `ctest:EasyGL_TransformMatrix_Translation` | `ctest` | `2d-direct` | Existing affine transform coverage; SKIA-35. |
-| `ctest:EasyGL_Texture2D_PartialRect_RoundTrip` | `ctest` | `2d-direct` | Existing exact transfer-range coverage; SKIA-24. |
+| `ctest:EasyGL_Texture2D_PartialRect_RoundTrip` | `ctest` | `2d-direct` | Exact source runs as `Skia_Contract_Texture2D_PartialRect`; SKIA-24, SKIA-109. |
 | `ctest:EasyGL_Texture2D_Mip_RoundTrip` | `ctest` | `2d-direct` | Direct 2D feature with explicit raster mip refusal; SKIA-27. |
-| `ctest:EasyGL_SurfaceFormat_Throws` | `ctest` | `2d-direct` | Existing raster format-rejection matrix; SKIA-25. |
+| `ctest:EasyGL_SurfaceFormat_Throws` | `ctest` | `2d-direct` | Exact source runs as `Skia_Contract_SurfaceFormat`; SKIA-25, SKIA-109. |
 | `ctest:EasyGL_RenderTargetUsage` | `ctest` | `2d-direct` | Preserve/discard is directly testable; SKIA-64. |
 | `ctest:EasyGL_RT_Roundtrip` | `ctest` | `2d-direct` | Existing bind/read/sample round trip; SKIA-61–63. |
-| `ctest:EasyGL_DeviceValidation` | `ctest` | `2d-direct` | Reuse common argument validation before native work. |
+| `ctest:EasyGL_DeviceValidation` | `ctest` | `3d` | Shared >16/null-entry validation runs as `Skia_Contract_DeviceValidation`; its mandatory 16-live-binding leg requires a VertexBuffer and therefore verifies SKIA-102's stable 3D refusal instead. |
 | `ctest:EasyGL_ClearOverloads` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_ClearOverloads`; absent attachments use bounded policy; SKIA-13, SKIA-67, SKIA-106. |
 | `ctest:EasyGL_ViewportState` | `ctest` | `2d-direct` | Existing Skia viewport state coverage; SKIA-42. |
 | `ctest:EasyGL_Scissor` | `ctest` | `2d-direct` | Existing Skia clip coverage; SKIA-41. |
 | `ctest:EasyGL_Viewport_Subregion` | `ctest` | `2d-direct` | Direct active-canvas viewport placement; SKIA-42. |
-| `ctest:EasyGL_DisposedResource` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_DisposedResource`; SKIA-29, SKIA-106. |
-| `ctest:EasyGL_DoubleDispose` | `ctest` | `2d-direct` | Shared idempotent disposal already runs on Skia; SKIA-29. |
-| `ctest:EasyGL_BoundResourceDispose` | `ctest` | `2d-direct` | Checked target/batch lifetime route; SKIA-69. |
-| `ctest:EasyGL_MoveSemantics` | `ctest` | `2d-direct` | Shared wrapper ownership contract; SKIA-29. |
-| `ctest:EasyGL_ResourceEvents` | `ctest` | `2d-direct` | Common resource events apply to Skia wrappers. |
-| `ctest:EasyGL_DeviceDisposeOrder` | `ctest` | `2d-direct` | Existing backend-before-resource coverage; SKIA-12, SKIA-18. |
-| `ctest:EasyGL_ResourceLeak` | `ctest` | `2d-direct` | Raster resources are measurable under ASan/LSan; SKIA-29, SKIA-74. |
-| `ctest:EasyGL_ViewportResetAfterResize` | `ctest` | `2d-direct` | Existing resize/viewport tests; SKIA-8, SKIA-13. |
+| `ctest:EasyGL_DisposedResource` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_DisposedResource`; compared directly in SKIA-109; SKIA-29, SKIA-106. |
+| `ctest:EasyGL_DoubleDispose` | `ctest` | `3d` | Mandatory VertexBuffer/IndexBuffer construction is rejected by SKIA-102; Skia's separate 2D/state double-disposal fixture remains live under SKIA-29. |
+| `ctest:EasyGL_BoundResourceDispose` | `ctest` | `3d` | Mandatory VertexBuffer/IndexBuffer construction reaches Skia's intentional SKIA-102 3D refusal before later target assertions; 2D target lifetime remains covered by SKIA-69/85. |
+| `ctest:EasyGL_MoveSemantics` | `ctest` | `3d` | Mandatory VertexBuffer/IndexBuffer move legs require resources intentionally rejected by SKIA-102; 2D ownership remains covered by SKIA-12/18/29. |
+| `ctest:EasyGL_ResourceEvents` | `ctest` | `3d` | Mandatory VertexBuffer/IndexBuffer event legs require resources intentionally rejected by SKIA-102; 2D disposal/event behavior remains covered by existing Skia lifecycle tests. |
+| `ctest:EasyGL_DeviceDisposeOrder` | `ctest` | `3d` | Mandatory VertexBuffer/IndexBuffer construction is outside the 2D-only ADR; backend-before-resource ownership is independently covered by SKIA-12/18. |
+| `ctest:EasyGL_ResourceLeak` | `ctest` | `3d` | Its mandatory 80-resource matrix includes VertexBuffer/IndexBuffer creation; SKIA-102 rejects those while SKIA-29/74 cover raster resource release. |
+| `ctest:EasyGL_ViewportResetAfterResize` | `ctest` | `2d-direct` | Exact source runs as `Skia_Contract_ViewportResetAfterResize`; SKIA-8, SKIA-13, SKIA-109. |
 | `ctest:EasyGL_NpotTexture` | `ctest` | `2d-direct` | Shared NPOT fixture already runs on Skia; SKIA-26. |
 | `ctest:EasyGL_TextureAddressMode` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_TextureAddressMode`; SKIA-44–46, SKIA-106. |
 | `ctest:EasyGL_TextureAddressMode_Mirror` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_TextureAddressMode_Mirror`; SKIA-46, SKIA-106. |
@@ -83,11 +83,11 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_SpriteBatch_ViewportSwitch` | `ctest` | `2d-direct` | Direct target-local viewport reset; SKIA-42, SKIA-61. |
 | `ctest:EasyGL_InvalidMipLevel` | `ctest` | `2d-direct` | Explicit invalid/raster-mip refusal; SKIA-27, SKIA-70. |
 | `ctest:EasyGL_BackbufferReadbackDimension` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_BackbufferReadbackDimension`, including immediate grow/shrink readback; SKIA-7, SKIA-62, SKIA-106. |
-| `ctest:EasyGL_BackbufferFirstRead` | `ctest` | `2d-direct` | Deterministic initialized raster backbuffer; SKIA-13. |
-| `ctest:EasyGL_BackbufferReject` | `ctest` | `2d-direct` | Existing bounds/unchanged-destination contract; SKIA-21, SKIA-62. |
-| `ctest:EasyGL_Texture2D_GetDataContract` | `ctest` | `2d-direct` | Shared fixture already runs on Skia; SKIA-23. |
-| `ctest:EasyGL_Texture2D_GetDataTransferRange` | `ctest` | `2d-direct` | Shared fixture already runs on Skia; SKIA-24. |
-| `ctest:EasyGL_RenderTarget_PassBoundary` | `ctest` | `2d-direct` | Bind/unbind is immediate but preserves the same public boundary; SKIA-61. |
+| `ctest:EasyGL_BackbufferFirstRead` | `ctest` | `2d-direct` | Exact fork-isolated source runs as `Skia_Contract_BackbufferFirstRead`; SKIA-13, SKIA-109. |
+| `ctest:EasyGL_BackbufferReject` | `ctest` | `2d-direct` | Exact validation/destination-integrity source runs as `Skia_Contract_BackbufferReject`; SKIA-21, SKIA-62, SKIA-109. |
+| `ctest:EasyGL_Texture2D_GetDataContract` | `ctest` | `2d-direct` | Shared fixture runs on both backends and is compared directly in SKIA-109; SKIA-23. |
+| `ctest:EasyGL_Texture2D_GetDataTransferRange` | `ctest` | `2d-direct` | Shared fixture runs on both backends and is compared directly in SKIA-109; SKIA-24. |
+| `ctest:EasyGL_RenderTarget_PassBoundary` | `ctest` | `2d-direct` | Exact source runs as `Skia_Contract_RenderTargetPassBoundary`; all supported 2D/cube legs match, while real-MSAA legs retain the explicit Skia refusal; SKIA-61, SKIA-109. |
 
 ## 2D-emulation registrations
 
@@ -120,8 +120,8 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_Texture3D_Mip_RoundTrip` | `ctest` | `2d-emulation` | Bounded volume mip fixture passes on Skia; SKIA-82–84. |
 | `ctest:EasyGL_Texture3D_PartialBox_RoundTrip` | `ctest` | `2d-emulation` | Exact CPU sub-volume transfer fixture passes on Skia; SKIA-82–84. |
 | `ctest:EasyGL_Texture3D_PartialBox_Readback` | `ctest` | `2d-emulation` | Exact front-to-back CPU box readback fixture passes on Skia; SKIA-82–84. |
-| `ctest:EasyGL_CubeVolume_GetDataContract` | `ctest` | `2d-emulation` | Transfer-only exhaustive cube/volume readback fixture passes 56/56 on bounded CPU storage; SKIA-80–84. |
-| `ctest:EasyGL_CubeVolume_SetDataContract` | `ctest` | `2d-emulation` | Transfer-only exhaustive cube/volume upload fixture passes 56/56 on bounded CPU storage; SKIA-80–84. |
+| `ctest:EasyGL_CubeVolume_GetDataContract` | `ctest` | `2d-emulation` | Transfer-only exhaustive cube/volume readback fixture passes 56/56 on both backends and is compared in SKIA-109; SKIA-80–84. |
+| `ctest:EasyGL_CubeVolume_SetDataContract` | `ctest` | `2d-emulation` | Transfer-only exhaustive cube/volume upload fixture passes 56/56 on both backends and is compared in SKIA-109; SKIA-80–84. |
 | `ctest:EasyGL_RenderTargetCube_PluralBinding` | `ctest` | `2d-emulation` | Shared six-face singular/plural binding and explicit MRT-refusal fixture passes through CPU raster readback; SKIA-85–86. |
 | `ctest:EasyGL_RenderTargetCube_Properties` | `ctest` | `2d-emulation` | Shared public property fixture passes with real mips and truthful zero-sample clamping; SKIA-85–86. |
 | `ctest:EasyGL_RenderTargetCube_GetDataContract` | `ctest` | `2d-emulation` | Shared asymmetric rendered/uploaded face, mip, depth-interaction, lifetime, and readback contract passes; SKIA-85–86. |

@@ -85,6 +85,9 @@ namespace
 #elif defined(CNA_BACKEND_SDL_RENDERER)
     constexpr const char* kBackendName = "SDL_RENDERER";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_BACKEND_SKIA)
+    constexpr const char* kBackendName = "SKIA";
+    constexpr bool kRasterizes = true;
 #elif defined(CNA_BACKEND_D3D9)
     constexpr const char* kBackendName = "D3D9";
     constexpr bool kRasterizes = true;

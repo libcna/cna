@@ -625,5 +625,17 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     `Skia_ColorWrite_Policy`. The full Debug suite passes 124/124 in 17.51 seconds (16 Raster,
     105 Display, three Audit); focused Release and ASan checks pass. See
     `docs/skia-xna-oracle.md`.
+82. SKIA-109 compares 13 backend-independent public API contracts by compiling the same fixture
+    source for Skia and EasyGL. Eight new Skia registrations cover device validation, partial
+    `Texture2D` transfers, surface formats, SpriteFont properties, viewport resize reset, first
+    backbuffer read, raster backbuffer acceptance, and 2D/cube render-target pass boundaries; five
+    existing same-source pairs cover disposal and exhaustive 2D/cube/volume transfer contracts.
+    The inventory found and fixed a stale EasyGL validation assertion that incorrectly expected 16
+    null vertex bindings to succeed. Six mixed lifecycle fixtures are now correctly classified 3D
+    because their mandatory buffer construction reaches the accepted SKIA-102 refusal; no product
+    API was widened or conditionally skipped. All 13 pairs pass in Debug on both backends, the eight
+    new Skia registrations pass in Release and ASan (`detect_leaks=0`), and the full Debug Skia
+    suite passes 132/132 in 21.66 seconds (16 Raster, 113 Display, three Audit). See
+    `docs/skia-api-contract-comparison.md`.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

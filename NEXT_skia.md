@@ -23,7 +23,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 124 Skia CTests: 16 raster-only, 105 display-required, and three
+- `docs/skia-backend.md` records 132 Skia CTests: 16 raster-only, 113 display-required, and three
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -953,11 +953,34 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   and corrected tint tests pass in Release and ASan (`detect_leaks=0`). Debug, Release, ASan, and
   EasyGL display caches are restored to `:0`; `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-109
+
+- Registered eight more backend-independent EasyGL fixture sources under Skia: device validation,
+  partial `Texture2D` transfers, unsupported surface formats, SpriteFont properties, viewport reset
+  after resize, first backbuffer read, raster backbuffer acceptance, and 2D/cube render-target pass
+  boundaries. Together with five existing same-source pairs, 13 public contract fixtures now pass
+  under both Skia and EasyGL; `docs/skia-api-contract-comparison.md` records each comparison.
+- The inventory found a stale shared validation assertion: a vector of 16 default/null
+  `VertexBufferBinding` objects had been expected to succeed even though the public API correctly
+  rejects its first null entry. The fixture now distinguishes >16, 16 null, and 16 live entries;
+  EasyGL accepts the live bindings while Skia verifies the stable SKIA-102 buffer refusal.
+- Six mixed lifecycle fixtures were corrected from `2d-direct` to `3d` in the test matrix because
+  each inherently creates live vertex/index buffers. They were not weakened with Skia-only skips;
+  Skia's own 2D disposal, ownership, target-lifetime, budget, and 3D-refusal tests retain the
+  applicable coverage. The render-target pass fixture declares and skips only its real-MSAA legs,
+  matching Skia's separately tested refusal of sample counts above one.
+- The eight new Skia registrations pass 8/8 in Debug, Release, and ASan (`detect_leaks=0`); their
+  EasyGL counterparts pass 8/8, and the five existing pairs pass 5/5 on both backends. The complete
+  Debug Skia suite passes 132/132 under Xvfb in 21.66 seconds with `--parallel 8` (16 Raster,
+  113 Display, three Audit). The 347-entry matrix, 248-row ledger, and 3D-refusal audit pass.
+  Debug, Release, ASan, and EasyGL display caches are restored to `:0`; `NEXT.md` was not read or
+  changed.
+
 ## Next candidates
 
-1. SKIA-109: register and compare backend-independent public API contract fixtures under Skia.
-2. SKIA-110: run the broader raster/display sanitizer and repeated recreation gate, retaining the
+1. SKIA-110: run the broader raster/display sanitizer and repeated recreation gate, retaining the
    documented display-stack leak boundary rather than masking new CNA ownership failures.
+2. SKIA-111: synchronize public backend/capability documentation with verified behavior only.
 3. Reassess earlier open architecture rows (especially SKIA-5/6/76/77) against the accepted
    raster-only ADR before doing the final release-gate tasks.
 

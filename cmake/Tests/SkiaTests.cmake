@@ -120,6 +120,62 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "Skia;Display")
 
+    # SKIA-109: compile the exact EasyGL sources for backend-independent API contracts. These
+    # fixtures assert shared validation precedence, transfer windows, first-read completion,
+    # SpriteFont validation, resize state, and immediate target pass boundaries without invoking
+    # a 3D draw. Mixed VertexBuffer/IndexBuffer lifecycle fixtures remain at the SKIA-102 boundary.
+    cna_skia_test(cna_test_skia_contract_device_validation
+                  examples/easygl_device_validation_test.cpp)
+    cna_register_skia_display_test(Skia_Contract_DeviceValidation
+                                   cna_test_skia_contract_device_validation)
+
+    cna_skia_test(cna_test_skia_contract_texture2d_partial_rect
+                  examples/easygl_texture2d_partial_rect_test.cpp)
+    cna_register_skia_display_test(Skia_Contract_Texture2D_PartialRect
+                                   cna_test_skia_contract_texture2d_partial_rect)
+
+    cna_skia_test(cna_test_skia_contract_surface_format
+                  examples/easygl_surface_format_throws_test.cpp)
+    cna_register_skia_display_test(Skia_Contract_SurfaceFormat
+                                   cna_test_skia_contract_surface_format)
+
+    cna_skia_test(cna_test_skia_contract_spritefont_properties
+                  examples/sprite_font_test.cpp)
+    cna_register_skia_display_test(Skia_Contract_SpriteFontProperties
+                                   cna_test_skia_contract_spritefont_properties)
+
+    cna_skia_test(cna_test_skia_contract_viewport_resize
+                  examples/viewport_reset_after_resize_test.cpp)
+    cna_register_skia_display_test(Skia_Contract_ViewportResetAfterResize
+                                   cna_test_skia_contract_viewport_resize)
+
+    cna_skia_test(cna_test_skia_contract_backbuffer_first_read
+                  examples/backbuffer_first_read_test.cpp)
+    cna_register_backend_test(
+        NAME Skia_Contract_BackbufferFirstRead
+        COMMAND cna_test_skia_contract_backbuffer_first_read
+        TIMEOUT 300
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "Skia;Display")
+
+    cna_skia_test(cna_test_skia_contract_backbuffer_reject
+                  examples/backbuffer_headless_reject_test.cpp)
+    cna_register_backend_test(
+        NAME Skia_Contract_BackbufferReject
+        COMMAND cna_test_skia_contract_backbuffer_reject
+        TIMEOUT 300
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "Skia;Display")
+
+    cna_skia_test(cna_test_skia_contract_rendertarget_pass_boundary
+                  examples/rendertarget_pass_boundary_test.cpp)
+    cna_register_backend_test(
+        NAME Skia_Contract_RenderTargetPassBoundary
+        COMMAND cna_test_skia_contract_rendertarget_pass_boundary
+        TIMEOUT 90
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "Skia;Display")
+
     cna_skia_test(cna_test_skia_present_interval examples/skia_present_interval_test.cpp)
     target_include_directories(cna_test_skia_present_interval PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_display_test(Skia_PresentInterval cna_test_skia_present_interval)
