@@ -199,6 +199,27 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-33 investigation: examples/gfx077_colorwritechannels_3d_test.cpp (shared, cross-backend,
+    # already registered on SdlGpu/WebGpu) was tried here too, and its very first check found a
+    # real, pre-existing bug -- AcquirePrimitivePipeline's own 3D pipeline cache key truncates
+    # MakeBlendPipelineKey's result to its low 16 bits, silently discarding
+    # BlendState.ColorWriteChannels (slot 0) and all four blend factors for 3D (BasicEffect +
+    # DrawPrimitives) draws. Every attempted fix for that truncation destabilized an unrelated,
+    # previously-passing test (Llgl_BasicEffect's own alpha-blend check) in a way not understood
+    # (see AcquirePrimitivePipeline's own doc comment in LlglGraphicsBackend.cpp). Deliberately NOT
+    # registered as a CTest while unfixed -- see known_bugs.md for the open item -- rather than
+    # shipping a known-failing test or an unexplained, empirically-fragile fix.
+
+    # LLGL-33: BlendState.MultiSampleMask -- a real per-sample coverage bitmask on a genuinely
+    # multisampled RenderTarget2D. Module-dependent (see the test's own header comment): the
+    # Vulkan module applies VkPipelineMultisampleStateCreateInfo::pSampleMask unconditionally; the
+    # OpenGL module's own glColorMaski-adjacent SetSampleMask call is `#if 0`'d out entirely in
+    # vendored LLGL, a permanent limitation on that module confirmed by reading its source.
+    cna_llgl_test(cna_test_llgl_multisamplemask examples/llgl_multisamplemask_test.cpp)
+    cna_register_backend_test(NAME Llgl_MultiSampleMask COMMAND cna_test_llgl_multisamplemask
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-17: the same two binaries, pinned to the OpenGL module instead of the default
     # (Vulkan-first) preference. Running only the default preference is what let the OpenGL module
     # clear correctly and draw nothing for as long as it did -- a module nothing exercises is a
@@ -273,6 +294,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_backend_test(NAME Llgl_RenderTarget2D_Mip_OpenGL COMMAND cna_test_llgl_rendertarget2d_mip
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_MultiSampleMask_OpenGL COMMAND cna_test_llgl_multisamplemask
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
 endif()

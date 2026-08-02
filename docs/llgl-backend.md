@@ -241,6 +241,25 @@ environment, not gated behind the same Vulkan-only limitation `Llgl_Msaa` docume
 chain. MRT binds and `RenderTargetCube` faces do not support MSAA yet (`LlglBoundRenderTarget::GetSampleCount()`
 defaults to 1/no-MSAA for both).
 
+**`BlendState.MultiSampleMask` is real (LLGL-33), module-dependent.** A `multiSampleMask_` member
+(default `0xFFFFFFFF`, matching `BlendWriteState`'s own default) is set from
+`ApplyBlendState`'s `writeState.multiSampleMask` and applied via
+`pipelineDesc.blend.sampleMask` on every pipeline built afterwards -- 3D, `SpriteBatch`, and custom
+`ShaderEffect` alike -- and folded into the sprite/custom-effect pipeline cache key
+(`MakeBlendPipelineKey`) so a non-default mask is never reused for a draw that wants the default.
+Confirmed by reading LLGL's own vendored source: the Vulkan module applies
+`VkPipelineMultisampleStateCreateInfo::pSampleMask` unconditionally (harmless outside MSAA, since an
+all-ones mask against one sample is a no-op); the OpenGL module's own `SetSampleMask` call is
+permanently `#if 0`'d out, so it can never honour a sample mask at all, on any driver, on this
+module -- a real, unfixable-from-CNA's-side limitation, not a bug. `Llgl_MultiSampleMask`/`_OpenGL`
+detect this at runtime and report `[SKIP]` rather than `FAIL` for that one check, matching this
+backend's own established `Llgl_Msaa`/`Llgl_MRT` module-dependent precedent, since this backend
+picks its native module at runtime and a single compiled binary cannot express "Vulkan supports it,
+OpenGL does not" through a compile-time flag the way single-native-API backends can.
+`AcquirePrimitivePipeline` (the 3D pipeline cache) has its own pre-existing, unrelated cache-key
+limitation that discards several OTHER blend fields (not `MultiSampleMask`, which is unaffected --
+see `known_bugs.md`'s open entry for the full writeup).
+
 **`RenderTarget2D` `mipMap` is real.** `CreateRenderTarget2D`'s colour texture is allocated with a
 full mip chain when `mipMap=true` (`RenderTarget2D.LevelCount`'s own `CalculateMipLevels(w, h)`
 formula, computed identically here and matching the Vulkan backend's own
@@ -314,9 +333,8 @@ to a deliberately narrower first cut than this project's other MRT-capable backe
   `VKGraphicsPSO.cpp`/`GLBlendState.cpp` directly). Module-dependent once that bug was fixed: the
   Vulkan module genuinely masks a non-zero slot on this environment; the OpenGL module's
   `glColorMaski` does not (a real GL driver constraint here, not a CNA defect) -- see
-  `Llgl_MRT`'s own `[SKIP]`-gated check. `BlendState.MultiSampleMask` is still not applied (LLGL's
-  sample mask lives in the blend descriptor and would multiply the pipeline cache with no real use
-  on this backend yet).
+  `Llgl_MRT`'s own `[SKIP]`-gated check. `BlendState.MultiSampleMask` is now applied too (LLGL-33,
+  see below) -- one mask shared by every attachment (XNA has only one, not one per MRT slot).
 
 A new `LlglMRTBinding` combines the N bound targets' own colour textures (borrowed -- still owned
 and released by the `RenderTarget2D` backends that created them, never duplicated or double-freed
@@ -637,6 +655,12 @@ adapted from `vulkan_rendertarget2d_mip_test.cpp`'s own technique but reading le
 via the now-real `GetData(level)` instead of forcing GPU LOD selection through an extreme
 minification draw. Also covers `GetData()` correctly rejecting a level outside `LevelCount`, on
 both a mip-mapped and a plain target.
+`Llgl_MultiSampleMask` (LLGL-33) covers `BlendState.MultiSampleMask` against a genuinely
+multisampled `RenderTarget2D`: an Opaque-blended full-target quad over a differently-coloured clear,
+the default all-ones mask resolving normally, and `MultiSampleMask=0` resolving to the clear colour
+on a module that honours it -- module-dependent, `[SKIP]` on the OpenGL module rather than failed,
+since its sample-mask application is permanently disabled in vendored LLGL (see "Render targets"
+above).
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED

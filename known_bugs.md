@@ -310,6 +310,72 @@ test detects this and reports `[SKIP]` for that one check on the OpenGL module r
 matching the existing `WireFrame`/back-buffer-MSAA precedent for a real, environment-specific
 driver constraint outside this backend's control.
 
+---
+
+## LLGL backend: 3D pipeline cache ignores `ColorWriteChannels`/blend factors for `DrawPrimitives` — OPEN
+
+**Status:** open, discovered during LLGL-33, not fixed. `BlendState.MultiSampleMask` itself
+(the actual LLGL-33 feature) is unaffected and shipped normally — see `docs/llgl-backend.md`.
+
+**Symptom:** `AcquirePrimitivePipeline` (the 3D/`DrawPrimitives` pipeline cache used by
+`BasicEffect` and friends, as opposed to `AcquireSpritePipeline`/`LlglEffectBackend::AcquirePipeline`
+used by `SpriteBatch`/custom effects) folds only the **low 16 bits** of
+`MakeBlendPipelineKey()`'s ~48-bit result into its own cache key. That truncation silently discards
+`colorSrcBlend_`/`colorDstBlend_`/`alphaSrcBlend_`/`alphaDstBlend_`/`colorBlendFunc_`/
+`alphaBlendFunc_`/`colorWriteChannels_[0]` entirely (they occupy the sub-key's higher-order bits).
+Two 3D draws differing ONLY in one of those fields can be assigned the SAME cached
+`LLGL::PipelineState*`, so the second draw silently keeps the FIRST draw's blend/write-mask state
+baked in instead of its own.
+
+**Found by:** registering the shared, cross-backend `examples/gfx077_colorwritechannels_3d_test.cpp`
+(already used by `SdlGpu`/`WebGpu`) against this backend — its very first check (differential
+`ColorWriteChannels::None` vs `::All` baselines through `BasicEffect`+`DrawPrimitives`) failed, both
+baselines reading back identically, proving `ColorWriteChannels` had no effect on that path. This
+test is **not** currently registered as an LLGL CTest (see `cmake/Tests/LlglTests.cmake`) precisely
+because it fails against this open bug; do not register it again until the underlying issue is
+fixed.
+
+**Attempted fixes, both abandoned:** widening the outer truncation to include the missing fields —
+first via an XOR + FNV-prime multiply (matching `MakeVertexLayoutKey`'s own `mix` style), then via a
+plain positional multiply-add fold (matching this function's own established style, avoiding the XOR
+approach entirely) — fixed the `ColorWriteChannels_3D` test in isolation but broke an unrelated,
+previously-passing test: `Llgl_BasicEffect`'s alpha-blend check
+(`"Alpha blends the white texel halfway to the background"`) started rendering
+`(64,64,64,191)` instead of the correct `(128,128,128,128)`, with BOTH fold strategies, even though
+instrumented tracing showed the pipeline built for that draw is provably correctly configured
+(`src=SourceAlpha, dst=InverseSourceAlpha`, its own uniquely-computed key, its own freshly-built
+`LLGL::PipelineState*`, no cache collision with any other draw).
+
+**The genuinely confusing part:** reverting to the OLD, truncated key — the one that provably causes
+the alpha-blend draw to be assigned the SAME cached `PipelineState*` as an EARLIER, unrelated Opaque
+draw (identical pointer, identical key, confirmed via instrumented tracing) — renders the alpha-blend
+draw CORRECTLY. Reusing a pipeline object whose baked-in blend state is `Opaque`
+(`blendEnabled=false, srcColor=One, dstColor=Zero`) for a draw that needs real
+`SourceAlpha`/`InverseSourceAlpha` blending should, under ordinary GPU fixed-function blend
+semantics, produce an unblended result — it does not. No explanation was found before this
+investigation was shelved in favour of shipping the safe, unaffected parts of LLGL-33. Hypotheses
+considered but not confirmed or ruled out: (a) LLGL/lavapipe pipeline object interning/de-duplication
+keyed on something coarser than full descriptor content (e.g. shader/layout identity or
+`debugName`), causing distinct `LLGL::PipelineState*` C++ wrapper objects to alias the same
+underlying GPU pipeline; (b) some sensitivity to the total number of distinct
+`GraphicsPipelineDescriptor`s created across the process's lifetime; (c) an incorrect assumption
+elsewhere in this reasoning about how this backend actually applies blend state, not yet identified.
+
+**Current state:** `AcquirePrimitivePipeline` keeps the original, known-buggy `& 0xFFFFu`
+truncation (see its own doc comment in `LlglGraphicsBackend.cpp`) rather than shipping either
+attempted fix. `BlendState.MultiSampleMask` is NOT affected by this limitation:
+`MakeBlendPipelineKey` folds `multiSampleMask_` in LAST, so it occupies the sub-key's lowest 4 bits
+and survives the `& 0xFFFFu` truncation intact — confirmed by `Llgl_MultiSampleMask`/`_OpenGL`
+passing (4/4 PASS on the Vulkan module, 3 PASS + a correctly-detected `[SKIP]` on the OpenGL
+module, which never applies a sample mask at all — see `LlglGraphicsBackend.cpp`'s own
+`FillCurrentBlendAndRasterStateEXT` doc comment).
+
+**Next step for whoever picks this up:** do not retry the same two fold strategies without new
+information. Consider instrumenting at the LLGL/Vulkan API call level (not just this backend's own
+descriptor construction) to see whether two DIFFERENT `LLGL::PipelineState*` C++ objects might be
+returned pointing at the same underlying `VkPipeline` handle, or whether `vkCmdBindPipeline` is
+actually being issued with the value this backend thinks it queued.
+
 **Tracked as:** `plan_llgl.md` task `LLGL-21`.
 
 ---

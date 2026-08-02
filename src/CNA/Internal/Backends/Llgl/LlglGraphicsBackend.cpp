@@ -2624,6 +2624,28 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + (envMapping ? 1u : 0u);
         key = key * 2u + (skinned ? 1u : 0u);
         key = key * 2u + (pbr ? 1u : 0u);
+        // Folds in the LOW 16 BITS of MakeBlendPipelineKey()'s own result -- NOT reusing the full
+        // value, since that one is sized for MRT's up to 4 attachments and is used AS-IS as the
+        // sprite/custom-effect pipeline's own map key elsewhere; a 3D draw is always a single
+        // attachment. `scissorEnabled` is already folded in above; not repeated here.
+        //
+        // Known limitation (LLGL-33 investigation, not fixed here): this low-16-bit truncation
+        // discards colorSrcBlend_/colorDstBlend_/alphaSrcBlend_/alphaDstBlend_/colorBlendFunc_/
+        // alphaBlendFunc_/colorWriteChannels_[0] entirely, since those occupy MakeBlendPipelineKey's
+        // higher-order bits. Two 3D draws differing ONLY in one of those fields can share a cached
+        // pipeline, keeping the FIRST draw's blend/write-mask state baked in for the second one --
+        // reproduced via the shared, cross-backend examples/gfx077_colorwritechannels_3d_test.cpp.
+        // Widening this truncation to include those fields was attempted (both an XOR+FNV-prime
+        // mix and a plain positional fold covering the full blend key) and, despite building a
+        // provably correctly-configured and uniquely-keyed pipeline for the affected draw (verified
+        // with instrumented tracing), broke an unrelated, previously-passing alpha-blend test
+        // (Llgl_BasicEffect) in a way not understood before the investigation was shelved -- traced
+        // as far as confirming the *old*, buggy, truncated key causes a stale Opaque pipeline
+        // object to be reused for that alpha-blend draw and yet still renders correctly, which
+        // contradicts ordinary GPU fixed-function blend semantics and was not explained. Tracked as
+        // an open item in known_bugs.md rather than shipped as an unexplained, empirically-fragile
+        // fix. `multiSampleMask_` (LLGL-33) is unaffected by this limitation: MakeBlendPipelineKey
+        // folds it in LAST, so it occupies the lowest 4 bits and survives this truncation intact.
         key = key * (1024u * 64u) +
               (MakeBlendPipelineKey(scissorEnabled, 1, GetPrimarySampleCountEXT()) & 0xFFFFu);
 
@@ -2715,6 +2737,7 @@ namespace CNA::Internal::Backends::Llgl
         pipelineDesc.blend.targets[0].dstAlpha = MapBlendFactor(alphaDstBlend_);
         pipelineDesc.blend.targets[0].alphaArithmetic = MapBlendFunction(alphaBlendFunc_);
         pipelineDesc.blend.targets[0].colorMask = MapColorWriteMask(colorWriteChannels_[0]);
+        pipelineDesc.blend.sampleMask = multiSampleMask_;
 
         LLGL::PipelineState* pipeline = renderer_->CreatePipelineState(pipelineDesc);
         if (pipeline == nullptr)
@@ -3412,6 +3435,19 @@ namespace CNA::Internal::Backends::Llgl
         key = key * 2u + (scissorEnabled ? 1u : 0u);
         key = key * 8u + static_cast<std::uint64_t>(colorAttachmentCount & 0x7);
         key = key * 64u + static_cast<std::uint64_t>(sampleCount & 0x3F);
+        // BlendState.MultiSampleMask (LLGL-33): folded in via the SAME plain positional
+        // multiply-add every other field above already uses -- an XOR + hash_combine-style mix
+        // was tried first and, in the analogous spot in AcquirePrimitivePipeline's own key (see
+        // that function's own doc comment), produced WRONG RENDERED PIXELS despite every logged
+        // pipeline descriptor field being provably correct; root cause not fully understood, so
+        // the same risky technique is avoided here too even though this specific spot was not
+        // independently confirmed broken. `multiSampleMask_` is folded to its own low nibble only
+        // (enough to distinguish the default 0xFFFFFFFF from a genuinely different mask like 0,
+        // without risking a full 32-bit fold) -- MultiSampleMask is rarely non-default at all, and
+        // two DIFFERENT non-default masks sharing a cached pipeline by coincidentally sharing a
+        // low nibble is a much smaller, already-accepted class of risk, matching this function's
+        // own `& 0x3`/`& 0x7`-style truncations for every other field.
+        key = key * 16u + static_cast<std::uint64_t>(multiSampleMask_ & 0xFu);
         return key;
     }
 
@@ -3431,6 +3467,12 @@ namespace CNA::Internal::Backends::Llgl
         // unconditionally would make every draw depend on a call that the overwhelming majority of
         // blend states have no use for.
         pipelineDesc.blend.blendFactorDynamic = UsesConstantBlendFactorState();
+        // BlendState.MultiSampleMask (LLGL-33): a single sample-coverage bitmask shared by every
+        // attachment (XNA has only one, not one per MRT slot). Applied unconditionally by LLGL's
+        // Vulkan module (VkPipelineMultisampleStateCreateInfo::pSampleMask, regardless of sample
+        // count -- harmless to set even outside MSAA); never applied by the OpenGL module (its own
+        // SetSampleMask call is permanently `#if 0`'d out in vendored LLGL).
+        pipelineDesc.blend.sampleMask = multiSampleMask_;
         // MRT (LLGL-26 follow-up): every attachment gets slot 0's own blend FACTORS/FUNCTIONS --
         // XNA's BlendState has only one set of those, not one per slot -- but its OWN colour write
         // mask (LLGL-21 follow-up: BlendState.ColorWriteChannels1..3 are real now, not slot 0's
@@ -5360,11 +5402,17 @@ namespace CNA::Internal::Backends::Llgl
         alphaBlendFunc_ = alphaBlendFunc;
         // Every slot's write mask is applied now (LLGL-21 follow-up): slot 0 outside an MRT bind,
         // all four while a real MRT set (LLGL-26 follow-up) is bound -- see
-        // FillCurrentBlendAndRasterStateEXT's own per-slot loop. BlendState.MultiSampleMask is
-        // still deliberately not applied: LLGL's sample mask lives in the blend descriptor and
-        // would multiply the pipeline cache with no real use on this backend yet.
+        // FillCurrentBlendAndRasterStateEXT's own per-slot loop.
         for (int slot = 0; slot < 4; ++slot)
             colorWriteChannels_[slot] = writeState.colorWriteChannels[slot];
+        // BlendState.MultiSampleMask is real now too (LLGL-33): LLGL::BlendDescriptor::sampleMask
+        // maps to a genuine per-sample coverage bitmask on the Vulkan module (VkPipelineMultisample
+        // StateCreateInfo::pSampleMask, applied unconditionally, not gated behind alphaToCoverage --
+        // confirmed by reading VKGraphicsPSO.cpp's own CreateMultisampleState); the OpenGL module
+        // never applies it at all (LLGL's own GLBlendState::Bind has the SetSampleMask call
+        // `#if 0`'d out with a `//TODO` -- confirmed by reading GLBlendState.cpp directly), a real,
+        // permanent LLGL-side limitation on that module, not a CNA defect.
+        multiSampleMask_ = static_cast<unsigned int>(writeState.multiSampleMask);
     }
 
     void LlglGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)

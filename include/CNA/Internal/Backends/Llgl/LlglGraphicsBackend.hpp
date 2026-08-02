@@ -2230,6 +2230,11 @@ namespace CNA::Internal::Backends::Llgl
         /// slot 0 applies outside an MRT bind (colorAttachmentCount == 1); slots 1..3 apply only
         /// while a real MRT set (LLGL-26 follow-up) is bound (LLGL-21).
         int   colorWriteChannels_[4] = {15, 15, 15, 15};
+        /// Raw XNA BlendState.MultiSampleMask (LLGL-33): a per-sample coverage bitmask, applied
+        /// via LLGL::BlendDescriptor::sampleMask -- only meaningful while a real MSAA render
+        /// target/back buffer is bound (samples > 1); 0xFFFFFFFF (every sample enabled) is XNA's
+        /// own default and this member's own default, matching BlendWriteState::multiSampleMask.
+        unsigned int multiSampleMask_ = 0xFFFFFFFFu;
         bool  blendEnabled_   = false;
         float blendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
