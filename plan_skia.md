@@ -13,6 +13,26 @@
 > `SupportsCapability()` and deterministic `NotSupportedException`/`runtime_error` paths; they
 > must never become silent no-ops.
 
+## Final release snapshot
+
+- **Plan:** SKIA-1 through SKIA-114 are complete; there is no remaining implementation row in this
+  plan. The signed checklist and reopening rules are in
+  [`docs/skia-release-gate.md`](docs/skia-release-gate.md).
+- **Execution mode:** the accepted release is deterministic CPU raster. The pinned artifact has no
+  Ganesh/Graphite/GL/Vulkan/Dawn path, and the selected build registers zero `Accelerated` tests.
+  Future Ganesh/OpenGL work requires a successor plan and must reopen
+  [`docs/skia-surface-mode-adr.md`](docs/skia-surface-mode-adr.md).
+- **Capabilities:** all nine enum values are audited against the implementation. Only
+  `GraphicsCapability::Texture3D` is true, strictly for bounded CPU transfer/readback storage;
+  3D rendering and volume sampling remain unsupported.
+- **Validation:** the complete Debug suite passes 133/133 on real display `:0` in 61.14 seconds
+  with at most eight workers (16 Raster, 113 Display, four Audit). The final MSAA and anisotropy
+  policy pair passes 2/2 in Release and under ASan+UBSan; the post-gate MSAA diagnostic assertion
+  additionally passes in Debug, Release, and ASan+UBSan.
+- **Continuity:** the authoritative current boundaries are the release gate, the 248-entry API
+  parity ledger, the 347-entry EasyGL test matrix, and the 37/37 3D decision audit. Historical
+  per-task test counts below intentionally record the checkpoint at which each row closed.
+
 Skia is a 2D graphics library, although it can render through raster, OpenGL, Vulkan, and other
 device backends. `SkCanvas` has 2D images, geometry, transforms, clipping, compositing, shaders,
 and surfaces; that does not turn it into XNA's vertex/index/depth 3D pipeline. The implementation
@@ -290,31 +310,31 @@ listed contract, including depth/stencil and stock-effect tests, passes.
 | SKIA-111 | Update `docs/skia-backend.md`, `docs/graphics-backend-feature-matrix.md`, backend selection docs, and the capability ledger with only verified facts. | ✅ | `docs/skia-backend.md` and the feature matrix now provide evidence-linked CPU-raster capability tables covering every advertised 2D family and every unsupported GPU/3D family, including each direct/emulation decision. README, docs index, CLAUDE backend-selection guidance, `GraphicsCapability` comments, and the corrected 248-row ledger agree that only bounded CPU `Texture3D` transfer storage is reported beyond the 2D route. All three source audits and the complete 132/132 Debug Skia suite pass. |
 | SKIA-112 | Add developer build instructions for the pinned Skia artifact, accelerated prerequisites, raster fallback, test environment, and common diagnostics. | ✅ | `docs/skia-developer-build.md` gives the exact revision/GN arguments/six-archive check, sibling/submodule prerequisites, global eight-worker limit (including configure-time SDL), offline CNA configure, display-free/Xvfb/real-display tests, working-directory-safe demo commands, sanitizer/state diagnostics, explicit non-fallback behavior, future GPU prerequisites, and failure remedies. A clean `git archive` source with fresh CMake/Ninja state completed the full build, 19/19 Audit+Raster tests, 132/132 Skia tests under Xvfb, zero Accelerated registrations, and the traced three-frame demo by following the corrected procedure. |
 | SKIA-113 | Perform a clean-worktree, fresh-configure smoke across `SKIA`, EasyGL, SDL_Renderer, Software, and all platform-gated backends available in CI. | ✅ | From clean baseline `77c3a604`, fresh Debug `CNA` builds pass for Skia, EasyGL, SDL_Renderer, Software, Vulkan and BGFX. Fresh MinGW `RelWithDebInfo` builds pass for CNA, D3D11/D3D12, and every backend-owned executable; Wine runtime passes D3D11 41/41 under DXVK and D3D12 2/2 under vkd3d-proton. `docs/skia-nonskia-build-matrix.md` records exact commands, the unavailable Emscripten/native-MSVC boundaries, and the pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet registration failure. No selection fell back to another renderer. |
-| SKIA-114 | Hold a release gate: verify every supported capability is demonstrated, every unimplemented EasyGL feature has an explicit direct/emulation decision, and no plan row is incorrectly marked complete. | ✅ | `docs/skia-release-gate.md` signs off all 114 rows, all nine live capability values, every direct/bounded/refused EasyGL family, the raster/acceleration and 3D ADRs, validation results, and known boundaries. `Skia_ReleaseGate_Audit` enforces the contiguous completed plan, exact capability table/implementation agreement, accepted raster decision, required release markers, and zero accelerated registrations. |
+| SKIA-114 | Hold a release gate: verify every supported capability is demonstrated, every unimplemented EasyGL feature has an explicit direct/emulation decision, and no plan row is incorrectly marked complete. | ✅ | `docs/skia-release-gate.md` signs off all 114 rows, all nine live capability values, every direct/bounded/refused EasyGL family, the raster/acceleration and 3D ADRs, validation results, and known boundaries. `Skia_ReleaseGate_Audit` enforces the contiguous completed plan, exact capability table/implementation agreement, accepted raster decision, required release markers, and zero accelerated registrations. Final validation passes 133/133 Debug tests (16 Raster, 113 Display, four Audit), the Release and ASan+UBSan policy pair, all four source audits, the 248-entry parity ledger, the 347-entry test matrix, and the 37/37 3D decision audit. |
 
-## Suggested implementation order
+## Completed dependency order
 
-1. SKIA-1 through SKIA-9 — settle dependency and surface ownership before adding a selectable
-   backend.
-2. SKIA-10 through SKIA-30 — make the backend buildable and establish correct Texture2D pixels.
-3. SKIA-31 through SKIA-75 — complete and verify the usable 2D path, including state and targets.
-4. SKIA-76 through SKIA-94 — activate device-dependent features and only the effect/resource
-   emulations that pass their spikes.
-5. SKIA-95 through SKIA-105 — make an explicit, evidence-backed 3D decision; do not intermingle
-   this work with a stable 2D release.
-6. SKIA-106 through SKIA-114 — regression, documentation, and release gate.
+1. SKIA-1 through SKIA-9 settled dependency, surface ownership, and the raster release mode.
+2. SKIA-10 through SKIA-30 made the backend selectable and established exact Texture2D pixels.
+3. SKIA-31 through SKIA-75 completed the usable 2D path, state handling, and render targets.
+4. SKIA-76 through SKIA-94 closed device-dependent probes and only the bounded resource/effect
+   emulations that passed their spikes.
+5. SKIA-95 through SKIA-105 made the evidence-backed decision to retain uniform 3D refusal.
+6. SKIA-106 through SKIA-114 completed regression coverage, documentation, cross-backend checks,
+   and the release gate.
 
-## Explicit initial exclusions (until a later task proves otherwise)
+## Final exclusions and reopening rule
 
-At the time this plan is written, `SKIA` must **not** advertise or silently approximate the
-following as an initial 2D delivery: generic EasyGL GLSL vertex/fragment `ShaderEffect`, full XNA
-3D primitive rendering, depth/stencil state, occlusion queries, instancing, wireframe, arbitrary
-cube/volume texture *sampling*, or MRT. These are not permanent declarations that Skia can never
-participate in; SKIA-80–SKIA-105 exist specifically to test safe emulations. They remain unavailable
-unless and until that evidence is present.
+The completed investigation confirms that this release must **not** advertise or silently
+approximate generic EasyGL GLSL vertex/fragment `ShaderEffect`, full XNA 3D primitive rendering,
+depth/stencil state, occlusion queries, instancing, wireframe, arbitrary cube/volume texture
+*sampling*, MRT, native MSAA, or native anisotropy. SKIA-76–SKIA-105 evaluated the relevant direct
+and bounded-emulation routes and recorded their final fallback or refusal decisions. Reversing one
+of those decisions requires new evidence, an updated ADR where applicable, and reopening SKIA-114
+through a successor plan.
 
-Conversely, the initial delivery is not allowed to omit Texture2D/SpriteBatch/SpriteFont,
-transforms, source rectangles, flip/rotation/origin, sampler addressing/filtering, standard blend
-states, scissor, RenderTarget2D, readback, presentation lifecycle, and all associated contracts on
-the grounds that it is “only 2D”: those are directly in the scope of this backend and must meet the
-EasyGL/CNA parity bar above.
+The completed CPU-raster delivery includes Texture2D/SpriteBatch/SpriteFont, transforms, source
+rectangles, flip/rotation/origin, the documented sampler addressing/filtering subset, standard and
+bounded proven blend states, scissor, RenderTarget2D, readback, presentation lifecycle, and their
+associated validation/lifetime contracts. These remain the required regression boundary for any
+future Skia execution mode.
