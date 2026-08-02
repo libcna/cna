@@ -26,6 +26,9 @@
 //   * repeated/interleaved clears in one frame;
 //   * target isolation and A->B->A target transitions;
 //   * full-target clears while a custom viewport and enabled scissor are active.
+//   * requested-versus-active renderer classification and two complete initialization/teardown
+//     cycles. A requested Vulkan route that falls back runs the OpenGL oracle selected from the
+//     active renderer, then returns 77 so the result cannot be reported as native Vulkan coverage.
 //
 // CMake runs this same public regression through Bgfx's OpenGL and Vulkan renderer routes.
 
@@ -58,6 +61,10 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+
+#if defined(CNA_BACKEND_BGFX)
+#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -212,14 +219,21 @@ namespace
         // depth-clearing case could never hold. Measured, not assumed: with the correct convention
         // the same probes bracket the value, and with the wrong one they do not.
 #if defined(CNA_BACKEND_BGFX)
-        const char* route = std::getenv("CNA_BGFX_RENDERER");
-        const bool homogeneousDepth = route != nullptr && std::string(route) == "VULKAN";
+        // REMED-GFX-018 fallback hardening: CNA_BGFX_RENDERER is the REQUEST. bgfx may activate a
+        // different renderer when that request cannot initialize (notably Vulkan -> OpenGL on an
+        // Xvfb server without DRI3). The active caps are the only authoritative clip-depth
+        // convention; using the request makes an OpenGL fallback receive Vulkan [0,1] probe
+        // positions and turns every depth-clearing lower bracket into a false failure.
+        const bgfx::Caps* caps = bgfx::getCaps();
+        // bgfx names [-1,1] NDC "homogeneous depth". The probe helper needs the inverse:
+        // whether the active renderer consumes [0,1] clip depth directly.
+        const bool zeroToOneDepth = caps != nullptr && !caps->homogeneousDepth;
 #elif defined(CNA_BACKEND_VULKAN)
-        const bool homogeneousDepth = true;
+        const bool zeroToOneDepth = true;
 #else
-        const bool homogeneousDepth = false;
+        const bool zeroToOneDepth = false;
 #endif
-        return homogeneousDepth ? depth : depth * 2.0f - 1.0f;
+        return zeroToOneDepth ? depth : depth * 2.0f - 1.0f;
     }
 }
 
@@ -260,6 +274,7 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
     int passed_ = 0;
     int failed_ = 0;
     bool depthlessInvalidDepthChecked_ = false;
+    bool nativeVulkanUnavailable_ = false;
 
     static RasterizerState ExplicitRasterizer(bool scissorEnabled)
     {
@@ -294,6 +309,57 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
         else
             ++failed_;
     }
+
+    void CheckExactProbe(const Color& actual, const Color& expected, bool condition,
+                         const std::string& label)
+    {
+        std::printf("[%s] %s: got=(%d,%d,%d,%d), expected probe=(%d,%d,%d,%d)\n",
+                    condition ? "PASS" : "FAIL", label.c_str(),
+                    actual.getRProperty(), actual.getGProperty(),
+                    actual.getBProperty(), actual.getAProperty(),
+                    expected.getRProperty(), expected.getGProperty(),
+                    expected.getBProperty(), expected.getAProperty());
+        if (condition)
+            ++passed_;
+        else
+            ++failed_;
+    }
+
+#if defined(CNA_BACKEND_BGFX)
+    void RecordRendererSelection()
+    {
+        const bgfx::RendererType::Enum requested =
+            CNA::Internal::Backends::Bgfx::Detail::ResolveRendererType(
+                std::getenv("CNA_BGFX_RENDERER"));
+        const bgfx::RendererType::Enum active = bgfx::getRendererType();
+
+        std::printf("[INFO] GFX-018 requested renderer=%s, active renderer=%s, "
+                    "clip-depth convention=%s\n",
+                    bgfx::getRendererName(requested), bgfx::getRendererName(active),
+                    bgfx::getCaps()->homogeneousDepth ? "[-1,1]" : "[0,1]");
+
+        if (requested == bgfx::RendererType::OpenGL)
+        {
+            Check(active == bgfx::RendererType::OpenGL,
+                  "renderer selection / requested OpenGL is actively OpenGL");
+            return;
+        }
+
+        if (requested == bgfx::RendererType::Vulkan)
+        {
+            if (active == bgfx::RendererType::Vulkan)
+            {
+                Check(true, "renderer selection / requested Vulkan is actively Vulkan");
+                return;
+            }
+
+            const bool supportedFallback = active == bgfx::RendererType::OpenGL;
+            Check(supportedFallback,
+                  "renderer selection / requested Vulkan fallback is explicitly active OpenGL");
+            nativeVulkanUnavailable_ = supportedFallback;
+        }
+    }
+#endif
 
     void ApplyEffect()
     {
@@ -570,8 +636,10 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
         {
             const auto passPoint = Center(DepthPassRect(width, height));
             const auto rejectPoint = Center(DepthRejectRect(width, height));
-            Check(IsGreen(Pixel(pixels, offsetX + passPoint.first, passPoint.second)),
-                  prefix + " / depth lower bracket passes");
+            const Color& passPixel = Pixel(
+                pixels, offsetX + passPoint.first, passPoint.second);
+            CheckExactProbe(passPixel, kGreen, IsGreen(passPixel),
+                            prefix + " / depth lower bracket passes");
             CheckColor(Pixel(pixels, offsetX + rejectPoint.first, rejectPoint.second),
                        expected.color, prefix + " / depth upper bracket rejects");
         }
@@ -580,8 +648,10 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
         {
             const auto passPoint = Center(StencilPassRect(width, height));
             const auto rejectPoint = Center(StencilRejectRect(width, height));
-            Check(IsBlue(Pixel(pixels, offsetX + passPoint.first, passPoint.second)),
-                  prefix + " / exact stencil value passes");
+            const Color& passPixel = Pixel(
+                pixels, offsetX + passPoint.first, passPoint.second);
+            CheckExactProbe(passPixel, kBlue, IsBlue(passPixel),
+                            prefix + " / exact stencil value passes");
             CheckColor(Pixel(pixels, offsetX + rejectPoint.first, rejectPoint.second),
                        expected.color, prefix + " / distinct stencil value rejects");
         }
@@ -703,12 +773,15 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
         const auto markerPoint = Center(marker);
         const auto depthPoint = Center(depthMarker);
         const auto stencilPoint = Center(stencilMarker);
-        Check(IsRed(Pixel(pixels, markerPoint.first, markerPoint.second)),
-              "ordered clears / colour drawn before depth-only and stencil-only clears survives");
-        Check(IsGreen(Pixel(pixels, depthPoint.first, depthPoint.second)),
-              "ordered clears / depth-only clear executes before its depth-tested draw");
-        Check(IsBlue(Pixel(pixels, stencilPoint.first, stencilPoint.second)),
-              "ordered clears / stencil-only clear executes before its stencil-tested draw");
+        const Color& markerPixel = Pixel(pixels, markerPoint.first, markerPoint.second);
+        const Color& depthPixel = Pixel(pixels, depthPoint.first, depthPoint.second);
+        const Color& stencilPixel = Pixel(pixels, stencilPoint.first, stencilPoint.second);
+        CheckExactProbe(markerPixel, kRed, IsRed(markerPixel),
+                        "ordered clears / colour drawn before depth-only and stencil-only clears survives");
+        CheckExactProbe(depthPixel, kGreen, IsGreen(depthPixel),
+                        "ordered clears / depth-only clear executes before its depth-tested draw");
+        CheckExactProbe(stencilPixel, kBlue, IsBlue(stencilPixel),
+                        "ordered clears / stencil-only clear executes before its stencil-tested draw");
         CheckColor(Pixel(pixels, 2, 2), kBaselineColor,
                    "ordered clears / untouched colour remains the pre-existing colour");
         suite_ = Suite::TargetDepthStencil;
@@ -899,20 +972,30 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
                    "target isolation A->B->A / A colour belongs only to A");
         CheckColor(Pixel(pixels, kTargetWidth + 2, 2), colorB,
                    "target isolation A->B->A / B colour belongs only to B");
-        Check(IsGreen(Pixel(pixels, depthPass.first, depthPass.second)),
-              "target isolation A->B->A / A receives its later depth-only clear");
-        Check(IsBlue(Pixel(pixels, stencilPass.first, stencilPass.second)),
-              "target isolation A->B->A / A preserves its stencil");
-        Check(IsGreen(Pixel(
-                  pixels, kTargetWidth + depthPass.first, depthPass.second)),
-              "target isolation A->B->A / B preserves its depth");
-        Check(IsBlue(Pixel(
-                  pixels, kTargetWidth + stencilPass.first, stencilPass.second)),
-              "target isolation A->B->A / B receives its stencil-only clear");
+        const Color& aDepthPixel = Pixel(pixels, depthPass.first, depthPass.second);
+        const Color& aStencilPixel = Pixel(pixels, stencilPass.first, stencilPass.second);
+        const Color& bDepthPixel = Pixel(
+            pixels, kTargetWidth + depthPass.first, depthPass.second);
+        const Color& bStencilPixel = Pixel(
+            pixels, kTargetWidth + stencilPass.first, stencilPass.second);
+        CheckExactProbe(aDepthPixel, kGreen, IsGreen(aDepthPixel),
+                        "target isolation A->B->A / A receives its later depth-only clear");
+        CheckExactProbe(aStencilPixel, kBlue, IsBlue(aStencilPixel),
+                        "target isolation A->B->A / A preserves its stencil");
+        CheckExactProbe(bDepthPixel, kGreen, IsGreen(bDepthPixel),
+                        "target isolation A->B->A / B preserves its depth");
+        CheckExactProbe(bStencilPixel, kBlue, IsBlue(bStencilPixel),
+                        "target isolation A->B->A / B receives its stencil-only clear");
 
         suite_ = Suite::Done;
         std::printf("=== GFX-018: %d/%d PASS ===\n",
                     passed_, passed_ + failed_);
+        if (nativeVulkanUnavailable_ && failed_ == 0)
+        {
+            std::printf("[UNAVAILABLE] native Bgfx Vulkan ClearOptions coverage was requested but "
+                        "the active renderer is OpenGL; fallback OpenGL ClearOptions passed, "
+                        "returning 77 without claiming a Vulkan pass.\n");
+        }
         Exit();
     }
 
@@ -921,6 +1004,9 @@ protected:
     {
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
+#if defined(CNA_BACKEND_BGFX)
+        RecordRendererSelection();
+#endif
         effect_ = std::make_unique<BasicEffect>(device);
         spriteBatch_ = std::make_unique<SpriteBatch>(device);
 
@@ -983,13 +1069,38 @@ public:
 
     int GetResult() const
     {
-        return failed_ == 0 ? 0 : 1;
+        if (failed_ != 0)
+            return 1;
+        return nativeVulkanUnavailable_ ? 77 : 0;
     }
 };
 
 int main()
 {
-    BgfxGraphicsDeviceClearOptionsTest game;
-    game.Run();
-    return game.GetResult();
+#if defined(CNA_BACKEND_BGFX)
+    constexpr int kLifecycleCount = 2;
+#else
+    constexpr int kLifecycleCount = 1;
+#endif
+
+    bool nativeVulkanUnavailable = false;
+    for (int lifecycle = 0; lifecycle < kLifecycleCount; ++lifecycle)
+    {
+        int result = 1;
+        std::printf("[INFO] GFX-018 lifecycle %d/%d initialization begins\n",
+                    lifecycle + 1, kLifecycleCount);
+        {
+            BgfxGraphicsDeviceClearOptionsTest game;
+            game.Run();
+            result = game.GetResult();
+        }
+        std::printf("[PASS] GFX-018 lifecycle %d/%d teardown completed\n",
+                    lifecycle + 1, kLifecycleCount);
+
+        if (result == 1)
+            return 1;
+        nativeVulkanUnavailable = nativeVulkanUnavailable || result == 77;
+    }
+
+    return nativeVulkanUnavailable ? 77 : 0;
 }

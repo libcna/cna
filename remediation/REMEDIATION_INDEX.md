@@ -241,6 +241,24 @@ into `REMED-CORE-012`. This is a real result about the codebase, not an omission
 | `REMED-NET-002` | `NetworkSessionProperties` unchecked iterator arithmetic | MEDIUM | NET | YES |
 | `REMED-MEDIA-002` | `MediaLibrary` object-graph SEGFAULT (6+ backends) | HIGH | MEDIA | YES |
 
+### REMED-GFX-018 renderer-route addendum — DONE 2026-08-02
+
+The final Bgfx shard miss belonged to the existing REMED-GFX-018 fixture; no new or duplicate ID was
+created. On a DRI3-less Xvfb, `CNA_BGFX_RENDERER=VULKAN` requested Vulkan but bgfx failed Vulkan
+presentation initialization and activated OpenGL 2.1. The fixture nevertheless selected its depth
+probes from the request, so the active OpenGL route received Vulkan `[0,1]` clip-depth positions and
+reported 15 false lower-bracket failures (**217/232**). Bgfx ClearOptions production was correct for
+the renderer actually executing the draws.
+
+The fixture now takes the clip convention from active `bgfx::Caps`, reports requested and active
+renderers explicitly, and runs two complete initialization/teardown cycles. Requested OpenGL with
+active OpenGL passes **233/233 twice**. Requested Vulkan with active OpenGL first passes the same
+complete active-OpenGL oracle **233/233 twice**, then returns deterministic CTest unavailable code
+77; it is a skip, never a Vulkan pass. If bgfx genuinely activates Vulkan, the same route executes
+and may pass only as active Vulkan. The serial shard is **181 passed, 1 explicitly unavailable, 0
+failed**. No production backend, other backend, extra frame/Present/retry/wait, or `audit/` file
+changed. Detailed evidence is in `REMEDIATION_PROGRESS.md`.
+
 ### Current GRAPHICS recommendation (inventory checkpoint, 2026-07-25)
 
 No GRAPHICS remediation is in progress. Historical “recommended next” lines in individual closure

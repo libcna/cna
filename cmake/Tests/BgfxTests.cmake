@@ -785,7 +785,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # colour/depth/stencil values, covers every flag combination + public overloads, ordered clears,
     # full-target viewport/scissor independence, backbuffer, Depth24Stencil8/Depth24/None RTs,
     # target isolation, and A->B->A. One whole-framebuffer snapshot per observable result; run
-    # through both Bgfx renderer routes.
+    # through both Bgfx renderer routes. The fixture selects clip-space probes from the actually
+    # active renderer, runs two complete initialization/teardown cycles, and classifies requested
+    # Vulkan -> active OpenGL as a successful fallback oracle followed by deterministic exit 77:
+    # native Vulkan coverage is skipped honestly rather than reported as a Vulkan pass.
     cna_bgfx_test(cna_test_bgfx_graphicsdevice_clearoptions
                   examples/bgfx_graphicsdevice_clearoptions_test.cpp)
     cna_register_backend_test(NAME Bgfx_GraphicsDevice_ClearOptions COMMAND cna_test_bgfx_graphicsdevice_clearoptions

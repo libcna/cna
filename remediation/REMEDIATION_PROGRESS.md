@@ -23335,6 +23335,93 @@ recommended next ticket were not begun. `audit/` is untouched.
 
 **No new findings were created.**
 
+## REMED-GFX-018 — Bgfx requested-Vulkan fallback and ClearOptions fixture — DONE 2026-08-02
+
+### Ticket reconciliation and exact reproduction
+
+Both remediation ledgers were read before editing. This was not a new defect class: the sole shard
+failure was `Bgfx_GraphicsDevice_ClearOptions_Vulkan`, the permanent fixture owned by canonical
+`REMED-GFX-018`. That ID was reused and no duplicate ticket was created. Signed REMED-GFX-197
+commit `1b1e342b` was the clean reproduction baseline.
+
+The exact pre-change CTest route set `SDL_VIDEODRIVER=x11`, `DISPLAY=:701`, and
+`CNA_BGFX_RENDERER=VULKAN`. X.Org Xvfb 21.1.16 exposed GLX, Present and RANDR but no DRI3;
+`vulkaninfo` reported `No DRI3 support detected - required for presentation`. bgfx diagnostics
+reported requested **Vulkan**, attempted Xlib surface creation, failed swapchain creation with
+`VK_ERROR_INITIALIZATION_FAILED`, and then reported actually active **OpenGL 2.1** (Mesa llvmpipe).
+The failed Vulkan attempt also produced bgfx/Khronos
+`VUID-vkDestroyInstance-instance-00629` for its leftover `VkSurfaceKHR`; the usual missing-RenderDoc
+warning was present. Neither diagnostic was emitted by a ClearOptions operation.
+
+The fixture exercised numeric flags `0`, `Target=1`, `DepthBuffer=2`, `Stencil=4`, and combinations
+`3`, `5`, `6`, and `7`, plus the two public colour overloads. It covered the backbuffer and
+`RenderTarget2D` paths with `Depth24Stencil8`, `Depth24`, `None`, and `PreserveContents`, including
+ordered/repeated clears and A -> B -> A target isolation. The exact result was **217/232**, direct
+exit status **1**, and a failed CTest. All 15 misses were the depth lower-bracket probe: expected
+green `(0,255,0,255)`, while the wrong clip convention left the preserved baseline
+`(31,73,121,183)` when colour was not requested, the requested clear colour `(207,91,43,97)` when
+it was, and target-isolation content `(17,191,83,173)` in that leg. Upper depth probes, stencil
+probes, colour masks, ordering, and preservation remained correct.
+
+The fixture is primarily the REMED-GFX-018 ClearOptions semantic oracle, but its two CTest
+registrations also purport to cover renderer selection. In a fallback-capable environment it must
+therefore distinguish three results: native route selection, correct ClearOptions for the renderer
+that actually became active, and an honest fallback/unavailable declaration. The failure is
+classified as **a fixture that assumes requested renderer equals active renderer**, combined with an
+**unsupported environment that must be declared honestly**. It is not a Bgfx Vulkan ClearOptions
+production defect, not a Bgfx OpenGL ClearOptions defect, and not incorrect backend fallback
+handling.
+
+### Narrow correction
+
+Only `examples/bgfx_graphicsdevice_clearoptions_test.cpp` and its Bgfx CTest registration comment
+changed. `ClipDepthForFramebufferDepth` now reads the actually active `bgfx::Caps::homogeneousDepth`
+instead of `CNA_BGFX_RENDERER`; the environment variable remains only the requested renderer.
+The fixture prints requested renderer, active renderer, and active clip convention, asserts the
+OpenGL/OpenGL and Vulkan/Vulkan routes, explicitly recognizes only Vulkan -> OpenGL fallback, and
+runs two complete initialization/teardown lifecycles.
+
+A Vulkan request that falls back to OpenGL executes the complete OpenGL ClearOptions oracle first,
+then returns CTest code 77 with an explicit `[UNAVAILABLE]` message. Thus valid fallback behaviour is
+tested without silently promoting it to native Vulkan coverage. A genuinely active Bgfx Vulkan
+route still executes the Vulkan clip convention and returns success only if that real route passes.
+No Bgfx production, other CNA backend production, public API, frame, Present, retry, sleep, dummy
+bind, or wait changed.
+
+### Coverage and verification
+
+The focused active-OpenGL route passes **233/233 in each of two lifecycles** and exits 0. The
+requested-Vulkan/active-OpenGL route also proves **233/233 in each of two lifecycles**, then exits 77
+and is reported by CTest as unavailable, not passed. Those matrices cover colour-only, depth-only,
+stencil-only, all combined ClearOptions, zero flags, both public colour overloads, backbuffer and
+render-target paths, ordered/repeated clears, target isolation, and repeated initialization and
+teardown. Native Bgfx Vulkan could not be initialized on this Xvfb and no Bgfx Vulkan pass is
+claimed; the conditional active-Vulkan path remains intact. The separate native CNA Vulkan backend
+ClearStencil, ClearDepth, full ClearOptions, OrderedClear, and render-target depth/stencil controls
+pass **5/5**, which is a preservation control and not a substitute for Bgfx Vulkan coverage.
+
+Relevant Bgfx renderer/ClearOptions coverage passes **7 with 1 honest skip** across GFX-185's two
+selection routes, GFX-196 reset/fatal handling, ClearStencil, ClearDepth, the two ClearOptions routes,
+and OrderedClear. Renderer parser tests pass **3/3**. Descriptor/view/readback diagnostics pass
+**3/3** with their expected unsupported-format capability probes only, and the GFX-196 fatal
+callback remains catchable and green. Linked `libasan.so.8` and `libubsan.so.1` builds pass both
+focused routes with no address or undefined-behaviour report; ASan leak detection alone remains off
+for the established bgfx/driver shutdown residual. Representative EasyGL, SDL_GPU, Software, and
+Headless ClearOptions/depth-stencil controls pass **2/2 each**.
+
+The complete Bgfx shard ran serially on the same DRI3-less Xvfb class and is green: **181 passed, 1
+deterministically unavailable, 0 failed out of 182**. The unavailable test is exactly
+`Bgfx_GraphicsDevice_ClearOptions_Vulkan`; its full active-OpenGL ClearOptions oracle passed before
+the skip was returned. Renderer selection and diagnostic transparency are preserved throughout.
+
+### Scope, environment, and findings
+
+Compilation requested at most `-j8`. Another session briefly occupied a `-j2` compilation lane, so
+this session reduced later builds as low as `-j1`; the focused work compiled one translation unit at
+a time. Approximate observed peak temperature was 82 C and cooling pauses were needed. Only the
+fixture, Bgfx CTest documentation, and these two ledgers changed. `audit/` is untouched, no next
+ticket was begun, and **no new finding ID was created**.
+
 ---
 
 ## REMED-GFX-197 — Bgfx Task 952 cube-depth fixture correction (DONE 2026-08-02)
