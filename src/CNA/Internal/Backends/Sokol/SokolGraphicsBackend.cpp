@@ -269,6 +269,20 @@ namespace CNA::Internal::Backends::Sokol
                 std::string("Sokol backend: ") + context + " was handed a foreign texture backend");
         }
 
+        /// Same shape as ResolveSampledTextureViewId, for a cube texture (plan_sokol.md SOKOL-34):
+        /// accepts either a plain SokolTextureCubeBackend or a SokolRenderTargetCubeBackend sampled
+        /// as an environment map (a genuine, real-XNA-legal dynamic-reflection pattern -- both
+        /// implement ITextureCubeBackend).
+        std::uint32_t ResolveSampledCubeViewId(const ITextureCubeBackend& cube, const char* context)
+        {
+            if (const auto* plain = dynamic_cast<const SokolTextureCubeBackend*>(&cube))
+                return plain->GetViewIdEXT();
+            if (const auto* renderTarget = dynamic_cast<const SokolRenderTargetCubeBackend*>(&cube))
+                return renderTarget->GetTextureViewIdEXT();
+            throw std::runtime_error(
+                std::string("Sokol backend: ") + context + " was handed a foreign texture-cube backend");
+        }
+
         /// True when @p texture is a RenderTarget2D's colour attachment rather than a plain,
         /// CPU-uploaded texture (REMED-GFX-147). A render target's colour image is written by real
         /// GPU rasterization, whose framebuffer-origin convention places row 0 (CNA's logical top)
@@ -545,6 +559,9 @@ namespace CNA::Internal::Backends::Sokol
         : size_(size)
         , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
     {
+        if (size <= 0)
+            throw std::runtime_error("Sokol backend: TextureCube size must be positive");
+
         levels_.resize(static_cast<std::size_t>(levelCount_));
         for (int level = 0; level < levelCount_; ++level)
         {
@@ -552,6 +569,76 @@ namespace CNA::Internal::Backends::Sokol
             const std::size_t faceBytes = static_cast<std::size_t>(dim) * static_cast<std::size_t>(dim) * 4u;
             for (auto& face : levels_[static_cast<std::size_t>(level)])
                 face.assign(faceBytes, 0u);
+        }
+        RecreateImage();
+    }
+
+    SokolTextureCubeBackend::~SokolTextureCubeBackend()
+    {
+        DestroyImage();
+    }
+
+    void SokolTextureCubeBackend::DestroyImage()
+    {
+        if (viewId_ != 0)
+        {
+            sg_destroy_view(MakeViewHandle(viewId_));
+            viewId_ = 0;
+        }
+        if (imageId_ != 0)
+        {
+            sg_destroy_image(MakeImageHandle(imageId_));
+            imageId_ = 0;
+        }
+    }
+
+    void SokolTextureCubeBackend::RecreateImage()
+    {
+        // Recreated as immutable rather than updated in place -- see this class's own doc comment
+        // (mirrors SokolTextureBackend::RecreateImage()'s identical reasoning).
+        DestroyImage();
+
+        sg_image_desc desc = {};
+        desc.type = SG_IMAGETYPE_CUBE;
+        desc.usage.immutable = true;
+        desc.width = size_;
+        desc.height = size_;
+        desc.num_mipmaps = levelCount_;
+        desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+        desc.label = "cna_texture_cube";
+
+        // sg_image_data.mip_levels[level] is one CONTIGUOUS range per mip level for a cube image
+        // (all 6 faces concatenated -- see this class's own doc comment), unlike this class's own
+        // per-face-per-level storage, so each level's 6 face buffers are concatenated into a
+        // temporary blob that only needs to outlive the synchronous sg_make_image() call below.
+        std::vector<std::vector<std::uint8_t>> combined(static_cast<std::size_t>(levelCount_));
+        for (int level = 0; level < levelCount_; ++level)
+        {
+            const auto& faces = levels_[static_cast<std::size_t>(level)];
+            auto& blob = combined[static_cast<std::size_t>(level)];
+            blob.reserve(faces[0].size() * 6u);
+            for (const auto& face : faces)
+                blob.insert(blob.end(), face.begin(), face.end());
+            desc.data.mip_levels[level].ptr = blob.data();
+            desc.data.mip_levels[level].size = blob.size();
+        }
+
+        imageId_ = sg_make_image(&desc).id;
+        if (sg_query_image_state(MakeImageHandle(imageId_)) != SG_RESOURCESTATE_VALID)
+        {
+            imageId_ = 0;
+            throw std::runtime_error("Sokol backend: sg_make_image failed for a TextureCube");
+        }
+
+        sg_view_desc viewDesc = {};
+        viewDesc.texture.image = MakeImageHandle(imageId_);
+        viewDesc.label = "cna_texture_cube_view";
+        viewId_ = sg_make_view(&viewDesc).id;
+        if (sg_query_view_state(MakeViewHandle(viewId_)) != SG_RESOURCESTATE_VALID)
+        {
+            viewId_ = 0;
+            DestroyImage();
+            throw std::runtime_error("Sokol backend: sg_make_view failed for a TextureCube");
         }
     }
 
@@ -574,6 +661,7 @@ namespace CNA::Internal::Backends::Sokol
                                           static_cast<std::size_t>(x)) * 4u;
             std::memcpy(pixels.data() + dstOffset, src + static_cast<std::size_t>(row) * rowBytes, rowBytes);
         }
+        RecreateImage();
         return true;
     }
 
@@ -1907,6 +1995,10 @@ namespace CNA::Internal::Backends::Sokol
         instanced3dShaderId_ = sg_make_shader(cna_instanced3d_shader_desc(sg_query_backend())).id;
         if (sg_query_shader_state(MakeShaderHandle(instanced3dShaderId_)) != SG_RESOURCESTATE_VALID)
             throw std::runtime_error("Sokol backend: instanced-3D shader creation failed");
+
+        envmap3dShaderId_ = sg_make_shader(cna_envmap3d_shader_desc(sg_query_backend())).id;
+        if (sg_query_shader_state(MakeShaderHandle(envmap3dShaderId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: environment-mapped-3D shader creation failed");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -3002,6 +3094,23 @@ namespace CNA::Internal::Backends::Sokol
                     desc.layout.attrs[ATTR_cna_skinned3d_color0].offset = key.colorOffset;
                 }
                 break;
+
+            case Shader3DKind::EnvMapped:
+                // Position, normal and texcoord0 are all required in the declaration for this kind
+                // (checked in DrawColored3D before a key is ever built) -- exactly 3 continuous
+                // slots, no optional trailing color0 (envmap3d.glsl has no color0 attribute at
+                // all; real XNA's EnvironmentMapEffect has no VertexColorEnabled property).
+                desc.shader = MakeShaderHandle(envmap3dShaderId_);
+                desc.layout.attrs[ATTR_cna_envmap3d_position].format =
+                    static_cast<sg_vertex_format>(key.positionFormat);
+                desc.layout.attrs[ATTR_cna_envmap3d_position].offset = key.positionOffset;
+                desc.layout.attrs[ATTR_cna_envmap3d_normal].format =
+                    static_cast<sg_vertex_format>(key.normalFormat);
+                desc.layout.attrs[ATTR_cna_envmap3d_normal].offset = key.normalOffset;
+                desc.layout.attrs[ATTR_cna_envmap3d_texcoord0].format =
+                    static_cast<sg_vertex_format>(key.texCoordFormat);
+                desc.layout.attrs[ATTR_cna_envmap3d_texcoord0].offset = key.texCoordOffset;
+                break;
         }
         desc.layout.buffers[0].stride = key.stride;
 
@@ -3199,13 +3308,12 @@ namespace CNA::Internal::Backends::Sokol
 
         // Everything this backend cannot shade yet is refused here rather than rendered as an
         // untextured, unlit approximation that would look plausible and be wrong. Plain texturing
-        // (SOKOL-21), lighting (SOKOL-21), dual-texturing (SOKOL-33) and skinning (SOKOL-35) are
-        // real below; environment mapping and PBR are each a distinct stock effect with their own
-        // vertex/uniform contract this backend does not implement yet.
-        if (params.envMapping || params.pbr)
+        // (SOKOL-21), lighting (SOKOL-21), dual-texturing (SOKOL-33), skinning (SOKOL-35) and
+        // environment mapping (SOKOL-34) are real below; PBR is a distinct stock effect with its
+        // own vertex/uniform contract this backend does not implement yet.
+        if (params.pbr)
         {
-            NotYetImplemented(kBackendName,
-                "environment-mapped/PBR 3D draws");
+            NotYetImplemented(kBackendName, "PBR 3D draws");
         }
         if (params.customEffectBackend != nullptr)
             NotYetImplemented(kBackendName, "custom ShaderEffect draws");
@@ -3225,7 +3333,8 @@ namespace CNA::Internal::Backends::Sokol
             if (ib->GetBufferIdEXT() == 0 || ib->GetIndexCount() <= 0) return;
         }
 
-        const Shader3DKind kind = params.skinned         ? Shader3DKind::Skinned
+        const Shader3DKind kind = params.envMapping      ? Shader3DKind::EnvMapped
+                                 : params.skinned         ? Shader3DKind::Skinned
                                  : params.lightingEnabled ? Shader3DKind::Lit
                                  : params.dualTexture     ? Shader3DKind::DualTextured
                                  : params.textureEnabled  ? Shader3DKind::Textured
@@ -3383,7 +3492,7 @@ namespace CNA::Internal::Backends::Sokol
                     break;
                 case 32:  // PositionNormalTextureStream: float3 position @0, float3 normal @12,
                           // float2 texcoord @24.
-                    if (kind != Shader3DKind::Lit)
+                    if (kind != Shader3DKind::Lit && kind != Shader3DKind::EnvMapped)
                         NotYetImplemented(kBackendName,
                             "a colored or plain-textured 3D draw from an undeclared "
                             "VertexPositionNormalTexture buffer");
@@ -3449,6 +3558,12 @@ namespace CNA::Internal::Backends::Sokol
                 "a skinned 3D draw from a VertexDeclaration with no Normal, no "
                 "TextureCoordinate, no BlendWeight or no BlendIndices element");
         }
+        if (kind == Shader3DKind::EnvMapped && (key.normalOffset < 0 || key.texCoordOffset < 0))
+        {
+            NotYetImplemented(kBackendName,
+                "an environment-mapped 3D draw from a VertexDeclaration with no Normal or no "
+                "TextureCoordinate element");
+        }
 
         // Resolved before the pass begins: a Textured draw needs a real texture, and a Lit draw
         // needs one only when actually textured (the white fallback otherwise). Accepts a
@@ -3457,7 +3572,7 @@ namespace CNA::Internal::Backends::Sokol
         std::uint32_t textureViewId = 0;
         bool textureIsRenderTarget = false;
         if (kind == Shader3DKind::Textured || kind == Shader3DKind::DualTextured
-            || kind == Shader3DKind::Skinned
+            || kind == Shader3DKind::Skinned || kind == Shader3DKind::EnvMapped
             || (kind == Shader3DKind::Lit && params.textureEnabled))
         {
             if (params.texture0 != nullptr)
@@ -3474,15 +3589,32 @@ namespace CNA::Internal::Backends::Sokol
         }
         if (!hasTexture
             && (kind == Shader3DKind::Lit || kind == Shader3DKind::DualTextured
-                || kind == Shader3DKind::Skinned))
+                || kind == Shader3DKind::Skinned || kind == Shader3DKind::EnvMapped))
         {
-            // Lit/Skinned: the 1x1 opaque-white fallback for an untextured lit/skinned draw
-            // (SkinnedEffect::FillGpuDrawParams always sets textureEnabled=true but texture0 stays
-            // null when the caller never assigned SkinnedEffect::Texture). DualTextured: the same
-            // null-fallback convention EasyGL/Vulkan/Bgfx already established for DualTextureEffect's
-            // own Texture slot (this codebase's docs/dualtextureeffect-support.md Task 386).
+            // Lit/Skinned/EnvMapped: the 1x1 opaque-white fallback for an untextured lit/skinned/
+            // environment-mapped draw (SkinnedEffect/EnvironmentMapEffect::FillGpuDrawParams both
+            // always set textureEnabled=true but texture0 stays null when the caller never assigned
+            // the effect's own Texture property). DualTextured: the same null-fallback convention
+            // EasyGL/Vulkan/Bgfx already established for DualTextureEffect's own Texture slot (this
+            // codebase's docs/dualtextureeffect-support.md Task 386).
             textureViewId = GetDefaultWhiteTexture().GetViewIdEXT();
             hasTexture = true;
+        }
+
+        // EnvironmentMapEffect's cube map -- unlike the base texture above, there is no
+        // established null-fallback convention for it in this codebase (every existing cross-
+        // backend test always sets one), so a missing cube map is refused the same way an
+        // explicitly-required TextureEnabled base texture is above, rather than silently sampling
+        // an unbound resource.
+        std::uint32_t envMapViewId = 0;
+        if (kind == Shader3DKind::EnvMapped)
+        {
+            if (params.envMap == nullptr)
+            {
+                throw std::runtime_error(
+                    "Sokol backend: EnvironmentMapEffect draw with no cube map bound");
+            }
+            envMapViewId = ResolveSampledCubeViewId(*params.envMap, "an environment-mapped 3D draw");
         }
 
         // DualTextureEffect's second slot (Texture2) -- same null-fallback convention as the
@@ -3530,6 +3662,17 @@ namespace CNA::Internal::Backends::Sokol
             const SamplerSlotState& sampler = samplerSlots_[0];
             bindings.views[VIEW_cna_tex2] = MakeViewHandle(texture1ViewId);
             bindings.samplers[SMP_cna_smp2] = MakeSamplerHandle(
+                GetSampler(sampler.filter, sampler.addressU, sampler.addressV,
+                          sampler.maxAnisotropy));
+        }
+        if (kind == Shader3DKind::EnvMapped)
+        {
+            // Reuses slot 0's sampler state (no distinct SamplerStates[1] tracking in this
+            // codebase's GpuDrawParams model), the same simplification DualTextured's own second
+            // texture slot already makes.
+            const SamplerSlotState& sampler = samplerSlots_[0];
+            bindings.views[VIEW_cna_envTex] = MakeViewHandle(envMapViewId);
+            bindings.samplers[SMP_cna_envSmp] = MakeSamplerHandle(
                 GetSampler(sampler.filter, sampler.addressU, sampler.addressV,
                           sampler.maxAnisotropy));
         }
@@ -3768,6 +3911,73 @@ namespace CNA::Internal::Backends::Sokol
 
                 sg_range fsRange3{&fsUniforms, sizeof(fsUniforms)};
                 sg_apply_uniforms(UB_cna_skinned3d_fs_params, &fsRange3);
+                break;
+            }
+            case Shader3DKind::EnvMapped:
+            {
+                const Matrix normalMatrix = Matrix::Transpose(Matrix::Invert(world));
+
+                cna_envmap3d_vs_params_t vsUniforms{};
+                worldViewProjection.ToColumnMajor(vsUniforms.mvp);
+                world.ToColumnMajor(vsUniforms.world);
+                normalMatrix.ToColumnMajor(vsUniforms.normalMatrix);
+                vsUniforms.eyePosition[0] = params.eyePositionWorld[0];
+                vsUniforms.eyePosition[1] = params.eyePositionWorld[1];
+                vsUniforms.eyePosition[2] = params.eyePositionWorld[2];
+                vsUniforms.flags[0] = params.fresnelEnabled ? 1.0f : 0.0f;
+                vsUniforms.flags[1] = params.fresnelFactor;
+                vsUniforms.flags[2] = params.envMapAmount;
+                vsUniforms.fogVector[0] = params.fogVector[0];
+                vsUniforms.fogVector[1] = params.fogVector[1];
+                vsUniforms.fogVector[2] = params.fogVector[2];
+                vsUniforms.fogVector[3] = params.fogVector[3];
+
+                sg_range vsRange{&vsUniforms, sizeof(vsUniforms)};
+                sg_apply_uniforms(UB_cna_envmap3d_vs_params, &vsRange);
+
+                // GpuDrawParams::diffuseColor/emissiveColor both arrive pre-multiplied by alpha for
+                // this effect (EnvironmentMapEffect::FillGpuDrawParams's own doc comment) -- see
+                // envmap3d.glsl's own doc comment for why this differs from lit3d's convention.
+                cna_envmap3d_fs_params_t fsUniforms{};
+                fsUniforms.diffuse[0] = params.diffuseColor[0];
+                fsUniforms.diffuse[1] = params.diffuseColor[1];
+                fsUniforms.diffuse[2] = params.diffuseColor[2];
+                fsUniforms.diffuse[3] = params.diffuseColor[3];
+                fsUniforms.emissiveColor[0] = params.emissiveColor[0];
+                fsUniforms.emissiveColor[1] = params.emissiveColor[1];
+                fsUniforms.emissiveColor[2] = params.emissiveColor[2];
+                fsUniforms.light0Dir[0] = params.light0Dir[0];
+                fsUniforms.light0Dir[1] = params.light0Dir[1];
+                fsUniforms.light0Dir[2] = params.light0Dir[2];
+                fsUniforms.light0Diffuse[0] = params.light0Diffuse[0];
+                fsUniforms.light0Diffuse[1] = params.light0Diffuse[1];
+                fsUniforms.light0Diffuse[2] = params.light0Diffuse[2];
+                fsUniforms.light1Dir[0] = params.light1Dir[0];
+                fsUniforms.light1Dir[1] = params.light1Dir[1];
+                fsUniforms.light1Dir[2] = params.light1Dir[2];
+                fsUniforms.light1Diffuse[0] = params.light1Diffuse[0];
+                fsUniforms.light1Diffuse[1] = params.light1Diffuse[1];
+                fsUniforms.light1Diffuse[2] = params.light1Diffuse[2];
+                fsUniforms.light2Dir[0] = params.light2Dir[0];
+                fsUniforms.light2Dir[1] = params.light2Dir[1];
+                fsUniforms.light2Dir[2] = params.light2Dir[2];
+                fsUniforms.light2Diffuse[0] = params.light2Diffuse[0];
+                fsUniforms.light2Diffuse[1] = params.light2Diffuse[1];
+                fsUniforms.light2Diffuse[2] = params.light2Diffuse[2];
+                fsUniforms.envMapSpecular[0] = params.envMapSpecular[0];
+                fsUniforms.envMapSpecular[1] = params.envMapSpecular[1];
+                fsUniforms.envMapSpecular[2] = params.envMapSpecular[2];
+                fsUniforms.alphaTest[0] = params.alphaTest[0];
+                fsUniforms.alphaTest[1] = params.alphaTest[1];
+                fsUniforms.alphaTest[2] = params.alphaTest[2];
+                fsUniforms.alphaTest[3] = params.alphaTest[3];
+                fsUniforms.fogColor[0] = params.fogColor[0];
+                fsUniforms.fogColor[1] = params.fogColor[1];
+                fsUniforms.fogColor[2] = params.fogColor[2];
+                fsUniforms.rtFlipV[0] = textureIsRenderTarget ? 1.0f : 0.0f;
+
+                sg_range fsRange4{&fsUniforms, sizeof(fsUniforms)};
+                sg_apply_uniforms(UB_cna_envmap3d_fs_params, &fsRange4);
                 break;
             }
         }

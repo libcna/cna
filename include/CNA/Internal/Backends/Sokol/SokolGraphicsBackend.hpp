@@ -447,28 +447,42 @@ namespace CNA::Internal::Backends::Sokol
     };
 
     /**
-     * @brief Backend handle for a cube texture: pure CPU-side RGBA8 storage, no sokol_gfx image.
+     * @brief Backend handle for a cube texture: a real `sg_image`/`sg_view` pair, sampled by
+     * `EnvironmentMapEffect` (plan_sokol.md SOKOL-34).
      *
-     * plan_sokol.md SOKOL-27. Nothing on this backend samples a cube texture yet -- dual-texture,
-     * environment-mapped, skinned and PBR 3D draws all throw `NotYetImplemented` in
-     * `DrawColored3D`, and there is no cube shader variant -- so allocating a real `sg_image` here
-     * would be a GPU resource with no consumer. `Texture2D`/`RenderTarget2D` create real images
-     * because SpriteBatch and the 3D paths genuinely sample them; this class stores exactly the six
-     * faces' pixels `SetData()`/`GetData()` need and nothing more, mirroring the Software backend's
-     * own `SoftwareTextureCubeBackend`.
+     * A CPU-side RGBA8 shadow (`levels_[level][face]`) is still kept, mirroring
+     * `SokolTextureBackend`'s own shape: sokol_gfx has no sub-image upload, so every `SetData()`
+     * recreates the whole immutable image from the shadow (`RecreateImage()`), the same "creating
+     * an immutable image with fresh initial data has no per-frame update-count limit, unlike
+     * `sg_update_image()`" reasoning `SokolTextureBackend::RecreateImage()`'s own comment gives --
+     * relevant here too since XNB/CNJ content loaders can write several faces/levels in one frame.
+     * `sg_image_data.mip_levels[level]` is one contiguous range per mip level for a
+     * `SG_IMAGETYPE_CUBE` image (all 6 faces concatenated, `[0]=+X,[1]=-X,[2]=+Y,[3]=-Y,[4]=+Z,
+     * [5]=-Z` -- sokol_gfx.h's own `sg_image_data` doc comment), which happens to be byte-identical
+     * to this class's own `face` parameter order (0=+X..5=-Z, matching
+     * `Microsoft::Xna::Framework::Graphics::CubeMapFace`), so no reordering is needed when
+     * concatenating the per-face shadow buffers.
      */
     class SokolTextureCubeBackend : public ITextureCubeBackend
     {
     public:
         /**
-         * @brief Allocates zeroed RGBA8 storage for all six faces of every mip level.
+         * @brief Allocates zeroed RGBA8 storage for all six faces of every mip level and creates
+         * the backing sokol_gfx cube image.
          * @param size   Edge length of one cube face at mip 0, in texels.
          * @param mipMap Allocate the full mip chain down to 1x1 as well as level 0.
          */
         SokolTextureCubeBackend(int size, bool mipMap);
 
+        /** @brief Destroys the sokol_gfx view and image owned by this cube texture. */
+        ~SokolTextureCubeBackend() override;
+
+        SokolTextureCubeBackend(const SokolTextureCubeBackend&) = delete;
+        SokolTextureCubeBackend& operator=(const SokolTextureCubeBackend&) = delete;
+
         /**
-         * @brief Copies one face's RGBA8 sub-rectangle into this backend's CPU storage.
+         * @brief Copies one face's RGBA8 sub-rectangle into this backend's CPU storage and
+         * recreates the sokol_gfx image from the updated shadow.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @param level      Mip level to write.
@@ -507,15 +521,27 @@ namespace CNA::Internal::Backends::Sokol
          */
         NOXNA [[nodiscard]] int GetSizeEXT() const { return size_; }
 
+        /**
+         * @brief Returns the raw sokol_gfx texture-view handle id used to sample the whole cube.
+         * NOXNA.
+         * @return sg_view id, or 0 when creation failed.
+         */
+        NOXNA [[nodiscard]] std::uint32_t GetViewIdEXT() const { return viewId_; }
+
     private:
         /// Face edge length at @p level, never below 1 -- mirrors TextureCube.cpp's own mip
         /// dimension helper.
         [[nodiscard]] int LevelDim(int level) const;
 
+        void RecreateImage();
+        void DestroyImage();
+
         int size_ = 0;
         int levelCount_ = 1;
         /// levels_[level][face] -- one tightly packed RGBA8 buffer per face per allocated mip level.
         std::vector<std::array<std::vector<std::uint8_t>, 6>> levels_;
+        std::uint32_t imageId_ = 0;
+        std::uint32_t viewId_ = 0;
     };
 
     /**
@@ -1547,7 +1573,12 @@ namespace CNA::Internal::Backends::Sokol
              *  has no unlit/untextured skinned shader permutation), a per-vertex weighted sum of up
              *  to 4 bone matrices (GpuDrawParams::weightsPerVertex) blends Position/Normal before
              *  the same lighting math lit3d.glsl uses. */
-            Skinned
+            Skinned,
+            /** @brief envmap3d.glsl -- EnvironmentMapEffect: always textured and lit, no vertex
+             *  colour support (real XNA's EnvironmentMapEffect has no VertexColorEnabled property).
+             *  A world-space reflection vector and Fresnel blend factor are computed per-vertex,
+             *  the cube map is sampled per-fragment and lerped with the lit base colour. */
+            EnvMapped
         };
 
         /**
@@ -1866,6 +1897,7 @@ namespace CNA::Internal::Backends::Sokol
         std::uint32_t dualTextured3dShaderId_ = 0;
         std::uint32_t skinned3dShaderId_ = 0;
         std::uint32_t instanced3dShaderId_ = 0;
+        std::uint32_t envmap3dShaderId_ = 0;
         /// Lazily created 1x1 opaque-white texture, bound by the Lit shader whenever
         /// GpuDrawParams::textureEnabled is false -- lets one shader serve both "textured and lit"
         /// and "vertex-coloured and lit" (the multiply is then a no-op), the same convention the

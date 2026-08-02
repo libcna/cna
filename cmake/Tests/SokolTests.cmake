@@ -212,4 +212,14 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
     cna_register_backend_test(NAME Sokol_Instanced3D COMMAND cna_test_sokol_instanced3d
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-34: EnvironmentMapEffect. Task 891's own backend-agnostic oracle (no
+    # CNA_BACKEND_* conditionals, already registered for EasyGL/Vulkan/Bgfx), reused here rather
+    # than duplicated.
+    cna_sokol_test(cna_test_sokol_environmentmapeffect_alphascaledlerp
+                    examples/environmentmapeffect_alphascaledlerp_test.cpp)
+    cna_register_backend_test(NAME Sokol_EnvironmentMapEffect_AlphaScaledLerp
+        COMMAND cna_test_sokol_environmentmapeffect_alphascaledlerp
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
