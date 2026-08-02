@@ -123,6 +123,15 @@ protected:
         // ── Other unsupported formats must throw ─────────────────────────────
 
 #if defined(CNA_BACKEND_SKIA)
+        expectNoThrow("Texture2D Bgra5551", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
+        });
+        expectNoThrow("Texture2D NormalizedByte2", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
+        });
+        expectNoThrow("Texture2D NormalizedByte4", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
+        });
         expectNoThrow("Texture2D Single", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
         });
@@ -145,6 +154,15 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
         });
 #else
+        expectThrows("Texture2D Bgra5551", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra5551);
+        });
+        expectThrows("Texture2D NormalizedByte2", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
+        });
+        expectThrows("Texture2D NormalizedByte4", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
+        });
         expectThrows("Texture2D Single", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
         });
@@ -171,9 +189,9 @@ protected:
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });
 #if defined(CNA_BACKEND_SKIA)
-        // SKIA-135–138 promote these exact transfer/sampling formats for Texture2D only.
-        // The SKIA-136 colour and SKIA-138 float formats were handled above; render targets
-        // remain independently gated and other backends retain the Color-only boundary.
+        // SKIA-135–139 promote these exact transfer/sampling formats for Texture2D only.
+        // The SKIA-136 colour, SKIA-138 float and SKIA-139 shadow formats were handled above;
+        // render targets remain independently gated and other backends retain Color-only.
         expectNoThrow("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });

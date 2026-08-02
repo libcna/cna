@@ -5,11 +5,11 @@
 
 > Skia successor note (SKIA-134): this historical cross-backend document does not define the Skia
 > implementation routes. The checked, current 27-value Skia contract is
-> [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). SKIA-135–138 have promoted
+> [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). SKIA-135–139 have promoted
 > `Bgr565`, `Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `ColorBgraEXT`,
 > `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`, `Single`, `Vector2`, `Vector4`, `HalfSingle`,
-> `HalfVector2`, `HalfVector4`, and `HdrBlendable` for Skia `Texture2D`; the remaining format gates
-> are tracked by SKIA-139–143.
+> `HalfVector2`, `HalfVector4`, `HdrBlendable`, `Bgra5551`, `NormalizedByte2`, and
+> `NormalizedByte4` for Skia `Texture2D`; the remaining format gates are tracked by SKIA-140–143.
 
 ---
 

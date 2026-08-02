@@ -31,10 +31,13 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
     struct Alpha8;
     struct Bgr565;
+    struct Bgra5551;
     struct Bgra4444;
     struct HalfSingle;
     struct HalfVector2;
     struct HalfVector4;
+    struct NormalizedByte2;
+    struct NormalizedByte4;
     struct Rg32;
     struct Rgba1010102;
     struct Rgba64;
@@ -144,6 +147,11 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Uploads exact packed Bgra4444 texels to a mip level or rectangle. */
         void SetData(int level, const Rectangle* rect, const PackedVector::Bgra4444* data,
                      int startIndex, int elementCount);
+        /** @brief Uploads exact packed Bgra5551 texels to a Bgra5551 texture. */
+        void SetData(const PackedVector::Bgra5551* data, int elementCount);
+        /** @brief Uploads exact packed Bgra5551 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Bgra5551* data,
+                     int startIndex, int elementCount);
         /** @brief Uploads exact packed Rgba1010102 texels to an Rgba1010102 texture. */
         void SetData(const PackedVector::Rgba1010102* data, int elementCount);
         /** @brief Uploads exact packed Rgba1010102 texels to a mip level or rectangle. */
@@ -163,6 +171,16 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetData(const PackedVector::Rgba64* data, int elementCount);
         /** @brief Uploads exact packed Rgba64 texels to a mip level or rectangle. */
         void SetData(int level, const Rectangle* rect, const PackedVector::Rgba64* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed signed-normalized XY bytes. */
+        void SetData(const PackedVector::NormalizedByte2* data, int elementCount);
+        /** @brief Uploads exact packed signed-normalized XY bytes to a mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::NormalizedByte2* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed signed-normalized XYZW bytes. */
+        void SetData(const PackedVector::NormalizedByte4* data, int elementCount);
+        /** @brief Uploads exact packed signed-normalized XYZW bytes to a mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::NormalizedByte4* data,
                      int startIndex, int elementCount);
         /** @brief Uploads exact IEEE binary32 values to a Single texture. */
         void SetData(const float* data, int elementCount);
@@ -256,6 +274,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Reads exact packed Bgra4444 texels from a mip level or rectangle. */
         void GetData(int level, const Rectangle* rect, PackedVector::Bgra4444* data,
                      int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Bgra5551 texels from a Bgra5551 texture. */
+        void GetData(PackedVector::Bgra5551* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Bgra5551 texels from a Bgra5551 texture. */
+        void GetData(PackedVector::Bgra5551* data, int elementCount) const;
+        /** @brief Reads exact packed Bgra5551 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Bgra5551* data,
+                     int startIndex, int elementCount) const;
         /** @brief Reads exact packed Rgba1010102 texels from an Rgba1010102 texture. */
         void GetData(PackedVector::Rgba1010102* data, int startIndex, int elementCount) const;
         /** @brief Reads all exact packed Rgba1010102 texels from an Rgba1010102 texture. */
@@ -283,6 +308,20 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(PackedVector::Rgba64* data, int elementCount) const;
         /** @brief Reads exact packed Rgba64 texels from a mip level or rectangle. */
         void GetData(int level, const Rectangle* rect, PackedVector::Rgba64* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed signed-normalized XY bytes. */
+        void GetData(PackedVector::NormalizedByte2* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed signed-normalized XY bytes. */
+        void GetData(PackedVector::NormalizedByte2* data, int elementCount) const;
+        /** @brief Reads exact packed signed-normalized XY bytes from a mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::NormalizedByte2* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed signed-normalized XYZW bytes. */
+        void GetData(PackedVector::NormalizedByte4* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed signed-normalized XYZW bytes. */
+        void GetData(PackedVector::NormalizedByte4* data, int elementCount) const;
+        /** @brief Reads exact packed signed-normalized XYZW bytes from a mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::NormalizedByte4* data,
                      int startIndex, int elementCount) const;
         /** @brief Reads exact IEEE binary32 values from a Single texture. */
         void GetData(float* data, int startIndex, int elementCount) const;

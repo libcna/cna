@@ -358,12 +358,29 @@ protected:
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
+#endif
+}
+
+TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
+{
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
+#else
+    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
@@ -486,6 +503,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         const bool supported = format == SurfaceFormat::Color
 #ifdef CNA_BACKEND_SKIA
             || format == SurfaceFormat::Bgr565
+            || format == SurfaceFormat::Bgra5551
             || format == SurfaceFormat::Bgra4444
             || format == SurfaceFormat::Rgba1010102
             || format == SurfaceFormat::Rg32
@@ -501,6 +519,8 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::HalfSingle
             || format == SurfaceFormat::HalfVector2
             || format == SurfaceFormat::HalfVector4
+            || format == SurfaceFormat::NormalizedByte2
+            || format == SurfaceFormat::NormalizedByte4
             || format == SurfaceFormat::HdrBlendable
 #endif
             ;

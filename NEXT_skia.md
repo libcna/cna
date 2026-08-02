@@ -1619,9 +1619,49 @@ level-boundary contract.
   `xvfb-run -a env SDL_AUDIODRIVER=dummy ctest --test-dir cmake-build-skia -R 'Skia_(Contract_SurfaceFormat|Texture2D_Constraints|Texture2D_FloatFormats)$' --output-on-failure -j 1`.
 - No real display or subagent was used. `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-139
+
+- Skia `Texture2D` now promotes `Bgra5551`, `NormalizedByte2`, and `NormalizedByte4` without
+  widening the non-Color `RenderTarget2D`, cube, or volume gates. Each native-width mip chain
+  retains the exact public transfer payload; both source-alpha-labelled sampling views are bounded
+  decoded `kRGBA_F32` copies and their actual 16-byte-per-texel footprint is resource-accounted.
+- Added typed whole-level and mip/rectangle `SetData`/`GetData` overloads for `Bgra5551`,
+  `NormalizedByte2`, and `NormalizedByte4`. Packed properties are serialized explicitly
+  little-endian rather than copying their polymorphic object representation. Caller offsets,
+  guards, partial-neighbour preservation, format mismatch, and failed-transfer atomicity use the
+  existing checked transfer windows.
+- `Bgra5551` decode follows A15:R14..10:G9..5:B4..0 and generated mips average the native
+  5/5/5/1 integers. Authored SNORM `0x80` remains bit-exact on readback; both signed -128 and -127
+  sample as -1. Generated SNORM levels canonicalize both endpoints to -127, average exact signed
+  integers and round half ties away from zero. A new regression caught and removed the former
+  float-rounding one-byte error at an exact half.
+- Added `Skia_Texture2D_ShadowFormats`, which passes 39/39 checks for construction/accounting,
+  exact/endian/partial transfer, guards, native-component mips, metadata, signed endpoints,
+  missing channels, public SpriteBatch pixels, typed mismatch atomicity, three target refusals and
+  exact counter release. The shared Skia refusal list is now only the six compressed formats.
+- Focused Debug, Release, and ASan+UBSan gates pass: the new 39-check fixture, the 29-check Skia
+  surface-format contract, the texture-constraint fixture, and all 13
+  `UnsupportedFormatConstructionTest` cases. Sanitizer execution used
+  `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1` only because of the
+  documented external Mesa/X11 process-exit residual. EasyGL passes its independent 27/27
+  offscreen contract and still rejects all three formats.
+- The complete Debug tree builds with `cmake --build cmake-build-skia --parallel 2`. All 156 Skia
+  tests then pass sequentially and headlessly: Raster 21/21 through CTest, all 129 Display test
+  commands directly under `SDL_VIDEODRIVER=dummy`, and Audit 6/6 through CTest. Direct execution
+  was required because this existing build has `SDL_VIDEODRIVER=x11;DISPLAY=:99` baked into its
+  Display CTest properties while the host `/tmp/.X11-unix` ownership prevents Xvfb from opening a
+  local listener; no test was skipped.
+- Useful focused commands:
+  `env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./cmake-build-skia/cna_test_skia_texture2d_shadow_formats`,
+  `ctest --test-dir cmake-build-skia -L Raster --output-on-failure -j 1`, and
+  `ctest --test-dir cmake-build-skia -L Audit --output-on-failure -j 1`.
+- No real display or subagent was used, compilation never exceeded two jobs, and `NEXT.md`
+  remained untouched. The exact next implementation point is SKIA-140: preserve DXT1/DXT3/DXT5
+  and Dxt5Srgb compressed blocks while supplying bounded decoded sampling images.
+
 ## Next candidates
 
-1. SKIA-139–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
+1. SKIA-140–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
    order, retaining exact pre-allocation refusals until each format passes transfer and pixels.
 2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.

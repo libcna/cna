@@ -31,6 +31,11 @@ F32/F16 raster views, generate deterministic exceptional-value mips, and pass ex
 sampling and bounded blend oracles. They remain Texture2D-only; target, cube, and volume routes
 remain independently refused.
 
+SKIA-139 shadow Texture2D promotion: PASS. `Bgra5551`, `NormalizedByte2`, and
+`NormalizedByte4` preserve exact packed/signed transfer bytes, expose bounded RGBA32F sampling
+views, and generate deterministic native-component mips. They remain Texture2D-only; target,
+cube, and volume routes remain independently refused.
+
 Scope: experimental `CNA_GRAPHICS_BACKEND=SKIA` CPU-raster 2D backend at the SKIA-114 checkpoint.
 This is not a Ganesh/Graphite, general 3D, or full EasyGL feature-equivalence claim.
 
@@ -89,6 +94,7 @@ audit can pass.
 | BGRA/sRGB `Texture2D` formats | Direct `kBGRA_8888`; exact encoded `kSRGBA_8888` with linear-sRGB working metadata and linear-light mips | `Skia_Texture2D_ColourFormats` 31/31 including explicit linear/sRGB destinations; SKIA-136 |
 | One/two/four-channel UNORM `Texture2D` formats | Direct pinned Alpha8/R8/R16/RG16/RGBA16 types with exact typed little-endian transfers and native mips | `Skia_Texture2D_UnormFormats` 63/63 including missing-channel pixels and target refusal; SKIA-137 |
 | Float/half `Texture2D` formats | Direct F32/F16 types plus exact expanded F32 views for Single/Vector2, bit-preserving typed transfers and deterministic IEEE mips | `Skia_Texture2D_FloatFormats` 44/44 including HDR sampling/blending and seven target refusals; SKIA-138 |
+| Packed/SNORM shadow `Texture2D` formats | Exact `Bgra5551`/`NormalizedByte2/4` shadows plus bounded RGBA32F sampling views and native-component mips | `Skia_Texture2D_ShadowFormats` 39/39 including endian, endpoint, partial-transfer, pixel and three target-refusal checks; SKIA-139 |
 | Non-Color target formats | Refused pending the format phase | stable pre-allocation diagnostics; SKIA-142–143 |
 | MRT, depth/stencil, wireframe, 3D, stock 3D effects, cube/volume sampling, queries | Refused after emulation investigation | MRT/3D/query ADRs and atomic refusal suite |
 | Ganesh/Graphite acceleration | Not selected or advertised | surface-mode ADR; zero `Accelerated` CTests in the raster build |
@@ -161,14 +167,20 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   refused.
 - SKIA-137 one/two/four-channel-UNORM Texture2D promotion: complete sequential Debug Skia suite
   154/154 PASS on isolated virtual Xvfb in 213.17 seconds (21 Raster, 127 Display, six Audit).
-- SKIA-138 float/half Texture2D promotion: complete sequential Debug Skia suite 155/155 PASS on
-  isolated virtual Xvfb in 217.64 seconds (21 Raster, 128 Display, six Audit). The focused
-  constructor/constraint/format gate passes in Debug, Release and ASan+UBSan, and the EasyGL
-  non-Skia boundary remains a 24/24 refusal contract.
   `Skia_Texture2D_UnormFormats` passes 63/63 checks; it and the constructor/refusal contracts pass
   as a three-test set in Debug, Release and ASan+UBSan (`detect_leaks=0` only for the documented
   external Mesa/X11 residual). The EasyGL Color-only control passes 20/20. The complete tree builds
   with `--parallel 2`; non-Color targets and non-Color cube/volume resources stay refused.
+- SKIA-138 float/half Texture2D promotion: complete sequential Debug Skia suite 155/155 PASS on
+  isolated virtual Xvfb in 217.64 seconds (21 Raster, 128 Display, six Audit). The focused
+  constructor/constraint/format gate passes in Debug, Release and ASan+UBSan, and the EasyGL
+  non-Skia boundary remains a 24/24 refusal contract.
+- SKIA-139 packed/SNORM-shadow Texture2D promotion: complete Debug tree builds with
+  `--parallel 2`; all 156 tests pass sequentially and headlessly (21 Raster, 129 Display binaries
+  under `SDL_VIDEODRIVER=dummy`, and six Audit). `Skia_Texture2D_ShadowFormats` passes 39/39 and
+  the constructor/constraint/format gate passes in Debug, Release and ASan+UBSan
+  (`detect_leaks=0` only for the documented external Mesa/X11 residual). The EasyGL offscreen
+  boundary remains 27/27 and rejects all three formats.
 - `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`,
   `Skia_ReleaseGate_Audit`, `Skia_SuccessorContracts_Audit`, and
   `Skia_SurfaceFormats_Audit`: PASS. The last audit covers all 27 SKIA-134 format rows and does not
@@ -193,9 +205,8 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
 - The only supported Skia artifact is pinned CPU raster on the documented GNU/Clang ELF build
   shape. Native Windows/MSVC, Emscripten, and accelerated Skia artifacts are not claimed.
 - SDL may use a GPU renderer to upload the completed CPU image. This is not a Skia GPU surface.
-- Real MSAA, native anisotropy, depth/stencil, general 3D, MRT, queries, 2D-target mips,
-  non-RGBA8 resources, and cube/volume sampling remain
-  unavailable as documented.
+- Real MSAA, native anisotropy, depth/stencil, general 3D, MRT, queries, compressed sampled
+  textures, non-Color render targets, and cube/volume sampling remain unavailable as documented.
 - Windowed LSan retains the already isolated, non-growing Mesa GLX process-exit baseline; the same
   64-cycle ownership test is clean with SDL dummy/software presentation.
 - The SKIA backend remains labelled experimental because its packaged-platform matrix is narrower

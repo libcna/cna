@@ -21,10 +21,11 @@ namespace CNA::Internal::Backends::Skia
      * mipChain_ stays in CNA's exact top-row-first public transfer layout. Direct Skia colour types
      * label Color, Bgr565, Rgba1010102, Rg32, Rgba64, Alpha8, ColorBgraEXT, ColorSrgbEXT,
      * ByteEXT, UShortEXT, Vector4 and the half-float formats. Bgra4444 keeps exact A:R:G:B words
-     * and uses a bounded RGBA8 working conversion; Single and Vector2 keep exact IEEE transfer
-     * words and expand missing channels into bounded RGBA32F working copies. The sRGB colour type
-     * decodes once into an explicitly linear-sRGB working space. The active BlendState selects the
-     * source-alpha-labelled view without rewriting public data. Every level supports exact CPU
+     * and uses a bounded RGBA8 working conversion. Bgra5551 and NormalizedByte2/4 retain exact
+     * packed/SNORM words while using bounded RGBA32F working copies; Single and Vector2 likewise
+     * retain exact IEEE transfer words and expand missing channels into RGBA32F. The sRGB colour
+     * type decodes once into an explicitly linear-sRGB working space. The active BlendState selects
+     * the source-alpha-labelled view without rewriting public data. Every level supports exact CPU
      * upload/readback and deterministic format-appropriate generation.
      */
     class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource

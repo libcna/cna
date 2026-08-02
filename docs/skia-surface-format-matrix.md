@@ -1,23 +1,25 @@
 # Skia `SurfaceFormat` contract matrix
 
-Status: normative SKIA-134 contract; SKIA-135–138 Texture2D routes promoted
+Status: normative SKIA-134 contract; SKIA-135–139 Texture2D routes promoted
 
 This matrix fixes the byte and sampling contract for every public format.
 It is based on CNA's `SurfaceFormat`, `Texture::GetBlockSizeSquaredEXT` and
 `Texture::GetFormatSizeEXT`, the CNA packed-vector implementations, and FNA/FNA3D's OpenGL
-transfer mappings. `Skia representation` names the pinned CPU-raster building block. SKIA-135–138
+transfer mappings. `Skia representation` names the pinned CPU-raster building block. SKIA-135–139
 now enable `Bgr565`, `Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `ColorBgraEXT`,
 `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`, `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`,
-`HalfVector4`, and `HdrBlendable` for Skia `Texture2D` only after their transfer and pixel gates
-passed. Every other non-`Color` texture row remains refused until its owner passes;
+`HalfVector4`, `HdrBlendable`, `Bgra5551`, `NormalizedByte2`, and `NormalizedByte4` for Skia
+`Texture2D` only after their transfer and pixel gates passed. The six compressed texture rows
+remain refused until their owners pass;
 non-`Color` render targets remain independently refused pending SKIA-142.
 
 All multi-byte words and IEEE values below use the little-endian host layout required by the
 pinned Skia raster artifact. A future big-endian build must add explicit byte conversion or refuse
 these routes; it may not reinterpret the words. Missing sampled colour channels are exactly zero
 and missing alpha is exactly one unless a row says otherwise. UNORM maps the full unsigned integer
-range to `[0, 1]`; SNORM maps signed bytes to `[-1, 1]` with the format-specific endpoint policy
-locked by SKIA-139. sRGB conversion applies to RGB only; alpha remains linear.
+range to `[0, 1]`. SNORM raw `-128` and `-127` both sample as exactly `-1`; generated mips
+canonicalize that endpoint to `-127` and average canonical signed integers with nearest ties away
+from zero. sRGB conversion applies to RGB only; alpha remains linear.
 
 `FNA/Skia RT decision` distinguishes FNA texture semantics from this backend's deliberate target
 policy. FNA makes the listed formats renderable and coerces the others to `Color`; Skia instead
@@ -28,13 +30,13 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
 |---:|---|---:|---:|---|---|---|---|---|---|
 | 0 | `Color` | 1 | 4 | bytes R8, G8, B8, A8 | RGBA UNORM | `kRGBA_8888`, canonical straight-byte shadow and declared-alpha views | renderable; direct raster surface | supported | SKIA-143 |
 | 1 | `Bgr565` | 1 | 2 | LE u16 R15:11, G10:5, B4:0 | RGB UNORM, A=1 | promoted Texture2D `kRGB_565` exact word | FNA coerces to Color; Skia refuses target | direct | SKIA-135 |
-| 2 | `Bgra5551` | 1 | 2 | LE u16 A15, R14:10, G9:5, B4:0 | RGBA UNORM | raw u16 shadow plus decoded RGBA working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
+| 2 | `Bgra5551` | 1 | 2 | LE u16 A15, R14:10, G9:5, B4:0 | RGBA UNORM | promoted exact raw u16 shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
 | 3 | `Bgra4444` | 1 | 2 | LE u16 A15:12, R11:8, G7:4, B3:0 | RGBA UNORM | promoted Texture2D raw u16 shadow plus decoded RGBA working image; `kARGB_4444` is not layout-compatible | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-135 |
 | 4 | `Dxt1` | 16 | 8 | one BC1 block per 4x4 texels | RGB UNORM or BC1 one-bit-alpha RGBA | exact block shadow plus bounded RGBA8 decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
 | 5 | `Dxt3` | 16 | 16 | one BC2 block per 4x4 texels | RGBA UNORM with explicit 4-bit alpha | exact block shadow plus bounded RGBA8 decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
 | 6 | `Dxt5` | 16 | 16 | one BC3 block per 4x4 texels | RGBA UNORM with interpolated alpha | exact block shadow plus bounded RGBA8 decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
-| 7 | `NormalizedByte2` | 1 | 2 | bytes X s8, Y s8 | RG SNORM, B=0, A=1 | exact byte shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
-| 8 | `NormalizedByte4` | 1 | 4 | bytes X s8, Y s8, Z s8, W s8 | RGBA SNORM | exact byte shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
+| 7 | `NormalizedByte2` | 1 | 2 | bytes X s8, Y s8 | RG SNORM, B=0, A=1 | promoted exact byte shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
+| 8 | `NormalizedByte4` | 1 | 4 | bytes X s8, Y s8, Z s8, W s8 | RGBA SNORM | promoted exact byte shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
 | 9 | `Rgba1010102` | 1 | 4 | LE u32 A31:30, B29:20, G19:10, R9:0 | RGBA UNORM | promoted Texture2D `kRGBA_1010102` exact word | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-135 |
 | 10 | `Rg32` | 1 | 4 | LE u16 R, then LE u16 G | RG UNORM, B=0, A=1 | promoted Texture2D `kR16G16_unorm` exact words | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-137 |
 | 11 | `Rgba64` | 1 | 8 | LE u16 R, G, B, A | RGBA UNORM | promoted Texture2D `kR16G16B16A16_unorm` exact words | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-137 |
@@ -82,3 +84,8 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
   narrowing; one infinity sign dominates finite inputs, opposing infinities or any NaN produce
   canonical positive quiet NaN (`0x7FC00000` or `0x7E00`). `Single`/`Vector2` working views add
   zero missing colour channels and opaque alpha without changing the transfer shadow.
+- `Bgra5551` retains its exact A:R:G:B word and averages native 5/5/5/1 components for generated
+  mips. Both signed-byte formats retain every authored byte, including raw `0x80`; working images
+  use the standard SNORM endpoint where `0x80` and `0x81` both gather as `-1`. Generated mip
+  inputs canonicalize both to signed `-127`, average exact integers, round half ties away from
+  zero, and therefore emit the unique `0x81` encoding for a generated `-1` endpoint.

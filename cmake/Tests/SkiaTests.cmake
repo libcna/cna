@@ -481,6 +481,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_Texture2D_FloatFormats
                                    cna_test_skia_texture2d_float_formats)
 
+    # SKIA-139: exact Bgra5551/SNORM shadows, deterministic normalized mips, RGBA32F
+    # conversion metadata, signed sampling and texture-only render-target gates.
+    cna_skia_test(cna_test_skia_texture2d_shadow_formats
+                  examples/skia_texture2d_shadow_formats_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_shadow_formats
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_ShadowFormats
+                                   cna_test_skia_texture2d_shadow_formats)
+
     cna_skia_test(cna_test_skia_texture2d_dispose examples/sdlrenderer_texture2d_dispose_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Dispose cna_test_skia_texture2d_dispose)
 

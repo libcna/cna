@@ -26,6 +26,7 @@ namespace CNA::Internal::Backends::Skia
         {
             return format == SurfaceFormat::Color
                 || format == SurfaceFormat::Bgr565
+                || format == SurfaceFormat::Bgra5551
                 || format == SurfaceFormat::Bgra4444
                 || format == SurfaceFormat::Rgba1010102
                 || format == SurfaceFormat::Rg32
@@ -41,6 +42,8 @@ namespace CNA::Internal::Backends::Skia
                 || format == SurfaceFormat::HalfSingle
                 || format == SurfaceFormat::HalfVector2
                 || format == SurfaceFormat::HalfVector4
+                || format == SurfaceFormat::NormalizedByte2
+                || format == SurfaceFormat::NormalizedByte4
                 || format == SurfaceFormat::HdrBlendable;
         }
 
@@ -55,11 +58,14 @@ namespace CNA::Internal::Backends::Skia
                 case SurfaceFormat::ColorSrgbEXT:
                 case SurfaceFormat::Single:
                 case SurfaceFormat::HalfVector2:
+                case SurfaceFormat::NormalizedByte4:
                     return 4u;
                 case SurfaceFormat::Bgr565:
+                case SurfaceFormat::Bgra5551:
                 case SurfaceFormat::Bgra4444:
                 case SurfaceFormat::UShortEXT:
                 case SurfaceFormat::HalfSingle:
+                case SurfaceFormat::NormalizedByte2:
                     return 2u;
                 case SurfaceFormat::Rgba64:
                 case SurfaceFormat::Vector2:
@@ -88,11 +94,18 @@ namespace CNA::Internal::Backends::Skia
                 case SurfaceFormat::Bgr565:
                     return SkImageInfo::Make(
                         width, height, kRGB_565_SkColorType, kOpaque_SkAlphaType);
+                case SurfaceFormat::Bgra5551:
+                case SurfaceFormat::NormalizedByte4:
+                    return SkImageInfo::Make(
+                        width, height, kRGBA_F32_SkColorType, alphaType);
                 case SurfaceFormat::Bgra4444:
                     // CNA stores A:R:G:B from the most to least significant nibble. Pinned
                     // kARGB_4444 stores R:G:B:A, so its bytes must never label CNA storage.
                     return SkImageInfo::Make(
                         width, height, kRGBA_8888_SkColorType, alphaType);
+                case SurfaceFormat::NormalizedByte2:
+                    return SkImageInfo::Make(
+                        width, height, kRGBA_F32_SkColorType, kOpaque_SkAlphaType);
                 case SurfaceFormat::Rgba1010102:
                     return SkImageInfo::Make(
                         width, height, kRGBA_1010102_SkColorType, alphaType);
@@ -195,6 +208,94 @@ namespace CNA::Internal::Backends::Skia
             return rgba;
         }
 
+        [[nodiscard]] bool NeedsDecodedRgbaF32Image(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::Bgra5551
+                || format == SurfaceFormat::NormalizedByte2
+                || format == SurfaceFormat::NormalizedByte4;
+        }
+
+        [[nodiscard]] int DecodeSignedByte(std::uint8_t value) noexcept
+        {
+            return value < 0x80u ? static_cast<int>(value) : static_cast<int>(value) - 256;
+        }
+
+        [[nodiscard]] float DecodeSnormByte(std::uint8_t value) noexcept
+        {
+            return static_cast<float>(std::max(-127, DecodeSignedByte(value))) / 127.0f;
+        }
+
+        [[nodiscard]] int AverageSnormComponent(
+            std::int64_t sum, std::uint32_t sampleCount) noexcept
+        {
+            const std::int64_t half = static_cast<std::int64_t>(sampleCount / 2u);
+            return static_cast<int>(sum >= 0
+                ? (sum + half) / static_cast<std::int64_t>(sampleCount)
+                : (sum - half) / static_cast<std::int64_t>(sampleCount));
+        }
+
+        [[nodiscard]] bool IsSnormTextureFormat(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::NormalizedByte2
+                || format == SurfaceFormat::NormalizedByte4;
+        }
+
+        [[nodiscard]] int SnormChannelCount(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::NormalizedByte2 ? 2 : 4;
+        }
+
+        void WriteFloatLe(std::uint8_t* bytes, float value) noexcept
+        {
+            WriteU32Le(bytes, std::bit_cast<std::uint32_t>(value));
+        }
+
+        [[nodiscard]] std::vector<std::uint8_t> DecodeRgbaF32Shadow(
+            SurfaceFormat format, const std::uint8_t* source, int width, int height,
+            std::size_t sourceRowBytes)
+        {
+            const std::size_t sourceTexelBytes =
+                format == SurfaceFormat::NormalizedByte4 ? 4u : 2u;
+            std::vector<std::uint8_t> rgba(
+                static_cast<std::size_t>(width) * height * 16u);
+            for (int y = 0; y < height; ++y)
+            {
+                for (int x = 0; x < width; ++x)
+                {
+                    const std::uint8_t* input = source
+                        + static_cast<std::size_t>(y) * sourceRowBytes
+                        + static_cast<std::size_t>(x) * sourceTexelBytes;
+                    std::uint8_t* output = rgba.data()
+                        + (static_cast<std::size_t>(y) * width + x) * 16u;
+                    if (format == SurfaceFormat::Bgra5551)
+                    {
+                        const std::uint16_t word = ReadU16Le(input);
+                        WriteFloatLe(
+                            output + 0u, static_cast<float>((word >> 10u) & 0x1Fu) / 31.0f);
+                        WriteFloatLe(
+                            output + 4u, static_cast<float>((word >> 5u) & 0x1Fu) / 31.0f);
+                        WriteFloatLe(
+                            output + 8u, static_cast<float>(word & 0x1Fu) / 31.0f);
+                        WriteFloatLe(output + 12u, (word & 0x8000u) != 0u ? 1.0f : 0.0f);
+                        continue;
+                    }
+                    const int channelCount =
+                        format == SurfaceFormat::NormalizedByte2 ? 2 : 4;
+                    for (int channel = 0; channel < channelCount; ++channel)
+                    {
+                        WriteFloatLe(output + static_cast<std::size_t>(channel) * 4u,
+                                     DecodeSnormByte(input[channel]));
+                    }
+                    if (channelCount == 2)
+                    {
+                        WriteFloatLe(output + 8u, 0.0f);
+                        WriteFloatLe(output + 12u, 1.0f);
+                    }
+                }
+            }
+            return rgba;
+        }
+
         [[nodiscard]] bool NeedsExpandedFloatImage(SurfaceFormat format) noexcept
         {
             return format == SurfaceFormat::Single || format == SurfaceFormat::Vector2;
@@ -237,6 +338,15 @@ namespace CNA::Internal::Backends::Skia
                     static_cast<std::size_t>(width) * 4u);
                 return SkImages::RasterFromPixmapCopy(pixmap);
             }
+            if (NeedsDecodedRgbaF32Image(format))
+            {
+                const std::vector<std::uint8_t> rgba =
+                    DecodeRgbaF32Shadow(format, pixels, width, height, rowBytes);
+                const SkPixmap pixmap(
+                    TextureImageInfo(format, width, height, alphaType), rgba.data(),
+                    static_cast<std::size_t>(width) * 16u);
+                return SkImages::RasterFromPixmapCopy(pixmap);
+            }
             if (NeedsExpandedFloatImage(format))
             {
                 const std::vector<std::uint8_t> rgba =
@@ -255,7 +365,8 @@ namespace CNA::Internal::Backends::Skia
             SurfaceFormat format, const std::uint8_t* pixels, int width, int height,
             std::size_t rowBytes, std::size_t byteCount, SkAlphaType alphaType)
         {
-            if (format == SurfaceFormat::Bgra4444 || NeedsExpandedFloatImage(format))
+            if (format == SurfaceFormat::Bgra4444 || NeedsExpandedFloatImage(format)
+                || NeedsDecodedRgbaF32Image(format))
                 return MakePackedImageCopy(format, pixels, width, height, rowBytes, alphaType);
             return SkImages::RasterFromData(
                 TextureImageInfo(format, width, height, alphaType),
@@ -480,8 +591,10 @@ namespace CNA::Internal::Backends::Skia
                 "Skia Texture2D mipLevels must name level zero or the complete 2D mip chain.");
         }
 
+        const bool usesRgbaF32WorkingView =
+            NeedsExpandedFloatImage(format_) || NeedsDecodedRgbaF32Image(format_);
         const std::size_t workingBytesPerTexel =
-            NeedsExpandedFloatImage(format_) ? 16u
+            usesRgbaF32WorkingView ? 16u
             : format_ == SurfaceFormat::Bgra4444 ? 4u
             : bytesPerTexel_;
         std::size_t workingLevelZeroBytes = 0u;
@@ -680,6 +793,55 @@ namespace CNA::Internal::Backends::Skia
             return;
         }
 
+        if (IsSnormTextureFormat(format_))
+        {
+            const SkiaMipLevel2D& source = mipChain_->Level(level - 1);
+            const SkiaMipLevel2D& target = mipChain_->Level(level);
+            const std::uint8_t* sourcePixels = mipChain_->LevelData(level - 1);
+            std::uint8_t* targetPixels = mipChain_->LevelData(level);
+            const int channelCount = SnormChannelCount(format_);
+            for (int y = 0; y < target.height; ++y)
+            {
+                const int y0 = static_cast<int>(
+                    static_cast<std::int64_t>(y) * source.height / target.height);
+                const int y1 = static_cast<int>(
+                    static_cast<std::int64_t>(y + 1) * source.height / target.height);
+                for (int x = 0; x < target.width; ++x)
+                {
+                    const int x0 = static_cast<int>(
+                        static_cast<std::int64_t>(x) * source.width / target.width);
+                    const int x1 = static_cast<int>(
+                        static_cast<std::int64_t>(x + 1) * source.width / target.width);
+                    const std::uint32_t sampleCount = static_cast<std::uint32_t>(
+                        (x1 - x0) * (y1 - y0));
+                    std::int64_t sums[4] = {0, 0, 0, 0};
+                    for (int sourceY = y0; sourceY < y1; ++sourceY)
+                    {
+                        for (int sourceX = x0; sourceX < x1; ++sourceX)
+                        {
+                            const std::uint8_t* texel = sourcePixels
+                                + static_cast<std::size_t>(sourceY) * source.rowBytes
+                                + static_cast<std::size_t>(sourceX) * bytesPerTexel_;
+                            for (int channel = 0; channel < channelCount; ++channel)
+                            {
+                                sums[channel] += std::max(
+                                    -127, DecodeSignedByte(texel[channel]));
+                            }
+                        }
+                    }
+                    std::uint8_t* output = targetPixels
+                        + static_cast<std::size_t>(y) * target.rowBytes
+                        + static_cast<std::size_t>(x) * bytesPerTexel_;
+                    for (int channel = 0; channel < channelCount; ++channel)
+                    {
+                        output[channel] = static_cast<std::uint8_t>(
+                            AverageSnormComponent(sums[channel], sampleCount));
+                    }
+                }
+            }
+            return;
+        }
+
         if (IsFloatTextureFormat(format_))
         {
             const SkiaMipLevel2D& source = mipChain_->Level(level - 1);
@@ -768,6 +930,14 @@ namespace CNA::Internal::Backends::Skia
                             sums[2] += word & 0xFu;
                             sums[3] += (word >> 12u) & 0xFu;
                         }
+                        else if (format_ == SurfaceFormat::Bgra5551)
+                        {
+                            const std::uint16_t word = ReadU16Le(texel);
+                            sums[0] += (word >> 10u) & 0x1Fu;
+                            sums[1] += (word >> 5u) & 0x1Fu;
+                            sums[2] += word & 0x1Fu;
+                            sums[3] += (word >> 15u) & 0x1u;
+                        }
                         else if (format_ == SurfaceFormat::Alpha8
                                  || format_ == SurfaceFormat::ByteEXT)
                         {
@@ -818,6 +988,12 @@ namespace CNA::Internal::Backends::Skia
                     WriteU16Le(output, static_cast<std::uint16_t>(
                         (average(sums[3]) << 12u) | (average(sums[0]) << 8u)
                         | (average(sums[1]) << 4u) | average(sums[2])));
+                }
+                else if (format_ == SurfaceFormat::Bgra5551)
+                {
+                    WriteU16Le(output, static_cast<std::uint16_t>(
+                        (average(sums[3]) << 15u) | (average(sums[0]) << 10u)
+                        | (average(sums[1]) << 5u) | average(sums[2])));
                 }
                 else if (format_ == SurfaceFormat::Alpha8
                          || format_ == SurfaceFormat::ByteEXT)
