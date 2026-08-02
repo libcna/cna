@@ -69,12 +69,13 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTarget2D`/`RenderTargetCube::GetData` (direct CPU readback) | ✅ | A throwaway GL FBO around the raw GL texture `sg_gl_query_image_info()` exposes. Fixed two real bugs it surfaced: sampling a render target as a texture was exactly vertically mirrored (REMED-GFX-147, fixed with a per-draw `rtFlipV` shader uniform), and a target bound/`Clear()`-ed/unbound with no draw in between never reached the GPU at all (`Present()` already had this fix for the backbuffer; the render-target bind path now has it too). `Sokol_RenderTarget_SamplingOrientation` 53/53 (55/55 as of `SOKOL-33`, once its own DualTextureEffect legs stopped degrading to an INFO skip), plus the whole SOKOL-25/26 render-target oracle suite re-verified with real pixels |
 | `DualTextureEffect` (base + overlay texture, `base.rgb *= 2` doubling factor, no alpha test) | ✅ | `Sokol_DualTextureEffect_VertexColor` (Task 889's own backend-agnostic oracle) -- both texture slots reuse the same `texcoord0` (this codebase's project-wide DualTextureEffect convention, not real XNA's separate UV sets) and independently fall back to opaque white when null |
 | `RenderTarget2D`/`RenderTargetCube` mip-mapped (`mipMap=true`) | ✅ | `Sokol_RenderTarget2D_Mip` (Task 336's own backend-agnostic oracle, reused unmodified). Only level 0 is ever rendered into, matching real D3D9 XNA's `D3DUSAGE_AUTOGENMIPMAP`; the rest of the chain is regenerated via `glGenerateMipmap` on unbind (a GL-only escape hatch, the same shape `ReadColorImagePixelsViaGL` already uses). `RenderTargetCube`'s half has no shared cross-backend oracle yet and cannot be sampled by any Sokol effect (`SOKOL-34` not landed), so it was confirmed with a throwaway, uncommitted verification program against `GetData(face, level=1, ...)` instead |
+| `SkinnedEffect` (bone-palette skinning, always textured and lit) | ✅ | `Sokol_SkinnedEffect_BoneDeformation` (Task 123's own backend-agnostic oracle, a real 2-bone GPU transform + mesh deformation) and `Sokol_SkinnedEffect_LightingConformance` (REMED-GFX-008's 9-check analytic ambient/emissive/diffuse/specular oracle -- shares `lit3d.glsl`'s fragment-stage math verbatim). Up to 4 bone matrices are blended per vertex from a `mat4 bones[72]` uniform array, gated by `weightsPerVertex` (1/2/4), the same shape `EasyGLGraphicsBackend::EnsureSkinnedProgram()` already established |
 
 ## What does not work yet
 
 | Feature | Behaviour today | Tracked as |
 |---|---|---|
-| Environment-mapped, skinned or PBR 3D shading | throws, naming the unsupported combination | `SOKOL-34`/`SOKOL-35` |
+| Environment-mapped or PBR 3D shading | throws, naming the unsupported combination | `SOKOL-34` |
 | Instanced draws | throws | Phase 5 |
 | Per-vertex (Gouraud) lighting (`BasicEffect.PreferPerPixelLighting = false`) | ignored -- always renders per-pixel, matching every CNA backend except D3D9 | not planned |
 | A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
@@ -175,6 +176,8 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_Viewport_MinMaxDepth` | 25, incl. a real depth-remap proof | all pass |
 | `Sokol_DualTextureEffect_VertexColor` | 2, exact expected RGB in both cases | all pass |
 | `Sokol_RenderTarget2D_Mip` | 1, a GL-complete-mip-chain proof (solid vs. black under `TextureFilter::Anisotropic`) | all pass |
+| `Sokol_SkinnedEffect_BoneDeformation` | 1, a real 2-bone GPU transform + mesh deformation proof | all pass |
+| `Sokol_SkinnedEffect_LightingConformance` | 9, analytic ambient/emissive/diffuse/specular checks, each against both the FNA-correct pixel and a historically-wrong "old bug" pixel | all pass |
 | `Sokol_OcclusionQuery_Cycle` | Begin/End/IsComplete/PixelCount plus every invalid-call-sequence and dispose-while-active case | all pass |
 | `Sokol_OcclusionQuery_VisibleQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_OcclusionQuery_OccludedQuad` | 3, real BasicEffect + depth-tested geometry | all pass |

@@ -1559,7 +1559,11 @@ namespace CNA::Internal::Backends::Sokol
             && texCoordOffset == other.texCoordOffset
             && texCoordFormat == other.texCoordFormat
             && normalOffset == other.normalOffset
-            && normalFormat == other.normalFormat;
+            && normalFormat == other.normalFormat
+            && blendWeightOffset == other.blendWeightOffset
+            && blendWeightFormat == other.blendWeightFormat
+            && blendIndicesOffset == other.blendIndicesOffset
+            && blendIndicesFormat == other.blendIndicesFormat;
     }
 
     std::size_t SokolGraphicsBackend::Pipeline3DKeyHash::operator()(const Pipeline3DKey& key) const
@@ -1609,6 +1613,10 @@ namespace CNA::Internal::Backends::Sokol
         mix(static_cast<std::size_t>(key.texCoordFormat));
         mix(static_cast<std::size_t>(key.normalOffset + 1));
         mix(static_cast<std::size_t>(key.normalFormat));
+        mix(static_cast<std::size_t>(key.blendWeightOffset + 1));
+        mix(static_cast<std::size_t>(key.blendWeightFormat));
+        mix(static_cast<std::size_t>(key.blendIndicesOffset + 1));
+        mix(static_cast<std::size_t>(key.blendIndicesFormat));
         return hash;
     }
 
@@ -1808,6 +1816,10 @@ namespace CNA::Internal::Backends::Sokol
         dualTextured3dShaderId_ = sg_make_shader(cna_dualtextured3d_shader_desc(sg_query_backend())).id;
         if (sg_query_shader_state(MakeShaderHandle(dualTextured3dShaderId_)) != SG_RESOURCESTATE_VALID)
             throw std::runtime_error("Sokol backend: dual-textured-3D shader creation failed");
+
+        skinned3dShaderId_ = sg_make_shader(cna_skinned3d_shader_desc(sg_query_backend())).id;
+        if (sg_query_shader_state(MakeShaderHandle(skinned3dShaderId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: skinned-3D shader creation failed");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -2872,6 +2884,37 @@ namespace CNA::Internal::Backends::Sokol
                     desc.layout.attrs[ATTR_cna_dualtextured3d_color0].offset = key.colorOffset;
                 }
                 break;
+
+            case Shader3DKind::Skinned:
+                // Position, normal, texcoord0, blendweight0 and blendindices0 are all required in
+                // the declaration for this kind (checked in DrawColored3D before a key is ever
+                // built). color0 is declared LAST in skinned3d.glsl specifically so it lands in
+                // the trailing attribute slot (see that file's own comment) -- sokol_gfx requires
+                // every valid attribute slot to be a continuous prefix with no gap, and color0 is
+                // the only one of these five that may legitimately be absent.
+                desc.shader = MakeShaderHandle(skinned3dShaderId_);
+                desc.layout.attrs[ATTR_cna_skinned3d_position].format =
+                    static_cast<sg_vertex_format>(key.positionFormat);
+                desc.layout.attrs[ATTR_cna_skinned3d_position].offset = key.positionOffset;
+                desc.layout.attrs[ATTR_cna_skinned3d_normal].format =
+                    static_cast<sg_vertex_format>(key.normalFormat);
+                desc.layout.attrs[ATTR_cna_skinned3d_normal].offset = key.normalOffset;
+                desc.layout.attrs[ATTR_cna_skinned3d_texcoord0].format =
+                    static_cast<sg_vertex_format>(key.texCoordFormat);
+                desc.layout.attrs[ATTR_cna_skinned3d_texcoord0].offset = key.texCoordOffset;
+                desc.layout.attrs[ATTR_cna_skinned3d_blendweight0].format =
+                    static_cast<sg_vertex_format>(key.blendWeightFormat);
+                desc.layout.attrs[ATTR_cna_skinned3d_blendweight0].offset = key.blendWeightOffset;
+                desc.layout.attrs[ATTR_cna_skinned3d_blendindices0].format =
+                    static_cast<sg_vertex_format>(key.blendIndicesFormat);
+                desc.layout.attrs[ATTR_cna_skinned3d_blendindices0].offset = key.blendIndicesOffset;
+                if (key.colorOffset >= 0)
+                {
+                    desc.layout.attrs[ATTR_cna_skinned3d_color0].format =
+                        static_cast<sg_vertex_format>(key.colorFormat);
+                    desc.layout.attrs[ATTR_cna_skinned3d_color0].offset = key.colorOffset;
+                }
+                break;
         }
         desc.layout.buffers[0].stride = key.stride;
 
@@ -2974,13 +3017,13 @@ namespace CNA::Internal::Backends::Sokol
 
         // Everything this backend cannot shade yet is refused here rather than rendered as an
         // untextured, unlit approximation that would look plausible and be wrong. Plain texturing
-        // (SOKOL-21), lighting (SOKOL-21) and dual-texturing (SOKOL-33) are real below;
-        // environment mapping, skinning and PBR are each a distinct stock effect with their own
+        // (SOKOL-21), lighting (SOKOL-21), dual-texturing (SOKOL-33) and skinning (SOKOL-35) are
+        // real below; environment mapping and PBR are each a distinct stock effect with their own
         // vertex/uniform contract this backend does not implement yet.
-        if (params.envMapping || params.skinned || params.pbr)
+        if (params.envMapping || params.pbr)
         {
             NotYetImplemented(kBackendName,
-                "environment-mapped/skinned/PBR 3D draws");
+                "environment-mapped/PBR 3D draws");
         }
         if (params.customEffectBackend != nullptr)
             NotYetImplemented(kBackendName, "custom ShaderEffect draws");
@@ -3000,7 +3043,8 @@ namespace CNA::Internal::Backends::Sokol
             if (ib->GetBufferIdEXT() == 0 || ib->GetIndexCount() <= 0) return;
         }
 
-        const Shader3DKind kind = params.lightingEnabled ? Shader3DKind::Lit
+        const Shader3DKind kind = params.skinned         ? Shader3DKind::Skinned
+                                 : params.lightingEnabled ? Shader3DKind::Lit
                                  : params.dualTexture     ? Shader3DKind::DualTextured
                                  : params.textureEnabled  ? Shader3DKind::Textured
                                                            : Shader3DKind::Colored;
@@ -3048,6 +3092,10 @@ namespace CNA::Internal::Backends::Sokol
         key.texCoordFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
         key.normalOffset = -1;
         key.normalFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
+        key.blendWeightOffset = -1;
+        key.blendWeightFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
+        key.blendIndicesOffset = -1;
+        key.blendIndicesFormat = static_cast<int>(SG_VERTEXFORMAT_INVALID);
 
         // VertexBuffer's own NOXNA-tagged auto-detect constructor (VertexBuffer(device, count),
         // used by GraphicsDevice::SetVertexBuffer callers who never pass an explicit
@@ -3090,6 +3138,16 @@ namespace CNA::Internal::Backends::Sokol
                 {
                     key.normalOffset = element.getOffsetProperty();
                     key.normalFormat = static_cast<int>(format);
+                }
+                else if (usage == VertexElementUsage::BlendWeight && key.blendWeightOffset < 0)
+                {
+                    key.blendWeightOffset = element.getOffsetProperty();
+                    key.blendWeightFormat = static_cast<int>(format);
+                }
+                else if (usage == VertexElementUsage::BlendIndices && key.blendIndicesOffset < 0)
+                {
+                    key.blendIndicesOffset = element.getOffsetProperty();
+                    key.blendIndicesFormat = static_cast<int>(format);
                 }
             }
         }
@@ -3155,6 +3213,25 @@ namespace CNA::Internal::Backends::Sokol
                     key.texCoordOffset = 24;
                     key.texCoordFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT2);
                     break;
+                case 52:  // VertexPositionNormalTextureSkinned: float3 position @0, float3
+                          // normal @12, float2 texcoord @24, float4 blendweight @32, ubyte4
+                          // blendindices @48.
+                    if (kind != Shader3DKind::Skinned)
+                        NotYetImplemented(kBackendName,
+                            "a non-skinned 3D draw from an undeclared "
+                            "VertexPositionNormalTextureSkinned buffer");
+                    key.stride = 52;
+                    key.positionOffset = 0;
+                    key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);
+                    key.normalOffset = 12;
+                    key.normalFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);
+                    key.texCoordOffset = 24;
+                    key.texCoordFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT2);
+                    key.blendWeightOffset = 32;
+                    key.blendWeightFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT4);
+                    key.blendIndicesOffset = 48;
+                    key.blendIndicesFormat = static_cast<int>(SG_VERTEXFORMAT_UBYTE4);
+                    break;
                 default:
                     NotYetImplemented(kBackendName,
                         "a 3D draw from a VertexBuffer with no VertexDeclaration and an "
@@ -3182,6 +3259,14 @@ namespace CNA::Internal::Backends::Sokol
                 "a lit 3D draw from a VertexDeclaration with no Normal or no TextureCoordinate "
                 "element");
         }
+        if (kind == Shader3DKind::Skinned
+            && (key.normalOffset < 0 || key.texCoordOffset < 0
+                || key.blendWeightOffset < 0 || key.blendIndicesOffset < 0))
+        {
+            NotYetImplemented(kBackendName,
+                "a skinned 3D draw from a VertexDeclaration with no Normal, no "
+                "TextureCoordinate, no BlendWeight or no BlendIndices element");
+        }
 
         // Resolved before the pass begins: a Textured draw needs a real texture, and a Lit draw
         // needs one only when actually textured (the white fallback otherwise). Accepts a
@@ -3190,6 +3275,7 @@ namespace CNA::Internal::Backends::Sokol
         std::uint32_t textureViewId = 0;
         bool textureIsRenderTarget = false;
         if (kind == Shader3DKind::Textured || kind == Shader3DKind::DualTextured
+            || kind == Shader3DKind::Skinned
             || (kind == Shader3DKind::Lit && params.textureEnabled))
         {
             if (params.texture0 != nullptr)
@@ -3204,12 +3290,15 @@ namespace CNA::Internal::Backends::Sokol
                     "Sokol backend: TextureEnabled draw with no texture bound");
             }
         }
-        if (!hasTexture && (kind == Shader3DKind::Lit || kind == Shader3DKind::DualTextured))
+        if (!hasTexture
+            && (kind == Shader3DKind::Lit || kind == Shader3DKind::DualTextured
+                || kind == Shader3DKind::Skinned))
         {
-            // Lit: the 1x1 opaque-white fallback for an untextured lit draw. DualTextured: the
-            // same null-fallback convention EasyGL/Vulkan/Bgfx already established for
-            // DualTextureEffect's own Texture slot (this codebase's docs/dualtextureeffect-support.md
-            // Task 386).
+            // Lit/Skinned: the 1x1 opaque-white fallback for an untextured lit/skinned draw
+            // (SkinnedEffect::FillGpuDrawParams always sets textureEnabled=true but texture0 stays
+            // null when the caller never assigned SkinnedEffect::Texture). DualTextured: the same
+            // null-fallback convention EasyGL/Vulkan/Bgfx already established for DualTextureEffect's
+            // own Texture slot (this codebase's docs/dualtextureeffect-support.md Task 386).
             textureViewId = GetDefaultWhiteTexture().GetViewIdEXT();
             hasTexture = true;
         }
@@ -3415,6 +3504,88 @@ namespace CNA::Internal::Backends::Sokol
 
                 sg_range fsRange2{&fsUniforms, sizeof(fsUniforms)};
                 sg_apply_uniforms(UB_cna_dualtextured3d_fs_params, &fsRange2);
+                break;
+            }
+            case Shader3DKind::Skinned:
+            {
+                const Matrix normalMatrix = Matrix::Transpose(Matrix::Invert(world));
+
+                cna_skinned3d_vs_params_t vsUniforms{};
+                worldViewProjection.ToColumnMajor(vsUniforms.mvp);
+                world.ToColumnMajor(vsUniforms.world);
+                normalMatrix.ToColumnMajor(vsUniforms.normalMatrix);
+                vsUniforms.flags[0] = vertexColorActive ? 1.0f : 0.0f;
+                vsUniforms.flags[1] = static_cast<float>(params.weightsPerVertex);
+                vsUniforms.alphaTest[0] = params.alphaTest[0];
+                vsUniforms.alphaTest[1] = params.alphaTest[1];
+                vsUniforms.alphaTest[2] = params.alphaTest[2];
+                vsUniforms.alphaTest[3] = params.alphaTest[3];
+                vsUniforms.fogVector[0] = params.fogVector[0];
+                vsUniforms.fogVector[1] = params.fogVector[1];
+                vsUniforms.fogVector[2] = params.fogVector[2];
+                vsUniforms.fogVector[3] = params.fogVector[3];
+                // GpuDrawParams::boneTransforms is already column-major mat4-per-bone, zero-filled
+                // beyond boneCount -- the exact memory shape cna_skinned3d_vs_params_t::bones[72][16]
+                // expects, so a straight copy needs no per-bone Matrix round-trip.
+                static_assert(sizeof(vsUniforms.bones) == sizeof(params.boneTransforms),
+                              "skinned3d bone-palette uniform size must match GpuDrawParams");
+                std::memcpy(vsUniforms.bones, params.boneTransforms, sizeof(vsUniforms.bones));
+
+                sg_range vsRange{&vsUniforms, sizeof(vsUniforms)};
+                sg_apply_uniforms(UB_cna_skinned3d_vs_params, &vsRange);
+
+                cna_skinned3d_fs_params_t fsUniforms{};
+                fsUniforms.diffuse[0] = params.diffuseColor[0];
+                fsUniforms.diffuse[1] = params.diffuseColor[1];
+                fsUniforms.diffuse[2] = params.diffuseColor[2];
+                fsUniforms.diffuse[3] = params.diffuseColor[3];
+                fsUniforms.ambient[0] = params.ambientColor[0];
+                fsUniforms.ambient[1] = params.ambientColor[1];
+                fsUniforms.ambient[2] = params.ambientColor[2];
+                fsUniforms.light0Dir[0] = params.light0Dir[0];
+                fsUniforms.light0Dir[1] = params.light0Dir[1];
+                fsUniforms.light0Dir[2] = params.light0Dir[2];
+                fsUniforms.light0Diffuse[0] = params.light0Diffuse[0];
+                fsUniforms.light0Diffuse[1] = params.light0Diffuse[1];
+                fsUniforms.light0Diffuse[2] = params.light0Diffuse[2];
+                fsUniforms.light0Specular[0] = params.light0Specular[0];
+                fsUniforms.light0Specular[1] = params.light0Specular[1];
+                fsUniforms.light0Specular[2] = params.light0Specular[2];
+                fsUniforms.light1Dir[0] = params.light1Dir[0];
+                fsUniforms.light1Dir[1] = params.light1Dir[1];
+                fsUniforms.light1Dir[2] = params.light1Dir[2];
+                fsUniforms.light1Diffuse[0] = params.light1Diffuse[0];
+                fsUniforms.light1Diffuse[1] = params.light1Diffuse[1];
+                fsUniforms.light1Diffuse[2] = params.light1Diffuse[2];
+                fsUniforms.light1Specular[0] = params.light1Specular[0];
+                fsUniforms.light1Specular[1] = params.light1Specular[1];
+                fsUniforms.light1Specular[2] = params.light1Specular[2];
+                fsUniforms.light2Dir[0] = params.light2Dir[0];
+                fsUniforms.light2Dir[1] = params.light2Dir[1];
+                fsUniforms.light2Dir[2] = params.light2Dir[2];
+                fsUniforms.light2Diffuse[0] = params.light2Diffuse[0];
+                fsUniforms.light2Diffuse[1] = params.light2Diffuse[1];
+                fsUniforms.light2Diffuse[2] = params.light2Diffuse[2];
+                fsUniforms.light2Specular[0] = params.light2Specular[0];
+                fsUniforms.light2Specular[1] = params.light2Specular[1];
+                fsUniforms.light2Specular[2] = params.light2Specular[2];
+                fsUniforms.specularColorAndPower[0] = params.specularColor[0];
+                fsUniforms.specularColorAndPower[1] = params.specularColor[1];
+                fsUniforms.specularColorAndPower[2] = params.specularColor[2];
+                fsUniforms.specularColorAndPower[3] = params.specularPower;
+                fsUniforms.eyePosition[0] = params.eyePositionWorld[0];
+                fsUniforms.eyePosition[1] = params.eyePositionWorld[1];
+                fsUniforms.eyePosition[2] = params.eyePositionWorld[2];
+                fsUniforms.emissiveColor[0] = params.emissiveColor[0];
+                fsUniforms.emissiveColor[1] = params.emissiveColor[1];
+                fsUniforms.emissiveColor[2] = params.emissiveColor[2];
+                fsUniforms.fogColor[0] = params.fogColor[0];
+                fsUniforms.fogColor[1] = params.fogColor[1];
+                fsUniforms.fogColor[2] = params.fogColor[2];
+                fsUniforms.rtFlipV[0] = textureIsRenderTarget ? 1.0f : 0.0f;
+
+                sg_range fsRange3{&fsUniforms, sizeof(fsUniforms)};
+                sg_apply_uniforms(UB_cna_skinned3d_fs_params, &fsRange3);
                 break;
             }
         }

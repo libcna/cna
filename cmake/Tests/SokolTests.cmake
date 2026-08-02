@@ -187,4 +187,21 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
     cna_register_backend_test(NAME Sokol_RenderTarget2D_Mip COMMAND cna_test_sokol_rendertarget2d_mip
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-35: SkinnedEffect. Task 123's own backend-agnostic 2-bone GPU transform +
+    # mesh deformation oracle (no CNA_BACKEND_* conditionals), reused here rather than duplicated.
+    cna_sokol_test(cna_test_sokol_skinned_integration examples/skinned_effect_integration_test.cpp)
+    cna_register_backend_test(NAME Sokol_SkinnedEffect_BoneDeformation
+        COMMAND cna_test_sokol_skinned_integration
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-008: analytic SkinnedEffect ambient/emissive lighting conformance, also backend-
+    # agnostic (its own header comment: "registered per backend by the CMake test files").
+    cna_sokol_test(cna_test_sokol_skinnedeffect_lighting_conformance
+                    examples/skinnedeffect_lighting_conformance_test.cpp)
+    cna_register_backend_test(NAME Sokol_SkinnedEffect_LightingConformance
+        COMMAND cna_test_sokol_skinnedeffect_lighting_conformance
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

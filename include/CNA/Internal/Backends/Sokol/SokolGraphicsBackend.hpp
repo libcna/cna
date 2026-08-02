@@ -1506,7 +1506,12 @@ namespace CNA::Internal::Backends::Sokol
              *  texcoord0 (this codebase has no second UV-set concept anywhere, matching every other
              *  CNA backend's own DualTextureEffect shape), `base.rgb *= 2` then multiplied by the
              *  overlay and DiffuseColor. No alpha test (FNA's PSDualTexture has none). */
-            DualTextured
+            DualTextured,
+            /** @brief skinned3d.glsl -- SkinnedEffect: always textured and lit (matching FNA, which
+             *  has no unlit/untextured skinned shader permutation), a per-vertex weighted sum of up
+             *  to 4 bone matrices (GpuDrawParams::weightsPerVertex) blends Position/Normal before
+             *  the same lighting math lit3d.glsl uses. */
+            Skinned
         };
 
         /**
@@ -1589,6 +1594,14 @@ namespace CNA::Internal::Backends::Sokol
             /// Byte offset of the Normal element, or -1 when absent (only Lit kind reads this).
             int normalOffset;
             int normalFormat;
+            /// Byte offset of the BlendWeight element, or -1 when absent (only Skinned kind reads
+            /// this).
+            int blendWeightOffset;
+            int blendWeightFormat;
+            /// Byte offset of the BlendIndices element, or -1 when absent (only Skinned kind reads
+            /// this).
+            int blendIndicesOffset;
+            int blendIndicesFormat;
 
             bool operator==(const Pipeline3DKey& other) const;
         };
@@ -1758,6 +1771,7 @@ namespace CNA::Internal::Backends::Sokol
         std::uint32_t textured3dShaderId_ = 0;
         std::uint32_t lit3dShaderId_ = 0;
         std::uint32_t dualTextured3dShaderId_ = 0;
+        std::uint32_t skinned3dShaderId_ = 0;
         /// Lazily created 1x1 opaque-white texture, bound by the Lit shader whenever
         /// GpuDrawParams::textureEnabled is false -- lets one shader serve both "textured and lit"
         /// and "vertex-coloured and lit" (the multiply is then a no-op), the same convention the
