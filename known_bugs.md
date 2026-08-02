@@ -379,3 +379,144 @@ actually being issued with the value this backend thinks it queued.
 **Tracked as:** `plan_llgl.md` task `LLGL-21`.
 
 ---
+
+## LLGL backend: per-draw `Viewport` is not captured/replayed, only per-render-pass-bucket — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause
+identified with confidence; not fixed here.
+
+**Symptom:** a game that sets a DIFFERENT `GraphicsDevice.Viewport` before each of several draws
+into the SAME target within one unflushed frame (no `GetData()`/`Present()` between them) gets
+every one of those draws rasterized with whichever viewport was set LAST, not its own. Confirmed by
+three independent, unrelated test files all failing the same way:
+
+- `examples/spritebatch_viewport_switch_test.cpp` (2/6 PASS): two `SpriteBatch` batches, each
+  `Begin()`'d after its own distinct `Viewport`, both drawing into the back buffer in one frame --
+  the SECOND batch's sprite lands correctly, the FIRST batch's sprite is read back at the SECOND
+  viewport's own footprint instead of its own.
+- `examples/spritebatch_custom_viewport_test.cpp` (7/13 PASS): Check C1/C2 specifically (a
+  transformed sprite drawn under a custom sub-region `Viewport`) fail; checks that only ever use
+  the default full-target viewport (B1/B2/D1-D3) pass.
+- `examples/rendertargetcube_plural_binding_test.cpp` (9/14 PASS): its own `SampleFaces()` helper
+  draws 6 `EnvironmentMapEffect` quads into 6 DIFFERENT sub-rectangles of the back buffer (one per
+  cube face, via `device.setViewportProperty(Viewport(x0,y0,...))` immediately before each
+  `DrawUserPrimitives()` call) in one unflushed frame, then reads the whole back buffer back at the
+  end -- 4 of the 6 faces come back wrong (stable, reproducible wrong values, not garbage), 2
+  coincidentally still correct. This looked at first like a genuine cube-face-index/array-layer
+  mapping bug (the kind LLGL-36's own investigation would have taken seriously), but is not: the
+  cube-face WRITE side of this test uses the plain, already-thoroughly-verified singular
+  `SetRenderTarget(cube, face)` API (LLGL-36: 56/56 PASS on the dedicated `GetData` contract
+  oracle); only the READ-back side (`SampleFaces`'s own multi-viewport back-buffer probe) is
+  affected, confirming the same root cause as the two `SpriteBatch` files above, not a new one.
+
+**Root cause:** `RecordAndSubmitFrame()`/`CaptureBackbuffer()` call
+`commands_->SetViewport(LLGL::Viewport{0, 0, resolution.width, resolution.height})` exactly ONCE
+per `FrameCommandBucket` -- i.e. once per DISTINCT TARGET IDENTITY the frame's queued commands
+group into (see `GroupFrameCommandsByTargetEXT()`), always sized to the WHOLE target, never to
+whatever `GraphicsDevice.Viewport` sub-rectangle was active when a given command was queued. A
+custom viewport is therefore only ever picked up if it happens to still be active during a SEPARATE
+render pass (a different target, or after an intervening flush) -- never for two different
+viewports used against the SAME target within one frame.
+
+**Fix shape (not implemented):** capture the active `Viewport` onto each `FrameCommand` at QUEUE
+time, exactly like `command.target`/`command.mipRegenColorTexture` already are, and have
+`ReplayFrameCommandsList()` issue `commands_->SetViewport()` per command (or per contiguous run of
+commands sharing one viewport) instead of `RecordAndSubmitFrame()`/`CaptureBackbuffer()` issuing it
+once before replaying the whole bucket. `ScissorRectangle` should be checked for the identical gap
+while this is being fixed (not independently confirmed broken here, but captured with the same
+"once per bucket, not once per command" shape if it works the same way).
+
+**Also affects (not yet independently confirmed, same shape expected):**
+`examples/deferred_viewport_capture_test.cpp` (`plan_llgl.md` LLGL-43) and
+`examples/rasterizerstate_cullmode_camera_test.cpp` if that file's own separate, still-unexplained
+Orthographic scenario failure (see the next entry) turns out to share this cause after all --
+current evidence does not point that way, but it was not ruled out.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7 (blocks `LLGL-39`'s deferred registrations, and likely
+several of `LLGL-40`..`LLGL-44`'s files too).
+
+---
+
+## LLGL backend: untextured+unlit `BasicEffect` with no vertex-colour attribute throws — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause
+identified with confidence; not fixed here.
+
+**Symptom:** `examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp` crashes
+(`std::runtime_error`, uncaught) the moment it draws a `BasicEffect` with `TextureEnabled=false`,
+`VertexColorEnabled=false`, `PreferPerPixelLighting`'s default (lighting disabled, `BasicEffect`'s
+own default), and a `VertexPositionNormalTexture` (stride-32, no colour attribute at all) vertex
+layout -- an entirely ordinary, real-XNA-legal way to draw flat-`DiffuseColor`-only geometry (every
+`ModelMeshPart` drawn via a `BasicEffect` with no texture and no per-vertex colour hits exactly this
+combination). The thrown message is explicit: `"LLGL backend: an untextured draw needs vertex
+colours, and this vertex layout has none"`.
+
+**Root cause:** `AcquirePrimitiveVertexShader()`'s own shader-variant selection
+(`LlglGraphicsBackend.cpp`) has exactly one branch for the fully-untextured, fully-unlit case:
+`else if (hasColor) { ... kColored3dVertGlsl ... } else { throw ... }` -- there is no shader variant
+at all for "untextured, unlit, AND no vertex-colour attribute in the layout." Every other
+combination this backend supports (textured, lit, coloured) has its own dedicated compiled shader;
+this one specific combination -- a flat, constant-`DiffuseColor`-only draw -- was never given one.
+
+Notably, `kColored3dVertGlsl` itself does not actually NEED the colour attribute's VALUE when
+`VertexColorEnabled=false` (its own `vColor = (vertexColorEnabledPad.x > 0.5) ? diffuseColor *
+color : diffuseColor;` line already ignores `color` entirely in that case) -- the crash is purely
+because that shader unconditionally DECLARES a `layout(location = 1) in vec4 color` input, and
+handing it a pipeline whose `vertex.inputAttribs` has no location-1 entry (because the bound vertex
+buffer's own layout has no colour attribute to describe) was judged too risky to attempt blind
+(undefined behaviour on Vulkan at best, a validation-layer rejection at worst) rather than actually
+tested.
+
+**Fix shape (not implemented):** a new, minimal `flat3d.vert.glsl`/`.gl.vert.glsl` +
+`flat3d.frag.glsl`/`.gl.frag.glsl` shader pair (mirroring `untextured3d.frag.glsl`'s own fragment
+stage, matching `SkinnedEffect.VertexColorEnabled`'s own LLGL-37 precedent for "add a whole new
+shader variant rather than risk an unbound-attribute declaration") that declares ONLY `position`
+(location 0) as input and outputs `diffuseColor` unconditionally, selected instead of throwing when
+`!textured && !lit && !hasColor`.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7 (blocks `LLGL-39`'s
+`Llgl_RasterizerState_CullMode_IndexedBasicEffect` registration).
+
+---
+
+## LLGL backend: `Orthographic` + `CreateLookAt` scenario reports geometry off-screen — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause NOT
+identified; not fixed here.
+
+**Symptom:** `examples/rasterizerstate_cullmode_camera_test.cpp` (no `CNA_BACKEND_` conditional
+branches at all -- meant to be universal, backend-agnostic math, already registered and passing on
+several other backends) fails its own internal `[FATAL]` scenario-setup check for exactly ONE of
+its five scenarios: `(b) Orthographic + CreateLookAt`. The test's own probe (`FindPixel`, a
+full-framebuffer scan for a matching colour) cannot find triangle B anywhere on screen at all
+(`geometry off-screen (A found=1, B found=0)`), so that scenario is skipped rather than judged.
+Scenarios (a) Identity, (c) Perspective+CreateLookAt (the IDENTICAL `eye`/`target`/`up` camera as
+(b), just with a perspective instead of an orthographic projection), (d) and (e) (both also
+Perspective+CreateLookAt, with a rotated/mirrored World matrix) all pass cleanly -- 24/24 individual
+cull-mode checks PASS across those four scenarios.
+
+**What was ruled out:** this is NOT the per-draw-`Viewport` bug documented in this file's own
+previous entry -- scenario (b)'s own draw calls (`RunScenario`'s `findOne`/`renderBoth` lambdas)
+never change `GraphicsDevice.Viewport` at all, unlike the three files that entry covers. `Matrix::
+CreateOrthographic`/`CreateLookAt` are shared, backend-agnostic CPU-side math (`Matrix.cpp`),
+identical for every backend, so the WVP matrix and resulting NDC coordinates should be bit-for-bit
+identical across backends -- yet only LLGL fails to find the geometry it places. No LLGL-specific
+depth-range remapping code was found in `LlglGraphicsBackend.cpp` (`grep` for
+`glDepthRange`/`DepthRange`/`ClipControl`-style handling returned nothing), so a Z-range convention
+mismatch (OpenGL's traditional `[-1,1]` vs Vulkan/D3D's `[0,1]`) was considered but not confirmed --
+LLGL itself is expected to normalize this internally across its own modules, the same way it does
+for every other passing scenario in this same file.
+
+**Next step for whoever picks this up:** instrument (temporarily) to print the actual clip-space
+`x/y/z/w` for triangle A and B under scenario (b)'s specific WVP matrix, and compare against the
+same values computed independently (e.g. in Python) from the identical `Matrix::CreateOrthographic
+(400, 400, 10, 10000)` / `Matrix::CreateLookAt(eye=(1000,500,0), target=(0,150,0), up=(0,1,0))`
+inputs, to determine whether the NDC coordinates are genuinely outside `[-1,1]`/`[0,1]` (a real math
+or matrix-construction bug reachable only through this specific matrix shape) or whether they are
+in-range and something in this backend's own rasterization of that specific geometry is still
+wrong.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7 (blocks `LLGL-39`'s
+`Llgl_RasterizerState_CullMode_Camera` registration).
+
+---

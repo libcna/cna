@@ -344,6 +344,18 @@ Two implementation choices are worth knowing if you are debugging a render-targe
   compatibility rule only requires matching attachment formats and sample counts, not the same
   `VkRenderPass` object. The 3D path (`BasicEffect`, depth-tested `VertexBuffer` draws) works into
   a render target too, not just `SpriteBatch` — both share the same reused pipelines.
+* **`GraphicsDevice.Viewport` is applied once per render-pass bucket, not once per draw (OPEN
+  finding, `known_bugs.md`).** `RecordAndSubmitFrame()`/`CaptureBackbuffer()` issue
+  `commands_->SetViewport()` exactly once per `FrameCommandBucket` (sized to the whole target,
+  never to a sub-region), before replaying every command grouped into that bucket. A game that sets
+  a DIFFERENT `Viewport` before each of several draws into the SAME target within one unflushed
+  frame gets every one of those draws rasterized with whichever viewport was set LAST — confirmed
+  by three independent test files (`spritebatch_viewport_switch_test.cpp`,
+  `spritebatch_custom_viewport_test.cpp`'s own Check C1/C2, and
+  `rendertargetcube_plural_binding_test.cpp`'s own multi-viewport `EnvironmentMapEffect` read-back
+  probe — NOT a cube-face-mapping bug, ruled out against the already-verified singular-bind path).
+  Not fixed here; see `known_bugs.md`'s own entry for the fix shape (capture `Viewport` per
+  `FrameCommand` at queue time, like `command.target` already is).
 
 Destroying a `RenderTarget2D` before `Present()` (create it, draw into it, sample it, let it go out
 of scope, all within one `Draw()`) is safe: like `VertexBuffer`/`IndexBuffer`, the underlying LLGL
@@ -753,6 +765,18 @@ the default all-ones mask resolving normally, and `MultiSampleMask=0` resolving 
 on a module that honours it -- module-dependent, `[SKIP]` on the OpenGL module rather than failed,
 since its sample-mask application is permanently disabled in vendored LLGL (see "Render targets"
 above).
+Five more shared, cross-backend tests (already registered on EasyGL and usually several other
+backends) were newly wired up here (`plan_llgl.md` Phase LLGL-7, `LLGL-39`):
+`Llgl_RenderTarget2D_DepthBuffer` (a `RenderTarget2D`'s own depth buffer really gates draws, not
+just stores a property), `Llgl_RenderTarget_ViewportScissorReset` (binding/unbinding a render
+target resets `Viewport`/`ScissorRectangle` to the new target's/back buffer's size),
+`Llgl_SkinnedEffect_LightingConformance` (analytic ambient/emissive lighting term isolation),
+`Llgl_ViewportResetAfterResize` (a backbuffer resize resets `Viewport` unconditionally), and
+`Llgl_GraphicsDevice_ClearDepth` (`Clear()`'s own `depth` parameter genuinely reaches the depth
+buffer). Five OTHER files from the same batch were deliberately left unregistered after being
+found to genuinely fail here for real, identified reasons -- see `known_bugs.md`'s three new open
+entries and this doc's own "`GraphicsDevice.Viewport` is applied once per render-pass bucket, not
+once per draw" bullet above.
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED

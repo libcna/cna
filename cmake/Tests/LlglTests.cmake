@@ -363,4 +363,57 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_register_backend_test(NAME Llgl_MultiSampleMask_OpenGL COMMAND cna_test_llgl_multisamplemask
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+
+    # LLGL-39: plain-registration batch of shared, cross-backend tests (no CNA_BACKEND_ conditional
+    # Contract branches -- ordinary Game-subclass oracles, already registered on EasyGL and usually
+    # several other backends, simply never wired up here). See plan_llgl.md's own Phase LLGL-7 for
+    # how this list was derived.
+    cna_llgl_test(cna_test_llgl_rendertarget2d_depth examples/rendertarget2d_depth_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTarget2D_DepthBuffer COMMAND cna_test_llgl_rendertarget2d_depth
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_rendertarget_viewport_scissor_reset
+                  examples/rendertarget_viewport_scissor_reset_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTarget_ViewportScissorReset COMMAND cna_test_llgl_rendertarget_viewport_scissor_reset
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_skinnedeffect_lighting_conformance
+                  examples/skinnedeffect_lighting_conformance_test.cpp)
+    cna_register_backend_test(NAME Llgl_SkinnedEffect_LightingConformance COMMAND cna_test_llgl_skinnedeffect_lighting_conformance
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # rendertargetcube_plural_binding_test.cpp, rasterizerstate_cullmode_camera_test.cpp,
+    # rasterizerstate_cullmode_indexed_basiceffect_test.cpp, spritebatch_custom_viewport_test.cpp
+    # and spritebatch_viewport_switch_test.cpp are deliberately NOT registered here -- all five
+    # genuinely fail on this backend for real, understood (not silently ignored) reasons. See
+    # known_bugs.md's own two new open entries: three of the five (rendertargetcube_plural_binding
+    # via its own EnvironmentMapEffect-based SampleFaces() probe, spritebatch_custom_viewport's
+    # Check C1/C2, spritebatch_viewport_switch) trace to the SAME single root cause -- this
+    # backend's replay only calls LLGL::CommandBuffer::SetViewport() ONCE per render-pass BUCKET
+    # (grouped by target identity), not once per queued draw/batch, so a game that sets a
+    # DIFFERENT Viewport for each of several draws into the SAME target within one unflushed frame
+    # has every one of those draws silently rasterize with whichever viewport was set LAST. The
+    # other two are separate, unrelated findings: rasterizerstate_cullmode_indexed_basiceffect
+    # crashes on an untextured+unlit+no-vertex-colour BasicEffect draw (VertexPositionNormalTexture,
+    # TextureEnabled=false, VertexColorEnabled=false) -- AcquirePrimitiveVertexShader() has no
+    # shader variant for that combination at all and throws by name; rasterizerstate_cullmode_camera
+    # hits a scenario-setup failure specific to its own Orthographic+CreateLookAt scenario (every
+    # other scenario in the same file, including Perspective+CreateLookAt with the identical camera,
+    # passes) -- root cause not yet identified.
+
+    cna_llgl_test(cna_test_llgl_viewport_reset_after_resize
+                  examples/viewport_reset_after_resize_test.cpp)
+    cna_register_backend_test(NAME Llgl_ViewportResetAfterResize COMMAND cna_test_llgl_viewport_reset_after_resize
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_graphicsdevice_clear_depth
+                  examples/graphicsdevice_clear_depth_test.cpp)
+    cna_register_backend_test(NAME Llgl_GraphicsDevice_ClearDepth COMMAND cna_test_llgl_graphicsdevice_clear_depth
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
