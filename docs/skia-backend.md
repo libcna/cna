@@ -33,7 +33,7 @@ authoritative compact capability boundary; later sections explain the individual
 | `SpriteBatch` draw overloads, sorting, transforms, source rectangles, tint, flips and `SpriteFont` | Verified direct 2D path | Direct `SkCanvas` image operations preserve the shared XNA-shaped batching and font-atlas layout. | [SKIA-31–40](../plan_skia.md); [2D EasyGL registration](skia-2d-easygl-registration.md); [XNA oracle](skia-xna-oracle.md) |
 | Point/linear filtering, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear and tile modes map directly. Level-zero Anisotropic is byte-identical to the documented Linear fallback; the capability stays false and mip-dependent modes reject. | [SKIA-43–46, SKIA-70, SKIA-78–79](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_Sampler_MipmapFilterPolicy` |
 | Blend presets, arbitrary raster states, and target-0 colour-write masks | Verified direct/generated runtime-blender path | All 714,025 valid factor/function tuples, independent RGB/alpha equations, live constants, and all target-0 masks draw. Invalid raw selectors and sample/MRT-only state reject before drawing. | [SKIA-47–57, SKIA-108, SKIA-119–124](../plan_skia.md); [generated blender](skia-generated-blender.md); `Skia_BlendMapping_Raster`, `Skia_GeneratedBlend_PublicCorpus` |
-| `Texture2D` level-0 upload, partial transfer, readback and NPOT sampling | Verified direct CPU image path | Direct CPU shadow plus Skia image; mip levels above zero reject after `withDefaultMipmaps()` was evaluated and found unable to provide CNA's mutable per-level contract. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109](../plan_skia.md); [API contract comparison](skia-api-contract-comparison.md) |
+| `Texture2D` level-0 image path and checked mip allocation | Verified direct/bounded CPU path | Direct level-zero CPU shadow plus Skia images; `mipMap=true` owns and reports a complete zeroed CNA chain. Higher-level transfers, generation and sampling remain staged as SKIA-127–129. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–126](../plan_skia.md); [resource policy](skia-successor-resource-oracles.md); `Skia_Texture2D_MipConstruction` |
 | `RenderTarget2D` colour rendering, readback, sampling and Preserve/Discard | Verified direct level-0 raster target | Direct `SkSurface`; real depth, mip chains and MSAA are unavailable rather than fabricated. | [SKIA-61–75](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_DepthPolicy`, `Skia_RenderTarget2D_MsaaPolicy` |
 | `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
 | `RenderTargetCube` face rendering, transfers, Preserve/Discard and generated mips | Verified bounded six-surface 2D emulation | Each face is an independent raster target. Cube sampling, real depth and real MSAA reject explicitly. | [SKIA-85–86](../plan_skia.md); `Skia_RenderTargetCube_Policy` and four shared cube contracts |
@@ -231,15 +231,15 @@ The current public texture-format policy is intentionally the existing CNA-wide 
 `SurfaceFormat::Color` is the only accepted format. Every other `SurfaceFormat` value is rejected
 by shared validation before a Skia allocation is attempted. Raster textures accept one-pixel and
 NPOT dimensions, report the shared 16384 maximum single axis, and reject a dimension above that
-limit before allocation. Mipmapped `Texture2D` construction is also rejected with
-`System::NotSupportedException` before data is accepted; `mipMap=true` `RenderTarget2D`
-construction raises the same exception. This is a deliberate raster policy: the pinned Skia
-checkout does contain a mip builder under private `src/core`, but the public raster `SkImage`
-creation path used by CNA accepts a level-0 pixmap only and supplies no stable public contract for
-CNA-owned level upload/readback. CNA will not bind Skia's internal cache implementation merely to
-imply a mip-chain contract it cannot fully expose. The six `TextureFilter` values that name a mip
-selection rule are likewise rejected with `System::NotSupportedException` during
-`SpriteBatch::Begin`; they are never silently treated as a level-0 Point or Linear request.
+limit before allocation. SKIA-125/126 replace the old Texture2D constructor refusal with a checked
+CNA-owned chain: all levels are allocated contiguously, zero initialized, and reported through the
+public `LevelCount`. Only level zero is converted into the two alpha-labelled Skia images at this
+checkpoint. Higher-level upload/readback stays an explicit rejection until SKIA-127, and mip
+generation/sampling remain SKIA-128/129. `mipMap=true` `RenderTarget2D` construction still raises
+`System::NotSupportedException` until the separate stable-surface work in SKIA-131. CNA does not
+bind Skia's private `src/core` mip builder. The six `TextureFilter` values that name a mip selection
+rule are likewise rejected during `SpriteBatch::Begin`; they are never silently treated as a
+level-zero Point or Linear request.
 
 ## Verification recorded for the initial slice
 
@@ -392,11 +392,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     reading runtime route in RenderTarget2D, and alpha-bit selection with distinct 128/255 source
     and destination alpha values. `Skia_GeneratedBlendState_Policy` extends the matrix to generated
     equations, live constants, disabled replacement, and re-enable restoration.
-44. `Skia_Texture2D_MipmapPolicy` also closes the target-mipmap investigation: the pinned public
-    Skia API can attach generated mips only to an immutable `SkImage` snapshot, while CNA requires
-    deterministic public per-level target readback and invalidation after bind/upload. The raster
-    backend consequently refuses a mipmapped target before construction, then proves a new
-    level-0 target can render, read back, unbind, and sample normally.
+44. `Skia_Texture2D_MipmapPolicy` records the post-SKIA-126 split: a mipmapped Texture2D constructs,
+    reports its full chain, and draws level zero, while a mipmapped target still refuses before
+    construction because deterministic per-level target readback and invalidation remain
+    unimplemented. A new level-0 target still renders, reads back, unbinds, and samples normally.
 45. `Skia_Resize_Presentation` keeps a `RenderTarget2D` and `SpriteBatch` alive across an active-
     target resize and two fullscreen/windowed presentation resets. It checks all three ordered
     device-reset pairs, old/new presentation dimensions, retained target readback, new-backbuffer
@@ -752,8 +751,14 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     zero-initialized contiguous allocation owns immutable dimension/row/offset/size descriptors for
     every floor-halved odd, NPOT, or one-dimensional level through 1×1. Preflight is result-
     preserving on overflow or the 256-MiB boundary, and live byte/object counters publish only
-    after successful allocation and return to baseline on destruction. Public Texture2D mip
-    construction remains disabled until SKIA-126.
+    after successful allocation and return to baseline on destruction. Public wiring follows in
+    SKIA-126.
+94. `Skia_Texture2D_MipConstruction` closes SKIA-126. Public odd/NPOT, one-dimensional, 1×1,
+    non-mipped, and maximum-axis Texture2D instances report exact level counts over the common
+    chain. Authored level zero is copied while every descendant starts at zero; invalid dimensions
+    and incomplete internal level counts publish no resource, and explicit disposal plus ordinary
+    destruction return all image/chain counters to baseline. Higher-level transfers, generation,
+    and sampling remain explicit SKIA-127–129 boundaries.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

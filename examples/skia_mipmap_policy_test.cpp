@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-27 / SKIA-70: pin the public raster mip policy after the Skia API audit.
+// SKIA-27 / SKIA-70 / SKIA-126: retain the target/sampler refusal while Texture2D storage opens.
 //
 // SkImage::withDefaultMipmaps() is public in the pinned Skia revision, but it returns an immutable
 // image snapshot.  Its public API neither exposes per-level raster readback nor defines the
-// invalidation/resolve contract CNA needs when a mutable SkSurface target is rebound, uploaded,
-// or read through Texture2D::GetData(level > 0).  CNA deliberately does not fabricate those
-// missing target semantics from private Skia internals: every mipMap=true Texture2D or
-// RenderTarget2D request fails as NotSupportedException before callers can submit any pixel data.
-// The follow-up level-0 texture and target cycles prove the refusal leaves normal draw/readback/
-// sampling behaviour usable.
+// invalidation/resolve contract CNA needs when a mutable SkSurface target is rebound or uploaded.
+// SKIA-126 now allocates a CNA-owned zeroed Texture2D chain while RenderTarget2D stays rejected
+// until SKIA-131. Mip-filter sampling remains rejected until SKIA-129. This transition test proves
+// a mipped texture's level-zero path and the ordinary target path remain usable around the retained
+// target refusal.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -109,11 +108,9 @@ protected:
         finished_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        check(throwsNotSupported([&] {
-                  Texture2D rejected(device, 4, 4, true, SurfaceFormat::Color);
-                  (void)rejected;
-              }),
-              "Texture2D mipMap=true rejects with NotSupportedException before SetData is possible");
+        Texture2D mippedTexture(device, 4, 4, true, SurfaceFormat::Color);
+        check(mippedTexture.getLevelCountProperty() == 3,
+              "Texture2D mipMap=true allocates and reports the complete 4x4 chain");
         check(throwsNotSupported([&] {
                   RenderTarget2D rejected(device, 4, 4, true, SurfaceFormat::Color,
                                           DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
@@ -121,17 +118,22 @@ protected:
               }),
               "RenderTarget2D mipMap=true rejects with NotSupportedException");
 
-        Texture2D levelZero(device, 2, 1, false, SurfaceFormat::Color);
-        const std::vector<Color> pixels = { kRed, kBlue };
-        levelZero.SetData(pixels.data(), static_cast<int>(pixels.size()));
+        const std::vector<Color> pixels = {
+            kRed, kRed, kBlue, kBlue,
+            kRed, kRed, kBlue, kBlue,
+            kRed, kRed, kBlue, kBlue,
+            kRed, kRed, kBlue, kBlue,
+        };
+        mippedTexture.SetData(pixels.data(), static_cast<int>(pixels.size()));
         device.Clear(Color(0, 0, 0, 255));
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque,
                             const_cast<SamplerState*>(&SamplerState::PointClamp), nullptr, nullptr,
                             nullptr, Matrix::getIdentityProperty());
-        spriteBatch_->Draw(levelZero, Rectangle(0, 0, 4, 2), Rectangle(0, 0, 2, 1), Color::White);
+        spriteBatch_->Draw(mippedTexture, Rectangle(0, 0, 4, 2),
+                           Rectangle(0, 0, 4, 4), Color::White);
         spriteBatch_->End();
-        checkPixel(1, kRed, "level-0 upload remains usable after rejected mip requests (red half)");
-        checkPixel(3, kBlue, "level-0 upload remains usable after rejected mip requests (blue half)");
+        checkPixel(1, kRed, "mipped Texture2D level-zero upload remains sampleable (red half)");
+        checkPixel(3, kBlue, "mipped Texture2D level-zero upload remains sampleable (blue half)");
 
         RenderTarget2D levelZeroTarget(device, 2, 1, false, SurfaceFormat::Color,
                                        DepthFormat::None, 0, RenderTargetUsage::PreserveContents);

@@ -103,7 +103,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::TransformLogicalToWindow/4` | Converts inverse EasyGL presentation mapping. | Uses SDL's DPI-aware inverse mapping. | `implemented` | SKIA-14, SKIA-72 |
 | `IGraphicsBackend::GetWindowInternal/0` | Returns the owned SDL window. | Returns the checked presenter window. | `internal` | SKIA-12, SKIA-18 |
 | `IGraphicsBackend::GetRendererInternal/0` | EasyGL has no SDL renderer. | Returns owned SDL presenter renderer. | `internal` | SKIA-12, SKIA-18 |
-| `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates level-zero CPU Skia images. | `bounded` | SKIA-22–30 |
+| `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates the complete checked zeroed 2D mip chain and level-zero alpha-labelled Skia images; higher-level transfer/sampling remain bounded. | `bounded` | SKIA-22–30, SKIA-125–126 |
 | `IGraphicsBackend::CreateSpriteBatch/0` | Allocates EasyGL sprite renderer state. | Allocates checked SkCanvas adapter. | `implemented` | SKIA-31–40 |
 | `IGraphicsBackend::ReadBackbuffer/5` | Reads GL framebuffer top-left RGBA. | Exact active-surface RGBA8 readback. | `implemented` | SKIA-7, SKIA-62 |
 | `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Creates a refusal object: safe false/zero properties; Begin/End throw after SKIA-104 disproves raster emulation. | `unsupported` | SKIA-102, SKIA-104–105 |

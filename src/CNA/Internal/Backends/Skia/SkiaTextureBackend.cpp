@@ -43,11 +43,37 @@ namespace CNA::Internal::Backends::Skia
         }
         if (data.pixels.size() != requiredBytes)
             throw std::runtime_error("Skia Texture2D requires exactly width * height * 4 RGBA8 bytes.");
-        if (data.mipLevels != 1)
+
+        std::vector<SkiaMipLevel2D> layout;
+        std::size_t chainBytes = 0u;
+        SkiaMipChain2DLayoutError layoutError = SkiaMipChain2DLayoutError::None;
+        if (data.mipLevels <= 0
+            || !TryBuildSkiaMipChain2DLayout(width_, height_, data.mipLevels > 1, 4u,
+                                              layout, chainBytes, layoutError))
+        {
             throw System::NotSupportedException(
-                "Skia raster Texture2D does not implement public mip chains; mipMap=true is rejected "
-                "before texture data can be uploaded.");
-        rawPixels_ = data.pixels;
+                "Skia Texture2D cannot allocate the requested checked RGBA8 mip chain.");
+        }
+        if (static_cast<int>(layout.size()) != data.mipLevels)
+        {
+            throw std::invalid_argument(
+                "Skia Texture2D mipLevels must name level zero or the complete 2D mip chain.");
+        }
+
+        std::size_t imageBytes = 0u;
+        std::size_t retainedBytes = 0u;
+        if (!CheckedSizeMultiply(requiredBytes, 2u, imageBytes)
+            || !CheckedSizeAdd(chainBytes, imageBytes, retainedBytes)
+            || retainedBytes > kSkiaCpuTextureStorageLimitBytes)
+        {
+            throw System::NotSupportedException(
+                "Skia Texture2D mip storage and level-zero image views exceed the checked "
+                "256 MiB per-resource limit.");
+        }
+
+        mipChain_ = std::make_unique<SkiaMipChain2D>(
+            width_, height_, data.mipLevels > 1, 4u, resourceCounters_);
+        std::memcpy(mipChain_->LevelData(0), data.pixels.data(), requiredBytes);
         RebuildImage();
         if (resourceCounters_)
         {
@@ -71,7 +97,7 @@ namespace CNA::Internal::Backends::Skia
 
         for (int row = 0; row < height_; ++row)
         {
-            std::memcpy(rawPixels_.data() + static_cast<std::size_t>(row) * width_ * 4u,
+            std::memcpy(mipChain_->LevelData(0) + static_cast<std::size_t>(row) * width_ * 4u,
                         rgba + static_cast<std::size_t>(row) * stride,
                         static_cast<std::size_t>(width_) * 4u);
         }
@@ -106,7 +132,8 @@ namespace CNA::Internal::Backends::Skia
         {
             const auto sourceOffset = (static_cast<std::size_t>(y + row) * width_ + x) * 4u;
             std::memcpy(destination + static_cast<std::size_t>(row) * width * 4u,
-                        rawPixels_.data() + sourceOffset, static_cast<std::size_t>(width) * 4u);
+                        mipChain_->LevelData(0) + sourceOffset,
+                        static_cast<std::size_t>(width) * 4u);
         }
         return true;
     }
@@ -122,8 +149,10 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaTextureBackend::RebuildImage()
     {
-        const SkPixmap straightPixmap(RgbaUnpremulInfo(width_, height_), rawPixels_.data(), width_ * 4);
-        const SkPixmap premultipliedPixmap(RgbaPremulInfo(width_, height_), rawPixels_.data(), width_ * 4);
+        const SkPixmap straightPixmap(
+            RgbaUnpremulInfo(width_, height_), mipChain_->LevelData(0), width_ * 4);
+        const SkPixmap premultipliedPixmap(
+            RgbaPremulInfo(width_, height_), mipChain_->LevelData(0), width_ * 4);
         straightImage_ = SkImages::RasterFromPixmapCopy(straightPixmap);
         premultipliedImage_ = SkImages::RasterFromPixmapCopy(premultipliedPixmap);
         if (!straightImage_ || !premultipliedImage_)
