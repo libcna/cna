@@ -577,6 +577,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTarget2D_MsaaResolve COMMAND cna_test_bgfx_rendertarget2d_msaa
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
 
+    # REMED-GFX-185: exact active-renderer MSAA capability clamp and public applied-count report.
+    # OpenGL exercises a real limited renderer; Vulkan exercises renderer selection/fallback with
+    # the active caps remaining authoritative. The fixture also drives the selection helper with
+    # synthetic 0/2/4/8/16 ceilings so device differences remain deterministic on one machine.
+    cna_bgfx_test(cna_test_bgfx_gfx185_msaa_capability
+                  examples/bgfx_gfx185_msaa_capability_test.cpp)
+    cna_register_backend_test(NAME Bgfx_GFX185_MsaaCapability
+        COMMAND cna_test_bgfx_gfx185_msaa_capability
+        TIMEOUT 120 ENVIRONMENT
+            "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=OPENGL")
+    cna_register_backend_test(NAME Bgfx_GFX185_MsaaCapability_Vulkan
+        COMMAND cna_test_bgfx_gfx185_msaa_capability
+        TIMEOUT 120 ENVIRONMENT
+            "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
     # Task 906: RenderTarget2D mip chains are genuinely generated (bgfx's own built-in
     # hasMips+BGFX_RESOLVE_AUTO_GEN_MIPS mechanism), not just present-but-undefined storage.
     cna_bgfx_test(cna_test_bgfx_rendertarget2d_mip

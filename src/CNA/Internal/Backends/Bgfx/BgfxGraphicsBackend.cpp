@@ -28,6 +28,11 @@ namespace CNA::Internal::Backends::Bgfx
     {
         const char* kRendererOverrideEnvVar = "CNA_BGFX_RENDERER";
 
+        // REMED-GFX-185: BGFX_TEXTURE_RT_MSAA_Xn allocates multisample storage, while this
+        // independent per-draw bit makes rasterization actually evaluate all of its samples.
+        // Every SpriteBatch and 3D submit carries it; on a single-sample target it is a no-op.
+        constexpr uint64_t kMsaaRasterState = BGFX_STATE_MSAA;
+
         struct SpriteVertex
         {
             float x;
@@ -795,18 +800,62 @@ namespace CNA::Internal::Backends::Bgfx
 
     // --- BgfxRenderTargetBackend ---
 
+    static bool MapDepthFormat(int depthFormat, ::bgfx::TextureFormat::Enum& outFormat);
+
+    int Detail::NormalizeRenderTargetMsaaLimitEXT(uint32_t nativeLimit, bool colorSupported,
+                                                   bool depthSupported)
+    {
+        if (!colorSupported || !depthSupported) return 0;
+        const uint32_t capped = std::min<uint32_t>(nativeLimit, 16);
+        if (capped >= 16) return 16;
+        if (capped >= 8)  return 8;
+        if (capped >= 4)  return 4;
+        if (capped >= 2)  return 2;
+        return 0;
+    }
+
+    /**
+     * @brief Returns the active bgfx renderer's normalized render-target MSAA ceiling.
+     *
+     * REMED-GFX-185: the format bits answer whether RGBA8 and the requested depth format can be
+     * multisampled at all; `Caps::Limits::maxMsaa` is the exact ceiling the native bgfx renderer
+     * applies to `BGFX_TEXTURE_RT_MSAA_Xn`. The latter is supplied by the pinned bgfx capability
+     * patch in `cmake/patches`, because upstream otherwise keeps the value private (`m_maxMsaa` on
+     * OpenGL and the rewritten `s_msaa` tables on Vulkan/Direct3D/Metal).
+     *
+     * Returning one of 0/2/4/8/16 preserves CNA's established ClosestMSAAPower policy. In
+     * particular, a native maximum that is not itself a power of two is rounded down before a
+     * bgfx flag is chosen, so CNA never reports a count different from the one encoded for both
+     * attachments.
+     */
+    static int BgfxRtMsaaLimit(int depthFormat)
+    {
+        const bgfx::Caps* caps = bgfx::getCaps();
+        constexpr uint32_t required = BGFX_CAPS_FORMAT_TEXTURE_FRAMEBUFFER_MSAA;
+        const bool colorSupported =
+            (caps->formats[bgfx::TextureFormat::RGBA8] & required) != 0;
+
+        ::bgfx::TextureFormat::Enum depthBgfxFormat;
+        const bool depthSupported = !MapDepthFormat(depthFormat, depthBgfxFormat) ||
+            (caps->formats[depthBgfxFormat] & required) != 0;
+        return Detail::NormalizeRenderTargetMsaaLimitEXT(
+            caps->limits.maxMsaa, colorSupported, depthSupported);
+    }
+
     // Task 878/879: BGFX_TEXTURE_RT_MSAA_X2/X4/X8/X16 occupy the same 4-bit field as
     // BGFX_TEXTURE_RT (see bgfx/defines.h's BGFX_TEXTURE_RT_MASK/RT_SHIFT) -- they are mutually
     // exclusive alternatives, not flags to OR alongside it. requestedMultiSampleCount arrives
     // already rounded to a power of two (or 0) by RenderTarget2D's/RenderTargetCube's own
     // ClosestMSAAPower step before it ever reaches the backend, so this only needs to pick the
-    // matching bgfx constant and clamp down to bgfx's max of 16x.
-    static uint64_t BgfxMsaaRtFlag(int requestedMultiSampleCount, int& appliedOut)
+    // matching bgfx constant. REMED-GFX-185 additionally clamps to what the ACTIVE renderer will
+    // really select, rather than reporting a larger flag request as if it had been applied.
+    static uint64_t BgfxMsaaRtFlag(int requestedMultiSampleCount, int depthFormat, int& appliedOut)
     {
-        if (requestedMultiSampleCount >= 16) { appliedOut = 16; return BGFX_TEXTURE_RT_MSAA_X16; }
-        if (requestedMultiSampleCount >= 8)  { appliedOut = 8;  return BGFX_TEXTURE_RT_MSAA_X8;  }
-        if (requestedMultiSampleCount >= 4)  { appliedOut = 4;  return BGFX_TEXTURE_RT_MSAA_X4;  }
-        if (requestedMultiSampleCount >= 2)  { appliedOut = 2;  return BGFX_TEXTURE_RT_MSAA_X2;  }
+        const int capped = std::min(requestedMultiSampleCount, BgfxRtMsaaLimit(depthFormat));
+        if (capped >= 16) { appliedOut = 16; return BGFX_TEXTURE_RT_MSAA_X16; }
+        if (capped >= 8)  { appliedOut = 8;  return BGFX_TEXTURE_RT_MSAA_X8;  }
+        if (capped >= 4)  { appliedOut = 4;  return BGFX_TEXTURE_RT_MSAA_X4;  }
+        if (capped >= 2)  { appliedOut = 2;  return BGFX_TEXTURE_RT_MSAA_X2;  }
         appliedOut = 0;
         return BGFX_TEXTURE_RT;
     }
@@ -945,7 +994,7 @@ namespace CNA::Internal::Backends::Bgfx
         }
 
         int appliedMsaa = 0;
-        const uint64_t msaaFlag = BgfxMsaaRtFlag(requestedMultiSampleCount, appliedMsaa);
+        const uint64_t msaaFlag = BgfxMsaaRtFlag(requestedMultiSampleCount, depthFormat, appliedMsaa);
         multiSampleCount = appliedMsaa;
 
         // Create color texture with render target flag (Task 878/879: an MSAA variant when
@@ -976,9 +1025,9 @@ namespace CNA::Internal::Backends::Bgfx
             // must say so with BGFX_TEXTURE_RT_WRITE_ONLY once that count exceeds one. See
             // BgfxDepthAttachmentFlags: without it bgfx aborts the process here rather than
             // returning an error this backend could report.
+            depthCreationFlags_ = BgfxDepthAttachmentFlags(msaaFlag, appliedMsaa);
             attachments[1] = bgfx::createTexture2D(static_cast<uint16_t>(w), static_cast<uint16_t>(h),
-                false, 1, depthBgfxFormat,
-                BgfxDepthAttachmentFlags(msaaFlag, appliedMsaa));
+                false, 1, depthBgfxFormat, depthCreationFlags_);
             numAttachments = 2;
         }
 
@@ -1193,7 +1242,7 @@ namespace CNA::Internal::Backends::Bgfx
         levelCount_ = mipMap ? BgfxCubeMipLevels(size) : 1;
         // Task 903: BGFX_TEXTURE_RT_MSAA_Xn instead of plain BGFX_TEXTURE_RT when requested.
         int appliedMsaa = 0;
-        const uint64_t msaaFlag = BgfxMsaaRtFlag(requestedMultiSampleCount, appliedMsaa);
+        const uint64_t msaaFlag = BgfxMsaaRtFlag(requestedMultiSampleCount, depthFormat, appliedMsaa);
         multiSampleCount = appliedMsaa;
 
         // REMED-GFX-195: bgfx's OpenGL TextureGL owns one `m_rbo` per TEXTURE, not per cube layer.
@@ -1221,6 +1270,7 @@ namespace CNA::Internal::Backends::Bgfx
         if (appliedMsaa > 0)
         {
             const uint64_t producerFlags = BgfxColorAttachmentFlags(msaaFlag);
+            msaaProducerCreationFlags_ = producerFlags;
             for (auto& faceTexture : msaaFaceColorTex_)
             {
                 faceTexture = bgfx::createTexture2D(
@@ -1259,9 +1309,9 @@ namespace CNA::Internal::Backends::Bgfx
             // REMED-GFX-163: the arithmetic that used to be spelled out here now lives in the shared
             // BgfxDepthAttachmentFlags, because RenderTarget2D needed the identical rule and did not
             // have it. Its full reasoning is documented there.
+            depthCreationFlags_ = BgfxDepthAttachmentFlags(msaaFlag, appliedMsaa);
             depthTex = bgfx::createTexture2D(static_cast<uint16_t>(size), static_cast<uint16_t>(size),
-                false, 1, depthBgfxFormat,
-                BgfxDepthAttachmentFlags(msaaFlag, appliedMsaa));
+                false, 1, depthBgfxFormat, depthCreationFlags_);
         }
         // The FBO is created per-face bind to attach the right face layer
         fbo = BGFX_INVALID_HANDLE;
@@ -1785,6 +1835,8 @@ namespace CNA::Internal::Backends::Bgfx
                           << std::min<int>(static_cast<int>(caps->limits.maxFBAttachments), 4)
                           << " targets (FNA MAX_RENDERTARGET_BINDINGS, device supports up to "
                           << static_cast<int>(caps->limits.maxFBAttachments) << "); "
+                             "render-target MSAA up to " << static_cast<int>(caps->limits.maxMsaa)
+                          << "x; "
                              "occlusion query: " << ((caps->supported & BGFX_CAPS_OCCLUSION_QUERY) ? "supported" : "NOT supported")
                           << "; texture blit/readback: "
                           << ((caps->supported & (BGFX_CAPS_TEXTURE_BLIT | BGFX_CAPS_TEXTURE_READ_BACK))
@@ -2196,7 +2248,7 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 768: gated on scissorEnabled_, not just a non-zero rect -- see that member's own
         // declaration comment for why the two must be tracked independently.
         ApplyScissorOverride();
-        bgfx::setState(colorWriteFlags_ | BGFX_STATE_MSAA
+        bgfx::setState(colorWriteFlags_ | kMsaaRasterState
                        | blendFlags_ | depthFlags_ | cullFlags_, blendFactorPacked_);
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::submit(spriteViewId, spriteProgram);
@@ -3388,7 +3440,7 @@ namespace CNA::Internal::Backends::Bgfx
                        // DepthBufferWriteEnable) already carries it when writes are actually
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
-                       | blendFlags_ | depthFlags_ | cullFlags_)
+                       | kMsaaRasterState | blendFlags_ | depthFlags_ | cullFlags_)
                        | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive)),
                        blendFactorPacked_);
         SubmitViewProgram(colored3DProgram_);
@@ -3439,7 +3491,7 @@ namespace CNA::Internal::Backends::Bgfx
                        // DepthBufferWriteEnable) already carries it when writes are actually
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
-                       | blendFlags_ | depthFlags_ | cullFlags_)
+                       | kMsaaRasterState | blendFlags_ | depthFlags_ | cullFlags_)
                        | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive)),
                        blendFactorPacked_);
         SubmitViewProgram(colored3DProgram_);
@@ -3619,7 +3671,7 @@ namespace CNA::Internal::Backends::Bgfx
                        // DepthBufferWriteEnable) already carries it when writes are actually
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
-                                | blendFlags_ | depthFlags_ | cullFlags_)
+                                | kMsaaRasterState | blendFlags_ | depthFlags_ | cullFlags_)
                                | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
         bgfx::setState(state, blendFactorPacked_);
 
@@ -4064,7 +4116,7 @@ namespace CNA::Internal::Backends::Bgfx
                        // DepthBufferWriteEnable) already carries it when writes are actually
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
-                                | blendFlags_ | depthFlags_ | cullFlags_)
+                                | kMsaaRasterState | blendFlags_ | depthFlags_ | cullFlags_)
                                | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
         bgfx::setState(state, blendFactorPacked_);
 
@@ -4536,7 +4588,7 @@ namespace CNA::Internal::Backends::Bgfx
                        // DepthBufferWriteEnable) already carries it when writes are actually
                        // requested; including it again here unconditionally made
                        // DepthBufferWriteEnable=false a complete no-op on every 3D draw.
-                                | blendFlags_ | depthFlags_ | cullFlags_)
+                                | kMsaaRasterState | blendFlags_ | depthFlags_ | cullFlags_)
                                | (useWireframe ? BGFX_STATE_PT_LINES : ToTopologyFlag(primitive));
         bgfx::setState(state, blendFactorPacked_);
         SubmitViewProgram(instanced3DProgram_);

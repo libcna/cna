@@ -1,0 +1,83 @@
+diff --git a/include/bgfx/bgfx.h b/include/bgfx/bgfx.h
+index ee59b8532..9964f4a27 100644
+--- a/include/bgfx/bgfx.h
++++ b/include/bgfx/bgfx.h
+@@ -550,0 +551 @@ namespace bgfx
++			uint32_t maxMsaa;                 //!< Maximum render-target sample count selected by BGFX_TEXTURE_RT_MSAA_Xn (0 means unsupported).
+diff --git a/include/bgfx/c99/bgfx.h b/include/bgfx/c99/bgfx.h
+index f3b87c362..26cec2651 100644
+--- a/include/bgfx/c99/bgfx.h
++++ b/include/bgfx/c99/bgfx.h
+@@ -591,0 +592 @@ typedef struct bgfx_caps_limits_s
++    uint32_t             maxMsaa;            /** Maximum render-target sample count selected by BGFX_TEXTURE_RT_MSAA_Xn (0 means unsupported). */
+diff --git a/scripts/bgfx.idl b/scripts/bgfx.idl
+index df405e623..a973b0ef8 100644
+--- a/scripts/bgfx.idl
++++ b/scripts/bgfx.idl
+@@ -813,0 +814 @@ struct.Limits  { namespace = "Caps" }
++	.maxMsaa                 "uint32_t" --- Maximum render-target sample count selected by BGFX_TEXTURE_RT_MSAA_Xn (0 means unsupported).
+diff --git a/src/bgfx.cpp b/src/bgfx.cpp
+index d624e7753..1e3660c46 100644
+--- a/src/bgfx.cpp
++++ b/src/bgfx.cpp
+@@ -4092,0 +4093 @@ namespace bgfx
++		g_caps.limits.maxMsaa                 = 0;
+diff --git a/src/renderer_d3d11.cpp b/src/renderer_d3d11.cpp
+index 10be8e10b..adeb1dae6 100644
+--- a/src/renderer_d3d11.cpp
++++ b/src/renderer_d3d11.cpp
+@@ -2511,0 +2512,3 @@ namespace bgfx { namespace d3d11
++			g_caps.limits.maxMsaa = s_msaa[BX_COUNTOF(s_msaa)-1].Count > 1
++				? s_msaa[BX_COUNTOF(s_msaa)-1].Count
++				: 0;
+diff --git a/src/renderer_d3d12.cpp b/src/renderer_d3d12.cpp
+index c6f8ea888..207b4027c 100644
+--- a/src/renderer_d3d12.cpp
++++ b/src/renderer_d3d12.cpp
+@@ -2903,0 +2904,3 @@ namespace bgfx { namespace d3d12
++			g_caps.limits.maxMsaa = s_msaa[BX_COUNTOF(s_msaa)-1].Count > 1
++				? s_msaa[BX_COUNTOF(s_msaa)-1].Count
++				: 0;
+diff --git a/src/renderer_gl.cpp b/src/renderer_gl.cpp
+index 5caabd79d..252f554a5 100644
+--- a/src/renderer_gl.cpp
++++ b/src/renderer_gl.cpp
+@@ -3133,0 +3134,3 @@ namespace bgfx { namespace gl
++				const uint32_t maxMsaa = uint32_t(bx::min<int32_t>(m_maxMsaa, 16) );
++				g_caps.limits.maxMsaa = maxMsaa > 1 ? maxMsaa : 0;
++
+diff --git a/src/renderer_mtl.cpp b/src/renderer_mtl.cpp
+index 62da2e470..65a5f782e 100644
+--- a/src/renderer_mtl.cpp
++++ b/src/renderer_mtl.cpp
+@@ -1099,0 +1100 @@ static_assert(BX_COUNTOF(s_accessNames) == Access::Count, "Invalid s_accessNames
++			uint32_t maxMsaa = 0;
+@@ -1106,0 +1108 @@ static_assert(BX_COUNTOF(s_accessNames) == Access::Count, "Invalid s_accessNames
++					maxMsaa = uint32_t(sampleCount);
+@@ -1112,0 +1115 @@ static_assert(BX_COUNTOF(s_accessNames) == Access::Count, "Invalid s_accessNames
++			g_caps.limits.maxMsaa = maxMsaa;
+diff --git a/src/renderer_noop.cpp b/src/renderer_noop.cpp
+index f8d305d16..a16050ebe 100644
+--- a/src/renderer_noop.cpp
++++ b/src/renderer_noop.cpp
+@@ -76,0 +77 @@ namespace bgfx { namespace noop
++			g_caps.limits.maxMsaa            = 0;
+diff --git a/src/renderer_vk.cpp b/src/renderer_vk.cpp
+index b2f3b0eff..73f8ca32a 100644
+--- a/src/renderer_vk.cpp
++++ b/src/renderer_vk.cpp
+@@ -1856,0 +1857 @@ VK_IMPORT_INSTANCE
++					uint32_t maxMsaa = 0;
+@@ -1864,0 +1866,4 @@ VK_IMPORT_INSTANCE
++							if (ii != 0)
++							{
++								maxMsaa = uint32_t(s_msaa[ii].Count);
++							}
+@@ -1870,0 +1876 @@ VK_IMPORT_INSTANCE
++					g_caps.limits.maxMsaa = maxMsaa;
+diff --git a/src/renderer_webgpu.cpp b/src/renderer_webgpu.cpp
+index 927801af1..0661d5fe7 100644
+--- a/src/renderer_webgpu.cpp
++++ b/src/renderer_webgpu.cpp
+@@ -1383,0 +1384 @@ WGPU_IMPORT
++						g_caps.limits.maxMsaa            = 0;

@@ -104,6 +104,17 @@ namespace CNA::Internal::Backends::Bgfx
          * @param flags  bgfx reset flags.
          */
         void ResetBackbufferEXT(uint16_t width, uint16_t height, uint32_t flags);
+
+        /**
+         * @brief Normalizes a bgfx native render-target MSAA limit to CNA's supported counts.
+         *
+         * @param nativeLimit Exact maximum selected by the active bgfx renderer.
+         * @param colorSupported Whether the colour format advertises framebuffer MSAA.
+         * @param depthSupported Whether the requested depth format advertises framebuffer MSAA.
+         * @return One of 0, 2, 4, 8 or 16; zero when either attachment lacks support.
+         */
+        int NormalizeRenderTargetMsaaLimitEXT(uint32_t nativeLimit, bool colorSupported,
+                                              bool depthSupported);
     }
 
     class BgfxGraphicsBackend;
@@ -337,6 +348,8 @@ namespace CNA::Internal::Backends::Bgfx
         int  multiSampleCount = 0;
         /// REMED-GFX-181: the `_flags` word passed to bgfx::createTexture2D. Diagnostics only.
         uint64_t creationFlags_ = 0;
+        /// REMED-GFX-185: the depth attachment's creation flags, or zero when absent. Diagnostics only.
+        uint64_t depthCreationFlags_ = 0;
 
         BgfxRenderTargetBackend(BgfxGraphicsBackend* owner, int w, int h, int depthFormat,
                                  bool preserveContents = false,
@@ -448,6 +461,10 @@ namespace CNA::Internal::Backends::Bgfx
         int levelCount_ = 1;
         /// REMED-GFX-181: the `_flags` word passed to bgfx::createTextureCube. Diagnostics only.
         uint64_t creationFlags_ = 0;
+        /// REMED-GFX-185: the per-face colour producer's creation flags. Diagnostics only.
+        uint64_t msaaProducerCreationFlags_ = 0;
+        /// REMED-GFX-185: the shared depth attachment's creation flags, or zero. Diagnostics only.
+        uint64_t depthCreationFlags_ = 0;
 
         /// REMED-GFX-195: face whose per-face producer is currently bound, or -1.
         int boundFace_ = -1;

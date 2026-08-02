@@ -183,10 +183,16 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
     FetchContent_Declare(
         bgfx_cmake
         GIT_REPOSITORY https://github.com/bkaradzic/bgfx.cmake.git
-        GIT_TAG master
-        GIT_SHALLOW TRUE
+        # REMED-GFX-185: pin the dependency revision the capability patch below was authored
+        # against. The patch exposes the exact renderer-selected render-target MSAA ceiling in
+        # bgfx::Caps; CNA cannot report an honest applied count from bgfx's format-support bit
+        # alone because the native renderers silently reduce RT_MSAA_Xn to a device limit.
+        GIT_TAG 572868c0cb952add48019d267223453958e958b8
+        GIT_SHALLOW FALSE
         GIT_PROGRESS TRUE
         GIT_SUBMODULES_RECURSE TRUE
+        PATCH_COMMAND git -C bgfx apply --unidiff-zero --whitespace=nowarn
+            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/bgfx-max-render-target-msaa.patch
     )
     FetchContent_MakeAvailable(bgfx_cmake)
 
