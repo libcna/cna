@@ -179,6 +179,35 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-36: shared, cross-backend RenderTargetCube oracles (already registered on EasyGL/Vulkan/
+    # Bgfx/etc, not previously on this backend). Each file's own Contract table gained a genuine,
+    # independently-verified CNA_BACKEND_LLGL branch -- see each file's own LLGL-specific comment.
+    # Notably, this backend's own "one render pass per distinct target, not per bind" replay
+    # architecture (docs/llgl-backend.md's own "Two implementation choices" paragraph) turns out to
+    # deliver genuine RenderTargetUsage.PreserveContents preservation WITHIN one frame as an
+    # incidental consequence -- not because preserveContents is honoured explicitly (it is not: the
+    # parameter is never read), but because every command naming the same target within one frame is
+    # grouped into ONE render pass, so a "second bind" never becomes a literal, freshly-cleared
+    # second pass unless an explicit Clear() was queued (which only a DiscardContents bind does, at
+    # the shared XNA layer). All three files' own checks confirmed this empirically.
+    cna_llgl_test(cna_test_llgl_rendertargetcube_getdata_contract
+                  examples/rendertargetcube_getdata_contract_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTargetCube_GetDataContract COMMAND cna_test_llgl_rendertargetcube_getdata_contract
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_rendertargetcube_usage
+                  examples/rendertargetcube_usage_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTargetCube_Usage COMMAND cna_test_llgl_rendertargetcube_usage
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_rendertargetcube_msaa_face
+                  examples/rendertargetcube_msaa_face_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTargetCube_MsaaFace COMMAND cna_test_llgl_rendertargetcube_msaa_face
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-26 MRT follow-up: RenderTarget2D-slots-only, SpriteBatch/custom-ShaderEffect-only first
     # cut -- see LlglMRTBinding's own doc comment in LlglGraphicsBackend.hpp for the scope
     # boundary. RenderTarget2D (unlike RenderTargetCube) works on both modules, so this gets an

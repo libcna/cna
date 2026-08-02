@@ -321,8 +321,20 @@ Two implementation choices are worth knowing if you are debugging a render-targe
   re-enter a render pass with `Load` semantics, so a frame that interleaves draws to the back
   buffer and one or more render targets is replayed as one pass per distinct target IDENTITY, in
   first-appearance order — every command for a given target is grouped together, not replayed in
-  original interleaved order. `RenderTargetUsage.PreserveContents` is not honoured across separate
-  binds of the same target within one frame as a result.
+  original interleaved order (`RenderTargetUsage.PreserveContents` is never actually READ by
+  `CreateRenderTarget2D`/`CreateRenderTargetCube`, so it plays no explicit role in this). One
+  consequence worth knowing precisely (LLGL-36 finding, cross-backend `RenderTargetCube` oracle
+  suite): as long as nothing FLUSHES the queued frame (`GetData()`, `Present()`) between two binds
+  of the SAME target, this grouping means content genuinely accumulates across those binds — a
+  "second bind" is not a literal, freshly-cleared second pass unless an explicit `Clear()` was
+  actually queued in between (which only happens for a `DiscardContents` bind, at the shared XNA
+  layer). This is an INCIDENTAL, not implemented-on-purpose, form of `PreserveContents` support —
+  it does NOT survive a flush: once `frameCommands_` is submitted and cleared, the next bind of that
+  same target starts a genuinely new, unpreserved pass. See `examples/rendertargetcube_usage_test.cpp`/
+  `rendertargetcube_msaa_face_test.cpp`'s own `CNA_BACKEND_LLGL` `Contract` branches (measured true,
+  since neither file's own producer/marker draws are ever separated by a flush) versus
+  `rendertargetcube_getdata_contract_test.cpp`'s own branch (measured false for its own U1/U2 checks
+  specifically, which DO call `GetData()` between the two draws) for the full empirical picture.
 * **Every render target shares the swap chain's own attachment formats.** The colour attachment
   always takes the swap chain's colour format, and a depth/stencil attachment matching the swap
   chain's own format is always allocated regardless of the requested `DepthFormat` (which only
@@ -678,6 +690,14 @@ technique against one cube face: a 7:1 red/blue split rendered into a `mipMap=tr
 average) -- proving the downsample cascade computed the right content, not just the right
 dimensions, and that a non-mipmapped cube (and an out-of-range level on a mipmapped one) both
 correctly reject `GetData()`; no `_OpenGL` twin, same `hasCubeTextures` reason.
+`Llgl_RenderTargetCube_GetDataContract`/`Llgl_RenderTargetCube_Usage`/`Llgl_RenderTargetCube_MsaaFace`
+(LLGL-36) are pre-existing, shared, cross-backend `RenderTargetCube` oracles (already registered on
+EasyGL/Vulkan/Bgfx/etc) newly wired up here: byte-exact face readback with correct row order and
+orientation, `RenderTargetUsage` behaviour (see "Render targets" above for the `PreserveContents`
+finding these uncovered), and per-face MSAA isolation (this backend has none of the
+shared-multisample-attachment aliasing defect REMED-GFX-141 fixed elsewhere, since every cube face
+is already its own distinct `LLGL::RenderTarget`) -- 56/30/32 checks pass respectively; no `_OpenGL`
+twin on any of the three, same `hasCubeTextures` reason.
 `Llgl_MRT` covers a real 2-output custom `ShaderEffect` writing two DIFFERENT values to two
 simultaneously bound `RenderTarget2D` slots from the SAME draw call, a 3D colour-only draw throwing
 while the MRT set is bound, back-buffer isolation, that an ordinary single-target draw still works
