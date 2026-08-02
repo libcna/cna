@@ -13,8 +13,9 @@ namespace CNA::Internal::Backends::Skia
      * alpha-labelled SkImages, CPU-only cube/volume resources report their exact RGBA8 vectors, a
      * public RenderTarget2D owns one raster surface, a RenderTargetCube reports its six surfaces
      * plus exact transfer shadows across the mip chain, and each 2D target is allowed at most one
-     * cached immutable sampling snapshot. That bounded cache is released on the next target write
-     * and with its wrapper.
+     * cached immutable sampling snapshot. CNA-owned 2D mip chains report their one contiguous
+     * allocation independently from derived SkImage views. Bounded caches are released on the
+     * next target write and with their wrappers.
      */
     struct SkiaResourceStats final
     {
@@ -25,11 +26,13 @@ namespace CNA::Internal::Backends::Skia
         std::size_t renderTargets = 0;
         std::size_t renderTargetCubes = 0;
         std::size_t targetSnapshots = 0;
+        std::size_t mipChains2D = 0;
         std::size_t textureImageBytes = 0;
         std::size_t cpuTextureStorageBytes = 0;
         std::size_t targetSurfaceBytes = 0;
         std::size_t cubeTargetStorageBytes = 0;
         std::size_t targetSnapshotBytes = 0;
+        std::size_t mipChain2DStorageBytes = 0;
     };
 
     /** Single-threaded resource counter shared by one graphics backend and its resource wrappers. */
@@ -108,6 +111,18 @@ namespace CNA::Internal::Backends::Skia
         {
             --stats_.targetSnapshots;
             stats_.targetSnapshotBytes -= RgbaBytes(width, height);
+        }
+
+        void AddMipChain2D(std::size_t bytes) noexcept
+        {
+            ++stats_.mipChains2D;
+            stats_.mipChain2DStorageBytes += bytes;
+        }
+
+        void RemoveMipChain2D(std::size_t bytes) noexcept
+        {
+            --stats_.mipChains2D;
+            stats_.mipChain2DStorageBytes -= bytes;
         }
 
         [[nodiscard]] SkiaResourceStats GetStats() const noexcept { return stats_; }

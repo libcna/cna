@@ -25,6 +25,29 @@ validation must complete before modifying storage or caller memory. `SkiaResourc
 exact CNA-owned retained stores; opaque internal Skia/driver allocations are never guessed into
 those counters and accelerated tasks must expose their own separate cache/budget evidence.
 
+### Checked 2D mip-chain storage (SKIA-125)
+
+`SkiaMipChain2D` is the common CNA-owned representation for the Texture2D/RenderTarget2D mip work
+that follows. It owns one zero-initialized contiguous byte allocation and an immutable descriptor
+per level: width, height, row bytes, byte offset, and byte count. Both dimensions use floor halving
+with a lower bound of one until the chain reaches 1×1, so odd/NPOT and one-dimensional resources
+have one deterministic layout. No vector is resized after construction, making every level address
+stable for the lifetime of the chain.
+
+`TryBuildSkiaMipChain2DLayout` performs the complete layout preflight without allocating texels.
+It distinguishes invalid dimensions, zero bytes per texel, host-size overflow, and the resource
+budget. Failure leaves the caller's descriptors and byte total unchanged. The owning constructor
+allocates only after that preflight and publishes `SkiaResourceStats::mipChains2D` and
+`mipChain2DStorageBytes` only after allocation succeeds; RAII removal returns both to baseline.
+Consequently invalid, over-budget, overflow, and allocation failures cannot leak a partial resource
+or accounting update.
+
+`Skia_MipChain2D_Raster` proves odd 7×5 offsets, 1×9/9×1 chains, level-zero-only storage,
+zero initialization and isolation, the exact 256-MiB descriptor boundary, descendant-over-budget
+and row-overflow atomicity, axis errors, out-of-range level access, and live/released counters.
+This internal storage result does not itself permit public `mipMap=true`; Texture2D wiring begins in
+SKIA-126 and RenderTarget2D wiring remains SKIA-131.
+
 ## Pixel and precision rules
 
 The reusable fixture is `examples/common/SkiaSuccessorOracle.hpp`.

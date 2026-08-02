@@ -170,11 +170,13 @@ private:
             && left.renderTargets == right.renderTargets
             && left.renderTargetCubes == right.renderTargetCubes
             && left.targetSnapshots == right.targetSnapshots
+            && left.mipChains2D == right.mipChains2D
             && left.textureImageBytes == right.textureImageBytes
             && left.cpuTextureStorageBytes == right.cpuTextureStorageBytes
             && left.targetSurfaceBytes == right.targetSurfaceBytes
             && left.cubeTargetStorageBytes == right.cubeTargetStorageBytes
-            && left.targetSnapshotBytes == right.targetSnapshotBytes;
+            && left.targetSnapshotBytes == right.targetSnapshotBytes
+            && left.mipChain2DStorageBytes == right.mipChain2DStorageBytes;
     }
 
     [[nodiscard]] static bool IsEmpty(const SkiaResourceStats& stats)
@@ -182,10 +184,11 @@ private:
         return stats.textureBackends == 0 && stats.textureImageViews == 0 && stats.renderTargets == 0
             && stats.cpuTextureCubeBackends == 0 && stats.cpuTexture3DBackends == 0
             && stats.renderTargetCubes == 0
-            && stats.targetSnapshots == 0 && stats.textureImageBytes == 0
+            && stats.targetSnapshots == 0 && stats.mipChains2D == 0
+            && stats.textureImageBytes == 0
             && stats.cpuTextureStorageBytes == 0
             && stats.targetSurfaceBytes == 0 && stats.cubeTargetStorageBytes == 0
-            && stats.targetSnapshotBytes == 0;
+            && stats.targetSnapshotBytes == 0 && stats.mipChain2DStorageBytes == 0;
     }
 
     void DrawTarget(Texture2D& target)

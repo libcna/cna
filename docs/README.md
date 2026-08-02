@@ -37,7 +37,9 @@ on it) rather than assuming either way.
   [`skia-successor-resource-oracles.md`](skia-successor-resource-oracles.md). Arbitrary blend work
   is anchored by the explicit [`skia-source-alpha-contract.md`](skia-source-alpha-contract.md).
   The internal all-selector implementation is documented in
-  [`skia-generated-blender.md`](skia-generated-blender.md); public promotion is still gated.
+  [`skia-generated-blender.md`](skia-generated-blender.md) and its exact raster surface is promoted
+  by SKIA-124. Checked 2D mip storage is documented in the successor resource policy; public mip
+  construction remains gated by SKIA-126 and later tasks.
 - **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
   2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.

@@ -748,6 +748,12 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     714,025 valid selector tuples, live constants, independent RGB/alpha equations, and target-0
     masks draw. Invalid raw selectors, target-1/2/3 masks, and non-default multisample masks remain
     atomic refusals; the claim does not include arbitrary GLSL, MRT, MSAA, or 3D sampling.
+93. `Skia_MipChain2D_Raster` closes SKIA-125's internal storage prerequisite. One checked,
+    zero-initialized contiguous allocation owns immutable dimension/row/offset/size descriptors for
+    every floor-halved odd, NPOT, or one-dimensional level through 1×1. Preflight is result-
+    preserving on overflow or the 256-MiB boundary, and live byte/object counters publish only
+    after successful allocation and return to baseline on destruction. Public Texture2D mip
+    construction remains disabled until SKIA-126.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

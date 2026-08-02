@@ -52,11 +52,13 @@ namespace
             && left.renderTargets == right.renderTargets
             && left.renderTargetCubes == right.renderTargetCubes
             && left.targetSnapshots == right.targetSnapshots
+            && left.mipChains2D == right.mipChains2D
             && left.textureImageBytes == right.textureImageBytes
             && left.cpuTextureStorageBytes == right.cpuTextureStorageBytes
             && left.targetSurfaceBytes == right.targetSurfaceBytes
             && left.cubeTargetStorageBytes == right.cubeTargetStorageBytes
-            && left.targetSnapshotBytes == right.targetSnapshotBytes;
+            && left.targetSnapshotBytes == right.targetSnapshotBytes
+            && left.mipChain2DStorageBytes == right.mipChain2DStorageBytes;
     }
 }
 

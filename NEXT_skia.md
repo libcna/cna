@@ -24,7 +24,7 @@
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
 - The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
-  140: 19 raster-only, 116 display-required tests, and five display-free source audits.
+  141: 20 raster-only, 116 display-required tests, and five display-free source audits.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
@@ -589,7 +589,8 @@
 
 ## Current task
 
-SKIA-115–124 are complete. Continue with SKIA-125's checked CNA-owned 2D mip-chain abstraction.
+SKIA-115–125 are complete. Continue with SKIA-126's public mipmapped Texture2D construction and
+level-count/property contract.
 
 ## Completed in this session: SKIA-93
 
@@ -1295,10 +1296,30 @@ SKIA-115–124 are complete. Continue with SKIA-125's checked CNA-owned 2D mip-c
   independent factors, and BlendFactor propagation. Every build used at most `--parallel 2`, all
   windowed execution used Xvfb, and `NEXT.md` was neither read nor changed.
 
+## Completed in this session: SKIA-125
+
+- Added generic `SkiaMipChain2D`: one contiguous, zero-initialized CNA byte store and immutable
+  descriptors containing each level's width, height, row bytes, byte offset, and byte count. Odd
+  and NPOT dimensions floor-halve independently through 1×1; 1×N/N×1 chains retain the unit axis;
+  level addresses never move after construction.
+- The public layout preflight performs checked row, level, offset, and accumulated-size arithmetic
+  without allocating texels. Invalid axes, zero bytes per texel, host overflow, and exceeding the
+  256-MiB per-resource ceiling have distinct dispositions and leave caller layout/byte outputs
+  unchanged. The exact 256-MiB level-zero descriptor remains accepted.
+- Extended `SkiaResourceStats` with exact live 2D-chain object/byte fields. Registration happens
+  only after storage allocation succeeds; invalid/over-budget construction does not change the
+  counters, and destruction returns both fields to baseline. Resource-budget and presenter-
+  recovery equality checks now include the new fields.
+- `Skia_MipChain2D_Raster` passes 14/14 checks in Debug, Release, and ASan+UBSan. All 25
+  Audit+Raster tests pass, and the focused chain/resource/recovery set passes 3/3 on Xvfb. The
+  complete Debug tree builds with `--parallel 2`; no real display or subagent was used, and
+  `NEXT.md` was neither read nor changed. Public `mipMap=true` remains rejected until SKIA-126.
+
 ## Next candidates
 
-1. SKIA-125: design and test the checked CNA-owned 2D mip-chain abstraction before wiring resources.
-2. SKIA-126–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
+1. SKIA-126: wire the checked chain into public Texture2D construction and exact level reporting.
+2. SKIA-127–158: implement mip transfers/generation/sampling, formats, bounded cube/volume
+   sampling, and wider explicit 2D
    effects in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
@@ -1311,7 +1332,9 @@ SKIA-115–124 are complete. Continue with SKIA-125's checked CNA-owned 2D mip-c
   to 2+ are rejected and the capability remains false.
 - Level-zero `TextureFilter::Anisotropic` deliberately falls back byte-exactly to Linear while the
   anisotropy capability remains false; mip/LOD-dependent sampler paths still reject.
-- Mipmapped textures and render targets are intentionally rejected by the public raster policy.
+- Mipmapped Texture2D and RenderTarget2D are still rejected by the public raster policy. The
+  internal checked chain is complete; public Texture2D wiring starts at SKIA-126 and target wiring
+  remains SKIA-131.
 - `docs/graphics-backend-feature-matrix.md` contains a separate verified Skia CPU-raster companion
   table, not an established GPU/3D column. Keep its task/test evidence synchronized with the live
   capability ledger and do not copy aspirational accelerated claims into it.
