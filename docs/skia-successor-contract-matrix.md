@@ -11,12 +11,16 @@ Baseline values are `supported`, `bounded`, `fallback`, `refused`, `transfer-onl
 `not-selected`. The validator derives every enum row from the current headers and rejects missing,
 stale, duplicated, malformed, or unrouted entries.
 
+SKIA-134's exact byte, sampling, pinned-raster and renderability decisions are maintained in the
+checked [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). This routing table remains
+the compact successor index; the format matrix is the normative input for SKIA-135–143.
+
 | ID | Contract | Baseline | Successor task | Existing evidence / required acceptance |
 |---|---|---|---|---|
 | `FMT-Color` | RGBA8 transfer, sampling and render target. | supported | SKIA-143 | Existing exhaustive transfer, target and XNA-oracle coverage remains the reference. |
 | `FMT-Bgr565` | Packed 16-bit BGR transfer, normalized sampling and renderability. | refused | SKIA-135 | Map exact little-endian bits to compatible Skia storage and prove quantization. |
 | `FMT-Bgra5551` | Packed 5:5:5:1 transfer and alpha quantization. | refused | SKIA-139 | Requires conversion shadow because pinned Skia has no layout-compatible color type. |
-| `FMT-Bgra4444` | Packed 4:4:4:4 transfer, sampling and renderability. | refused | SKIA-135 | Map channel order and prove raw round-trip plus rendered output. |
+| `FMT-Bgra4444` | Packed 4:4:4:4 transfer, sampling and renderability. | refused | SKIA-135 | Use exact shadow conversion: CNA A:R:G:B is not Skia `kARGB_4444` R:G:B:A; prove raw round-trip plus pixels. |
 | `FMT-Dxt1` | BC1 blocks, optional one-bit alpha, mips and sampled pixels. | refused | SKIA-140 | Preserve compressed blocks while decoding bounded sampling images. |
 | `FMT-Dxt3` | BC2 explicit-alpha blocks, mips and sampled pixels. | refused | SKIA-140 | Preserve exact blocks and verify four-bit alpha expansion. |
 | `FMT-Dxt5` | BC3 interpolated-alpha blocks, mips and sampled pixels. | refused | SKIA-140 | Preserve exact blocks and verify both alpha interpolation modes. |

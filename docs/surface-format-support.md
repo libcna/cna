@@ -3,6 +3,11 @@
 > Generated from source inspection against Tasks 174, 281.
 > Covers: EasyGL, Vulkan, Bgfx, SDL_Renderer backends.
 
+> Skia successor note (SKIA-134): this historical cross-backend document does not define the Skia
+> implementation routes. The checked, current 27-value Skia contract is
+> [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md); public Skia remains Color-only
+> until the individual SKIA-135–143 gates pass.
+
 ---
 
 ## Canonical `SurfaceFormat` enum values (Task 281)

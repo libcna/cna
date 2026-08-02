@@ -1485,9 +1485,26 @@ level-boundary contract.
 - No real display or subagent was used, all compilation stayed at two jobs, and `NEXT.md` remained
   untouched.
 
+## Completed in this session: SKIA-134
+
+- Added `docs/skia-surface-format-matrix.md`, one normative row for every live `SurfaceFormat`.
+  It fixes ordinals, block/payload sizes, little-endian transfer layout, missing-channel/SNORM/sRGB
+  sampling, pinned Skia direct or shadow representation, FNA renderability and Skia refusal route.
+- Added `Skia_SurfaceFormats_Audit`. It derives the live header order and both
+  `Texture::GetBlockSizeSquaredEXT`/`GetFormatSizeEXT` switches, rejects missing, duplicate or
+  drifted rows and verifies the selected SKIA-135–143 owner. All six Audit CTests pass.
+- Corrected the plan's `Bgra4444` premise: CNA stores A:R:G:B in descending nibbles, while pinned
+  Skia `kARGB_4444` stores R:G:B:A. SKIA-135 will therefore retain exact caller words in a shadow
+  and convert its sampling image instead of corrupting byte layout through the similarly named
+  Skia type.
+- Classification deliberately enables no format. Shared validation still rejects all 26
+  non-Color values before allocation, so the existing backend remains coherent while SKIA-135 is
+  the next implementation point. CMake reconfiguration and the audit run used no real display,
+  no compilation and no subagent; `NEXT.md` remained untouched.
+
 ## Next candidates
 
-1. SKIA-134–143: implement truthful non-Color Texture2D/content/RenderTarget2D formats in dependency
+1. SKIA-135–143: implement truthful non-Color Texture2D/content/RenderTarget2D formats in dependency
    order, retaining exact pre-allocation refusals until each format passes transfer and pixels.
 2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.

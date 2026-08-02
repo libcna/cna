@@ -16,6 +16,11 @@ oracle route is governed by
 [`skia-successor-resource-oracles.md`](skia-successor-resource-oracles.md). Baseline capability
 claims below change only after the successor release gate passes.
 
+The 27-format byte/sampling/renderability design input is the checked
+[`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). It classifies future pinned-raster
+routes without enabling them; public validation remains `Color`-only until each SKIA-135–143 owner
+passes its transfer and pixel gate.
+
 The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback,
 logical-size handling, window-coordinate transforms, every `Texture2D` mip upload/readback, CPU-raster
 `RenderTarget2D`, and `SpriteBatch` drawing work. A newly created or resized backbuffer starts
@@ -253,6 +258,13 @@ edge. Invalid foreign/cross-device binds validate before resolving the current t
 presenter recreation preserves both clean and dirty CPU-owned chains. CNA still does not bind
 Skia's private `src/core` mip builder, and cube/volume sampling remains a separate unsupported
 route.
+
+SKIA-134 freezes the successor representation contract for all 27 formats without changing that
+live `Color`-only policy. The matrix is checked against the enum and both live `Texture` size
+helpers. It distinguishes direct Skia colour types, exact conversion shadows, compressed-block
+shadows, colour-space handling, BC7 decoder gating, and texture-only versus renderable routes. In
+particular, `Bgra4444` is conversion-backed because CNA's word is A:R:G:B from most to least
+significant nibble while pinned Skia `kARGB_4444` is R:G:B:A.
 
 ## Verification recorded for the initial slice
 
@@ -814,6 +826,11 @@ route.
     generation/storage/SetData/EasyGL-parity set passes 5/5 in Release and 5/5 under ASan+UBSan;
     stress, resource-budget, target counter release and demo smoke remain green. Every build uses
     at most two parallel jobs.
+102. `Skia_SurfaceFormats_Audit` closes SKIA-134. It derives all 27 live enum members in ordinal
+    order plus both block/payload size switches, then requires exactly one detailed matrix row and
+    one promotion owner for each. Six display-free audits pass after registering it. The matrix
+    explicitly corrects `Bgra4444` to conversion storage and keeps all non-Color public routes
+    refused until their implementation tasks pass.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

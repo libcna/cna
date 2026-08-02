@@ -128,7 +128,9 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   tests pass in Release and under ASan+UBSan (`detect_leaks=0` only for the documented external
   Mesa GLX residual). The complete tree builds with `--parallel 2`; no real display is used.
 - `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`,
-  `Skia_ReleaseGate_Audit`, and `Skia_SuccessorContracts_Audit`: PASS.
+  `Skia_ReleaseGate_Audit`, `Skia_SuccessorContracts_Audit`, and
+  `Skia_SurfaceFormats_Audit`: PASS. The last audit covers all 27 SKIA-134 format rows and does not
+  itself promote a non-Color public route.
 - Updated `Skia_Sampler_MipmapFilterPolicy` and `Skia_RenderTarget2D_MsaaPolicy`: 2/2 PASS on the
   real display after adding exact anisotropy fallback and full sample-count matrices.
 - Complete Debug Skia suite: 133/133 PASS on real display `:0` in 61.14 seconds with
