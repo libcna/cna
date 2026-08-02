@@ -53,7 +53,7 @@ but none supplies the missing vertex/depth pipeline. The accepted
 | `3D-TEXTURE-CUBE` | Direction-vector cube sampling, cube render targets and face orientation. | CPU face storage stays transfer-only; SKIA-101 rejects direction sampling. |
 | `3D-TEXTURE-VOLUME` | 3D coordinates, volume filtering and custom-effect binding. | CPU volume storage stays transfer-only; SKIA-101 rejects 3D-coordinate sampling. |
 | `3D-SAMPLER-MIP` | Independent slots, address/filter/mip selection and LOD behavior. | Raster 2D sampling is bounded; 3D/mip contract is unsupported, SKIA-99/SKIA-100. |
-| `3D-SAMPLER-ANISOTROPY` | Probed anisotropic filtering for stock-effect and texture paths. | Deterministically rejected by SKIA-79; remains device-dependent. |
+| `3D-SAMPLER-ANISOTROPY` | Probed anisotropic filtering for stock-effect and texture paths. | Capability is false; SpriteBatch level-zero sampling has an exact Linear fallback, while the stock-3D sampler route rejects. |
 | `3D-STATE-DEPTH` | Depth storage, clear, compare/write, target persistence and bias interaction. | No depth attachment; CPU feasibility is conditional SKIA-97. |
 | `3D-STATE-STENCIL` | Reference/masks, compare, operations, two-sided winding and colour-write interaction. | No stencil attachment; conditional on depth bridge, SKIA-98. |
 | `3D-STATE-CULL-FILL` | Front-face convention, all cull modes, solid/wireframe and raster bias. | SKIA-99 proves post-projection winding, all cull modes and wire expansion; depth bias/pixel rules remain absent. |

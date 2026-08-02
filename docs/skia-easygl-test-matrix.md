@@ -324,9 +324,9 @@ emulator is tracked by SKIA-80–105.
 | `ctest:EasyGL_RealWindowResize` | `ctest` | `device-dependent` | Requires actual display/window synchronization; SKIA-8. |
 | `ctest:EasyGL_DepthFormat` | `ctest` | `device-dependent` | Actual depth attachment format capability. |
 | `ctest:EasyGL_MsaaChange` | `ctest` | `device-dependent` | Runtime sample-count capability; SKIA-76–77. |
-| `ctest:EasyGL_TextureAnisotropic_DualTextureEffect` | `ctest` | `device-dependent` | Requires probed anisotropy; SKIA-78–79. |
-| `ctest:EasyGL_Texture2D_AnisotropicSingleLevel` | `ctest` | `device-dependent` | Requires probed anisotropy; SKIA-78–79. |
-| `ctest:EasyGL_Anisotropic_GlState` | `ctest` | `device-dependent` | Explicit GL/device anisotropy state; SKIA-78–79. |
+| `ctest:EasyGL_TextureAnisotropic_DualTextureEffect` | `ctest` | `device-dependent` | Stock-3D effect route remains unsupported; SpriteBatch's raster Linear fallback is separately pixel-proven by SKIA-78–79. |
+| `ctest:EasyGL_Texture2D_AnisotropicSingleLevel` | `ctest` | `device-dependent` | Uses BasicEffect geometry and therefore reaches the 3D refusal; the same level-zero anisotropic fallback is proven through SpriteBatch by SKIA-78–79. |
+| `ctest:EasyGL_Anisotropic_GlState` | `ctest` | `device-dependent` | Explicit GL/device anisotropy is unavailable and capability-false; selected-raster fallback evidence is SKIA-78–79. |
 | `ctest:EasyGL_GraphicsDevice_DefaultStateOcclusion` | `ctest` | `device-dependent` | Occlusion result depends on real depth/query pipeline. |
 | `ctest:EasyGL_GraphicsDeviceManager_Vsync` | `ctest` | `device-dependent` | Presenter/driver swap policy; SKIA-15. |
 | `ctest:EasyGL_MsaaDepthContract` | `ctest` | `device-dependent` | Coupled samples/depth attachment capability. |

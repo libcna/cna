@@ -3,8 +3,9 @@
 ## Session status
 
 - Branch: `feature/skia`; commits are pushed through the SSH `origin` remote.
-- Scope: experimental CPU-raster `CNA_GRAPHICS_BACKEND=SKIA`, progressing toward pixel-verified
-  2D parity with the observable EasyGL/CNA contracts. Do not claim 3D drawing, GPU presentation,
+- Scope: release-gated experimental CPU-raster `CNA_GRAPHICS_BACKEND=SKIA`, with pixel-verified
+  2D parity for every accepted observable EasyGL/CNA contract. Do not claim 3D drawing, GPU
+  presentation,
   depth, MSAA, renderable/Texture2D mipmaps, MRT, cube/volume sampling, or arbitrary effects until
   their individual `plan_skia.md` evidence exists. Plain cube/volume CPU transfer storage is
   separately proven by SKIA-80–84, and six-face 2D RenderTargetCube emulation by SKIA-85/86 does
@@ -23,7 +24,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 132 Skia CTests: 16 raster-only, 113 display-required, and three
+- `docs/skia-backend.md` records 133 Skia CTests: 16 raster-only, 113 display-required, and four
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -589,9 +590,9 @@
 
 ## Current task
 
-SKIA-101 is complete and rejects full 3D emulation. Commit/push the ADR checkpoint, then begin
-SKIA-102 by auditing and normalizing every public 3D refusal while preserving all proven 2D,
-TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
+The original `plan_skia.md` is complete: all SKIA-1 through SKIA-114 rows are signed off for the
+selected CPU-raster release. There is no active implementation task in this plan. Any accelerated
+Skia work requires a successor plan and reopening the accepted surface-mode ADR and release gate.
 
 ## Completed in this session: SKIA-93
 
@@ -1080,17 +1081,50 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   allowed run on display `:0` produced the complete green D3D11 suite above. `NEXT.md` was not read
   or changed.
 
+## Completed in this session: SKIA-5, SKIA-6, SKIA-76 through SKIA-79, and SKIA-114
+
+- Accepted `docs/skia-surface-mode-adr.md`. The release surface is the deterministic CPU raster
+  path already implemented and verified. Ganesh/OpenGL is only the first candidate if acceleration
+  is reopened; Ganesh/Vulkan and Graphite Vulkan/Dawn/Metal were compared against the pinned
+  headers but are not enabled by the pinned artifact. No automatic GPU fallback is permitted.
+  Conditional SKIA-6 is therefore not applicable to this release, with explicit ownership,
+  flush/swap/readback/resize/context-loss/parity requirements retained for a successor plan.
+- Expanded `Skia_RenderTarget2D_MsaaPolicy`: backbuffer Reset requests 0, 1, 2, 4, and 4096 all
+  succeed and read back the actually applied zero; target requests 0/1 report zero while
+  2/3/4/4096 reject before allocation. Exact post-probe backbuffer readback succeeds. The backend
+  keeps `MultiSampleAntiAliasing=false` and exposes no fabricated resolve or sample mask.
+- Expanded `Skia_Sampler_MipmapFilterPolicy` with a non-uniform 2x2 source. Level-zero
+  Anisotropic draws at `MaxAnisotropy` 1, 4, and 9999 are byte-identical to Linear, establishing
+  the documented raster fallback while `AnisotropicFiltering=false`; mip-dependent filters still
+  reject and the same SpriteBatch recovers through PointClamp.
+- Added `docs/skia-release-gate.md` and `Skia_ReleaseGate_Audit`. The audit derives all 114 plan
+  IDs, all nine capability enum values, the backend's exact true set (`Texture3D` transfer storage
+  only), the accepted raster ADR markers, and the absence of accelerated registrations. Together
+  with the parity, test-matrix, and 3D-decision audits it passes 4/4.
+- Debug builds with `--parallel 8`; the complete real-display suite passes 133/133 in 61.14
+  seconds (16 Raster, 113 Display, four Audit). The 64-frame SpriteBatch stress test exposed a
+  stale common 30-second limit, then passed deterministically in 61.03 seconds after receiving a
+  test-specific 120-second limit. The two new policy tests pass 2/2 in Release (1.76 seconds) and
+  ASan+UBSan (2.28 seconds, `detect_leaks=0`, `halt_on_error=1`).
+- `plan_skia.md` now has a final COMPLETE banner and 114/114 completed rows. All persistent Debug,
+  Release, and sanitizer caches retain `CNA_TEST_DISPLAY=:0`; `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. Reassess earlier open architecture rows (especially SKIA-5/6) against the accepted raster-only
-   ADR and accurately disposition them before the release gate.
-2. SKIA-114: run the final plan/capability/evidence audit, correct stale statuses, and publish the
-   signed-off release summary.
+1. No task remains in `plan_skia.md`. Preserve the release-gated raster backend unless a concrete
+   defect is found.
+2. Future Ganesh/OpenGL acceleration is intentionally outside this completed plan. Start it only
+   with a successor plan, an updated pinned artifact, and the six reopening proofs in
+   `docs/skia-surface-mode-adr.md`.
+3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+   by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions
 
 - The Skia path is raster-only.  Its current requested MSAA 0/1 reports 0; requests normalizing
   to 2+ are rejected and the capability remains false.
+- Level-zero `TextureFilter::Anisotropic` deliberately falls back byte-exactly to Linear while the
+  anisotropy capability remains false; mip/LOD-dependent sampler paths still reject.
 - Mipmapped textures and render targets are intentionally rejected by the public raster policy.
 - `docs/graphics-backend-feature-matrix.md` contains a separate verified Skia CPU-raster companion
   table, not an established GPU/3D column. Keep its task/test evidence synchronized with the live

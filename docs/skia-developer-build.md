@@ -200,8 +200,10 @@ There is no accelerated Skia binary or runtime fallback in this revision. The pi
 disable every Skia GPU API, and `SKIA` construction always selects raster. SDL may use a GPU only to
 upload/present the completed CPU image; that does not change the Skia execution mode.
 
-SKIA-5/6 remain the gates for a future Ganesh/Graphite path. Before such a path can be built or
-advertised it needs, at minimum:
+The accepted [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md) selects raster for this release
+and names Ganesh/OpenGL only as the first future candidate. Any successor accelerated plan must
+reopen the SKIA-6 proof rather than treating its conditional current-release closure as GPU
+evidence. Before such a path can be built or advertised it needs, at minimum:
 
 1. a separately named pinned GN artifact with the selected GPU API enabled;
 2. explicit SDL/native context or device ownership and framebuffer/surface interop;

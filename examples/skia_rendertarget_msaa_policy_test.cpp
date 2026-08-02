@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-67: CPU raster targets do not allocate MSAA attachments. The shared XNA normalization of
-// one sample to zero remains observable, while every real multisample request is rejected.
+// SKIA-67/SKIA-76/SKIA-77: CPU raster backbuffers and targets do not allocate MSAA attachments.
+// Backbuffer requests are truthfully clamped to zero, while every real target request is rejected.
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 
+#include <array>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -40,11 +43,41 @@ protected:
         auto& device = getGraphicsDeviceProperty();
         Check(!device.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing),
               "raster backend does not advertise MSAA");
+
+        constexpr std::array<int, 5> backbufferRequests{{0, 1, 2, 4, 4096}};
+        for (const int requested : backbufferRequests)
+        {
+            int applied = -1;
+            bool threw = false;
+            try
+            {
+                PresentationParameters parameters = device.getPresentationParametersProperty();
+                parameters.setMultiSampleCountProperty(requested);
+                device.Reset(parameters);
+                applied = device.getPresentationParametersProperty().getMultiSampleCountProperty();
+            }
+            catch (...)
+            {
+                threw = true;
+            }
+            Check(!threw && applied == 0,
+                  "backbuffer request " + std::to_string(requested)
+                      + " is accepted and truthfully clamped to zero");
+        }
+
         Check(CreateAndReportSamples(device, 0) == 0, "requested 0 samples reports 0");
         Check(CreateAndReportSamples(device, 1) == 0, "requested 1 sample normalizes to 0");
         Check(RejectsRealMsaa(device, 2), "requested 2 samples is rejected");
         Check(RejectsRealMsaa(device, 3), "requested 3 samples normalizes then is rejected");
         Check(RejectsRealMsaa(device, 4), "requested 4 samples is rejected");
+        Check(RejectsRealMsaa(device, 4096), "oversized sample request is rejected");
+
+        device.Clear(Color(17, 34, 51, 255));
+        Color pixel(0, 0, 0, 0);
+        const Rectangle onePixel(0, 0, 1, 1);
+        device.GetBackBufferData(&onePixel, &pixel, 0, 1);
+        Check(pixel == Color(17, 34, 51, 255),
+              "backbuffer remains usable after the complete sample-count probe");
         Exit();
     }
 
@@ -69,7 +102,7 @@ private:
         return false;
     }
 
-    void Check(bool pass, const char* label)
+    void Check(bool pass, const std::string& label)
     {
         std::printf("[%s] %s\n", pass ? "PASS" : "FAIL", label);
         if (!pass)

@@ -1,6 +1,6 @@
 # docs/ index
 
-93 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+95 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -27,7 +27,10 @@ on it) rather than assuming either way.
   dependency policy, tests, and explicit direct/emulation decisions; the 248-entry API ledger is
   [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md), active work is in
   `../plan_skia.md`, Skia-only continuity is in `../NEXT_skia.md`, and the fresh-checkout procedure
-  is [`skia-developer-build.md`](skia-developer-build.md).
+  is [`skia-developer-build.md`](skia-developer-build.md). The accepted raster-versus-GPU decision
+  and future acceleration reopening gate are in
+  [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md); the final CPU-raster checklist is
+  [`skia-release-gate.md`](skia-release-gate.md).
 - **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
   2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.

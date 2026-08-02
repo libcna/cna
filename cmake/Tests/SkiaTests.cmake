@@ -67,6 +67,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                 "${CMAKE_SOURCE_DIR}"
         TIMEOUT 30
         LABELS "Skia;Audit")
+    cna_register_backend_test(
+        NAME Skia_ReleaseGate_Audit
+        COMMAND "${CNA_SKIA_LEDGER_PYTHON}"
+                "${CMAKE_SOURCE_DIR}/scripts/validate_skia_release_gate.py"
+                "${CMAKE_SOURCE_DIR}"
+        TIMEOUT 30
+        LABELS "Skia;Audit")
 
     cna_skia_test(cna_test_skia_surface_raster examples/skia_surface_raster_test.cpp)
     # This test intentionally exercises the internal SkiaSurface boundary directly, so unlike
@@ -439,7 +446,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_SpriteBatch_RemainingOverloads cna_test_skia_spritebatch_remaining_overloads)
 
     cna_skia_test(cna_test_skia_spritebatch_stress examples/skia_spritebatch_stress_test.cpp)
-    cna_register_skia_display_test(Skia_SpriteBatch_Stress cna_test_skia_spritebatch_stress)
+    # This intentionally renders and reads back 64 complete frames. On a real display the SDL
+    # presenter may pace those frames, so the common 30-second smoke-test limit is too short even
+    # though the deterministic workload completes normally (about 61 seconds on the release-gate
+    # host). Keep the workload intact and give only this stress test a bounded larger window.
+    cna_register_backend_test(
+        NAME Skia_SpriteBatch_Stress
+        COMMAND cna_test_skia_spritebatch_stress
+        TIMEOUT 120
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "Skia;Display")
 
     # These three presets establish the alpha convention used by the raster backend:
     # opaque source replacement, premultiplied-alpha source-over, and straight-alpha source-over.

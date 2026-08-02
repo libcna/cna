@@ -2,7 +2,12 @@
 
 ## Current status
 
-`CNA_GRAPHICS_BACKEND=SKIA` is an experimental CPU-raster 2D backend. Its first vertical slice owns a raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through an SDL streaming texture. It deliberately does not create or use a Skia OpenGL/GPU context and does not call the EasyGL backend. SDL may internally choose an accelerated renderer solely to present the completed CPU image; that platform-dependent presenter is not a Skia GPU execution mode.
+`CNA_GRAPHICS_BACKEND=SKIA` is a release-gated experimental CPU-raster 2D backend. It owns a
+raster `SkSurface`, clears it through `SkCanvas`, reads RGBA8 pixels back, and presents them through
+an SDL streaming texture. It deliberately does not create or use a Skia OpenGL/GPU context and
+does not call the EasyGL backend. SDL may internally choose an accelerated renderer solely to
+present the completed CPU image; that platform-dependent presenter is not a Skia GPU execution
+mode.
 
 The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback,
 logical-size handling, window-coordinate transforms, level-0 `Texture2D` upload/readback, CPU-raster
@@ -19,7 +24,7 @@ authoritative compact capability boundary; later sections explain the individual
 |---|---|---|---|
 | Clear, present, resize, five presentation modes, coordinate transforms and backbuffer readback | Verified direct CPU surface plus SDL presentation | Direct raster implementation; SDL uploads the completed image and is not a Skia GPU mode. | [SKIA-7, SKIA-13–17, SKIA-71–72](../plan_skia.md); `Skia_PresentationModes`, `Skia_Resize_Presentation`, `Skia_DisplayScale` |
 | `SpriteBatch` draw overloads, sorting, transforms, source rectangles, tint, flips and `SpriteFont` | Verified direct 2D path | Direct `SkCanvas` image operations preserve the shared XNA-shaped batching and font-atlas layout. | [SKIA-31–40](../plan_skia.md); [2D EasyGL registration](skia-2d-easygl-registration.md); [XNA oracle](skia-xna-oracle.md) |
-| Point/linear filtering and independent Clamp/Wrap/Mirror U/V | Verified direct 2D path | Direct Skia sampling/tile modes; mip-dependent and anisotropic modes reject because the selected raster resources have no mip sampler. | [SKIA-43–46, SKIA-70, SKIA-78–79](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_Sampler_MipmapFilterPolicy` |
+| Point/linear filtering, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear and tile modes map directly. Level-zero Anisotropic is byte-identical to the documented Linear fallback; the capability stays false and mip-dependent modes reject. | [SKIA-43–46, SKIA-70, SKIA-78–79](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_Sampler_MipmapFilterPolicy` |
 | Blend presets and target-0 colour-write masks | Verified bounded direct/runtime-blender path | `Opaque` and `AlphaBlend` use direct modes; XNA's independent alpha, one custom tuple, and masks use pixel-proven SkSL blenders. Every other tuple rejects before drawing. | [SKIA-47–57, SKIA-108](../plan_skia.md); [XNA oracle](skia-xna-oracle.md); `Skia_BlendMapping_Raster`, `Skia_ColorWrite_Policy` |
 | `Texture2D` level-0 upload, partial transfer, readback and NPOT sampling | Verified direct CPU image path | Direct CPU shadow plus Skia image; mip levels above zero reject after `withDefaultMipmaps()` was evaluated and found unable to provide CNA's mutable per-level contract. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109](../plan_skia.md); [API contract comparison](skia-api-contract-comparison.md) |
 | `RenderTarget2D` colour rendering, readback, sampling and Preserve/Discard | Verified direct level-0 raster target | Direct `SkSurface`; real depth, mip chains and MSAA are unavailable rather than fabricated. | [SKIA-61–75](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_DepthPolicy`, `Skia_RenderTarget2D_MsaaPolicy` |
@@ -29,7 +34,7 @@ authoritative compact capability boundary; later sections explain the individual
 | Stock `SpriteEffect` and explicit custom 2D fragment SkSL | Verified bounded path | Stock `SpriteEffect` aliases the default batch path. Only the `CNA_SKIA_SKSL_V1` fragment-only ABI is accepted; arbitrary EasyGL GLSL and vertex/3D effects reject after staged emulation investigation. | [SKIA-89–94](../plan_skia.md); [effects boundary](skia-effects.md) |
 | Real depth/stencil, MSAA, wireframe, 3D draws, models and cube/volume sampling | Unsupported | Direct selected-raster support is absent. SkVertices and CPU depth/stencil/geometry/effect prototypes were evaluated; completing them would be a separate software renderer, so production emulation was rejected. | [SKIA-95–103](../plan_skia.md); [3D emulation ADR](skia-3d-emulation-adr.md); `Skia_3D_Refusal` |
 | Occlusion queries | Unsupported | Skia raster exposes no samples-passed query. Framebuffer-diff, replay and hidden-GPU emulations were evaluated and rejected as observably incorrect; properties safely return false/zero and Begin/End reject. | [SKIA-104–105](../plan_skia.md); [occlusion-query feasibility](skia-occlusion-query-feasibility.md) |
-| Ganesh/Graphite accelerated Skia mode | Not implemented or advertised | The pinned artifact disables Ganesh, Graphite, GL, Vulkan and Dawn. A direct accelerated integration and its reset/interoperability contract remain open in SKIA-5/6; no raster-to-GPU emulation is claimed. | [SKIA-5–6, SKIA-107, SKIA-110](../plan_skia.md); [verification boundary](skia-verification-boundary.md); [sanitizer validation](skia-sanitizer-validation.md) |
+| Ganesh/Graphite accelerated Skia mode | Not implemented or advertised | The accepted release mode is raster. Pinned-header comparison names Ganesh/OpenGL only as the first future candidate and requires a successor plan to reopen interop/parity/reset gates; no raster-to-GPU emulation is claimed. | [surface-mode ADR](skia-surface-mode-adr.md); [SKIA-5–6, SKIA-107, SKIA-110](../plan_skia.md) |
 
 The complete API-level comparison with EasyGL is maintained in
 [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md). Its 248 rows cover every current
@@ -116,9 +121,9 @@ state leakage rather than application logging.
 
 | Mode | Status | Presentation | 3D/depth/stencil |
 |---|---|---|---|
-| Raster | Implemented first slice | `SkSurface` readback to SDL streaming texture | Unsupported |
-| Ganesh/OpenGL | Not implemented; SKIA-5/6 open | Direct context/framebuffer ownership and reset interop remain unevaluated | Not claimed |
-| Graphite/Vulkan/Metal/Dawn | Not implemented; pinned artifact disables them | No direct interop evaluation or selected reset contract; no emulation claimed | Not claimed |
+| Raster | Release-gated implementation | `SkSurface` readback to SDL streaming texture | Unsupported |
+| Ganesh/OpenGL | First future candidate; not implemented | Pinned APIs were compared, but context/framebuffer ownership, wrapping and reset proof require a successor plan | Not claimed |
+| Graphite/Vulkan/Metal/Dawn | Deferred; pinned artifact disables them | Device/queue/recorder/swapchain ownership is broader than the first GL candidate; no emulation claimed | Not claimed |
 
 Raster uses premultiplied RGBA8888 inside Skia and normalizes readback into top-row-first RGBA8 bytes for SDL. A future GPU path must preserve that contract and pass the same pixel tests; it may not silently change reported capabilities mid-frame.
 
@@ -306,8 +311,9 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     level-0 texture upload/draw and a fresh target bind/Clear/readback/unbind/sample cycle remain
     correct.
 26. `Skia_Sampler_MipmapFilterPolicy` verifies every mip-dependent `TextureFilter` value rejects
-    during `SpriteBatch::Begin`, before any draw; it then reuses the same batch successfully with
-    `PointClamp`.
+    during `SpriteBatch::Begin`, before any draw. It then renders a non-uniform 2×2 source and
+    proves Anisotropic with `MaxAnisotropy` 1, 4, and 9999 is byte-identical to the documented
+    Linear fallback while the capability remains false, before reusing the batch with PointClamp.
 27. `Skia_BlendEnabled_State` verifies `SetBlendEnabled(false)` makes sprites replace their
     destination, `Clear` remains an unconditional surface clear, and re-enabling restores the
     previously configured `BlendState::AlphaBlend` composition.
@@ -341,9 +347,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
 35. `Skia_RenderTarget2D_SetData` proves full and partial level-0 uploads update the existing
     target surface without replacing its backend identity, preserves untouched pixels, round-trips
     through public readback, and rejects level 1 and mipmapped-target requests precisely.
-36. `Skia_RenderTarget2D_MsaaPolicy` fixes the raster MSAA contract: requests 0 and 1 report 0,
-    while normalized real MSAA requests (2, 3, and 4) fail before target creation and the
-    corresponding capability remains false.
+36. `Skia_RenderTarget2D_MsaaPolicy` fixes the raster MSAA contract: backbuffer requests
+    0/1/2/4/4096 all write back the actual zero count; target requests 0 and 1 report 0, while
+    normalized real or oversized requests 2/3/4/4096 fail before allocation. The capability stays
+    false and an exact post-probe backbuffer read proves the device remains usable.
 37. `Skia_RenderTargetBinding_Raster` and `Skia_RenderTarget2D_Lifetime` close the target lifetime
     hole: a target's destructor weakly detaches it from the backend-owned active-surface record
     before releasing its `SkSurface`. The raster test covers 128 snapshot lifetimes and the inverse
@@ -680,5 +687,22 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     fully `libGLX_mesa.so.0`-rooted 100,956-byte residual for the stress and one-presenter control.
     Ganesh, Graphite, GL, Vulkan and Dawn remain disabled, so no accelerated Skia suite exists to
     run or advertise. See `docs/skia-sanitizer-validation.md`.
+84. SKIA-111 synchronizes the backend guide, feature matrix, selection documentation, capability
+    comments, and the live 248-entry parity ledger. Only bounded CPU Texture3D transfer storage is
+    true beyond the verified 2D path; every GPU/3D family names its refusal or emulation evidence.
+85. SKIA-112 supplies the reproducible pinned-dependency build procedure, and SKIA-113 verifies
+    fresh native Skia/EasyGL/SDL_Renderer/Software/Vulkan/BGFX builds plus available MinGW/Wine
+    D3D11 and D3D12 evidence. See `docs/skia-developer-build.md` and
+    `docs/skia-nonskia-build-matrix.md` for exact platform boundaries and commands.
+86. The accepted SKIA-5/6 surface ADR selects CPU raster for this release. Ganesh/OpenGL is only
+    the first future acceleration candidate and must prove ownership, flush/swap, readback,
+    resize, context loss, and CPU/GPU parity through a successor plan. SKIA-76/77 prove the
+    zero-sample MSAA clamp/refusal matrix; SKIA-78/79 prove the level-zero Anisotropic-to-Linear
+    fallback at three requested qualities while both capabilities remain false.
+87. SKIA-114 passes the final release gate: all 114 plan rows, all nine capability values, and all
+    direct/bounded/refused feature families are audited. The complete Debug suite passes 133/133
+    on real display `:0` in 61.14 seconds (16 Raster, 113 Display, four Audit); the final two policy
+    tests also pass in Release and ASan+UBSan. See `docs/skia-release-gate.md`.
 
-Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.
+The original Skia CPU-raster plan is complete. Any accelerated or expanded feature scope requires
+a successor plan and must reopen the applicable ADR and release gate.

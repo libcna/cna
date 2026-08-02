@@ -31,7 +31,7 @@ namespace CNA::Internal::Backends::Skia
             switch (textureFilter)
             {
                 case 0: // Linear
-                case 2: // Anisotropic (the raster path has no anisotropy control)
+                case 2: // Anisotropic: SKIA-78/79's documented raster Linear fallback.
                     return SkSamplingOptions(SkFilterMode::kLinear);
                 case 1: // Point
                     return SkSamplingOptions(SkFilterMode::kNearest);

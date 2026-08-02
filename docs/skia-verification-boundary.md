@@ -35,7 +35,9 @@ Therefore SKIA-107 proves:
 4. presenter recovery preserves pixels and the capability/diagnostic set; and
 5. the SDL presenter remains backend-owned without changing the reported Skia execution mode.
 
-Any future accelerated implementation must add a construction-time mode selector, mode-specific
+The accepted [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md) selects raster for this release
+and makes the following list a mandatory reopening gate. Any future accelerated implementation
+must add a construction-time mode selector, mode-specific
 startup diagnostics, context/device-loss policy, and pixel comparisons for Clear, Texture2D,
 SpriteBatch, SpriteFont, blend/sampler/scissor, RenderTarget2D and readback. Until then, saying that
 CPU and GPU output have parity is unsupported; saying that the raster mode cannot silently become
