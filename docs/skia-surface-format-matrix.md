@@ -1,6 +1,6 @@
 # Skia `SurfaceFormat` contract matrix
 
-Status: normative SKIA-134 contract; SKIA-135–140 Texture2D routes promoted
+Status: normative SKIA-134 contract; SKIA-135–141 Texture2D routes promoted
 
 This matrix fixes the byte and sampling contract for every public format.
 It is based on CNA's `SurfaceFormat`, `Texture::GetBlockSizeSquaredEXT` and
@@ -11,10 +11,11 @@ now enable `Bgr565`, `Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `Col
 `HalfVector4`, `HdrBlendable`, `Bgra5551`, `NormalizedByte2`, and `NormalizedByte4` for Skia
 `Texture2D` only after their transfer and pixel gates passed. SKIA-140 additionally promotes
 `Dxt1`, `Dxt3`, and `Dxt5` with a padded compressed-block CPU chain (exact `GetData`) plus a
-bounded decoded `kRGBA_8888` sampling image; unlike every other promoted format their descendant
-mip levels are never generated and must be explicitly authored. The three remaining compressed rows
-remain refused until their owners pass;
-non-`Color` render targets remain independently refused pending SKIA-142.
+bounded decoded `kRGBA_8888` sampling image, and SKIA-141 promotes `Bc7EXT`/`Bc7SrgbEXT` the same
+way via a native BC7 decoder; unlike every other promoted format none of these five formats'
+descendant mip levels are ever generated -- they must be explicitly authored. `Dxt5SrgbEXT` is the
+only remaining compressed row, refused pending a task that scopes it; non-`Color` render targets
+remain independently refused pending SKIA-142.
 
 All multi-byte words and IEEE values below use the little-endian host layout required by the
 pinned Skia raster artifact. A future big-endian build must add explicit byte conversion or refuse
@@ -53,9 +54,9 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
 | 19 | `HdrBlendable` | 1 | 8 | LE IEEE binary16 R, G, B, A | RGBA float with HDR blending | promoted `kRGBA_F16` exact words | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-138 |
 | 20 | `ColorBgraEXT` | 1 | 4 | bytes B8, G8, R8, A8 | RGBA UNORM after B/R mapping | promoted Texture2D `kBGRA_8888` exact bytes | FNA coerces to Color; Skia refuses target | direct-texture-only | SKIA-136 |
 | 21 | `ColorSrgbEXT` | 1 | 4 | bytes sR8, sG8, sB8, A8 | linear RGB after one sRGB decode, A UNORM | promoted Texture2D `kSRGBA_8888` plus linear-sRGB working metadata | FNA conditionally renderable; Skia target remains refused pending SKIA-142 | colour-space | SKIA-136 |
-| 22 | `Dxt5SrgbEXT` | 16 | 16 | one BC3 block per 4x4 texels with sRGB RGB | linear RGB after BC3 decode and one sRGB decode, A UNORM | exact block shadow plus bounded RGBA8 sRGB decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | pending (not in SKIA-140's Dxt1/Dxt3/Dxt5 scope) |
-| 23 | `Bc7EXT` | 16 | 16 | one BC7 block per 4x4 texels | RGBA UNORM | exact block shadow plus license-compatible bounded decoder | FNA coerces to Color; Skia refuses target | decoder-required | SKIA-141 |
-| 24 | `Bc7SrgbEXT` | 16 | 16 | one BC7 block per 4x4 texels with sRGB RGB | linear RGB after BC7 decode and one sRGB decode, A UNORM | exact block shadow plus license-compatible bounded sRGB decoder | FNA coerces to Color; Skia refuses target | decoder-required | SKIA-141 |
+| 22 | `Dxt5SrgbEXT` | 16 | 16 | one BC3 block per 4x4 texels with sRGB RGB | linear RGB after BC3 decode and one sRGB decode, A UNORM | exact block shadow plus bounded RGBA8 sRGB decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
+| 23 | `Bc7EXT` | 16 | 16 | one BC7 block per 4x4 padded blocks | RGBA UNORM | promoted exact padded-block shadow plus a native decoded `kRGBA_8888` image; mip levels never generated | FNA coerces to Color; Skia refuses target pending SKIA-142 | decoder-required | SKIA-141 |
+| 24 | `Bc7SrgbEXT` | 16 | 16 | one BC7 block per 4x4 padded blocks with sRGB RGB | linear RGB after BC7 decode and one sRGB decode, A UNORM | promoted exact padded-block shadow plus a native decoded `kSRGBA_8888` image; mip levels never generated | FNA coerces to Color; Skia refuses target pending SKIA-142 | decoder-required | SKIA-141 |
 | 25 | `ByteEXT` | 1 | 1 | one byte R8 | R UNORM, G=0, B=0, A=1 | promoted Texture2D `kR8_unorm` exact byte | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-137 |
 | 26 | `UShortEXT` | 1 | 2 | LE u16 R | R UNORM, G=0, B=0, A=1 | promoted Texture2D `kR16_unorm` exact word | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-137 |
 
@@ -71,8 +72,10 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
 - Compressed formats are texture-only. NPOT dimensions still use `ceil(width/4) * ceil(height/4)`
   blocks per level; the old enum comment's multiple-of-four wording does not justify dropping edge
   texels or crossing mip boundaries.
-- BC7 stays refused unless SKIA-141 selects a bounded, license-compatible decoder. No other codec,
-  zero fill, or stale RGBA8 content is an acceptable fallback.
+- SKIA-141 implements Bc7EXT/Bc7SrgbEXT with a native BC7 decoder written directly from the public
+  Khronos BPTC specification (bit layout, partition/anchor tables, interpolation formula) rather
+  than a vendored third-party decoder -- see `docs/skia-bc7-decoder.md`. No other codec, zero
+  fill, or stale RGBA8 content is used as a fallback.
 - Format promotion is per route. Texture sampling support never implies renderability, and
   renderability never implies backbuffer-format support.
 - Pinned `kSRGBA_8888` itself decodes encoded RGB while gathering. Its Skia colour-space metadata

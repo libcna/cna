@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+#include "CNA/Internal/Graphics/Bc7Util.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 
 #include "include/core/SkColorSpace.h"
@@ -48,14 +49,23 @@ namespace CNA::Internal::Backends::Skia
                 || format == SurfaceFormat::HdrBlendable
                 || format == SurfaceFormat::Dxt1
                 || format == SurfaceFormat::Dxt3
-                || format == SurfaceFormat::Dxt5;
+                || format == SurfaceFormat::Dxt5
+                || format == SurfaceFormat::Bc7EXT
+                || format == SurfaceFormat::Bc7SrgbEXT;
         }
 
         [[nodiscard]] bool IsCompressedTextureFormat(SurfaceFormat format) noexcept
         {
             return format == SurfaceFormat::Dxt1
                 || format == SurfaceFormat::Dxt3
-                || format == SurfaceFormat::Dxt5;
+                || format == SurfaceFormat::Dxt5
+                || format == SurfaceFormat::Bc7EXT
+                || format == SurfaceFormat::Bc7SrgbEXT;
+        }
+
+        [[nodiscard]] bool IsSrgbCompressedTextureFormat(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::Bc7SrgbEXT;
         }
 
         [[nodiscard]] std::size_t CompressedBlockByteSize(SurfaceFormat format)
@@ -64,7 +74,9 @@ namespace CNA::Internal::Backends::Skia
             {
                 case SurfaceFormat::Dxt1: return 8u;
                 case SurfaceFormat::Dxt3:
-                case SurfaceFormat::Dxt5: return 16u;
+                case SurfaceFormat::Dxt5:
+                case SurfaceFormat::Bc7EXT:
+                case SurfaceFormat::Bc7SrgbEXT: return 16u;
                 default:
                     throw System::NotSupportedException(
                         "Skia Texture2D has no block byte size for this SurfaceFormat.");
@@ -75,12 +87,16 @@ namespace CNA::Internal::Backends::Skia
             SurfaceFormat format, const std::uint8_t* data, std::size_t dataSize,
             int width, int height)
         {
+            using CNA::Internal::Graphics::Bc7Util;
             using CNA::Internal::Graphics::DxtUtil;
             switch (format)
             {
                 case SurfaceFormat::Dxt1: return DxtUtil::DecompressDxt1(data, dataSize, width, height);
                 case SurfaceFormat::Dxt3: return DxtUtil::DecompressDxt3(data, dataSize, width, height);
                 case SurfaceFormat::Dxt5: return DxtUtil::DecompressDxt5(data, dataSize, width, height);
+                case SurfaceFormat::Bc7EXT:
+                case SurfaceFormat::Bc7SrgbEXT:
+                    return Bc7Util::DecompressBc7(data, dataSize, width, height);
                 default:
                     throw System::NotSupportedException(
                         "Skia Texture2D has no block decoder for this SurfaceFormat.");
@@ -93,9 +109,16 @@ namespace CNA::Internal::Backends::Skia
         {
             const std::vector<std::uint8_t> rgba =
                 DecompressBlockLevel(format, data, dataSize, width, height);
-            const SkPixmap pixmap(
-                SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, alphaType),
-                rgba.data(), static_cast<std::size_t>(width) * 4u);
+            // Bc7SrgbEXT's decoded RGB bytes are sRGB-encoded; kSRGBA_8888 performs the sRGB
+            // transfer decode while gathering texels, and the gathered working components are
+            // described as linear-sRGB so a linear destination does not decode them a second
+            // time while an explicit sRGB destination re-encodes them exactly once -- the same
+            // convention already established for ColorSrgbEXT.
+            const SkImageInfo info = IsSrgbCompressedTextureFormat(format)
+                ? SkImageInfo::Make(width, height, kSRGBA_8888_SkColorType, alphaType,
+                                    SkColorSpace::MakeSRGBLinear())
+                : SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, alphaType);
+            const SkPixmap pixmap(info, rgba.data(), static_cast<std::size_t>(width) * 4u);
             return SkImages::RasterFromPixmapCopy(pixmap);
         }
 

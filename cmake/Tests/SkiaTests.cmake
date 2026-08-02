@@ -500,6 +500,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_Texture2D_CompressedFormats
                                    cna_test_skia_texture2d_compressed_formats)
 
+    # SKIA-141: exact Bc7EXT/Bc7SrgbEXT compressed block transfer, sRGB colour-space handling,
+    # block-alignment validation, malformed-data rejection, deterministic reserved-mode fallback,
+    # decoded public sampling and continued RenderTarget2D refusal.
+    cna_skia_test(cna_test_skia_texture2d_bc7 examples/skia_texture2d_bc7_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_bc7
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_Bc7 cna_test_skia_texture2d_bc7)
+
     cna_skia_test(cna_test_skia_texture2d_dispose examples/sdlrenderer_texture2d_dispose_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Dispose cna_test_skia_texture2d_dispose)
 

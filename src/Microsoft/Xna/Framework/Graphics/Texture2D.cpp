@@ -118,7 +118,9 @@ namespace Microsoft::Xna::Framework::Graphics
             || format == SurfaceFormat::HdrBlendable
             || format == SurfaceFormat::Dxt1
             || format == SurfaceFormat::Dxt3
-            || format == SurfaceFormat::Dxt5)
+            || format == SurfaceFormat::Dxt5
+            || format == SurfaceFormat::Bc7EXT
+            || format == SurfaceFormat::Bc7SrgbEXT)
         {
             return;
         }
@@ -141,15 +143,18 @@ namespace Microsoft::Xna::Framework::Graphics
 #endif
     }
 
-    /// SKIA-140: Dxt1/Dxt3/Dxt5 transfer raw compressed blocks through the same NOXNA byte-array
-    /// overloads ByteEXT uses, matching how real XNA/FNA upload compressed content through the
-    /// generic SetData<byte>/GetData<byte> overload rather than a dedicated method.
+    /// SKIA-140/141: Dxt1/Dxt3/Dxt5/Bc7EXT/Bc7SrgbEXT transfer raw compressed blocks through the
+    /// same NOXNA byte-array overloads ByteEXT uses, matching how real XNA/FNA upload compressed
+    /// content through the generic SetData<byte>/GetData<byte> overload rather than a dedicated
+    /// method.
     [[nodiscard]] static bool IsCompressedTransferFormatEXT(SurfaceFormat format) noexcept
     {
 #ifdef CNA_BACKEND_SKIA
         return format == SurfaceFormat::Dxt1
             || format == SurfaceFormat::Dxt3
-            || format == SurfaceFormat::Dxt5;
+            || format == SurfaceFormat::Dxt5
+            || format == SurfaceFormat::Bc7EXT
+            || format == SurfaceFormat::Bc7SrgbEXT;
 #else
         (void)format;
         return false;

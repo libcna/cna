@@ -95,12 +95,23 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::ColorSrgbEXT);
         });
 #endif
+#if defined(CNA_BACKEND_SKIA)
+        // SKIA-141 promotes Bc7EXT/Bc7SrgbEXT with a native BC7 decoder (no third-party decoder
+        // dependency). Dxt5SrgbEXT below remains refused pending a task that scopes it.
+        expectNoThrow("Texture2D Bc7EXT", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7EXT);
+        });
+        expectNoThrow("Texture2D Bc7SrgbEXT", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7SrgbEXT);
+        });
+#else
         expectThrows("Texture2D Bc7EXT", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7EXT);
         });
         expectThrows("Texture2D Bc7SrgbEXT", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Bc7SrgbEXT);
         });
+#endif
         expectThrows("Texture2D Dxt5SrgbEXT", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5SrgbEXT);
         });
@@ -186,8 +197,8 @@ protected:
         });
 #endif
 #if defined(CNA_BACKEND_SKIA)
-        // SKIA-140 promotes Dxt1/Dxt3/Dxt5 with preserved compressed CPU blocks; Dxt5SrgbEXT,
-        // Bc7EXT and Bc7SrgbEXT above remain refused pending SKIA-141.
+        // SKIA-140 promotes Dxt1/Dxt3/Dxt5 with preserved compressed CPU blocks; Dxt5SrgbEXT
+        // above remains refused pending a task that scopes it.
         expectNoThrow("Texture2D Dxt1", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });

@@ -165,7 +165,7 @@ def main() -> int:
 
     required_findings = (
         "`kARGB_4444` is not layout-compatible",
-        "BC7 stays refused unless SKIA-141 selects a bounded, license-compatible decoder",
+        "SKIA-141 implements Bc7EXT/Bc7SrgbEXT with a native BC7 decoder",
         "Texture sampling support never implies renderability",
     )
     for finding in required_findings:

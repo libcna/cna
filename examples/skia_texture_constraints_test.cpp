@@ -102,14 +102,13 @@ private:
         const char* name;
     };
 
-    static const std::array<FormatCase, 3>& UnsupportedFormats()
+    static const std::array<FormatCase, 1>& UnsupportedFormats()
     {
-        // SKIA-140 promoted Dxt1/Dxt3/Dxt5 to skia_texture2d_compressed_formats_test.cpp; the
-        // remaining compressed formats stay refused pending SKIA-141.
+        // SKIA-140 promoted Dxt1/Dxt3/Dxt5 to skia_texture2d_compressed_formats_test.cpp and
+        // SKIA-141 promoted Bc7EXT/Bc7SrgbEXT to skia_texture2d_bc7_test.cpp; Dxt5SrgbEXT is the
+        // only remaining compressed format, pending a task that scopes it.
         static constexpr std::array formats{
             FormatCase{SurfaceFormat::Dxt5SrgbEXT, "Dxt5SrgbEXT"},
-            FormatCase{SurfaceFormat::Bc7EXT, "Bc7EXT"},
-            FormatCase{SurfaceFormat::Bc7SrgbEXT, "Bc7SrgbEXT"},
         };
         return formats;
     }

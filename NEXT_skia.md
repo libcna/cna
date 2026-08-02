@@ -1725,13 +1725,89 @@ level-boundary contract.
   BC7/Bc7SrgbEXT only with a bounded, license-compatible decoder (no such decoder exists yet in
   this codebase).
 
+## Completed in this session: SKIA-141
+
+- Evaluated third-party BC7 decoder options (e.g. Microsoft's MIT-licensed DirectXTex, public-
+  domain `bc7decomp`) and decided against vendoring any of them: `docs/skia-bc7-decoder.md`
+  records the decision to implement BC7 from scratch against the public Khronos Data Format
+  Specification's BPTC section, matching `DxtUtil`'s own existing precedent for DXT1/3/5. This
+  adds no new dependency, submodule, or license to reconcile, and keeps the decode exactly
+  auditable against cited specification text.
+- The new `Bc7Util` (`CNA::Internal::Graphics`, alongside `DxtUtil`) implements all 8 BC7 modes:
+  mode-bit detection, per-mode field widths (partition/rotation/index-selection bits, colour/alpha
+  endpoints, per-endpoint or shared P-bits, primary/secondary indices), endpoint precision
+  expansion (P-bit insertion, MSB replication to 8 bits) and the documented interpolation formula.
+  The 64-entry 2-subset/3-subset partition tables and their three anchor-index tables were
+  transcribed programmatically (not by hand) from the specification's own raw AsciiDoc source to
+  eliminate transposition risk, then verified against the specification's own worked decode
+  example (mode 2, partition 6, texel (1,2) resolves to subset 1) before use. The reserved mode
+  (block low byte entirely zero) decodes to deterministic exact zero, matching the specification's
+  hardware-fallback guidance.
+- Before wiring into the backend, the decoder was cross-checked field-by-field against the
+  specification's exact per-mode bit-range table for all 8 modes, then validated standalone with
+  hand-constructed conformance blocks: a single-subset mode (unique P-bits, exact byte-for-byte
+  round trip once endpoint channels share the same LSB parity the shared/unique P-bit implies) and
+  a two-subset mode (shared P-bits, partition-table texel assignment, matching a hand-computed
+  left/right split for partition 0).
+- `SkiaTextureBackend` reuses SKIA-140's `SkiaCompressedMipChain2D` and decoded-image plumbing
+  unchanged for Bc7EXT/Bc7SrgbEXT: both are 16-byte blocks per 4x4 texels, the same layout as
+  Dxt3/Dxt5. `Bc7SrgbEXT` reuses the established `ColorSrgbEXT` `kSRGBA_8888`/linear-sRGB
+  colour-space convention rather than a new one. As with Dxt1/3/5, descendant mip levels are never
+  generated -- there is no direct Skia block encoder -- and must be explicitly authored.
+- Wiring `SkiaTextureBackend.cpp`'s new call into `Bc7Util::DecompressBc7` exposed a real,
+  pre-existing link-order fragility: `CnaLibrary.cmake` already has `CNA` `PUBLIC`-link
+  `${BACKEND_TARGET}`, but nothing declared the reverse edge, so a single-pass linker could not
+  resolve a symbol defined in `libCNA.a` (scanned first) from a reference in
+  `libcna_backend_graphics_skia.a` (scanned after) for any executable that had no other, earlier
+  reason to pull `Bc7Util.cpp.o` in first. Found via a real "undefined reference to
+  `Bc7Util::DecompressBc7`" failure on `cna_reference_dump` specifically (the one tool target with
+  no such earlier reference) after every test executable had already linked successfully by
+  coincidence. Fixed by adding `target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)` in
+  `cmake/BackendLibraries.cmake`'s `SKIA` branch; the complete tree (170 targets) then builds and
+  links cleanly.
+- Added `Skia_Texture2D_Bc7`, which passes 16/16 checks: exact 16-byte block round-trip for both
+  formats; `Bc7SrgbEXT` exposing a distinct `kSRGBA_8888` (vs `Bc7EXT`'s `kRGBA_8888`) sampling
+  image; the identical (127,127,127) bit pattern sampling unchanged as `Bc7EXT` and decoding to
+  approximately linear 54 as `Bc7SrgbEXT` through public `SpriteBatch` drawing (matching the
+  established `ColorSrgbEXT` verification technique -- drawing an untagged source directly into an
+  explicitly-colour-managed intermediate surface was tried first and rejected: Skia treats an
+  untagged `kRGBA_8888` source as sRGB-encoded by default against an explicitly-tagged
+  destination, which would have silently double-decoded the "stays linear" case); the deterministic
+  reserved-mode (all-zero low byte) fallback via both exact byte round-trip and decoded-pixel
+  checks; block-alignment validation reusing SKIA-140's exact policy; malformed-data rejection with
+  failure atomicity; decoded public sampling of a solid mode-6 block; continued `RenderTarget2D`
+  refusal; and exact resource-counter release.
+- Updating the refusal matrix and shared format contract surfaced a stale, pre-existing hardcoded
+  assumption in `scripts/validate_skia_surface_formats.py`'s own `required_findings` check (a
+  literal "BC7 stays refused unless SKIA-141..." string) -- fixed alongside the doc's own bullet.
+  `Skia_Texture2D_Constraints`' refusal matrix drops to one remaining unsupported compressed format
+  (`Dxt5SrgbEXT`); `easygl_surface_format_throws_test.cpp`/`Skia_Contract_SurfaceFormat` moves
+  Bc7EXT/Bc7SrgbEXT into the Skia-only `expectNoThrow` branch and passes 31/31.
+- The new fixture, the updated refusal matrix, and the updated shared contract pass in Debug,
+  Release, and ASan+UBSan (`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1
+  UBSAN_OPTIONS=halt_on_error=1`, the documented external Mesa/X11 residual only). The complete
+  Debug tree (170 targets) builds with `cmake --build cmake-build-skia --parallel 3`, and the
+  complete sequential Skia suite (`ctest -L 'Raster|Display|Audit'`) passes 158/158 on the
+  pre-existing `:99` Xvfb display: 21 Raster, 131 Display, six Audit.
+- Useful focused commands:
+  `env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./cmake-build-skia/cna_test_skia_texture2d_bc7`,
+  `python3 scripts/validate_skia_surface_formats.py "$(pwd)"`,
+  `ctest --test-dir cmake-build-skia -L 'Raster|Display|Audit' --output-on-failure -j3`.
+- No real display or subagent was used, compilation never exceeded three jobs, and `NEXT.md`
+  remained untouched. The exact next implementation point is SKIA-142: establish per-format
+  `RenderTarget2D` support and refuse non-renderable/compressed formats before allocation, now
+  that SKIA-140/141 have settled the promoted Texture2D-only compressed-format set (Dxt1/Dxt3/
+  Dxt5/Bc7EXT/Bc7SrgbEXT promoted; Dxt5SrgbEXT is the sole remaining refusal among the eight
+  original compressed rows).
+
 ## Next candidates
 
-1. SKIA-141: evaluate and implement BC7/Bc7SrgbEXT sampled textures only with a bounded,
-   license-compatible decoder (a real, separately-licensed decoder dependency, unlike SKIA-140's
-   reuse of the existing in-tree `DxtUtil`).
-2. SKIA-142–143: per-format `RenderTarget2D` support/refusal and the exhaustive cross-format
-   validation/documentation sweep, once SKIA-141 settles the final compressed-format set.
+1. SKIA-142: establish per-format `RenderTarget2D` support and refuse non-renderable/compressed
+   formats before allocation, now that SKIA-140/141 have settled the promoted Texture2D-only
+   compressed-format set (Dxt1/Dxt3/Dxt5/Bc7EXT/Bc7SrgbEXT promoted texture-only; Dxt5SrgbEXT the
+   sole remaining refusal).
+2. SKIA-143: run the exhaustive cross-format validation/documentation sweep once SKIA-142 settles
+   render-target support.
 3. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.
 4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
