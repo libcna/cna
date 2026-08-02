@@ -706,6 +706,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_FrontFaceWinding COMMAND cna_test_webgpu_frontface_winding
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-183: dedicated TriangleStrip parity/culling matrix. Covers native and DrawUser,
+    # indexed/non-indexed, Uint16/Uint32, odd/even primitives, both source windings, all cull modes,
+    # nonzero ranges, list interleaving, deferred state snapshots, disposal, and validation.
+    cna_webgpu_test(cna_test_webgpu_triangle_strip_winding
+                    examples/triangle_strip_winding_test.cpp)
+    target_link_libraries(cna_test_webgpu_triangle_strip_winding PRIVATE WebGPU::WebGPU)
+    cna_register_backend_test(NAME WebGPU_TriangleStripWinding
+        COMMAND cna_test_webgpu_triangle_strip_winding
+        TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-165: a rectangle-less GetBackBufferData must address the whole logical backbuffer
     # (PresentationParameters W x H) from the first observable frame, with no SetRenderTarget round
     # trip, no extra Present and no viewport reset -- sized from the backbuffer description, never from

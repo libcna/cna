@@ -123,10 +123,14 @@ namespace
         float centerX,
         const Color& color)
     {
+        // REMED-GFX-183: clockwise-as-displayed is XNA's front face (GFX-160). A strip must
+        // therefore begin TL,TR,BL,BR: fixed-function parity turns its second primitive into
+        // BL,TR,BR with the same winding. The former TL,BL,TR,BR order was the reversed,
+        // counter-clockwise source and made the GFX-183 culling test assert the opposite oracle.
         return {
             VertexPositionColor(Vector3(centerX - 0.18f,  0.45f, 0.5f), color),
-            VertexPositionColor(Vector3(centerX - 0.18f, -0.45f, 0.5f), color),
             VertexPositionColor(Vector3(centerX + 0.18f,  0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX - 0.18f, -0.45f, 0.5f), color),
             VertexPositionColor(Vector3(centerX + 0.18f, -0.45f, 0.5f), color),
         };
     }

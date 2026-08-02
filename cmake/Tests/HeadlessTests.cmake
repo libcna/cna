@@ -302,6 +302,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
         COMMAND cna_test_headless_frontface_winding
         TIMEOUT 300 LABELS "Headless")
 
+    # REMED-GFX-183 control: Headless declares its non-rasterizing boundary.
+    cna_headless_test(cna_test_headless_triangle_strip_winding
+        examples/triangle_strip_winding_test.cpp)
+    cna_register_backend_test(NAME Headless_TriangleStripWinding
+        COMMAND cna_test_headless_triangle_strip_winding
+        TIMEOUT 300 LABELS "Headless")
+
     cna_headless_test(cna_test_headless_texture2d_getdata_contract
                       examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Headless_Texture2D_GetDataContract

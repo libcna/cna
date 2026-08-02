@@ -1342,6 +1342,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_FrontFaceWinding COMMAND cna_test_bgfx_frontface_winding
         TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-183 cross-backend control: the complete TriangleStrip parity/culling matrix.
+    cna_bgfx_test(cna_test_bgfx_triangle_strip_winding
+        examples/triangle_strip_winding_test.cpp)
+    cna_register_backend_test(NAME Bgfx_TriangleStripWinding
+        COMMAND cna_test_bgfx_triangle_strip_winding
+        TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_bgfx_test(cna_test_bgfx_texture2d_getdata_contract
                   examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Bgfx_Texture2D_GetDataContract COMMAND cna_test_bgfx_texture2d_getdata_contract

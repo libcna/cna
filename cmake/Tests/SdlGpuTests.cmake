@@ -545,6 +545,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_FrontFaceWinding COMMAND cna_test_sdlgpu_frontface_winding
         TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-183 cross-backend control: the complete TriangleStrip parity/culling matrix.
+    cna_sdlgpu_test(cna_test_sdlgpu_triangle_strip_winding
+        examples/triangle_strip_winding_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_TriangleStripWinding
+        COMMAND cna_test_sdlgpu_triangle_strip_winding
+        TIMEOUT 300 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_sdlgpu_test(cna_test_sdlgpu_texture2d_getdata_contract
                     examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME SdlGpu_Texture2D_GetDataContract COMMAND cna_test_sdlgpu_texture2d_getdata_contract

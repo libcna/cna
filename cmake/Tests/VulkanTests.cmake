@@ -1462,6 +1462,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             examples/frontface_winding_test.cpp)
         cna_register_backend_test(NAME Vulkan_FrontFaceWinding COMMAND cna_test_vulkan_frontface_winding
             TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # REMED-GFX-183 cross-backend control: the complete TriangleStrip parity/culling matrix.
+        cna_vulkan_test(cna_test_vulkan_triangle_strip_winding
+            examples/triangle_strip_winding_test.cpp)
+        cna_register_backend_test(NAME Vulkan_TriangleStripWinding
+            COMMAND cna_test_vulkan_triangle_strip_winding
+            TIMEOUT 300 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         # The same fixture on a multisampled device. A Vulkan render target derives its sample count
         # from the device's own, so only this run makes leg E a genuinely multisampled producer --
         # its resolve has to complete before the consumer samples it, with no readback to trigger it.

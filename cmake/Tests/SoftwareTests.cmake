@@ -313,6 +313,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
         COMMAND cna_test_software_frontface_winding
         TIMEOUT 300 LABELS "Software")
 
+    # REMED-GFX-183 control: Software v1 explicitly declares its TriangleList-only 3D boundary.
+    cna_software_test(cna_test_software_triangle_strip_winding
+        examples/triangle_strip_winding_test.cpp)
+    cna_register_backend_test(NAME Software_TriangleStripWinding
+        COMMAND cna_test_software_triangle_strip_winding
+        TIMEOUT 300 LABELS "Software")
+
     cna_software_test(cna_test_software_texture2d_getdata_contract
                       examples/texture2d_getdata_contract_test.cpp)
     cna_register_backend_test(NAME Software_Texture2D_GetDataContract
