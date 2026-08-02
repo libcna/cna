@@ -3240,6 +3240,23 @@ float4 main(in PSInput psIn) : SV_Target
         context_->Flush();
         context_->WaitForIdle();
 
+        // DiligentCore v2.5.6's OpenGL backend has a real bug (DILIGENT-30): DeviceContextGLImpl::
+        // Flush() resets its whole SRB-binding bookkeeping (m_BindInfo = {}, including ActiveSRBMask)
+        // but DeviceContextGLImpl::SetPipelineState() early-outs on "same pipeline object as before"
+        // (IsSameObject()) WITHOUT recomputing ActiveSRBMask. Every sprite/3D draw here reuses one
+        // cached pipeline object per ShaderVariant, so the very next draw after this Flush() (unless
+        // it happens to pick a different ShaderVariant) sets the *same* pipeline object again, hits
+        // that early-out, and is left with ActiveSRBMask == 0 forever after -- GetCommitMask() then
+        // always returns 0, so BindProgramResources() (the call that actually issues glBindTexture)
+        // is silently skipped on every following draw, leaving whatever GL texture unit content was
+        // last actually bound. InvalidateState() forces the next SetPipelineState() call to take the
+        // real (non-early-out) path again, correctly recomputing ActiveSRBMask; renderTargetsBound_
+        // is already false above, so the next draw's own EnsureRenderTargetsBound() re-establishes
+        // the render target before drawing, avoiding the "framebuffer without attachments" assert an
+        // earlier attempt at this hit from calling InvalidateState() without that guarantee in place.
+        if (deviceType_ == DiligentDeviceType::OpenGL)
+            context_->InvalidateState();
+
         // MAP_FLAG_DO_NOT_WAIT is the correct flag *because* of the WaitForIdle() above: Diligent's
         // Vulkan backend never synchronizes staging reads itself and asks callers to state that
         // they have already done so.
@@ -3937,6 +3954,21 @@ float4 main(in PSInput psIn) : SV_Target
         context_->CopyTexture(copyAttribs);
         context_->Flush();
         context_->WaitForIdle();
+
+        // See ReadBackbuffer's identical InvalidateState() call for why this is needed (DILIGENT-30):
+        // Flush() wipes DeviceContextGLImpl's SRB-binding bookkeeping (ActiveSRBMask in particular),
+        // but SetPipelineState() silently skips recomputing it when the next draw reuses the same
+        // pipeline object, permanently disabling resource rebinding from that point on. Unlike
+        // ReadBackbuffer, this function does not unbind render targets first, so renderTargetsBound_
+        // must be explicitly cleared here too -- InvalidateState() wipes Diligent's own FBO/render-
+        // target tracking regardless of what that CNA-side shadow flag still says, and skipping this
+        // would make EnsureRenderTargetsBound()'s cheap early-out skip re-establishing it before the
+        // next draw.
+        if (deviceType_ == DiligentDeviceType::OpenGL)
+        {
+            context_->InvalidateState();
+            renderTargetsBound_ = false;
+        }
 
         // See ReadBackbuffer for why MAP_FLAG_DO_NOT_WAIT is the correct flag after WaitForIdle().
         Dg::MappedTextureSubresource mapped{};

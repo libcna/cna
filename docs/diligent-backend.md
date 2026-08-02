@@ -178,13 +178,30 @@ Not implemented — each **throws with its own name** rather than rendering an a
   instruction rather than deep inside Diligent.
 - **OpenGL creates a device and renders most of the baseline, but is not fully verified or CTest-covered
   yet (`DILIGENT-30`).** The verification below was performed on the Vulkan device type; running the
-  same GPU test binaries by hand with `CNA_DILIGENT_DEVICE=opengl` passes most checks, but two real
-  bugs remain open: a texture/shader-resource-variable binding issue where the second distinct
-  texture sampled in a session appears to still read the first one's content (affects
-  `SpriteBatch.Draw` with a `sourceRectangle`, `DualTextureEffect`'s second layer, sampling an
-  unbound `RenderTarget2D`, and `RenderTarget2D` MSAA resolve), and `SkinnedEffect`'s vertex shader
-  failing to convert to GLSL at all (a local `float4x4` variable never gets translated, unlike the
-  same type inside a constant buffer).
+  same GPU test binaries by hand with `CNA_DILIGENT_DEVICE=opengl` passes most checks. A real,
+  confirmed upstream DiligentCore v2.5.6 OpenGL-backend bug was root-caused and partially fixed this
+  session: `DeviceContextGLImpl::Flush()` (called by this backend's own `ReadBackbuffer()`/
+  `ReadTextureRegion()` to synchronize a staging-texture readback) wipes its internal SRB-binding
+  bookkeeping, including `ActiveSRBMask`, but `SetPipelineState()` skips recomputing it whenever the
+  *same* pipeline object is set again (an early-out on pipeline identity) -- which this backend does
+  on every draw that reuses a cached `ShaderVariant` pipeline. With `ActiveSRBMask` stuck at zero,
+  `BindProgramResources()` (the call that issues `glBindTexture`) is silently skipped on every draw
+  after a readback, leaving stale GL texture-unit content bound. Fixed with a GL-only
+  `context_->InvalidateState()` right after the existing `Flush()`/`WaitForIdle()` in both readback
+  paths, forcing the next `SetPipelineState()` to genuinely recompute `ActiveSRBMask`
+  (`renderTargetsBound_` is cleared alongside it, since `InvalidateState()` also wipes Diligent's own
+  render-target tracking). This fixes `SpriteBatch.Draw` with a `sourceRectangle` and
+  `DualTextureEffect`'s second layer; two related-but-distinct symptoms remain open --
+  sampling an unbound `RenderTarget2D` and `RenderTarget2D` MSAA resolve still fail under GL, evidently
+  a different trigger not yet root-caused. `SkinnedEffect`'s vertex shader still fails to convert to
+  GLSL at all (a local `float4x4` variable never gets translated, unlike the same type inside a
+  constant buffer) -- unchanged, and the same failure now also confirmed on `PbrEffect`'s and the
+  per-vertex-lighting shader family's own vertex shaders. A broader manual sweep this session also
+  found `Diligent_ReferenceStencil`, `SpriteFont`'s `FlipVertically` check, hardware instancing,
+  `DrawIndexedPrimitives`' `baseVertex` case, `Texture2D` NPOT sampling through a real draw, and
+  `RenderTarget2D` mip-generation's "level 0 unaffected" check all fail under GL too -- none
+  investigated yet. OpenGL device-type support is meaningfully less complete than a first glance at
+  this backend's Vulkan-verified feature list would suggest.
 - **Direct3D 11/12 are code paths only.** They compile only in a Windows-targeting build and have
   not been run.
 - **Depth-stencil is always `D24_UNORM_S8_UINT`**, regardless of the requested `DepthFormat`.
