@@ -715,6 +715,13 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     direct/bounded/refused feature families are audited. The complete Debug suite passes 133/133
     on real display `:0` in 61.14 seconds (16 Raster, 113 Display, four Audit); the final two policy
     tests also pass in Release and ASan+UBSan. See `docs/skia-release-gate.md`.
+88. `Skia_GeneratedBlender_Raster` closes the internal SKIA-120 generator. One process-cached,
+    fixed-size runtime program covers all 13 factors and five independent RGB/alpha functions;
+    its 46-check independent scalar oracle includes constants, source-alpha saturation,
+    factor-independent EasyGL/OpenGL Min/Max, separate alpha, deterministic validation failures,
+    and exactly one compilation attempt. Debug, Release, and ASan+UBSan pass. The generator is not
+    yet a public compatibility claim: live state/masks, every SpriteBatch mode, exhaustive public
+    pixels, and promotion remain SKIA-121–124. See `docs/skia-generated-blender.md`.
 
-The original Skia CPU-raster plan is complete. Any accelerated or expanded feature scope requires
-a successor plan and must reopen the applicable ADR and release gate.
+The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
+immutable while expanded features pass their own implementation and promotion gates.

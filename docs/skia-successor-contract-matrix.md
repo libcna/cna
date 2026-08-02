@@ -56,8 +56,8 @@ stale, duplicated, malformed, or unrouted entries.
 | `BLENDFUNC-Add` | Add weighted source and destination. | bounded | SKIA-120 | Presets and one custom tuple pass; arbitrary factor pairs remain. |
 | `BLENDFUNC-Subtract` | Subtract destination term from source term. | refused | SKIA-120 | Runtime SkSL expression exists and needs public clamping/alpha evidence. |
 | `BLENDFUNC-ReverseSubtract` | Subtract source term from destination term. | refused | SKIA-120 | Runtime SkSL expression exists and needs public clamping/alpha evidence. |
-| `BLENDFUNC-Max` | Componentwise maximum of weighted terms. | refused | SKIA-120 | Runtime SkSL expression exists and needs public clamping/alpha evidence. |
-| `BLENDFUNC-Min` | Componentwise minimum of weighted terms. | refused | SKIA-120 | Runtime SkSL expression exists and needs public clamping/alpha evidence. |
+| `BLENDFUNC-Max` | Componentwise maximum of source and destination; EasyGL/OpenGL ignores factors. | refused | SKIA-120 | Generic runtime SkSL and an independent scalar oracle must match the actual EasyGL equation. |
+| `BLENDFUNC-Min` | Componentwise minimum of source and destination; EasyGL/OpenGL ignores factors. | refused | SKIA-120 | Generic runtime SkSL and an independent scalar oracle must match the actual EasyGL equation. |
 | `FILTER-Linear` | Bilinear texel sampling without mip selection. | supported | SKIA-129 | Preserve existing exact magnification/minification pixels. |
 | `FILTER-Point` | Nearest texel sampling without mip selection. | supported | SKIA-129 | Preserve existing exact coordinate and tile-mode pixels. |
 | `FILTER-Anisotropic` | Device anisotropic footprint up to MaxAnisotropy. | fallback | SKIA-165 | Raster stays Linear fallback; Ganesh must prove a distinct device result. |

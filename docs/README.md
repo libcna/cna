@@ -1,6 +1,6 @@
 # docs/ index
 
-98 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+99 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -36,6 +36,8 @@ on it) rather than assuming either way.
   allocation and oracle rules are
   [`skia-successor-resource-oracles.md`](skia-successor-resource-oracles.md). Arbitrary blend work
   is anchored by the explicit [`skia-source-alpha-contract.md`](skia-source-alpha-contract.md).
+  The internal all-selector implementation is documented in
+  [`skia-generated-blender.md`](skia-generated-blender.md); public promotion is still gated.
 - **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
   2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
   to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.

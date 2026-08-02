@@ -108,6 +108,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     target_include_directories(cna_test_skia_runtime_blender_raster PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_raster_test(Skia_RuntimeBlender_Raster cna_test_skia_runtime_blender_raster)
 
+    cna_skia_test(cna_test_skia_generated_blender examples/skia_generated_blender_test.cpp)
+    target_include_directories(cna_test_skia_generated_blender PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_GeneratedBlender_Raster cna_test_skia_generated_blender)
+
     cna_skia_test(cna_test_skia_color_write_mask_raster examples/skia_color_write_mask_raster_test.cpp)
     target_include_directories(cna_test_skia_color_write_mask_raster PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_raster_test(Skia_ColorWriteMask_Raster cna_test_skia_color_write_mask_raster)

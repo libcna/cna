@@ -24,7 +24,7 @@
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
 - The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
-  136: 18 raster-only, 113 display-required tests, and five display-free source audits.
+  137: 19 raster-only, 113 display-required tests, and five display-free source audits.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
@@ -589,8 +589,8 @@
 
 ## Current task
 
-SKIA-115–119 are complete. Continue with SKIA-120's generated arbitrary raster blender, followed
-by constant/state/mask integration in SKIA-121 and the remaining SKIA-122–124 promotion gates.
+SKIA-115–120 are complete. Continue with SKIA-121's BlendFactor/BlendEnabled/write-mask integration,
+followed by the remaining SKIA-122–124 batch, exhaustive-corpus, and promotion gates.
 
 ## Completed in this session: SKIA-93
 
@@ -1186,9 +1186,30 @@ by constant/state/mask integration in SKIA-121 and the remaining SKIA-122–124 
   pass 6/6 on virtual X11 through Xvfb. The current configure selects 136 Skia CTests, compilation
   used only `--parallel 2`, and `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-120
+
+- Added a bounded generic `SkRuntimeEffect::MakeForBlender` program with six integer selectors and
+  one float4 blend constant. It is compiled and process-cached exactly once; each state creates
+  only a fixed uniform block and `SkBlender`. All 13 source/destination factors, five independent
+  RGB/alpha functions, source-alpha saturation, and the actual EasyGL/OpenGL factor-independent
+  Min/Max equations have explicit branches.
+- The generated route recovers logical destination RGB from Skia's premultiplied storage, evaluates
+  the EasyGL equation, clamps the normalized result, and re-encodes it for the raster surface under
+  SKIA-119's explicit source convention. Invalid selector fields and non-finite/out-of-range blend
+  constants return stable field-specific diagnostics before construction.
+- `Skia_GeneratedBlender_Raster` compares real raster output with an independent scalar oracle. All
+  46 direct checks pass, including every factor in RGB and alpha positions, every function in both
+  positions, constants, saturation, reverse subtract, separate alpha, validation failures, and the
+  single-compilation invariant. The focused test passes in Debug, Release, and ASan+UBSan; all 24
+  display-free Audit+Raster tests pass. The configure now selects 137 Skia CTests: 19 Raster, 113
+  Display, and five Audit. Builds used only `--parallel 2`; `NEXT.md` was not read or changed.
+- This is deliberately internal. Public `BlendState` routing, live BlendFactor/BlendEnabled and
+  write masks remain SKIA-121; batch/effect paths, exhaustive public pixels, and promotion remain
+  SKIA-122–124. See `docs/skia-generated-blender.md`.
+
 ## Next candidates
 
-1. SKIA-120–124: complete arbitrary raster blend states before starting mip/format storage work.
+1. SKIA-121–124: complete arbitrary raster blend states before starting mip/format storage work.
 2. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
    effects in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
