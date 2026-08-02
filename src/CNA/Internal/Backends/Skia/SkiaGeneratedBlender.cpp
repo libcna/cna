@@ -29,6 +29,7 @@ namespace CNA::Internal::Backends::Skia
                     uniform int colorFunction;
                     uniform int alphaFunction;
                     uniform float4 blendFactor;
+                    uniform float4 writeMask;
 
                     half4 factor(int selector, half4 src, half4 dst) {
                         if (selector == 0) return half4(1.0);                    // One
@@ -74,7 +75,10 @@ namespace CNA::Internal::Backends::Skia
                         half4 logical = half4(saturate(color.rgb), saturate(alpha.a));
                         // Encode logical components for the premultiplied SkSurface. Public
                         // readback reverses this when output alpha is nonzero.
-                        return half4(logical.rgb * logical.a, logical.a);
+                        half4 storedResult = half4(logical.rgb * logical.a, logical.a);
+                        // ColorWriteChannels is an output-merger operation. Preserve disabled
+                        // destination storage bytes after the complete independent blend equation.
+                        return mix(storedDst, storedResult, writeMask);
                     }
                 )"));
                 result.effect = compiled.effect;
@@ -142,11 +146,17 @@ namespace CNA::Internal::Backends::Skia
     sk_sp<SkBlender> TryMakeSkiaGeneratedBlender(
         const SkiaGeneratedBlendSelectors& selectors,
         const std::array<float, 4>& blendFactor,
+        int colorWriteMask,
         std::string& error)
     {
         error.clear();
         if (!Validate(selectors, blendFactor, error))
             return nullptr;
+        if (colorWriteMask < 0 || colorWriteMask > 15)
+        {
+            error = "Skia generated blender ColorWriteChannels mask must be within [0, 15].";
+            return nullptr;
+        }
 
         const CachedGeneratedBlendEffect& cached = GeneratedBlendEffect();
         if (!cached.effect)
@@ -163,6 +173,13 @@ namespace CNA::Internal::Backends::Skia
         builder.uniform("colorFunction") = selectors.colorFunction;
         builder.uniform("alphaFunction") = selectors.alphaFunction;
         builder.uniform("blendFactor") = blendFactor;
+        std::array<float, 4> writeMask{};
+        for (int channel = 0; channel < 4; ++channel)
+        {
+            writeMask[static_cast<std::size_t>(channel)]
+                = (colorWriteMask & (1 << channel)) ? 1.0f : 0.0f;
+        }
+        builder.uniform("writeMask") = writeMask;
         sk_sp<SkBlender> blender = builder.makeBlender();
         if (!blender)
             error = "Skia generated blender failed to instantiate the validated selector tuple.";

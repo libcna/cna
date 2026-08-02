@@ -128,7 +128,7 @@ namespace
                                const Byte4& sourceBytes, const Byte4& destinationBytes,
                                const Float4& constant, std::string& error)
     {
-        sk_sp<SkBlender> blender = TryMakeSkiaGeneratedBlender(selectors, constant, error);
+        sk_sp<SkBlender> blender = TryMakeSkiaGeneratedBlender(selectors, constant, 15, error);
         if (!blender)
             return {};
         SkiaTextureBackend source(ImageData{1, 1, {
@@ -267,8 +267,8 @@ int main()
         invalid.mutate(selectors);
         std::string firstError;
         std::string secondError;
-        const auto firstInvalid = TryMakeSkiaGeneratedBlender(selectors, constant, firstError);
-        const auto secondInvalid = TryMakeSkiaGeneratedBlender(selectors, constant, secondError);
+        const auto firstInvalid = TryMakeSkiaGeneratedBlender(selectors, constant, 15, firstError);
+        const auto secondInvalid = TryMakeSkiaGeneratedBlender(selectors, constant, 15, secondError);
         Check(!firstInvalid && !secondInvalid && firstError == secondError
                   && firstError.find(invalid.expectedName) != std::string::npos,
               std::string("invalid ") + invalid.expectedName
@@ -278,7 +278,7 @@ int main()
     selectors = {};
     Float4 invalidConstant = constant;
     invalidConstant[2] = std::numeric_limits<float>::quiet_NaN();
-    const auto invalid = TryMakeSkiaGeneratedBlender(selectors, invalidConstant, error);
+    const auto invalid = TryMakeSkiaGeneratedBlender(selectors, invalidConstant, 15, error);
     Check(!invalid && error.find("constant channel 2") != std::string::npos,
           "non-finite blend constant rejects deterministically");
 

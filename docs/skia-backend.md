@@ -719,9 +719,17 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     fixed-size runtime program covers all 13 factors and five independent RGB/alpha functions;
     its 46-check independent scalar oracle includes constants, source-alpha saturation,
     factor-independent EasyGL/OpenGL Min/Max, separate alpha, deterministic validation failures,
-    and exactly one compilation attempt. Debug, Release, and ASan+UBSan pass. The generator is not
-    yet a public compatibility claim: live state/masks, every SpriteBatch mode, exhaustive public
-    pixels, and promotion remain SKIA-121–124. See `docs/skia-generated-blender.md`.
+    and exactly one compilation attempt. Debug, Release, and ASan+UBSan pass. At the SKIA-120
+    checkpoint it was not yet a public compatibility claim; SKIA-121's live-state layer is the
+    next entry below. See `docs/skia-generated-blender.md`.
+89. `Skia_GeneratedBlendState_Policy` closes SKIA-121's live public state layer. Unlisted valid
+    factor/function tuples use the fixed generator while the five established mappings retain
+    their pixel-proven alpha routes. Baked constants, live red→green→red changes, all sixteen
+    post-equation target-0 masks, masked source replacement while disabled, and configured-state
+    restoration pass; invalid selectors and unsupported sample masks remain atomic refusals. The
+    focused suite passes Debug, Release, and ASan+UBSan, and all 138 current Skia CTests pass in
+    sequential Xvfb blocks. Batch/effect equivalence, exhaustive EasyGL pixels, and promotion
+    remain SKIA-122–124.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

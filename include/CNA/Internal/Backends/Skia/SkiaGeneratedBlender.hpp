@@ -29,12 +29,14 @@ namespace CNA::Internal::Backends::Skia
         = SkiaSourceAlphaConvention::Premultiplied;
 
     /**
-     * Creates a blender from the one cached generic SkSL program. Returns null and an actionable
-     * deterministic error for invalid selectors/constants or a construction failure.
+     * Creates a blender from the one cached generic SkSL program. The target-0 write mask uses
+     * XNA's low RGBA bits. Returns null and an actionable deterministic error for invalid
+     * selectors, constants, masks, or a construction failure.
      */
     [[nodiscard]] sk_sp<SkBlender> TryMakeSkiaGeneratedBlender(
         const SkiaGeneratedBlendSelectors& selectors,
         const std::array<float, 4>& blendFactor,
+        int colorWriteMask,
         std::string& error);
 
     /** Number of generic SkSL compilation attempts in this process (zero or one). */

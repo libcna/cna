@@ -24,7 +24,7 @@
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
 - The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
-  137: 19 raster-only, 113 display-required tests, and five display-free source audits.
+  138: 19 raster-only, 114 display-required tests, and five display-free source audits.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
@@ -589,8 +589,8 @@
 
 ## Current task
 
-SKIA-115–120 are complete. Continue with SKIA-121's BlendFactor/BlendEnabled/write-mask integration,
-followed by the remaining SKIA-122–124 batch, exhaustive-corpus, and promotion gates.
+SKIA-115–121 are complete. Continue with SKIA-122's SpriteBatch mode/effect integration, followed
+by SKIA-123's exhaustive corpus and SKIA-124's documentation/promotion gate.
 
 ## Completed in this session: SKIA-93
 
@@ -1207,9 +1207,35 @@ followed by the remaining SKIA-122–124 batch, exhaustive-corpus, and promotion
   write masks remain SKIA-121; batch/effect paths, exhaustive public pixels, and promotion remain
   SKIA-122–124. See `docs/skia-generated-blender.md`.
 
+## Completed in this session: SKIA-121
+
+- `SkiaGraphicsBackend::ApplyBlendState` preserves the five existing pixel-proven preset routes,
+  but routes every other valid factor/function tuple through `SkiaGeneratedBlender`. Raw invalid
+  ordinals, invalid target-0 masks, non-default target-1/2/3 masks, and non-default MultiSampleMask
+  values still reject before any active/configured state mutation.
+- Added a live normalized BlendFactor cache and backend override. A constant change constructs a
+  new fixed uniform block for the active generated selector tuple and atomically replaces both the
+  configured and live blender; preset paths retain their established implementation. Disabling
+  blend performs source replacement, including the current partial write mask, and applying a new
+  state while disabled rebuilds that replacement mask instead of retaining stale channels.
+- The generic SkSL now accepts a four-channel write mask and applies it after the complete blend
+  equation in premultiplied surface storage, preserving disabled destination bytes. The new public
+  `Skia_GeneratedBlendState_Policy` proves baked BlendFactor, live red→green→red updates in one
+  Immediate batch, all 16 masks after ReverseSubtract, masked replacement while disabled, and
+  restoration after re-enable. `Skia_BlendMapping_Policy` now reserves refusal for invalid raw
+  selectors and unsupported sample masks, and proves recovery.
+- The 15-test blend/alpha suite passes on Xvfb. Generated raster/public policy tests pass in Debug,
+  Release, and ASan+UBSan (`detect_leaks=0`, both halt-on-error); all 24 Audit+Raster tests pass.
+  Every numbered Skia CTest 5703–5840 passes in sequential Xvfb blocks, including the isolated
+  first-read, stress, and demo smoke cases: 138 total (19 Raster, 114 Display, five Audit). All
+  builds used only `--parallel 2`; `NEXT.md` was not read or changed.
+- Public batch-mode/effect equivalence and failure-state isolation remain SKIA-122; exhaustive
+  selector/public EasyGL comparison remains SKIA-123, so general compatibility is not promoted
+  until SKIA-124.
+
 ## Next candidates
 
-1. SKIA-121–124: complete arbitrary raster blend states before starting mip/format storage work.
+1. SKIA-122–124: complete arbitrary raster blend states before starting mip/format storage work.
 2. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
    effects in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the

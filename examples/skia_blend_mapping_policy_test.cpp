@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-51/SKIA-56: public BlendState rejection policy. A failed Begin must name the requested
-// unsupported state/sample mask and leave the SpriteBatch usable with a documented mapping.
+// SKIA-51/SKIA-56/SKIA-121: invalid raw BlendState selectors and unsupported sample masks reject
+// atomically, while all valid factor/function combinations route through a documented mapping.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -66,16 +66,15 @@ protected:
         if (finished_) return;
         finished_ = true;
 
-        BlendState destinationFactor;
-        destinationFactor.setColorSourceBlendProperty(Blend::DestinationColor);
-        destinationFactor.setAlphaSourceBlendProperty(Blend::DestinationColor);
-        Check(BeginRejects(destinationFactor, "DestinationColor"),
-              "unsupported direct-looking factor tuple names DestinationColor");
+        BlendState invalidFactor;
+        invalidFactor.setColorSourceBlendProperty(static_cast<Blend>(13));
+        Check(BeginRejects(invalidFactor, "color source factor ordinal 13"),
+              "invalid Blend ordinal names its exact selector field and value");
 
-        BlendState subtract = BlendState::Opaque;
-        subtract.setColorBlendFunctionProperty(BlendFunction::Subtract);
-        Check(BeginRejects(subtract, "Subtract"),
-              "unsupported blend equation names Subtract");
+        BlendState invalidFunction = BlendState::Opaque;
+        invalidFunction.setColorBlendFunctionProperty(static_cast<BlendFunction>(5));
+        Check(BeginRejects(invalidFunction, "color function ordinal 5"),
+              "invalid BlendFunction ordinal names its exact selector field and value");
 
         BlendState zeroCoverage = BlendState::Opaque;
         zeroCoverage.setMultiSampleMaskProperty(0);
@@ -90,7 +89,7 @@ protected:
         Color pixel(0, 0, 0, 0);
         const Rectangle sample(2, 2, 1, 1);
         device.GetBackBufferData(&sample, &pixel, 0, 1);
-        Check(pixel == Color::White, "SpriteBatch remains usable after rejected BlendState requests");
+        Check(pixel == Color::White, "SpriteBatch remains usable after rejected raw state requests");
         Exit();
     }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaGeneratedBlender.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaOwnership.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterState.hpp"
@@ -97,6 +98,7 @@ namespace CNA::Internal::Backends::Skia
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias, float slopeScaleDepthBias) override;
         void SetScissorRect(int x, int y, int width, int height) override;
@@ -179,6 +181,10 @@ namespace CNA::Internal::Backends::Skia
         sk_sp<SkBlender> configuredSpriteCustomBlender_;
         SkiaSourceAlphaConvention configuredSpriteSourceAlphaConvention_
             = SkiaSourceAlphaConvention::Premultiplied;
+        SkiaGeneratedBlendSelectors configuredGeneratedBlendSelectors_;
+        std::array<float, 4> blendFactor_ = {1.0f, 1.0f, 1.0f, 1.0f};
+        int configuredColorWriteMask_ = 15;
+        bool configuredUsesGeneratedBlender_ = false;
         bool blendEnabled_ = true;
         SkiaRasterState rasterState_;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;

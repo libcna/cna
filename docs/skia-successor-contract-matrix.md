@@ -50,8 +50,8 @@ stale, duplicated, malformed, or unrouted entries.
 | `BLEND-InverseDestinationColor` | Inverse destination-color multiplier. | bounded | SKIA-120 | Runtime blender must read the active target destination exactly once. |
 | `BLEND-DestinationAlpha` | Destination-alpha multiplier. | bounded | SKIA-120 | Raw premultiplied target alpha needs an explicit reference convention. |
 | `BLEND-InverseDestinationAlpha` | Inverse destination-alpha multiplier. | bounded | SKIA-120 | Raw premultiplied target alpha needs an explicit reference convention. |
-| `BLEND-BlendFactor` | GraphicsDevice blend constant multiplier. | refused | SKIA-121 | Uniform update, persistence and independent RGB/alpha use require public tests. |
-| `BLEND-InverseBlendFactor` | Inverse GraphicsDevice blend constant. | refused | SKIA-121 | Uniform update, persistence and independent RGB/alpha use require public tests. |
+| `BLEND-BlendFactor` | GraphicsDevice blend constant multiplier. | refused | SKIA-121 | Baked public constant and live red→green→red updates now pass; exhaustive promotion remains SKIA-123/124. |
+| `BLEND-InverseBlendFactor` | Inverse GraphicsDevice blend constant. | refused | SKIA-121 | Generic selector/oracle coverage passes; discriminating exhaustive public pixels remain SKIA-123. |
 | `BLEND-SourceAlphaSaturation` | min(source alpha, inverse destination alpha) RGB factor. | bounded | SKIA-120 | Alpha factor and opaque/translucent edge values need discriminating pixels. |
 | `BLENDFUNC-Add` | Add weighted source and destination. | bounded | SKIA-120 | Presets and one custom tuple pass; arbitrary factor pairs remain. |
 | `BLENDFUNC-Subtract` | Subtract destination term from source term. | refused | SKIA-120 | Runtime SkSL expression exists and needs public clamping/alpha evidence. |

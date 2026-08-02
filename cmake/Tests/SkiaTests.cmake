@@ -497,6 +497,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_blend_mapping_policy examples/skia_blend_mapping_policy_test.cpp)
     cna_register_skia_display_test(Skia_BlendMapping_Policy cna_test_skia_blend_mapping_policy)
 
+    cna_skia_test(cna_test_skia_generated_blend_state_policy
+                  examples/skia_generated_blend_state_policy_test.cpp)
+    cna_register_skia_display_test(Skia_GeneratedBlendState_Policy
+                                   cna_test_skia_generated_blend_state_policy)
+
     cna_skia_test(cna_test_skia_runtime_blender_policy examples/skia_runtime_blender_policy_test.cpp)
     cna_register_skia_display_test(Skia_RuntimeBlender_Policy cna_test_skia_runtime_blender_policy)
 
