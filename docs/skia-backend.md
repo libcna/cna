@@ -118,9 +118,10 @@ premultiplied (`AlphaBlend`) or straight-alpha (`NonPremultiplied`) Skia image m
 same bytes. Tint uses a cached SkSL color filter so XNA's per-component colour and alpha
 multiplication is preserved without applying tint alpha to premultiplied RGB a second time. A
 table maps only the four public tuples whose source convention is already defined: `Opaque` to
-`kSrc` with premultiplied bytes, `AlphaBlend` to `kSrcOver` with premultiplied bytes,
-`NonPremultiplied` to `kSrcOver` with straight bytes, and `Additive` to `kPlus` with straight
-bytes. A custom `BlendState` carries factors and equations but no source-byte alpha label, so the
+`kSrc` with premultiplied bytes and `AlphaBlend` to `kSrcOver` with premultiplied bytes.
+`NonPremultiplied` and `Additive` use bounded runtime blenders with straight-labelled input so
+their independent XNA alpha equations (`Sa*Sa + Da*(1-Sa)` and `Sa*Sa + Da`) are preserved as
+well as their RGB equations. A custom `BlendState` carries factors and equations but no source-byte alpha label, so the
 raster backend must not silently pick a superficially similar `SkBlendMode`. SKIA-54 additionally
 accepts one independently proven runtime-blender tuple: colour
 `DestinationColor`/`Zero`, alpha `One`/`Zero`, both `Add`; it uses premultiplied source bytes and
@@ -614,5 +615,15 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     the Skia execution-mode claim. The focused test passes in Debug, Release and ASan
     (`detect_leaks=0`); the complete Debug suite passes 123/123 in 15.88 seconds (16 Raster,
     104 Display, three Audit).
+81. `Skia_XNA_2D_Oracle` closes SKIA-108 by rendering all nine SpriteBatch-only declarative scenes
+    against checked-in PNGs produced by real XNA 4.0. Seven results are byte-exact. The flipped
+    and rotated linear-filter scenes allow only RGB delta one, exact alpha, at most 1,591 raw
+    differing pixels, and their measured transformed sprite footprints; there is no blanket
+    antialias tolerance. The first comparison exposed exact RGB but incorrect opaque output alpha
+    in the three sort scenes. `NonPremultiplied` and `Additive` now use bounded runtime blenders
+    for XNA's independent alpha equations, with a separate public-API alpha regression in
+    `Skia_ColorWrite_Policy`. The full Debug suite passes 124/124 in 17.51 seconds (16 Raster,
+    105 Display, three Audit); focused Release and ASan checks pass. See
+    `docs/skia-xna-oracle.md`.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

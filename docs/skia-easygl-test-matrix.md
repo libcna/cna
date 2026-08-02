@@ -367,15 +367,15 @@ emulator is tracked by SKIA-80–105.
 
 | Entry | Kind | Category | Skia route or evidence |
 |---|---|---|---|
-| `oracle:sprite_basic_quad.scene` | `oracle` | `2d-direct` | Direct SpriteBatch image oracle candidate. |
-| `oracle:sprite_flipped_quad.scene` | `oracle` | `2d-direct` | Direct SpriteEffects oracle candidate. |
-| `oracle:sprite_mirror_quad.scene` | `oracle` | `2d-direct` | Direct mirror-address oracle candidate. |
-| `oracle:sprite_multitexture_quad.scene` | `oracle` | `2d-direct` | Direct multiple-texture SpriteBatch sequence. |
-| `oracle:sprite_rotated_quad.scene` | `oracle` | `2d-direct` | Direct rotation/origin oracle candidate. |
-| `oracle:sprite_sortmode_backtofront_quad.scene` | `oracle` | `2d-direct` | Direct sort-order oracle candidate. |
-| `oracle:sprite_sortmode_deferred_quad.scene` | `oracle` | `2d-direct` | Direct deferred-order oracle candidate. |
-| `oracle:sprite_sortmode_fronttoback_quad.scene` | `oracle` | `2d-direct` | Direct sort-order oracle candidate. |
-| `oracle:sprite_wrap_quad.scene` | `oracle` | `2d-direct` | Direct wrap-address oracle candidate. |
+| `oracle:sprite_basic_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; exact RGBA. |
+| `oracle:sprite_flipped_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; bounded linear-interpolation RGB rounding. |
+| `oracle:sprite_mirror_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; exact RGBA mirror addressing. |
+| `oracle:sprite_multitexture_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; exact RGBA texture-switch sequence. |
+| `oracle:sprite_rotated_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; bounded linear-interpolation RGB rounding. |
+| `oracle:sprite_sortmode_backtofront_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; exact draw order, RGB, and alpha. |
+| `oracle:sprite_sortmode_deferred_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; exact draw order, RGB, and alpha. |
+| `oracle:sprite_sortmode_fronttoback_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; exact draw order, RGB, and alpha. |
+| `oracle:sprite_wrap_quad.scene` | `oracle` | `2d-direct` | SKIA-108 real-XNA image gate; exact RGBA wrap addressing. |
 | `oracle:alphatest_always_quad.scene` | `oracle` | `3d` | AlphaTestEffect geometry scene. |
 | `oracle:alphatest_equal_quad.scene` | `oracle` | `3d` | AlphaTestEffect geometry scene. |
 | `oracle:alphatest_greaterequal_quad.scene` | `oracle` | `3d` | AlphaTestEffect geometry scene. |

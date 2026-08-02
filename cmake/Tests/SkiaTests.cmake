@@ -108,6 +108,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_RasterMode_Coherence
                                    cna_test_skia_raster_mode_coherence)
 
+    # SKIA-108: build the shared declarative XNA-oracle renderer against Skia. The registered
+    # comparison gate below runs only scene files whose own spritebatchmode=true bypasses every
+    # stock-effect/3D path; the renderer remains shared with D3D9 and EasyGL.
+    cna_skia_test(cna_oracle_render_skia tools/xna-oracle/CnaOracleRender.cpp)
+    cna_register_backend_test(
+        NAME Skia_XNA_2D_Oracle
+        COMMAND "${CMAKE_SOURCE_DIR}/scripts/run-skia-2d-oracle-diff.sh"
+                $<TARGET_FILE:cna_oracle_render_skia>
+        TIMEOUT 60
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "Skia;Display")
+
     cna_skia_test(cna_test_skia_present_interval examples/skia_present_interval_test.cpp)
     target_include_directories(cna_test_skia_present_interval PRIVATE "${CNA_SKIA_ROOT}")
     cna_register_skia_display_test(Skia_PresentInterval cna_test_skia_present_interval)

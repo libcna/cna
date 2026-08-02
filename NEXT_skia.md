@@ -23,7 +23,7 @@
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
-- `docs/skia-backend.md` records 123 Skia CTests: 16 raster-only, 104 display-required, and three
+- `docs/skia-backend.md` records 124 Skia CTests: 16 raster-only, 105 display-required, and three
   display-free source audits. Validation uses the persistent in-repository `cmake-build-skia`
   directory, per `CLAUDE.md`.
 
@@ -925,11 +925,39 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   three Audit). Debug, Release and ASan display caches are restored to `:0`; `NEXT.md` was not read
   or changed.
 
+## Completed in this session: SKIA-108
+
+- Added `Skia_XNA_2D_Oracle`, using the shared declarative renderer and checked-in PNGs produced by
+  real XNA 4.0. Its runner discovers all scenes with `spritebatchmode=true` and requires exact
+  agreement with the nine-row `tools/xna-oracle/skia-2d-policy.tsv`; policy omissions, stale rows,
+  duplicate rows, missing references, render failures, and image-policy failures are fatal. The
+  other 30 scenes require the intentionally unsupported stock-effect/3D path.
+- Seven scenes match all 65,536 RGBA pixels exactly. `sprite_flipped_quad` and
+  `sprite_rotated_quad` each have 1,591 raw differing pixels with maximum RGB delta one and exact
+  alpha. Their policy permits at most that count only inside the measured 80x80 transformed sprite
+  footprint. There is no general antialias tolerance. Negative probes confirmed the comparator
+  rejects a count of 1,590, a wrong footprint, and an alpha-only semantic change.
+- The first oracle run found a product defect in all three sort scenes: RGB was byte-exact, but
+  `NonPremultiplied` produced alpha 255 instead of XNA's 159 on all 6,400 sprite pixels. Skia
+  SourceOver cannot express XNA's independent alpha equation. `NonPremultiplied` and `Additive`
+  now use bounded runtime blenders that compute the XNA colour and alpha branches independently,
+  then premultiply the completed logical result for SkSurface storage.
+- `Skia_ColorWrite_Policy` now directly checks both independent preset alpha equations. The full
+  suite exposed one stale `Skia_SpriteBatch_TintAlpha` expectation: its semitransparent straight
+  source correctly produces alpha 207, not the old SourceOver alpha 255. The corrected public
+  oracle passes.
+- `docs/skia-xna-oracle.md` records scope, reference provenance, every row's tolerance rationale,
+  and the defect. The XNA-oracle README and EasyGL/Skia test matrix now link the live gate.
+- Debug builds completely and the Skia suite passes 124/124 under Xvfb in 17.51 seconds with
+  `--parallel 8` (16 Raster, 105 Display, three Audit). The oracle, blend mapping, colour-write,
+  and corrected tint tests pass in Release and ASan (`detect_leaks=0`). Debug, Release, ASan, and
+  EasyGL display caches are restored to `:0`; `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-108: define the 2D XNA-oracle corpus and explicit antialiasing tolerance policy now that
-   the SKIA-107 diagnostic/state boundary is closed.
-2. SKIA-109: register and compare backend-independent public API contract fixtures under Skia.
+1. SKIA-109: register and compare backend-independent public API contract fixtures under Skia.
+2. SKIA-110: run the broader raster/display sanitizer and repeated recreation gate, retaining the
+   documented display-stack leak boundary rather than masking new CNA ownership failures.
 3. Reassess earlier open architecture rows (especially SKIA-5/6/76/77) against the accepted
    raster-only ADR before doing the final release-gate tasks.
 
