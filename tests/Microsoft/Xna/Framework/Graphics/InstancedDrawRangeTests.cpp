@@ -33,10 +33,8 @@
 // The two axes are independent, so a draw cannot satisfy one by accident while breaking the other.
 //
 // Backend scope. The permanent suite runs on the backends whose stock (non-custom-effect) instanced
-// path consumes the per-instance stream and an exact index range: Bgfx, Vulkan, WebGPU, D3D9 and,
-// after REMED-GFX-122, EasyGL. D3D11 and D3D12 issue
-// DrawIndexedInstanced(..., 0, 0, 0) and carry the same offset gap; they are recorded in
-// remediation and deliberately out of this file's compiled scope.
+// path consumes the per-instance stream and an exact index range: Bgfx, Vulkan, WebGPU, D3D9,
+// EasyGL (REMED-GFX-122) and, after REMED-GFX-123, D3D11 and D3D12.
 
 #include <algorithm>
 #include <array>
@@ -110,6 +108,15 @@ using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 using Microsoft::Xna::Framework::Graphics::Viewport;
+
+// REMED-GFX-123: the binding-offset/InstanceFrequency oracle is asserted only on the backends whose
+// instanced path has actually been corrected to consume VertexBufferBinding.VertexOffset and
+// InstanceFrequency -- EasyGL (REMED-GFX-122) and D3D11/D3D12 (REMED-GFX-123). The other suite
+// backends run the index-range contract above; whether they honour the binding offsets is a
+// separate question that belongs to its own finding, not to this file's compiled expectations.
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
+#define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
+#endif
 
 namespace
 {
@@ -695,6 +702,121 @@ namespace
             return PerInstanceTransformIsApplied() ? requested : 1;
         }
 
+#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
+        /// REMED-GFX-122's binding oracle, shared verbatim with REMED-GFX-123's D3D11/D3D12 route.
+        /// The mesh and instance buffers both begin with asymmetric decoys. `VertexOffset=3` and
+        /// instance `VertexOffset=1` are ELEMENT offsets while every native binding underneath is
+        /// expressed in bytes (GL pointers, `IASetVertexBuffers` offsets, a D3D12
+        /// `D3D12_VERTEX_BUFFER_VIEW.BufferLocation`); `InstanceFrequency=2` advances the matrix
+        /// once per two draw instances. Each defect therefore lights a different cell rather than
+        /// accidentally reproducing the expected pixels:
+        ///
+        ///   * an ignored per-vertex offset      -> the mesh prefix decoy in slot 6, band 0
+        ///   * an ignored instance offset        -> band 3 (the instance prefix decoy), not 0/1
+        ///   * a byte/element mix-up either side -> geometry far outside slot 3, or nothing at all
+        ///   * an ignored/stale step rate of 1   -> bands 0-3 one instance each instead of 0-1
+        ///   * a stale layout/PSO after the A->B->A leg -> the final pass disagrees with the first
+        void RunBindingOffsetAndFrequencyOracle()
+        {
+            RequireInstancedRendering();
+
+            const GridLayout layout = BackbufferLayout();
+            const InstancedFixture fixture = BuildFixture(layout);
+            constexpr int kElementCount = kSlotCount * kVerticesPerSlot;
+
+            std::vector<VertexPositionColor> prefixedMesh;
+            prefixedMesh.reserve(static_cast<std::size_t>(kElementCount + kVerticesPerSlot));
+            prefixedMesh.insert(
+                prefixedMesh.end(), fixture.mesh.end() - kVerticesPerSlot, fixture.mesh.end());
+            prefixedMesh.insert(prefixedMesh.end(), fixture.mesh.begin(), fixture.mesh.end());
+
+            std::vector<InstanceMatrix> prefixedInstances;
+            prefixedInstances.reserve(static_cast<std::size_t>(kRowCount + 1));
+            prefixedInstances.push_back(RowTranslation(3));
+            prefixedInstances.insert(
+                prefixedInstances.end(), fixture.instances.begin(), fixture.instances.end());
+
+            VertexBuffer meshBuffer(
+                device, PositionColorDeclaration(),
+                static_cast<int>(prefixedMesh.size()), BufferUsage::None);
+            meshBuffer.SetData(prefixedMesh.data(), static_cast<int>(prefixedMesh.size()));
+
+            IndexBuffer indexBuffer(
+                device, IndexElementSize::SixteenBits, kElementCount, BufferUsage::None);
+            indexBuffer.SetData(fixture.indices.data(), kElementCount);
+
+            DynamicVertexBuffer instanceBuffer(
+                device, InstanceMatrixDeclaration(),
+                static_cast<int>(prefixedInstances.size()), BufferUsage::None);
+            instanceBuffer.SetDataRaw(
+                prefixedInstances.data(), static_cast<int>(prefixedInstances.size()),
+                static_cast<int>(sizeof(InstanceMatrix)));
+
+            BasicEffect effect(device);
+            device.SetIndexBuffer(&indexBuffer);
+
+            auto renderOffsetCase = [&]() {
+                ApplyInstancedEffect(effect);
+                device.Clear(Color::Black);
+                device.SetVertexBuffers({
+                    VertexBufferBinding(&meshBuffer, kVerticesPerSlot, 0),
+                    VertexBufferBinding(&instanceBuffer, 1, 2),
+                });
+                // Four draw instances consume two matrix records because the divisor is two. The
+                // selected geometry is fixture slot 3: startIndex=9 after the three-vertex mesh
+                // prefix.
+                device.DrawInstancedPrimitives(
+                    PrimitiveType::TriangleList, 0, 0, kElementCount, 9, 1, 4);
+                return CaptureBackbuffer(device, layout.width, layout.height);
+            };
+
+            const FrameSnapshot first = renderOffsetCase();
+            for (const int row : {0, 1})
+                EXPECT_GT(CountLitInCell(first, layout, 3, row, Color::Black), 0)
+                    << "offset/frequency draw omitted slot 3 band " << row
+                    << DescribeLitCellMap(first, layout, Color::Black);
+            for (const int row : {2, 3})
+                EXPECT_EQ(0, CountLitInCell(first, layout, 3, row, Color::Black))
+                    << "instance divisor or instance offset selected an extra matrix record"
+                    << DescribeLitCellMap(first, layout, Color::Black);
+            ExpectColumnsExclusive(
+                first, layout, ExpectedRange{3, 1}, Color::Black, "binding-offset draw");
+
+            // Switch to the ordinary indexed path. Binding one buffer must discard the old instance
+            // binding, disable its attributes/divisors and leave the non-instanced stock shader gate
+            // off.
+            ApplyInstancedEffect(effect);
+            device.Clear(Color::Black);
+            device.SetVertexBuffer(&meshBuffer);
+            device.DrawIndexedPrimitives(
+                PrimitiveType::TriangleList, 0, 0,
+                static_cast<int>(prefixedMesh.size()), 0, 1);
+            const FrameSnapshot ordinary = CaptureBackbuffer(device, layout.width, layout.height);
+            EXPECT_GT(CountLitInCell(ordinary, layout, 6, 0, Color::Black), 0)
+                << "ordinary indexed draw lost the prefix decoy after an instanced draw"
+                << DescribeLitCellMap(ordinary, layout, Color::Black);
+            EXPECT_EQ(
+                0, ordinary.CountLitInRows(
+                       static_cast<int>(layout.RowBoundaryY(1) + 0.999f), layout.height,
+                       Color::Black))
+                << "ordinary indexed draw reused stale per-instance state";
+
+            // Return to the same two-stream layout and offsets. This catches a layout/PSO cache or
+            // state repair that only works on first use or retains the intervening ordinary layout.
+            const FrameSnapshot returned = renderOffsetCase();
+            for (const int row : {0, 1})
+                EXPECT_GT(CountLitInCell(returned, layout, 3, row, Color::Black), 0)
+                    << "return to the previous layout lost slot 3 band " << row
+                    << DescribeLitCellMap(returned, layout, Color::Black);
+            for (const int row : {2, 3})
+                EXPECT_EQ(0, CountLitInCell(returned, layout, 3, row, Color::Black))
+                    << "return to the previous layout reused stale instance data"
+                    << DescribeLitCellMap(returned, layout, Color::Black);
+            ExpectColumnsExclusive(
+                returned, layout, ExpectedRange{3, 1}, Color::Black, "returned binding-offset draw");
+        }
+#endif
+
     private:
         /// Draws one slot's triangle twice and asks whether the second instance landed in the band
         /// its translation asked for, and nowhere else.
@@ -745,7 +867,8 @@ namespace
 
 #if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_EASYGL)
+    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || \
+    defined(CNA_BACKEND_D3D12)
 
 // Zero-offset control. Identical state, buffers and instance stream to every case below, with
 // startIndex = baseVertex = 0 and the geometry range covering the complete first three slots. It
@@ -1006,7 +1129,10 @@ TEST_F(InstancedDrawRangeTest, InstanceCountIsIndependentOfTheGeometryRange)
         fixture.instances.data(), kRowCount, static_cast<int>(sizeof(InstanceMatrix)));
 
     BasicEffect effect(device);
-    for (const int instanceCount : {1, 2, kRowCount})
+    // REMED-GFX-123: every instance count the four-band fixture can express, 1..4 -- 3 is the one
+    // that tells an off-by-one in a step-rate or instance-offset conversion apart from a clean
+    // power-of-two coincidence.
+    for (const int instanceCount : {1, 2, 3, kRowCount})
     {
         const std::string label =
             "instanceCount=" + std::to_string(instanceCount);
@@ -2089,105 +2215,22 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedRangesAllocateNoPerDrawNativeResourc
 #endif
 
 #ifdef CNA_BACKEND_EASYGL
-// REMED-GFX-122's EasyGL-specific binding oracle. The mesh and instance buffers both begin with
-// asymmetric decoys. VertexOffset=3 and instance VertexOffset=1 are ELEMENT offsets, while the
-// underlying GL pointers are bytes; InstanceFrequency=2 advances the matrix once per two draw
-// instances. A byte/element mix-up, an ignored offset or a stale divisor therefore lights a
-// different slot/band instead of accidentally reproducing the expected pixels.
+// REMED-GFX-122's EasyGL binding-offset pin, unchanged in name and in what it asserts; its body is
+// now the fixture's shared oracle so REMED-GFX-123's D3D route asserts exactly the same contract.
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 {
-    RequireInstancedRendering();
+    RunBindingOffsetAndFrequencyOracle();
+}
+#endif
 
-    const GridLayout layout = BackbufferLayout();
-    const InstancedFixture fixture = BuildFixture(layout);
-    constexpr int kElementCount = kSlotCount * kVerticesPerSlot;
-
-    std::vector<VertexPositionColor> prefixedMesh;
-    prefixedMesh.reserve(static_cast<std::size_t>(kElementCount + kVerticesPerSlot));
-    prefixedMesh.insert(
-        prefixedMesh.end(), fixture.mesh.end() - kVerticesPerSlot, fixture.mesh.end());
-    prefixedMesh.insert(prefixedMesh.end(), fixture.mesh.begin(), fixture.mesh.end());
-
-    std::vector<InstanceMatrix> prefixedInstances;
-    prefixedInstances.reserve(static_cast<std::size_t>(kRowCount + 1));
-    prefixedInstances.push_back(RowTranslation(3));
-    prefixedInstances.insert(
-        prefixedInstances.end(), fixture.instances.begin(), fixture.instances.end());
-
-    VertexBuffer meshBuffer(
-        device, PositionColorDeclaration(),
-        static_cast<int>(prefixedMesh.size()), BufferUsage::None);
-    meshBuffer.SetData(prefixedMesh.data(), static_cast<int>(prefixedMesh.size()));
-
-    IndexBuffer indexBuffer(
-        device, IndexElementSize::SixteenBits, kElementCount, BufferUsage::None);
-    indexBuffer.SetData(fixture.indices.data(), kElementCount);
-
-    DynamicVertexBuffer instanceBuffer(
-        device, InstanceMatrixDeclaration(),
-        static_cast<int>(prefixedInstances.size()), BufferUsage::None);
-    instanceBuffer.SetDataRaw(
-        prefixedInstances.data(), static_cast<int>(prefixedInstances.size()),
-        static_cast<int>(sizeof(InstanceMatrix)));
-
-    BasicEffect effect(device);
-    device.SetIndexBuffer(&indexBuffer);
-
-    auto renderOffsetCase = [&]() {
-        ApplyInstancedEffect(effect);
-        device.Clear(Color::Black);
-        device.SetVertexBuffers({
-            VertexBufferBinding(&meshBuffer, kVerticesPerSlot, 0),
-            VertexBufferBinding(&instanceBuffer, 1, 2),
-        });
-        // Four draw instances consume two matrix records because the divisor is two. The selected
-        // geometry is fixture slot 3: startIndex=9 after the three-vertex mesh prefix.
-        device.DrawInstancedPrimitives(
-            PrimitiveType::TriangleList, 0, 0, kElementCount, 9, 1, 4);
-        return CaptureBackbuffer(device, layout.width, layout.height);
-    };
-
-    const FrameSnapshot first = renderOffsetCase();
-    for (const int row : {0, 1})
-        EXPECT_GT(CountLitInCell(first, layout, 3, row, Color::Black), 0)
-            << "offset/frequency draw omitted slot 3 band " << row
-            << DescribeLitCellMap(first, layout, Color::Black);
-    for (const int row : {2, 3})
-        EXPECT_EQ(0, CountLitInCell(first, layout, 3, row, Color::Black))
-            << "instance divisor or instance offset selected an extra matrix record"
-            << DescribeLitCellMap(first, layout, Color::Black);
-    ExpectColumnsExclusive(
-        first, layout, ExpectedRange{3, 1}, Color::Black, "binding-offset draw");
-
-    // Switch to the ordinary indexed path. Binding one buffer must discard the old instance
-    // binding, disable its attributes/divisors and leave the non-instanced stock shader gate off.
-    ApplyInstancedEffect(effect);
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&meshBuffer);
-    device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleList, 0, 0,
-        static_cast<int>(prefixedMesh.size()), 0, 1);
-    const FrameSnapshot ordinary = CaptureBackbuffer(device, layout.width, layout.height);
-    EXPECT_GT(CountLitInCell(ordinary, layout, 6, 0, Color::Black), 0)
-        << "ordinary indexed draw lost the prefix decoy after an instanced draw"
-        << DescribeLitCellMap(ordinary, layout, Color::Black);
-    EXPECT_EQ(
-        0, ordinary.CountLitInRows(
-               static_cast<int>(layout.RowBoundaryY(1) + 0.999f), layout.height, Color::Black))
-        << "ordinary indexed draw reused stale per-instance state";
-
-    // Return to the same two-stream layout and offsets. This catches a VAO cache/state repair that
-    // only works on first use or retains the intervening ordinary layout.
-    const FrameSnapshot returned = renderOffsetCase();
-    for (const int row : {0, 1})
-        EXPECT_GT(CountLitInCell(returned, layout, 3, row, Color::Black), 0)
-            << "return to the previous layout lost slot 3 band " << row
-            << DescribeLitCellMap(returned, layout, Color::Black);
-    for (const int row : {2, 3})
-        EXPECT_EQ(0, CountLitInCell(returned, layout, 3, row, Color::Black))
-            << "return to the previous layout reused stale instance data"
-            << DescribeLitCellMap(returned, layout, Color::Black);
-    ExpectColumnsExclusive(
-        returned, layout, ExpectedRange{3, 1}, Color::Black, "returned binding-offset draw");
+#if defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
+// REMED-GFX-123's D3D binding oracle: the same contract REMED-GFX-122 pinned on EasyGL, asserted on
+// the two backends whose instanced path hardcoded every offset. D3D11 converts the element offsets
+// with each stream's own stride for IASetVertexBuffers; D3D12 folds them into each
+// D3D12_VERTEX_BUFFER_VIEW; both key their instanced input layout / PSO on InstanceDataStepRate, so
+// the A->B->A leg fails on a cache that still holds the previous frequency.
+TEST_F(InstancedDrawRangeTest, D3DHonorsBindingOffsetsAndInstanceFrequency)
+{
+    RunBindingOffsetAndFrequencyOracle();
 }
 #endif

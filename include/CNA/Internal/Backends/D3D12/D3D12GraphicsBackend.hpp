@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <unordered_map>
 
 namespace CNA::Internal::Backends::D3D12
 {
@@ -524,9 +525,10 @@ namespace CNA::Internal::Backends::D3D12
         /// float4 rows, per-instance, slot 1) -- mirrors D3D11GraphicsBackend's own
         /// GetOrCreateInstancedInputLayoutEXT() element list exactly, and D3D12SpriteBatchBackend's
         /// own precedent for hand-building a PSO when the stride-keyed cache's assumptions don't fit
-        /// (this file's own instancedPso_ uses the (1,0,0) root-signature shape -- PerDraw@b0 only,
+        /// (this file's own instancedPsos_ use the (1,0,0) root-signature shape -- PerDraw@b0 only,
         /// no texture -- matching instanced3d.frag.hlsl's own real (textureless) declaration).
-        ID3D12PipelineState* GetOrCreateInstancedPsoEXT(ID3D12RootSignature* rootSig);
+        ID3D12PipelineState* GetOrCreateInstancedPsoEXT(ID3D12RootSignature* rootSig,
+                                                       UINT instanceStepRate);
 
         /// DX-111 (continued): resolves the real SRV GPU descriptor handle to bind for a
         /// GpuDrawParams texture slot -- mirrors D3D11GraphicsBackend's own GetSrvForTextureEXT,
@@ -703,8 +705,12 @@ namespace CNA::Internal::Backends::D3D12
         std::unique_ptr<ITextureBackend> defaultWhiteTexture_;
         std::unique_ptr<ITextureBackend> defaultFlatNormalTexture_;
         // DX-111 (finish): instanced3d's own hand-built PSO (see GetOrCreateInstancedPsoEXT's doc
-        // comment) -- created once, reused every DrawInstancedPrimitivesEx call.
-        ComPtr<ID3D12PipelineState> instancedPso_;
+        // comment) -- reused across DrawInstancedPrimitivesEx calls.
+        // REMED-GFX-123: keyed by InstanceDataStepRate. The rate is baked into the PSO's input
+        // layout, so a single cached PSO would silently reuse the previous draw's
+        // VertexBufferBinding.InstanceFrequency. One entry per distinct rate (one or two in
+        // practice), so alternating frequencies never build a PSO per draw.
+        std::unordered_map<UINT, ComPtr<ID3D12PipelineState>> instancedPsos_;
 
         // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
         // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.

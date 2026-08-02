@@ -1234,28 +1234,37 @@ namespace CNA::Internal::Backends::D3D11
         return defaultFlatNormalSrv_.Get();
     }
 
-    ID3D11InputLayout* D3D11GraphicsBackend::GetOrCreateInstancedInputLayoutEXT()
+    ID3D11InputLayout* D3D11GraphicsBackend::GetOrCreateInstancedInputLayoutEXT(UINT instanceStepRate)
     {
-        if (!instancedInputLayout_)
-        {
-            static const D3D11_INPUT_ELEMENT_DESC kElements[] = {
-                { "POSITION",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA,   0 },
-                { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-                { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-                { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-                { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
-            };
+        auto cached = instancedInputLayouts_.find(instanceStepRate);
+        if (cached != instancedInputLayouts_.end())
+            return cached->second.Get();
 
-            const uint8_t* vsBytes = nullptr;
-            std::size_t vsSize = 0;
-            D3DCommon::GetVertexShaderBytecode(D3DCommon::D3DShaderVariant::Instanced3d, vsBytes, vsSize);
-            if (vsBytes == nullptr || vsSize == 0)
-                return nullptr;
+        // REMED-GFX-123: InstanceDataStepRate carries the public
+        // VertexBufferBinding.InstanceFrequency -- "advance to the next per-instance record once
+        // every N drawn instances" -- instead of the hardcoded 1 this layout used to bake in.
+        const D3D11_INPUT_ELEMENT_DESC elements[] = {
+            { "POSITION",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA,   0 },
+            { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
+            { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
+            { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
+            { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, instanceStepRate },
+        };
 
-            device_->CreateInputLayout(kElements, ARRAYSIZE(kElements), vsBytes, vsSize,
-                                       instancedInputLayout_.ReleaseAndGetAddressOf());
-        }
-        return instancedInputLayout_.Get();
+        const uint8_t* vsBytes = nullptr;
+        std::size_t vsSize = 0;
+        D3DCommon::GetVertexShaderBytecode(D3DCommon::D3DShaderVariant::Instanced3d, vsBytes, vsSize);
+        if (vsBytes == nullptr || vsSize == 0)
+            return nullptr;
+
+        ComPtr<ID3D11InputLayout> layout;
+        const HRESULT hr = device_->CreateInputLayout(
+            elements, ARRAYSIZE(elements), vsBytes, vsSize, layout.ReleaseAndGetAddressOf());
+        if (FAILED(hr) || !layout)
+            return nullptr;
+
+        auto inserted = instancedInputLayouts_.emplace(instanceStepRate, std::move(layout));
+        return inserted.first->second.Get();
     }
 
     void D3D11GraphicsBackend::DrawPrimitivesExImpl(
@@ -1895,7 +1904,12 @@ namespace CNA::Internal::Backends::D3D11
         const auto& d3dIb     = static_cast<const D3D11IndexBufferBackend&>(ib);
         const auto& d3dInstVb = static_cast<const D3D11VertexBufferBackend&>(*params.instanceVb);
         const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
-        constexpr std::size_t kInstanceStride = 64; // 4 x float4 rows (INSTANCEWORLD0-3)
+        // REMED-GFX-123: the per-instance stream's own declared stride, not a hardcoded 64. The
+        // instanced3d layout reads INSTANCEWORLD0-3 at 0/16/32/48, so a 64-byte record is what it
+        // needs, but the stride is also what turns the public element offset below into bytes --
+        // taking it from the bound buffer keeps those two uses of "one instance record" identical.
+        const std::size_t instanceStride =
+            d3dInstVb.GetStrideEXT() > 0 ? d3dInstVb.GetStrideEXT() : 64;
 
         constexpr auto variant = D3DCommon::D3DShaderVariant::Instanced3d;
         auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
@@ -1903,7 +1917,10 @@ namespace CNA::Internal::Backends::D3D11
         if (!vs || !ps)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d shader objects");
 
-        ID3D11InputLayout* layout = GetOrCreateInstancedInputLayoutEXT();
+        // REMED-GFX-123: instanceFrequency is zero only when no per-instance stream is bound, and
+        // the null-instanceVb fallback above already took that case.
+        const UINT instanceStepRate = static_cast<UINT>(std::max(1, params.instanceFrequency));
+        ID3D11InputLayout* layout = GetOrCreateInstancedInputLayoutEXT(instanceStepRate);
         if (!layout)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d input layout");
 
@@ -1921,9 +1938,17 @@ namespace CNA::Internal::Backends::D3D11
         ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
         UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
 
+        // REMED-GFX-123: IASetVertexBuffers takes BYTE offsets, while the public
+        // VertexBufferBinding.VertexOffset this carries is in vertex ELEMENTS -- convert with each
+        // stream's own stride, exactly once, and only here at the native binding. The per-vertex
+        // stream's offset is independent of BaseVertexLocation below: the IA adds the base vertex to
+        // the decoded index and then fetches at `offset + index * stride`, so both apply once.
         ID3D11Buffer* vbs[2] = { d3dVb.GetBufferEXT(), d3dInstVb.GetBufferEXT() };
-        UINT strides[2] = { static_cast<UINT>(perVertexStride), static_cast<UINT>(kInstanceStride) };
-        UINT offsets[2] = { 0, 0 };
+        UINT strides[2] = { static_cast<UINT>(perVertexStride), static_cast<UINT>(instanceStride) };
+        UINT offsets[2] = {
+            static_cast<UINT>(static_cast<std::size_t>(params.vertexBufferOffset) * perVertexStride),
+            static_cast<UINT>(static_cast<std::size_t>(params.instanceVertexOffset) * instanceStride),
+        };
         context_->IASetVertexBuffers(0, 2, vbs, strides, offsets);
         context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
         context_->IASetInputLayout(layout);
@@ -1935,7 +1960,15 @@ namespace CNA::Internal::Backends::D3D11
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
-        context_->DrawIndexedInstanced(indexCount, instCount, 0, 0, 0);
+        // REMED-GFX-123: honor the public startIndex/baseVertex on the instanced path too (both
+        // were hardcoded to zero). Exactly what REMED-GFX-020 did for this backend's ordinary
+        // indexed draw: StartIndexLocation is an index-ELEMENT offset, BaseVertexLocation is added
+        // to every decoded index once. StartInstanceLocation stays 0 -- the per-instance stream's
+        // own start is the byte offset applied at IASetVertexBuffers above, so adding it here too
+        // would apply the same public offset twice.
+        context_->DrawIndexedInstanced(indexCount, instCount,
+                                       static_cast<UINT>(params.startIndex),
+                                       static_cast<INT>(params.baseVertex), 0);
     }
 }
 

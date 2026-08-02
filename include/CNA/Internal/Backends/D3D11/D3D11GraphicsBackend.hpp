@@ -13,6 +13,7 @@
 #include <wrl/client.h>
 
 #include <cstddef>
+#include <unordered_map>
 
 namespace CNA::Internal::Backends::D3D11
 {
@@ -391,10 +392,14 @@ namespace CNA::Internal::Backends::D3D11
         ID3D11ShaderResourceView* GetOrCreateDefaultFlatNormalSrvEXT();
 
         // Phase DX8 (DX-68): instanced3d's fixed 5-element input layout (POSITION0 @ slot 0,
-        // per-vertex; INSTANCEWORLD0-3 @ slot 1, per-instance, stride 64) -- independent of the
-        // bound vertex buffer's own stride (the shader only reads Position, DX-13-hlsl's own row
-        // notes), so unlike D3D11InputLayoutCache this needs no stride key, just one cached layout.
-        ComPtr<ID3D11InputLayout> instancedInputLayout_;
-        ID3D11InputLayout* GetOrCreateInstancedInputLayoutEXT();
+        // per-vertex; INSTANCEWORLD0-3 @ slot 1, per-instance) -- independent of the bound vertex
+        // buffer's own stride (the shader only reads Position, DX-13-hlsl's own row notes), so
+        // unlike D3D11InputLayoutCache this needs no stride key.
+        // REMED-GFX-123: it does need an InstanceDataStepRate key. The rate is baked into the
+        // native layout object, so a single cached layout would silently reuse the previous draw's
+        // VertexBufferBinding.InstanceFrequency. The map holds one layout per distinct rate (one or
+        // two entries in practice) so alternating frequencies never create a layout per draw.
+        std::unordered_map<UINT, ComPtr<ID3D11InputLayout>> instancedInputLayouts_;
+        ID3D11InputLayout* GetOrCreateInstancedInputLayoutEXT(UINT instanceStepRate);
     };
 }

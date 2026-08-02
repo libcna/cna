@@ -48,6 +48,29 @@ namespace CNA::Internal::Backends::D3D12
             return 0;
         }
 
+        /// REMED-GFX-123: move a vertex-buffer view forward by @p elementOffset whole vertex
+        /// records. D3D12's view has no offset field of its own (unlike D3D11's
+        /// IASetVertexBuffers byte offset), so an element offset has to become a byte offset on
+        /// BufferLocation with the same byte count removed from SizeInBytes -- otherwise the view
+        /// would claim to extend past the end of the resource. The conversion runs in 64-bit and is
+        /// applied exactly once per stream; the public guard in
+        /// GraphicsDevice::DrawInstancedPrimitives has already rejected an offset that leaves the
+        /// buffer, so the clamp below is a defensive floor, not a silent truncation of a legal draw.
+        void AdvanceVertexBufferView(D3D12_VERTEX_BUFFER_VIEW& view, int elementOffset)
+        {
+            if (elementOffset <= 0 || view.StrideInBytes == 0) return;
+            const std::uint64_t byteOffset =
+                static_cast<std::uint64_t>(elementOffset) * view.StrideInBytes;
+            if (byteOffset >= view.SizeInBytes)
+            {
+                view.BufferLocation += view.SizeInBytes;
+                view.SizeInBytes = 0;
+                return;
+            }
+            view.BufferLocation += byteOffset;
+            view.SizeInBytes -= static_cast<UINT>(byteOffset);
+        }
+
         /// D3D12_PRIMITIVE_TOPOLOGY is D3D_PRIMITIVE_TOPOLOGY under the hood -- same underlying enum
         /// D3D11 uses for IASetPrimitiveTopology, just a different typedef name.
         D3D12_PRIMITIVE_TOPOLOGY ToD3D12Topology(PrimitiveType pt)
@@ -634,7 +657,9 @@ namespace CNA::Internal::Backends::D3D12
         pbrLightsConstantBufferMapped_ = nullptr;
         defaultWhiteTexture_.reset();
         defaultFlatNormalTexture_.reset();
-        instancedPso_.Reset();
+        // REMED-GFX-123: every cached step-rate PSO is device-tied, so the whole map goes, not just
+        // the one that happened to be built last.
+        instancedPsos_.clear();
         // The bound off-screen color target (if any) was owned by the caller and lived on the old
         // device -- it's gone too; the caller must recreate its render target and rebind after
         // calling RecreateDeviceEXT(), same as it must recreate any of its own DX-109 resources.
@@ -2336,10 +2361,12 @@ namespace CNA::Internal::Backends::D3D12
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 
-    ID3D12PipelineState* D3D12GraphicsBackend::GetOrCreateInstancedPsoEXT(ID3D12RootSignature* rootSig)
+    ID3D12PipelineState* D3D12GraphicsBackend::GetOrCreateInstancedPsoEXT(
+        ID3D12RootSignature* rootSig, UINT instanceStepRate)
     {
-        if (instancedPso_)
-            return instancedPso_.Get();
+        auto cached = instancedPsos_.find(instanceStepRate);
+        if (cached != instancedPsos_.end())
+            return cached->second.Get();
 
         const uint8_t* vsBytes = nullptr; std::size_t vsSize = 0;
         const uint8_t* psBytes = nullptr; std::size_t psSize = 0;
@@ -2350,12 +2377,14 @@ namespace CNA::Internal::Backends::D3D12
 
         // Mirrors D3D11GraphicsBackend::GetOrCreateInstancedInputLayoutEXT()'s own element list
         // exactly -- POSITION0 (per-vertex, slot 0) + INSTANCEWORLD0-3 (per-instance, slot 1).
-        static const D3D12_INPUT_ELEMENT_DESC kElements[] = {
+        // REMED-GFX-123: InstanceDataStepRate carries the public
+        // VertexBufferBinding.InstanceFrequency instead of a hardcoded 1, same as D3D11.
+        const D3D12_INPUT_ELEMENT_DESC kElements[] = {
             { "POSITION",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,   0 },
-            { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
-            { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1 },
+            { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
+            { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
+            { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
+            { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, instanceStepRate },
         };
 
         D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
@@ -2398,10 +2427,12 @@ namespace CNA::Internal::Backends::D3D12
         desc.RTVFormats[0] = boundColorFormat_;
         desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 
-        HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(instancedPso_.ReleaseAndGetAddressOf()));
+        ComPtr<ID3D12PipelineState> pso;
+        HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("D3D12GraphicsBackend: instanced3d CreateGraphicsPipelineState failed, hr=" + FormatHr(hr));
-        return instancedPso_.Get();
+        auto inserted = instancedPsos_.emplace(instanceStepRate, std::move(pso));
+        return inserted.first->second.Get();
     }
 
     void D3D12GraphicsBackend::DrawInstancedPrimitivesEx(
@@ -2429,7 +2460,10 @@ namespace CNA::Internal::Backends::D3D12
         auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/0, /*numSamplers=*/0);
         if (!rootSig)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create root signature");
-        ID3D12PipelineState* pso = GetOrCreateInstancedPsoEXT(rootSig.Get());
+        // REMED-GFX-123: instanceFrequency is zero only when no per-instance stream is bound, and
+        // the null-instanceVb fallback above already took that case.
+        const UINT instanceStepRate = static_cast<UINT>(std::max(1, params.instanceFrequency));
+        ID3D12PipelineState* pso = GetOrCreateInstancedPsoEXT(rootSig.Get(), instanceStepRate);
         if (!pso)
             throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d PSO");
 
@@ -2467,7 +2501,15 @@ namespace CNA::Internal::Backends::D3D12
         cmdList->SetPipelineState(pso);
         cmdList->IASetPrimitiveTopology(ToD3D12Topology(primitive));
 
+        // REMED-GFX-123: a D3D12 vertex-buffer view has no separate offset field, so the public
+        // VertexBufferBinding.VertexOffset -- an ELEMENT offset -- has to move BufferLocation and
+        // shrink SizeInBytes by the same byte count, converted with that stream's own stride
+        // exactly once. The per-vertex stream's offset stays independent of BaseVertexLocation
+        // below: the IA adds the base vertex to the decoded index and then fetches at
+        // `BufferLocation + index * stride`, so both apply once.
         D3D12_VERTEX_BUFFER_VIEW vbViews[2] = { d3dVb.GetViewEXT(), d3dInstVb.GetViewEXT() };
+        AdvanceVertexBufferView(vbViews[0], params.vertexBufferOffset);
+        AdvanceVertexBufferView(vbViews[1], params.instanceVertexOffset);
         cmdList->IASetVertexBuffers(0, 2, vbViews);
         D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
         cmdList->IASetIndexBuffer(&ibView);
@@ -2476,7 +2518,13 @@ namespace CNA::Internal::Backends::D3D12
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
-        cmdList->DrawIndexedInstanced(indexCount, instCount, 0, 0, 0);
+        // REMED-GFX-123: honor the public startIndex/baseVertex on the instanced path too (both
+        // were hardcoded to zero), exactly as this backend's ordinary indexed draw already does
+        // since REMED-GFX-020. StartInstanceLocation stays 0 -- the per-instance stream's own start
+        // is already in its view above, so adding it here would apply the same offset twice.
+        cmdList->DrawIndexedInstanced(indexCount, instCount,
+                                      static_cast<UINT>(params.startIndex),
+                                      static_cast<INT>(params.baseVertex), 0);
 
         if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
         HRESULT hr = cmdList->Close();
