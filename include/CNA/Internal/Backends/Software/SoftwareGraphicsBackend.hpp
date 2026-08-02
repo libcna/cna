@@ -285,6 +285,16 @@ namespace CNA::Internal::Backends::Software
          */
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+        /**
+         * @brief Returns how many readback requests reached this backend object.
+         *
+         * REMED-GFX-198 uses this diagnostic to distinguish shared argument rejection from a
+         * Software capability refusal. Invalid public mip levels must leave this count unchanged;
+         * a valid public read increments it exactly once.
+         *
+         * @return The number of calls to GetData on this backend object.
+         */
+        [[nodiscard]] std::size_t GetReadbackCallCountEXT() const { return readbackCallCount_; }
         void BindAsRenderTarget() override { bound_ = true; }
         void UnbindAsRenderTarget() override { bound_ = false; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
@@ -309,6 +319,7 @@ namespace CNA::Internal::Backends::Software
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
         bool bound_ = false;
+        mutable std::size_t readbackCallCount_ = 0;
     };
 
     /// SOFTWARE-82: real 6-face RGBA8 cube map storage, for EnvironmentMapEffect.

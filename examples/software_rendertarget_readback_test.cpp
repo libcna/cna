@@ -56,6 +56,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -628,9 +629,107 @@ protected:
             check(Throws<std::out_of_range>(
                       [&] { target.GetData(-1, &whole, buffer.data(), 0, static_cast<int>(total)); }),
                   "E8 negative mip level rejected");
-            check(Throws<System::NotSupportedException>(
-                      [&] { target.GetData(1, nullptr, buffer.data(), 0, static_cast<int>(total)); }),
-                  "E9 mip level above 0 rejected (Software stores level 0 only)");
+            // REMED-GFX-198: this public request is an invalid Texture2D argument, not a request
+            // for a valid level that Software happens not to implement. Before GFX-192, level 1
+            // reached SoftwareRenderTargetBackend::GetData and raised its level-0-only
+            // NotSupportedException after the shared layer had allocated scratch storage. The
+            // shared [0, LevelCount) validator now owns the request and must reject it before mip
+            // dimensions, scratch allocation, capability policy or Software dispatch.
+            {
+                using CNA::Internal::Backends::Software::SoftwareRenderTargetBackend;
+                constexpr int requestedLevel = 1;
+                constexpr int prefix = 3;
+                constexpr int requestedCount = 1;
+                constexpr int suffix = 5;
+                const int publicLevelCount = target.getLevelCountProperty();
+                auto* softwareBackend =
+                    dynamic_cast<SoftwareRenderTargetBackend*>(target.GetRenderTargetBackend());
+
+                check(publicLevelCount == 1 && requestedLevel == publicLevelCount,
+                      "E9a request level 1 is exactly LevelCount 1, outside [0, LevelCount)");
+                check(softwareBackend != nullptr,
+                      "E9b the production Software render-target backend is observable");
+
+                std::vector<Color> rejected(prefix + requestedCount + suffix, SentinelA5());
+                const std::vector<Color> rejectedBefore = rejected;
+                std::size_t callsBefore = 0;
+                const std::size_t trackedBefore = dev.GetTrackedResourceCount();
+                const std::uint8_t* colorAddressBefore = nullptr;
+                const float* depthAddressBefore = nullptr;
+                std::size_t colorSizeBefore = 0, colorCapacityBefore = 0;
+                std::size_t depthSizeBefore = 0, depthCapacityBefore = 0;
+                std::vector<std::uint8_t> colorBefore;
+                std::vector<float> depthBefore;
+                if (softwareBackend != nullptr)
+                {
+                    callsBefore = softwareBackend->GetReadbackCallCountEXT();
+                    const auto& framebuffer = softwareBackend->Framebuffer();
+                    colorAddressBefore = framebuffer.color.data();
+                    depthAddressBefore = framebuffer.depthBuffer.data();
+                    colorSizeBefore = framebuffer.color.size();
+                    colorCapacityBefore = framebuffer.color.capacity();
+                    depthSizeBefore = framebuffer.depthBuffer.size();
+                    depthCapacityBefore = framebuffer.depthBuffer.capacity();
+                    colorBefore = framebuffer.color;
+                    depthBefore = framebuffer.depthBuffer;
+                }
+
+                bool wasOutOfRange = false;
+                std::string what;
+                try
+                {
+                    target.GetData(requestedLevel, nullptr, rejected.data(), prefix,
+                                   requestedCount);
+                }
+                catch (const std::out_of_range& e)
+                {
+                    wasOutOfRange = true;
+                    what = e.what();
+                }
+                catch (const std::exception& e) { what = e.what(); }
+
+                check(wasOutOfRange,
+                      "E9c invalid public level is std::out_of_range, not Software's "
+                      "NotSupportedException");
+                check(what.find("level 1") != std::string::npos &&
+                          what.find("LevelCount 1") != std::string::npos,
+                      "E9d exception identifies requested level 1 and public LevelCount 1: " +
+                          what);
+                check(rejected == rejectedBefore,
+                      "E9e rejected read leaves destination prefix, requested range and suffix "
+                      "unchanged");
+
+                check(softwareBackend != nullptr &&
+                          softwareBackend->GetReadbackCallCountEXT() == callsBefore,
+                      "E9f invalid public level makes zero Software backend readback calls");
+
+                bool storageUnchanged = false;
+                if (softwareBackend != nullptr)
+                {
+                    const auto& framebuffer = softwareBackend->Framebuffer();
+                    storageUnchanged = framebuffer.color.data() == colorAddressBefore &&
+                        framebuffer.depthBuffer.data() == depthAddressBefore &&
+                        framebuffer.color.size() == colorSizeBefore &&
+                        framebuffer.color.capacity() == colorCapacityBefore &&
+                        framebuffer.depthBuffer.size() == depthSizeBefore &&
+                        framebuffer.depthBuffer.capacity() == depthCapacityBefore &&
+                        framebuffer.color == colorBefore && framebuffer.depthBuffer == depthBefore;
+                }
+                check(storageUnchanged && dev.GetTrackedResourceCount() == trackedBefore,
+                      "E9g rejection allocates no Software resource and leaves colour/depth "
+                      "storage byte-exact at the same address and capacity");
+
+                // The same object must remain a live render target and a readable texture after
+                // the refusal. This deliberately performs new rendering before the valid read.
+                ProduceTargetPattern(dev, target);
+                const std::size_t callsBeforeValid = softwareBackend != nullptr
+                    ? softwareBackend->GetReadbackCallCountEXT() : 0;
+                CheckFullReadback(target, SentinelCD(),
+                                  "E9h valid render/GetData after invalid level");
+                check(softwareBackend != nullptr &&
+                          softwareBackend->GetReadbackCallCountEXT() == callsBeforeValid + 1,
+                      "E9i the later valid GetData reaches Software production exactly once");
+            }
             // REMED-GFX-149 (REMED-GFX-128's expression). This check used to assert the DEFECT --
             // that the whole-level overload rejected every non-zero startIndex with
             // std::runtime_error("no CPU-side pixel data available") -- and so pinned the very

@@ -90,6 +90,10 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "common/PixelTestGame.hpp"
 
+#if defined(CNA_BACKEND_SOFTWARE)
+#include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
+#endif
+
 #include <algorithm>
 #include <climits>
 #include <cstdio>
@@ -453,6 +457,13 @@ class RenderTargetInvalidMipLevelTest : public Game
                              int elementCount, int startIndex, const std::string& label)
     {
         std::vector<Color> buf = SentinelBuffer(std::max(elementCount, 1) + startIndex);
+#if defined(CNA_BACKEND_SOFTWARE)
+        auto* softwareBackend =
+            dynamic_cast<CNA::Internal::Backends::Software::SoftwareRenderTargetBackend*>(
+                rt.GetRenderTargetBackend());
+        const std::size_t softwareCallsBefore = softwareBackend != nullptr
+            ? softwareBackend->GetReadbackCallCountEXT() : 0;
+#endif
         step(label + ": GetData(level=" + std::to_string(level) + ", startIndex=" +
              std::to_string(startIndex) + ", elementCount=" + std::to_string(elementCount) +
              ") must be REFUSED before any native call");
@@ -482,6 +493,20 @@ class RenderTargetInvalidMipLevelTest : public Game
 
         check(wasOutOfRange, label + ": the refusal is a std::out_of_range from the shared "
                                      "Texture2D mip-level validator");
+        check(what.find("level") != std::string::npos,
+              label + ": the exception identifies the level parameter");
+        if (level >= rt.getLevelCountProperty())
+        {
+            check(what.find(std::to_string(level)) != std::string::npos &&
+                      what.find(std::to_string(rt.getLevelCountProperty())) != std::string::npos,
+                  label + ": the exception identifies requested level " + std::to_string(level) +
+                      " and LevelCount " + std::to_string(rt.getLevelCountProperty()));
+        }
+#if defined(CNA_BACKEND_SOFTWARE)
+        check(softwareBackend != nullptr &&
+                  softwareBackend->GetReadbackCallCountEXT() == softwareCallsBefore,
+              label + ": zero Software backend readback calls");
+#endif
     }
 
     /**
@@ -751,6 +776,27 @@ class RenderTargetInvalidMipLevelTest : public Game
             check(sourceUntouched,
                   "A1 Texture2D: rejected SetData level " + std::to_string(level) +
                       " leaves its source unchanged");
+
+            std::vector<Color> rejectedDestination(9, kSentinel);
+            const std::vector<Color> destinationBefore = rejectedDestination;
+            bool getWasOutOfRange = false;
+            std::string getWhat;
+            try
+            {
+                texture.GetData(level, nullptr, rejectedDestination.data(), destinationStart, 1);
+            }
+            catch (const std::out_of_range& e)
+            {
+                getWasOutOfRange = true;
+                getWhat = e.what();
+            }
+            catch (const std::exception& e) { getWhat = e.what(); }
+            check(getWasOutOfRange && getWhat.find("level") != std::string::npos,
+                  "A1 Texture2D: GetData level " + std::to_string(level) +
+                      " is rejected as the level argument by the same shared path");
+            check(rejectedDestination == destinationBefore,
+                  "A1 Texture2D: rejected GetData level " + std::to_string(level) +
+                      " leaves destination prefix, range and suffix unchanged");
         }
 
         for (int level = 0; level < n; ++level)
@@ -845,6 +891,52 @@ class RenderTargetInvalidMipLevelTest : public Game
         const Rectangle sub(0, 0, 1, 1);
         ExpectLevelRejected(*rt, n, &sub, 1, 0, "A2 invalid level, startIndex 0");
         ExpectLevelRejected(*rt, n, &sub, 1, 17, "A2 invalid level, nonzero startIndex 17");
+
+        // Mip membership precedes rectangle and positive-capacity checks. This request combines a
+        // nonexistent level with an invalid rectangle and a region larger than the claimed
+        // destination capacity; it must still identify `level`, with no backend call.
+        const Rectangle outside(-1, 0, 2, 2);
+        ExpectLevelRejected(*rt, n, &outside, 1, kGuard,
+                            "A2 invalid level combined with invalid rectangle and capacity");
+
+        // The two validation stages that intentionally precede mip membership retain their own
+        // identity. A negative destination index wins over invalid level, as does elementCount 0.
+        {
+            std::vector<Color> guarded(9, kSentinel);
+            const std::vector<Color> before = guarded;
+#if defined(CNA_BACKEND_SOFTWARE)
+            auto* softwareBackend =
+                dynamic_cast<CNA::Internal::Backends::Software::SoftwareRenderTargetBackend*>(
+                    rt->GetRenderTargetBackend());
+            const std::size_t softwareCallsBefore = softwareBackend != nullptr
+                ? softwareBackend->GetReadbackCallCountEXT() : 0;
+#endif
+            bool startIndexWon = false;
+            std::string startWhat;
+            try { rt->GetData(n, &sub, guarded.data(), -1, 1); }
+            catch (const std::out_of_range& e)
+            {
+                startWhat = e.what();
+                startIndexWon = startWhat.find("startIndex") != std::string::npos;
+            }
+            catch (const std::exception& e) { startWhat = e.what(); }
+            check(startIndexWon,
+                  "A2 invalid level + negative startIndex: startIndex validation precedes level");
+
+            bool elementCountWon = false;
+            try { rt->GetData(n, &sub, guarded.data(), 0, 0); }
+            catch (const std::invalid_argument&) { elementCountWon = true; }
+            catch (const std::exception&) {}
+            check(elementCountWon,
+                  "A2 invalid level + elementCount 0: data/elementCount validation precedes level");
+            check(guarded == before,
+                  "A2 precedence rejections leave destination prefix, range and suffix unchanged");
+#if defined(CNA_BACKEND_SOFTWARE)
+            check(softwareBackend != nullptr &&
+                      softwareBackend->GetReadbackCallCountEXT() == softwareCallsBefore,
+                  "A2 precedence rejections make zero Software backend readback calls");
+#endif
+        }
 
         // An undersized destination is ALSO wrong. Whichever specific error wins, the answer must
         // still be an exception that writes nothing -- never a completed read.

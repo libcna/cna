@@ -2410,6 +2410,7 @@ namespace CNA::Internal::Backends::Software
     bool SoftwareRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
                                               void* data, int dataLength) const
     {
+        ++readbackCallCount_;
         if (data == nullptr)
             throw System::ArgumentNullException("data");
         if (level < 0)
