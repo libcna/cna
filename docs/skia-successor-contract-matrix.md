@@ -50,8 +50,8 @@ stale, duplicated, malformed, or unrouted entries.
 | `BLEND-InverseDestinationColor` | Inverse destination-color multiplier. | bounded | SKIA-120 | Public corpus reads inverse active destination components in all positions. |
 | `BLEND-DestinationAlpha` | Destination-alpha multiplier. | bounded | SKIA-120 | Public alpha-position pixels match the premultiplied target convention. |
 | `BLEND-InverseDestinationAlpha` | Inverse destination-alpha multiplier. | bounded | SKIA-120 | Public alpha-position pixels match the independent scalar oracle. |
-| `BLEND-BlendFactor` | GraphicsDevice blend constant multiplier. | refused | SKIA-121 | Baked public constant and live red→green→red updates now pass; exhaustive promotion remains SKIA-123/124. |
-| `BLEND-InverseBlendFactor` | Inverse GraphicsDevice blend constant. | refused | SKIA-121 | Generic selector/oracle coverage passes; discriminating exhaustive public pixels remain SKIA-123. |
+| `BLEND-BlendFactor` | GraphicsDevice blend constant multiplier. | refused | SKIA-121 | Baseline refusal is superseded by the SKIA-124 promoted raster route: baked and live A→B→A constants pass. |
+| `BLEND-InverseBlendFactor` | Inverse GraphicsDevice blend constant. | refused | SKIA-121 | Baseline refusal is superseded by the SKIA-124 promoted raster route and independent public oracle coverage. |
 | `BLEND-SourceAlphaSaturation` | min(source alpha, inverse destination alpha) RGB factor. | bounded | SKIA-120 | Public corpus covers it in all four positions against the independent oracle. |
 | `BLENDFUNC-Add` | Add weighted source and destination. | bounded | SKIA-120 | Public color/alpha scenes cover arbitrary weighted terms. |
 | `BLENDFUNC-Subtract` | Subtract destination term from source term. | refused | SKIA-120 | Public color/alpha scenes prove clamping against the scalar oracle. |

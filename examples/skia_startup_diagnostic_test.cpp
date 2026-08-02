@@ -34,6 +34,10 @@ int main()
     Check(report.find("samples=0") != std::string_view::npos
               && report.find("anisotropic filtering=unsupported") != std::string_view::npos,
           "diagnostic reports actual raster sample and anisotropy capabilities");
+    Check(report.find("blend=all-valid-13-factor/5-function-tuples") != std::string_view::npos
+              && report.find("blend-constant=live") != std::string_view::npos
+              && report.find("colour-write-mask=target0") != std::string_view::npos,
+          "diagnostic reports the promoted raster blend selector, constant and mask surface");
     Check(report.find('\n') == std::string_view::npos && report.find('\r') == std::string_view::npos
               && report.find("0x") == std::string_view::npos,
           "diagnostic is one line and contains no pointer-shaped private value");

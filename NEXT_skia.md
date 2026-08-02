@@ -19,7 +19,7 @@
 ## Completed baseline
 
 - The raster backbuffer, SDL presentation, `Texture2D`, `SpriteBatch`, SpriteFont atlas path,
-  scissor/viewport, point/linear Clamp/Wrap/Mirror sampling, the four standard blend presets,
+  scissor/viewport, point/linear Clamp/Wrap/Mirror sampling, all valid 2D raster blend states,
   `RenderTarget2D` level-0 readback/upload, and current raster refusal policies are implemented.
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
@@ -589,8 +589,7 @@
 
 ## Current task
 
-SKIA-115–123 are complete. Continue with SKIA-124's exact promotion gate, parity/feature/diagnostic
-documentation synchronization, and complete reusable Skia/EasyGL blend regressions.
+SKIA-115–124 are complete. Continue with SKIA-125's checked CNA-owned 2D mip-chain abstraction.
 
 ## Completed in this session: SKIA-93
 
@@ -1272,10 +1271,34 @@ documentation synchronization, and complete reusable Skia/EasyGL blend regressio
   release documents, and run the complete Skia plus reusable EasyGL reference regressions. It
   must not imply general custom GLSL, MRT, MSAA, or 3D support.
 
+## Completed in this session: SKIA-124
+
+- Promoted exactly the proven 2D raster blend surface in the 248-entry parity ledger, Skia
+  companion feature matrix, backend/generated-blender guides, successor contract matrix, release
+  gate, and stable startup diagnostic. The claim is all 714,025 valid combinations of four
+  13-value factor selectors and two five-value function selectors, independent RGB/alpha
+  equations, live blend constants, and all 16 target-0 colour-write masks.
+- Invalid raw factor/function ordinals, target-1/2/3 masks, and non-default multisample masks still
+  reject atomically. The promotion does not imply arbitrary EasyGL GLSL, MRT, MSAA, or 3D,
+  cube, or volume sampling. Five established routes remain specialized and the other 714,020 use
+  the single process-cached generated SkSL blender.
+- `validate_skia_release_gate.py` now makes the promotion auditable: once SKIA-124 is complete it
+  requires matching markers in the release gate, startup diagnostic, parity ledger, feature
+  matrix, and generated-blender contract. The direct parity, release, and 87-contract successor
+  validators pass; the release report advances to 10/56 successor tasks.
+- The complete Debug Skia suite passes 140/140 in sequential Xvfb blocks, including the isolated
+  first-read, stress, and 2D demo smoke fixtures. The focused blend/effect set passes 17/17; the
+  startup/classifier/generator/public-state/public-corpus promotion set passes 5/5 in Release and
+  5/5 under ASan+UBSan (`detect_leaks=0`, both halt-on-error).
+- Nine reusable EasyGL reference regressions pass 9/9 on Xvfb: Opaque, AlphaBlend,
+  NonPremultiplied, Additive, Additive golden, target-0 colour writes, independent functions,
+  independent factors, and BlendFactor propagation. Every build used at most `--parallel 2`, all
+  windowed execution used Xvfb, and `NEXT.md` was neither read nor changed.
+
 ## Next candidates
 
-1. SKIA-124: complete the arbitrary raster blend promotion gate before mip/format storage work.
-2. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
+1. SKIA-125: design and test the checked CNA-owned 2D mip-chain abstraction before wiring resources.
+2. SKIA-126–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
    effects in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.

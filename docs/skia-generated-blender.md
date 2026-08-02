@@ -1,7 +1,6 @@
 # Skia generated raster blender
 
-Status: generator, live public state, SpriteBatch/effect integration, and exhaustive comparison
-complete for SKIA-120–123; promotion remains SKIA-124
+Status: promoted arbitrary raster blend surface complete for SKIA-120–124
 
 `SkiaGeneratedBlender` compiles one generic `SkRuntimeEffect::MakeForBlender` program per process.
 Six integer uniforms select the independent RGB/alpha source factor, destination factor and
@@ -62,5 +61,17 @@ or malformed-effect rejection.
 audit. It assigns all 714,025 valid tuples to five established routes or 714,020 generic routes;
 out-of-range raw values are Invalid. `Skia_GeneratedBlend_PublicCorpus` then renders the minimized
 62-scene public set against an independent EasyGL/OpenGL scalar oracle, covering every factor in
-all four positions and every function in both equations. General compatibility is not advertised
-until SKIA-124 synchronizes the public matrices and completes the promotion regressions.
+all four positions and every function in both equations.
+
+## Promoted boundary
+
+SKIA-124 promotes exactly that selector surface for 2D raster draws: every tuple formed from the
+13 public `Blend` values and five public `BlendFunction` values is accepted, including independent
+RGB/alpha equations and live blend constants. All 16 target-0 colour-write masks compose with
+those tuples. The five established mappings retain their specialized routes; the remaining
+714,020 tuples use the generated blender.
+
+This is not a claim for invalid raw enum values, target-1/2/3 masks, a non-default multisample
+mask, MRT, MSAA, arbitrary EasyGL GLSL, or 3D/cube/volume sampling. Those inputs still refuse
+before drawing. The release audit pins this distinction to the startup diagnostic, parity ledger,
+and feature matrix so a future edit cannot silently widen or narrow the advertised surface.

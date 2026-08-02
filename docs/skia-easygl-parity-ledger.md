@@ -115,11 +115,11 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Untagged strings return null; exact `CNA_SKIA_SKSL_V1` constructs the bounded fragment-only SkSL adapter. | `bounded` | SKIA-89–92; `docs/skia-effects.md`; `Skia_SkSL_Effect_Prototype` |
 | `IGraphicsBackend::SetRenderTargetCubeFace/2` | Binds selected cube face. | Binds one checked raster face and resets target-local state. | `implemented` | SKIA-85–86; plural binding contract |
 | `IGraphicsBackend::SetRenderTargets/2` | Binds normalized GL MRT set. | Empty/one 2D/one cube face work; 2–4 targets reject atomically because SkCanvas cannot express distinct slot outputs. | `bounded` | SKIA-68, SKIA-85–88; `Skia_MRT_Rejection` |
-| `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | Five proven blend routes and channel masks only. | `bounded` | SKIA-47–57 |
+| `IGraphicsBackend::ApplyBlendState/7` | Maps full EasyGL blend/write state. | All 714,025 valid factor/function tuples and target-0 masks draw; invalid raw selectors, target-1/2/3 masks, and non-default sample masks reject atomically. | `bounded` | SKIA-47–57, SKIA-119–124 |
 | `IGraphicsBackend::ApplyDepthStencilState/16` | Applies complete GL depth/stencil state. | Disabled None is valid 2D state; any active depth/write/stencil mode rejects. | `unsupported` | SKIA-97–98, SKIA-102 |
 | `IGraphicsBackend::ApplyRasterizerState/5` | Applies GL cull/fill/scissor/bias. | 2D solid/scissor only; wireframe rejects. | `bounded` | SKIA-41, SKIA-58 |
 | `IGraphicsBackend::ApplySamplerState/5` | Applies per-slot GL filter/address/anisotropy. | Sprite slot point/linear/address work; level-zero Anisotropic is a documented Linear fallback, not an advertised device feature. | `bounded` | SKIA-43–46, SKIA-78–79 |
-| `IGraphicsBackend::SetBlendFactor/4` | Sets GL constant blend color. | Stored state has no accepted constant-factor route. | `bounded` | SKIA-53–55 |
+| `IGraphicsBackend::SetBlendFactor/4` | Sets GL constant blend color. | Rebuilds the active generated blender transactionally with the live RGBA constant. | `implemented` | SKIA-120–124 |
 | `IGraphicsBackend::SetReferenceStencil/1` | Updates GL stencil reference. | Zero accompanies disabled 2D state; nonzero rejects. | `unsupported` | SKIA-98, SKIA-102 |
 | `IGraphicsBackend::SetScissorRect/4` | Updates GL scissor. | Updates active top-left Skia clip state. | `implemented` | SKIA-41, SKIA-59 |
 | `IGraphicsBackend::SetViewport/6` | Updates GL viewport and depth range. | 2D rectangle works; depth range has no effect. | `bounded` | SKIA-42, SKIA-97 |
@@ -183,8 +183,8 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::getSamplerStatesProperty/0` | Common sampler slots apply to EasyGL. | Point/linear and address modes are bounded to 2D. | `bounded` | SKIA-43–46, SKIA-79 |
 | `GraphicsDevice::getVertexTexturesProperty/0` | Common vertex-sampler slots feed EasyGL 3D. | No raster vertex shader pipeline. | `unsupported` | SKIA-95–103 |
 | `GraphicsDevice::getVertexSamplerStatesProperty/0` | Common vertex sampler state feeds EasyGL 3D. | No raster vertex shader pipeline. | `unsupported` | SKIA-95–103 |
-| `GraphicsDevice::getBlendStateProperty/0#1` | Mutable cached EasyGL blend state. | Returns cached state; only proven 2D mappings draw. | `bounded` | SKIA-47–57 |
-| `GraphicsDevice::setBlendStateProperty/1` | Applies complete EasyGL blend/write state. | Five blend tuples and target-zero write masks work. | `bounded` | SKIA-47–57 |
+| `GraphicsDevice::getBlendStateProperty/0#1` | Mutable cached EasyGL blend state. | Returns the cached state for every valid 2D factor/function tuple; sample/MRT write fields retain the documented raster boundary. | `bounded` | SKIA-47–57, SKIA-119–124 |
+| `GraphicsDevice::setBlendStateProperty/1` | Applies complete EasyGL blend/write state. | All valid selector tuples, independent RGB/alpha equations, constants, and target-zero write masks work; unsupported sample/MRT fields reject. | `bounded` | SKIA-47–57, SKIA-119–124 |
 | `GraphicsDevice::getBlendStateProperty/0#2` | Const cached EasyGL blend state. | Returns the common cached Skia state. | `implemented` | SKIA-47–57 |
 | `GraphicsDevice::getDepthStencilStateProperty/0#1` | Mutable cached EasyGL depth/stencil state. | State can be inspected but has no raster attachment. | `unsupported` | SKIA-97–98 |
 | `GraphicsDevice::setDepthStencilStateProperty/1` | Applies full EasyGL depth/stencil state. | None remains a 2D no-op; active modes reject without changing cache. | `unsupported` | SKIA-97–98, SKIA-102 |
@@ -196,8 +196,8 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `GraphicsDevice::setScissorRectangleProperty/1` | Applies EasyGL scissor immediately. | Applies checked Skia raster clip state. | `implemented` | SKIA-41, SKIA-59 |
 | `GraphicsDevice::getViewportProperty/0` | Returns common EasyGL viewport/depth range. | Rectangle is exact; depth range is metadata. | `bounded` | SKIA-42, SKIA-97 |
 | `GraphicsDevice::setViewportProperty/1` | Applies EasyGL viewport/depth range. | Applies 2D placement/clip; no depth interpretation. | `bounded` | SKIA-42, SKIA-97 |
-| `GraphicsDevice::getBlendFactorProperty/0` | Returns EasyGL constant blend color. | Returns cached value; accepted routes do not consume it. | `bounded` | SKIA-53–55 |
-| `GraphicsDevice::setBlendFactorProperty/1` | Applies GL constant blend color. | Stores value; no unproven constant-factor route is accepted. | `bounded` | SKIA-53–55 |
+| `GraphicsDevice::getBlendFactorProperty/0` | Returns EasyGL constant blend color. | Returns the cached constant consumed by generated BlendFactor/InverseBlendFactor routes. | `implemented` | SKIA-120–124 |
+| `GraphicsDevice::setBlendFactorProperty/1` | Applies GL constant blend color. | Applies live RGBA updates transactionally to generated blend routes. | `implemented` | SKIA-120–124 |
 | `GraphicsDevice::getMultiSampleMaskProperty/0` | Returns EasyGL coverage mask. | Returns common cache on a zero-sample raster. | `unsupported` | SKIA-56, SKIA-76 |
 | `GraphicsDevice::setMultiSampleMaskProperty/1` | Stores EasyGL coverage mask for draws. | Non-default draw use rejects; no sample mask is invented. | `unsupported` | SKIA-56, SKIA-76 |
 | `GraphicsDevice::getReferenceStencilProperty/0` | Returns EasyGL stencil reference. | Returns common cache without raster stencil. | `unsupported` | SKIA-98 |

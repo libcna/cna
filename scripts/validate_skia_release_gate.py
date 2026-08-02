@@ -24,6 +24,10 @@ def main() -> int:
     capability_path = root / "include/CNA/GraphicsCapability.hpp"
     backend_path = root / "src/CNA/Internal/Backends/Skia/SkiaGraphicsBackend.cpp"
     tests_path = root / "cmake/Tests/SkiaTests.cmake"
+    diagnostic_path = root / "include/CNA/Internal/Backends/Skia/SkiaStartupDiagnostic.hpp"
+    parity_path = root / "docs/skia-easygl-parity-ledger.md"
+    feature_matrix_path = root / "docs/graphics-backend-feature-matrix.md"
+    generated_blender_path = root / "docs/skia-generated-blender.md"
 
     try:
         plan = plan_path.read_text()
@@ -32,6 +36,10 @@ def main() -> int:
         capability_header = capability_path.read_text()
         backend = backend_path.read_text()
         tests = tests_path.read_text()
+        diagnostic = diagnostic_path.read_text()
+        parity = parity_path.read_text()
+        feature_matrix = feature_matrix_path.read_text()
+        generated_blender = generated_blender_path.read_text()
     except OSError as error:
         print(f"Skia release gate failed to read input: {error}", file=sys.stderr)
         return 1
@@ -56,6 +64,7 @@ def main() -> int:
             errors.append(f"{plan_path}: SKIA-{task} appears {count} times")
     allowed_statuses = {"✅", "⬜", "🟨"}
     successor_statuses: list[str] = []
+    successor_status_by_task: dict[int, str] = {}
     for task_text, status_text in task_rows:
         task = int(task_text)
         status = status_text.strip()
@@ -65,6 +74,7 @@ def main() -> int:
             errors.append(f"{plan_path}: baseline SKIA-{task} is not complete ({status!r})")
         if task > BASELINE_LAST_TASK:
             successor_statuses.append(status)
+            successor_status_by_task[task] = status
     if "Status: COMPLETE — verified CPU-raster 2D backend." not in plan:
         errors.append(f"{plan_path}: baseline COMPLETE status banner is missing")
 
@@ -152,6 +162,20 @@ def main() -> int:
             errors.append(f"{release_path}: required marker {marker!r} is missing")
     if "Status: accepted for the CPU-raster release" not in surface_adr:
         errors.append(f"{surface_adr_path}: accepted raster decision is missing")
+
+    if successor_status_by_task.get(124) == "✅":
+        promoted_blend_markers = (
+            (release_path, release, "SKIA-124 arbitrary-raster-blend promotion: PASS"),
+            (diagnostic_path, diagnostic, "blend=all-valid-13-factor/5-function-tuples"),
+            (parity_path, parity, "All 714,025 valid factor/function tuples"),
+            (feature_matrix_path, feature_matrix, "All 714,025 valid selector tuples"),
+            (generated_blender_path, generated_blender, "Status: promoted arbitrary raster blend surface"),
+        )
+        for path, contents, marker in promoted_blend_markers:
+            if marker not in contents:
+                errors.append(
+                    f"{path}: completed SKIA-124 requires promotion marker {marker!r}"
+                )
 
     accelerated_registrations = len(
         re.findall(r"^\s*cna_register_skia_accelerated_test\s*\(", tests, flags=re.MULTILINE)

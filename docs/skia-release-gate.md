@@ -2,8 +2,12 @@
 
 Status: passed for the SKIA-1–114 CPU-raster baseline
 
-Successor status: SKIA-115–170 is active and is not covered by this passed baseline gate. New
-features remain unadvertised until their individual evidence and SKIA-170 pass.
+Successor status: SKIA-115–170 is active and is not covered by this passed baseline gate. A
+successor feature may be advertised only after its individual evidence and promotion task pass;
+SKIA-170 remains the final gate for the successor set as a whole.
+
+SKIA-124 arbitrary-raster-blend promotion: PASS. This promotes one bounded feature inside the
+experimental Skia backend; it does not mark the successor expansion complete.
 
 Scope: experimental `CNA_GRAPHICS_BACKEND=SKIA` CPU-raster 2D backend at the SKIA-114 checkpoint.
 This is not a Ganesh/Graphite, general 3D, or full EasyGL feature-equivalence claim.
@@ -52,11 +56,11 @@ audit can pass.
 | Texture2D, SpriteBatch, SpriteFont, transforms, source rectangles, tint, flip and sort | Direct 2D canvas/image path | shared EasyGL fixtures plus nine-scene real-XNA oracle |
 | Point/Linear, Clamp/Wrap/Mirror | Direct Skia sampling/tile modes | axis/seam/sampler transition tests |
 | Anisotropic on level-zero SpriteBatch | Bounded exact Linear fallback, capability false | non-uniform 2×2 readback at MaxAnisotropy 1/4/9999 |
-| Blend presets, one custom tuple, independent alpha and target-0 write masks | Direct modes plus bounded runtime blenders | exhaustive selector and exact pixel/oracle coverage |
+| All valid raster blend selector tuples, independent alpha, live constants and target-0 write masks | Direct modes plus one bounded generated runtime blender | exhaustive 714,025-tuple classifier, 62-scene public oracle, state/batch regressions |
 | RenderTarget2D and single RenderTargetCube face binding | Direct raster target / six-surface bounded emulation | readback, sampling, usage, pass, lifecycle and transfer contracts |
 | TextureCube/Texture3D transfer storage | Bounded CPU face/voxel emulation | checked limits, mips, partial transfers, disposal and exhaustive contracts |
 | Explicit `CNA_SKIA_SKSL_V1` SpriteBatch fragment effects | Bounded opt-in extension | compiler/ABI/uniform/texture/security-limit tests |
-| Mips for mutable Texture2D/RenderTarget2D, non-Color formats, unproven blends | Refused after focused feasibility/policy work | stable pre-draw or construction diagnostics and recovery tests |
+| Mips for mutable Texture2D/RenderTarget2D and non-Color formats | Refused after focused feasibility/policy work | stable pre-draw or construction diagnostics and recovery tests |
 | MRT, depth/stencil, wireframe, 3D, stock 3D effects, cube/volume sampling, queries | Refused after emulation investigation | MRT/3D/query ADRs and atomic refusal suite |
 | Ganesh/Graphite acceleration | Not selected or advertised | surface-mode ADR; zero `Accelerated` CTests in the raster build |
 
@@ -65,6 +69,13 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
 
 ## Validation performed
 
+- SKIA-124 successor promotion: complete Debug Skia suite 140/140 PASS in sequential Xvfb blocks
+  (19 Raster, 116 Display, five Audit), including first-read, stress, and 2D demo smoke. The focused
+  blend/effect set passes 17/17; the startup/classifier/generator/public-state/public-corpus set
+  passes 5/5 in Release and 5/5 under ASan+UBSan (`detect_leaks=0`, both halt-on-error).
+- Nine EasyGL blend/write reference regressions pass 9/9 on Xvfb: four presets, Additive golden,
+  target-0 write masks, independent functions, independent factors, and BlendFactor propagation.
+  All SKIA-124 builds used at most `--parallel 2`; no real display was used.
 - `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`, and
   `Skia_ReleaseGate_Audit`: PASS.
 - Updated `Skia_Sampler_MipmapFilterPolicy` and `Skia_RenderTarget2D_MsaaPolicy`: 2/2 PASS on the

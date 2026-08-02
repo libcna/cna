@@ -32,7 +32,7 @@ authoritative compact capability boundary; later sections explain the individual
 | Clear, present, resize, five presentation modes, coordinate transforms and backbuffer readback | Verified direct CPU surface plus SDL presentation | Direct raster implementation; SDL uploads the completed image and is not a Skia GPU mode. | [SKIA-7, SKIA-13–17, SKIA-71–72](../plan_skia.md); `Skia_PresentationModes`, `Skia_Resize_Presentation`, `Skia_DisplayScale` |
 | `SpriteBatch` draw overloads, sorting, transforms, source rectangles, tint, flips and `SpriteFont` | Verified direct 2D path | Direct `SkCanvas` image operations preserve the shared XNA-shaped batching and font-atlas layout. | [SKIA-31–40](../plan_skia.md); [2D EasyGL registration](skia-2d-easygl-registration.md); [XNA oracle](skia-xna-oracle.md) |
 | Point/linear filtering, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear and tile modes map directly. Level-zero Anisotropic is byte-identical to the documented Linear fallback; the capability stays false and mip-dependent modes reject. | [SKIA-43–46, SKIA-70, SKIA-78–79](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_Sampler_MipmapFilterPolicy` |
-| Blend presets and target-0 colour-write masks | Verified bounded direct/runtime-blender path | `Opaque` and `AlphaBlend` use direct modes; XNA's independent alpha, one custom tuple, and masks use pixel-proven SkSL blenders. Every other tuple rejects before drawing. | [SKIA-47–57, SKIA-108](../plan_skia.md); [XNA oracle](skia-xna-oracle.md); `Skia_BlendMapping_Raster`, `Skia_ColorWrite_Policy` |
+| Blend presets, arbitrary raster states, and target-0 colour-write masks | Verified direct/generated runtime-blender path | All 714,025 valid factor/function tuples, independent RGB/alpha equations, live constants, and all target-0 masks draw. Invalid raw selectors and sample/MRT-only state reject before drawing. | [SKIA-47–57, SKIA-108, SKIA-119–124](../plan_skia.md); [generated blender](skia-generated-blender.md); `Skia_BlendMapping_Raster`, `Skia_GeneratedBlend_PublicCorpus` |
 | `Texture2D` level-0 upload, partial transfer, readback and NPOT sampling | Verified direct CPU image path | Direct CPU shadow plus Skia image; mip levels above zero reject after `withDefaultMipmaps()` was evaluated and found unable to provide CNA's mutable per-level contract. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109](../plan_skia.md); [API contract comparison](skia-api-contract-comparison.md) |
 | `RenderTarget2D` colour rendering, readback, sampling and Preserve/Discard | Verified direct level-0 raster target | Direct `SkSurface`; real depth, mip chains and MSAA are unavailable rather than fabricated. | [SKIA-61–75](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_DepthPolicy`, `Skia_RenderTarget2D_MsaaPolicy` |
 | `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
@@ -158,22 +158,20 @@ claim a `DeviceLost` event for resources that did not become unavailable. A futu
 Skia mode needs its own genuine device-loss contract and must not inherit this raster claim.
 
 `Texture2D` keeps a CPU shadow, so its successful public `GetData` calls return the exact bytes
-accepted by `SetData`. At draw time the active blend preset selects an explicitly labelled
+accepted by `SetData`. At draw time the active blend state selects an explicitly labelled
 premultiplied (`AlphaBlend`) or straight-alpha (`NonPremultiplied`) Skia image made from those
 same bytes. Tint uses a cached SkSL color filter so XNA's per-component colour and alpha
 multiplication is preserved without applying tint alpha to premultiplied RGB a second time. A
-table maps only the four public tuples whose source convention is already defined: `Opaque` to
+table retains specialized paths for five established tuples: `Opaque` to
 `kSrc` with premultiplied bytes and `AlphaBlend` to `kSrcOver` with premultiplied bytes.
 `NonPremultiplied` and `Additive` use bounded runtime blenders with straight-labelled input so
 their independent XNA alpha equations (`Sa*Sa + Da*(1-Sa)` and `Sa*Sa + Da`) are preserved as
-well as their RGB equations. A custom `BlendState` carries factors and equations but no source-byte alpha label, so the
-raster backend must not silently pick a superficially similar `SkBlendMode`. SKIA-54 additionally
-accepts one independently proven runtime-blender tuple: colour
-`DestinationColor`/`Zero`, alpha `One`/`Zero`, both `Add`; it uses premultiplied source bytes and
-is proven only with opaque source/destination input. Every other tuple outside the four presets
-still fails before drawing and names the requested factors/functions. SKIA-55 records this as the
-current bounded full-matrix policy: no unproven tuple is silently treated as SourceOver.
-direct `SkiaSurface::WritePixels`/`ReadPixels` round trip is
+well as their RGB equations. The fifth established route is the original destination-reading
+`DestinationColor`/`Zero`, alpha `One`/`Zero`, both-`Add` tuple. Every other valid selector tuple
+uses one process-cached generic SkSL blender under the deterministic SKIA-119 premultiplied working
+convention. Invalid raw selectors, target-1/2/3 masks, and non-default multisample masks still fail
+before drawing; no state silently falls back to SourceOver. A direct
+`SkiaSurface::WritePixels`/`ReadPixels` round trip is
 different by design: converting through Skia's 8-bit premultiplied storage has deterministic
 integer unpremultiplication rounding for semi-transparent texels. The raster test records this
 boundary explicitly; future code must not describe it as a byte-exact straight-alpha surface
@@ -189,22 +187,22 @@ the resulting `SkBlender` through `SkPaint::setBlender`. It can write separate R
 expressions, use an RGBA uniform for `BlendFactor`, calculate `SourceAlphaSaturation` as
 `min(src.a, 1-dst.a)` for RGB (and `1` for alpha), and use `+`, `-`, reversed `-`, `min`, or `max`
 for the five XNA equations. Thus every current `Blend` and `BlendFunction` ordinal has an
-algebraic direct-runtime-blender expression. This is not a claim that the public backend has
-implemented the full matrix yet.
+algebraic direct-runtime-blender expression. SKIA-53 established only this feasibility result;
+SKIA-119–124 subsequently implemented and promoted the complete valid selector matrix.
 
-`Skia_RuntimeBlender_Raster` proves this interface on the selected CPU raster path: it composites
-different RGB and alpha equations from the real source/destination canvas values. It also proves
-that the raster pipeline retains a deliberately non-premultiplied output. That is required before
-supporting an XNA state that leaves RGB while setting output alpha to zero, but it means later
-public work must preserve that data through `RenderTarget2D`, readback, sampling, and SDL
-presentation. `Skia_RuntimeBlender_Policy` now proves that a public SpriteBatch state with colour
-`DestinationColor`/`Zero` and independent alpha `One`/`Zero` is exact for opaque source and
-destination on the backbuffer, a `RenderTarget2D` readback, and a subsequent target sample.
-Runtime Effects are documented by Skia itself as experimental, so their use stays behind the
-explicit `SKIA` backend. SKIA-55's exhaustive selector maps only tuples with an established
-source convention and rejects the rest. The source image's
-straight/premultiplied label remains CNA-owned; the blender alone cannot infer it from arbitrary
-RGBA bytes.
+`SkiaGeneratedBlender` turns that feasibility result into one fixed, process-cached program. Six
+integer uniforms select all 13 source/destination factors and all five functions independently for
+RGB and alpha; fixed uniforms carry the live blend constant and target-0 write mask. State changes
+therefore allocate only a bounded uniform block and blender, never generated source or a
+selector-sized program cache. `ClassifySkiaBlendSelectors` assigns all 714,025 valid tuples to the
+five established routes or 714,020 generated routes, while explicit out-of-range enum values form
+the refusal class. The display-free scalar oracle covers every branch, and the public 62-scene
+corpus covers every factor position and function position against independent EasyGL/OpenGL math.
+
+Runtime Effects are documented by Skia itself as experimental, so this implementation stays
+behind the explicit `SKIA` backend. The source image's straight/premultiplied label remains
+CNA-owned and is supplied by the SKIA-119 contract; the blender never infers it from pixel values.
+See [`skia-generated-blender.md`](skia-generated-blender.md) for the exact promoted boundary.
 
 The complete storage-to-working-colour and tint/effect rules are fixed by
 [`skia-source-alpha-contract.md`](skia-source-alpha-contract.md) and its raw-byte
@@ -216,8 +214,8 @@ a convention from source pixel values.
 `Skia_ColorWriteMask_Raster` proves the direct raster building block for `ColorWriteChannels`: a
 runtime blender computes the normal premultiplied source-over result first and then chooses each
 of RGBA from that result or the original destination. All sixteen masks preserve their disabled
-destination bytes, including `None`. SKIA-57 applies that post-blend selection to the four direct
-routes and the bounded destination-reading runtime route. `Skia_ColorWrite_Policy` checks all
+destination bytes, including `None`. The same post-equation uniform selection applies to the five
+established paths and every generated route. `Skia_ColorWrite_Policy` checks all
 sixteen masks after every accepted route on the backbuffer, all sixteen after the destination-
 reading route on RenderTarget2D readback, and alpha selection with distinct source/destination
 alpha. Only target-0 `ColorWriteChannels` is meaningful for this one-target backend;
@@ -369,9 +367,10 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     backend-before-target order; the public test proves a subsequent Clear and SpriteBatch draw land
     on the backbuffer and that a fresh target cycle still works.
 38. `Skia_BlendMapping_Raster` table-tests all thirteen public `Blend` ordinals in each factor
-    position, all twenty-five colour/alpha `BlendFunction` pairs, the four direct preset mappings,
-    and their diagnostic names. `Skia_BlendMapping_Policy` verifies public rejection of an
-    unsupported factor/equation and that each failed `SpriteBatch::Begin` leaves the batch usable.
+    position, all twenty-five colour/alpha `BlendFunction` pairs, the five established mappings,
+    and their diagnostic names. `Skia_BlendMapping_Policy` verifies public rejection of invalid
+    raw selectors and unsupported sample state, and that each failed `SpriteBatch::Begin` leaves
+    the batch usable.
 39. `Skia_RuntimeBlender_Raster` compiles a two-input `SkRuntimeEffect` blender, composites an
     independent RGB/alpha expression against an actual raster destination, and proves the selected
     Skia raster pipeline preserves an intentional non-premultiplied output rather than silently
@@ -381,17 +380,18 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     then on RenderTarget2D readback and target sampling, without retaining the custom blender for a
     following Opaque sampling draw.
 41. `Skia_BlendMapping_Raster` exhaustively checks all 714,025 combinations of the thirteen
-    source/destination factors and five colour/alpha functions. It accepts only the four direct
-    presets plus the SKIA-54 runtime tuple; every other combination has the deterministic error
-    path rather than a silent `kSrcOver` fallback.
+    source/destination factors and five colour/alpha functions. Exactly five established tuples
+    keep their specialized paths and the other 714,020 select the bounded generator; invalid raw
+    selectors retain the deterministic error path rather than a silent `kSrcOver` fallback.
 42. `Skia_ColorWriteMask_Raster` runs a real post-blend runtime blender for all sixteen RGBA write
     masks and checks raw premultiplied output bytes: each disabled component is retained from the
     destination, including the zero-mask no-write case. `Skia_BlendMapping_Policy` confirms the
     raster's non-default sample-mask rejection and safe batch recovery.
 43. `Skia_ColorWrite_Policy` exercises the public post-blend mask implementation: all sixteen
-    masks after every accepted blend route on the backbuffer, all sixteen on the destination-
+    masks after every established blend route on the backbuffer, all sixteen on the destination-
     reading runtime route in RenderTarget2D, and alpha-bit selection with distinct 128/255 source
-    and destination alpha values.
+    and destination alpha values. `Skia_GeneratedBlendState_Policy` extends the matrix to generated
+    equations, live constants, disabled replacement, and re-enable restoration.
 44. `Skia_Texture2D_MipmapPolicy` also closes the target-mipmap investigation: the pinned public
     Skia API can attach generated mips only to an immutable `SkImage` snapshot, while CNA requires
     deterministic public per-level target readback and invalidation after bind/upload. The raster
@@ -742,7 +742,12 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     class. `Skia_GeneratedBlend_PublicCorpus` independently implements the EasyGL/OpenGL math and
     passes 62/62 real SpriteBatch scenes: every factor in all four positions and every function in
     both equations. Classifier and corpus pass Debug, Release, and ASan+UBSan; the expanded focused
-    blend/effect suite passes 17/17 on Xvfb. Public promotion remains SKIA-124.
+    blend/effect suite passes 17/17 on Xvfb. Public promotion follows in SKIA-124.
+92. SKIA-124 promotes exactly the proven arbitrary raster blend surface. The startup diagnostic,
+    parity ledger, feature matrix, release gate, and generated-blender contract now agree that all
+    714,025 valid selector tuples, live constants, independent RGB/alpha equations, and target-0
+    masks draw. Invalid raw selectors, target-1/2/3 masks, and non-default multisample masks remain
+    atomic refusals; the claim does not include arbitrary GLSL, MRT, MSAA, or 3D sampling.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.
