@@ -327,9 +327,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.
         void MaybeFreeCpuPixels();
 
-        /// Builds a Texture2D from already-decoded RGBA8 pixel data; shared by both FromStream overloads.
+        /// Builds a single-level Texture2D from transformed/decoded RGBA8 pixel data.
         static Texture2D MakeTextureFromPixels(GraphicsDevice& device, int w, int h,
                                                std::vector<std::uint8_t>&& rgba);
+
+        /// Builds a Texture2D from an exact, fully decoded RGBA8 mip chain.
+        static Texture2D MakeTextureFromMipPixels(
+            GraphicsDevice& device, int w, int h,
+            std::vector<std::vector<std::uint8_t>>&& rgbaLevels);
 
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
         std::vector<uint8_t>& getMipBuffer(int level);

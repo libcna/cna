@@ -68,6 +68,16 @@ namespace CNA::Internal::Xnb
             }
             return levels;
         }
+
+        std::size_t CompressedLevelByteCount(SurfaceFormat format, int32_t width, int32_t height)
+        {
+            const std::size_t blockWidth =
+                (static_cast<std::size_t>(width) + 3u) / 4u;
+            const std::size_t blockHeight =
+                (static_cast<std::size_t>(height) + 3u) / 4u;
+            const std::size_t bytesPerBlock = format == SurfaceFormat::Dxt1 ? 8u : 16u;
+            return blockWidth * blockHeight * bytesPerBlock;
+        }
     }
 
     Texture2D Texture2DReader::Read(ContentReader& input, std::optional<Texture2D> existingInstance)
@@ -128,12 +138,34 @@ namespace CNA::Internal::Xnb
                 " exceeds this device's maximum texture dimension of " + std::to_string(maxDim) + ".");
         }
         const int32_t maxLevels = CalculateMaxMipLevels(width, height);
-        if (levelCount > maxLevels)
+        if (levelCount <= 0 || levelCount > maxLevels)
         {
             throw ContentLoadException(
                 "Texture2DReader: declared mip level count (" + std::to_string(levelCount) +
-                ") exceeds the maximum of " + std::to_string(maxLevels) + " for a " +
+                ") is outside 1.." + std::to_string(maxLevels) + " for a " +
                 std::to_string(width) + "x" + std::to_string(height) + " texture.");
+        }
+        // Texture2D's public XNA allocation is level-zero-only or the complete floor-halved
+        // chain. A partial prefix would allocate additional levels that were never present in
+        // the asset; Skia would then deterministically generate them. Reject that ambiguity so
+        // content loading never fabricates absent mip data.
+        if (levelCount != 1 && levelCount != maxLevels)
+        {
+            throw ContentLoadException(
+                "Texture2DReader: incomplete mip chain; expected level zero only or all " +
+                std::to_string(maxLevels) + " levels for a " + std::to_string(width) + "x" +
+                std::to_string(height) + " texture.");
+        }
+
+        if (existingInstance.has_value()
+            && (existingInstance->getWidthProperty() != width
+                || existingInstance->getHeightProperty() != height
+                || existingInstance->getFormatProperty() != uploadFormat
+                || existingInstance->getLevelCountProperty() != levelCount))
+        {
+            throw ContentLoadException(
+                "Texture2DReader: existing texture dimensions, format, or mip count do not "
+                "match the serialized asset.");
         }
 
         Texture2D texture = existingInstance.has_value()
@@ -150,6 +182,16 @@ namespace CNA::Internal::Xnb
 
             if (IsCompressed(surfaceFormat))
             {
+                const std::size_t expectedCompressedBytes =
+                    CompressedLevelByteCount(surfaceFormat, levelWidth, levelHeight);
+                if (bytes.size() != expectedCompressedBytes)
+                {
+                    throw ContentLoadException(
+                        "Texture2DReader: compressed level " + std::to_string(level) +
+                        " byte count (" + std::to_string(bytes.size()) + ") does not match " +
+                        std::to_string(levelWidth) + "x" + std::to_string(levelHeight) +
+                        "'s required " + std::to_string(expectedCompressedBytes) + " bytes.");
+                }
                 switch (surfaceFormat)
                 {
                     case SurfaceFormat::Dxt1:

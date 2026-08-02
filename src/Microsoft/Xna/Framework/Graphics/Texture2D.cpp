@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -18,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/IO/Stream.hpp"
+#include "System/FormatException.hpp"
 #include "System/NotSupportedException.hpp"
 
 // plan_dx9.md Phase D9-10 (D9-103): GraphicsProfile.Reach/HiDef texture-size ceilings are real,
@@ -646,48 +648,141 @@ namespace Microsoft::Xna::Framework::Graphics
     // FromStream
     // -----------------------------------------------------------------------
 
-    // Minimal DDS header parser — returns true and fills out/w/h if a supported DXT format.
-    static bool TryDecodeDds(const uint8_t* buf, std::size_t len,
-                              std::vector<uint8_t>& out, int& w, int& h)
+    struct DecodedTexture2D final
     {
-        // DDS magic "DDS " + 124-byte DDS_HEADER = 128 bytes minimum
-        if (len < 128) return false;
-        if (buf[0] != 'D' || buf[1] != 'D' || buf[2] != 'S' || buf[3] != ' ') return false;
+        int width = 0;
+        int height = 0;
+        std::vector<std::vector<uint8_t>> rgbaLevels;
+    };
+
+    static uint32_t ReadU32Le(const uint8_t* bytes)
+    {
+        return static_cast<uint32_t>(bytes[0])
+             | (static_cast<uint32_t>(bytes[1]) << 8)
+             | (static_cast<uint32_t>(bytes[2]) << 16)
+             | (static_cast<uint32_t>(bytes[3]) << 24);
+    }
+
+    static std::size_t DdsLevelByteCount(int width, int height, uint32_t fourCC)
+    {
+        const std::size_t blockWidth = (static_cast<std::size_t>(width) + 3u) / 4u;
+        const std::size_t blockHeight = (static_cast<std::size_t>(height) + 3u) / 4u;
+        const std::size_t bytesPerBlock = fourCC == 0x31545844u ? 8u : 16u;
+        if (blockWidth > std::numeric_limits<std::size_t>::max() / blockHeight
+            || blockWidth * blockHeight > std::numeric_limits<std::size_t>::max() / bytesPerBlock)
+        {
+            throw System::FormatException(
+                "Texture2D::FromStream: DDS mip byte count overflows the host address space");
+        }
+        return blockWidth * blockHeight * bytesPerBlock;
+    }
+
+    // SKIA-130: distinguish a non-DDS image (which SDL_image may decode) from a malformed DDS.
+    // Once the DDS magic is present, every declared field and level is validated here and errors
+    // are reported as DDS errors instead of falling through to an unrelated image decoder.
+    static bool TryDecodeDds(const uint8_t* buf, std::size_t len, int maximumTextureDimension,
+                             DecodedTexture2D& decoded)
+    {
+        if (len < 4 || buf[0] != 'D' || buf[1] != 'D' || buf[2] != 'S' || buf[3] != ' ')
+            return false;
+        if (len < 128)
+            throw System::FormatException("Texture2D::FromStream: truncated DDS header");
 
         // DDS_HEADER fields (all little-endian uint32)
         auto r32 = [&](std::size_t off) -> uint32_t {
-            return static_cast<uint32_t>(buf[off])
-                 | (static_cast<uint32_t>(buf[off+1]) << 8)
-                 | (static_cast<uint32_t>(buf[off+2]) << 16)
-                 | (static_cast<uint32_t>(buf[off+3]) << 24);
+            return ReadU32Le(buf + off);
         };
 
-        const int height = static_cast<int>(r32(12));
-        const int width  = static_cast<int>(r32(16));
+        if (r32(4) != 124u || r32(76) != 32u)
+            throw System::FormatException("Texture2D::FromStream: invalid DDS header size");
+
+        const uint32_t rawHeight = r32(12);
+        const uint32_t rawWidth = r32(16);
+        if (rawWidth == 0u || rawHeight == 0u
+            || rawWidth > static_cast<uint32_t>(std::numeric_limits<int>::max())
+            || rawHeight > static_cast<uint32_t>(std::numeric_limits<int>::max()))
+        {
+            throw System::FormatException("Texture2D::FromStream: invalid DDS dimensions");
+        }
+        const int width = static_cast<int>(rawWidth);
+        const int height = static_cast<int>(rawHeight);
+        if (width > maximumTextureDimension || height > maximumTextureDimension)
+        {
+            throw System::NotSupportedException(
+                "Texture2D::FromStream: DDS dimensions exceed this device's maximum texture "
+                "dimension of " + std::to_string(maximumTextureDimension));
+        }
+
         // DDS_PIXELFORMAT starts at offset 76; dwFourCC at offset 84
         const uint32_t fourCC = r32(84);
-        const uint8_t* pixels = buf + 128;
-        const std::size_t pixLen = len - 128;
-
         // fourCC codes: 'DXT1'=0x31545844, 'DXT3'=0x33545844, 'DXT5'=0x35545844
-        if (fourCC == 0x31545844u)
-            out = DxtUtil::DecompressDxt1(pixels, pixLen, width, height);
-        else if (fourCC == 0x33545844u)
-            out = DxtUtil::DecompressDxt3(pixels, pixLen, width, height);
-        else if (fourCC == 0x35545844u)
-            out = DxtUtil::DecompressDxt5(pixels, pixLen, width, height);
-        else
-            return false; // unsupported DDS format — fall through to SDL_image
+        if (fourCC != 0x31545844u && fourCC != 0x33545844u && fourCC != 0x35545844u)
+        {
+            throw System::NotSupportedException(
+                "Texture2D::FromStream: unsupported DDS pixel format "
+                "(only DXT1/DXT3/DXT5 are supported)");
+        }
 
-        w = width;
-        h = height;
+        const int maximumLevels = CalculateMipLevels(width, height);
+        const uint32_t declaredMipCount = r32(28);
+        if (declaredMipCount > static_cast<uint32_t>(maximumLevels))
+        {
+            throw System::FormatException(
+                "Texture2D::FromStream: DDS declares more mip levels than its dimensions allow");
+        }
+        const int mipCount = declaredMipCount == 0u ? 1 : static_cast<int>(declaredMipCount);
+        // Texture2D's XNA-compatible public allocation is either level zero or a complete chain.
+        // Reject a prefix instead of allocating the complete chain and silently generating levels
+        // the asset never contained.
+        if (mipCount != 1 && mipCount != maximumLevels)
+        {
+            throw System::FormatException(
+                "Texture2D::FromStream: DDS mip chain is incomplete; expected level zero only or "
+                "the complete chain");
+        }
+
+        DecodedTexture2D result;
+        result.width = width;
+        result.height = height;
+        result.rgbaLevels.reserve(static_cast<std::size_t>(mipCount));
+
+        std::size_t offset = 128u;
+        int levelWidth = width;
+        int levelHeight = height;
+        for (int level = 0; level < mipCount; ++level)
+        {
+            const std::size_t levelBytes = DdsLevelByteCount(levelWidth, levelHeight, fourCC);
+            if (offset > len || levelBytes > len - offset)
+            {
+                throw System::FormatException(
+                    "Texture2D::FromStream: truncated DDS mip level " + std::to_string(level));
+            }
+
+            const uint8_t* levelData = buf + offset;
+            if (fourCC == 0x31545844u)
+                result.rgbaLevels.push_back(DxtUtil::DecompressDxt1(
+                    levelData, levelBytes, levelWidth, levelHeight));
+            else if (fourCC == 0x33545844u)
+                result.rgbaLevels.push_back(DxtUtil::DecompressDxt3(
+                    levelData, levelBytes, levelWidth, levelHeight));
+            else
+                result.rgbaLevels.push_back(DxtUtil::DecompressDxt5(
+                    levelData, levelBytes, levelWidth, levelHeight));
+
+            offset += levelBytes;
+            levelWidth = std::max(1, levelWidth / 2);
+            levelHeight = std::max(1, levelHeight / 2);
+        }
+
+        decoded = std::move(result);
         return true;
     }
 
     // Reads the entire stream and decodes it into RGBA8 pixel data — DDS/DXT1/3/5 via
     // DxtUtil, everything else via SDL_image (PNG/JPG/BMP/GIF/... — whatever SDL3_image was
     // built with; see docs/texture-stream-formats.md for the formats verified by CI).
-    static ImageData DecodeStreamToImageData(System::IO::Stream& stream)
+    static DecodedTexture2D DecodeStreamToImageData(
+        System::IO::Stream& stream, int maximumTextureDimension)
     {
         using System::IO::intcs;
         using System::IO::bytecs;
@@ -697,58 +792,121 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::runtime_error("Texture2D::FromStream: stream is empty or length unknown");
 
         std::vector<bytecs> buf(static_cast<std::size_t>(len));
-        stream.Read(buf.data(), 0, len);
+        intcs bytesRead = 0;
+        while (bytesRead < len)
+        {
+            const intcs count = stream.Read(buf.data(), bytesRead, len - bytesRead);
+            if (count <= 0)
+                throw std::runtime_error("Texture2D::FromStream: stream ended before its declared length");
+            bytesRead += count;
+        }
 
         const auto* raw = reinterpret_cast<const uint8_t*>(buf.data());
 
-        ImageData img;
-        std::vector<uint8_t> ddsOut;
-        int ddsW = 0, ddsH = 0;
-        if (TryDecodeDds(raw, static_cast<std::size_t>(len), ddsOut, ddsW, ddsH))
+        DecodedTexture2D decoded;
+        if (!TryDecodeDds(raw, static_cast<std::size_t>(len), maximumTextureDimension, decoded))
         {
-            img.width  = ddsW;
-            img.height = ddsH;
-            img.pixels = std::move(ddsOut);
+            ImageData image = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
+            decoded.width = image.width;
+            decoded.height = image.height;
+            decoded.rgbaLevels.push_back(std::move(image.pixels));
         }
-        else
-        {
-            img = ImageLoader::LoadFromMemory(raw, static_cast<std::size_t>(len));
-        }
-        return img;
+        return decoded;
     }
 
     Texture2D Texture2D::MakeTextureFromPixels(GraphicsDevice& device, int w, int h,
                                                std::vector<std::uint8_t>&& rgba)
     {
+        std::vector<std::vector<std::uint8_t>> levels;
+        levels.push_back(std::move(rgba));
+        return MakeTextureFromMipPixels(device, w, h, std::move(levels));
+    }
+
+    Texture2D Texture2D::MakeTextureFromMipPixels(
+        GraphicsDevice& device, int w, int h,
+        std::vector<std::vector<std::uint8_t>>&& rgbaLevels)
+    {
+#ifdef CNA_BACKEND_D3D9
+        ValidateTextureSizeForProfileEXT(device, w, h);
+#endif
+        ValidateTextureDimensionEXT(device, w, h);
+        const int maximumLevels = CalculateMipLevels(w, h);
+        if (rgbaLevels.empty()
+            || (rgbaLevels.size() != 1u
+                && rgbaLevels.size() != static_cast<std::size_t>(maximumLevels)))
+        {
+            throw std::invalid_argument(
+                "Texture2D::FromStream: decoded mip chain must contain level zero or every level");
+        }
+
+        int levelWidth = w;
+        int levelHeight = h;
+        for (std::size_t level = 0; level < rgbaLevels.size(); ++level)
+        {
+            const std::size_t expected = static_cast<std::size_t>(levelWidth)
+                                       * static_cast<std::size_t>(levelHeight) * 4u;
+            if (rgbaLevels[level].size() != expected)
+            {
+                throw std::invalid_argument(
+                    "Texture2D::FromStream: decoded RGBA mip level has the wrong byte count");
+            }
+            levelWidth = std::max(1, levelWidth / 2);
+            levelHeight = std::max(1, levelHeight / 2);
+        }
+
         ImageData img;
         img.width  = w;
         img.height = h;
-        img.pixels = std::move(rgba);
+        img.mipLevels = static_cast<int>(rgbaLevels.size());
+        img.pixels = std::move(rgbaLevels[0]);
 
         Texture2D tex;
         tex.graphicsDevice_ = &device;
         tex.width           = w;
         tex.height          = h;
+        tex.levelCount_      = img.mipLevels;
         tex.backend_        = device.GetBackend().CreateTexture(img);
         tex.cpuPixels_      = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
         tex.backend_->ShareCpuPixels(tex.cpuPixels_);
+
+        if (rgbaLevels.size() > 1u)
+        {
+            tex.extraMipLevels_ = std::make_shared<std::vector<std::vector<uint8_t>>>();
+            tex.extraMipLevels_->reserve(rgbaLevels.size() - 1u);
+            levelWidth = std::max(1, w / 2);
+            levelHeight = std::max(1, h / 2);
+            for (std::size_t level = 1; level < rgbaLevels.size(); ++level)
+            {
+                tex.extraMipLevels_->push_back(std::move(rgbaLevels[level]));
+                const auto& pixels = tex.extraMipLevels_->back();
+                tex.backend_->UpdatePixelsLevel(
+                    static_cast<int>(level), pixels.data(), levelWidth, levelHeight);
+                levelWidth = std::max(1, levelWidth / 2);
+                levelHeight = std::max(1, levelHeight / 2);
+            }
+        }
         tex.MaybeFreeCpuPixels();
         return tex;
     }
 
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream)
     {
-        ImageData img = DecodeStreamToImageData(stream);
-        return MakeTextureFromPixels(graphicsDevice, img.width, img.height, std::move(img.pixels));
+        DecodedTexture2D decoded = DecodeStreamToImageData(
+            stream, graphicsDevice.GetMaxTextureDimension());
+        return MakeTextureFromMipPixels(
+            graphicsDevice, decoded.width, decoded.height, std::move(decoded.rgbaLevels));
     }
 
     Texture2D Texture2D::FromStream(GraphicsDevice& graphicsDevice, System::IO::Stream& stream,
                                     int width, int height, bool zoom)
     {
-        ImageData img = DecodeStreamToImageData(stream);
+        DecodedTexture2D decoded = DecodeStreamToImageData(
+            stream, graphicsDevice.GetMaxTextureDimension());
+        std::vector<uint8_t>& levelZero = decoded.rgbaLevels.front();
 
         SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            img.width, img.height, SDL_PIXELFORMAT_RGBA32, img.pixels.data(), img.width * 4);
+            decoded.width, decoded.height, SDL_PIXELFORMAT_RGBA32,
+            levelZero.data(), decoded.width * 4);
         if (!surface)
             throw std::runtime_error(std::string("SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
 

@@ -82,7 +82,7 @@ stale, duplicated, malformed, or unrouted entries.
 | `MIP-RENDERTARGET2D` | Render, upload, readback and sample mutable target mips. | refused | SKIA-131–132 | Existing target policy proves atomic refusal and recovery. |
 | `MIP-SAMPLING-LOD` | Min/mag and mip-level selection/interpolation. | refused | SKIA-129 | Baseline refusal is superseded by all-nine decomposition, affine rho, NPOT, source/crop, transform, addressing and interpolation evidence. |
 | `FORMAT-RENDERTARGET` | Per-format renderability independent of texture sampling. | refused | SKIA-142 | Every enum needs direct route or pre-allocation refusal. |
-| `FORMAT-CONTENT` | XNB/DDS level and compressed block preservation. | bounded | SKIA-130–141 | Existing Color DDS path and cube content fixtures are reusable evidence. |
+| `FORMAT-CONTENT` | XNB/DDS level and compressed block preservation. | bounded | SKIA-130–141 | SKIA-130 preserves complete DDS DXT1/DXT3/DXT5 and XNB Color/DXT5 chains as canonical RGBA8, rejects malformed boundaries, and keeps single-level assets single-level; native wider public formats remain SKIA-134–141. |
 | `EFFECT-LANGUAGE` | Untagged EasyGL GLSL versus explicit SkSL identity. | bounded | SKIA-152–155 | Existing v1 marker prevents language guessing. |
 | `EFFECT-VERTEX` | Custom 2D vertex attributes, transform and varyings. | refused | SKIA-153–154 | SkMesh must pass interpolation and clipping oracles before promotion. |
 | `EFFECT-FRAGMENT` | Single-output programmable fragment color. | bounded | SKIA-154–158 | Explicit SkSL v1 works; broader ABI and translated sources remain. |

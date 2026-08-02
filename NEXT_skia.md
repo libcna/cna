@@ -25,7 +25,7 @@
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
 - The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
-  146: 21 raster-only, 120 display-required tests, and five display-free source audits.
+  147: 21 raster-only, 121 display-required tests, and five display-free source audits.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
@@ -1389,11 +1389,34 @@ level-boundary contract.
   146/146 on virtual X11: 21 Raster, 120 Display and five Audit. All builds used at most
   `--parallel 2`; no real display or subagent was used, and `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-130
+
+- `Texture2D::FromStream` now reads DDS DXT1/DXT3/DXT5 as exact per-level spans instead of
+  decoding only level zero from the entire remaining payload. It uploads every decoded level into
+  the mutable chain; the resize/crop overload intentionally consumes level zero and returns a
+  single-level transformed texture.
+- DDS magic now commits to DDS-specific validation. Invalid header sizes, unsupported FourCC,
+  device-oversized dimensions, impossible counts, incomplete prefixes and truncated levels reject
+  without SDL_image fallback. Short stream reads also reject instead of leaving zero-filled input.
+- `Texture2DReader` requires positive counts, either level zero or the complete dimension-derived
+  chain, matching existing-instance dimensions/format/count, exact Color bytes and exact DXT block
+  bytes. This prevents Skia's valid runtime generation from inventing asset levels absent from XNB.
+- Added `Skia_Texture2D_ContentMips`: all four 8×8 levels round-trip for DDS DXT1/DXT3/DXT5
+  and XNB Color/DXT5, single-level inputs remain single-level, malformed/truncated/cross-boundary
+  inputs reject, and resource counters return to baseline after every success or failure.
+- The fixture passes in Debug and Release and under ASan+UBSan with only the documented external
+  Mesa GLX leak check disabled. Eighteen existing Texture2DReader, real XNB, PNG/JPEG/BMP and resize
+  tests pass. The unchanged EasyGL DXT1 FromStream and three-level public mip fixtures also pass
+  directly on virtual `:99` (their existing build cache names stale `:482`, so direct execution
+  supplied the live display explicitly). The complete Debug Skia suite passes 147/147 sequentially
+  on virtual `:99`: 21 Raster, 121 Display and five Audit, in 197.99 seconds. Every build used
+  `--parallel 2`; no real display or subagent was used, and `NEXT.md` remained untouched.
+
 ## Next candidates
 
-1. SKIA-130: load mipmapped 2D content and compressed-source assets without losing declared level
-   boundaries or fabricating absent mips.
-2. SKIA-131–158: implement render-target mips, formats, bounded cube/volume
+1. SKIA-131–133: implement mutable RenderTarget2D mip storage, pass-boundary generation and the
+   complete mip lifecycle/release gate.
+2. SKIA-134–158: implement formats, bounded cube/volume
    sampling, and wider explicit 2D
    effects in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
@@ -1409,7 +1432,8 @@ level-boundary contract.
   mip interpolation, while the real anisotropy capability remains false.
 - Mipmapped Texture2D construction, exact level reporting, full/partial transfer at every level,
   deterministic generation with explicit-level ownership barriers, and all nine TextureFilter
-  sampling routes are supported. Mipmapped RenderTarget2D remains
+  sampling routes are supported. Complete DDS/XNB chains preserve authored levels; partial asset
+  prefixes reject rather than fabricating their suffix. Mipmapped RenderTarget2D remains
   rejected until SKIA-131.
 - `docs/graphics-backend-feature-matrix.md` contains a separate verified Skia CPU-raster companion
   table, not an established GPU/3D column. Keep its task/test evidence synchronized with the live

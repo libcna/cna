@@ -475,6 +475,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_sampler_mipmap_filter examples/skia_sampler_mipmap_filter_test.cpp)
     cna_register_skia_display_test(Skia_Sampler_MipmapFilterPolicy cna_test_skia_sampler_mipmap_filter)
 
+    cna_skia_test(cna_test_skia_texture2d_content_mips
+                  examples/skia_texture2d_content_mips_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_content_mips
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_ContentMips
+                                   cna_test_skia_texture2d_content_mips)
+
     # Pixel-level sampling companion to the CPU readback cases above: two odd NPOT dimensions,
     # source-row selection, PointClamp, and backbuffer readback all pass through the public API.
     cna_skia_test(cna_test_skia_npot_texture examples/sdlrenderer_npot_texture_test.cpp)

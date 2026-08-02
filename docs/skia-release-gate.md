@@ -96,6 +96,13 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   generation, source-crop and SkSL integration set passes 5/5 in Release and 5/5 under
   ASan+UBSan (`detect_leaks=0` only for the documented Mesa GLX residual). All builds use at most
   `--parallel 2`.
+- SKIA-130 successor checkpoint: complete Debug Skia suite 147/147 PASS in sequential virtual-X11
+  execution (21 Raster, 121 Display, five Audit). `Skia_Texture2D_ContentMips` passes in Debug,
+  Release, and ASan+UBSan (`detect_leaks=0` only for the documented Mesa GLX residual). DDS
+  DXT1/DXT3/DXT5 and XNB Color/DXT5 preserve all four authored levels; single-level, incomplete,
+  truncated, and cross-boundary fixtures follow the documented non-fabrication policy. Eighteen
+  existing XNB and FromStream format/resize regressions pass on Xvfb. All builds use at most
+  `--parallel 2`.
 - `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`, and
   `Skia_ReleaseGate_Audit`: PASS.
 - Updated `Skia_Sampler_MipmapFilterPolicy` and `Skia_RenderTarget2D_MsaaPolicy`: 2/2 PASS on the
