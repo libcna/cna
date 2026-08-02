@@ -2118,13 +2118,14 @@ namespace CNA::Internal::Backends::Bgfx
         // REMED-GFX-067: on originBottomLeft renderers (OpenGL/GLES/WebGL) a render target's color
         // attachment stores its texel memory bottom-up, so sampling it with the ordinary top-down V
         // yields a vertically-mirrored image (an ordinary Texture2D is top-down and unaffected).
-        // Flip V for render-target sources so RenderTarget2D content blits back upright — matching
-        // every other backend's public XNA top-left orientation. Composes with FlipVertically above
-        // (two swaps cancel, preserving the user's requested flip). No-op on Vulkan/D3D/Metal
-        // (originBottomLeft == false), where the FBO memory is already top-down.
+        // Mirror each absolute V around the whole texture for render-target sources so both a full
+        // texture and a partial source rectangle select the same logical rows as an uploaded
+        // Texture2D. This composes with FlipVertically above without changing the selected region.
+        // No-op on Vulkan/D3D/Metal (originBottomLeft == false), where FBO memory is top-down.
         if (sourceIsRenderTarget && bgfx::getCaps()->originBottomLeft)
         {
-            std::swap(v1, v2);
+            v1 = 1.0f - v1;
+            v2 = 1.0f - v2;
         }
 
         const float dx = static_cast<float>(destinationRectangle.X);

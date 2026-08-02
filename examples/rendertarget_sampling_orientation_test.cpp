@@ -194,23 +194,6 @@ namespace
      */
     constexpr bool kStockEffectRtSourceSupported = true;
 
-    /**
-     * @brief Whether SpriteBatch's sourceRectangle is honoured for a render-target source.
-     *
-     * REMED-GFX-153 (recorded here, not owned by this task): bgfx applies REMED-GFX-067's
-     * bottom-up compensation as `std::swap(v1, v2)`, which only REVERSES the rows inside the
-     * source rectangle. That happens to equal the correct `v -> 1 - v` mirror when the rectangle
-     * spans the full texture height -- every prior fixture's case -- and is a different region of
-     * the texture otherwise. Measured: an 8x4 target sampled through source rectangle (4,2,4,2)
-     * returns logical row 0 where row 2 is required.
-     */
-    constexpr bool kRtSourceRectangleCorrect =
-#if defined(CNA_BACKEND_BGFX)
-        false;
-#else
-        true;
-#endif
-
     // REMED-GFX-154 is FIXED, so the `kMsaaFirstReadbackWorks` declaration that used to live here --
     // false on BGFX, pinning "the first readback of a multisampled target is entirely empty" -- is
     // gone, together with the dummy-target bind leg L1 used to nudge the resolve into completing.
@@ -1165,19 +1148,6 @@ class RenderTargetSamplingOrientationTest : public Game
                                     ") rt=" + ColorText(lhs) + " tex=" + ColorText(rhs);
                     }
                 }
-            const bool sourceRectCase = c.opts.src.has_value();
-            if (sourceRectCase && !kRtSourceRectangleCorrect)
-            {
-                // REMED-GFX-153 pinned: this backend reverses the rows INSIDE the source rectangle
-                // instead of mirroring V across the texture, so a sub-rectangle reads a different
-                // region entirely. Asserted as a difference, so fixing it trips this line.
-                check(mismatched > 0, std::string(c.name) +
-                      ": REMED-GFX-153 pinned -- this backend's render-target source rectangle "
-                      "does NOT match the Texture2D control (" +
-                      std::to_string(compared - mismatched) + "/" + std::to_string(compared) +
-                      " agree). Fixing REMED-GFX-153 must flip this declaration.");
-                continue;
-            }
             check(mismatched == 0, std::string(c.name) +
                   ": render target and Texture2D sample identically (" +
                   std::to_string(compared - mismatched) + "/" + std::to_string(compared) + ")" + first);

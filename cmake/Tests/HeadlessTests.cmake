@@ -69,6 +69,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     cna_register_backend_test(NAME Headless_RenderTarget_SamplingOrientation COMMAND cna_test_headless_rt_sampling_orientation
         TIMEOUT 120 LABELS "Headless")
 
+    # REMED-GFX-153 boundary control: no rasterization means target readback must refuse without
+    # touching the destination, and the same resource graph must dispose cleanly.
+    cna_headless_test(cna_test_headless_gfx153_source_rectangle
+        examples/source_rectangle_orientation_test.cpp)
+    cna_register_backend_test(NAME Headless_GFX153_SourceRectangleOrientation
+        COMMAND cna_test_headless_gfx153_source_rectangle
+        TIMEOUT 180 LABELS "Headless")
+
 
 
     # REMED-GFX-169: every stock 3D effect must sample its textures through the public

@@ -305,6 +305,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_RenderTarget_SamplingOrientation COMMAND cna_test_sdlgpu_rt_sampling_orientation
         TIMEOUT 120 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-153 cross-backend source-selection and render-target-destination control. SDL_GPU's
+    # established missing swapchain-download boundary is asserted separately inside the fixture.
+    cna_sdlgpu_test(cna_test_sdlgpu_gfx153_source_rectangle
+        examples/source_rectangle_orientation_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_GFX153_SourceRectangleOrientation
+        COMMAND cna_test_sdlgpu_gfx153_source_rectangle
+        TIMEOUT 180 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 
 
     # REMED-GFX-169: every stock 3D effect must sample its textures through the public

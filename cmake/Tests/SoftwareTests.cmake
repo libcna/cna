@@ -155,6 +155,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_RenderTarget_SamplingOrientation COMMAND cna_test_software_rt_sampling_orientation
         TIMEOUT 120 LABELS "Software")
 
+    # REMED-GFX-153 deterministic CPU control for source selection and destination orientation.
+    cna_software_test(cna_test_software_gfx153_source_rectangle
+        examples/source_rectangle_orientation_test.cpp)
+    cna_register_backend_test(NAME Software_GFX153_SourceRectangleOrientation
+        COMMAND cna_test_software_gfx153_source_rectangle
+        TIMEOUT 180 LABELS "Software")
+
     # REMED-GFX-151 cross-backend control: the canonical XNA render-to-texture sequence -- render
     # into a target, unbind it, sample it -- must complete in ONE public frame with no intervening
     # GetData, Present, extra frame, manual flush or wait. The defect was Vulkan-local (its deferred

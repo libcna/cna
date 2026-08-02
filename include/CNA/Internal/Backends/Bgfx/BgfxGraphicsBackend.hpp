@@ -1043,8 +1043,9 @@ namespace CNA::Internal::Backends::Bgfx
         // dimensions rather than a concrete BgfxTextureBackend, so callers can supply either a
         // BgfxTextureBackend's or a BgfxRenderTargetBackend's real sampleable texture (via
         // IBgfxSamplable::GetBgfxTextureHandle()) without an unsafe cast between unrelated types.
-        // REMED-GFX-067: sourceIsRenderTarget flips the sampled V on originBottomLeft renderers so
-        // a RenderTarget2D sampled back (its FBO memory is bottom-up on OpenGL) appears upright.
+        // REMED-GFX-067/GFX-153: sourceIsRenderTarget mirrors each absolute sampled V around the
+        // whole texture on originBottomLeft renderers, keeping full and partial source rectangles
+        // upright when a RenderTarget2D's FBO memory is bottom-up on OpenGL.
         void SubmitSprite(bgfx::TextureHandle textureHandle, bool sourceIsRenderTarget,
                           int texWidth, int texHeight,
                           const Rectangle& destinationRectangle,

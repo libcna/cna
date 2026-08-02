@@ -487,6 +487,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_RenderTarget_SamplingOrientation COMMAND cna_test_webgpu_rt_sampling_orientation
         TIMEOUT 120 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-153 cross-backend source-selection and destination-orientation control.
+    cna_webgpu_test(cna_test_webgpu_gfx153_source_rectangle
+                    examples/source_rectangle_orientation_test.cpp)
+    cna_register_backend_test(NAME WebGPU_GFX153_SourceRectangleOrientation
+        COMMAND cna_test_webgpu_gfx153_source_rectangle
+        TIMEOUT 180 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 
 
     # REMED-GFX-169: every stock 3D effect must sample its textures through the public

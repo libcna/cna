@@ -24,7 +24,8 @@
 // assertion is on the SET of colours and their pixel counts rather than on where each one landed:
 // sampling orientation is REMED-GFX-067's contract and is owned by
 // rendertarget_sampling_orientation_test.cpp and bgfx_rendertarget_orientation_test.cpp, so this
-// file must not double-declare it (and must not collide with REMED-GFX-153, still open).
+// file must not double-declare it; REMED-GFX-153's partial-source coverage lives in its dedicated
+// source_rectangle_orientation_test.cpp fixture.
 //
 // Exit code 0 = the unbound render target reached the backbuffer with its real content.
 

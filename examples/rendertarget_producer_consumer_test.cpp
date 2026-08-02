@@ -181,21 +181,6 @@ namespace
     constexpr bool kStockEffectRtSourceSupported = true;
 
     /**
-     * @brief Whether SpriteBatch's sourceRectangle is honoured for a render-target source.
-     *
-     * REMED-GFX-153 (recorded by REMED-GFX-147): bgfx applies its bottom-up compensation as
-     * `std::swap(v1, v2)`, which only reverses the rows INSIDE the source rectangle and so selects
-     * a different region whenever the rectangle is not full-height. Leg H's sub-rectangle case is
-     * declared unmeasurable there; its full-texture cases still run.
-     */
-    constexpr bool kRtSourceRectangleCorrect =
-#if defined(CNA_BACKEND_BGFX)
-        false;
-#else
-        true;
-#endif
-
-    /**
      * @brief Whether a BACKBUFFER draw can sample a render target that was never read back.
      *
      * REMED-GFX-155, measured here and FIXED (2026-07-29), so this is now true everywhere. On bgfx
@@ -1142,40 +1127,31 @@ class RenderTargetProducerConsumerTest : public Game
         }
 
         // H2: a sub-rectangle of the producer.
-        if (kRtSourceRectangleCorrect)
+        const Rectangle sub(4, 2, 4, 2);
+        RenderTarget2D dst(dev, 4, 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                           RenderTargetUsage::DiscardContents);
+        dev.SetRenderTarget(&dst);
+        ResetState(dev);
+        dev.Clear(Color(0, 0, 0, 255));
+        BlitPatternAt(dev, a, 0, SamplerState::PointClamp, sub);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        ResetState(dev);
+        Readback r = ReadWhole(dst, 4, 2);
+        if (RequireReadable(r, "H2 source-rectangle consumer"))
         {
-            const Rectangle sub(4, 2, 4, 2);
-            RenderTarget2D dst(dev, 4, 2, false, SurfaceFormat::Color, DepthFormat::None, 0,
-                               RenderTargetUsage::DiscardContents);
-            dev.SetRenderTarget(&dst);
-            ResetState(dev);
-            dev.Clear(Color(0, 0, 0, 255));
-            BlitPatternAt(dev, a, 0, SamplerState::PointClamp, sub);
-            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
-            ResetState(dev);
-            Readback r = ReadWhole(dst, 4, 2);
-            if (RequireReadable(r, "H2 source-rectangle consumer"))
-            {
-                int good = 0;
-                std::string first;
-                for (int y = 0; y < 2; ++y)
-                    for (int x = 0; x < 4; ++x)
-                    {
-                        const Color want = PatternColor(sub.X + x, sub.Y + y);
-                        if (Same(r.at(x, y), want)) ++good;
-                        else if (first.empty())
-                            first = " first at (" + std::to_string(x) + "," + std::to_string(y) +
-                                    ") want=" + ColorText(want) + " got=" + ColorText(r.at(x, y));
-                    }
-                check(good == 8, "H2 a never-read producer sampled through source rectangle "
-                                 "(4,2,4,2) (" + std::to_string(good) + "/8)" + first);
-            }
-        }
-        else
-        {
-            std::printf("[INFO] H2 source rectangles on a render-target source are declared "
-                        "incorrect on %s (REMED-GFX-153) -- not measured here\n", kBackendName);
-            std::fflush(stdout);
+            int good = 0;
+            std::string first;
+            for (int y = 0; y < 2; ++y)
+                for (int x = 0; x < 4; ++x)
+                {
+                    const Color want = PatternColor(sub.X + x, sub.Y + y);
+                    if (Same(r.at(x, y), want)) ++good;
+                    else if (first.empty())
+                        first = " first at (" + std::to_string(x) + "," + std::to_string(y) +
+                                ") want=" + ColorText(want) + " got=" + ColorText(r.at(x, y));
+                }
+            check(good == 8, "H2 a never-read producer sampled through source rectangle "
+                             "(4,2,4,2) (" + std::to_string(good) + "/8)" + first);
         }
     }
 
