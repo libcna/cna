@@ -633,6 +633,52 @@ comment there for the full per-leg breakdown).
 
 ---
 
+## LLGL backend: two `RenderTargetCube` faces sharing a depth buffer replay out of public order — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-41`,
+`rendertarget_depthstencil_usage_test.cpp`). Root cause identified with confidence; not fixed here
+(the correct fix is architectural -- interleaved cross-bucket replay for aliased resources -- and
+out of scope for a test-wiring task).
+
+**Symptom:** `rendertarget_depthstencil_usage_test.cpp`'s U2 check (28/29 checks otherwise pass) --
+clear face A and face B of a `RenderTargetCube` to depth 1.0 each, then draw into face A at depth
+0.25, then draw into face B (depth-tested) at depth 0.50 -- expects face B's draw to be REJECTED
+(0.50 is farther than the 0.25 face A's draw already wrote into the depth buffer they share, per
+FNA's own one-`glDepthStencilBuffer`-per-cube convention this backend already implements for
+storage). Instead face B's draw is ACCEPTED, as if the shared depth buffer still read 1.0.
+
+**Root cause:** each of a `RenderTargetCube`'s 6 faces is its own distinct `LLGL::RenderTarget`
+object (`CreateRenderTargetCube`'s own per-face loop), all six referencing the SAME physical depth
+`LLGL::Texture` -- so `GroupFrameCommandsByTargetEXT()` puts each face's commands in its OWN bucket
+(keyed by that face's own `LLGL::RenderTarget*`), not one shared bucket. Buckets replay fully,
+one at a time, in first-appearance order -- so the public sequence "clear A; clear B; draw A;
+draw B" replays as [face-A bucket: clear, draw] then [face-B bucket: clear, draw] -- face B's own
+EARLIER "clear to depth 1.0" command (queued before face A's draw, but living in face B's own
+bucket) ends up REPLAYED AFTER face A's draw, because bucket-level ordering only respects
+first-appearance of the BUCKET, not the true interleaved position of every command inside it. Face
+B's stale clear then wipes the shared depth value face A's draw had just written, so face B's own
+draw sees a fresh 1.0 instead of face A's 0.25. This is the same general shape as the (now-fixed)
+LLGL-40 swap-chain-bucket-ordering bug, but between two RENDER TARGETS that alias one physical
+resource rather than between a render target and the backbuffer -- `GroupFrameCommandsByTargetEXT`'s
+"replay each target's bucket fully, in first-appearance order" model is correct for buckets that
+never touch each other's resources, and wrong whenever two different-identity buckets alias the same
+underlying GPU memory (as cube faces deliberately do for depth, by design).
+
+**Why this needs more than a test-wiring fix:** a real fix requires either (a) true interleaved
+replay across buckets that alias a resource (a general capability the target-identity-bucket
+architecture does not have today), or (b) detecting the aliasing case specifically and special-
+casing cube-face depth replay -- both are architectural changes with real risk to the (large, only
+recently stabilized) rest of this backend's frame-replay model, not something to attempt blind at
+the end of a long session. Every OTHER depth/stencil check in the same file (single-target
+preserve/discard, MSAA, colour-vs-depth clear-flag isolation, disposal) passes cleanly, including
+U1 (a single face's own depth surviving its own unbind/rebind cycle) -- this is specifically about
+two DIFFERENT faces' commands interleaving correctly with each other.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
+`rendertarget_depthstencil_usage_test.cpp` until this is resolved).
+
+---
+
 ## LLGL backend: untextured+unlit `BasicEffect` with no vertex-colour attribute throws — OPEN
 
 **Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause

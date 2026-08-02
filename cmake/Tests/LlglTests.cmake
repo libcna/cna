@@ -459,6 +459,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    cna_llgl_test(cna_test_llgl_rendertarget_pass_boundary
+                  examples/rendertarget_pass_boundary_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTarget_PassBoundary COMMAND cna_test_llgl_rendertarget_pass_boundary
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # rendertarget_depthstencil_usage_test.cpp is deliberately NOT registered here: 28/29 checks
+    # pass (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate), but U2 (two
+    # RenderTargetCube faces sharing one depth buffer, replayed out of public order) hits a real,
+    # separate, OPEN finding -- see known_bugs.md's new entry.
+
     # backbuffer_first_read_test.cpp is deliberately NOT registered here: 9/13 legs pass
     # (A1, A3, A4, A6, B1, B2, B3, B4, C1), but D63/D64/D65 (its own row-pitch matrix, widths
     # 63/64/65 against a fixed height of 17) and E1 (64x32) all fail for a real, identified,
