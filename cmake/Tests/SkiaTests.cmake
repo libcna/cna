@@ -472,6 +472,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_Texture2D_UnormFormats
                                    cna_test_skia_texture2d_unorm_formats)
 
+    # SKIA-138: exact IEEE/half transfers, deterministic exceptional-value mips, native float
+    # image metadata, extended-range sampling and texture-only render-target gates.
+    cna_skia_test(cna_test_skia_texture2d_float_formats
+                  examples/skia_texture2d_float_formats_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_float_formats
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_FloatFormats
+                                   cna_test_skia_texture2d_float_formats)
+
     cna_skia_test(cna_test_skia_texture2d_dispose examples/sdlrenderer_texture2d_dispose_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Dispose cna_test_skia_texture2d_dispose)
 

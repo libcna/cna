@@ -16,6 +16,12 @@ struct SDL_Texture;
 
 namespace System::IO { class Stream; }
 
+namespace Microsoft::Xna::Framework
+{
+    struct Vector2;
+    struct Vector4;
+}
+
 namespace CNA::Internal::Backends
 {
     class ITextureBackend;
@@ -26,6 +32,9 @@ namespace Microsoft::Xna::Framework::Graphics::PackedVector
     struct Alpha8;
     struct Bgr565;
     struct Bgra4444;
+    struct HalfSingle;
+    struct HalfVector2;
+    struct HalfVector4;
     struct Rg32;
     struct Rgba1010102;
     struct Rgba64;
@@ -155,6 +164,36 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Uploads exact packed Rgba64 texels to a mip level or rectangle. */
         void SetData(int level, const Rectangle* rect, const PackedVector::Rgba64* data,
                      int startIndex, int elementCount);
+        /** @brief Uploads exact IEEE binary32 values to a Single texture. */
+        void SetData(const float* data, int elementCount);
+        /** @brief Uploads exact IEEE binary32 values to a Single mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const float* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact two-component binary32 values to a Vector2 texture. */
+        void SetData(const Vector2* data, int elementCount);
+        /** @brief Uploads exact two-component binary32 values to a Vector2 mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const Vector2* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact four-component binary32 values to a Vector4 texture. */
+        void SetData(const Vector4* data, int elementCount);
+        /** @brief Uploads exact four-component binary32 values to a Vector4 mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const Vector4* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed binary16 values to a HalfSingle texture. */
+        void SetData(const PackedVector::HalfSingle* data, int elementCount);
+        /** @brief Uploads exact packed binary16 values to a HalfSingle mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::HalfSingle* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed RG binary16 values to a HalfVector2 texture. */
+        void SetData(const PackedVector::HalfVector2* data, int elementCount);
+        /** @brief Uploads exact packed RG binary16 values to a HalfVector2 mip or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::HalfVector2* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed RGBA binary16 values to HalfVector4 or HdrBlendable. */
+        void SetData(const PackedVector::HalfVector4* data, int elementCount);
+        /** @brief Uploads exact packed RGBA binary16 values to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::HalfVector4* data,
+                     int startIndex, int elementCount);
         /** @brief Uploads exact unsigned bytes to a ByteEXT texture. */
         NOXNA void SetData(const std::uint8_t* data, int elementCount);
         /** @brief Uploads exact unsigned bytes to a ByteEXT mip level or rectangle. */
@@ -244,6 +283,48 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(PackedVector::Rgba64* data, int elementCount) const;
         /** @brief Reads exact packed Rgba64 texels from a mip level or rectangle. */
         void GetData(int level, const Rectangle* rect, PackedVector::Rgba64* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact IEEE binary32 values from a Single texture. */
+        void GetData(float* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact IEEE binary32 values from a Single texture. */
+        void GetData(float* data, int elementCount) const;
+        /** @brief Reads exact IEEE binary32 values from a Single mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, float* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact two-component binary32 values from a Vector2 texture. */
+        void GetData(Vector2* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact two-component binary32 values from a Vector2 texture. */
+        void GetData(Vector2* data, int elementCount) const;
+        /** @brief Reads exact two-component binary32 values from a Vector2 mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, Vector2* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact four-component binary32 values from a Vector4 texture. */
+        void GetData(Vector4* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact four-component binary32 values from a Vector4 texture. */
+        void GetData(Vector4* data, int elementCount) const;
+        /** @brief Reads exact four-component binary32 values from a Vector4 mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, Vector4* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed binary16 values from a HalfSingle texture. */
+        void GetData(PackedVector::HalfSingle* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed binary16 values from a HalfSingle texture. */
+        void GetData(PackedVector::HalfSingle* data, int elementCount) const;
+        /** @brief Reads exact packed binary16 values from a HalfSingle mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::HalfSingle* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed RG binary16 values from a HalfVector2 texture. */
+        void GetData(PackedVector::HalfVector2* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed RG binary16 values from a HalfVector2 texture. */
+        void GetData(PackedVector::HalfVector2* data, int elementCount) const;
+        /** @brief Reads exact packed RG binary16 values from a HalfVector2 mip or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::HalfVector2* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed RGBA binary16 values from HalfVector4 or HdrBlendable. */
+        void GetData(PackedVector::HalfVector4* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed RGBA binary16 values from HalfVector4 or HdrBlendable. */
+        void GetData(PackedVector::HalfVector4* data, int elementCount) const;
+        /** @brief Reads exact packed RGBA binary16 values from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::HalfVector4* data,
                      int startIndex, int elementCount) const;
         /** @brief Reads exact unsigned bytes from a ByteEXT texture. */
         NOXNA void GetData(std::uint8_t* data, int startIndex, int elementCount) const;

@@ -30,13 +30,13 @@ the compact successor index; the format matrix is the normative input for SKIA-1
 | `FMT-Rg32` | Two unsigned 16-bit channels and normalized raw sampling. | refused | SKIA-137 | Promoted for Texture2D: exact LE RG16 transfers/mips use `kR16G16_unorm` and sample B=0/A=1; targets stay refused. |
 | `FMT-Rgba64` | Four unsigned 16-bit channels and normalized raw sampling. | refused | SKIA-137 | Promoted for Texture2D: exact LE RGBA16 transfers/mips use `kR16G16B16A16_unorm`; targets stay refused. |
 | `FMT-Alpha8` | One alpha byte with zero RGB sampling semantics. | refused | SKIA-137 | Promoted for Texture2D: exact A8 storage uses pinned `kAlpha_8`, whose gather supplies zero RGB; targets stay refused. |
-| `FMT-Single` | One IEEE float channel and raw sampling. | refused | SKIA-138 | Preserve bit patterns and define NaN, infinity and renderability. |
-| `FMT-Vector2` | Two IEEE float channels and raw sampling. | refused | SKIA-138 | Preserve RG float layout without color management. |
-| `FMT-Vector4` | Four IEEE float channels, sampling and HDR operations. | refused | SKIA-138 | Use RGBA_F32 where supported and bound precision/readback behavior. |
-| `FMT-HalfSingle` | One IEEE half channel and raw sampling. | refused | SKIA-138 | Preserve half bits and explicit R-channel semantics. |
-| `FMT-HalfVector2` | Two IEEE half channels and raw sampling. | refused | SKIA-138 | Use R16G16 float storage where compatible. |
-| `FMT-HalfVector4` | Four IEEE half channels and HDR sampling. | refused | SKIA-138 | Use RGBA_F16 storage with explicit alpha/color-space policy. |
-| `FMT-HdrBlendable` | Blendable HDR half-float surface. | refused | SKIA-138 | Must separately prove transfer, blending and render-target support. |
+| `FMT-Single` | One IEEE float channel and raw sampling. | refused | SKIA-138 | Promoted for Texture2D: exact LE binary32 shadow expands to opaque `kRGBA_F32`; exceptional bits round-trip and targets stay refused. |
+| `FMT-Vector2` | Two IEEE float channels and raw sampling. | refused | SKIA-138 | Promoted for Texture2D: exact LE RG binary32 shadow expands to opaque `kRGBA_F32` with B=0; targets stay refused. |
+| `FMT-Vector4` | Four IEEE float channels, sampling and HDR operations. | refused | SKIA-138 | Promoted for Texture2D through direct `kRGBA_F32`, exact typed transfers and deterministic float mips; targets stay refused. |
+| `FMT-HalfSingle` | One IEEE half channel and raw sampling. | refused | SKIA-138 | Promoted for Texture2D through direct opaque `kR16_float`, exact half words and explicit exceptional-value mips. |
+| `FMT-HalfVector2` | Two IEEE half channels and raw sampling. | refused | SKIA-138 | Promoted for Texture2D through direct opaque `kR16G16_float`; B=0/A=1 sampling and exact transfers pass. |
+| `FMT-HalfVector4` | Four IEEE half channels and HDR sampling. | refused | SKIA-138 | Promoted for Texture2D through direct `kRGBA_F16`, exact typed transfers and extended-range sampling; targets stay refused. |
+| `FMT-HdrBlendable` | Blendable HDR half-float surface. | refused | SKIA-138 | Promoted for Texture2D through `kRGBA_F16`; unclamped sampling and bounded public blending pass, while render targets stay refused pending SKIA-142. |
 | `FMT-ColorBgraEXT` | BGRA8 XNA3 transfer layout and ordinary color sampling. | refused | SKIA-136 | Promoted for Texture2D: exact B/G/R/A transfer bytes use `kBGRA_8888`, sample with the required B/R mapping, and generate byte-domain mips; targets stay refused. |
 | `FMT-ColorSrgbEXT` | RGBA8 sRGB transfer with linear shader sampling. | refused | SKIA-136 | Promoted for Texture2D: exact encoded bytes, linear-light RGB mips, linear alpha, and explicit linear/sRGB destinations prove one decode and at most one re-encode; targets stay refused. |
 | `FMT-Dxt5SrgbEXT` | BC3 blocks with sRGB RGB sampling and linear alpha. | refused | SKIA-140 | Combine exact compressed shadow with explicit sRGB decoded image. |

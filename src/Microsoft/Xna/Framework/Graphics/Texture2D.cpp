@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -22,9 +23,14 @@
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfSingle.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector2.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfVector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/FormatException.hpp"
@@ -96,7 +102,14 @@ namespace Microsoft::Xna::Framework::Graphics
             || format == SurfaceFormat::ColorBgraEXT
             || format == SurfaceFormat::ColorSrgbEXT
             || format == SurfaceFormat::ByteEXT
-            || format == SurfaceFormat::UShortEXT)
+            || format == SurfaceFormat::UShortEXT
+            || format == SurfaceFormat::Single
+            || format == SurfaceFormat::Vector2
+            || format == SurfaceFormat::Vector4
+            || format == SurfaceFormat::HalfSingle
+            || format == SurfaceFormat::HalfVector2
+            || format == SurfaceFormat::HalfVector4
+            || format == SurfaceFormat::HdrBlendable)
         {
             return;
         }
@@ -697,6 +710,104 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
+        template <typename Element>
+        struct FloatElementTraits;
+
+        template <>
+        struct FloatElementTraits<float>
+        {
+            static constexpr int Components = 1;
+            [[nodiscard]] static float Get(const float& value, int) noexcept { return value; }
+            static void Set(float& value, int, float component) noexcept { value = component; }
+        };
+
+        template <>
+        struct FloatElementTraits<Vector2>
+        {
+            static constexpr int Components = 2;
+            [[nodiscard]] static float Get(const Vector2& value, int component) noexcept
+            {
+                return component == 0 ? value.X : value.Y;
+            }
+            static void Set(Vector2& value, int component, float channel) noexcept
+            {
+                if (component == 0) value.X = channel;
+                else value.Y = channel;
+            }
+        };
+
+        template <>
+        struct FloatElementTraits<Vector4>
+        {
+            static constexpr int Components = 4;
+            [[nodiscard]] static float Get(const Vector4& value, int component) noexcept
+            {
+                switch (component)
+                {
+                    case 0: return value.X;
+                    case 1: return value.Y;
+                    case 2: return value.Z;
+                    default: return value.W;
+                }
+            }
+            static void Set(Vector4& value, int component, float channel) noexcept
+            {
+                switch (component)
+                {
+                    case 0: value.X = channel; break;
+                    case 1: value.Y = channel; break;
+                    case 2: value.Z = channel; break;
+                    default: value.W = channel; break;
+                }
+            }
+        };
+
+        template <typename Element>
+        std::vector<std::uint8_t> EncodeFloatElements(
+            const Element* data, int startIndex, int elementCount)
+        {
+            if (!data || elementCount <= 0)
+                throw std::invalid_argument("Texture2D::SetData: data must not be null");
+            if (startIndex < 0)
+                throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+            constexpr int components = FloatElementTraits<Element>::Components;
+            std::vector<std::uint8_t> result(
+                static_cast<std::size_t>(elementCount) * components * sizeof(float));
+            for (int index = 0; index < elementCount; ++index)
+            {
+                for (int component = 0; component < components; ++component)
+                {
+                    const std::uint32_t bits = std::bit_cast<std::uint32_t>(
+                        FloatElementTraits<Element>::Get(data[startIndex + index], component));
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(index) * components + component) * sizeof(float);
+                    for (std::size_t byte = 0; byte < sizeof(float); ++byte)
+                        result[offset + byte] = static_cast<std::uint8_t>(bits >> (byte * 8u));
+                }
+            }
+            return result;
+        }
+
+        template <typename Element>
+        void DecodeFloatElements(const std::vector<std::uint8_t>& bytes, int requiredElements,
+                                 Element* data, int startIndex)
+        {
+            constexpr int components = FloatElementTraits<Element>::Components;
+            for (int index = 0; index < requiredElements; ++index)
+            {
+                for (int component = 0; component < components; ++component)
+                {
+                    const std::size_t offset =
+                        (static_cast<std::size_t>(index) * components + component) * sizeof(float);
+                    std::uint32_t bits = 0u;
+                    for (std::size_t byte = 0; byte < sizeof(float); ++byte)
+                        bits |= static_cast<std::uint32_t>(bytes[offset + byte]) << (byte * 8u);
+                    FloatElementTraits<Element>::Set(
+                        data[startIndex + index], component, std::bit_cast<float>(bits));
+                }
+            }
+        }
+
         int ValidatedRequestedTexelCount(const char* api, int baseWidth, int baseHeight,
                                          int level, int levelCount, const Rectangle* rect)
         {
@@ -822,6 +933,117 @@ namespace Microsoft::Xna::Framework::Graphics
             "Texture2D::SetData", width, height, level, levelCount_, rect);
         validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
         const auto bytes = EncodePackedElements<PackedVector::Rgba64, std::uint64_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
+    }
+
+    void Texture2D::SetData(const float* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const float* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Single)
+            throw std::invalid_argument("Texture2D::SetData: float data requires Single format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodeFloatElements(data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+    }
+
+    void Texture2D::SetData(const Vector2* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const Vector2* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Vector2)
+            throw std::invalid_argument("Texture2D::SetData: Vector2 data requires Vector2 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodeFloatElements(data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
+    }
+
+    void Texture2D::SetData(const Vector4* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const Vector4* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Vector4)
+            throw std::invalid_argument("Texture2D::SetData: Vector4 data requires Vector4 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodeFloatElements(data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 16);
+    }
+
+    void Texture2D::SetData(const PackedVector::HalfSingle* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect,
+                            const PackedVector::HalfSingle* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::HalfSingle)
+            throw std::invalid_argument(
+                "Texture2D::SetData: HalfSingle data requires HalfSingle format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::HalfSingle, std::uint16_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
+    }
+
+    void Texture2D::SetData(const PackedVector::HalfVector2* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect,
+                            const PackedVector::HalfVector2* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::HalfVector2)
+            throw std::invalid_argument(
+                "Texture2D::SetData: HalfVector2 data requires HalfVector2 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::HalfVector2, std::uint32_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+    }
+
+    void Texture2D::SetData(const PackedVector::HalfVector4* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect,
+                            const PackedVector::HalfVector4* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::HalfVector4 && format_ != SurfaceFormat::HdrBlendable)
+            throw std::invalid_argument(
+                "Texture2D::SetData: HalfVector4 data requires HalfVector4 or HdrBlendable format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::HalfVector4, std::uint64_t>(
             data, startIndex, requiredElements);
         SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
     }
@@ -1344,6 +1566,168 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 8u);
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
         DecodePackedElements<PackedVector::Rgba64, std::uint64_t>(
+            bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(float* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(float* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, float* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Single)
+            throw std::invalid_argument("Texture2D::GetData: float data requires Single format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+        DecodeFloatElements(bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(Vector2* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(Vector2* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, Vector2* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Vector2)
+            throw std::invalid_argument("Texture2D::GetData: Vector2 data requires Vector2 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 8u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
+        DecodeFloatElements(bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(Vector4* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(Vector4* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, Vector4* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Vector4)
+            throw std::invalid_argument("Texture2D::GetData: Vector4 data requires Vector4 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 16u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 16);
+        DecodeFloatElements(bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(PackedVector::HalfSingle* data,
+                            int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::HalfSingle* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect,
+                            PackedVector::HalfSingle* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::HalfSingle)
+            throw std::invalid_argument(
+                "Texture2D::GetData: HalfSingle data requires HalfSingle format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
+        DecodePackedElements<PackedVector::HalfSingle, std::uint16_t>(
+            bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(PackedVector::HalfVector2* data,
+                            int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::HalfVector2* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect,
+                            PackedVector::HalfVector2* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::HalfVector2)
+            throw std::invalid_argument(
+                "Texture2D::GetData: HalfVector2 data requires HalfVector2 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+        DecodePackedElements<PackedVector::HalfVector2, std::uint32_t>(
+            bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(PackedVector::HalfVector4* data,
+                            int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::HalfVector4* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect,
+                            PackedVector::HalfVector4* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::HalfVector4 && format_ != SurfaceFormat::HdrBlendable)
+            throw std::invalid_argument(
+                "Texture2D::GetData: HalfVector4 data requires HalfVector4 or HdrBlendable format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 8u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
+        DecodePackedElements<PackedVector::HalfVector4, std::uint64_t>(
             bytes, requiredElements, data, startIndex);
     }
 

@@ -122,19 +122,58 @@ protected:
 
         // ── Other unsupported formats must throw ─────────────────────────────
 
+#if defined(CNA_BACKEND_SKIA)
+        expectNoThrow("Texture2D Single", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
+        });
+        expectNoThrow("Texture2D Vector2", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector2);
+        });
+        expectNoThrow("Texture2D Vector4", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector4);
+        });
+        expectNoThrow("Texture2D HalfSingle", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfSingle);
+        });
+        expectNoThrow("Texture2D HalfVector2", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector2);
+        });
+        expectNoThrow("Texture2D HalfVector4", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector4);
+        });
+        expectNoThrow("Texture2D HdrBlendable", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
+        });
+#else
+        expectThrows("Texture2D Single", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
+        });
+        expectThrows("Texture2D Vector2", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector2);
+        });
+        expectThrows("Texture2D Vector4", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector4);
+        });
+        expectThrows("Texture2D HalfSingle", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfSingle);
+        });
+        expectThrows("Texture2D HalfVector2", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector2);
+        });
         expectThrows("Texture2D HalfVector4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HalfVector4);
         });
         expectThrows("Texture2D HdrBlendable", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
         });
+#endif
         expectThrows("Texture2D Dxt1", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });
 #if defined(CNA_BACKEND_SKIA)
-        // SKIA-135–137 promote these exact transfer/sampling formats for Texture2D only.
-        // The SKIA-136 colour formats were handled above; render targets remain independently
-        // gated and other backends retain the Color-only boundary.
+        // SKIA-135–138 promote these exact transfer/sampling formats for Texture2D only.
+        // The SKIA-136 colour and SKIA-138 float formats were handled above; render targets
+        // remain independently gated and other backends retain the Color-only boundary.
         expectNoThrow("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });
@@ -179,10 +218,6 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::UShortEXT);
         });
 #endif
-        expectThrows("Texture2D Vector4", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector4);
-        });
-
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         result_ = (fail_ == 0) ? 0 : 1;
         Exit();

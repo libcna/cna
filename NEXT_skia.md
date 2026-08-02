@@ -1581,9 +1581,47 @@ level-boundary contract.
   little-endian artifact. Public transfers are explicitly serialized, but a future big-endian
   build must additionally prove or refuse the Skia colour-type interpretation.
 
+## Completed in this session: SKIA-138
+
+- Skia `Texture2D` now promotes `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`,
+  `HalfVector4`, and `HdrBlendable` without widening `RenderTarget2D`, cube, or volume gates.
+  Direct pinned views cover RGBA32F, R16F, RG16F, and RGBA16F; exact `Single`/`Vector2` shadows
+  expand into bounded opaque RGBA32F images with zero missing colour channels.
+- Public whole-level/rectangle Set/Get overloads accept `float`, `Vector2`, `Vector4`,
+  `HalfSingle`, `HalfVector2`, and `HalfVector4` values (`HalfVector4` is also the
+  `HdrBlendable` transfer type). Every component/property is serialized explicitly
+  little-endian. Polymorphic packed-vector layout and native Vector struct layout are never used
+  as transfer bytes. Signed zero, subnormals, infinities, and NaN payload bits round-trip exactly.
+- Generated float/half mips use an explicit deterministic policy: finite inputs accumulate in
+  double and narrow once; one infinity sign dominates finite values; any NaN or opposing
+  infinities produce canonical positive quiet NaN (`0x7FC00000`/`0x7E00`). Original authored
+  levels retain their exact exceptional-value bits.
+- `Skia_Texture2D_FloatFormats` passes 44/44 checks for construction/accounting, full and partial
+  transfer, caller guards, endian storage, typed metadata, finite and exceptional mips, missing
+  channels, unclamped negative/greater-than-one HDR sampling, public non-premultiplied blending,
+  typed failure atomicity, seven target refusals, and exact resource release. The shared Skia
+  refusal list is now nine formats instead of 16.
+- The focused `Skia_Contract_SurfaceFormat`, `Skia_Texture2D_Constraints`, and
+  `Skia_Texture2D_FloatFormats` gate passes 3/3 in Debug, Release, and ASan+UBSan
+  (`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1`, `UBSAN_OPTIONS=halt_on_error=1`). All 12 focused
+  construction unit tests pass on virtual X11. The non-Skia EasyGL contract passes 24/24 and still
+  rejects all seven formats.
+- The complete Debug tree builds with `cmake --build cmake-build-skia --parallel 2`. The final
+  complete sequential Skia suite passes 155/155 in 217.64 seconds on isolated auto-selected Xvfb:
+  21 Raster, 128 Display, and six Audit tests. An earlier full run used a stale pre-relink Debug
+  test executable and reported only its old alpha-oracle expectation; rebuilding the target and
+  repeating the complete suite produced the recorded clean result.
+- A final post-documentation rerun passed all six Audit tests. Its optional display-only repeat
+  could not start SDL because the host `/tmp/.X11-unix` directory had become owned by `nobody`
+  and Xvfb consequently refused every local listener; no test body or assertion ran. The only
+  changes after the clean 155/155 run were comments and documentation.
+- Useful focused command:
+  `xvfb-run -a env SDL_AUDIODRIVER=dummy ctest --test-dir cmake-build-skia -R 'Skia_(Contract_SurfaceFormat|Texture2D_Constraints|Texture2D_FloatFormats)$' --output-on-failure -j 1`.
+- No real display or subagent was used. `NEXT.md` remained untouched.
+
 ## Next candidates
 
-1. SKIA-138–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
+1. SKIA-139–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
    order, retaining exact pre-allocation refusals until each format passes transfer and pixels.
 2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.

@@ -5,11 +5,14 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkData.h"
 #include "include/core/SkPixmap.h"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -31,7 +34,14 @@ namespace CNA::Internal::Backends::Skia
                 || format == SurfaceFormat::ColorBgraEXT
                 || format == SurfaceFormat::ColorSrgbEXT
                 || format == SurfaceFormat::ByteEXT
-                || format == SurfaceFormat::UShortEXT;
+                || format == SurfaceFormat::UShortEXT
+                || format == SurfaceFormat::Single
+                || format == SurfaceFormat::Vector2
+                || format == SurfaceFormat::Vector4
+                || format == SurfaceFormat::HalfSingle
+                || format == SurfaceFormat::HalfVector2
+                || format == SurfaceFormat::HalfVector4
+                || format == SurfaceFormat::HdrBlendable;
         }
 
         [[nodiscard]] std::size_t BytesPerTexel(SurfaceFormat format)
@@ -43,16 +53,24 @@ namespace CNA::Internal::Backends::Skia
                 case SurfaceFormat::Rg32:
                 case SurfaceFormat::ColorBgraEXT:
                 case SurfaceFormat::ColorSrgbEXT:
+                case SurfaceFormat::Single:
+                case SurfaceFormat::HalfVector2:
                     return 4u;
                 case SurfaceFormat::Bgr565:
                 case SurfaceFormat::Bgra4444:
                 case SurfaceFormat::UShortEXT:
+                case SurfaceFormat::HalfSingle:
                     return 2u;
                 case SurfaceFormat::Rgba64:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
                     return 8u;
                 case SurfaceFormat::Alpha8:
                 case SurfaceFormat::ByteEXT:
                     return 1u;
+                case SurfaceFormat::Vector4:
+                    return 16u;
                 default:
                     throw System::NotSupportedException(
                         "Skia Texture2D has no promoted representation for this SurfaceFormat.");
@@ -104,6 +122,22 @@ namespace CNA::Internal::Backends::Skia
                 case SurfaceFormat::UShortEXT:
                     return SkImageInfo::Make(
                         width, height, kR16_unorm_SkColorType, kOpaque_SkAlphaType);
+                case SurfaceFormat::Single:
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::Vector4:
+                    return SkImageInfo::Make(
+                        width, height, kRGBA_F32_SkColorType,
+                        format == SurfaceFormat::Vector4 ? alphaType : kOpaque_SkAlphaType);
+                case SurfaceFormat::HalfSingle:
+                    return SkImageInfo::Make(
+                        width, height, kR16_float_SkColorType, kOpaque_SkAlphaType);
+                case SurfaceFormat::HalfVector2:
+                    return SkImageInfo::Make(
+                        width, height, kR16G16_float_SkColorType, kOpaque_SkAlphaType);
+                case SurfaceFormat::HalfVector4:
+                case SurfaceFormat::HdrBlendable:
+                    return SkImageInfo::Make(
+                        width, height, kRGBA_F16_SkColorType, alphaType);
                 default:
                     throw System::NotSupportedException(
                         "Skia Texture2D has no image info for this SurfaceFormat.");
@@ -161,6 +195,35 @@ namespace CNA::Internal::Backends::Skia
             return rgba;
         }
 
+        [[nodiscard]] bool NeedsExpandedFloatImage(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::Single || format == SurfaceFormat::Vector2;
+        }
+
+        [[nodiscard]] std::vector<std::uint8_t> ExpandFloatImage(
+            SurfaceFormat format, const std::uint8_t* source, int width, int height,
+            std::size_t sourceRowBytes)
+        {
+            const std::size_t sourceTexelBytes =
+                format == SurfaceFormat::Single ? 4u : 8u;
+            std::vector<std::uint8_t> rgba(
+                static_cast<std::size_t>(width) * height * 16u, 0u);
+            for (int y = 0; y < height; ++y)
+            {
+                for (int x = 0; x < width; ++x)
+                {
+                    const std::uint8_t* input = source
+                        + static_cast<std::size_t>(y) * sourceRowBytes
+                        + static_cast<std::size_t>(x) * sourceTexelBytes;
+                    std::uint8_t* output = rgba.data()
+                        + (static_cast<std::size_t>(y) * width + x) * 16u;
+                    std::memcpy(output, input, sourceTexelBytes);
+                    WriteU32Le(output + 12u, 0x3F800000u);
+                }
+            }
+            return rgba;
+        }
+
         [[nodiscard]] sk_sp<SkImage> MakePackedImageCopy(
             SurfaceFormat format, const std::uint8_t* pixels, int width, int height,
             std::size_t rowBytes, SkAlphaType alphaType)
@@ -174,6 +237,15 @@ namespace CNA::Internal::Backends::Skia
                     static_cast<std::size_t>(width) * 4u);
                 return SkImages::RasterFromPixmapCopy(pixmap);
             }
+            if (NeedsExpandedFloatImage(format))
+            {
+                const std::vector<std::uint8_t> rgba =
+                    ExpandFloatImage(format, pixels, width, height, rowBytes);
+                const SkPixmap pixmap(
+                    TextureImageInfo(format, width, height, alphaType), rgba.data(),
+                    static_cast<std::size_t>(width) * 16u);
+                return SkImages::RasterFromPixmapCopy(pixmap);
+            }
             const SkPixmap pixmap(
                 TextureImageInfo(format, width, height, alphaType), pixels, rowBytes);
             return SkImages::RasterFromPixmapCopy(pixmap);
@@ -183,7 +255,7 @@ namespace CNA::Internal::Backends::Skia
             SurfaceFormat format, const std::uint8_t* pixels, int width, int height,
             std::size_t rowBytes, std::size_t byteCount, SkAlphaType alphaType)
         {
-            if (format == SurfaceFormat::Bgra4444)
+            if (format == SurfaceFormat::Bgra4444 || NeedsExpandedFloatImage(format))
                 return MakePackedImageCopy(format, pixels, width, height, rowBytes, alphaType);
             return SkImages::RasterFromData(
                 TextureImageInfo(format, width, height, alphaType),
@@ -254,6 +326,117 @@ namespace CNA::Internal::Backends::Skia
                 }
             }
         }
+
+        [[nodiscard]] bool IsFloatTextureFormat(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::Single
+                || format == SurfaceFormat::Vector2
+                || format == SurfaceFormat::Vector4
+                || format == SurfaceFormat::HalfSingle
+                || format == SurfaceFormat::HalfVector2
+                || format == SurfaceFormat::HalfVector4
+                || format == SurfaceFormat::HdrBlendable;
+        }
+
+        [[nodiscard]] bool IsHalfTextureFormat(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::HalfSingle
+                || format == SurfaceFormat::HalfVector2
+                || format == SurfaceFormat::HalfVector4
+                || format == SurfaceFormat::HdrBlendable;
+        }
+
+        [[nodiscard]] int FloatChannelCount(SurfaceFormat format) noexcept
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Single:
+                case SurfaceFormat::HalfSingle:
+                    return 1;
+                case SurfaceFormat::Vector2:
+                case SurfaceFormat::HalfVector2:
+                    return 2;
+                default:
+                    return 4;
+            }
+        }
+
+        [[nodiscard]] float ReadFloatChannel(
+            SurfaceFormat format, const std::uint8_t* texel, int channel) noexcept
+        {
+            if (IsHalfTextureFormat(format))
+            {
+                return Microsoft::Xna::Framework::Graphics::PackedVector::HalfTypeHelper::Convert(
+                    ReadU16Le(texel + static_cast<std::size_t>(channel) * 2u));
+            }
+            return std::bit_cast<float>(
+                ReadU32Le(texel + static_cast<std::size_t>(channel) * 4u));
+        }
+
+        void WriteFloatChannel(SurfaceFormat format, std::uint8_t* texel,
+                               int channel, float value) noexcept
+        {
+            if (IsHalfTextureFormat(format))
+            {
+                const std::uint16_t bits = std::isnan(value)
+                    ? static_cast<std::uint16_t>(0x7E00u)
+                    : Microsoft::Xna::Framework::Graphics::PackedVector::HalfTypeHelper::Convert(
+                        value);
+                WriteU16Le(texel + static_cast<std::size_t>(channel) * 2u, bits);
+                return;
+            }
+            const std::uint32_t bits = std::isnan(value)
+                ? 0x7FC00000u
+                : std::bit_cast<std::uint32_t>(value);
+            WriteU32Le(texel + static_cast<std::size_t>(channel) * 4u, bits);
+        }
+
+        struct FloatMipAccumulator final
+        {
+            double finiteSum = 0.0;
+            bool hasFinite = false;
+            bool hasNaN = false;
+            bool hasPositiveInfinity = false;
+            bool hasNegativeInfinity = false;
+
+            void Add(float value) noexcept
+            {
+                if (std::isnan(value))
+                {
+                    hasNaN = true;
+                    return;
+                }
+                if (std::isinf(value))
+                {
+                    if (std::signbit(value)) hasNegativeInfinity = true;
+                    else hasPositiveInfinity = true;
+                    return;
+                }
+                if (!hasFinite)
+                {
+                    finiteSum = value;
+                    hasFinite = true;
+                }
+                else
+                {
+                    finiteSum += value;
+                }
+            }
+
+            [[nodiscard]] float Average(std::uint32_t sampleCount) const noexcept
+            {
+                // Generated mips use a stable IEEE policy independent of source NaN payload:
+                // any NaN, or opposing infinities, becomes canonical positive quiet NaN;
+                // one infinity sign dominates finite samples; finite samples average in double.
+                if (hasNaN || (hasPositiveInfinity && hasNegativeInfinity))
+                    return std::bit_cast<float>(0x7FC00000u);
+                if (hasPositiveInfinity)
+                    return std::numeric_limits<float>::infinity();
+                if (hasNegativeInfinity)
+                    return -std::numeric_limits<float>::infinity();
+                return static_cast<float>(finiteSum / static_cast<double>(sampleCount));
+            }
+        };
     }
 
     SkiaTextureBackend::SkiaTextureBackend(const ImageData& data,
@@ -298,7 +481,9 @@ namespace CNA::Internal::Backends::Skia
         }
 
         const std::size_t workingBytesPerTexel =
-            format_ == SurfaceFormat::Bgra4444 ? 4u : bytesPerTexel_;
+            NeedsExpandedFloatImage(format_) ? 16u
+            : format_ == SurfaceFormat::Bgra4444 ? 4u
+            : bytesPerTexel_;
         std::size_t workingLevelZeroBytes = 0u;
         std::size_t imageBytes = 0u;
         std::size_t retainedBytes = 0u;
@@ -434,7 +619,8 @@ namespace CNA::Internal::Backends::Skia
                 : kUnpremul_SkAlphaType;
         // The chain has stable addresses and outlives this temporary image. No pixel copy or
         // retained per-draw cache is needed for direct layouts; UpdatePixels cannot overlap a
-        // synchronous raster draw. Bgra4444 takes its mandatory bounded conversion copy here.
+        // synchronous raster draw. Bgra4444 and expanded Single/Vector2 views take their
+        // mandatory bounded conversion copy here.
         return MakePackedMipImage(format_, mipChain_->LevelData(level), mip.width, mip.height,
                                   mip.rowBytes, mip.bytes, alphaType);
     }
@@ -491,6 +677,53 @@ namespace CNA::Internal::Backends::Skia
         if (format_ == SurfaceFormat::ColorSrgbEXT)
         {
             GenerateSrgbMipLevel(*mipChain_, level);
+            return;
+        }
+
+        if (IsFloatTextureFormat(format_))
+        {
+            const SkiaMipLevel2D& source = mipChain_->Level(level - 1);
+            const SkiaMipLevel2D& target = mipChain_->Level(level);
+            const std::uint8_t* sourcePixels = mipChain_->LevelData(level - 1);
+            std::uint8_t* targetPixels = mipChain_->LevelData(level);
+            const int channelCount = FloatChannelCount(format_);
+            for (int y = 0; y < target.height; ++y)
+            {
+                const int y0 = static_cast<int>(
+                    static_cast<std::int64_t>(y) * source.height / target.height);
+                const int y1 = static_cast<int>(
+                    static_cast<std::int64_t>(y + 1) * source.height / target.height);
+                for (int x = 0; x < target.width; ++x)
+                {
+                    const int x0 = static_cast<int>(
+                        static_cast<std::int64_t>(x) * source.width / target.width);
+                    const int x1 = static_cast<int>(
+                        static_cast<std::int64_t>(x + 1) * source.width / target.width);
+                    const std::uint32_t sampleCount = static_cast<std::uint32_t>(
+                        (x1 - x0) * (y1 - y0));
+                    FloatMipAccumulator accumulators[4];
+                    for (int sourceY = y0; sourceY < y1; ++sourceY)
+                    {
+                        for (int sourceX = x0; sourceX < x1; ++sourceX)
+                        {
+                            const std::uint8_t* texel = sourcePixels
+                                + static_cast<std::size_t>(sourceY) * source.rowBytes
+                                + static_cast<std::size_t>(sourceX) * bytesPerTexel_;
+                            for (int channel = 0; channel < channelCount; ++channel)
+                                accumulators[channel].Add(
+                                    ReadFloatChannel(format_, texel, channel));
+                        }
+                    }
+                    std::uint8_t* output = targetPixels
+                        + static_cast<std::size_t>(y) * target.rowBytes
+                        + static_cast<std::size_t>(x) * bytesPerTexel_;
+                    for (int channel = 0; channel < channelCount; ++channel)
+                    {
+                        WriteFloatChannel(format_, output, channel,
+                                          accumulators[channel].Average(sampleCount));
+                    }
+                }
+            }
             return;
         }
 

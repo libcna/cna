@@ -368,37 +368,65 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
@@ -467,6 +495,13 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::ColorSrgbEXT
             || format == SurfaceFormat::ByteEXT
             || format == SurfaceFormat::UShortEXT
+            || format == SurfaceFormat::Single
+            || format == SurfaceFormat::Vector2
+            || format == SurfaceFormat::Vector4
+            || format == SurfaceFormat::HalfSingle
+            || format == SurfaceFormat::HalfVector2
+            || format == SurfaceFormat::HalfVector4
+            || format == SurfaceFormat::HdrBlendable
 #endif
             ;
         if (supported)
