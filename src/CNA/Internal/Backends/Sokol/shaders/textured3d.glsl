@@ -51,6 +51,9 @@ layout(binding = 0) uniform sampler smp;
 
 layout(binding = 1) uniform textured3d_fs_params {
     vec4 fogColor; // xyz used
+    // REMED-GFX-147: 1 when `tex` is a RenderTarget2D's colour attachment, 0 for a plain texture --
+    // see IsRenderTargetSourceEXT's own doc comment. x used, yzw unused.
+    vec4 rtFlipV;
 };
 
 in vec2 uv;
@@ -61,7 +64,8 @@ in float fogFactor;
 out vec4 frag_color;
 
 void main() {
-    vec4 c = texture(sampler2D(tex, smp), uv) * tint;
+    vec2 sampleUv = vec2(uv.x, mix(uv.y, 1.0 - uv.y, rtFlipV.x));
+    vec4 c = texture(sampler2D(tex, smp), sampleUv) * tint;
     float pass = (alphaTestOut.y > 0.0)
         ? ((abs(c.a - alphaTestOut.x) < alphaTestOut.y) ? alphaTestOut.z : alphaTestOut.w)
         : ((c.a < alphaTestOut.x) ? alphaTestOut.z : alphaTestOut.w);

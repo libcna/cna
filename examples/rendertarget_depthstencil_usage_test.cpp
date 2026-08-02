@@ -341,12 +341,17 @@ namespace
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
 #elif defined(CNA_BACKEND_SOKOL)
-    // plan_sokol.md SOKOL-25/26: RenderTarget2D AND RenderTargetCube can both be created and
-    // bound, but neither has a working GetData (docs/sokol-backend.md: SokolRenderTargetBackend/
-    // SokolRenderTargetCubeBackend inherit the base class's `return false` readback default), so
-    // `readback`/`cubeReadback` stay Unsupported and every readback-driven check in this file
-    // (including all of D8/U1-U4) safely degenerates to its legality-only skeleton. `stencilInRT`
-    // and `stencilPreserves` true (plan_sokol.md SOKOL-23): ApplyDepthStencilState now wires the
+    // plan_sokol.md SOKOL-25/26/38: RenderTarget2D AND RenderTargetCube can both be created and
+    // bound, and both now have a working single-sample GetData (SokolRenderTargetBackend/
+    // SokolRenderTargetCubeBackend read back their real colour content via a throwaway GL FBO
+    // around the raw GL texture sg_gl_query_image_info() exposes), so `readback`/`cubeReadback`
+    // are Exact and every readback-driven check in this file (U1-U4 in particular) measures real
+    // pixels. `msaaReadback` stays false, conservatively unclaimed: a multisampled RenderTarget2D's
+    // own multisample colour image has a DONTCARE store action at every pass end (SOKOL-26's own
+    // resolve-then-discard design, matching sokol_gfx.h's documented MSAA workflow), so whether its
+    // content survives an unbind/rebind PreserveContents cycle the way D8 requires is genuinely
+    // unverified here, not just untested -- D8 stays skipped rather than asserting an unmeasured
+    // claim either way. `stencilInRT` and `stencilPreserves` true (plan_sokol.md SOKOL-23): ApplyDepthStencilState now wires the
     // real stencil state into Pipeline3DKey/Get3DPipeline (front/back ops, compare, masks and
     // reference are baked into the sokol_gfx pipeline itself, since sg_stencil_state.ref is
     // pipeline state there, not dynamic). Depth and stencil share the one real depth-stencil image
@@ -358,13 +363,16 @@ namespace
     // (Sokol_RenderTarget2D_Depth's own proof). `orderedClearInCycle` true: QueueClear ends the
     // active pass so a mid-cycle Clear cannot be reordered against an earlier draw -- the same
     // "GraphicsDevice itself clears a DiscardContents target" convention EasyGL documents.
-    // `msaaDepthRT2D`/`msaaDepthCube` true: CreateRenderTarget2D/CreateRenderTargetCube silently
-    // clamp `multiSampleCount` to 1 (this backend's documented, codebase-wide convention for a
-    // capability with a self-reporting query) rather than throwing or aborting, so both targets
-    // genuinely can be created and bound; the readback-gated checks that would otherwise measure
-    // them stay skipped regardless. `msaaCubeReadback` -- a field this file gained after this
-    // lane was branched -- is false for the same reason `msaaReadback` is.
-    constexpr Contract kContract{"SOKOL", Support::Unsupported, true, Support::Unsupported,
+    // `msaaDepthRT2D` true: a multisampled, depth-backed RenderTarget2D is real as of SOKOL-26 (a
+    // genuine multisample colour + matching-sample-count depth image, not a silent clamp) and can
+    // be created and bound. `msaaDepthCube` true for the opposite reason: CreateRenderTargetCube
+    // still silently clamps `multiSampleCount` to 1 (RenderTargetCube MSAA is a permanent sokol_gfx
+    // boundary -- SG_IMAGETYPE_CUBE rejects sample_count > 1 outright), so it too can always be
+    // created and bound, just never genuinely multisampled; either way the D8/U-series checks that
+    // would measure MSAA depth content stay skipped via `msaaReadback` above -- and so does
+    // `msaaCubeReadback`, a field this file gained after this lane was branched, which is false
+    // because a multisampled cube can never exist here at all.
+    constexpr Contract kContract{"SOKOL", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true,
                                  true, true, false, false, true, true, false, false};
 #else

@@ -230,6 +230,25 @@ namespace CNA::Internal::Backends::Sokol
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
 
         /**
+         * @brief Reads back a rectangle of this target's colour content via a throwaway GL FBO.
+         *
+         * plan_sokol.md SOKOL-38. GL-only, and only ever @p level 0 -- `CreateRenderTarget2D`
+         * refuses `mipMap=true` before this class exists at all.
+         *
+         * @param level      Must be 0; any other value returns false.
+         * @param x          Left edge of the requested region, in pixels.
+         * @param y          Top edge of the requested region, in pixels.
+         * @param w          Width of the requested region, in pixels.
+         * @param h          Height of the requested region, in pixels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes.
+         * @return True if the whole region was written; false on a non-GL `CNA_SOKOL_API`, an
+         *         out-of-range request, or an out-of-range level.
+         */
+        [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
+
+        /**
          * @brief Returns the real, driver-clamped MSAA sample count this target was created with.
          * @return Sample count greater than 1 when MSAA is active; 0 when it is not.
          */
@@ -340,6 +359,26 @@ namespace CNA::Internal::Backends::Sokol
          * @return True if a depth-stencil attachment exists.
          */
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override;
+
+        /**
+         * @brief Reads back a rectangle of one face's colour content via a throwaway GL FBO.
+         *
+         * plan_sokol.md SOKOL-38. GL-only, and only ever @p level 0 -- `CreateRenderTargetCube`
+         * refuses `mipMap=true` before this class exists at all.
+         *
+         * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level      Must be 0; any other value returns false.
+         * @param x          Left edge of the requested region, in texels.
+         * @param y          Top edge of the requested region, in texels.
+         * @param w          Width of the requested region, in texels.
+         * @param h          Height of the requested region, in texels.
+         * @param data       Destination for tightly packed RGBA8 rows, top row first.
+         * @param dataLength Size of @p data in bytes.
+         * @return True if the whole region was written; false on a non-GL `CNA_SOKOL_API`, an
+         *         out-of-range request, an out-of-range level, or an invalid @p face.
+         */
+        [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
+                                   void* data, int dataLength) const override;
 
         /**
          * @brief Returns the raw sokol_gfx cube image handle id. NOXNA.

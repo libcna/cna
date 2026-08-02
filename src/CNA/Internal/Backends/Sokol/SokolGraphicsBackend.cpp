@@ -268,6 +268,78 @@ namespace CNA::Internal::Backends::Sokol
             throw std::runtime_error(
                 std::string("Sokol backend: ") + context + " was handed a foreign texture backend");
         }
+
+        /// True when @p texture is a RenderTarget2D's colour attachment rather than a plain,
+        /// CPU-uploaded texture (REMED-GFX-147). A render target's colour image is written by real
+        /// GPU rasterization, whose framebuffer-origin convention places row 0 (CNA's logical top)
+        /// at OpenGL's HIGH y (v=1 when later sampled) -- the opposite of a plain SokolTextureBackend,
+        /// whose CPU pixel buffer is uploaded byte-for-byte via sg_make_image with no Y-flip, so its
+        /// row 0 lands at v=0 directly. Sampling both kinds with the same UV convention silently
+        /// mirrors every render-target source vertically; the fragment shaders' `uRtFlipV`/`rtFlipV`
+        /// uniform (sprite_fs_params/textured3d_fs_params/lit3d_fs_params) corrects it per-draw, the
+        /// same per-slot-uniform shape EasyGL's own uRtFlipV and bgfx's u_rtFlipV use for the
+        /// identical finding.
+        bool IsRenderTargetSourceEXT(const ITextureBackend& texture)
+        {
+            return dynamic_cast<const SokolRenderTargetBackend*>(&texture) != nullptr;
+        }
+
+#if CNA_SOKOL_HAS_GL_READBACK
+        /// Reads back a rectangle of an sg_image's colour content via a throwaway GL FBO, GL-only
+        /// (plan_sokol.md SOKOL-38). sokol_gfx has no read-back API of its own, but
+        /// sg_gl_query_image_info() exposes the raw GL texture handle backing any image regardless
+        /// of whether it is the currently active render target -- unlike ReadBackbuffer(), which
+        /// piggybacks on whatever FBO sokol_gfx itself left bound after ending the active pass, this
+        /// needs its own independent FBO since RenderTarget2D::GetData()/RenderTargetCube::GetData()
+        /// must work whether or not the target is currently bound. @p attachTarget is
+        /// GL_TEXTURE_2D for a RenderTarget2D or GL_TEXTURE_CUBE_MAP_POSITIVE_X + face for one face
+        /// of a RenderTargetCube. Returns false (leaving @p data untouched) if the image has no raw
+        /// GL texture or the throwaway FBO cannot be completed -- neither should happen for an image
+        /// this backend itself created as a colour attachment, but there is no fabricated-pixel
+        /// fallback either way.
+        bool ReadColorImagePixelsViaGL(std::uint32_t colorImageId, GLenum attachTarget,
+                                       int imageHeight, int x, int y, int w, int h, void* data)
+        {
+            if (colorImageId == 0) return false;
+
+            const sg_gl_image_info info = sg_gl_query_image_info(MakeImageHandle(colorImageId));
+            const GLuint texId = info.tex[info.active_slot];
+            if (texId == 0) return false;
+
+            GLint previousFbo = 0;
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFbo);
+
+            GLuint fbo = 0;
+            glGenFramebuffers(1, &fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, attachTarget, texId, 0);
+
+            const bool complete =
+                glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+            if (complete)
+            {
+                // Top-left origin (every CNA caller) -> GL's bottom-left framebuffer origin, the
+                // same flip ReadBackbuffer applies to the window's own framebuffer.
+                const int glY = imageHeight - (y + h);
+                std::vector<std::uint8_t> raw(static_cast<std::size_t>(w) * h * 4u);
+                glPixelStorei(GL_PACK_ALIGNMENT, 1);
+                glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, raw.data());
+
+                auto* destination = static_cast<std::uint8_t*>(data);
+                for (int row = 0; row < h; ++row)
+                {
+                    const int sourceRow = h - 1 - row;
+                    std::memcpy(destination + static_cast<std::size_t>(row) * w * 4u,
+                                raw.data() + static_cast<std::size_t>(sourceRow) * w * 4u,
+                                static_cast<std::size_t>(w) * 4u);
+                }
+            }
+
+            glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFbo));
+            glDeleteFramebuffers(1, &fbo);
+            return complete;
+        }
+#endif
     }
 
     // ---------------------------------------------------------------------------------------
@@ -816,6 +888,21 @@ namespace CNA::Internal::Backends::Sokol
         return depthStencilAttachmentViewId_ != 0;
     }
 
+    bool SokolRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                           void* data, int dataLength) const
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (data == nullptr || level != 0) return false;
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > width_ || y + h > height_) return false;
+        if (dataLength < w * h * 4) return false;
+
+        return ReadColorImagePixelsViaGL(colorImageId_, GL_TEXTURE_2D, height_, x, y, w, h, data);
+#else
+        (void)level; (void)x; (void)y; (void)w; (void)h; (void)data; (void)dataLength;
+        return false;
+#endif
+    }
+
     // ---------------------------------------------------------------------------------------
     // SokolRenderTargetCubeBackend
     // ---------------------------------------------------------------------------------------
@@ -940,6 +1027,23 @@ namespace CNA::Internal::Backends::Sokol
     void SokolRenderTargetCubeBackend::BindAsRenderTargetFace(int /*face*/) {}
 
     void SokolRenderTargetCubeBackend::UnbindAsRenderTarget() {}
+
+    bool SokolRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                               void* data, int dataLength) const
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (data == nullptr || level != 0) return false;
+        if (face < 0 || face >= 6) return false;
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > size_ || y + h > size_) return false;
+        if (dataLength < w * h * 4) return false;
+
+        const GLenum faceTarget = static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face);
+        return ReadColorImagePixelsViaGL(imageId_, faceTarget, size_, x, y, w, h, data);
+#else
+        (void)face; (void)level; (void)x; (void)y; (void)w; (void)h; (void)data; (void)dataLength;
+        return false;
+#endif
+    }
 
     bool SokolRenderTargetCubeBackend::HasRealDepthBuffer(bool depthFormatWasRequested) const
     {
@@ -2117,6 +2221,14 @@ namespace CNA::Internal::Backends::Sokol
     void SokolGraphicsBackend::BindSingleRenderTarget2D(SokolRenderTargetBackend* rt)
     {
         if (currentRenderTarget_ == rt && currentRenderTargetCube_ == nullptr) return;
+        // Mirrors Present()'s identical "begin before ending" comment: a Clear() queued against the
+        // target about to be replaced, with no draw ever following it, never called
+        // BeginPassIfNeeded() at all -- with no pass ever opened, EndPassIfActive() alone would
+        // silently drop the pending clear instead of ever reaching the GPU (it only closes an
+        // ALREADY-open pass). Realizing it here makes "bind, Clear(), unbind" alone a legal, visible
+        // producer, matching every other backend's own Clear() semantics.
+        if (pendingClearColor_ || pendingClearDepth_ || pendingClearStencil_)
+            BeginPassIfNeeded();
         EndPassIfActive();
         currentRenderTarget_ = rt;
         currentRenderTargetCube_ = nullptr;
@@ -2134,6 +2246,9 @@ namespace CNA::Internal::Backends::Sokol
         if (currentRenderTargetCube_ == rt && currentRenderTargetCubeFace_ == face
             && currentRenderTarget_ == nullptr)
             return;
+        // See BindSingleRenderTarget2D's identical comment.
+        if (pendingClearColor_ || pendingClearDepth_ || pendingClearStencil_)
+            BeginPassIfNeeded();
         EndPassIfActive();
         currentRenderTarget_ = nullptr;
         currentRenderTargetCube_ = rt;
@@ -2488,6 +2603,11 @@ namespace CNA::Internal::Backends::Sokol
         uniformRange.ptr = &params;
         uniformRange.size = sizeof(params);
         sg_apply_uniforms(UB_cna_sprite_vs_params, &uniformRange);
+
+        cna_sprite_fs_params_t fsParams{};
+        fsParams.rtFlipV = IsRenderTargetSourceEXT(texture) ? 1.0f : 0.0f;
+        sg_range fsRange{&fsParams, sizeof(fsParams)};
+        sg_apply_uniforms(UB_cna_sprite_fs_params, &fsRange);
 
         const int quadCount = static_cast<int>(vertices.size()) / kSpriteVerticesPerQuad;
         sg_draw(0, quadCount * kSpriteIndicesPerQuad, 1);
@@ -2966,11 +3086,13 @@ namespace CNA::Internal::Backends::Sokol
         // render-target-as-texture the same way the SpriteBatch path does.
         bool hasTexture = false;
         std::uint32_t textureViewId = 0;
+        bool textureIsRenderTarget = false;
         if (kind == Shader3DKind::Textured || (kind == Shader3DKind::Lit && params.textureEnabled))
         {
             if (params.texture0 != nullptr)
             {
                 textureViewId = ResolveSampledTextureViewId(*params.texture0, "a textured 3D draw");
+                textureIsRenderTarget = IsRenderTargetSourceEXT(*params.texture0);
                 hasTexture = true;
             }
             else if (kind == Shader3DKind::Textured)
@@ -3050,6 +3172,7 @@ namespace CNA::Internal::Backends::Sokol
                 fsUniforms.fogColor[0] = params.fogColor[0];
                 fsUniforms.fogColor[1] = params.fogColor[1];
                 fsUniforms.fogColor[2] = params.fogColor[2];
+                fsUniforms.rtFlipV[0] = textureIsRenderTarget ? 1.0f : 0.0f;
 
                 sg_range fsRange{&fsUniforms, sizeof(fsUniforms)};
                 sg_apply_uniforms(UB_cna_textured3d_fs_params, &fsRange);
@@ -3124,6 +3247,7 @@ namespace CNA::Internal::Backends::Sokol
                 fsUniforms.fogColor[0] = params.fogColor[0];
                 fsUniforms.fogColor[1] = params.fogColor[1];
                 fsUniforms.fogColor[2] = params.fogColor[2];
+                fsUniforms.rtFlipV[0] = textureIsRenderTarget ? 1.0f : 0.0f;
 
                 sg_range fsRange{&fsUniforms, sizeof(fsUniforms)};
                 sg_apply_uniforms(UB_cna_lit3d_fs_params, &fsRange);

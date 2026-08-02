@@ -66,6 +66,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTarget2D` MSAA + resolve (`MultiSampleCount` > 1) | ✅ | `Sokol_RenderTarget2D_Msaa` -- a real differential anti-aliasing proof (a solid binary edge at `MultiSampleCount=0` vs. genuinely blended pixels at `8`), not just "resolve doesn't corrupt solid colours" |
 | `Viewport.MinDepth`/`MaxDepth` | ✅ | `Sokol_Viewport_MinMaxDepth` -- REMED-GFX-079's 25-check backend-agnostic 3D-viewport oracle, including a real depth-remap proof (compressing `MaxDepth` pulls a farther quad in front of a nearer one) |
 | `GetBackBufferData` while a `RenderTarget2D`/`RenderTargetCube` face is bound (reads the bound target's own content) | ✅ | Same oracle's check G; matches `EasyGLGraphicsBackend::ReadBackbuffer`'s "read from whatever's bound" convention |
+| `RenderTarget2D`/`RenderTargetCube::GetData` (direct CPU readback) | ✅ | A throwaway GL FBO around the raw GL texture `sg_gl_query_image_info()` exposes. Fixed two real bugs it surfaced: sampling a render target as a texture was exactly vertically mirrored (REMED-GFX-147, fixed with a per-draw `rtFlipV` shader uniform), and a target bound/`Clear()`-ed/unbound with no draw in between never reached the GPU at all (`Present()` already had this fix for the backbuffer; the render-target bind path now has it too). `Sokol_RenderTarget_SamplingOrientation` 53/53, plus the whole SOKOL-25/26 render-target oracle suite re-verified with real pixels |
 
 ## What does not work yet
 
@@ -76,9 +77,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Per-vertex (Gouraud) lighting (`BasicEffect.PreferPerPixelLighting = false`) | ignored -- always renders per-pixel, matching every CNA backend except D3D9 | not planned |
 | A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
 | Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |
-| `RenderTarget2D::GetData` (direct CPU readback) | throws `System::NotSupportedException` — `SokolRenderTargetBackend` does not override `ITextureBackend::GetData`, so it inherits the base class's `return false` default. Sampling the target as a texture, or reading the backbuffer after drawing it there, both work. | `SOKOL-26` |
 | `RenderTarget2D` mip-mapped (`mipMap=true`) | `CreateRenderTarget2D` throws `NotYetImplemented` | `SOKOL-26` |
-| `RenderTargetCube::GetData` (direct CPU readback) | throws `System::NotSupportedException`, same boundary as `RenderTarget2D::GetData` | `SOKOL-26` |
 | `RenderTargetCube` mip-mapped | throws `NotYetImplemented` | `SOKOL-26` |
 | `RenderTargetCube` MSAA | `multiSampleCount` is always silently clamped to 1/ignored -- **a permanent sokol_gfx API boundary, not a "not implemented yet" gap**: its own validation layer hard-rejects a `SG_IMAGETYPE_CUBE` image with `sample_count > 1` (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed empirically (a real `[sg][panic]` validation abort) while prototyping the same per-face multisample + resolve layout `RenderTarget2D` uses. The same kind of declared boundary `WebGPUGraphicsBackend`/`D3D9RenderTargetCubeBackend` report for their own reasons | `SOKOL-26` (closed as a permanent gap) |
 | MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented` | `SOKOL-26` |
@@ -165,23 +164,27 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_Lit3D` | 10, every one a real pixel read-back | all pass |
 | `Sokol_RenderTarget_ViewportScissorReset` | 6 | all pass |
 | `Sokol_RenderTarget2D_Depth` | 1, a real depth-occlusion proof inside a render target | all pass |
-| `Sokol_RenderTarget_DepthStencilUsage` | 29, incl. 4 cube legs (U1-U4) | all pass |
-| `Sokol_RenderTarget_PassBoundary` | 30, incl. 4 cube legs (C1/C2) | all pass |
-| `Sokol_RenderTarget_ProducerConsumer` | 27 | all pass |
-| `Sokol_RenderTarget_BackbufferConsumer` | 3 real, the rest honestly INFO-skipped (no direct `RenderTarget2D`/`RenderTargetCube::GetData`) | all pass |
-| `Sokol_RenderTarget_FirstUse` | 16, incl. a cube leg (N) | all pass |
-| `Sokol_RenderTarget_SamplingOrientation` | 29 | all pass |
+| `Sokol_RenderTarget_DepthStencilUsage` | 29, incl. 4 cube legs (U1-U4), all now real `GetData()` reads | all pass |
+| `Sokol_RenderTarget_PassBoundary` | 40, incl. 4 cube legs (C1/C2), all now real `GetData()` reads | all pass |
+| `Sokol_RenderTarget_ProducerConsumer` | 37, all real `GetData()` reads | all pass |
+| `Sokol_RenderTarget_BackbufferConsumer` | 87, all real `GetData()`/`GetBackBufferData()` reads | all pass |
+| `Sokol_RenderTarget_FirstUse` | 26, incl. a cube leg (N), all real `GetData()` reads | all pass |
+| `Sokol_RenderTarget_SamplingOrientation` | 53, all real `GetData()` reads | all pass |
+| `Sokol_RenderTarget2D_Msaa` | 2, a real differential anti-aliasing proof | all pass |
+| `Sokol_RenderTargetCube_MsaaFace` | 9, incl. the permanent cube-MSAA boundary declaration | all pass |
+| `Sokol_Viewport_MinMaxDepth` | 25, incl. a real depth-remap proof | all pass |
 | `Sokol_OcclusionQuery_Cycle` | Begin/End/IsComplete/PixelCount plus every invalid-call-sequence and dispose-while-active case | all pass |
 | `Sokol_OcclusionQuery_VisibleQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_OcclusionQuery_OccludedQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_RasterizerState_DepthBias` | 4, a real coplanar-redraw proof | all pass |
 
 The render-target fixtures above are shared, backend-agnostic oracles also registered for EasyGL/
-Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. Most of their
-checks assert `System::NotSupportedException` from a direct `RenderTarget2D::GetData()` call — see
-the "What does not work yet" table — which every one of these fixtures treats as a legitimate,
-distinctly-asserted backend declaration rather than a failure. The checks that DO exercise real
-pixel content on SOKOL go through `SpriteBatch`/3D sampling or `GetBackBufferData()` instead.
+Vulkan/bgfx/SDL_GPU/etc.; SOKOL reuses them rather than duplicating bespoke tests. As of `SOKOL-38`
+every one of their checks that reads a render target's content does so through a real
+`RenderTarget2D`/`RenderTargetCube::GetData()` call, not just `SpriteBatch`/3D sampling or
+`GetBackBufferData()` — landing that readback is what caught REMED-GFX-147's sampling-orientation
+mirror and the Clear()-only-producer bug described above, both invisible while `GetData()` still
+threw `System::NotSupportedException` unconditionally.
 
 The full `CnaTests` suite also runs under this backend. Note that the shared suite gates several
 capability-dependent expectations on an explicit list of backend macros (`kCubeStorageSupported`

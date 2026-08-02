@@ -76,6 +76,10 @@ layout(binding = 1) uniform lit3d_fs_params {
     vec4 eyePosition;  // xyz used
     vec4 emissiveColor; // xyz used
     vec4 fogColor;      // xyz used
+    // REMED-GFX-147: 1 when `tex` is a RenderTarget2D's colour attachment, 0 for a plain texture
+    // (including the 1x1 white fallback) -- see IsRenderTargetSourceEXT's own doc comment. x used,
+    // yzw unused.
+    vec4 rtFlipV;
 };
 
 in vec3 worldNormal;
@@ -118,7 +122,8 @@ void main() {
         (spec0 * light0Specular.xyz + spec1 * light1Specular.xyz + spec2 * light2Specular.xyz)
         * specularColorAndPower.xyz;
 
-    vec4 texel = texture(sampler2D(tex, smp), uv);
+    vec2 sampleUv = vec2(uv.x, mix(uv.y, 1.0 - uv.y, rtFlipV.x));
+    vec4 texel = texture(sampler2D(tex, smp), sampleUv);
     vec4 c = texel * vec4(litRGB, diffuse.a * tint.a);
     c.rgb += specularRGB * c.a;
 

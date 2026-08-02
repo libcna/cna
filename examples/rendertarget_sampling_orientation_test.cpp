@@ -162,16 +162,20 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "CANVAS";
 #elif defined(CNA_BACKEND_SOKOL)
-    // plan_sokol.md SOKOL-25: real geometry is genuinely rasterized, and RenderTarget2D sampling
-    // orientation is correct (SpriteBatch and the 3D paths alike resolve a render target's own
-    // colour attachment view through the same ResolveSampledTextureViewId a plain Texture2D uses,
-    // with no separate bottom-up compensation to get wrong). `RequireReadable` here is exercised
-    // only against a direct RenderTarget2D::GetData; `SokolRenderTargetBackend` does not override
-    // `ITextureBackend::GetData` (inherits the base class's `return false` default, the same
-    // boundary as every other REMED-GFX render-target fixture on this backend), so that call always
-    // raises NotSupportedException regardless of the backend's real, working orientation --
-    // `kRasterizes = false` is the accurate declaration for what this file actually measures.
-    constexpr bool kRasterizes = false;
+    // plan_sokol.md SOKOL-38: real geometry is genuinely rasterized, and RenderTarget2D sampling
+    // orientation is now correct -- REMED-GFX-147 found (via this very file, once GetData() below
+    // could finally observe a real comparison instead of always throwing) that it was NOT correct
+    // before this task: a render target's colour image is written by GPU rasterization, whose
+    // framebuffer-origin convention stores CNA's logical row 0 at OpenGL's HIGH y, the opposite of
+    // a plain SokolTextureBackend's un-flipped CPU upload -- sampling both the same way silently
+    // mirrored every render-target source vertically. Fixed with a per-draw `rtFlipV` shader
+    // uniform (sprite_fs_params/textured3d_fs_params/lit3d_fs_params), the same per-slot-uniform
+    // shape EasyGL's own uRtFlipV and bgfx's u_rtFlipV use for this identical finding.
+    // `RequireReadable`'s direct RenderTarget2D::GetData now round-trips real content too
+    // (SokolRenderTargetBackend::GetData reads back via a throwaway GL FBO around the raw GL
+    // texture sg_gl_query_image_info() exposes), so `kRasterizes = true` is accurate for what this
+    // file measures -- and, as of this task, every one of its 53 checks passes for real.
+    constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "SOKOL";
 #else
 #error "REMED-GFX-147: this backend has no declared render-target orientation contract."

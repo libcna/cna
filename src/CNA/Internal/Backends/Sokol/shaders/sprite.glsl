@@ -34,13 +34,20 @@ void main() {
 layout(binding = 0) uniform texture2D tex;
 layout(binding = 0) uniform sampler smp;
 
+layout(binding = 1) uniform sprite_fs_params {
+    // REMED-GFX-147: 1 when `tex` is a RenderTarget2D's colour attachment, 0 for a plain texture --
+    // see IsRenderTargetSourceEXT's own doc comment for why sampling needs a per-draw V flip.
+    float rtFlipV;
+};
+
 in vec2 uv;
 in vec4 tint;
 
 out vec4 frag_color;
 
 void main() {
-    frag_color = texture(sampler2D(tex, smp), uv) * tint;
+    vec2 sampleUv = vec2(uv.x, mix(uv.y, 1.0 - uv.y, rtFlipV));
+    frag_color = texture(sampler2D(tex, smp), sampleUv) * tint;
 }
 @end
 

@@ -157,18 +157,11 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "CANVAS";
 #elif defined(CNA_BACKEND_SOKOL)
-    // plan_sokol.md SOKOL-25: real geometry is genuinely rasterized (this is not a HEADLESS-style
-    // non-rasterizing backend), but `RequireReadable` below is exercised exclusively against
-    // `ReadWholeTarget` (a direct RenderTarget2D::GetData), never against a backbuffer readback --
-    // every backbuffer read in this file goes through the softer `ReadBackbufferOr`/`Unsupported()`
-    // pair instead, which degrades to an INFO skip rather than a hard requirement. Since
-    // `SokolRenderTargetBackend` does not override `ITextureBackend::GetData` (it inherits the base
-    // class's `return false` default, same as rendertarget_producer_consumer_test.cpp), a direct
-    // RenderTarget2D read always raises NotSupportedException here, so `kRasterizes = false` is the
-    // accurate declaration for what `RequireReadable` actually measures -- even though the real
-    // backbuffer oracle this file is named for would work, it is conservatively left unclaimed to
-    // avoid misusing the single shared flag two genuinely different capabilities are folded into.
-    constexpr bool kRasterizes = false;
+    // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `SokolRenderTargetBackend`
+    // now overrides `ITextureBackend::GetData` via a throwaway GL FBO around the raw texture handle
+    // `sg_gl_query_image_info()` exposes -- `RequireReadable`'s direct `ReadWholeTarget` (a
+    // RenderTarget2D::GetData) round-trips real content, so `kRasterizes = true` is accurate.
+    constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "SOKOL";
 #else
 #error "REMED-GFX-155: this backend has no declared backbuffer-consumer contract."

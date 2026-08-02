@@ -165,15 +165,10 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "CANVAS";
 #elif defined(CNA_BACKEND_SOKOL)
-    // plan_sokol.md SOKOL-25: real geometry really is rasterized into a RenderTarget2D here (this
-    // is not a HEADLESS-style non-rasterizing backend), but `SokolRenderTargetBackend` does not
-    // override `ITextureBackend::GetData` (docs/sokol-backend.md), so it inherits the base class's
-    // `return false` default and every RenderTarget2D::GetData call in this file raises
-    // System::NotSupportedException regardless. `kRasterizes` only gates `RequireReadable()`'s
-    // expectation below, so `false` is the accurate declaration for THIS file's contract even
-    // though the backend truly draws -- Leg C's own SpriteBatch/BasicEffect production still runs,
-    // only the subsequent GetData()-based observation is what this records as absent.
-    constexpr bool kRasterizes = false;
+    // plan_sokol.md SOKOL-25/38: real geometry really is rasterized into a RenderTarget2D here, and
+    // `SokolRenderTargetBackend::GetData` now round-trips real content via a throwaway GL FBO
+    // (docs/sokol-backend.md), so `kRasterizes = true` is accurate for this file's contract too.
+    constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "SOKOL";
 #else
 #error "REMED-GFX-151: this backend has no declared render-target producer/consumer contract."

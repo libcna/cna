@@ -171,15 +171,10 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "CANVAS";
 #elif defined(CNA_BACKEND_SOKOL)
-    // plan_sokol.md SOKOL-25: real geometry is genuinely rasterized, but `RequireReadable` here is
-    // exercised only against `ReadWholeTarget` (a direct RenderTarget2D::GetData); every backbuffer
-    // read in this file goes through the softer `ReadBackbufferOr`/`Unsupported()` pair, which
-    // degrades to an INFO skip instead of a hard requirement. `SokolRenderTargetBackend` does not
-    // override `ITextureBackend::GetData` (inherits the base class's `return false` default, same
-    // boundary as the other REMED-GFX render-target fixtures on this backend), so a direct
-    // RenderTarget2D read always raises NotSupportedException -- `kRasterizes = false` is the
-    // accurate declaration for what `RequireReadable` measures here.
-    constexpr bool kRasterizes = false;
+    // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `RequireReadable`'s
+    // direct `ReadWholeTarget` (a RenderTarget2D::GetData) now round-trips real content via a
+    // throwaway GL FBO around the raw texture handle `sg_gl_query_image_info()` exposes.
+    constexpr bool kRasterizes = true;
     constexpr const char* kBackendName = "SOKOL";
 #else
 #error "REMED-GFX-158: this backend has no declared first-use contract."
