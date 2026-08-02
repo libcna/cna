@@ -13,11 +13,18 @@ namespace CNA::Internal::Backends::HtmlDom
      * standard XNA `BlendState` presets are reproduced by preparing the SOURCE PIXELS instead of
      * the compositing step:
      *
-     * - `Opaque` (`srcBlend=One`, `dstBlend=Zero`) ignores source alpha entirely, so the sprite is
-     *   drawn from an alpha-stripped copy of the texture. Every drawn texel then covers what is
-     *   beneath it, which is what `dstBlend=Zero` means, and nothing outside the sprite's own
-     *   footprint is touched -- avoiding the whole-surface-clearing pitfall Canvas2D's `'copy'`
-     *   operator has.
+     * - `Opaque` (`srcBlend=One`, `dstBlend=Zero` for BOTH colour and alpha -- confirmed via this
+     *   project's own `BlendState.cpp`) replaces the destination pixel with the source pixel
+     *   exactly, alpha included; it does NOT force the result to alpha=255. HTMLDOM-100: the two
+     *   draw paths reproduce this differently. The bound-render-target path has a real Canvas2D
+     *   context and uses Porter-Duff `'copy'` on the texture's STRAIGHT (as-uploaded) pixels,
+     *   clipped to exactly the sprite's own footprint first (`'copy'` is evaluated over the WHOLE
+     *   compositing area, not just the drawn shape -- the same pitfall plan_canvas.md CANVAS-44
+     *   found and fixed with an identical clip). The DOM `<div>` backbuffer path has no such
+     *   operator -- CSS cannot make one stacked, blended element erase whatever is beneath another
+     *   while still showing its own partial alpha through -- so it falls back to an alpha-stripped
+     *   copy of the texture instead: an accepted, deliberate deviation for that path only, not a
+     *   bug, since full opacity is the closest a `<div>` can get to "ignore the destination".
      * - `AlphaBlend` (`srcBlend=One`) assumes source colour that is ALREADY premultiplied by its
      *   own alpha. CSS composites straight alpha and premultiplies internally, so genuinely
      *   premultiplied data would be multiplied by its alpha a second time; the sprite is therefore
@@ -28,7 +35,12 @@ namespace CNA::Internal::Backends::HtmlDom
      */
     enum class DomCompositeOp
     {
-        /** @brief BlendState.Opaque -- alpha-stripped source pixels, normal compositing. */
+        /**
+         * @brief BlendState.Opaque -- DOM path: alpha-stripped source pixels, normal compositing
+         * (accepted deviation, see the class doc). Canvas2D render-target path: straight source
+         * pixels with `'copy'` compositing, which preserves the real XNA alpha-included-replace
+         * semantics exactly (HTMLDOM-100).
+         */
         Opaque = 0,
         /** @brief BlendState.NonPremultiplied -- source pixels as uploaded, normal compositing. */
         NonPremultiplied = 1,
@@ -44,6 +56,10 @@ namespace CNA::Internal::Backends::HtmlDom
      * The JS-side variant cache is keyed on this plus the tint colour (plan_html_dom.md
      * HTMLDOM-23), so `Additive` and `NonPremultiplied` deliberately share variant 0 rather than
      * generating two identical copies of the same pixels.
+     *
+     * HTMLDOM-100: mode 2 (alpha-stripped) is fetched verbatim by the DOM `<div>` backbuffer path,
+     * but the Canvas2D render-target path treats mode 2 as a request for the STRAIGHT (mode 0)
+     * pixels composited with `'copy'` instead -- see CNA_HtmlDom_FlushSprites.
      *
      * @param op The composite operation in effect for the draw.
      * @return 0 for straight (as-uploaded) pixels, 1 for un-premultiplied, 2 for alpha-stripped.

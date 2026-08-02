@@ -19,9 +19,14 @@
 // `cnaDomGetVariant(id, mode, r, g, b)` returns the cached form of a texture's pixels for one blend
 // mode and tint, generating it on first use:
 //
-//   mode 0 = straight        -- the pixels exactly as uploaded (NonPremultiplied, Additive)
+//   mode 0 = straight        -- the pixels exactly as uploaded (NonPremultiplied, Additive, and
+//                               HTMLDOM-100: Opaque on the Canvas2D render-target path, which
+//                               reproduces real XNA's alpha-included replace via 'copy' instead)
 //   mode 1 = un-premultiplied -- RGB divided by alpha (AlphaBlend's srcBlend=One contract)
-//   mode 2 = alpha-stripped   -- every alpha forced to 255 (Opaque ignores source alpha entirely)
+//   mode 2 = alpha-stripped   -- every alpha forced to 255; Opaque on the DOM <div> backbuffer path
+//                               ONLY, an accepted deviation since CSS has no operator that can
+//                               replace a stacked element's destination while still showing a
+//                               partial source alpha through it
 //
 // and, on top of any of those, RGB multiplied by the tint. The maths runs directly over the pixel
 // array -- exact, with alpha read and written back completely untouched in every case -- rather

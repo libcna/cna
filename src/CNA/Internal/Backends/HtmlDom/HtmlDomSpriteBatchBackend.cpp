@@ -49,12 +49,25 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         for (let i = 0; i < count; ++i) {
             const o = base + i * stride;
             const flags = HEAP32[o + 14];
+            const rawMode = HEAP32[o + 15];
+            // HTMLDOM-100: rawMode 2 (Opaque) selects the alpha-STRIPPED variant only for the DOM
+            // <div> backbuffer path below, where CSS has no operator that can erase whatever is
+            // beneath a sprite while still showing the sprite's own (possibly non-255) alpha through
+            // it -- full opacity is the closest a stacked, blended <div> can get, and that deviation
+            // is accepted there. This Canvas2D path has a real Porter-Duff 'copy' operator, so it
+            // fetches the STRAIGHT variant instead and lets 'copy' reproduce Opaque's real XNA
+            // semantics exactly: BlendState.cpp confirms Opaque uses symmetric One/Zero factors for
+            // BOTH colour and alpha, meaning the destination is replaced by the source pixel
+            // INCLUDING its own alpha, never forced to 255 (matches plan_canvas.md CANVAS-44's own
+            // 'copy' mapping, already pixel-verified).
+            const isOpaque = rawMode === 2;
+            const fetchMode = isOpaque ? 0 : rawMode;
             const packed = HEAPU32[o + 16];
             const isMirror = (flags & 64) !== 0;
             const variant = isMirror
-                ? Module['cnaDomGetMirrorVariant'](HEAP32[o], HEAP32[o + 15],
+                ? Module['cnaDomGetMirrorVariant'](HEAP32[o], fetchMode,
                     packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255)
-                : Module['cnaDomGetVariant'](HEAP32[o], HEAP32[o + 15],
+                : Module['cnaDomGetVariant'](HEAP32[o], fetchMode,
                     packed & 255, (packed >>> 8) & 255, (packed >>> 16) & 255);
             if (!variant) continue;
             const sx = HEAPF32[o + 1], sy = HEAPF32[o + 2], sw = HEAPF32[o + 3], sh = HEAPF32[o + 4];
@@ -62,7 +75,6 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             targetCtx.setTransform(1, 0, 0, 1, 0, 0);
             if (hasMatrix) targetCtx.transform(m0, m1, m2, m3, m4, m5);
             targetCtx.imageSmoothingEnabled = (flags & 4) !== 0;
-            targetCtx.globalCompositeOperation = (flags & 16) !== 0 ? 'lighter' : 'source-over';
             targetCtx.globalAlpha = ((packed >>> 24) & 255) / 255;
             targetCtx.translate(HEAPF32[o + 5], HEAPF32[o + 6]);
             const rot = HEAPF32[o + 9];
@@ -77,6 +89,19 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                 targetCtx.translate(0, cy); targetCtx.scale(1, -1); targetCtx.translate(0, -cy);
             }
             const lx = HEAPF32[o + 10], ly = HEAPF32[o + 11];
+            if (isOpaque) {
+                // plan_canvas.md CANVAS-44: Porter-Duff 'copy' is evaluated over the WHOLE
+                // compositing area, not just the drawn shape -- clip to exactly the sprite's own
+                // footprint (the same already-transformed local space drawImage/fillRect use below)
+                // first, or it wipes every other sprite already drawn into this target to
+                // transparent.
+                targetCtx.beginPath();
+                targetCtx.rect(lx, ly, sw, sh);
+                targetCtx.clip();
+                targetCtx.globalCompositeOperation = 'copy';
+            } else {
+                targetCtx.globalCompositeOperation = (flags & 16) !== 0 ? 'lighter' : 'source-over';
+            }
             const repU = (flags & 8) !== 0, repV = (flags & 32) !== 0;
             if (repU || repV) {
                 // Wrap/Mirror: CSS background tiling has no Canvas2D equivalent other than a

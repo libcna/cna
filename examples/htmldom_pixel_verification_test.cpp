@@ -259,11 +259,16 @@ protected:
                   "HTMLDOM-85: AlphaBlend un-premultiplies premultiplied source data correctly");
         }
 
-        // plan_html_dom.md HTMLDOM-86: Opaque strips alpha to 255 and leaves RGB untouched. Use a
-        // GENUINELY semi-transparent source texel (every prior check used alpha=255 source data,
-        // so the strip was a no-op every time it ran) -- if the strip were instead blending with
-        // the transparent background, RGB would come back darkened; if it forgot to force alpha,
-        // it would come back at the source's own alpha instead of 255.
+        // plan_html_dom.md HTMLDOM-86/HTMLDOM-100: Opaque replaces the destination with the source
+        // pixel exactly, alpha included -- confirmed via this project's own BlendState.cpp, which
+        // defines BlendState::Opaque with symmetric One/Zero factors for BOTH colour and alpha, not
+        // just colour. This test binds a RenderTarget2D, so it exercises the Canvas2D path, which
+        // reproduces that with 'copy' compositing on the un-modified source pixels. Use a GENUINELY
+        // semi-transparent source texel (every prior check used alpha=255 source data, so a strip-to-
+        // 255 bug would have been a no-op every time it ran) -- if RGB came back darkened, 'copy'
+        // would have blended with the cleared-transparent background instead of replacing it
+        // outright; if alpha came back as 255 rather than the source's own 120, the destination
+        // would not have been genuinely replaced.
         if (frame_ == 3)
         {
             Texture2D tex = Make1x1(dev, 180, 90, 40, 120);
@@ -271,15 +276,15 @@ protected:
                 spriteBatch_->Draw(tex, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1),
                                    Color(255, 255, 255, 255));
             });
-            std::printf("       opaque got (%d,%d,%d,%d) want ~(180,90,40,255)\n",
+            std::printf("       opaque got (%d,%d,%d,%d) want ~(180,90,40,120)\n",
                         result.getRProperty(), result.getGProperty(), result.getBProperty(),
                         result.getAProperty());
             check(CloseEnough(result.getRProperty(), 180, 1) &&
                   CloseEnough(result.getGProperty(), 90, 1) &&
                   CloseEnough(result.getBProperty(), 40, 1) &&
-                  result.getAProperty() == 255,
-                  "HTMLDOM-86: Opaque strips alpha to 255 without darkening RGB from a real "
-                  "semi-transparent source");
+                  CloseEnough(result.getAProperty(), 120, 1),
+                  "HTMLDOM-86: Opaque replaces the destination with the source pixel including its "
+                  "own alpha, not forced to 255, on the Canvas2D render-target path");
         }
 
         // plan_html_dom.md HTMLDOM-87: Additive must actually ADD channel values (clamped), not
