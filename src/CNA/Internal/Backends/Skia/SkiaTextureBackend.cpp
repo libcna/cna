@@ -114,7 +114,8 @@ namespace CNA::Internal::Backends::Skia
     sk_sp<SkImage> SkiaTextureBackend::SnapshotImage(
         SkiaSourceAlphaConvention alphaConvention) const
     {
-        return alphaConvention == SkiaSourceAlphaConvention::Premultiplied
+        return ResolveSkiaWorkingSourceRoute(StorageAlphaEXT(), alphaConvention)
+                == SkiaWorkingSourceRoute::PreserveDeclaredComponents
             ? premultipliedImage_
             : straightImage_;
     }

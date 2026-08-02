@@ -206,6 +206,11 @@ source convention and rejects the rest. The source image's
 straight/premultiplied label remains CNA-owned; the blender alone cannot infer it from arbitrary
 RGBA bytes.
 
+The complete storage-to-working-colour and tint/effect rules are fixed by
+[`skia-source-alpha-contract.md`](skia-source-alpha-contract.md) and its raw-byte
+`Skia_SourceAlpha_Policy` test. Generated blend routes must use that contract rather than inferring
+a convention from source pixel values.
+
 ### Colour-write and sample-mask investigation
 
 `Skia_ColorWriteMask_Raster` proves the direct raster building block for `ColorWriteChannels`: a

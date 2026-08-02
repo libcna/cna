@@ -66,8 +66,13 @@ namespace CNA::Internal::Backends::Skia
     }
 
     sk_sp<SkImage> SkiaRenderTargetBackend::SnapshotImage(
-        SkiaSourceAlphaConvention /*alphaConvention*/) const
+        SkiaSourceAlphaConvention alphaConvention) const
     {
+        if (ResolveSkiaWorkingSourceRoute(StorageAlphaEXT(), alphaConvention)
+            != SkiaWorkingSourceRoute::ReusePremultipliedSurface)
+        {
+            return nullptr;
+        }
         // An SkSurface snapshot is already premultiplied.  Keep only one immutable image per
         // target; any target write explicitly releases it before the canvas mutates, so callers
         // never sample stale pixels and repeated sprite draws cannot grow a hidden cache.

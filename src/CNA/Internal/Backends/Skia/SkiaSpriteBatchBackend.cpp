@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Skia/SkiaEffectBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaRasterTarget.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaSourceAlphaPolicy.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaStateTrace.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -100,31 +101,6 @@ namespace CNA::Internal::Backends::Skia
             return result;
         }
 
-        struct TintScale
-        {
-            float red;
-            float green;
-            float blue;
-            float alpha;
-        };
-
-        [[nodiscard]] TintScale MakeTintScale(
-            const Color& color, SkiaSourceAlphaConvention alphaConvention)
-        {
-            const float alpha = static_cast<float>(color.getAProperty()) / 255.0f;
-            // Skia has already premultiplied a straight-alpha image when the shader/filter sees
-            // it; XNA's NonPremultiplied equation still needs that source alpha after tinting.
-            const float straightAlphaScale = alphaConvention == SkiaSourceAlphaConvention::Straight
-                ? alpha
-                : 1.0f;
-            return {
-                static_cast<float>(color.getRProperty()) / 255.0f * straightAlphaScale,
-                static_cast<float>(color.getGProperty()) / 255.0f * straightAlphaScale,
-                static_cast<float>(color.getBProperty()) / 255.0f * straightAlphaScale,
-                alpha,
-            };
-        }
-
         [[nodiscard]] const sk_sp<SkRuntimeEffect>& TintEffect()
         {
             // SkColorFilters::Blend(..., kModulate) uses premultiplied tint RGB, which would
@@ -148,7 +124,7 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] sk_sp<SkColorFilter> MakeTintFilter(const Color& color,
                                                             SkiaSourceAlphaConvention alphaConvention)
         {
-            const TintScale scale = MakeTintScale(color, alphaConvention);
+            const SkiaTintScale scale = MakeSkiaTintScale(color, alphaConvention);
             return TintEffect()->makeColorFilter(SkData::MakeWithCopy(&scale, sizeof(scale)));
         }
     }
@@ -377,7 +353,7 @@ namespace CNA::Internal::Backends::Skia
             if (!primary)
                 throw std::runtime_error("Skia failed to create the custom effect's cnaTexture0 child.");
 
-            const TintScale tint = MakeTintScale(color, sourceAlphaConvention);
+            const SkiaTintScale tint = MakeSkiaTintScale(color, sourceAlphaConvention);
             const float tintValues[4] = {tint.red, tint.green, tint.blue, tint.alpha};
             sk_sp<SkShader> shader = customEffect_->MakeSpriteShaderEXT(
                 std::move(primary), tintValues);

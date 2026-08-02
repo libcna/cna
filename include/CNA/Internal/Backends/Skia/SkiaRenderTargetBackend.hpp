@@ -31,6 +31,10 @@ namespace CNA::Internal::Backends::Skia
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] bool HasRealDepthBuffer(bool) const override { return false; }
+        [[nodiscard]] SkiaSourceStorageAlpha StorageAlphaEXT() const noexcept override
+        {
+            return SkiaSourceStorageAlpha::PremultipliedSurface;
+        }
         [[nodiscard]] sk_sp<SkImage> SnapshotImage(
             SkiaSourceAlphaConvention alphaConvention) const override;
 

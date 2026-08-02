@@ -35,6 +35,10 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] bool GetData(int level, int x, int y, int width, int height,
                                    void* data, int dataLength) const override;
 
+        [[nodiscard]] SkiaSourceStorageAlpha StorageAlphaEXT() const noexcept override
+        {
+            return SkiaSourceStorageAlpha::CanonicalRgbaBytes;
+        }
         [[nodiscard]] sk_sp<SkImage> SnapshotImage(
             SkiaSourceAlphaConvention alphaConvention) const override;
 

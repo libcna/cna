@@ -24,7 +24,7 @@
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
 - The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
-  135: 17 raster-only, 113 display-required tests, and five display-free source audits.
+  136: 18 raster-only, 113 display-required tests, and five display-free source audits.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
@@ -589,8 +589,8 @@
 
 ## Current task
 
-SKIA-115–118 are complete. Continue with the raster arbitrary-blend implementation in
-SKIA-119–124, beginning with the exact straight/premultiplied source convention.
+SKIA-115–119 are complete. Continue with SKIA-120's generated arbitrary raster blender, followed
+by constant/state/mask integration in SKIA-121 and the remaining SKIA-122–124 promotion gates.
 
 ## Completed in this session: SKIA-93
 
@@ -1167,9 +1167,28 @@ SKIA-119–124, beginning with the exact straight/premultiplied source conventio
 - Compilation for the SKIA-118 changes used `--parallel 2` after the user reduced the global CPU
   ceiling. `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-119
+
+- Added code-level `SkiaSourceStorageAlpha` and `SkiaWorkingSourceRoute` contracts. Texture2D
+  identifies canonical public RGBA bytes and resolves Premultiplied to component preservation or
+  Straight to one RGB-by-alpha multiplication. RenderTarget2D identifies its already-premultiplied
+  surface and reuses the same snapshot for either requested route, preventing double multiplication.
+- Centralized tint calculation in `SkiaSourceAlphaPolicy.hpp`; premultiplied tint components stay
+  independent while a straight-labelled input folds tint alpha into working RGB exactly once.
+  The explicit `CNA_SKIA_SKSL_V1` ABI now names its premultiplied output convention in code.
+- Added `docs/skia-source-alpha-contract.md` and display-free `Skia_SourceAlpha_Policy`. Raw working
+  probes distinguish `{96,32,16,128}` premultiplied texture bytes from the straight route's
+  `{48,16,8,128}`, prove targets remain single-premultiplied, and verify a translucent custom
+  effect/tint result. All five accepted mapping rows carry one explicit convention; unlisted tuples
+  remain rejected rather than guessed.
+- The new policy plus blend-mapping and alpha-boundary tests pass 3/3 in Debug, Release and
+  ASan+UBSan. All 23 Audit+Raster tests pass. Four public blend presets and both public SkSL tests
+  pass 6/6 on virtual X11 through Xvfb. The current configure selects 136 Skia CTests, compilation
+  used only `--parallel 2`, and `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-119–124: complete arbitrary raster blend states before starting mip/format storage work.
+1. SKIA-120–124: complete arbitrary raster blend states before starting mip/format storage work.
 2. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
    effects in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
