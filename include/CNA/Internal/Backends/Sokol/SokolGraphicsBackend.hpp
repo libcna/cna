@@ -1399,6 +1399,42 @@ namespace CNA::Internal::Backends::Sokol
                                      const GpuDrawParams& params) override;
 
         /**
+         * @brief GraphicsDevice.DrawInstancedPrimitives -- one draw call rendering `instanceCount`
+         * copies of the same mesh, each transformed by its own World matrix read from
+         * `params.instanceVb` (plan_sokol.md SOKOL-36).
+         *
+         * A dedicated, deliberately simplified shader (instanced3d.glsl, ported from
+         * VulkanGraphicsBackend's own instanced3d.{vert,frag}.glsl): flat `DiffuseColor` only, no
+         * vertex colour, texturing or lighting -- the same established scope reduction every other
+         * CNA backend with real instancing already makes. When `params.instanceVb` is null this
+         * falls back to a real, working `DrawIndexedPrimitivesEx()` draw instead of throwing,
+         * matching `VulkanGraphicsBackend`/`D3D11GraphicsBackend`'s own identical fallback
+         * contract.
+         *
+         * @param vb             Per-vertex mesh buffer; only its Position element is read.
+         * @param ib             Index buffer to read from.
+         * @param world          World matrix -- unused when instancing (each instance supplies its
+         *                       own World via `params.instanceVb`); only reached by the
+         *                       `instanceVb == nullptr` fallback path.
+         * @param view           View matrix.
+         * @param projection     Projection matrix.
+         * @param primitive      Primitive topology.
+         * @param primitiveCount Number of primitives per instance.
+         * @param instanceCount  Number of instances to draw.
+         * @param params         Per-draw effect parameters; `instanceVb` supplies the per-instance
+         *                       World-matrix stream.
+         */
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
+                                       const IIndexBufferBackend& ib,
+                                       const Matrix& world,
+                                       const Matrix& view,
+                                       const Matrix& projection,
+                                       PrimitiveType primitive,
+                                       int primitiveCount,
+                                       int instanceCount,
+                                       const GpuDrawParams& params) override;
+
+        /**
          * @brief Reports which features this backend's current baseline actually supports.
          * @param capability Feature to query.
          * @return True when the feature is implemented and usable.
@@ -1611,6 +1647,62 @@ namespace CNA::Internal::Backends::Sokol
             std::size_t operator()(const Pipeline3DKey& key) const;
         };
 
+        /**
+         * @brief Identity of an instanced-3D pipeline (plan_sokol.md SOKOL-36).
+         *
+         * A separate, smaller key than Pipeline3DKey: instanced3d.glsl only ever reads Position
+         * from vertex-buffer slot 0 (any stride -- see instanced3d.glsl's own doc comment) and the
+         * always-fixed-layout 4-vec4 World-matrix columns from slot 1, so there is no
+         * color/texCoord/normal/blendWeight/blendIndices attribute set to key on, and no
+         * Shader3DKind (this key only ever targets one shader).
+         */
+        struct PipelineInstanced3DKey
+        {
+            int colorSrcBlend;
+            int alphaSrcBlend;
+            int colorDstBlend;
+            int alphaDstBlend;
+            int colorBlendFunc;
+            int alphaBlendFunc;
+            int colorWriteChannels;
+            bool blendEnabled;
+            bool depthTestEnabled;
+            bool depthWriteEnabled;
+            int depthFunc;
+            bool hasDepthAttachment;
+            bool stencilEnabled;
+            int stencilFunc;
+            int stencilPass;
+            int stencilFail;
+            int stencilDepthFail;
+            int ccwStencilFunc;
+            int ccwStencilPass;
+            int ccwStencilFail;
+            int ccwStencilDepthFail;
+            bool twoSidedStencilMode;
+            int stencilMask;
+            int stencilWriteMask;
+            int referenceStencil;
+            float depthBias;
+            float slopeScaleDepthBias;
+            int sampleCount;
+            int cullMode;
+            int primitiveType;
+            int indexType;
+            /// Per-vertex buffer (slot 0) stride; the instance buffer (slot 1) is always exactly
+            /// 64 bytes (4 column-major vec4s), so it needs no key field of its own.
+            int stride;
+            int positionOffset;
+            int positionFormat;
+
+            bool operator==(const PipelineInstanced3DKey& other) const;
+        };
+
+        struct PipelineInstanced3DKeyHash
+        {
+            std::size_t operator()(const PipelineInstanced3DKey& key) const;
+        };
+
         struct SamplerKey
         {
             int filter;
@@ -1643,6 +1735,7 @@ namespace CNA::Internal::Backends::Sokol
                            int primitiveCount,
                            const GpuDrawParams& params);
         [[nodiscard]] std::uint32_t Get3DPipeline(const Pipeline3DKey& key);
+        [[nodiscard]] std::uint32_t GetInstanced3DPipeline(const PipelineInstanced3DKey& key);
         [[nodiscard]] SokolTextureBackend& GetDefaultWhiteTexture();
         [[nodiscard]] std::uint32_t GetSpritePipeline();
         [[nodiscard]] std::uint32_t GetSampler(int filter, int addressU, int addressV,
@@ -1772,6 +1865,7 @@ namespace CNA::Internal::Backends::Sokol
         std::uint32_t lit3dShaderId_ = 0;
         std::uint32_t dualTextured3dShaderId_ = 0;
         std::uint32_t skinned3dShaderId_ = 0;
+        std::uint32_t instanced3dShaderId_ = 0;
         /// Lazily created 1x1 opaque-white texture, bound by the Lit shader whenever
         /// GpuDrawParams::textureEnabled is false -- lets one shader serve both "textured and lit"
         /// and "vertex-coloured and lit" (the multiply is then a no-op), the same convention the
@@ -1779,6 +1873,8 @@ namespace CNA::Internal::Backends::Sokol
         std::unique_ptr<SokolTextureBackend> defaultWhiteTexture_;
         std::unordered_map<PipelineKey, std::uint32_t, PipelineKeyHash> pipelineCache_;
         std::unordered_map<Pipeline3DKey, std::uint32_t, Pipeline3DKeyHash> pipeline3dCache_;
+        std::unordered_map<PipelineInstanced3DKey, std::uint32_t, PipelineInstanced3DKeyHash>
+            pipelineInstanced3dCache_;
         std::unordered_map<SamplerKey, std::uint32_t, SamplerKeyHash> samplerCache_;
     };
 }

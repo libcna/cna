@@ -204,4 +204,12 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_skinnedeffect_lighting_conformance
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-36: instanced draws. WEBGPU-27/38/68's own backend-agnostic oracle (no
+    # CNA_BACKEND_* conditionals, drives IGraphicsBackend::DrawInstancedPrimitivesEx() directly),
+    # reused here rather than duplicated.
+    cna_sokol_test(cna_test_sokol_instanced3d examples/webgpu_instanced3d_test.cpp)
+    cna_register_backend_test(NAME Sokol_Instanced3D COMMAND cna_test_sokol_instanced3d
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

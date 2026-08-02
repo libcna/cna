@@ -1620,6 +1620,89 @@ namespace CNA::Internal::Backends::Sokol
         return hash;
     }
 
+    bool SokolGraphicsBackend::PipelineInstanced3DKey::operator==(
+        const PipelineInstanced3DKey& other) const
+    {
+        return colorSrcBlend == other.colorSrcBlend
+            && alphaSrcBlend == other.alphaSrcBlend
+            && colorDstBlend == other.colorDstBlend
+            && alphaDstBlend == other.alphaDstBlend
+            && colorBlendFunc == other.colorBlendFunc
+            && alphaBlendFunc == other.alphaBlendFunc
+            && colorWriteChannels == other.colorWriteChannels
+            && blendEnabled == other.blendEnabled
+            && depthTestEnabled == other.depthTestEnabled
+            && depthWriteEnabled == other.depthWriteEnabled
+            && depthFunc == other.depthFunc
+            && hasDepthAttachment == other.hasDepthAttachment
+            && stencilEnabled == other.stencilEnabled
+            && stencilFunc == other.stencilFunc
+            && stencilPass == other.stencilPass
+            && stencilFail == other.stencilFail
+            && stencilDepthFail == other.stencilDepthFail
+            && ccwStencilFunc == other.ccwStencilFunc
+            && ccwStencilPass == other.ccwStencilPass
+            && ccwStencilFail == other.ccwStencilFail
+            && ccwStencilDepthFail == other.ccwStencilDepthFail
+            && twoSidedStencilMode == other.twoSidedStencilMode
+            && stencilMask == other.stencilMask
+            && stencilWriteMask == other.stencilWriteMask
+            && referenceStencil == other.referenceStencil
+            && depthBias == other.depthBias
+            && slopeScaleDepthBias == other.slopeScaleDepthBias
+            && sampleCount == other.sampleCount
+            && cullMode == other.cullMode
+            && primitiveType == other.primitiveType
+            && indexType == other.indexType
+            && stride == other.stride
+            && positionOffset == other.positionOffset
+            && positionFormat == other.positionFormat;
+    }
+
+    std::size_t SokolGraphicsBackend::PipelineInstanced3DKeyHash::operator()(
+        const PipelineInstanced3DKey& key) const
+    {
+        std::size_t hash = 1469598103934665603ull;
+        auto mix = [&hash](std::size_t value) {
+            hash ^= value + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2);
+        };
+        mix(static_cast<std::size_t>(key.colorSrcBlend));
+        mix(static_cast<std::size_t>(key.alphaSrcBlend));
+        mix(static_cast<std::size_t>(key.colorDstBlend));
+        mix(static_cast<std::size_t>(key.alphaDstBlend));
+        mix(static_cast<std::size_t>(key.colorBlendFunc));
+        mix(static_cast<std::size_t>(key.alphaBlendFunc));
+        mix(static_cast<std::size_t>(key.colorWriteChannels));
+        mix(static_cast<std::size_t>(key.blendEnabled));
+        mix(static_cast<std::size_t>(key.depthTestEnabled));
+        mix(static_cast<std::size_t>(key.depthWriteEnabled));
+        mix(static_cast<std::size_t>(key.depthFunc));
+        mix(static_cast<std::size_t>(key.hasDepthAttachment));
+        mix(static_cast<std::size_t>(key.stencilEnabled));
+        mix(static_cast<std::size_t>(key.stencilFunc));
+        mix(static_cast<std::size_t>(key.stencilPass));
+        mix(static_cast<std::size_t>(key.stencilFail));
+        mix(static_cast<std::size_t>(key.stencilDepthFail));
+        mix(static_cast<std::size_t>(key.ccwStencilFunc));
+        mix(static_cast<std::size_t>(key.ccwStencilPass));
+        mix(static_cast<std::size_t>(key.ccwStencilFail));
+        mix(static_cast<std::size_t>(key.ccwStencilDepthFail));
+        mix(static_cast<std::size_t>(key.twoSidedStencilMode));
+        mix(static_cast<std::size_t>(key.stencilMask));
+        mix(static_cast<std::size_t>(key.stencilWriteMask));
+        mix(static_cast<std::size_t>(key.referenceStencil));
+        mix(std::hash<float>{}(key.depthBias));
+        mix(std::hash<float>{}(key.slopeScaleDepthBias));
+        mix(static_cast<std::size_t>(key.sampleCount));
+        mix(static_cast<std::size_t>(key.cullMode));
+        mix(static_cast<std::size_t>(key.primitiveType));
+        mix(static_cast<std::size_t>(key.indexType));
+        mix(static_cast<std::size_t>(key.stride));
+        mix(static_cast<std::size_t>(key.positionOffset));
+        mix(static_cast<std::size_t>(key.positionFormat));
+        return hash;
+    }
+
     bool SokolGraphicsBackend::SamplerKey::operator==(const SamplerKey& other) const
     {
         return filter == other.filter && addressU == other.addressU
@@ -1820,6 +1903,10 @@ namespace CNA::Internal::Backends::Sokol
         skinned3dShaderId_ = sg_make_shader(cna_skinned3d_shader_desc(sg_query_backend())).id;
         if (sg_query_shader_state(MakeShaderHandle(skinned3dShaderId_)) != SG_RESOURCESTATE_VALID)
             throw std::runtime_error("Sokol backend: skinned-3D shader creation failed");
+
+        instanced3dShaderId_ = sg_make_shader(cna_instanced3d_shader_desc(sg_query_backend())).id;
+        if (sg_query_shader_state(MakeShaderHandle(instanced3dShaderId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: instanced-3D shader creation failed");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -2990,6 +3077,101 @@ namespace CNA::Internal::Backends::Sokol
         return pipelineId;
     }
 
+    std::uint32_t SokolGraphicsBackend::GetInstanced3DPipeline(const PipelineInstanced3DKey& key)
+    {
+        if (const auto found = pipelineInstanced3dCache_.find(key);
+            found != pipelineInstanced3dCache_.end())
+            return found->second;
+
+        sg_pipeline_desc desc = {};
+        desc.shader = MakeShaderHandle(instanced3dShaderId_);
+
+        // Slot 0: per-vertex mesh data, step_func defaults to SG_VERTEXSTEP_PER_VERTEX -- only
+        // Position is read (see instanced3d.glsl's own doc comment).
+        desc.layout.attrs[ATTR_cna_instanced3d_position].buffer_index = 0;
+        desc.layout.attrs[ATTR_cna_instanced3d_position].format =
+            static_cast<sg_vertex_format>(key.positionFormat);
+        desc.layout.attrs[ATTR_cna_instanced3d_position].offset = key.positionOffset;
+        desc.layout.buffers[0].stride = key.stride;
+
+        // Slot 1: per-instance World matrix, 4 column-major vec4 attributes at fixed offsets
+        // (InstanceColumns is always exactly a mat4 -- there is no declaration to read here, unlike
+        // slot 0's Position element).
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol0].buffer_index = 1;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol0].format = SG_VERTEXFORMAT_FLOAT4;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol0].offset = 0;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol1].buffer_index = 1;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol1].format = SG_VERTEXFORMAT_FLOAT4;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol1].offset = 16;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol2].buffer_index = 1;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol2].format = SG_VERTEXFORMAT_FLOAT4;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol2].offset = 32;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol3].buffer_index = 1;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol3].format = SG_VERTEXFORMAT_FLOAT4;
+        desc.layout.attrs[ATTR_cna_instanced3d_instCol3].offset = 48;
+        desc.layout.buffers[1].stride = 64;
+        desc.layout.buffers[1].step_func = SG_VERTEXSTEP_PER_INSTANCE;
+
+        desc.index_type = static_cast<sg_index_type>(key.indexType);
+        desc.primitive_type = static_cast<sg_primitive_type>(key.primitiveType);
+        desc.cull_mode = ToCullMode(key.cullMode);
+        desc.face_winding = SG_FACEWINDING_CW;
+        desc.sample_count = key.sampleCount;
+        if (key.hasDepthAttachment)
+        {
+            desc.depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL;
+            desc.depth.compare = key.depthTestEnabled ? ToCompareFunc(key.depthFunc) : SG_COMPAREFUNC_ALWAYS;
+            desc.depth.write_enabled = key.depthTestEnabled && key.depthWriteEnabled;
+
+            desc.stencil.enabled = key.stencilEnabled;
+            if (key.stencilEnabled)
+            {
+                const sg_stencil_face_state front{
+                    ToCompareFunc(key.stencilFunc), ToStencilOp(key.stencilFail),
+                    ToStencilOp(key.stencilDepthFail), ToStencilOp(key.stencilPass)};
+                desc.stencil.front = front;
+                desc.stencil.back = key.twoSidedStencilMode
+                    ? sg_stencil_face_state{ToCompareFunc(key.ccwStencilFunc), ToStencilOp(key.ccwStencilFail),
+                                            ToStencilOp(key.ccwStencilDepthFail), ToStencilOp(key.ccwStencilPass)}
+                    : front;
+                desc.stencil.read_mask = static_cast<std::uint8_t>(key.stencilMask & 0xFF);
+                desc.stencil.write_mask = static_cast<std::uint8_t>(key.stencilWriteMask & 0xFF);
+                desc.stencil.ref = static_cast<std::uint8_t>(key.referenceStencil & 0xFF);
+            }
+        }
+        else
+        {
+            desc.depth.pixel_format = SG_PIXELFORMAT_NONE;
+            desc.depth.compare = SG_COMPAREFUNC_ALWAYS;
+            desc.depth.write_enabled = false;
+            desc.stencil.enabled = false;
+        }
+        desc.depth.bias = key.depthBias;
+        desc.depth.bias_slope_scale = key.slopeScaleDepthBias;
+        desc.color_count = 1;
+        desc.colors[0].pixel_format = SG_PIXELFORMAT_RGBA8;
+        desc.colors[0].write_mask = ToColorMask(key.colorWriteChannels);
+        desc.colors[0].blend.enabled = key.blendEnabled;
+        desc.colors[0].blend.src_factor_rgb = ToBlendFactor(key.colorSrcBlend);
+        desc.colors[0].blend.dst_factor_rgb = ToBlendFactor(key.colorDstBlend);
+        desc.colors[0].blend.op_rgb = ToBlendOp(key.colorBlendFunc);
+        desc.colors[0].blend.src_factor_alpha = ToBlendFactor(key.alphaSrcBlend);
+        desc.colors[0].blend.dst_factor_alpha = ToBlendFactor(key.alphaDstBlend);
+        desc.colors[0].blend.op_alpha = ToBlendOp(key.alphaBlendFunc);
+        desc.blend_color.r = blendFactor_[0];
+        desc.blend_color.g = blendFactor_[1];
+        desc.blend_color.b = blendFactor_[2];
+        desc.blend_color.a = blendFactor_[3];
+        desc.label = "cna_instanced_3d_pipeline";
+
+        const std::uint32_t pipelineId = sg_make_pipeline(&desc).id;
+        if (sg_query_pipeline_state(MakePipelineHandle(pipelineId)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: instanced-3D pipeline creation failed");
+
+        pipelineInstanced3dCache_.emplace(key, pipelineId);
+        return pipelineId;
+    }
+
     SokolTextureBackend& SokolGraphicsBackend::GetDefaultWhiteTexture()
     {
         if (!defaultWhiteTexture_)
@@ -3643,6 +3825,123 @@ namespace CNA::Internal::Backends::Sokol
                                                        const GpuDrawParams& params)
     {
         DrawColored3D(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+    }
+
+    void SokolGraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& vbIn,
+                                                         const IIndexBufferBackend& ibIn,
+                                                         const Matrix& world,
+                                                         const Matrix& view,
+                                                         const Matrix& projection,
+                                                         PrimitiveType primitive,
+                                                         int primitiveCount,
+                                                         int instanceCount,
+                                                         const GpuDrawParams& params)
+    {
+        if (params.instanceVb == nullptr)
+        {
+            // No per-instance stream -- fall back to a real, working non-instanced draw rather
+            // than throwing, matching VulkanGraphicsBackend/D3D11GraphicsBackend's own identical
+            // fallback contract.
+            DrawColored3D(vbIn, &ibIn, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (primitiveCount <= 0) return;
+
+        const auto& vb = static_cast<const SokolVertexBufferBackend&>(vbIn);
+        if (vb.GetBufferIdEXT() == 0 || vb.GetVertexCount() <= 0) return;
+
+        const auto& ib = static_cast<const SokolIndexBufferBackend&>(ibIn);
+        if (ib.GetBufferIdEXT() == 0 || ib.GetIndexCount() <= 0) return;
+
+        const auto& instVb = static_cast<const SokolVertexBufferBackend&>(*params.instanceVb);
+        if (instVb.GetBufferIdEXT() == 0 || instVb.GetVertexCount() <= 0) return;
+
+        PipelineInstanced3DKey key{};
+        key.colorSrcBlend = blendColorSrc_;
+        key.alphaSrcBlend = blendAlphaSrc_;
+        key.colorDstBlend = blendColorDst_;
+        key.alphaDstBlend = blendAlphaDst_;
+        key.colorBlendFunc = blendColorFunc_;
+        key.alphaBlendFunc = blendAlphaFunc_;
+        key.colorWriteChannels = colorWriteChannels_;
+        key.blendEnabled = blendEnabled_;
+        key.depthTestEnabled = depthTestEnabled_;
+        key.depthWriteEnabled = depthWriteEnabled_;
+        key.depthFunc = depthFunc_;
+        key.cullMode = cullMode_;
+        key.hasDepthAttachment = CurrentPassHasDepthStencilAttachmentEXT();
+        key.sampleCount = CurrentPassSampleCountEXT();
+        key.stencilEnabled = stencilEnabled_;
+        key.stencilFunc = stencilFunc_;
+        key.stencilPass = stencilPass_;
+        key.stencilFail = stencilFail_;
+        key.stencilDepthFail = stencilDepthFail_;
+        key.ccwStencilFunc = ccwStencilFunc_;
+        key.ccwStencilPass = ccwStencilPass_;
+        key.ccwStencilFail = ccwStencilFail_;
+        key.ccwStencilDepthFail = ccwStencilDepthFail_;
+        key.twoSidedStencilMode = twoSidedStencilMode_;
+        key.stencilMask = stencilMask_;
+        key.stencilWriteMask = stencilWriteMask_;
+        key.referenceStencil = referenceStencil_;
+        key.depthBias = depthBias_;
+        key.slopeScaleDepthBias = slopeScaleDepthBias_;
+        key.primitiveType = static_cast<int>(ToPrimitiveType(primitive));
+        key.indexType = static_cast<int>(ib.IsThirtyTwoBit() ? SG_INDEXTYPE_UINT32 : SG_INDEXTYPE_UINT16);
+
+        // Only Position is read (instanced3d.glsl's own doc comment); resolved from the mesh
+        // buffer's declaration when one was supplied, else offset 0 / FLOAT3 -- every one of this
+        // codebase's built-in vertex layouts (and the position-only 12-byte layout
+        // examples/webgpu_instanced3d_test.cpp itself uses) puts Position first.
+        key.stride = static_cast<int>(vb.GetStrideEXT());
+        key.positionOffset = 0;
+        key.positionFormat = static_cast<int>(SG_VERTEXFORMAT_FLOAT3);
+        if (const VertexDeclaration* declaration = vb.GetDeclarationEXT();
+            declaration != nullptr && !declaration->GetVertexElements().empty())
+        {
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            for (const VertexElement& element : declaration->GetVertexElements())
+            {
+                if (element.getUsageIndexProperty() != 0) continue;
+                if (element.getVertexElementUsageProperty() != VertexElementUsage::Position) continue;
+                const sg_vertex_format format = ToVertexFormat(element.getVertexElementFormatProperty());
+                if (format != SG_VERTEXFORMAT_INVALID)
+                {
+                    key.positionOffset = element.getOffsetProperty();
+                    key.positionFormat = static_cast<int>(format);
+                }
+                break;
+            }
+        }
+        if (key.stride <= 0) return;
+
+        BeginPassIfNeeded();
+
+        sg_apply_pipeline(MakePipelineHandle(GetInstanced3DPipeline(key)));
+
+        sg_bindings bindings = {};
+        bindings.vertex_buffers[0] = MakeBufferHandle(vb.GetBufferIdEXT());
+        bindings.vertex_buffer_offsets[0] = params.baseVertex * key.stride;
+        bindings.vertex_buffers[1] = MakeBufferHandle(instVb.GetBufferIdEXT());
+        bindings.index_buffer = MakeBufferHandle(ib.GetBufferIdEXT());
+        sg_apply_bindings(&bindings);
+
+        cna_instanced3d_vs_params_t uniforms{};
+        // World is reconstructed per-instance in the vertex shader; only view*projection goes in
+        // the uniform (mirrors VulkanGraphicsBackend::FillInstancedPushConst's identical shape).
+        const Matrix vp = view * projection;
+        vp.ToColumnMajor(uniforms.vp);
+        uniforms.diffuseColor[0] = params.diffuseColor[0];
+        uniforms.diffuseColor[1] = params.diffuseColor[1];
+        uniforms.diffuseColor[2] = params.diffuseColor[2];
+        uniforms.diffuseColor[3] = params.diffuseColor[3];
+
+        sg_range range{&uniforms, sizeof(uniforms)};
+        sg_apply_uniforms(UB_cna_instanced3d_vs_params, &range);
+
+        const int elementCount = ElementCountForPrimitives(primitive, primitiveCount);
+        const int instCountClamped = std::max(1, instanceCount);
+        sg_draw(params.startIndex, elementCount, instCountClamped);
     }
 
     bool SokolGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const

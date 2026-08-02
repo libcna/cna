@@ -34,7 +34,7 @@ OUTPUT = HERE / "sokol_shaders.hpp"
 
 # One entry per @program-bearing source file in this directory.
 SOURCES = ["sprite.glsl", "colored3d.glsl", "textured3d.glsl", "lit3d.glsl", "dualtextured3d.glsl",
-           "skinned3d.glsl"]
+           "skinned3d.glsl", "instanced3d.glsl"]
 
 # glsl410 = SOKOL_GLCORE, glsl300es = SOKOL_GLES3, hlsl5 = SOKOL_D3D11,
 # metal_macos = SOKOL_METAL, wgsl = SOKOL_WGPU. spirv_vk (SOKOL_VULKAN) is deliberately
