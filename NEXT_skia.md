@@ -1108,6 +1108,10 @@ Skia work requires a successor plan and reopening the accepted surface-mode ADR 
   ASan+UBSan (2.28 seconds, `detect_leaks=0`, `halt_on_error=1`).
 - `plan_skia.md` now has a final COMPLETE banner and 114/114 completed rows. All persistent Debug,
   Release, and sanitizer caches retain `CNA_TEST_DISPLAY=:0`; `NEXT.md` was not read or changed.
+- A final Skia-only TODO/stub-marker audit found no unfinished implementation. It did find one
+  provisional RenderTarget2D MSAA diagnostic ending in “not implemented yet”; the message and its
+  focused assertion now state the accepted permanent raster refusal without implying scheduled
+  acceleration.
 
 ## Next candidates
 

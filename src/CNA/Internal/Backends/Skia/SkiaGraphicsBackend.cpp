@@ -539,7 +539,8 @@ namespace CNA::Internal::Backends::Skia
             throw System::NotSupportedException(
                 "Skia raster RenderTarget2D does not implement public mip chains; mipMap=true is rejected.");
         if (multiSampleCount != 0)
-            throw std::runtime_error("Skia raster RenderTarget2D multisampling is not implemented yet.");
+            throw std::runtime_error(
+                "Skia raster RenderTarget2D does not support multisampling; real sample counts are rejected.");
         return std::make_unique<SkiaRenderTargetBackend>(width, height, preserveContents,
                                                          targetBinding_, resourceCounters_);
     }

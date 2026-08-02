@@ -97,7 +97,8 @@ private:
         }
         catch (const std::runtime_error& error)
         {
-            return std::string(error.what()).find("multisampling") != std::string::npos;
+            return std::string(error.what()).find("does not support multisampling")
+                != std::string::npos;
         }
         return false;
     }
