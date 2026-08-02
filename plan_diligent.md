@@ -56,7 +56,7 @@ Practical consequences that shaped this plan:
 | Namespace alias | `Dg = ::Diligent` — the CNA namespace is itself named `Diligent`, so unqualified `Diligent::X` inside it would resolve to the CNA namespace and fail |
 | Third-party pin | DiligentCore `v2.5.6`, via `FetchContent` in `cmake/ThirdPartyDiligent.cmake` |
 | Task prefix | `DILIGENT-` |
-| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT`, `Diligent_OcclusionQuery`, `Diligent_MSAA`, `Diligent_Instanced`, `Diligent_DrawOffset`, `Diligent_SetDataOptions`, `Diligent_VertexLit`, `Diligent_Pbr`, `Diligent_DepthBias`, `Diligent_ReferenceStencil`, `Diligent_FillMode`, `Diligent_Anisotropic`, `Diligent_SpriteFont`, `Diligent_Model`, `Diligent_Mip`, `Diligent_Npot` |
+| CTest targets | `DiligentDeviceSelectionTest.*` (no GPU needed), `Diligent_2D`, `Diligent_3D`, `Diligent_RenderTarget`, `Diligent_RenderTargetCube`, `Diligent_AlphaTestFog`, `Diligent_DualTextureEnvMap`, `Diligent_Skinned`, `Diligent_MRT`, `Diligent_OcclusionQuery`, `Diligent_MSAA`, `Diligent_Instanced`, `Diligent_DrawOffset`, `Diligent_SetDataOptions`, `Diligent_VertexLit`, `Diligent_Pbr`, `Diligent_DepthBias`, `Diligent_ReferenceStencil`, `Diligent_FillMode`, `Diligent_Anisotropic`, `Diligent_SpriteFont`, `Diligent_Model`, `Diligent_Mip`, `Diligent_Npot`, `Diligent_RenderTargetMipGen` |
 
 ---
 
@@ -204,7 +204,7 @@ Deliberately refused (each throws, naming itself):
 | `DILIGENT-23` | `TextureCube` (`CreateTextureCube`, `SetData`/`GetData` per face) | ✅ | Six array slices of one `RESOURCE_DIM_TEX_CUBE`; full mip chain. Verified by the shared `TextureCubeTests`/`CnjCapabilityMatrixTests`/XNB cube fixtures, which now run for real on this backend instead of asserting the refusal |
 | `DILIGENT-24` | MRT (`SetRenderTargets` with 2..4 slots) | ✅ | All bound slots are attached and cleared, and the pipeline key carries every slot's format plus the per-slot colour write masks. Only slot 0 receives *fragments* today: every built-in shader declares one `SV_TARGET`, so slots 1..3 stay clear-only until `DILIGENT-42` |
 | `DILIGENT-25` | MSAA back buffer + render targets, device-probed clamping | ✅ | Real offscreen-then-resolve MSAA for the back buffer (`Present()`/`ReadBackbuffer()` resolve) and `RenderTarget2D` (its own independent multisampled texture + resolve texture, resolved on unbind), both clamped via `GetTextureFormatInfoExt()`'s per-format `SampleCounts` bitmask. `RenderTargetCube` MSAA is not implemented (still clamped to 1). Verified by `Diligent_MSAA`'s diagonal-edge differential (see "Verification status"). Found and fixed a real, separate, pre-existing bug while wiring this up -- see this row's own "Verification status" note |
-| `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | 🟨 | Implemented, but `DILIGENT-25`'s work discovered it had never actually been reachable -- `DiligentGraphicsBackend::SetRenderTarget2D()`/`SetRenderTargetCubeFace()`/`SetRenderTargets()` never called the outgoing target's `UnbindAsRenderTarget()` at all (fixed alongside `DILIGENT-25`, see that row). Mip regeneration itself is real now, but still has no dedicated pixel test asserting the generated levels' content |
+| `DILIGENT-26` | Mip generation for render targets (`GenerateMips`) | ✅ | Implemented since `DILIGENT-25` (which also fixed the real bug that made it unreachable -- `SetRenderTarget2D()`/`SetRenderTargetCubeFace()`/`SetRenderTargets()` never called the outgoing target's `UnbindAsRenderTarget()`). Now closed with a dedicated pixel test, `Diligent_RenderTargetMipGen` (`examples/diligent_rendertarget_mipgen_test.cpp`): a 4x4 mipMap `RenderTarget2D` gets an exact (x+y)%2 Red/Blue checkerboard pixel-copied into level 0 (`SpriteBatch` + `PointClamp`, 1:1), so every aligned 2x2 block contains exactly 2 Red + 2 Blue texels. After unbinding (which triggers `IDeviceContext::GenerateMips()`), level 1 (2x2) and level 2 (1x1) both read back as the real box-filter average `(128,0,128)` at every texel -- not pure Red, pure Blue, or black, which is what a nearest-copy fallback or a silent no-op would produce instead. 7/7 checks pass, deterministic across repeated runs; level 0's own content is confirmed unaffected by the regeneration |
 
 ### Phase `DILIGENT-3` — remaining effect families
 
@@ -273,16 +273,16 @@ use:
 2. **Runs without a GPU** — `Diligent_DeviceSelection` exercises the device-preference and override
    parsing with no device created at all. ✅
 3. **Real device pixels** — a real Diligent device renders and a test asserts on read-back pixels.
-   ✅ **reached, on a software device**: 22 of the 23 `Diligent_*` CTest binaries are fully green
-   (105 of their own checks — `Diligent_2D` 6, `Diligent_3D` 6, `Diligent_RenderTarget` 5,
+   ✅ **reached, on a software device**: 23 of the 24 `Diligent_*` CTest binaries are fully green
+   (112 of their own checks — `Diligent_2D` 6, `Diligent_3D` 6, `Diligent_RenderTarget` 5,
    `Diligent_RenderTargetCube` 4, `Diligent_AlphaTestFog` 4, `Diligent_DualTextureEnvMap` 6,
    `Diligent_Skinned` 4, `Diligent_MRT` 4, `Diligent_OcclusionQuery` 4, `Diligent_MSAA` 5,
    `Diligent_Instanced` 4, `Diligent_DrawOffset` 5, `Diligent_SetDataOptions` 4,
    `Diligent_VertexLit` 4, `Diligent_Pbr` 5, `Diligent_ReferenceStencil` 1, `Diligent_FillMode` 3,
    `Diligent_Anisotropic` 1, `Diligent_SpriteFont` 4, `Diligent_Model` 1, `Diligent_Mip` 22,
-   `Diligent_Npot` 3 — plus `Diligent_DepthBias`'s own 4 checks, 3 of which pass, makes 109 checks
-   total, 108 passing) run against a genuine Vulkan device provided by Mesa's `lavapipe` ICD under
-   Xvfb. The 23rd, `Diligent_DepthBias`
+   `Diligent_Npot` 3, `Diligent_RenderTargetMipGen` 7 — plus `Diligent_DepthBias`'s own 4 checks,
+   3 of which pass, makes 116 checks total, 115 passing) run against a genuine Vulkan device
+   provided by Mesa's `lavapipe` ICD under Xvfb. The 24th, `Diligent_DepthBias`
    (`DILIGENT-49`), is 3/4: constant `DepthBias` shows no observable effect on this software device,
    matching two independent pre-existing findings elsewhere in this codebase (`D9-62`'s oracle
    attempt against real XNA 4.0, `Vulkan_DepthBias`'s own pre-existing `DepthBias=-1e6` sub-case) —
