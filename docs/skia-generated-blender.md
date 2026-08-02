@@ -1,7 +1,7 @@
 # Skia generated raster blender
 
-Status: generator and live public state integration complete for SKIA-120/121; promotion remains
-SKIA-122–124
+Status: generator, live public state, and SpriteBatch/effect integration complete for
+SKIA-120–122; exhaustive comparison/promotion remains SKIA-123/124
 
 `SkiaGeneratedBlender` compiles one generic `SkRuntimeEffect::MakeForBlender` program per process.
 Six integer uniforms select the independent RGB/alpha source factor, destination factor and
@@ -50,6 +50,11 @@ constant/inverse constant, SourceAlphaSaturation, reverse subtract and a mixed s
 tuple. It also proves one compilation attempt and deterministic validation failures.
 
 `Skia_GeneratedBlendState_Policy` is the public SKIA-121 boundary: baked and live constants, all 16
-target-0 masks, disabled replacement and re-enable restoration have exact opaque pixels. General
-compatibility is not promoted yet. Translucent texture/target/effect equivalence across every batch
-mode, the exhaustive selector/public EasyGL corpus, and final documentation remain SKIA-122–124.
+target-0 masks, disabled replacement and re-enable restoration have exact opaque pixels.
+
+`Skia_GeneratedBlend_BatchModes` closes SKIA-122. The common paint path produces one equivalent
+translucent pixel from Texture2D components, an equivalent premultiplied RenderTarget2D snapshot,
+and an identity explicit SkSL effect in Deferred, Immediate, Texture, BackToFront, and FrontToBack.
+Texture mode sorts two distinct sources, and stock Opaque remains exact after successful effect use
+or malformed-effect rejection. General compatibility is not promoted yet: the exhaustive
+selector/public EasyGL corpus and final documentation remain SKIA-123/124.

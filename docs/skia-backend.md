@@ -727,9 +727,16 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     their pixel-proven alpha routes. Baked constants, live red→green→red changes, all sixteen
     post-equation target-0 masks, masked source replacement while disabled, and configured-state
     restoration pass; invalid selectors and unsupported sample masks remain atomic refusals. The
-    focused suite passes Debug, Release, and ASan+UBSan, and all 138 current Skia CTests pass in
-    sequential Xvfb blocks. Batch/effect equivalence, exhaustive EasyGL pixels, and promotion
-    remain SKIA-122–124.
+    focused suite passes Debug, Release, and ASan+UBSan, and all 138 tests at that checkpoint pass
+    in sequential Xvfb blocks. The next entry closes batch/effect equivalence; exhaustive EasyGL
+    pixels and promotion remain SKIA-123/124.
+90. `Skia_GeneratedBlend_BatchModes` closes SKIA-122 without duplicating production blend paths.
+    Deferred, Immediate, Texture, BackToFront, and FrontToBack all reach the same generated
+    `SkPaint` composition for translucent Texture2D, premultiplied RenderTarget2D, and explicit
+    identity-SkSL inputs. Two distinct sources exercise real texture sorting. All 19 checks pass,
+    stock Opaque remains exact after successful effect use and malformed-effect Begin rejection,
+    and the policy is green in Debug, Release, and ASan+UBSan. Exhaustive classification and final
+    promotion remain SKIA-123/124.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

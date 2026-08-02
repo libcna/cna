@@ -24,7 +24,7 @@
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
 - The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
-  138: 19 raster-only, 114 display-required tests, and five display-free source audits.
+  139: 19 raster-only, 115 display-required tests, and five display-free source audits.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
@@ -589,8 +589,8 @@
 
 ## Current task
 
-SKIA-115–121 are complete. Continue with SKIA-122's SpriteBatch mode/effect integration, followed
-by SKIA-123's exhaustive corpus and SKIA-124's documentation/promotion gate.
+SKIA-115–122 are complete. Continue with SKIA-123's exhaustive selector/public pixel corpus,
+followed by SKIA-124's documentation and exact promotion gate.
 
 ## Completed in this session: SKIA-93
 
@@ -1233,9 +1233,29 @@ by SKIA-123's exhaustive corpus and SKIA-124's documentation/promotion gate.
   selector/public EasyGL comparison remains SKIA-123, so general compatibility is not promoted
   until SKIA-124.
 
+## Completed in this session: SKIA-122
+
+- Audited the complete SpriteBatch flow. All non-Immediate queues reach the same backend `Draw`
+  after their stable ordering step, Immediate reaches it per call, and the Skia draw constructs one
+  `SkPaint` with the generated blender before selecting either the image path or explicit SkSL
+  shader. No separate effect/batch-mode blend implementation needed to be added or maintained.
+- Added `Skia_GeneratedBlend_BatchModes` with a translucent working source `{64,32,16,128}` and a
+  ReverseSubtract/separate-alpha state. Deferred, Immediate, Texture, BackToFront, and FrontToBack
+  agree for Texture2D, a RenderTarget2D whose premultiplied snapshot has the same components, and
+  an identity `CNA_SKIA_SKSL_V1` effect. Two distinct non-overlapping textures force Texture mode
+  through its actual sort rather than a single-sprite shortcut.
+- The same SpriteBatch produces exact stock Opaque pixels after successful generated/effect draws,
+  rejects a malformed effect before Begin commits, and immediately produces another exact stock
+  pixel afterward. All 19 checks pass. The complete focused blend/alpha/effect set passes 16/16 on
+  Xvfb, and the new policy passes in Debug, Release, and ASan+UBSan (`detect_leaks=0`, both
+  halt-on-error). The configure selects 139 tests: 19 Raster, 115 Display, five Audit. Builds used
+  only `--parallel 2`; `NEXT.md` was not read or changed.
+- Exhaustive classification of all 714,025 selector tuples and minimized public reference pixels
+  remain SKIA-123. No general arbitrary-blend compatibility claim is promoted before SKIA-124.
+
 ## Next candidates
 
-1. SKIA-122–124: complete arbitrary raster blend states before starting mip/format storage work.
+1. SKIA-123–124: complete arbitrary raster blend states before starting mip/format storage work.
 2. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
    effects in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the

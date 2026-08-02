@@ -35,11 +35,12 @@ alpha into working RGB exactly once. The same four scale values are passed to th
 | `NonPremultiplied` | Straight | Texture evaluation supplies the RGB source-alpha factor; the runtime blender computes independent output alpha. |
 | `Additive` | Straight | Texture evaluation supplies the RGB source-alpha factor; the runtime blender adds destination and computes independent alpha. |
 | `DestinationColorPrototype` | Premultiplied | Preserve source components for the one opaque pixel-proven custom tuple. |
+| `Generated` | Premultiplied | Preserve Texture2D/effect working components, reuse target surface components, evaluate every selected factor explicitly, then encode the logical result for SkSurface. |
 
-All five entries carry `SkiaSourceAlphaConvention` in `kSkiaBlendMappings`. A future generated
-blender from SKIA-120 must declare its convention before construction and obtain raw pixel evidence
-for textures, targets, tint and tagged effects. Until then, an unlisted tuple rejects; similarity to
-a preset is not permission to guess.
+The five optimized entries carry `SkiaSourceAlphaConvention` in `kSkiaBlendMappings`; the generic
+route declares `kSkiaGeneratedBlendSourceAlphaConvention`. SKIA-120's scalar oracle and SKIA-122's
+all-mode Texture2D/RenderTarget2D/tagged-effect pixels prove that boundary. Invalid raw selectors
+still reject rather than guessing a nearby preset.
 
 `Skia_SourceAlpha_Policy` is display-free. It reads raw premultiplied Skia bytes for discriminating
 translucent Texture2D, RenderTarget2D and custom-effect sources, verifies tint scales, and audits
