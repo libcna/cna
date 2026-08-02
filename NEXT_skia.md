@@ -1050,12 +1050,42 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
 - The disposable validation cache and all persistent Debug, Release, sanitizer, and EasyGL caches
   are restored to `CNA_TEST_DISPLAY=:0`. `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-113
+
+- Started from clean baseline `77c3a604` and created fresh `/tmp/cna-skia113-*` CMake/Ninja
+  directories with compiler caching, tests, examples, and networking disabled for the native
+  compile-selection rows. `CMAKE_BUILD_PARALLEL_LEVEL=8` and `--parallel 8` bounded all builds.
+- Fresh Debug configuration and the complete `CNA` target pass for `SKIA` (480 Ninja edges),
+  `EASYGL` (499), `SDL_RENDERER` (473), `SOFTWARE` (473), `VULKAN` (473), and `BGFX`. Every
+  configure printed the exact requested selection. Vulkan found 1.4.309 while the optional
+  `glslc`/`glslangValidator` tools remained absent; BGFX reused its pinned local source tree so the
+  run stayed offline.
+- The CI inventory currently selects EasyGL, SDL_Renderer, Vulkan, BGFX, D3D11, and D3D12.
+  Emscripten is not installed, so Canvas remains locally unavailable behind its intentional gate;
+  native Windows/MSVC is likewise unavailable and the following cross-build/runtime evidence does
+  not replace the authoritative Windows jobs.
+- Fresh MinGW-w64 `RelWithDebInfo` configurations pass for D3D11 and D3D12. Explicitly building
+  `CNA`, D3DCommon, the selected backend, and every backend-owned test executable passes for both;
+  D3D12's compile-only swap-chain diagnostic also links. On real display `:0`, the full D3D11
+  suite passes 41/41 under Wine + DXVK 2.6.0 in 168.79 seconds. Both registered D3D12 off-screen
+  tests pass under Wine + vkd3d-proton in 7.24 seconds.
+- The D3D11 workflow-shaped unqualified `all` build first built `CNA` and the D3D11 archive, then
+  hit a pre-existing unrelated build-graph defect: `CNA_ENABLE_NET=OFF` does not prevent
+  `CnaTests` from compiling `ENetBackendTests.cpp`, whose `enet/enet.h` is then unavailable.
+  SKIA-112 had independently reproduced the same issue. This session did not change networking or
+  Windows CI; `docs/skia-nonskia-build-matrix.md` records the exact failure and the successful
+  backend-scoped evidence.
+- A sandboxed Wine attempt failed with seccomp `Bad system call`, and an Xvfb Wine attempt exposed
+  no monitor to Windows SDL. Both are runner-environment diagnostics, not product results: the
+  allowed run on display `:0` produced the complete green D3D11 suite above. `NEXT.md` was not read
+  or changed.
+
 ## Next candidates
 
-1. SKIA-113: perform the clean-worktree/fresh-configure cross-backend smoke now that the developer
-   procedure is reproducible.
-2. Reassess earlier open architecture rows (especially SKIA-5/6) against the accepted
-   raster-only ADR before doing the final release-gate tasks.
+1. Reassess earlier open architecture rows (especially SKIA-5/6) against the accepted raster-only
+   ADR and accurately disposition them before the release gate.
+2. SKIA-114: run the final plan/capability/evidence audit, correct stale statuses, and publish the
+   signed-off release summary.
 
 ## Known boundaries / assumptions
 

@@ -1,4 +1,6 @@
-# SKIA-20 non-Skia backend build matrix
+# Skia cross-backend build matrices
+
+## SKIA-20: initial non-Skia selection matrix
 
 This document records the regression matrix run after adding the Skia backend-selection branch.
 It is evidence that selecting Skia did not make the other backend branches syntactically or
@@ -68,3 +70,92 @@ toolchain. Each failed at its intentional platform gate before backend compilati
 These four results verify selection isolation and diagnostics only. They are deliberately not
 reported as successful builds; their platform/cross-toolchain build evidence remains owned by the
 corresponding backend plans and CI.
+
+## SKIA-113: release-candidate fresh-configure matrix
+
+SKIA-113 repeated the selection check at the end of the Skia work, this time including Skia itself,
+the four Linux backends exercised by current GitHub Actions, the requested Software comparison,
+and both platform-gated backends exercised by native Windows CI. The worktree was clean at baseline
+commit `77c3a604`; every build directory was newly created under `/tmp` and no compiler cache was
+used.
+
+### Environment and command boundary
+
+- Date: 2026-08-01
+- Host: Linux 6.12.96+deb13-amd64, x86_64
+- Native compiler: GNU C++ 14.2.0
+- Windows cross compiler: x86_64-w64-mingw32 GNU C++ 14
+- Generator: Ninja 1.12.1, CMake 3.31.6
+- Concurrency: `CMAKE_BUILD_PARALLEL_LEVEL=8` and every explicit build used `--parallel 8`
+- Current CI selections: EasyGL, SDL_Renderer, Vulkan, BGFX, D3D11, and D3D12
+- Locally unavailable CI toolchain: native Windows/MSVC; the D3D rows therefore add MinGW compile
+  and Wine runtime evidence but do not replace the authoritative Windows jobs
+- Unavailable platform toolchain: Emscripten (`emcmake`/`em++` absent), so Canvas could not be
+  compiled locally and remains covered by its intentional platform gate
+
+The six native Linux rows used this shape, replacing the backend and build directory per row:
+
+```sh
+export CMAKE_BUILD_PARALLEL_LEVEL=8
+cmake -S . -B /tmp/cna-skia113-<name> -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCNA_GRAPHICS_BACKEND=<BACKEND> \
+  -DCNA_BUILD_TESTS=OFF \
+  -DCNA_BUILD_EXAMPLES=OFF \
+  -DCNA_ENABLE_NET=OFF \
+  -DCNA_USE_CCACHE=OFF
+cmake --build /tmp/cna-skia113-<name> --target CNA --parallel 8
+```
+
+The Skia row used the same pinned CPU-raster artifact validated by SKIA-112. The BGFX row reused
+the already pinned `bgfx.cmake` source tree through `FETCHCONTENT_SOURCE_DIR_BGFX_CMAKE`, keeping
+this verification offline. No tracked source or dependency state was changed.
+
+### Native Linux results
+
+| Selection | Fresh configure | Full `CNA` target | Notes |
+|---|---|---|---|
+| `SKIA` | pass | pass | selected the pinned raster backend; 480 Ninja edges |
+| `EASYGL` | pass | pass | selected adjacent `../easy-gl`; 499 Ninja edges |
+| `SDL_RENDERER` | pass | pass | selected the vendored SDL renderer; 473 Ninja edges |
+| `SOFTWARE` | pass | pass | selected the CPU rasterizer; 473 Ninja edges |
+| `VULKAN` | pass | pass | Vulkan 1.4.309 found; optional `glslc` and `glslangValidator` absent; 473 Ninja edges |
+| `BGFX` | pass | pass | reused the pinned local `bgfx.cmake` source; backend archive and CNA linked successfully |
+
+This is a compile-selection smoke, not a claim that these non-Skia backends gained new
+capabilities. All six fresh configurations selected exactly the requested backend; none fell back
+to Skia or another renderer.
+
+### Windows CI selections from Linux
+
+D3D11 and D3D12 were freshly configured with the repository's MinGW-w64 toolchain, matching the
+CI options (`RelWithDebInfo`, backend tests on, examples and networking off). `CNA`, the selected
+backend archive, and every backend-owned executable were built explicitly with eight workers.
+Runtime tests used the project's established Wine prefixes and translation-layer engagement gates,
+so a silent WineD3D substitution could not pass.
+
+| Selection | Fresh cross-configure | Backend compile | Runtime evidence |
+|---|---|---|---|
+| `D3D11` | pass | `CNA`, D3DCommon, D3D11, and all 41 backend CTest executables pass | 41/41 on display `:0` under Wine + DXVK 2.6.0, 168.79 s |
+| `D3D12` | pass | `CNA`, D3DCommon, D3D12, all backend executables, and the swap-chain diagnostic pass | 2/2 registered off-screen tests under Wine + vkd3d-proton, 7.24 s |
+
+The D3D12 build emitted only previously existing test-source warnings (ignored `[[nodiscard]]`
+results and an ambiguous integral `Color` overload); neither affected compilation or the two
+registered off-screen tests. Window/swap-chain D3D12 fixtures remain compile-only on this Linux
+loop by the existing DX-100 policy and are exercised by native Windows CI.
+
+### Pre-existing out-of-scope failure
+
+A first `cmake --build /tmp/cna-skia113-d3d11 --parallel 8` invocation built both D3D11 libraries
+and `CNA`, then failed while compiling the unrelated monolithic `CnaTests` target. With
+`CNA_ENABLE_NET=OFF`, `cmake/UnitTests.cmake` still registers
+`tests/CNA/Internal/Net/ENetBackendTests.cpp`, which transitively includes missing `enet/enet.h`.
+SKIA-112 had already reproduced the same defect in a fresh native build. The Windows workflow says
+its scope is CNA plus backend-owned tests, but its unqualified `all` build currently includes
+`CnaTests`; this is therefore a pre-existing CI/build-graph issue rather than a backend-selection
+regression. SKIA-113 did not change unrelated networking or Windows workflow behavior: explicitly
+building the documented D3D scope proved both backends and all their test executables compile.
+
+The complete requested matrix consequently found no Skia-induced selection or compilation
+regression. All observed non-green behavior is either the documented ENet-off registration defect,
+an unavailable host toolchain, or an established D3D12 Wine windowing boundary.
