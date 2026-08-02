@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/Skia/SkiaTextureBackend.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
+#include "CNA/Internal/Graphics/DxtUtil.hpp"
 
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkImageInfo.h"
@@ -44,7 +45,58 @@ namespace CNA::Internal::Backends::Skia
                 || format == SurfaceFormat::HalfVector4
                 || format == SurfaceFormat::NormalizedByte2
                 || format == SurfaceFormat::NormalizedByte4
-                || format == SurfaceFormat::HdrBlendable;
+                || format == SurfaceFormat::HdrBlendable
+                || format == SurfaceFormat::Dxt1
+                || format == SurfaceFormat::Dxt3
+                || format == SurfaceFormat::Dxt5;
+        }
+
+        [[nodiscard]] bool IsCompressedTextureFormat(SurfaceFormat format) noexcept
+        {
+            return format == SurfaceFormat::Dxt1
+                || format == SurfaceFormat::Dxt3
+                || format == SurfaceFormat::Dxt5;
+        }
+
+        [[nodiscard]] std::size_t CompressedBlockByteSize(SurfaceFormat format)
+        {
+            switch (format)
+            {
+                case SurfaceFormat::Dxt1: return 8u;
+                case SurfaceFormat::Dxt3:
+                case SurfaceFormat::Dxt5: return 16u;
+                default:
+                    throw System::NotSupportedException(
+                        "Skia Texture2D has no block byte size for this SurfaceFormat.");
+            }
+        }
+
+        [[nodiscard]] std::vector<std::uint8_t> DecompressBlockLevel(
+            SurfaceFormat format, const std::uint8_t* data, std::size_t dataSize,
+            int width, int height)
+        {
+            using CNA::Internal::Graphics::DxtUtil;
+            switch (format)
+            {
+                case SurfaceFormat::Dxt1: return DxtUtil::DecompressDxt1(data, dataSize, width, height);
+                case SurfaceFormat::Dxt3: return DxtUtil::DecompressDxt3(data, dataSize, width, height);
+                case SurfaceFormat::Dxt5: return DxtUtil::DecompressDxt5(data, dataSize, width, height);
+                default:
+                    throw System::NotSupportedException(
+                        "Skia Texture2D has no block decoder for this SurfaceFormat.");
+            }
+        }
+
+        [[nodiscard]] sk_sp<SkImage> MakeDecodedCompressedImage(
+            SurfaceFormat format, const std::uint8_t* data, std::size_t dataSize,
+            int width, int height, SkAlphaType alphaType)
+        {
+            const std::vector<std::uint8_t> rgba =
+                DecompressBlockLevel(format, data, dataSize, width, height);
+            const SkPixmap pixmap(
+                SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, alphaType),
+                rgba.data(), static_cast<std::size_t>(width) * 4u);
+            return SkImages::RasterFromPixmapCopy(pixmap);
         }
 
         [[nodiscard]] std::size_t BytesPerTexel(SurfaceFormat format)
@@ -562,6 +614,59 @@ namespace CNA::Internal::Backends::Skia
         if (!IsSupportedTextureFormat(format_))
             throw System::NotSupportedException(
                 "Skia Texture2D SurfaceFormat has not passed its promotion gate.");
+        if (IsCompressedTextureFormat(format_))
+        {
+            const std::size_t blockByteSize = CompressedBlockByteSize(format_);
+            std::vector<SkiaCompressedMipLevel2D> layout;
+            std::size_t chainBytes = 0u;
+            SkiaCompressedMipChain2DLayoutError layoutError =
+                SkiaCompressedMipChain2DLayoutError::None;
+            if (data.mipLevels <= 0
+                || !TryBuildSkiaCompressedMipChain2DLayout(width_, height_, data.mipLevels > 1,
+                                                            blockByteSize, layout, chainBytes,
+                                                            layoutError))
+            {
+                throw System::NotSupportedException(
+                    "Skia Texture2D cannot allocate the requested compressed format mip chain.");
+            }
+            if (static_cast<int>(layout.size()) != data.mipLevels)
+            {
+                throw std::invalid_argument(
+                    "Skia Texture2D mipLevels must name level zero or the complete compressed "
+                    "mip chain.");
+            }
+            if (data.pixels.size() != layout[0].bytes)
+            {
+                throw std::runtime_error(
+                    "Skia Texture2D requires exactly the padded compressed block bytes for "
+                    "level zero.");
+            }
+
+            std::size_t imageBytes = 0u;
+            std::size_t retainedBytes = 0u;
+            if (!CheckedTexelBytes2D(static_cast<std::size_t>(width_),
+                                     static_cast<std::size_t>(height_), 4u, imageBytes)
+                || !CheckedSizeMultiply(imageBytes, 2u, imageBytes)
+                || !CheckedSizeAdd(chainBytes, imageBytes, retainedBytes)
+                || retainedBytes > kSkiaCpuTextureStorageLimitBytes)
+            {
+                throw System::NotSupportedException(
+                    "Skia Texture2D compressed mip storage and decoded image views exceed the "
+                    "checked 256 MiB per-resource limit.");
+            }
+
+            compressedChain_ = std::make_unique<SkiaCompressedMipChain2D>(
+                width_, height_, data.mipLevels > 1, blockByteSize, resourceCounters_);
+            std::memcpy(compressedChain_->LevelData(0), data.pixels.data(), data.pixels.size());
+            RebuildImage();
+            if (resourceCounters_)
+            {
+                imageViewStorageBytes_ = imageBytes;
+                resourceCounters_->AddTexture(imageViewStorageBytes_);
+                resourceRegistered_ = true;
+            }
+            return;
+        }
         bytesPerTexel_ = BytesPerTexel(format_);
         std::size_t requiredBytes = 0;
         if (!CheckedTexelBytes2D(static_cast<std::size_t>(width_),
@@ -638,6 +743,21 @@ namespace CNA::Internal::Backends::Skia
     {
         if (!rgba)
             throw std::runtime_error("Skia Texture2D UpdatePixels received null format data.");
+
+        if (compressedChain_)
+        {
+            const SkiaCompressedMipLevel2D& level0 = compressedChain_->Level(0);
+            if (stride != static_cast<int>(level0.rowBytes))
+            {
+                throw std::runtime_error(
+                    "Skia Texture2D compressed UpdatePixels stride must equal the exact "
+                    "padded block row size.");
+            }
+            std::memcpy(compressedChain_->LevelData(0), rgba, level0.bytes);
+            RebuildImage();
+            return;
+        }
+
         if (stride < static_cast<int>(static_cast<std::size_t>(width_) * bytesPerTexel_))
             throw std::runtime_error(
                 "Skia Texture2D UpdatePixels stride is smaller than a format row.");
@@ -659,6 +779,25 @@ namespace CNA::Internal::Backends::Skia
     {
         if (!rgba)
             throw std::runtime_error("Skia Texture2D mip upload received null RGBA data.");
+
+        if (compressedChain_)
+        {
+            const SkiaCompressedMipLevel2D& target = compressedChain_->Level(level);
+            if (levelWidth != target.width || levelHeight != target.height)
+            {
+                throw std::runtime_error(
+                    "Skia Texture2D compressed mip upload dimensions do not match the "
+                    "requested level.");
+            }
+            if (level == 0)
+            {
+                UpdatePixels(rgba, static_cast<int>(target.rowBytes));
+                return;
+            }
+            std::memcpy(compressedChain_->LevelData(level), rgba, target.bytes);
+            return;
+        }
+
         const SkiaMipLevel2D& target = mipChain_->Level(level);
         if (levelWidth != target.width || levelHeight != target.height)
         {
@@ -681,7 +820,54 @@ namespace CNA::Internal::Backends::Skia
     bool SkiaTextureBackend::GetData(int level, int x, int y, int width, int height,
                                      void* data, int dataLength) const
     {
-        if (!data || level < 0 || level >= mipChain_->LevelCount())
+        if (!data) return false;
+
+        if (compressedChain_)
+        {
+            if (level < 0 || level >= compressedChain_->LevelCount()) return false;
+            const SkiaCompressedMipLevel2D& sourceLevel = compressedChain_->Level(level);
+            // A partial rect must start on a block boundary and either be block-aligned or
+            // reach the level's actual (possibly NPOT) edge -- the same policy real block-
+            // compression hardware/drivers enforce for sub-level updates.
+            const bool touchesRightEdge = x + width == sourceLevel.width;
+            const bool touchesBottomEdge = y + height == sourceLevel.height;
+            if (width <= 0 || height <= 0 || x < 0 || y < 0
+                || width > sourceLevel.width || height > sourceLevel.height
+                || x > sourceLevel.width - width || y > sourceLevel.height - height
+                || (x % 4) != 0 || (y % 4) != 0
+                || ((width % 4) != 0 && !touchesRightEdge)
+                || ((height % 4) != 0 && !touchesBottomEdge))
+            {
+                return false;
+            }
+            const std::size_t blockByteSize = CompressedBlockByteSize(format_);
+            const int blockCols = (width + 3) / 4;
+            const int blockRows = (height + 3) / 4;
+            std::size_t requiredBytes = 0;
+            if (!CheckedTexelBytes2D(static_cast<std::size_t>(blockCols),
+                                     static_cast<std::size_t>(blockRows), blockByteSize,
+                                     requiredBytes)
+                || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
+            {
+                return false;
+            }
+
+            auto* destination = static_cast<std::uint8_t*>(data);
+            const int blockX = x / 4;
+            const int blockY = y / 4;
+            const std::size_t rowCopyBytes = static_cast<std::size_t>(blockCols) * blockByteSize;
+            for (int row = 0; row < blockRows; ++row)
+            {
+                const std::size_t sourceOffset =
+                    static_cast<std::size_t>(blockY + row) * sourceLevel.rowBytes
+                    + static_cast<std::size_t>(blockX) * blockByteSize;
+                std::memcpy(destination + static_cast<std::size_t>(row) * rowCopyBytes,
+                            compressedChain_->LevelData(level) + sourceOffset, rowCopyBytes);
+            }
+            return true;
+        }
+
+        if (level < 0 || level >= mipChain_->LevelCount())
             return false;
         const SkiaMipLevel2D& sourceLevel = mipChain_->Level(level);
         std::size_t requiredBytes = 0;
@@ -719,6 +905,27 @@ namespace CNA::Internal::Backends::Skia
     sk_sp<SkImage> SkiaTextureBackend::SnapshotMipLevelEXT(
         int level, SkiaSourceAlphaConvention alphaConvention) const
     {
+        if (compressedChain_)
+        {
+            if (level < 0 || level >= compressedChain_->LevelCount())
+                return nullptr;
+            if (level == 0)
+                return SnapshotImage(alphaConvention);
+
+            const SkiaCompressedMipLevel2D& mip = compressedChain_->Level(level);
+            const SkAlphaType alphaType =
+                ResolveSkiaWorkingSourceRoute(StorageAlphaEXT(), alphaConvention)
+                        == SkiaWorkingSourceRoute::PreserveDeclaredComponents
+                    ? kPremul_SkAlphaType
+                    : kUnpremul_SkAlphaType;
+            // Decoded on demand, matching the other conversion-shadow formats below -- the
+            // padded compressed block chain has stable addresses, but there is no direct Skia
+            // representation for compressed bytes, so every snapshot decodes a fresh bounded
+            // RGBA8 image.
+            return MakeDecodedCompressedImage(format_, compressedChain_->LevelData(level),
+                                              mip.bytes, mip.width, mip.height, alphaType);
+        }
+
         if (level < 0 || level >= mipChain_->LevelCount())
             return nullptr;
         if (level == 0)
@@ -740,6 +947,20 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaTextureBackend::RebuildImage()
     {
+        if (compressedChain_)
+        {
+            const SkiaCompressedMipLevel2D& levelZero = compressedChain_->Level(0);
+            straightImage_ = MakeDecodedCompressedImage(
+                format_, compressedChain_->LevelData(0), levelZero.bytes, width_, height_,
+                kUnpremul_SkAlphaType);
+            premultipliedImage_ = MakeDecodedCompressedImage(
+                format_, compressedChain_->LevelData(0), levelZero.bytes, width_, height_,
+                kPremul_SkAlphaType);
+            if (!straightImage_ || !premultipliedImage_)
+                throw std::runtime_error("Skia failed to create a raster Texture2D image.");
+            return;
+        }
+
         const SkiaMipLevel2D& levelZero = mipChain_->Level(0);
         straightImage_ = MakePackedImageCopy(
             format_, mipChain_->LevelData(0), width_, height_, levelZero.rowBytes,
@@ -753,6 +974,13 @@ namespace CNA::Internal::Backends::Skia
 
     std::uint64_t SkiaTextureBackend::MipGenerationCountEXT(int level) const
     {
+        if (compressedChain_)
+        {
+            // Compressed descendant levels are never generated -- see the class-level comment.
+            if (level < 0 || level >= compressedChain_->LevelCount())
+                throw std::out_of_range("Skia Texture2D mip generation level is out of range.");
+            return 0u;
+        }
         if (level < 0 || level >= static_cast<int>(mipGenerationCounts_.size()))
             throw std::out_of_range("Skia Texture2D mip generation level is out of range.");
         return mipGenerationCounts_[static_cast<std::size_t>(level)];

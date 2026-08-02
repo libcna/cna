@@ -212,9 +212,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Uploads exact packed RGBA binary16 values to a mip level or rectangle. */
         void SetData(int level, const Rectangle* rect, const PackedVector::HalfVector4* data,
                      int startIndex, int elementCount);
-        /** @brief Uploads exact unsigned bytes to a ByteEXT texture. */
+        /** @brief Uploads exact unsigned bytes to a ByteEXT texture, or compressed blocks to a Dxt1/Dxt3/Dxt5 texture. */
         NOXNA void SetData(const std::uint8_t* data, int elementCount);
-        /** @brief Uploads exact unsigned bytes to a ByteEXT mip level or rectangle. */
+        /**
+         * @brief Uploads exact unsigned bytes to a ByteEXT texture, or exact compressed blocks
+         * to a Dxt1/Dxt3/Dxt5 texture. For a compressed format, level/rect coordinates are texel
+         * space and must be block-aligned or reach the level's edge; elementCount is the exact
+         * padded block byte count for the requested region.
+         */
         NOXNA void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
                            int startIndex, int elementCount);
         /** @brief Uploads exact unsigned 16-bit values to a UShortEXT texture. */
@@ -367,9 +372,14 @@ namespace Microsoft::Xna::Framework::Graphics
                      int startIndex, int elementCount) const;
         /** @brief Reads exact unsigned bytes from a ByteEXT texture. */
         NOXNA void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
-        /** @brief Reads all exact unsigned bytes from a ByteEXT texture. */
+        /** @brief Reads all exact unsigned bytes from a ByteEXT texture, or compressed blocks from a Dxt1/Dxt3/Dxt5 texture. */
         NOXNA void GetData(std::uint8_t* data, int elementCount) const;
-        /** @brief Reads exact unsigned bytes from a ByteEXT mip level or rectangle. */
+        /**
+         * @brief Reads exact unsigned bytes from a ByteEXT mip level or rectangle, or exact
+         * compressed blocks from a Dxt1/Dxt3/Dxt5 mip level or rectangle. For a compressed
+         * format, rect coordinates are texel space and must be block-aligned or reach the
+         * level's edge; elementCount is the exact padded block byte count for the region.
+         */
         NOXNA void GetData(int level, const Rectangle* rect, std::uint8_t* data,
                            int startIndex, int elementCount) const;
         /** @brief Reads exact unsigned 16-bit values from a UShortEXT texture. */
@@ -608,6 +618,15 @@ namespace Microsoft::Xna::Framework::Graphics
                           int startIndex, int elementCount, int elementBytes);
         void GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                           int startIndex, int elementCount, int elementBytes) const;
+
+        /// Raw block-compressed byte upload for Dxt1/Dxt3/Dxt5 (SKIA-140). Unlike SetDataBytes,
+        /// there is no CPU-side mirror: each call reads back, patches, and re-uploads through
+        /// the backend directly, since compressed storage cannot be sliced by texel row.
+        void SetCompressedDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
+                                    int startIndex, int elementCount);
+        /// Raw block-compressed byte readback counterpart of SetCompressedDataBytes.
+        void GetCompressedDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
+                                    int startIndex, int elementCount) const;
 
         [[nodiscard]] SDL_Texture* GetNativeTextureInternal() const;
 

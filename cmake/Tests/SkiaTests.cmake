@@ -490,6 +490,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_Texture2D_ShadowFormats
                                    cna_test_skia_texture2d_shadow_formats)
 
+    # SKIA-140: exact Dxt1/Dxt3/Dxt5 compressed block transfer, block-alignment/NPOT-edge
+    # validation, alpha-mode fidelity, authored-only mip chains, decoded public sampling,
+    # malformed-data rejection and continued RenderTarget2D refusal.
+    cna_skia_test(cna_test_skia_texture2d_compressed_formats
+                  examples/skia_texture2d_compressed_formats_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_compressed_formats
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_CompressedFormats
+                                   cna_test_skia_texture2d_compressed_formats)
+
     cna_skia_test(cna_test_skia_texture2d_dispose examples/sdlrenderer_texture2d_dispose_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Dispose cna_test_skia_texture2d_dispose)
 

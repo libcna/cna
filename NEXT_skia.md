@@ -1659,15 +1659,84 @@ level-boundary contract.
   remained untouched. The exact next implementation point is SKIA-140: preserve DXT1/DXT3/DXT5
   and Dxt5Srgb compressed blocks while supplying bounded decoded sampling images.
 
+## Completed in this session: SKIA-140
+
+- The pinned Skia raster dependency (`libskia.a` + five sibling archives) that this repo's
+  `cmake-build-skia*` directories point at had been staged under `/tmp/cna-skia-src` and
+  `/tmp/cna-skia-build` in a prior session -- a violation of this project's own "never stage
+  dependencies in `/tmp`" rule -- and was gone once `/tmp` was wiped between sessions. It was
+  rebuilt from source at the pinned revision `ebf50520d720a1ce9d842d942d04c6c39c3fbc7b` into the
+  reusable `~/deps/skia` (source) and `~/deps/skia-out/raster` (GN/ninja raster output)
+  directories, matching this family of projects' `~/deps/<name>` convention, and all three build
+  directories were reconfigured to point at the new paths with ccache enabled (it had been
+  configured off in the stale caches).
+- A new `SkiaCompressedMipChain2D` (`SkiaMipChain2D.hpp`-sibling) stores each mip level as
+  `ceil(width/4) * ceil(height/4)` padded blocks -- 8 bytes/block for Dxt1, 16 for Dxt3/Dxt5 --
+  with the same stable-address, resource-accounted contiguous storage pattern as the existing
+  per-texel chain, sharing its `mipChains2D`/`mipChain2DStorageBytes` counter bucket.
+  `SkiaTextureBackend` branches its constructor, `UpdatePixels`/`UpdatePixelsLevel`, `GetData`,
+  `RebuildImage`, and `SnapshotMipLevelEXT` for Dxt1/Dxt3/Dxt5: level zero and every descendant
+  decode through the existing `CNA::Internal::Graphics::DxtUtil` decompressor into a bounded
+  `kRGBA_8888` image (decoded fresh on each `SnapshotMipLevelEXT` call for levels above zero,
+  matching the established conversion-shadow pattern). Unlike every other promoted format,
+  compressed descendant mip levels are never generated -- there is no direct Skia block encoder,
+  and building one is out of this task's scope -- so `MipGenerationCountEXT` always reports zero
+  and an unauthored descendant level reads back exactly zero rather than a fabricated downsample.
+- The shared (Skia-branch) `Texture2D::SetData`/`GetData(uint8_t*, ...)` NOXNA overloads, previously
+  ByteEXT-only, now also route Dxt1/Dxt3/Dxt5 through new `SetCompressedDataBytes`/
+  `GetCompressedDataBytes` helpers. A partial rect must start on a block boundary (x/y multiples
+  of 4) and either be block-aligned or reach the level's true (possibly NPOT) edge -- the same
+  policy real block-compression drivers enforce. Every required/transferred byte count uses the
+  exact padded block count, which is intentionally more exact than FNA's own
+  `w*h*GetFormatSizeEXT/GetBlockSizeSquaredEXT` validation formula (that raw formula under-counts
+  a rectangle whose edge falls inside a partial NPOT tail block). `SetCompressedDataBytes` has no
+  lasting CPU-side shadow: a partial update reads the current level back from the backend, patches
+  only the requested block rectangle, and re-uploads the whole level, mirroring the render-target
+  partial-update pattern already used elsewhere in this file. The format-constructor's level-zero
+  buffer sizing was also fixed to use the padded block count for any `GetBlockSizeSquaredEXT != 1`
+  format (previously `w*h*GetFormatSizeEXT`, silently oversized/undersized for every compressed
+  format including the still-refused ones).
+- `Skia_Texture2D_CompressedFormats` passes 29/29 checks: exact 8/16-byte block round-trip for all
+  three formats; Dxt1 one-bit alpha (4-colour opaque, 3-colour+transparent index 3, 3-colour
+  average-opaque index 2); Dxt3 explicit 4-bit alpha nibble replication; Dxt5 six-interpolated
+  values plus the two explicit index-6/7 codes; block-aligned/misaligned/out-of-bounds SetData and
+  GetData rects; a 6x6 NPOT texture's exact 32-byte padded level and its edge-touching partial
+  update exception; an 8x8 mip-mapped texture proving an unauthored descendant level stays exactly
+  zero (not generated) while an explicitly authored one round-trips exactly, with
+  `MipGenerationCountEXT` zero at every level; public SpriteBatch sampling of solid-colour blocks;
+  an undersized SetData rejected with the previous block bytes left exactly unchanged; and
+  `RenderTarget2D` construction for all three formats remaining a transactional refusal with
+  resource counters unchanged. The pre-existing refusal matrix (`Skia_Texture2D_Constraints`) drops
+  from six to three unsupported compressed formats (`Dxt5SrgbEXT`, `Bc7EXT`, `Bc7SrgbEXT` remain),
+  and the shared format contract (`easygl_surface_format_throws_test.cpp` /
+  `Skia_Contract_SurfaceFormat`) moves Dxt1/Dxt3/Dxt5 into the Skia-only `expectNoThrow` branch
+  (adding explicit Dxt3/Dxt5 cases it did not previously cover) and passes 31/31.
+- The new fixture, the updated refusal matrix, and the updated shared contract pass in Debug,
+  Release, and ASan+UBSan (`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1
+  UBSAN_OPTIONS=halt_on_error=1`, the documented external Mesa/X11 residual only). The complete
+  Debug tree builds with `cmake --build cmake-build-skia --parallel 3`, and the complete sequential
+  Skia suite (`ctest -L 'Raster|Display|Audit'`) passes 157/157 on the pre-existing `:99` Xvfb
+  display: 21 Raster, 130 Display, six Audit.
+- Useful focused commands:
+  `env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./cmake-build-skia/cna_test_skia_texture2d_compressed_formats`,
+  `ctest --test-dir cmake-build-skia -L 'Raster|Display|Audit' --output-on-failure -j3`.
+- No real display or subagent was used, compilation never exceeded three jobs, and `NEXT.md`
+  remained untouched. The exact next implementation point is SKIA-141: evaluate and implement
+  BC7/Bc7SrgbEXT only with a bounded, license-compatible decoder (no such decoder exists yet in
+  this codebase).
+
 ## Next candidates
 
-1. SKIA-140–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
-   order, retaining exact pre-allocation refusals until each format passes transfer and pixels.
-2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
+1. SKIA-141: evaluate and implement BC7/Bc7SrgbEXT sampled textures only with a bounded,
+   license-compatible decoder (a real, separately-licensed decoder dependency, unlike SKIA-140's
+   reuse of the existing in-tree `DxtUtil`).
+2. SKIA-142–143: per-format `RenderTarget2D` support/refusal and the exhaustive cross-format
+   validation/documentation sweep, once SKIA-141 settles the final compressed-format set.
+3. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.
-3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+5. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaCompressedMipChain2D.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaMipChain2D.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
@@ -24,9 +25,12 @@ namespace CNA::Internal::Backends::Skia
      * and uses a bounded RGBA8 working conversion. Bgra5551 and NormalizedByte2/4 retain exact
      * packed/SNORM words while using bounded RGBA32F working copies; Single and Vector2 likewise
      * retain exact IEEE transfer words and expand missing channels into RGBA32F. The sRGB colour
-     * type decodes once into an explicitly linear-sRGB working space. The active BlendState selects
-     * the source-alpha-labelled view without rewriting public data. Every level supports exact CPU
-     * upload/readback and deterministic format-appropriate generation.
+     * type decodes once into an explicitly linear-sRGB working space. Dxt1/Dxt3/Dxt5 retain their
+     * exact compressed CPU blocks in a separate padded-block chain and expose a bounded decoded
+     * RGBA8 sampling image; unlike every other format their descendant mip levels are never
+     * generated and must be explicitly authored. The active BlendState selects the source-alpha-
+     * labelled view without rewriting public data. Every level supports exact CPU upload/readback
+     * and deterministic format-appropriate generation, except the compressed formats noted above.
      */
     class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource
     {
@@ -43,6 +47,8 @@ namespace CNA::Internal::Backends::Skia
         void UpdatePixelsLevel(int level, const std::uint8_t* rgba, int levelWidth, int levelHeight) override;
         [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override
         {
+            if (compressedChain_)
+                return level >= 0 && level < compressedChain_->LevelCount();
             return mipChain_ && level >= 0 && level < mipChain_->LevelCount();
         }
         [[nodiscard]] bool GetData(int level, int x, int y, int width, int height,
@@ -59,11 +65,17 @@ namespace CNA::Internal::Backends::Skia
 
         NOXNA [[nodiscard]] int MipLevelCountEXT() const noexcept override
         {
+            if (compressedChain_) return compressedChain_->LevelCount();
             return mipChain_ ? mipChain_->LevelCount() : 0;
         }
         NOXNA [[nodiscard]] const SkiaMipChain2D& MipChainEXT() const noexcept
         {
             return *mipChain_;
+        }
+        /** Block-compressed counterpart of MipChainEXT(); only valid for Dxt1/Dxt3/Dxt5. */
+        NOXNA [[nodiscard]] const SkiaCompressedMipChain2D& CompressedMipChainEXT() const noexcept
+        {
+            return *compressedChain_;
         }
         NOXNA [[nodiscard]] std::uint64_t MipGenerationCountEXT(int level) const;
         NOXNA [[nodiscard]] Microsoft::Xna::Framework::Graphics::SurfaceFormat FormatEXT() const
@@ -85,6 +97,7 @@ namespace CNA::Internal::Backends::Skia
         std::size_t bytesPerTexel_ = 4u;
         std::size_t imageViewStorageBytes_ = 0u;
         std::unique_ptr<SkiaMipChain2D> mipChain_;
+        std::unique_ptr<SkiaCompressedMipChain2D> compressedChain_;
         std::vector<bool> authoredMipLevels_;
         std::vector<bool> dirtyMipLevels_;
         std::vector<std::uint64_t> mipGenerationCounts_;

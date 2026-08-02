@@ -185,9 +185,23 @@ protected:
             Texture2D t(dev, 2, 2, false, SurfaceFormat::HdrBlendable);
         });
 #endif
+#if defined(CNA_BACKEND_SKIA)
+        // SKIA-140 promotes Dxt1/Dxt3/Dxt5 with preserved compressed CPU blocks; Dxt5SrgbEXT,
+        // Bc7EXT and Bc7SrgbEXT above remain refused pending SKIA-141.
+        expectNoThrow("Texture2D Dxt1", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
+        });
+        expectNoThrow("Texture2D Dxt3", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt3);
+        });
+        expectNoThrow("Texture2D Dxt5", [&]{
+            Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt5);
+        });
+#else
         expectThrows("Texture2D Dxt1", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });
+#endif
 #if defined(CNA_BACKEND_SKIA)
         // SKIA-135–139 promote these exact transfer/sampling formats for Texture2D only.
         // The SKIA-136 colour, SKIA-138 float and SKIA-139 shadow formats were handled above;

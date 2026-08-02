@@ -115,7 +115,10 @@ namespace Microsoft::Xna::Framework::Graphics
             || format == SurfaceFormat::HalfVector4
             || format == SurfaceFormat::NormalizedByte2
             || format == SurfaceFormat::NormalizedByte4
-            || format == SurfaceFormat::HdrBlendable)
+            || format == SurfaceFormat::HdrBlendable
+            || format == SurfaceFormat::Dxt1
+            || format == SurfaceFormat::Dxt3
+            || format == SurfaceFormat::Dxt5)
         {
             return;
         }
@@ -134,6 +137,21 @@ namespace Microsoft::Xna::Framework::Graphics
         return format == SurfaceFormat::ColorBgraEXT
             || format == SurfaceFormat::ColorSrgbEXT;
 #else
+        return false;
+#endif
+    }
+
+    /// SKIA-140: Dxt1/Dxt3/Dxt5 transfer raw compressed blocks through the same NOXNA byte-array
+    /// overloads ByteEXT uses, matching how real XNA/FNA upload compressed content through the
+    /// generic SetData<byte>/GetData<byte> overload rather than a dedicated method.
+    [[nodiscard]] static bool IsCompressedTransferFormatEXT(SurfaceFormat format) noexcept
+    {
+#ifdef CNA_BACKEND_SKIA
+        return format == SurfaceFormat::Dxt1
+            || format == SurfaceFormat::Dxt3
+            || format == SurfaceFormat::Dxt5;
+#else
+        (void)format;
         return false;
 #endif
     }
@@ -280,9 +298,23 @@ namespace Microsoft::Xna::Framework::Graphics
         data.height    = h;
         data.mipLevels = levelCount_;
         data.surfaceFormat = static_cast<int>(format);
-        data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h)
-                               * static_cast<std::size_t>(Texture::GetFormatSizeEXT(format)),
-                           0);
+        // Block-compressed formats are addressed in padded 4x4 blocks, not per texel: a level's
+        // byte count is ceil(w/4) * ceil(h/4) blocks, never the raw texel count used below for
+        // every other format (SKIA-140).
+        if (Texture::GetBlockSizeSquaredEXT(format) != 1)
+        {
+            const std::size_t blockCols = static_cast<std::size_t>((w + 3) / 4);
+            const std::size_t blockRows = static_cast<std::size_t>((h + 3) / 4);
+            data.pixels.assign(
+                blockCols * blockRows * static_cast<std::size_t>(Texture::GetFormatSizeEXT(format)),
+                0);
+        }
+        else
+        {
+            data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h)
+                                   * static_cast<std::size_t>(Texture::GetFormatSizeEXT(format)),
+                               0);
+        }
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         backend_->ShareCpuPixels(cpuPixels_);
@@ -631,6 +663,90 @@ namespace Microsoft::Xna::Framework::Graphics
             if (gpuOnlyContent_)
                 extraMipLevels_.reset();
         }
+    }
+
+    void Texture2D::SetCompressedDataBytes(int level, const Rectangle* rect,
+                                           const std::uint8_t* data, int startIndex,
+                                           int elementCount)
+    {
+        if (!data || elementCount <= 0)
+            throw std::invalid_argument("Texture2D::SetData: data must not be null");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+        validateMipLevel("Texture2D::SetData", level, levelCount_);
+        if (!backend_)
+            throw std::runtime_error("Texture2D::SetData: compressed texture has no backend");
+
+        const int levelW = mipDim(width, level);
+        const int levelH = mipDim(height, level);
+        int x = 0, y = 0, w = levelW, h = levelH;
+        if (rect)
+        {
+            x = rect->X; y = rect->Y;
+            w = rect->Width; h = rect->Height;
+        }
+
+        // A partial rect must start on a block boundary and either be block-aligned or reach
+        // the level's actual (possibly NPOT) edge -- the same policy real block-compression
+        // hardware/drivers enforce for sub-level updates. This is intentionally more exact than
+        // FNA's own raw w*h*GetFormatSizeEXT/GetBlockSizeSquaredEXT validation formula, which
+        // under-counts the true padded byte requirement for a rectangle whose edge falls inside
+        // a partial NPOT tail block; every byte count below uses the exact padded block count.
+        const bool touchesRightEdge = x + w == levelW;
+        const bool touchesBottomEdge = y + h == levelH;
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h
+            || (x % 4) != 0 || (y % 4) != 0
+            || ((w % 4) != 0 && !touchesRightEdge)
+            || ((h % 4) != 0 && !touchesBottomEdge))
+        {
+            throw std::out_of_range(
+                "Texture2D::SetData: compressed rectangle must be block-aligned and within bounds");
+        }
+
+        const int blockByteSize = Texture::GetFormatSizeEXT(format_);
+        const int blockCols = (w + 3) / 4;
+        const int blockRows = (h + 3) / 4;
+        const int requiredElements = blockCols * blockRows * blockByteSize;
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+
+        const int levelBlockCols = (levelW + 3) / 4;
+        const int levelBlockRows = (levelH + 3) / 4;
+        const std::size_t levelByteCount =
+            static_cast<std::size_t>(levelBlockCols) * levelBlockRows * blockByteSize;
+        std::vector<std::uint8_t> levelBytes(levelByteCount);
+        const bool coversFullLevel = x == 0 && y == 0 && touchesRightEdge && touchesBottomEdge;
+        if (coversFullLevel)
+        {
+            std::memcpy(levelBytes.data(), data + startIndex, levelByteCount);
+        }
+        else
+        {
+            // No lasting compressed CPU shadow is kept (unlike getMipBuffer for other formats):
+            // the backend is always the authoritative store, so a partial update reads it back,
+            // patches only the requested block rectangle, and re-uploads the whole level.
+            if (!backend_->GetData(level, 0, 0, levelW, levelH, levelBytes.data(),
+                                   static_cast<int>(levelBytes.size())))
+            {
+                throw System::NotSupportedException(
+                    "Texture2D::SetData: backend cannot preserve untouched compressed block bytes");
+            }
+            const int blockX = x / 4;
+            const int blockY = y / 4;
+            const std::size_t levelRowBytes =
+                static_cast<std::size_t>(levelBlockCols) * blockByteSize;
+            const std::size_t rectRowBytes = static_cast<std::size_t>(blockCols) * blockByteSize;
+            for (int row = 0; row < blockRows; ++row)
+            {
+                std::memcpy(
+                    levelBytes.data() + (static_cast<std::size_t>(blockY + row) * levelRowBytes
+                                         + static_cast<std::size_t>(blockX) * blockByteSize),
+                    data + startIndex + static_cast<std::size_t>(row) * rectRowBytes,
+                    rectRowBytes);
+            }
+        }
+
+        backend_->UpdatePixelsLevel(level, levelBytes.data(), levelW, levelH);
     }
 
     namespace
@@ -1121,6 +1237,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect, const std::uint8_t* data,
                             int startIndex, int elementCount)
     {
+        if (IsCompressedTransferFormatEXT(format_))
+        {
+            SetCompressedDataBytes(level, rect, data, startIndex, elementCount);
+            return;
+        }
         if (format_ != SurfaceFormat::ByteEXT)
             throw std::invalid_argument("Texture2D::SetData: byte data requires ByteEXT format");
         const int requiredElements = ValidatedRequestedTexelCount(
@@ -1472,6 +1593,51 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         std::memcpy(data + static_cast<std::size_t>(startIndex) * bytesPerTexel,
                     scratch.data(), scratch.size());
+    }
+
+    void Texture2D::GetCompressedDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
+                                           int startIndex, int elementCount) const
+    {
+        if (!data || elementCount <= 0)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
+        validateMipLevel("Texture2D::GetData", level, levelCount_);
+        if (!backend_)
+            throw std::runtime_error("Texture2D::GetData: compressed texture has no backend");
+
+        const int levelW = mipDim(width, level);
+        const int levelH = mipDim(height, level);
+        int x = 0, y = 0, w = levelW, h = levelH;
+        if (rect)
+        {
+            x = rect->X; y = rect->Y;
+            w = rect->Width; h = rect->Height;
+        }
+
+        const bool touchesRightEdge = x + w == levelW;
+        const bool touchesBottomEdge = y + h == levelH;
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h
+            || (x % 4) != 0 || (y % 4) != 0
+            || ((w % 4) != 0 && !touchesRightEdge)
+            || ((h % 4) != 0 && !touchesBottomEdge))
+        {
+            throw std::out_of_range(
+                "Texture2D::GetData: compressed rectangle must be block-aligned and within bounds");
+        }
+
+        const int blockByteSize = Texture::GetFormatSizeEXT(format_);
+        const int blockCols = (w + 3) / 4;
+        const int blockRows = (h + 3) / 4;
+        const int requiredElements = blockCols * blockRows * blockByteSize;
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+
+        if (!backend_->GetData(level, x, y, w, h, data + startIndex, requiredElements))
+        {
+            throw System::NotSupportedException(
+                "Texture2D::GetData: backend cannot read the requested compressed block bytes");
+        }
     }
 
     void Texture2D::GetData(PackedVector::Bgr565* data, int startIndex, int elementCount) const
@@ -1894,6 +2060,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect, std::uint8_t* data,
                             int startIndex, int elementCount) const
     {
+        if (IsCompressedTransferFormatEXT(format_))
+        {
+            GetCompressedDataBytes(level, rect, data, startIndex, elementCount);
+            return;
+        }
         if (format_ != SurfaceFormat::ByteEXT)
             throw std::invalid_argument("Texture2D::GetData: byte data requires ByteEXT format");
         if (!data)
