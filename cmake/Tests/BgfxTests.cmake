@@ -633,8 +633,9 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_bgfx_gfx138_rendertargetcube_finalize
         TIMEOUT 1200 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # Task 877: RenderTargetCube honors its exact requested DepthFormat -- Bgfx's first-ever
-    # depth-tested RenderTargetCube face (previously no depth attachment support at all).
+    # REMED-GFX-197 / historical Task 952: direct functional cube depth/stencil matrix. Covers all
+    # public depth formats, single-sample/supported-MSAA, all faces, ordered aspect clears, stencil
+    # gates, A/B/A preservation, same-frame sampling, GetData, handle reuse and device teardown.
     cna_bgfx_test(cna_test_bgfx_rendertargetcube_depthformat
                   examples/bgfx_rendertargetcube_depthformat_test.cpp)
     cna_register_backend_test(NAME Bgfx_RenderTargetCube_DepthFormat COMMAND cna_test_bgfx_rendertargetcube_depthformat
