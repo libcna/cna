@@ -2471,7 +2471,7 @@ existing task.
 | REMED-GFX-119 | Software's non-indexed raster paths never apply `vertexStart`; they read from element zero and only enforce `primitiveCount` against the buffer size. | MEDIUM | P2 | REMED-GFX-113 cross-backend controls | **DONE 2026-07-27 — `DrawPrimitivesEx` NOW FETCHES VERTEX `vertexStart + local` FOR `local` IN `[0, PrimitiveElementCount)`, WITH `vertexStart` A VERTEX-ELEMENT OFFSET AND THE STRIDE MULTIPLY ONLY AFTER VALIDATION; BOTH NON-INDEXED CPU PATHS SHARE ONE 64-BIT `ValidateNonIndexedAddressing` THAT REJECTS RATHER THAN CLAMPS BEFORE ANY STORAGE ACCESS; `primitiveCount` WAS MEASURED ALREADY CORRECT AND ONLY THE OFFSET WAS LOST; DRAWUSER PRESERVED AS THE ORACLE; THREE STRIDES, STATIC/DYNAMIC, TWO-BUFFER A→B→A, VALID→INVALID→VALID, TOPOLOGY REJECTION, SANITIZERS AND NINE CROSS-BACKEND CONTROLS PASS.** |
 | REMED-GFX-120 | SDL_GPU's point-topology graphics pipelines raise `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because its SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-117 validation inspection | **OPEN — SDL_GPU COUNTERPART OF REMED-GFX-115; PIXELS CORRECT ON THE TESTED DRIVER, POINT SIZE FORMALLY UNDEFINED WITHOUT `maintenance5`.** |
 | REMED-GFX-121 | Bgfx's non-GLSL renderers transpose the per-instance world matrix: `vs_instanced3d.sc` builds it with the raw `mat4(i_data0..i_data3)` constructor instead of bgfx's `mtxFromCols()`. | MEDIUM | P2 | REMED-GFX-118 Vulkan route | **OPEN — A/B-PROVEN PRE-EXISTING; INSTANCE 0 IS CORRECT AND EVERY LATER INSTANCE IS PROJECTED SOMEWHERE UNPREDICTABLE ON GENUINE BGFX VULKAN; PINNED BY A COMMITTED PER-RENDERER TEST.** |
-| REMED-GFX-122 | EasyGL's stock (non-custom-effect) instanced branch ignores `params.startIndex`, `params.baseVertex` and `params.instanceVb` entirely. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — EASYGL COUNTERPART OF REMED-GFX-118 PLUS A DROPPED PER-INSTANCE STREAM; PINNED BY A COMMITTED CURRENT-BEHAVIOUR TEST.** |
+| REMED-GFX-122 | EasyGL's stock and custom-effect instanced routes now preserve public index, vertex-binding and instance-binding offsets plus exact step rate. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **DONE 2026-08-02 — EXACT PRE-FIX PIN FLIPPED; START INDEX, BASE VERTEX, MESH/INSTANCE ELEMENT OFFSETS, DECLARATION POINTERS, INSTANCE FREQUENCY AND VAO RETURN STATE ARE CORRECT; EASYGL 17/17, SERIAL SHARD 21/21, SANITIZERS/DIAGNOSTICS/CONTROLS CLEAN.** |
 | REMED-GFX-123 | D3D11 and D3D12 issue `DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0)`, dropping public `startIndex` and `baseVertex` on the instanced path. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — REMED-GFX-020/060'S OFFSET DEFECT IN THE ONE D3D PATH THOSE TASKS DID NOT COVER; D3D11 MEASURED 3/16 UNDER WINE+DXVK, D3D12 INSPECTION-ONLY.** |
 | REMED-GFX-124 | Software render targets could be neither read back nor sampled: `SoftwareRenderTargetBackend` implemented no `ITextureBackend::GetData` and was not a `SoftwareTextureBackend`. | MEDIUM | P2 | REMED-GFX-119 render-target control | **DONE 2026-07-27 — TWO INDEPENDENT DEFECTS, ONE ARCHITECTURAL CAUSE: THE TARGET'S COLOUR STORAGE WAS REACHABLE THROUGH NO INTERFACE ANY CONSUMER USED. THE INHERITED READBACK SYMPTOM WAS WRONG IN THE WORSE DIRECTION — `Texture2D::GetData` ZERO-INITIALIZES THE SCRATCH BUFFER IT HANDS THE BACKEND, SO A NO-OP BACKEND RETURNS A FABRICATED, FULLY WRITTEN TRANSPARENT-BLACK FRAME AND THE "DID GETDATA WRITE ANYTHING?" SENTINEL CHECK PASSES PRE-FIX. FIXED BY ONE SHARED READ-ONLY `SoftwareColorSurface` CAPABILITY IMPLEMENTED BY BOTH TEXTURE AND TARGET (NO DUPLICATE BUFFER, NO RESOLVE, NO COPY PER SAMPLE) PLUS A REAL `GetData` OVERRIDE OVER THE SAME STORAGE. NEW SUITE 88/88, A/B 32/88 PRE-FIX; `ctest -L Software` 17/17; ASAN/UBSAN CLEAN; ALL FOURTEEN BACKEND LIBRARIES BUILD; SPAWNED GFX-126/127/128.** |
 | REMED-GFX-125 | The XNA vertex structs build `getVertexDeclarationStatic()` from `sizeof(T)`, which includes the `IVertexType` virtual base's vtable, so the declared `VertexStride` exceeds the GPU layout. | MEDIUM | P2 | REMED-GFX-119 stride coverage | **DONE 2026-07-27 — ALL SEVEN BUILT-IN DECLARATIONS NOW TAKE THEIR STRIDE FROM `sizeof(stream)` AND EVERY ELEMENT OFFSET FROM `offsetof(stream, member)` OF ONE SHARED PACKED STRUCTURE PER TYPE, SO A STRIDE AND ITS ELEMENT LAYOUT CANNOT DIVERGE; A STRIDE-ONLY PATCH WOULD HAVE BEEN A HALF-FIX, SO EIGHT TYPED EXPLICIT-DECLARATION `DrawUser` OVERLOADS CONVERT AN OBJECT ARRAY INTO THAT STREAM EXACTLY ONCE AND THE RAW `const void*` OVERLOADS KEEP THEIR UNCHANGED CALLER-PACKED CONTRACT; DECLARATION AND 64-BIT RANGE VALIDATION ADDED WHERE A `vertexOffset` OF `0x7FFFFFF0` PREVIOUSLY DUMPED CORE; `VertexBuffer` PROVEN UNAFFECTED; 24/24 ON SEVEN RENDERING BACKENDS, SANITIZERS CLEAN, NO ABI OR PUBLIC-FIELD CHANGE.** |
@@ -23336,6 +23336,118 @@ preserved. No other backend's production was modified; GFX-187, GFX-188, every o
 recommended next ticket were not begun. `audit/` is untouched.
 
 **No new findings were created.**
+
+---
+
+## REMED-GFX-122 — EasyGL instanced draw offsets and step rate (DONE 2026-08-02)
+
+### Recorded status, reproducer and authoritative contract
+
+Both remediation ledgers were read before production was edited and recorded GFX-122 as **OPEN**,
+MEDIUM/GRAPHICS/P2. The exact current-HEAD reproducer
+`InstancedDrawRangeTest.EasyGLStockInstancedPathIgnoresOffsetsAndTheInstanceStream` passed **1/1**
+against the wrong result: a request for slots 3-4 with `baseVertex=6`, `startIndex=3` and three
+instances lit element-zero geometry in slot 0/band 0, left slot 3 dark, and produced zero pixels in
+later bands. With only the production correction applied, that old pin failed in the opposite,
+expected direction: slot 0 became 0 pixels, slot 3 became 2470 lit pixels, and the later bands
+became 9874 lit pixels. The pin was then replaced by the positive permanent oracle.
+
+The repository's public `GraphicsDevice::DrawInstancedPrimitives` API and `VertexBufferBinding`
+define `startIndex` in index elements, `baseVertex` added to each decoded index once,
+`VertexOffset` in vertex elements, and `InstanceFrequency` as the number of instances sharing one
+instance element. The accepted FNA/FNA3D OpenGL reference multiplies a binding's vertex offset by
+its declaration stride only when constructing the byte pointer, uses `startIndex * indexElementSize`
+for the index pointer, applies either native base vertex or pointer rebasing but not both, and passes
+the exact instance frequency as the attribute divisor. Its D3D11 and SDL GPU controls use the same
+start/base/step contract. Completed GFX-113, GFX-118 and GFX-119 establish the matching exact-range
+rule; GFX-125 supplies the packed declaration/stride boundary. GFX-147's render-target orientation
+contract remains unchanged.
+
+### Proven mechanism and narrow correction
+
+The defect spanned the native draw and attribute-construction stages. The stock EasyGL branch
+always gave `draw_elements_instanced` a null index pointer, never applied `params.baseVertex`, and
+never bound `params.instanceVb`, so only topology-derived `primitiveCount` survived. The custom
+`ShaderEffect` branch bound its instance declaration from byte zero with divisor 1, regardless of
+the public binding. The shared payload carried none of the mesh offset, instance offset or frequency,
+and singular `SetVertexBuffer` left the prior plural binding vector available as stale state.
+
+`GpuDrawParams` now carries the two element offsets and the exact step rate. The public draw guard
+validates the mesh window after binding offset plus base vertex, and validates the number of instance
+elements as `1 + (instanceCount - 1) / InstanceFrequency` after its binding offset. EasyGL performs
+the stride multiplication only while constructing declaration-accurate GL attribute pointers,
+preserving integer versus normalized packed formats. It uses `startIndex * 2` or `startIndex * 4`
+for the native index pointer and `glDrawElementsInstancedBaseVertex` only when a nonzero base is
+required. Custom effects append the instance declaration after the mesh declaration. All twelve
+stock 3D program variants share an optional four-column instance transform at locations 12-15,
+leaving locations 0-11 available to the mesh within the GLES/XNA 16-attribute limit; an ordinary
+draw keeps the uniform gate disabled.
+
+After each instanced draw the instance attributes are disabled, their divisors reset, any temporary
+mesh offset pointers restored, and the stock instance gate cleared. A singular vertex-buffer bind
+also clears the old plural layout. This preserves cached VAO and buffer ownership while making
+instanced→ordinary→previous-layout transitions deterministic. No CPU geometry rewrite, per-draw
+instance duplication/repacking, public frame, `Present`, retry, sleep, wait, or other backend's
+production was added.
+
+### Offset and lifetime matrix
+
+The permanent EasyGL instanced suite passes **17/17**. Its asymmetric slot/band data distinguishes
+the first index, base vertex, mesh offset, instance offset, frequency, and previous-draw state:
+
+| Axis | Covered values/routes |
+|---|---|
+| Mesh binding offset | 0 and 3 vertex elements; custom route 4 elements |
+| Index range | `startIndex` 0 and nonzero, independently and with nonzero `baseVertex` |
+| Base vertex | 0 and nonzero, applied exactly once |
+| Index format | 16-bit and 32-bit; start remains an element offset |
+| Instances | counts 1, 2, 3 and 4; asymmetric transforms/bands |
+| Instance binding | offsets 0 and 1 element; frequencies 1 and 2 |
+| Streams and storage | mesh plus instance streams; static and dynamic vertex/index/instance buffers |
+| Reuse | first/middle/final ranges, A→B→A, instanced→ordinary→same instanced layout |
+| Destinations/order | backbuffer, `RenderTarget2D`, viewport/scissor and ordered target transitions |
+| Lifetime | source update, buffer disposal, device teardown and VAO reuse |
+
+EasyGL exposes only the indexed public instanced entry point; no non-indexed instanced production
+route exists. Ordinary indexed and non-indexed paths remain their controls. The strengthened public
+custom-`ShaderEffect` fixture combines mesh `VertexOffset=4`, `baseVertex=1`, `startIndex=3`, instance
+`VertexOffset=1`, two distinct transforms and declaration-contiguous instance attributes; its two
+readbacks are exactly white `(255,255,255,255)` and gray `(64,64,64,255)`.
+
+### Regression, diagnostics, sanitizers and controls
+
+- Relevant indexed/non-indexed range, binding, validation and packed-layout tests: **89/89**.
+- Seven ordinary stock-effect golden tests: **7/7**.
+- Relevant EasyGL CTest shard, run serially: **21/21**, including buffer, layout/custom-effect,
+  render-target, ordering and teardown fixtures.
+- EasyGL OpenGL diagnostic: clean GLES 3.2 context with no Mesa/OpenGL diagnostic message.
+- Combined AddressSanitizer/UndefinedBehaviorSanitizer: dedicated suite **17/17** plus the custom
+  fixture, with no address or undefined-behaviour report. Leak-enabled ASan identified only an
+  external Mesa/libdrm shutdown residual (51,136 bytes in 68 allocations, no CNA frame), so the
+  clean required run disabled leak detection only and retained `halt_on_error=1` for ASan/UBSan.
+- Vulkan instanced control with Khronos validation: **16/16**, zero validation output. Representative
+  SDL_GPU **43/43**, Bgfx **43/43**, WebGPU **42/42**, Software **40/40**, and Headless **30/30**
+  controls passed without modifying those backends' production.
+
+Every persistent `cmake-build-*` directory was reused with incremental builds and ccache; no build
+tree was created. Maximum compilation parallelism was **-j8**. Approximate peak temperature was
+**90 °C** during an early build, so a cooling pause was required and later compilation was reduced.
+Graphics/display tests were serial. Only exact session-owned processes were controlled.
+
+### Scope, commits and findings
+
+Production changed only the shared instanced draw payload/public binding handoff and EasyGL. Focused
+coverage changed only the existing instanced suite and existing EasyGL custom-effect fixture, plus
+these two ledgers. GFX-113, GFX-118, GFX-119, GFX-125, GFX-147, ordinary drawing, exact primitive
+ranges, packed declarations, VAO/buffer lifetime, render-target orientation and ordering remain
+green. `audit/` is untouched. Signed implementation commit:
+
+- `a5f415a9 fix: honor EasyGL instanced draw offsets`
+
+**No new findings were created.** GFX-121 and GFX-123 remain OPEN and untouched. The recommended
+next ticket is **REMED-GFX-123**; it was not begun.
+
+---
 
 ## REMED-GFX-148 — Software complete Additive blend equation (DONE 2026-08-02)
 
