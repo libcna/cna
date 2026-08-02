@@ -40,24 +40,24 @@ stale, duplicated, malformed, or unrouted entries.
 | `FMT-Bc7SrgbEXT` | BC7 blocks with sRGB RGB sampling. | refused | SKIA-141 | Decoder and color-space path must be proven together. |
 | `FMT-ByteEXT` | One unsigned normalized R byte. | refused | SKIA-137 | Use raw R8 semantics rather than grayscale/color-managed sampling. |
 | `FMT-UShortEXT` | One unsigned normalized R 16-bit value. | refused | SKIA-137 | Use raw R16 semantics with exact little-endian transfer. |
-| `BLEND-One` | Unit source/destination multiplier. | bounded | SKIA-120 | Runtime-blender scalar expression exists; arbitrary public tuples need pixels. |
-| `BLEND-Zero` | Zero source/destination multiplier. | bounded | SKIA-120 | Runtime-blender scalar expression exists; arbitrary public tuples need pixels. |
-| `BLEND-SourceColor` | Per-channel source-color multiplier. | bounded | SKIA-120 | Must use the route's proven straight/premultiplied source convention. |
-| `BLEND-InverseSourceColor` | Inverse source-color multiplier. | bounded | SKIA-120 | Must use the route's proven straight/premultiplied source convention. |
-| `BLEND-SourceAlpha` | Source-alpha multiplier. | bounded | SKIA-120 | Translucent raw output must distinguish source alpha from stored RGB. |
-| `BLEND-InverseSourceAlpha` | Inverse source-alpha multiplier. | bounded | SKIA-120 | Translucent raw output must distinguish source alpha from stored RGB. |
-| `BLEND-DestinationColor` | Per-channel destination-color multiplier. | bounded | SKIA-120 | Runtime blender must read the active target destination exactly once. |
-| `BLEND-InverseDestinationColor` | Inverse destination-color multiplier. | bounded | SKIA-120 | Runtime blender must read the active target destination exactly once. |
-| `BLEND-DestinationAlpha` | Destination-alpha multiplier. | bounded | SKIA-120 | Raw premultiplied target alpha needs an explicit reference convention. |
-| `BLEND-InverseDestinationAlpha` | Inverse destination-alpha multiplier. | bounded | SKIA-120 | Raw premultiplied target alpha needs an explicit reference convention. |
+| `BLEND-One` | Unit source/destination multiplier. | bounded | SKIA-120 | Public scalar-oracle pixels cover all four selector positions in SKIA-123. |
+| `BLEND-Zero` | Zero source/destination multiplier. | bounded | SKIA-120 | Public scalar-oracle pixels cover all four selector positions in SKIA-123. |
+| `BLEND-SourceColor` | Per-channel source-color multiplier. | bounded | SKIA-120 | Public generated pixels use the declared premultiplied working convention. |
+| `BLEND-InverseSourceColor` | Inverse source-color multiplier. | bounded | SKIA-120 | Public generated pixels use the declared premultiplied working convention. |
+| `BLEND-SourceAlpha` | Source-alpha multiplier. | bounded | SKIA-120 | Translucent public pixels distinguish source alpha from RGB in all positions. |
+| `BLEND-InverseSourceAlpha` | Inverse source-alpha multiplier. | bounded | SKIA-120 | Translucent public pixels distinguish inverse source alpha in all positions. |
+| `BLEND-DestinationColor` | Per-channel destination-color multiplier. | bounded | SKIA-120 | Public corpus reads the active destination in source and destination terms. |
+| `BLEND-InverseDestinationColor` | Inverse destination-color multiplier. | bounded | SKIA-120 | Public corpus reads inverse active destination components in all positions. |
+| `BLEND-DestinationAlpha` | Destination-alpha multiplier. | bounded | SKIA-120 | Public alpha-position pixels match the premultiplied target convention. |
+| `BLEND-InverseDestinationAlpha` | Inverse destination-alpha multiplier. | bounded | SKIA-120 | Public alpha-position pixels match the independent scalar oracle. |
 | `BLEND-BlendFactor` | GraphicsDevice blend constant multiplier. | refused | SKIA-121 | Baked public constant and live red→green→red updates now pass; exhaustive promotion remains SKIA-123/124. |
 | `BLEND-InverseBlendFactor` | Inverse GraphicsDevice blend constant. | refused | SKIA-121 | Generic selector/oracle coverage passes; discriminating exhaustive public pixels remain SKIA-123. |
-| `BLEND-SourceAlphaSaturation` | min(source alpha, inverse destination alpha) RGB factor. | bounded | SKIA-120 | Alpha factor and opaque/translucent edge values need discriminating pixels. |
-| `BLENDFUNC-Add` | Add weighted source and destination. | bounded | SKIA-120 | Presets and one custom tuple pass; arbitrary factor pairs remain. |
-| `BLENDFUNC-Subtract` | Subtract destination term from source term. | refused | SKIA-120 | Runtime SkSL expression exists and needs public clamping/alpha evidence. |
-| `BLENDFUNC-ReverseSubtract` | Subtract source term from destination term. | refused | SKIA-120 | Runtime SkSL expression exists and needs public clamping/alpha evidence. |
-| `BLENDFUNC-Max` | Componentwise maximum of source and destination; EasyGL/OpenGL ignores factors. | refused | SKIA-120 | Generic runtime SkSL and an independent scalar oracle must match the actual EasyGL equation. |
-| `BLENDFUNC-Min` | Componentwise minimum of source and destination; EasyGL/OpenGL ignores factors. | refused | SKIA-120 | Generic runtime SkSL and an independent scalar oracle must match the actual EasyGL equation. |
+| `BLEND-SourceAlphaSaturation` | min(source alpha, inverse destination alpha) RGB factor. | bounded | SKIA-120 | Public corpus covers it in all four positions against the independent oracle. |
+| `BLENDFUNC-Add` | Add weighted source and destination. | bounded | SKIA-120 | Public color/alpha scenes cover arbitrary weighted terms. |
+| `BLENDFUNC-Subtract` | Subtract destination term from source term. | refused | SKIA-120 | Public color/alpha scenes prove clamping against the scalar oracle. |
+| `BLENDFUNC-ReverseSubtract` | Subtract source term from destination term. | refused | SKIA-120 | Public color/alpha scenes prove clamping against the scalar oracle. |
+| `BLENDFUNC-Max` | Componentwise maximum of source and destination; EasyGL/OpenGL ignores factors. | refused | SKIA-120 | Public color/alpha scenes prove the factor-independent EasyGL equation. |
+| `BLENDFUNC-Min` | Componentwise minimum of source and destination; EasyGL/OpenGL ignores factors. | refused | SKIA-120 | Public color/alpha scenes prove the factor-independent EasyGL equation. |
 | `FILTER-Linear` | Bilinear texel sampling without mip selection. | supported | SKIA-129 | Preserve existing exact magnification/minification pixels. |
 | `FILTER-Point` | Nearest texel sampling without mip selection. | supported | SKIA-129 | Preserve existing exact coordinate and tile-mode pixels. |
 | `FILTER-Anisotropic` | Device anisotropic footprint up to MaxAnisotropy. | fallback | SKIA-165 | Raster stays Linear fallback; Ganesh must prove a distinct device result. |

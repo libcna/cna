@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CNA/Internal/Backends/Skia/SkiaGeneratedBlender.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaImageSource.hpp"
 
 #include "include/core/SkBlendMode.h"
@@ -80,6 +81,39 @@ namespace CNA::Internal::Backends::Skia
             colorSourceBlend, alphaSourceBlend, colorDestinationBlend, alphaDestinationBlend,
             colorBlendFunction, alphaBlendFunction);
         return mapping && mapping->route == SkiaBlendMappingRoute::DirectBlendMode ? mapping : nullptr;
+    }
+
+    /** Stable bounded routing decision for raw public factor/function selectors. */
+    enum class SkiaBlendSelectorDisposition
+    {
+        EstablishedMapping,
+        Generated,
+        Invalid,
+    };
+
+    [[nodiscard]] inline SkiaBlendSelectorDisposition ClassifySkiaBlendSelectors(
+        int colorSourceBlend, int alphaSourceBlend,
+        int colorDestinationBlend, int alphaDestinationBlend,
+        int colorBlendFunction, int alphaBlendFunction) noexcept
+    {
+        const int factors[] = {
+            colorSourceBlend, alphaSourceBlend, colorDestinationBlend, alphaDestinationBlend,
+        };
+        for (const int factor : factors)
+        {
+            if (factor < 0 || factor >= kSkiaBlendFactorCount)
+                return SkiaBlendSelectorDisposition::Invalid;
+        }
+        if (colorBlendFunction < 0 || colorBlendFunction >= kSkiaBlendFunctionCount
+            || alphaBlendFunction < 0 || alphaBlendFunction >= kSkiaBlendFunctionCount)
+        {
+            return SkiaBlendSelectorDisposition::Invalid;
+        }
+        return FindSkiaBlendMapping(
+            colorSourceBlend, alphaSourceBlend, colorDestinationBlend, alphaDestinationBlend,
+            colorBlendFunction, alphaBlendFunction)
+            ? SkiaBlendSelectorDisposition::EstablishedMapping
+            : SkiaBlendSelectorDisposition::Generated;
     }
 
     [[nodiscard]] inline const char* SkiaBlendFactorName(int factor) noexcept

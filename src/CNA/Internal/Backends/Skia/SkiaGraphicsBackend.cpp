@@ -665,13 +665,20 @@ namespace CNA::Internal::Backends::Skia
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
             colorBlendFunc, alphaBlendFunc,
         };
-        const SkiaBlendMapping* mapping = FindSkiaBlendMapping(
-            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
+        const SkiaBlendSelectorDisposition disposition = ClassifySkiaBlendSelectors(
+            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+            colorBlendFunc, alphaBlendFunc);
+        const SkiaBlendMapping* mapping
+            = disposition == SkiaBlendSelectorDisposition::EstablishedMapping
+                ? FindSkiaBlendMapping(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+                                       colorBlendFunc, alphaBlendFunc)
+                : nullptr;
 
         SkBlendMode configuredMode = SkBlendMode::kSrcOver;
         sk_sp<SkBlender> configuredBlender;
         SkiaSourceAlphaConvention configuredConvention = kSkiaGeneratedBlendSourceAlphaConvention;
-        const bool usesGeneratedBlender = mapping == nullptr;
+        const bool usesGeneratedBlender
+            = disposition == SkiaBlendSelectorDisposition::Generated;
         const char* mappingName = "Generated";
         if (!mapping)
         {

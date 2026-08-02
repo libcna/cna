@@ -507,6 +507,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_GeneratedBlend_BatchModes
                                    cna_test_skia_generated_blend_batch_modes)
 
+    cna_skia_test(cna_test_skia_generated_blend_public_corpus
+                  examples/skia_generated_blend_public_corpus_test.cpp)
+    cna_register_skia_display_test(Skia_GeneratedBlend_PublicCorpus
+                                   cna_test_skia_generated_blend_public_corpus)
+
     cna_skia_test(cna_test_skia_runtime_blender_policy examples/skia_runtime_blender_policy_test.cpp)
     cna_register_skia_display_test(Skia_RuntimeBlender_Policy cna_test_skia_runtime_blender_policy)
 

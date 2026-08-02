@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-51/SKIA-55: table audit for every accepted source-alpha-labelled BlendState mapping. It
-// exhaustively exercises the current XNA Blend/BlendFunction matrix without creating an SDL window.
+// SKIA-51/SKIA-55/SKIA-123: table audit for optimized mappings plus the bounded generated fallback.
+// It exhaustively classifies the XNA Blend/BlendFunction matrix without creating an SDL window.
 
 #include "CNA/Internal/Backends/Skia/SkiaBlendMapping.hpp"
 
@@ -56,8 +56,8 @@ int main()
     int checkedBlendValues = 0;
     for (int blend = 0; blend <= 12; ++blend)
     {
-        // Change each of the four XNA factor positions individually from the Opaque tuple.  Only
-        // the original One/Zero values remain an exact known-convention mapping in that shape.
+        // Change each of the four XNA factor positions individually from the Opaque tuple. Only
+        // the original One/Zero values retain an optimized established mapping in that shape.
         blendCoverageCorrect = blendCoverageCorrect
             && (Find(blend, 0, 1, 1) != nullptr) == (blend == 0 || blend == 6);
         blendCoverageCorrect = blendCoverageCorrect && (Find(0, blend, 1, 1) != nullptr) == (blend == 0);
@@ -66,7 +66,7 @@ int main()
         checkedBlendValues += 4;
     }
     Check(blendCoverageCorrect && checkedBlendValues == 52,
-          "all 13 Blend values are deterministically accepted or rejected in every factor position");
+          "all 13 Blend values are deterministically optimized or deferred in every factor position");
 
     bool functionCoverageCorrect = true;
     int checkedFunctionPairs = 0;
@@ -81,10 +81,13 @@ int main()
         }
     }
     Check(functionCoverageCorrect && checkedFunctionPairs == 25,
-          "all 5 BlendFunction values are deterministically rejected outside Add/Add");
+          "all 5 BlendFunction values are deterministically deferred outside optimized Add/Add");
 
     bool exhaustiveCoverageCorrect = true;
     int checkedBlendStateTuples = 0;
+    int establishedTuples = 0;
+    int generatedTuples = 0;
+    int invalidTuples = 0;
     for (int colorSource = 0; colorSource <= 12; ++colorSource)
     {
         for (int alphaSource = 0; alphaSource <= 12; ++alphaSource)
@@ -108,9 +111,16 @@ int main()
                                         && colorDestination == 0 && alphaDestination == 0)
                                     || (colorSource == 6 && alphaSource == 0
                                         && colorDestination == 1 && alphaDestination == 1));
+                            const SkiaBlendSelectorDisposition disposition = ClassifySkiaBlendSelectors(
+                                colorSource, alphaSource, colorDestination, alphaDestination,
+                                colorFunction, alphaFunction);
+                            establishedTuples += disposition
+                                == SkiaBlendSelectorDisposition::EstablishedMapping;
+                            generatedTuples += disposition == SkiaBlendSelectorDisposition::Generated;
+                            invalidTuples += disposition == SkiaBlendSelectorDisposition::Invalid;
                             exhaustiveCoverageCorrect = exhaustiveCoverageCorrect
-                                && (Find(colorSource, alphaSource, colorDestination, alphaDestination,
-                                         colorFunction, alphaFunction) != nullptr) == expected;
+                                && (disposition == SkiaBlendSelectorDisposition::EstablishedMapping)
+                                    == expected;
                             ++checkedBlendStateTuples;
                         }
                     }
@@ -118,8 +128,15 @@ int main()
             }
         }
     }
-    Check(exhaustiveCoverageCorrect && checkedBlendStateTuples == 714025,
-          "all 714025 Blend-factor/function tuples are accepted or rejected by the bounded table");
+    Check(exhaustiveCoverageCorrect && checkedBlendStateTuples == 714025
+              && establishedTuples == 5 && generatedTuples == 714020 && invalidTuples == 0,
+          "all 714025 valid tuples classify as five established or 714020 generated routes");
+
+    Check(ClassifySkiaBlendSelectors(13, 0, 1, 1, 0, 0)
+              == SkiaBlendSelectorDisposition::Invalid
+              && ClassifySkiaBlendSelectors(0, 0, 1, 1, 5, 0)
+                  == SkiaBlendSelectorDisposition::Invalid,
+          "out-of-range factor and function ordinals classify as invalid before construction");
 
     const std::string message = DescribeUnsupportedSkiaBlendState(6, 8, 1, 5, 1, 2);
     Check(message.find("DestinationColor") != std::string::npos
@@ -129,6 +146,6 @@ int main()
               && message.find("ReverseSubtract") != std::string::npos,
           "unsupported mapping message names every requested factor and function");
 
-    std::printf("=== %d/%d PASS ===\n", 9 - failures, 9);
+    std::printf("=== %d/%d PASS ===\n", 10 - failures, 10);
     return failures == 0 ? 0 : 1;
 }

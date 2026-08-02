@@ -737,6 +737,12 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     stock Opaque remains exact after successful effect use and malformed-effect Begin rejection,
     and the policy is green in Debug, Release, and ASan+UBSan. Exhaustive classification and final
     promotion remain SKIA-123/124.
+91. SKIA-123's production-used classifier assigns all 714,025 valid selector tuples to exactly five
+    established mappings or 714,020 generated routes; explicit invalid ordinals form the refusal
+    class. `Skia_GeneratedBlend_PublicCorpus` independently implements the EasyGL/OpenGL math and
+    passes 62/62 real SpriteBatch scenes: every factor in all four positions and every function in
+    both equations. Classifier and corpus pass Debug, Release, and ASan+UBSan; the expanded focused
+    blend/effect suite passes 17/17 on Xvfb. Public promotion remains SKIA-124.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.
