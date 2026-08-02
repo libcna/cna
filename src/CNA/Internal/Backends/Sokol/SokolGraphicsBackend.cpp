@@ -293,11 +293,12 @@ namespace CNA::Internal::Backends::Sokol
         /// needs its own independent FBO since RenderTarget2D::GetData()/RenderTargetCube::GetData()
         /// must work whether or not the target is currently bound. @p attachTarget is
         /// GL_TEXTURE_2D for a RenderTarget2D or GL_TEXTURE_CUBE_MAP_POSITIVE_X + face for one face
-        /// of a RenderTargetCube. Returns false (leaving @p data untouched) if the image has no raw
-        /// GL texture or the throwaway FBO cannot be completed -- neither should happen for an image
-        /// this backend itself created as a colour attachment, but there is no fabricated-pixel
-        /// fallback either way.
-        bool ReadColorImagePixelsViaGL(std::uint32_t colorImageId, GLenum attachTarget,
+        /// of a RenderTargetCube. @p level selects the mip level to attach (0 for a non-mipmapped
+        /// target). Returns false (leaving @p data untouched) if the image has no raw GL texture or
+        /// the throwaway FBO cannot be completed -- neither should happen for an image this backend
+        /// itself created as a colour attachment, but there is no fabricated-pixel fallback either
+        /// way.
+        bool ReadColorImagePixelsViaGL(std::uint32_t colorImageId, GLenum attachTarget, int level,
                                        int imageHeight, int x, int y, int w, int h, void* data)
         {
             if (colorImageId == 0) return false;
@@ -312,7 +313,7 @@ namespace CNA::Internal::Backends::Sokol
             GLuint fbo = 0;
             glGenFramebuffers(1, &fbo);
             glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, attachTarget, texId, 0);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, attachTarget, texId, level);
 
             const bool complete =
                 glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
@@ -338,6 +339,31 @@ namespace CNA::Internal::Backends::Sokol
             glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFbo));
             glDeleteFramebuffers(1, &fbo);
             return complete;
+        }
+
+        /// Regenerates every mip level above 0 of an sg_image from its current level-0 content via
+        /// a raw glGenerateMipmap, GL-only (plan_sokol.md SOKOL-39). Mirrors
+        /// EasyGLRenderTargetBackend's own "auto-generate on unbind" contract (matching real D3D9
+        /// XNA's D3DUSAGE_AUTOGENMIPMAP semantics). @p bindTarget is GL_TEXTURE_2D or
+        /// GL_TEXTURE_CUBE_MAP. Silently does nothing if the image has no raw GL texture -- this is
+        /// only ever called on a target this backend itself created with mipMap=true, so that
+        /// should not happen in practice.
+        void RegenerateMipmapsViaGL(std::uint32_t colorImageId, GLenum bindTarget)
+        {
+            if (colorImageId == 0) return;
+
+            const sg_gl_image_info info = sg_gl_query_image_info(MakeImageHandle(colorImageId));
+            const GLuint texId = info.tex[info.active_slot];
+            if (texId == 0) return;
+
+            const GLenum bindingQuery =
+                (bindTarget == GL_TEXTURE_CUBE_MAP) ? GL_TEXTURE_BINDING_CUBE_MAP : GL_TEXTURE_BINDING_2D;
+            GLint previousTex = 0;
+            glGetIntegerv(bindingQuery, &previousTex);
+
+            glBindTexture(bindTarget, texId);
+            glGenerateMipmap(bindTarget);
+            glBindTexture(bindTarget, static_cast<GLuint>(previousTex));
         }
 #endif
     }
@@ -678,10 +704,29 @@ namespace CNA::Internal::Backends::Sokol
     // SokolRenderTargetBackend
     // ---------------------------------------------------------------------------------------
 
+    namespace
+    {
+        /// Mirrors Texture3D.cpp's own CalculateMipLevels(width, height) (rectangular, not just
+        /// square) -- the same formula CalculateVolumeMipLevels above already reuses.
+        int CalculateRenderTargetMipLevels(int w, int h)
+        {
+            int levels = 1;
+            while (w > 1 || h > 1)
+            {
+                w = std::max(1, w / 2);
+                h = std::max(1, h / 2);
+                ++levels;
+            }
+            return levels;
+        }
+    }
+
     SokolRenderTargetBackend::SokolRenderTargetBackend(int width, int height, bool hasDepthStencil,
-                                                        int multiSampleCount)
+                                                        int multiSampleCount, bool mipMap)
         : width_(width)
         , height_(height)
+        , mipMap_(mipMap)
+        , levelCount_(mipMap ? CalculateRenderTargetMipLevels(width, height) : 1)
     {
         if (width <= 0 || height <= 0)
             throw std::runtime_error("Sokol backend: render target dimensions must be positive");
@@ -709,7 +754,12 @@ namespace CNA::Internal::Backends::Sokol
         colorDesc.type = SG_IMAGETYPE_2D;
         colorDesc.width = width_;
         colorDesc.height = height_;
-        colorDesc.num_mipmaps = 1;
+        // levelCount_ (plan_sokol.md SOKOL-39): sokol_gfx's GL backend allocates real GL storage
+        // for every level up front via glTexStorage2D regardless of whether data is supplied, so
+        // RegenerateMipmapsIfNeededEXT()'s glGenerateMipmap has valid storage to write into even
+        // though only level 0 is ever rendered into directly (there is no public XNA API to bind a
+        // specific RenderTarget2D mip level as the active target).
+        colorDesc.num_mipmaps = levelCount_;
         colorDesc.pixel_format = SG_PIXELFORMAT_RGBA8;
         if (msaa)
         {
@@ -892,14 +942,24 @@ namespace CNA::Internal::Backends::Sokol
                                            void* data, int dataLength) const
     {
 #if CNA_SOKOL_HAS_GL_READBACK
-        if (data == nullptr || level != 0) return false;
-        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > width_ || y + h > height_) return false;
+        if (data == nullptr || level < 0 || level >= levelCount_) return false;
+        const int levelWidth = MipDimension(width_, level);
+        const int levelHeight = MipDimension(height_, level);
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > levelWidth || y + h > levelHeight) return false;
         if (dataLength < w * h * 4) return false;
 
-        return ReadColorImagePixelsViaGL(colorImageId_, GL_TEXTURE_2D, height_, x, y, w, h, data);
+        return ReadColorImagePixelsViaGL(colorImageId_, GL_TEXTURE_2D, level, levelHeight, x, y, w, h, data);
 #else
         (void)level; (void)x; (void)y; (void)w; (void)h; (void)data; (void)dataLength;
         return false;
+#endif
+    }
+
+    void SokolRenderTargetBackend::RegenerateMipmapsIfNeededEXT() const
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (!mipMap_) return;
+        RegenerateMipmapsViaGL(colorImageId_, GL_TEXTURE_2D);
 #endif
     }
 
@@ -907,8 +967,11 @@ namespace CNA::Internal::Backends::Sokol
     // SokolRenderTargetCubeBackend
     // ---------------------------------------------------------------------------------------
 
-    SokolRenderTargetCubeBackend::SokolRenderTargetCubeBackend(int size, bool hasDepthStencil)
+    SokolRenderTargetCubeBackend::SokolRenderTargetCubeBackend(int size, bool hasDepthStencil,
+                                                                bool mipMap)
         : size_(size)
+        , mipMap_(mipMap)
+        , levelCount_(mipMap ? CalculateCubeMipLevels(size) : 1)
     {
         if (size <= 0)
             throw std::runtime_error("Sokol backend: cube render target size must be positive");
@@ -918,7 +981,8 @@ namespace CNA::Internal::Backends::Sokol
         colorDesc.usage.color_attachment = true;
         colorDesc.width = size_;
         colorDesc.height = size_;
-        colorDesc.num_mipmaps = 1;
+        // levelCount_ (plan_sokol.md SOKOL-39): see SokolRenderTargetBackend's identical comment.
+        colorDesc.num_mipmaps = levelCount_;
         colorDesc.sample_count = 1;
         colorDesc.pixel_format = SG_PIXELFORMAT_RGBA8;
         colorDesc.label = "cna_render_target_cube_color";
@@ -1032,16 +1096,25 @@ namespace CNA::Internal::Backends::Sokol
                                                void* data, int dataLength) const
     {
 #if CNA_SOKOL_HAS_GL_READBACK
-        if (data == nullptr || level != 0) return false;
+        if (data == nullptr || level < 0 || level >= levelCount_) return false;
         if (face < 0 || face >= 6) return false;
-        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > size_ || y + h > size_) return false;
+        const int levelSize = MipDimension(size_, level);
+        if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         if (dataLength < w * h * 4) return false;
 
         const GLenum faceTarget = static_cast<GLenum>(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face);
-        return ReadColorImagePixelsViaGL(imageId_, faceTarget, size_, x, y, w, h, data);
+        return ReadColorImagePixelsViaGL(imageId_, faceTarget, level, levelSize, x, y, w, h, data);
 #else
         (void)face; (void)level; (void)x; (void)y; (void)w; (void)h; (void)data; (void)dataLength;
         return false;
+#endif
+    }
+
+    void SokolRenderTargetCubeBackend::RegenerateMipmapsIfNeededEXT() const
+    {
+#if CNA_SOKOL_HAS_GL_READBACK
+        if (!mipMap_) return;
+        RegenerateMipmapsViaGL(imageId_, GL_TEXTURE_CUBE_MAP);
 #endif
     }
 
@@ -2191,15 +2264,14 @@ namespace CNA::Internal::Backends::Sokol
         // preserveContents is intentionally unused -- see this method's own header doc and
         // BeginPassIfNeeded's identical comment for why every bind already behaves that way.
         (void)preserveContents;
-        if (mipMap)
-            NotYetImplemented(kBackendName, "a mipmapped RenderTarget2D");
         // multiSampleCount is real as of plan_sokol.md SOKOL-26: SokolRenderTargetBackend clamps it
         // to the driver's GL_MAX_SAMPLES and allocates the matching MSAA colour (and, when a depth
         // format was requested, depth-stencil) image plus a resolve target, following sokol_gfx.h's
         // own documented offscreen-MSAA workflow. GetMultiSampleCount() reports the real, clamped
-        // value, matching every other backend's own convention.
+        // value, matching every other backend's own convention. mipMap is real as of SOKOL-39.
 
-        return std::make_unique<SokolRenderTargetBackend>(w, h, depthFormat != 0, multiSampleCount);
+        return std::make_unique<SokolRenderTargetBackend>(w, h, depthFormat != 0, multiSampleCount,
+                                                           mipMap);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> SokolGraphicsBackend::CreateRenderTargetCube(
@@ -2210,12 +2282,11 @@ namespace CNA::Internal::Backends::Sokol
         // sokol_gfx's own validation layer hard-rejects a CUBE image with sample_count > 1
         // (VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE) -- a permanent API boundary, not a
         // "not implemented yet" gap, matching WebGPU's/D3D9's own declared cube-MSAA boundaries.
+        // mipMap is real as of SOKOL-39.
         (void)preserveContents;
-        if (mipMap)
-            NotYetImplemented(kBackendName, "a mipmapped RenderTargetCube");
         (void)multiSampleCount;
 
-        return std::make_unique<SokolRenderTargetCubeBackend>(size, depthFormat != 0);
+        return std::make_unique<SokolRenderTargetCubeBackend>(size, depthFormat != 0, mipMap);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -2234,6 +2305,11 @@ namespace CNA::Internal::Backends::Sokol
         if (pendingClearColor_ || pendingClearDepth_ || pendingClearStencil_)
             BeginPassIfNeeded();
         EndPassIfActive();
+        // Regenerate the OUTGOING target's mip chain now that its content is flushed
+        // (plan_sokol.md SOKOL-39), mirroring EasyGLRenderTargetBackend's own "auto-generate on
+        // unbind" contract. No-op on a target that was not created with mipMap=true.
+        if (currentRenderTarget_ != nullptr) currentRenderTarget_->RegenerateMipmapsIfNeededEXT();
+        if (currentRenderTargetCube_ != nullptr) currentRenderTargetCube_->RegenerateMipmapsIfNeededEXT();
         currentRenderTarget_ = rt;
         currentRenderTargetCube_ = nullptr;
         // Any pending Clear* from before this bind belongs to whatever was previously active
@@ -2254,6 +2330,9 @@ namespace CNA::Internal::Backends::Sokol
         if (pendingClearColor_ || pendingClearDepth_ || pendingClearStencil_)
             BeginPassIfNeeded();
         EndPassIfActive();
+        // See BindSingleRenderTarget2D's identical mip-regeneration comment.
+        if (currentRenderTarget_ != nullptr) currentRenderTarget_->RegenerateMipmapsIfNeededEXT();
+        if (currentRenderTargetCube_ != nullptr) currentRenderTargetCube_->RegenerateMipmapsIfNeededEXT();
         currentRenderTarget_ = nullptr;
         currentRenderTargetCube_ = rt;
         currentRenderTargetCubeFace_ = face;

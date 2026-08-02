@@ -179,4 +179,12 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_dualtextureeffect_vertexcolor
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-39: mipmapped RenderTarget2D. Task 336's own backend-agnostic mip-chain
+    # completeness proof (no CNA_BACKEND_* conditionals despite its "easygl_" filename) -- reused
+    # here rather than duplicated.
+    cna_sokol_test(cna_test_sokol_rendertarget2d_mip examples/easygl_rendertarget2d_mip_test.cpp)
+    cna_register_backend_test(NAME Sokol_RenderTarget2D_Mip COMMAND cna_test_sokol_rendertarget2d_mip
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

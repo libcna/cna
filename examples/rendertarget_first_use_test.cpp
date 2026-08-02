@@ -205,12 +205,12 @@ namespace
      *
      * WEBGPU declares this unimplemented (plan_webgpu.md WEBGPU-53/54) and throws when the target's
      * mip chain would have to be regenerated. That predates and is unrelated to first use, so leg I
-     * asserts the deterministic rejection there instead of a value.
+     * asserts the deterministic rejection there instead of a value. SOKOL implements it as of
+     * plan_sokol.md SOKOL-39 (mip storage allocated via sokol_gfx's num_mipmaps, regenerated from
+     * level 0 via glGenerateMipmap on unbind).
      */
     constexpr bool kMipmappedRenderTargetSupported =
-#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_SOKOL)
-        // SOKOL: CreateRenderTarget2D throws NotYetImplemented for mipMap=true (plan_sokol.md
-        // SOKOL-25 -- a declared, self-documenting boundary, not a first-use defect).
+#if defined(CNA_BACKEND_WEBGPU)
         false;
 #else
         true;

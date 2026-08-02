@@ -166,15 +166,18 @@ namespace CNA::Internal::Backends::Sokol
      * depth-stencil attachment are requested -- it is never resolved (nothing here reads a render
      * target's depth back), matching every other backend's MSAA depth handling.
      *
-     * Scope for this task: a single, non-mipmapped target. `RenderTargetCube` MSAA and MRT are not
-     * implemented yet (plan_sokol.md SOKOL-26's remaining items) and `CreateRenderTarget2D` refuses
-     * a mipmapped request explicitly rather than silently downgrading it.
-     * `GetData()` (reading a rendered target back to the CPU) is not implemented either -- it
-     * would need either sokol's opaque per-backend image handle exposed for a raw GL readback (the
-     * approach ReadBackbuffer() already uses for the window's own framebuffer) or an injected,
-     * self-managed GL texture; neither is done here, so it inherits ITextureBackend::GetData's
-     * `return false` default, which the shared layer turns into a clean
-     * `System::NotSupportedException` rather than fabricated pixels.
+     * plan_sokol.md SOKOL-39: when @p mipMap is true, `colorImageId_` (the single-sample resolve/
+     * only colour image) is allocated with a full mip chain (`sg_image_desc.num_mipmaps` -- GL
+     * storage for every level, via sokol_gfx's own `glTexStorage2D`-based allocation, exists
+     * immediately even though only level 0 is ever rendered into: there is no public XNA API to
+     * bind a specific RenderTarget2D mip level as the active target). `RegenerateMipmapsIfNeededEXT()`
+     * calls a raw `glGenerateMipmap` on unbind, mirroring `EasyGLRenderTargetBackend`'s own
+     * "auto-generate on unbind" contract (matching real D3D9 XNA's `D3DUSAGE_AUTOGENMIPMAP`
+     * semantics) -- the same GL-escape-hatch discipline `ReadColorImagePixelsViaGL`/
+     * `SokolOcclusionQueryBackend` already use.
+     *
+     * `GetData()` reads back any of the allocated levels (not just 0) via the same throwaway-GL-FBO
+     * approach, attaching the requested mip level instead of always level 0.
      */
     class SokolRenderTargetBackend : public IRenderTargetBackend
     {
@@ -187,8 +190,10 @@ namespace CNA::Internal::Backends::Sokol
          * @param multiSampleCount Requested MSAA sample count; 0 or 1 means no MSAA. Clamped to the
          *                         driver's `GL_MAX_SAMPLES` -- see GetMultiSampleCount() for the
          *                         real, applied value.
+         * @param mipMap      True to allocate the full mip chain (regenerated on unbind).
          */
-        SokolRenderTargetBackend(int width, int height, bool hasDepthStencil, int multiSampleCount);
+        SokolRenderTargetBackend(int width, int height, bool hasDepthStencil, int multiSampleCount,
+                                 bool mipMap);
 
         /** @brief Destroys every sokol_gfx view and image owned by this target. */
         ~SokolRenderTargetBackend() override;
@@ -232,11 +237,11 @@ namespace CNA::Internal::Backends::Sokol
         /**
          * @brief Reads back a rectangle of this target's colour content via a throwaway GL FBO.
          *
-         * plan_sokol.md SOKOL-38. GL-only, and only ever @p level 0 -- `CreateRenderTarget2D`
-         * refuses `mipMap=true` before this class exists at all.
+         * plan_sokol.md SOKOL-38/39. GL-only. @p level may be any allocated mip level (0 when
+         * `mipMap=false`, 0..LevelCount-1 otherwise).
          *
-         * @param level      Must be 0; any other value returns false.
-         * @param x          Left edge of the requested region, in pixels.
+         * @param level      Requested mip level; out of range returns false.
+         * @param x          Left edge of the requested region, in pixels (that level's own space).
          * @param y          Top edge of the requested region, in pixels.
          * @param w          Width of the requested region, in pixels.
          * @param h          Height of the requested region, in pixels.
@@ -253,6 +258,14 @@ namespace CNA::Internal::Backends::Sokol
          * @return Sample count greater than 1 when MSAA is active; 0 when it is not.
          */
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+
+        /**
+         * @brief Regenerates every mip level above 0 from the current level-0 content via a raw
+         * `glGenerateMipmap`, GL-only. No-op when this target was not created with `mipMap=true`.
+         * Called on unbind, mirroring `EasyGLRenderTargetBackend`'s identical "auto-generate on
+         * unbind" contract (plan_sokol.md SOKOL-39). NOXNA.
+         */
+        NOXNA void RegenerateMipmapsIfNeededEXT() const;
 
         /**
          * @brief Returns the raw sokol_gfx colour image handle id -- the single-sample image that
@@ -294,6 +307,8 @@ namespace CNA::Internal::Backends::Sokol
         int width_ = 0;
         int height_ = 0;
         int multiSampleCount_ = 0;
+        bool mipMap_ = false;
+        int levelCount_ = 1;
         std::uint32_t colorImageId_ = 0;
         std::uint32_t colorAttachmentViewId_ = 0;
         /// Only allocated when multiSampleCount_ > 0: the multisample-only image colorAttachmentViewId_
@@ -330,8 +345,9 @@ namespace CNA::Internal::Backends::Sokol
          * attachment) for a cube render target.
          * @param size            Edge length of each face in pixels.
          * @param hasDepthStencil True to also allocate a shared depth-stencil attachment.
+         * @param mipMap          True to allocate the full mip chain (regenerated on unbind).
          */
-        SokolRenderTargetCubeBackend(int size, bool hasDepthStencil);
+        SokolRenderTargetCubeBackend(int size, bool hasDepthStencil, bool mipMap);
 
         /** @brief Destroys every sokol_gfx view and image owned by this target. */
         ~SokolRenderTargetCubeBackend() override;
@@ -363,12 +379,11 @@ namespace CNA::Internal::Backends::Sokol
         /**
          * @brief Reads back a rectangle of one face's colour content via a throwaway GL FBO.
          *
-         * plan_sokol.md SOKOL-38. GL-only, and only ever @p level 0 -- `CreateRenderTargetCube`
-         * refuses `mipMap=true` before this class exists at all.
+         * plan_sokol.md SOKOL-38/39. GL-only. @p level may be any allocated mip level.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
-         * @param level      Must be 0; any other value returns false.
-         * @param x          Left edge of the requested region, in texels.
+         * @param level      Requested mip level; out of range returns false.
+         * @param x          Left edge of the requested region, in texels (that level's own space).
          * @param y          Top edge of the requested region, in texels.
          * @param w          Width of the requested region, in texels.
          * @param h          Height of the requested region, in texels.
@@ -379,6 +394,13 @@ namespace CNA::Internal::Backends::Sokol
          */
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
+
+        /**
+         * @brief Regenerates every mip level above 0 (on all six faces) from the current level-0
+         * content via a raw `glGenerateMipmap`, GL-only. No-op when this target was not created
+         * with `mipMap=true`. Called on unbind (plan_sokol.md SOKOL-39). NOXNA.
+         */
+        NOXNA void RegenerateMipmapsIfNeededEXT() const;
 
         /**
          * @brief Returns the raw sokol_gfx cube image handle id. NOXNA.
@@ -415,6 +437,8 @@ namespace CNA::Internal::Backends::Sokol
 
     private:
         int size_ = 0;
+        bool mipMap_ = false;
+        int levelCount_ = 1;
         std::uint32_t imageId_ = 0;
         std::array<std::uint32_t, 6> colorAttachmentViewIds_{};
         std::uint32_t textureViewId_ = 0;

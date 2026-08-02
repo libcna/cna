@@ -68,6 +68,7 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `GetBackBufferData` while a `RenderTarget2D`/`RenderTargetCube` face is bound (reads the bound target's own content) | ✅ | Same oracle's check G; matches `EasyGLGraphicsBackend::ReadBackbuffer`'s "read from whatever's bound" convention |
 | `RenderTarget2D`/`RenderTargetCube::GetData` (direct CPU readback) | ✅ | A throwaway GL FBO around the raw GL texture `sg_gl_query_image_info()` exposes. Fixed two real bugs it surfaced: sampling a render target as a texture was exactly vertically mirrored (REMED-GFX-147, fixed with a per-draw `rtFlipV` shader uniform), and a target bound/`Clear()`-ed/unbound with no draw in between never reached the GPU at all (`Present()` already had this fix for the backbuffer; the render-target bind path now has it too). `Sokol_RenderTarget_SamplingOrientation` 53/53 (55/55 as of `SOKOL-33`, once its own DualTextureEffect legs stopped degrading to an INFO skip), plus the whole SOKOL-25/26 render-target oracle suite re-verified with real pixels |
 | `DualTextureEffect` (base + overlay texture, `base.rgb *= 2` doubling factor, no alpha test) | ✅ | `Sokol_DualTextureEffect_VertexColor` (Task 889's own backend-agnostic oracle) -- both texture slots reuse the same `texcoord0` (this codebase's project-wide DualTextureEffect convention, not real XNA's separate UV sets) and independently fall back to opaque white when null |
+| `RenderTarget2D`/`RenderTargetCube` mip-mapped (`mipMap=true`) | ✅ | `Sokol_RenderTarget2D_Mip` (Task 336's own backend-agnostic oracle, reused unmodified). Only level 0 is ever rendered into, matching real D3D9 XNA's `D3DUSAGE_AUTOGENMIPMAP`; the rest of the chain is regenerated via `glGenerateMipmap` on unbind (a GL-only escape hatch, the same shape `ReadColorImagePixelsViaGL` already uses). `RenderTargetCube`'s half has no shared cross-backend oracle yet and cannot be sampled by any Sokol effect (`SOKOL-34` not landed), so it was confirmed with a throwaway, uncommitted verification program against `GetData(face, level=1, ...)` instead |
 
 ## What does not work yet
 
@@ -78,8 +79,6 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Per-vertex (Gouraud) lighting (`BasicEffect.PreferPerPixelLighting = false`) | ignored -- always renders per-pixel, matching every CNA backend except D3D9 | not planned |
 | A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
 | Vertex elements other than Position/Color at usage index 0 (Normal, TexCoord, …) | ignored by the colored-3D pipeline | `SOKOL-22` |
-| `RenderTarget2D` mip-mapped (`mipMap=true`) | `CreateRenderTarget2D` throws `NotYetImplemented` | `SOKOL-26` |
-| `RenderTargetCube` mip-mapped | throws `NotYetImplemented` | `SOKOL-26` |
 | `RenderTargetCube` MSAA | `multiSampleCount` is always silently clamped to 1/ignored -- **a permanent sokol_gfx API boundary, not a "not implemented yet" gap**: its own validation layer hard-rejects a `SG_IMAGETYPE_CUBE` image with `sample_count > 1` (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed empirically (a real `[sg][panic]` validation abort) while prototyping the same per-face multisample + resolve layout `RenderTarget2D` uses. The same kind of declared boundary `WebGPUGraphicsBackend`/`D3D9RenderTargetCubeBackend` report for their own reasons | `SOKOL-26` (closed as a permanent gap) |
 | MRT (`SetRenderTargets` with more than one binding) | throws `NotYetImplemented` | `SOKOL-26` |
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
@@ -175,6 +174,7 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_RenderTargetCube_MsaaFace` | 9, incl. the permanent cube-MSAA boundary declaration | all pass |
 | `Sokol_Viewport_MinMaxDepth` | 25, incl. a real depth-remap proof | all pass |
 | `Sokol_DualTextureEffect_VertexColor` | 2, exact expected RGB in both cases | all pass |
+| `Sokol_RenderTarget2D_Mip` | 1, a GL-complete-mip-chain proof (solid vs. black under `TextureFilter::Anisotropic`) | all pass |
 | `Sokol_OcclusionQuery_Cycle` | Begin/End/IsComplete/PixelCount plus every invalid-call-sequence and dispose-while-active case | all pass |
 | `Sokol_OcclusionQuery_VisibleQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_OcclusionQuery_OccludedQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
