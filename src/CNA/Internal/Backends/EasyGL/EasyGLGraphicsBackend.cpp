@@ -940,6 +940,7 @@ namespace CNA::Internal::Backends::EasyGL
         if (binding->mrtCount > 0 && !anySlotLeft)
         {
             binding->mrtCount = 0;
+            binding->mrtFramebuffer = 0;
             binding->width = 0;
             binding->height = 0;
         }
@@ -1082,21 +1083,25 @@ namespace CNA::Internal::Backends::EasyGL
         fbo_.bind(::easygl::FramebufferTarget::Framebuffer);
     }
 
+    void EasyGLRenderTargetBackend::ResolveColorEXT(const char* traceEvent) const
+    {
+        if (multiSampleCount_ <= 0) return;
+        TargetTrace(traceEvent, this, TraceNativeDetailEXT());
+        fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+        ::easygl::Framebuffer::blit(0, 0, width_, height_,
+                                    0, 0, width_, height_,
+                                    ::metagl::ClearBufferBit::Color,
+                                    ::metagl::BlitFilter::Nearest);
+    }
+
     void EasyGLRenderTargetBackend::UnbindAsRenderTarget()
     {
         TargetTrace("rt2d.unbind", this, TraceNativeDetailEXT());
         // Resolve the multisampled color renderbuffer into colorTex_ before mips (if any) are
         // regenerated from it, matching FNA3D's OPENGL_ResolveTarget resolve-then-mipmap order.
         if (multiSampleCount_ > 0)
-        {
-            TargetTrace("rt2d.resolve", this, TraceNativeDetailEXT());
-            fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
-            resolveFbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
-            ::easygl::Framebuffer::blit(0, 0, width_, height_,
-                                        0, 0, width_, height_,
-                                        ::metagl::ClearBufferBit::Color,
-                                        ::metagl::BlitFilter::Nearest);
-        }
+            ResolveColorEXT("rt2d.resolve");
         // Regenerate the mip chain from level 0's just-rendered (and possibly just-resolved)
         // content, matching FNA3D's OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...
         // glGenerateMipmap... }".
@@ -1126,6 +1131,33 @@ namespace CNA::Internal::Backends::EasyGL
         if (x < 0 || y < 0 || x + w > levelWidth || y + h > levelHeight)
             throw std::out_of_range(
                 "EasyGLRenderTargetBackend::GetData: rectangle out of bounds.");
+
+        // REMED-GFX-164: GetData is legal while this target remains the active producer.  Its
+        // public texture is the single-sample resolve destination, so reading that texture before
+        // the bind changes would otherwise return the preceding resolve (fresh targets commonly
+        // expose transparent-black storage).  Resolve exactly when this multisample attachment is
+        // active, then restore the same DRAW framebuffer so rendering may continue after the read.
+        // An idle target was already resolved by the producer/consumer bind transition and incurs
+        // no second blit.  READ framebuffer selection below remains the one native pixel transfer.
+        if (multiSampleCount_ > 0)
+        {
+            const auto binding = binding_.lock();
+            const bool activeSingle = binding && binding->rt2D == this;
+            bool activeMrt = false;
+            if (binding)
+                for (int i = 0; i < binding->mrtCount; ++i)
+                    activeMrt = activeMrt || binding->mrt[static_cast<std::size_t>(i)] == this;
+            if (activeSingle || activeMrt)
+            {
+                ResolveColorEXT("rt2d.resolve.readback");
+                if (activeMrt)
+                    ::metagl::glBindFramebuffer(
+                        ::metagl::FramebufferTarget::DrawFramebuffer,
+                        ::metagl::FramebufferId{binding->mrtFramebuffer});
+                else
+                    fbo_.bind(::easygl::FramebufferTarget::DrawFramebuffer);
+            }
+        }
 
         ::easygl::Framebuffer mipFbo;
         if (level == 0)
@@ -2509,6 +2541,7 @@ void main()
         TargetTrace("mrt.finalize", this, TraceBindingDetailEXT());
         const int count = bound_->mrtCount;
         bound_->mrtCount = 0;
+        bound_->mrtFramebuffer = 0;
         bound_->width = 0;
         bound_->height = 0;
         for (int i = 0; i < count; ++i)
@@ -2678,6 +2711,7 @@ void main()
 
         bound_->mrt = targets;
         bound_->mrtCount = count;
+        bound_->mrtFramebuffer = mrtFbo_.native_handle();
         bound_->width = renderTargets[0].GetWidth();
         bound_->height = renderTargets[0].GetHeight();
         ApplyCurrentColorWriteMasks();

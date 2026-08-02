@@ -1813,16 +1813,22 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_MsaaDepthContract COMMAND cna_test_easygl_msaa_depth_contract
             TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # REMED-GFX-154 cross-backend control, and the one that carries a live boundary: the Bgfx
-        # half of REMED-GFX-164 was reconciled into GFX-154 and fixed there, while EasyGL's half
-        # stays OPEN and its production is deliberately untouched. The fixture therefore asserts the
-        # whole TRANSFER contract here (the call returns, every requested element is written, the
-        # protected prefix and suffix survive) and PRINTS the multisampled texels it measured instead
-        # of asserting them -- so when GFX-164 is fixed the stale declaration is visible rather than
-        # silently passing. The non-multisampled legs are asserted here exactly as everywhere else.
+        # REMED-GFX-154 cross-backend control. The Bgfx half of the original REMED-GFX-164 report
+        # was reconciled into GFX-154 and fixed there. This fixture's unbound sequence was already
+        # byte-exact on EasyGL and remains fully asserted; REMED-GFX-164's distinct active-target
+        # sequence is covered immediately below.
         cna_easygl_test(cna_test_easygl_msaa_first_readback
             examples/rendertarget_msaa_first_readback_test.cpp)
         cna_register_backend_test(NAME EasyGL_MsaaFirstReadback COMMAND cna_test_easygl_msaa_first_readback
+            TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-164: active-target MSAA resolve and exact public alpha delivery.  This is the
+        # ticket's dedicated fixture; it keeps the bound-vs-unbound stage discriminating and also
+        # covers raw RGBA transfer, target sampling, guarded rectangles, repetition and teardown.
+        cna_easygl_test(cna_test_easygl_gfx164_bound_msaa_alpha
+            examples/easygl_gfx164_bound_msaa_alpha_test.cpp)
+        cna_register_backend_test(NAME EasyGL_GFX164_BoundMsaaAlpha
+            COMMAND cna_test_easygl_gfx164_bound_msaa_alpha
             TIMEOUT 900 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # REMED-GFX-186 cross-backend control: the same PUBLIC generated-mip readback contract on this

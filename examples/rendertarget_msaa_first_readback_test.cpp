@@ -36,14 +36,12 @@
 //
 // RELATIONSHIP TO REMED-GFX-164
 // -----------------------------
-// GFX-164 records all-zero MSAA readback on EasyGL AND Bgfx. The Bgfx half is this ticket: same
-// public sequence, same target, same all-zero result, same source handle, and the two are NOT
-// independently reproducible. GFX-154 is canonical for Bgfx; GFX-164 keeps only its EasyGL scope,
-// which this file deliberately does not fix -- EasyGL production is untouched here. On EasyGL the
-// content assertion is therefore reported as a NAMED, MEASURED boundary (the pixels are printed, so
-// a future GFX-164 fix makes the stale declaration visible) while the whole TRANSFER contract --
-// the call returns, every requested element is written, the protected prefix and suffix survive --
-// stays fully asserted there like everywhere else.
+// GFX-164 originally recorded all-zero MSAA readback on EasyGL AND Bgfx. The Bgfx half is this
+// ticket: same unbound public sequence, same target, same all-zero result, same source handle, and
+// the two are NOT independently reproducible. GFX-154 is canonical for Bgfx. GFX-164 retained the
+// distinct EasyGL sequence in which GetData reads the target while it is still bound; that active
+// producer required its own resolve correction. This fixture remains the cross-backend control for
+// the unbound first-read contract and fully asserts EasyGL content as well as transfer boundaries.
 //
 // THE ORACLE
 // ----------
@@ -139,20 +137,15 @@ namespace
      *
      * TRUE EVERYWHERE, INCLUDING EASYGL -- and that is a measurement, not an assumption.
      *
-     * This started as an EasyGL boundary, because REMED-GFX-164 records an all-zero multisampled
+     * This started as an EasyGL boundary, because REMED-GFX-164 recorded an all-zero multisampled
      * readback there and REMED-GFX-154 changes Bgfx production only. The boundary was written to
      * PRINT the texels it measured rather than skip silently, exactly so a stale declaration would
      * be visible -- and it was: EasyGL measured **0/256 all-zero texels with the centre reading the
      * correct (250,25,15,255)**. Asserting the content there instead gives **34/34 legs and 145/145
-     * checks**, so EasyGL's multisampled readback is byte-exact through THIS public sequence and the
-     * declaration was simply too broad.
-     *
-     * REMED-GFX-164 is NOT thereby closed. Its own fixture, `frontface_winding_test.cpp`, still
-     * reproduces on EasyGL in the same run: leg W1msaa reports the NEVER-COVERED quadrants of a 4x
-     * target reading `(0,0,0,0)` where `(0,0,0,255)` was expected. So the remaining EasyGL scope is
-     * narrower than "MSAA render targets read back all-zero" -- it is sequence-specific, and a
-     * region that only a Clear ever touched is where it shows. Recorded under REMED-GFX-164;
-     * EasyGL production is untouched by this task.
+     * checks**, so EasyGL's multisampled readback is byte-exact through THIS public sequence.
+     * REMED-GFX-164 subsequently proved that its own failure required the distinct active-target
+     * sequence: the unresolved public texture lagged the live multisample renderbuffer until
+     * unbind. The active resolve correction leaves this unbound cross-backend contract unchanged.
      */
     constexpr bool kMsaaContentReadable = true;
 
@@ -517,8 +510,8 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         }
         else
         {
-            boundary(label + ": multisampled CONTENT is REMED-GFX-164's remaining EasyGL scope and "
-                             "is not asserted here -- measured " + std::to_string(zeroed) + "/" +
+            boundary(label + ": multisampled CONTENT is not asserted on this backend -- measured " +
+                     std::to_string(zeroed) + "/" +
                      std::to_string(count) + " texels exactly (0,0,0,0), centre " +
                      ColorText(buf[static_cast<std::size_t>(kGuard + (h / 4) * w + (w / 4))]));
         }
@@ -611,7 +604,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         }
         else
         {
-            boundary("A4 multisampled content is REMED-GFX-164's EasyGL scope -- measured " +
+            boundary("A4 multisampled content is not asserted on this backend -- measured " +
                      std::to_string(zeroed) + "/" + std::to_string(count) + " exactly (0,0,0,0)");
         }
     }
@@ -746,7 +739,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
             return;
         }
         if (!kMsaaContentReadable)
-            boundary("A10 content unasserted on this backend (REMED-GFX-164)");
+            boundary("A10 content unasserted on this backend");
         check(good == 6, "A10 six create/render/first-read/dispose cycles all correct (" +
                              std::to_string(good) + "/6)");
     }
@@ -923,7 +916,7 @@ class RenderTargetMsaaFirstReadbackTest : public Game
         }
         else
         {
-            boundary(label + ": content unasserted (REMED-GFX-164), " + std::to_string(zeroed) +
+            boundary(label + ": content unasserted, " + std::to_string(zeroed) +
                      "/" + std::to_string(count) + " exactly (0,0,0,0)");
         }
     }

@@ -33,12 +33,12 @@ namespace CNA::Internal::Backends::EasyGL
      * itself already be gone, and a graphics backend that dies first simply takes the record with
      * it, leaving every surviving target's `weak_ptr` expired and its destructor a no-op.
      *
-     * Only IDENTITY and EXTENT live here -- no GL handles, no ownership of anything. A target's
-     * native storage stays owned by the target, because the finalization those handles serve writes
-     * into that same target's own `colorTex_`/`cubeTex_`: nothing outside a live wrapper can observe
-     * it, so a destroyed target has no finalization left to owe. The MRT slots are the one case
-     * where the neighbours' finalization IS observable, which is why a detach clears one SLOT rather
-     * than abandoning the set.
+     * Only IDENTITY, EXTENT, and the non-owning name of the active MRT draw FBO live here -- no
+     * ownership of anything. A target's native storage stays owned by the target, because the
+     * finalization those handles serve writes into that same target's own `colorTex_`/`cubeTex_`:
+     * nothing outside a live wrapper can observe it, so a destroyed target has no finalization left
+     * to owe. The MRT slots are the one case where the neighbours' finalization IS observable,
+     * which is why a detach clears one SLOT rather than abandoning the set.
      */
     struct EasyGLBoundTargetEXT
     {
@@ -50,6 +50,8 @@ namespace CNA::Internal::Backends::EasyGL
         std::array<EasyGLRenderTargetBackend*, 4> mrt = {};
         /** @brief Number of live slots in `mrt`; 0 when no multi-target set is bound. */
         int mrtCount = 0;
+        /** @brief Native draw FBO for the active MRT set, used to restore it after direct readback. */
+        unsigned int mrtFramebuffer = 0;
         /** @brief Extent of the bound destination in pixels; 0 means the default framebuffer. */
         int width  = 0;
         /** @brief Extent of the bound destination in pixels; 0 means the default framebuffer. */
@@ -166,6 +168,8 @@ namespace CNA::Internal::Backends::EasyGL
         friend class EasyGLGraphicsBackend;
 
         void CreateResources();
+        /** @brief Resolves this target's multisample colour storage into its public texture. */
+        void ResolveColorEXT(const char* traceEvent) const;
         /// REMED-GFX-168: this target's own native identities, for `CNA_EASYGL_TARGET_TRACE`.
         [[nodiscard]] std::string TraceNativeDetailEXT() const;
         /// REMED-GFX-168: clears every slot of the shared binding record that names this target.

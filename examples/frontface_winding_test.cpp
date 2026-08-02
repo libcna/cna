@@ -793,8 +793,9 @@ class FrontFaceWindingTest : public Game
         // A destination is only an oracle if it reproduces what was rendered into it at all. When
         // the two NEVER-COVERED quadrants do not even hold the clear colour, the readback is not
         // showing this frame, and scoring the cull modes against it would report a winding defect
-        // that is really a readback one. EasyGL's MSAA render target does exactly this (it returns
-        // all-zero, not the clear colour) -- recorded as its own finding, not absorbed here.
+        // that is really a readback one. REMED-GFX-164 originally tripped this guard with stale
+        // transparent-black resolve storage; retain it so that alpha/readback regression cannot be
+        // misreported as a winding failure.
         if (!Same(none.atTR, kClear) || !Same(none.atBL, kClear))
         {
             skip(tag + ": " + dest.name + " does not reproduce even the clear colour on " +
