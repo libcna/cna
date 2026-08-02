@@ -1502,9 +1502,35 @@ level-boundary contract.
   the next implementation point. CMake reconfiguration and the audit run used no real display,
   no compilation and no subagent; `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-135
+
+- Skia `Texture2D` now accepts exactly `Color`, `Bgr565`, `Bgra4444`, and `Rgba1010102` without
+  widening the shared cube/volume gate. Non-Color `RenderTarget2D` requests reject transactionally
+  before allocation pending SKIA-142.
+- Added public typed packed-vector `SetData`/`GetData` overloads for whole levels and rectangles,
+  including caller start/count windows and the existing two-argument convenience shape. Transfer
+  code reads/writes packed properties explicitly little-endian; it never copies polymorphic packed
+  objects (which contain a vptr) as if they were raw words. Mismatched `Color`/packed overloads
+  reject without changing storage or caller memory.
+- `SkiaTextureBackend` uses native `kRGB_565` and `kRGBA_1010102` views. `Bgra4444` keeps exact CNA
+  A:R:G:B words and converts to bounded RGBA working images because pinned `kARGB_4444` has the
+  incompatible R:G:B:A nibble order. Every format owns a native-width checked mip chain and
+  deterministic area-box generation averages its own 5/6/5, 4/4/4/4, or 10/10/10/2 components.
+- Resource counters now account the actual two image-view footprints: 16-bit direct views remain
+  16-bit, while `Bgra4444` reports its decoded RGBA working copies. All constructor, transfer,
+  sampling, rejection and disposal paths return counters to baseline.
+- Added `Skia_Texture2D_PackedFormats`: 42/42 checks pass in Debug, Release and ASan+UBSan on the
+  virtual display `:99`. The updated `Skia_Texture2D_Constraints`, mip generation/sampler/resource
+  regressions and all 12 `UnsupportedFormatConstructionTest` cases pass. Builds used at most
+  `--parallel 2`; no real display or subagent was used, and `NEXT.md` remained untouched.
+- The shared surface-format constructor contract now conditionally accepts the same three formats
+  only in a Skia build while retaining its existing refusal expectation for other backends. After
+  that synchronization, the complete sequential Debug Skia suite passes 152/152 on virtual `:99`
+  in 198.13 seconds: 21 Raster, 125 Display, and six Audit tests.
+
 ## Next candidates
 
-1. SKIA-135–143: implement truthful non-Color Texture2D/content/RenderTarget2D formats in dependency
+1. SKIA-136–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
    order, retaining exact pre-allocation refusals until each format passes transfer and pixels.
 2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.

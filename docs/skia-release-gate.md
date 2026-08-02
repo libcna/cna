@@ -13,6 +13,10 @@ SKIA-133 mutable 2D mip promotion: PASS. Texture2D and Color RenderTarget2D comp
 construction, transfer, generation and sampling are promoted for the CPU-raster backend. This
 does not promote non-Color formats, MSAA, 3D, cube/volume sampling or the successor set as a whole.
 
+SKIA-135 packed Texture2D promotion: PASS. `Bgr565`, `Bgra4444`, and `Rgba1010102` have exact
+typed transfer, native-precision mip, sampling and lifecycle evidence. This promotion is
+Texture2D-only: non-Color targets and every other non-Color resource route remain refused.
+
 Scope: experimental `CNA_GRAPHICS_BACKEND=SKIA` CPU-raster 2D backend at the SKIA-114 checkpoint.
 This is not a Ganesh/Graphite, general 3D, or full EasyGL feature-equivalence claim.
 
@@ -67,6 +71,7 @@ audit can pass.
 | Mipmapped Texture2D construction/storage/generation/sampling | Bounded CNA-owned CPU chain and synchronous raster views | exact level/property/transfer/generation plus affine LOD, mip interpolation, strict crops, addressing, generated-level and stale-cache evidence |
 | Texture2D per-mip transfer | Direct checked CPU-chain transfer | exact full/partial SetData/GetData at every valid level; invalid requests and caller memory remain unchanged |
 | RenderTarget2D mip storage/transfer/sampling | Bounded CNA-owned surfaces and exact shadows; dirty descendants resolve once after upload/pass writes | `Skia_RenderTarget2D_MipStorage`, `Skia_RenderTarget2D_MipGeneration`, `Skia_EasyGL_RenderTarget2D_MipComplete`; SKIA-131–132 |
+| Packed `Texture2D` formats | Direct `Bgr565`/`Rgba1010102` storage plus exact `Bgra4444` conversion shadow | `Skia_Texture2D_PackedFormats` 42/42 in Debug, Release and ASan+UBSan; SKIA-135 |
 | Non-Color target formats | Refused pending the format phase | stable pre-allocation diagnostics; SKIA-142–143 |
 | MRT, depth/stencil, wireframe, 3D, stock 3D effects, cube/volume sampling, queries | Refused after emulation investigation | MRT/3D/query ADRs and atomic refusal suite |
 | Ganesh/Graphite acceleration | Not selected or advertised | surface-mode ADR; zero `Accelerated` CTests in the raster build |
@@ -127,6 +132,10 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   and snapshot counters to baseline. The five focused generation/storage/SetData/EasyGL-parity
   tests pass in Release and under ASan+UBSan (`detect_leaks=0` only for the documented external
   Mesa GLX residual). The complete tree builds with `--parallel 2`; no real display is used.
+- SKIA-135 packed-Texture2D promotion: complete sequential Debug Skia suite 152/152 PASS on virtual
+  `:99` in 198.13 seconds (21 Raster, 125 Display, six Audit). The 42-check packed-format fixture
+  passes in Debug, Release, and ASan+UBSan; the complete tree builds with `--parallel 2`. Non-Color
+  render targets and non-Color cube/volume resources remain refused.
 - `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`,
   `Skia_ReleaseGate_Audit`, `Skia_SuccessorContracts_Audit`, and
   `Skia_SurfaceFormats_Audit`: PASS. The last audit covers all 27 SKIA-134 format rows and does not

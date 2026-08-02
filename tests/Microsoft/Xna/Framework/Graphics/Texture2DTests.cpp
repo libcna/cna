@@ -403,7 +403,11 @@ TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
+#endif
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
@@ -450,10 +454,17 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
 
     for (SurfaceFormat format : kAllFormats)
     {
-        if (format == SurfaceFormat::Color)
+        const bool supported = format == SurfaceFormat::Color
+#ifdef CNA_BACKEND_SKIA
+            || format == SurfaceFormat::Bgr565
+            || format == SurfaceFormat::Bgra4444
+            || format == SurfaceFormat::Rgba1010102
+#endif
+            ;
+        if (supported)
         {
             EXPECT_NO_THROW(Texture2D(gd, 4, 4, false, format))
-                << "SurfaceFormat::Color ordinal " << static_cast<int>(format);
+                << "supported SurfaceFormat ordinal " << static_cast<int>(format);
         }
         else
         {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -18,6 +19,13 @@ namespace System::IO { class Stream; }
 namespace CNA::Internal::Backends
 {
     class ITextureBackend;
+}
+
+namespace Microsoft::Xna::Framework::Graphics::PackedVector
+{
+    struct Bgr565;
+    struct Bgra4444;
+    struct Rgba1010102;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -110,6 +118,34 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void SetData(int level, const Rectangle* rect, const Color* data, int startIndex, int elementCount);
 
+        /** @brief Uploads exact packed Bgr565 texels to a Bgr565 texture. */
+        void SetData(const PackedVector::Bgr565* data, int elementCount);
+        /** @brief Uploads exact packed Bgr565 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Bgr565* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Bgra4444 texels to a Bgra4444 texture. */
+        void SetData(const PackedVector::Bgra4444* data, int elementCount);
+        /** @brief Uploads exact packed Bgra4444 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Bgra4444* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Rgba1010102 texels to an Rgba1010102 texture. */
+        void SetData(const PackedVector::Rgba1010102* data, int elementCount);
+        /** @brief Uploads exact packed Rgba1010102 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Rgba1010102* data,
+                     int startIndex, int elementCount);
+
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void SetData(std::nullptr_t, int elementCount)
+        {
+            SetData(static_cast<const Color*>(nullptr), elementCount);
+        }
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void SetData(int level, const Rectangle* rect, std::nullptr_t,
+                     int startIndex, int elementCount)
+        {
+            SetData(level, rect, static_cast<const Color*>(nullptr), startIndex, elementCount);
+        }
+
         /**
          * @brief Reads pixel data from the texture into the provided array.
          * @param data         Output array to receive the pixel data.
@@ -134,6 +170,45 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of Color elements to read.
          */
         void GetData(int level, const Rectangle* rect, Color* data, int startIndex, int elementCount) const;
+
+        /** @brief Reads exact packed Bgr565 texels from a Bgr565 texture. */
+        void GetData(PackedVector::Bgr565* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Bgr565 texels from a Bgr565 texture. */
+        void GetData(PackedVector::Bgr565* data, int elementCount) const;
+        /** @brief Reads exact packed Bgr565 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Bgr565* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Bgra4444 texels from a Bgra4444 texture. */
+        void GetData(PackedVector::Bgra4444* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Bgra4444 texels from a Bgra4444 texture. */
+        void GetData(PackedVector::Bgra4444* data, int elementCount) const;
+        /** @brief Reads exact packed Bgra4444 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Bgra4444* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Rgba1010102 texels from an Rgba1010102 texture. */
+        void GetData(PackedVector::Rgba1010102* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Rgba1010102 texels from an Rgba1010102 texture. */
+        void GetData(PackedVector::Rgba1010102* data, int elementCount) const;
+        /** @brief Reads exact packed Rgba1010102 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Rgba1010102* data,
+                     int startIndex, int elementCount) const;
+
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void GetData(std::nullptr_t, int elementCount) const
+        {
+            GetData(static_cast<Color*>(nullptr), elementCount);
+        }
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void GetData(std::nullptr_t, int startIndex, int elementCount) const
+        {
+            GetData(static_cast<Color*>(nullptr), startIndex, elementCount);
+        }
+        /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
+        void GetData(int level, const Rectangle* rect, std::nullptr_t,
+                     int startIndex, int elementCount) const
+        {
+            GetData(level, rect, static_cast<Color*>(nullptr), startIndex, elementCount);
+        }
 
         /**
          * @brief Creates a Texture2D by decoding image data from a stream.
@@ -341,6 +416,11 @@ namespace Microsoft::Xna::Framework::Graphics
         void storeCpuPixels(const uint8_t* rgba, int pixelCount);
         std::vector<uint8_t>& getMipBuffer(int level);
         const std::vector<uint8_t>* getMipBufferConst(int level) const;
+        [[nodiscard]] int getBytesPerTexel() const;
+        void SetDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
+                          int startIndex, int elementCount, int elementBytes);
+        void GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
+                          int startIndex, int elementCount, int elementBytes) const;
 
         [[nodiscard]] SDL_Texture* GetNativeTextureInternal() const;
 

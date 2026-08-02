@@ -18,15 +18,15 @@ the compact successor index; the format matrix is the normative input for SKIA-1
 | ID | Contract | Baseline | Successor task | Existing evidence / required acceptance |
 |---|---|---|---|---|
 | `FMT-Color` | RGBA8 transfer, sampling and render target. | supported | SKIA-143 | Existing exhaustive transfer, target and XNA-oracle coverage remains the reference. |
-| `FMT-Bgr565` | Packed 16-bit BGR transfer, normalized sampling and renderability. | refused | SKIA-135 | Map exact little-endian bits to compatible Skia storage and prove quantization. |
+| `FMT-Bgr565` | Packed 16-bit BGR transfer, normalized sampling and renderability. | refused | SKIA-135 | Promoted for Texture2D: exact little-endian `kRGB_565` words, native mips, sampling and quantization pass; targets stay refused. |
 | `FMT-Bgra5551` | Packed 5:5:5:1 transfer and alpha quantization. | refused | SKIA-139 | Requires conversion shadow because pinned Skia has no layout-compatible color type. |
-| `FMT-Bgra4444` | Packed 4:4:4:4 transfer, sampling and renderability. | refused | SKIA-135 | Use exact shadow conversion: CNA A:R:G:B is not Skia `kARGB_4444` R:G:B:A; prove raw round-trip plus pixels. |
+| `FMT-Bgra4444` | Packed 4:4:4:4 transfer, sampling and renderability. | refused | SKIA-135 | Promoted for Texture2D through exact A:R:G:B shadow conversion, native mips and sampled pixels; Skia `kARGB_4444` is never mislabelled and targets stay refused. |
 | `FMT-Dxt1` | BC1 blocks, optional one-bit alpha, mips and sampled pixels. | refused | SKIA-140 | Preserve compressed blocks while decoding bounded sampling images. |
 | `FMT-Dxt3` | BC2 explicit-alpha blocks, mips and sampled pixels. | refused | SKIA-140 | Preserve exact blocks and verify four-bit alpha expansion. |
 | `FMT-Dxt5` | BC3 interpolated-alpha blocks, mips and sampled pixels. | refused | SKIA-140 | Preserve exact blocks and verify both alpha interpolation modes. |
 | `FMT-NormalizedByte2` | Signed normalized two-channel transfer and raw sampling. | refused | SKIA-139 | Explicit signed normalization and missing-channel defaults require byte oracles. |
 | `FMT-NormalizedByte4` | Signed normalized four-channel transfer and raw sampling. | refused | SKIA-139 | Explicit signed normalization must avoid color-space conversion. |
-| `FMT-Rgba1010102` | Packed 10:10:10:2 transfer, sampling and renderability. | refused | SKIA-135 | Pinned Skia exposes compatible storage; prove endian and alpha rounding. |
+| `FMT-Rgba1010102` | Packed 10:10:10:2 transfer, sampling and renderability. | refused | SKIA-135 | Promoted for Texture2D: compatible pinned storage passes exact endian, native mip, sampled colour and two-bit-alpha evidence; targets stay refused. |
 | `FMT-Rg32` | Two unsigned 16-bit channels and normalized raw sampling. | refused | SKIA-137 | Use compatible RG16 storage or exact conversion shadow. |
 | `FMT-Rgba64` | Four unsigned 16-bit channels and normalized raw sampling. | refused | SKIA-137 | Use compatible RGBA16 storage and preserve original transfer words. |
 | `FMT-Alpha8` | One alpha byte with zero RGB sampling semantics. | refused | SKIA-137 | Pinned Alpha8 path needs exact swizzle and target policy evidence. |

@@ -4,7 +4,8 @@
 //
 // Tests Texture2D, Texture3D, and TextureCube constructors against
 // representative unsupported formats (sRGB, HDR, compressed, packed).
-// SurfaceFormat::Color must NOT throw.
+// SurfaceFormat::Color must NOT throw; the Skia build also verifies its
+// explicitly supported SKIA-135 packed Texture2D formats.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -121,9 +122,23 @@ protected:
         expectThrows("Texture2D Alpha8", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
         });
+#if defined(CNA_BACKEND_SKIA)
+        // SKIA-135 promotes these packed formats for Texture2D only.  The other
+        // backends that share this contract test retain the Color-only boundary.
+        expectNoThrow("Texture2D Bgr565", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
+        });
+        expectNoThrow("Texture2D Bgra4444", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgra4444);
+        });
+        expectNoThrow("Texture2D Rgba1010102", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Rgba1010102);
+        });
+#else
         expectThrows("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });
+#endif
         expectThrows("Texture2D Vector4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Vector4);
         });

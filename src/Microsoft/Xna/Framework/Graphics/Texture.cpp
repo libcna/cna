@@ -112,7 +112,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         throw std::runtime_error(
             "Texture: SurfaceFormat " + std::to_string(static_cast<int>(fmt)) +
-            " is not implemented; only SurfaceFormat::Color is currently supported");
+            " is not implemented by the selected graphics backend");
     }
 
     SurfaceFormat Texture::getFormatProperty() const

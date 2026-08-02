@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -17,6 +18,9 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/FormatException.hpp"
@@ -75,6 +79,23 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    static void ValidateTexture2DFormatEXT(SurfaceFormat format)
+    {
+#ifdef CNA_BACKEND_SKIA
+        if (format == SurfaceFormat::Color
+            || format == SurfaceFormat::Bgr565
+            || format == SurfaceFormat::Bgra4444
+            || format == SurfaceFormat::Rgba1010102)
+        {
+            return;
+        }
+        throw std::runtime_error(
+            "Skia Texture2D SurfaceFormat has not passed its promotion gate.");
+#else
+        Texture::ValidateFormat(format);
+#endif
+    }
+
     static int mipDim(int base, int level)
     {
         return std::max(1, base >> level);
@@ -89,6 +110,9 @@ namespace Microsoft::Xna::Framework::Graphics
                 std::string(api) + ": level " + std::to_string(level) +
                 " must be less than LevelCount " + std::to_string(levelCount));
     }
+
+    static void validateTransferWindow(const char* api, int startIndex, int elementCount,
+                                       int requiredElements);
 
     void Texture2D::MaybeFreeCpuPixels()
     {
@@ -109,8 +133,8 @@ namespace Microsoft::Xna::Framework::Graphics
             if (!cpuPixels_) cpuPixels_ = std::make_shared<std::vector<uint8_t>>();
             if (cpuPixels_->empty())
             {
-                const std::size_t sz =
-                    static_cast<std::size_t>(mipDim(width, 0)) * mipDim(height, 0) * 4;
+                const std::size_t sz = static_cast<std::size_t>(mipDim(width, 0))
+                    * mipDim(height, 0) * static_cast<std::size_t>(getBytesPerTexel());
                 if (sz > 0) cpuPixels_->assign(sz, 0);
             }
             return *cpuPixels_;
@@ -123,7 +147,8 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             const int w = mipDim(width, level);
             const int h = mipDim(height, level);
-            (*extraMipLevels_)[idx].assign(static_cast<std::size_t>(w * h) * 4, 0);
+            (*extraMipLevels_)[idx].assign(
+                static_cast<std::size_t>(w) * h * static_cast<std::size_t>(getBytesPerTexel()), 0);
         }
         return (*extraMipLevels_)[idx];
     }
@@ -136,6 +161,14 @@ namespace Microsoft::Xna::Framework::Graphics
         const int idx = level - 1;
         if (static_cast<int>(extraMipLevels_->size()) <= idx) return nullptr;
         return (*extraMipLevels_)[idx].empty() ? nullptr : &(*extraMipLevels_)[idx];
+    }
+
+    int Texture2D::getBytesPerTexel() const
+    {
+        if (Texture::GetBlockSizeSquaredEXT(format_) != 1)
+            throw System::NotSupportedException(
+                "Texture2D: block-compressed transfer storage is not enabled by this format phase");
+        return Texture::GetFormatSizeEXT(format_);
     }
 
     // -----------------------------------------------------------------------
@@ -197,14 +230,17 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
 #endif
         ValidateTextureDimensionEXT(graphicsDevice, w, h);
-        ValidateFormat(format);
+        ValidateTexture2DFormatEXT(format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;
         ImageData data;
         data.width     = w;
         data.height    = h;
         data.mipLevels = levelCount_;
-        data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4, 0);
+        data.surfaceFormat = static_cast<int>(format);
+        data.pixels.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h)
+                               * static_cast<std::size_t>(Texture::GetFormatSizeEXT(format)),
+                           0);
         backend_   = graphicsDevice.GetBackend().CreateTexture(data);
         cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(data.pixels));
         backend_->ShareCpuPixels(cpuPixels_);
@@ -254,6 +290,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetData(const Color* data, int elementCount)
     {
+        if (format_ != SurfaceFormat::Color)
+            throw std::invalid_argument(
+                "Texture2D::SetData: Color data requires SurfaceFormat::Color");
         if (!graphicsDevice_ || !data || elementCount <= 0) return;
         const int total = width * height;
         if (elementCount < total)
@@ -299,6 +338,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect,
                             const Color* data, int startIndex, int elementCount)
     {
+        if (format_ != SurfaceFormat::Color)
+            throw std::invalid_argument(
+                "Texture2D::SetData: Color data requires SurfaceFormat::Color");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
         if (startIndex < 0)
@@ -427,8 +469,248 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void Texture2D::SetDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
+                                 int startIndex, int elementCount, int elementBytes)
+    {
+        if (!data || elementCount <= 0)
+            throw std::invalid_argument("Texture2D::SetData: data must not be null");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+        validateMipLevel("Texture2D::SetData", level, levelCount_);
+        const int bytesPerTexel = getBytesPerTexel();
+        if (elementBytes != bytesPerTexel)
+            throw std::invalid_argument(
+                "Texture2D::SetData: packed element type does not match the texture format");
+
+        const int levelW = mipDim(width, level);
+        const int levelH = mipDim(height, level);
+        int x = 0;
+        int y = 0;
+        int w = levelW;
+        int h = levelH;
+        if (rect)
+        {
+            x = rect->X;
+            y = rect->Y;
+            w = rect->Width;
+            h = rect->Height;
+        }
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
+        {
+            throw std::out_of_range("Texture2D::SetData: rectangle out of texture bounds");
+        }
+        const int requiredElements = w * h;
+        if (elementCount < requiredElements)
+            throw std::out_of_range(
+                "Texture2D::SetData: elementCount is less than the requested region");
+
+        const bool coversFullLevel = x == 0 && y == 0 && w == levelW && h == levelH;
+        if (gpuOnlyContent_)
+        {
+            cpuPixels_.reset();
+            extraMipLevels_.reset();
+        }
+
+        if (level == 0 && backend_ && !cpuPixels_ && !coversFullLevel)
+        {
+            if (!gpuOnlyContent_)
+            {
+                throw std::runtime_error(
+                    "Texture2D::SetData: partial update requires CPU-side pixel storage, which "
+                    "was freed because context recovery is disabled");
+            }
+            std::vector<uint8_t> currentPixels(
+                static_cast<std::size_t>(levelW) * levelH * bytesPerTexel);
+            if (!backend_->GetData(0, 0, 0, levelW, levelH, currentPixels.data(),
+                                   static_cast<int>(currentPixels.size())))
+            {
+                throw System::NotSupportedException(
+                    "Texture2D::SetData: backend cannot preserve untouched target pixels");
+            }
+            cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(currentPixels));
+        }
+
+        if (level > 0 && backend_ && !coversFullLevel && !getMipBufferConst(level)
+            && backend_->HasDefinedMipLevel(level))
+        {
+            std::vector<uint8_t> currentPixels(
+                static_cast<std::size_t>(levelW) * levelH * bytesPerTexel);
+            if (!backend_->GetData(level, 0, 0, levelW, levelH, currentPixels.data(),
+                                   static_cast<int>(currentPixels.size())))
+            {
+                throw System::NotSupportedException(
+                    "Texture2D::SetData: backend cannot preserve untouched generated mip pixels");
+            }
+            getMipBuffer(level) = std::move(currentPixels);
+        }
+
+        std::vector<uint8_t>& destination = getMipBuffer(level);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t sourceOffset = static_cast<std::size_t>(startIndex + row * w)
+                * bytesPerTexel;
+            const std::size_t destinationOffset =
+                (static_cast<std::size_t>(y + row) * levelW + x) * bytesPerTexel;
+            std::memcpy(destination.data() + destinationOffset, data + sourceOffset, rowBytes);
+        }
+
+        if (level == 0)
+        {
+            if (backend_)
+            {
+                backend_->UpdatePixels(destination.data(), levelW * bytesPerTexel);
+            }
+            else if (graphicsDevice_)
+            {
+                ImageData image;
+                image.width = width;
+                image.height = height;
+                image.mipLevels = levelCount_;
+                image.surfaceFormat = static_cast<int>(format_);
+                image.pixels = destination;
+                backend_ = graphicsDevice_->GetBackend().CreateTexture(image);
+                backend_->ShareCpuPixels(cpuPixels_);
+            }
+            if (gpuOnlyContent_)
+            {
+                cpuPixels_.reset();
+                extraMipLevels_.reset();
+                return;
+            }
+            MaybeFreeCpuPixels();
+        }
+        else if (backend_)
+        {
+            backend_->UpdatePixelsLevel(level, destination.data(), levelW, levelH);
+            if (gpuOnlyContent_)
+                extraMipLevels_.reset();
+        }
+    }
+
+    namespace
+    {
+        template <typename Packed, typename Word>
+        std::vector<std::uint8_t> EncodePackedElements(
+            const Packed* data, int startIndex, int elementCount)
+        {
+            if (!data || elementCount <= 0)
+                throw std::invalid_argument("Texture2D::SetData: data must not be null");
+            if (startIndex < 0)
+                throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+            std::vector<std::uint8_t> result(
+                static_cast<std::size_t>(elementCount) * sizeof(Word));
+            for (int index = 0; index < elementCount; ++index)
+            {
+                const Word word = static_cast<Word>(
+                    data[startIndex + index].getPackedValueProperty());
+                for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                {
+                    result[static_cast<std::size_t>(index) * sizeof(Word) + byte] =
+                        static_cast<std::uint8_t>(word >> (byte * 8u));
+                }
+            }
+            return result;
+        }
+
+        template <typename Packed, typename Word>
+        void DecodePackedElements(const std::vector<std::uint8_t>& bytes, int requiredElements,
+                                  Packed* data, int startIndex)
+        {
+            for (int index = 0; index < requiredElements; ++index)
+            {
+                Word word = 0;
+                for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                {
+                    word |= static_cast<Word>(bytes[static_cast<std::size_t>(index)
+                                                     * sizeof(Word) + byte])
+                        << (byte * 8u);
+                }
+                data[startIndex + index].setPackedValueProperty(word);
+            }
+        }
+
+        int ValidatedRequestedTexelCount(const char* api, int baseWidth, int baseHeight,
+                                         int level, int levelCount, const Rectangle* rect)
+        {
+            validateMipLevel(api, level, levelCount);
+            const int levelWidth = mipDim(baseWidth, level);
+            const int levelHeight = mipDim(baseHeight, level);
+            if (!rect)
+                return levelWidth * levelHeight;
+            if (rect->X < 0 || rect->Y < 0 || rect->Width <= 0 || rect->Height <= 0
+                || rect->Width > levelWidth || rect->Height > levelHeight
+                || rect->X > levelWidth - rect->Width || rect->Y > levelHeight - rect->Height)
+            {
+                throw std::out_of_range(std::string(api) + ": rectangle out of texture bounds");
+            }
+            return rect->Width * rect->Height;
+        }
+    }
+
+    void Texture2D::SetData(const PackedVector::Bgr565* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Bgr565* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Bgr565)
+            throw std::invalid_argument("Texture2D::SetData: Bgr565 data requires Bgr565 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::Bgr565, std::uint16_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
+    }
+
+    void Texture2D::SetData(const PackedVector::Bgra4444* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Bgra4444* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Bgra4444)
+            throw std::invalid_argument(
+                "Texture2D::SetData: Bgra4444 data requires Bgra4444 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::Bgra4444, std::uint16_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
+    }
+
+    void Texture2D::SetData(const PackedVector::Rgba1010102* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect,
+                            const PackedVector::Rgba1010102* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Rgba1010102)
+            throw std::invalid_argument(
+                "Texture2D::SetData: Rgba1010102 data requires Rgba1010102 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::Rgba1010102, std::uint32_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+    }
+
     void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
     {
+        if (format_ != SurfaceFormat::Color)
+            throw std::invalid_argument(
+                "Texture2D::SetDataRGBA: raw RGBA requires SurfaceFormat::Color");
         if (!backend_ || !data || pixelCount <= 0) return;
         if (gpuOnlyContent_)
         {
@@ -498,6 +780,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::GetData(Color* data, int startIndex, int elementCount) const
     {
+        if (format_ != SurfaceFormat::Color)
+            throw std::invalid_argument(
+                "Texture2D::GetData: Color data requires SurfaceFormat::Color");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("data must not be null and elementCount must be > 0");
         if (startIndex < 0)
@@ -574,6 +859,9 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect,
                             Color* data, int startIndex, int elementCount) const
     {
+        if (format_ != SurfaceFormat::Color)
+            throw std::invalid_argument(
+                "Texture2D::GetData: Color data requires SurfaceFormat::Color");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
         if (startIndex < 0)
@@ -669,6 +957,161 @@ namespace Microsoft::Xna::Framework::Graphics
                                   (*buf)[src + 3]);
             }
         }
+    }
+
+    void Texture2D::GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
+                                 int startIndex, int elementCount, int elementBytes) const
+    {
+        if (!data || elementCount <= 0)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        if (startIndex < 0)
+            throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
+        validateMipLevel("Texture2D::GetData", level, levelCount_);
+        const int bytesPerTexel = getBytesPerTexel();
+        if (elementBytes != bytesPerTexel)
+            throw std::invalid_argument(
+                "Texture2D::GetData: packed element type does not match the texture format");
+
+        const int levelW = mipDim(width, level);
+        const int levelH = mipDim(height, level);
+        int x = 0;
+        int y = 0;
+        int w = levelW;
+        int h = levelH;
+        if (rect)
+        {
+            x = rect->X;
+            y = rect->Y;
+            w = rect->Width;
+            h = rect->Height;
+        }
+        if (x < 0 || y < 0 || w <= 0 || h <= 0
+            || w > levelW || h > levelH || x > levelW - w || y > levelH - h)
+        {
+            throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
+        }
+        const int requiredElements = w * h;
+        validateTransferWindow(
+            "Texture2D::GetData", startIndex, elementCount, requiredElements);
+
+        const std::vector<uint8_t>* source = gpuOnlyContent_ ? nullptr : getMipBufferConst(level);
+        if (source)
+        {
+            const std::size_t expectedBytes = static_cast<std::size_t>(levelW) * levelH
+                * bytesPerTexel;
+            if (source->size() < expectedBytes)
+                throw std::runtime_error(
+                    "Texture2D::GetData: CPU-side packed pixel storage is incomplete");
+            const std::size_t copyBytes = static_cast<std::size_t>(w) * bytesPerTexel;
+            for (int row = 0; row < h; ++row)
+            {
+                const std::size_t sourceOffset =
+                    (static_cast<std::size_t>(y + row) * levelW + x) * bytesPerTexel;
+                const std::size_t destinationOffset =
+                    static_cast<std::size_t>(startIndex + row * w) * bytesPerTexel;
+                std::memcpy(data + destinationOffset, source->data() + sourceOffset, copyBytes);
+            }
+            return;
+        }
+
+        const bool backendOwnsDefinedMip = level > 0 && backend_
+            && backend_->HasDefinedMipLevel(level);
+        if (!backend_ || (!gpuOnlyContent_ && !backendOwnsDefinedMip))
+            throw std::runtime_error(
+                "Texture2D::GetData: no CPU-side packed pixel data for requested mip level");
+
+        std::vector<uint8_t> scratch(
+            static_cast<std::size_t>(requiredElements) * bytesPerTexel);
+        if (!backend_->GetData(level, x, y, w, h, scratch.data(),
+                               static_cast<int>(scratch.size())))
+        {
+            throw System::NotSupportedException(
+                "Texture2D::GetData: backend cannot read the requested packed pixels");
+        }
+        std::memcpy(data + static_cast<std::size_t>(startIndex) * bytesPerTexel,
+                    scratch.data(), scratch.size());
+    }
+
+    void Texture2D::GetData(PackedVector::Bgr565* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::Bgr565* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Bgr565* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Bgr565)
+            throw std::invalid_argument("Texture2D::GetData: Bgr565 data requires Bgr565 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
+        DecodePackedElements<PackedVector::Bgr565, std::uint16_t>(
+            bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(PackedVector::Bgra4444* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::Bgra4444* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Bgra4444* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Bgra4444)
+            throw std::invalid_argument(
+                "Texture2D::GetData: Bgra4444 data requires Bgra4444 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
+        DecodePackedElements<PackedVector::Bgra4444, std::uint16_t>(
+            bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(PackedVector::Rgba1010102* data, int startIndex,
+                            int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::Rgba1010102* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect,
+                            PackedVector::Rgba1010102* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Rgba1010102)
+            throw std::invalid_argument(
+                "Texture2D::GetData: Rgba1010102 data requires Rgba1010102 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+        DecodePackedElements<PackedVector::Rgba1010102, std::uint32_t>(
+            bytes, requiredElements, data, startIndex);
     }
 
     // -----------------------------------------------------------------------

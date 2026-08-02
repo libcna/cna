@@ -447,6 +447,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_texture_constraints examples/skia_texture_constraints_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Constraints cna_test_skia_texture_constraints)
 
+    cna_skia_test(cna_test_skia_texture2d_packed_formats
+                  examples/skia_texture2d_packed_formats_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_packed_formats
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_PackedFormats
+                                   cna_test_skia_texture2d_packed_formats)
+
     cna_skia_test(cna_test_skia_texture2d_dispose examples/sdlrenderer_texture2d_dispose_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Dispose cna_test_skia_texture2d_dispose)
 

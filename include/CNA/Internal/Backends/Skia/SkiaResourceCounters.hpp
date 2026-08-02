@@ -40,18 +40,18 @@ namespace CNA::Internal::Backends::Skia
     class SkiaResourceCounters final
     {
     public:
-        void AddTexture(int width, int height) noexcept
+        void AddTexture(std::size_t imageViewStorageBytes) noexcept
         {
             ++stats_.textureBackends;
             stats_.textureImageViews += 2;
-            stats_.textureImageBytes += RgbaBytes(width, height) * 2;
+            stats_.textureImageBytes += imageViewStorageBytes;
         }
 
-        void RemoveTexture(int width, int height) noexcept
+        void RemoveTexture(std::size_t imageViewStorageBytes) noexcept
         {
             --stats_.textureBackends;
             stats_.textureImageViews -= 2;
-            stats_.textureImageBytes -= RgbaBytes(width, height) * 2;
+            stats_.textureImageBytes -= imageViewStorageBytes;
         }
 
         void AddCpuTextureCube(std::size_t bytes) noexcept

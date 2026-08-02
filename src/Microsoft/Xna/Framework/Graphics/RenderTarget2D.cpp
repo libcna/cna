@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 
@@ -36,6 +37,27 @@ namespace Microsoft::Xna::Framework::Graphics
         return static_cast<int>(result >> 1);
     }
 
+    static std::shared_ptr<IRenderTargetBackend> CreateValidatedRenderTargetBackend(
+        GraphicsDevice& device, int width, int height, SurfaceFormat format,
+        DepthFormat depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+#ifdef CNA_BACKEND_SKIA
+        // SKIA-135 promotes packed formats for Texture2D only. Target format selection is a
+        // separate contract (SKIA-142); reject before the Color raster target allocates so a
+        // failed packed request cannot report one format while owning another.
+        if (format != SurfaceFormat::Color)
+        {
+            throw System::NotSupportedException(
+                "Skia RenderTarget2D supports only SurfaceFormat::Color until SKIA-142.");
+        }
+#endif
+        Texture::ValidateFormat(format);
+        return std::shared_ptr<IRenderTargetBackend>(
+            device.GetBackend().CreateRenderTarget2D(
+                width, height, static_cast<int>(depthFormat), preserveContents, mipMap,
+                ClosestMSAAPower(multiSampleCount)));
+    }
+
     RenderTarget2D::RenderTarget2D(GraphicsDevice& device, int width, int height)
         : RenderTarget2D(device, width, height, false, SurfaceFormat::Color, DepthFormat::None)
     {
@@ -51,16 +73,15 @@ namespace Microsoft::Xna::Framework::Graphics
                                    RenderTargetUsage usage)
         : Texture2D(device, width, height, preferredFormat,
                     mipMap ? CalculateMipLevels(width, height) : 1,
-                    std::shared_ptr<IRenderTargetBackend>(
-                        device.GetBackend().CreateRenderTarget2D(
-                            width, height, static_cast<int>(preferredDepthFormat),
+                    CreateValidatedRenderTargetBackend(
+                            device, width, height, preferredFormat, preferredDepthFormat,
                             // REMED-GFX-136: one shared mapping for both public render targets.
                             // The literal `usage == PreserveContents` this replaces contradicted
                             // GraphicsDevice::SetRenderTargets, which only ever clears a
                             // DiscardContents target, so PlatformContents was preserved by the
                             // shared layer and discarded by the backend at the same time.
                             RenderTargetUsagePreservesContentsEXT(usage), mipMap,
-                            ClosestMSAAPower(preferredMultiSampleCount))))
+                            preferredMultiSampleCount))
         , depthFormat_(preferredDepthFormat)
         , multiSampleCount_(preferredMultiSampleCount)
         , usage_(usage)

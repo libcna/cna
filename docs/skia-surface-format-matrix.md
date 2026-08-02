@@ -1,13 +1,14 @@
 # Skia `SurfaceFormat` contract matrix
 
-Status: normative SKIA-134 input for SKIA-135–143
+Status: normative SKIA-134 contract; SKIA-135 packed Texture2D routes promoted
 
-This matrix fixes the byte and sampling contract before any additional public format is enabled.
+This matrix fixes the byte and sampling contract for every public format.
 It is based on CNA's `SurfaceFormat`, `Texture::GetBlockSizeSquaredEXT` and
 `Texture::GetFormatSizeEXT`, the CNA packed-vector implementations, and FNA/FNA3D's OpenGL
-transfer mappings. `Skia representation` names the pinned CPU-raster building block, not a claim
-that the public route is already enabled. Except for `Color`, `Texture::ValidateFormat` continues
-to reject every row before allocation until its owner task supplies transfer and pixel evidence.
+transfer mappings. `Skia representation` names the pinned CPU-raster building block. SKIA-135 now
+enables `Bgr565`, `Bgra4444`, and `Rgba1010102` for Skia `Texture2D` only after their transfer and
+pixel gates passed. Every other non-`Color` texture row remains refused until its owner passes;
+non-`Color` render targets remain independently refused pending SKIA-142.
 
 All multi-byte words and IEEE values below use the little-endian host layout required by the
 pinned Skia raster artifact. A future big-endian build must add explicit byte conversion or refuse
@@ -24,15 +25,15 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
 | Ordinal | SurfaceFormat | Block texels | Payload bytes | Exact CNA transfer layout | FNA/EasyGL sampled value | Pinned Skia representation | FNA/Skia RT decision | Promotion route | Owner |
 |---:|---|---:|---:|---|---|---|---|---|---|
 | 0 | `Color` | 1 | 4 | bytes R8, G8, B8, A8 | RGBA UNORM | `kRGBA_8888`, canonical straight-byte shadow and declared-alpha views | renderable; direct raster surface | supported | SKIA-143 |
-| 1 | `Bgr565` | 1 | 2 | LE u16 R15:11, G10:5, B4:0 | RGB UNORM, A=1 | `kRGB_565` exact word | FNA coerces to Color; Skia refuses target | direct | SKIA-135 |
+| 1 | `Bgr565` | 1 | 2 | LE u16 R15:11, G10:5, B4:0 | RGB UNORM, A=1 | promoted Texture2D `kRGB_565` exact word | FNA coerces to Color; Skia refuses target | direct | SKIA-135 |
 | 2 | `Bgra5551` | 1 | 2 | LE u16 A15, R14:10, G9:5, B4:0 | RGBA UNORM | raw u16 shadow plus decoded RGBA working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
-| 3 | `Bgra4444` | 1 | 2 | LE u16 A15:12, R11:8, G7:4, B3:0 | RGBA UNORM | raw u16 shadow plus decoded RGBA working image; `kARGB_4444` is not layout-compatible | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-135 |
+| 3 | `Bgra4444` | 1 | 2 | LE u16 A15:12, R11:8, G7:4, B3:0 | RGBA UNORM | promoted Texture2D raw u16 shadow plus decoded RGBA working image; `kARGB_4444` is not layout-compatible | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-135 |
 | 4 | `Dxt1` | 16 | 8 | one BC1 block per 4x4 texels | RGB UNORM or BC1 one-bit-alpha RGBA | exact block shadow plus bounded RGBA8 decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
 | 5 | `Dxt3` | 16 | 16 | one BC2 block per 4x4 texels | RGBA UNORM with explicit 4-bit alpha | exact block shadow plus bounded RGBA8 decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
 | 6 | `Dxt5` | 16 | 16 | one BC3 block per 4x4 texels | RGBA UNORM with interpolated alpha | exact block shadow plus bounded RGBA8 decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
 | 7 | `NormalizedByte2` | 1 | 2 | bytes X s8, Y s8 | RG SNORM, B=0, A=1 | exact byte shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
 | 8 | `NormalizedByte4` | 1 | 4 | bytes X s8, Y s8, Z s8, W s8 | RGBA SNORM | exact byte shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
-| 9 | `Rgba1010102` | 1 | 4 | LE u32 A31:30, B29:20, G19:10, R9:0 | RGBA UNORM | `kRGBA_1010102` exact word | renderable; direct raster candidate | direct | SKIA-135 |
+| 9 | `Rgba1010102` | 1 | 4 | LE u32 A31:30, B29:20, G19:10, R9:0 | RGBA UNORM | promoted Texture2D `kRGBA_1010102` exact word | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-135 |
 | 10 | `Rg32` | 1 | 4 | LE u16 R, then LE u16 G | RG UNORM, B=0, A=1 | `kR16G16_unorm` exact words | renderable; direct raster candidate | direct | SKIA-137 |
 | 11 | `Rgba64` | 1 | 8 | LE u16 R, G, B, A | RGBA UNORM | `kR16G16B16A16_unorm` exact words | renderable; direct raster candidate | direct | SKIA-137 |
 | 12 | `Alpha8` | 1 | 1 | one byte A8 | R=0, G=0, B=0, A UNORM | `kAlpha_8` exact byte | FNA coerces to Color; Skia refuses target | direct-texture-only | SKIA-137 |

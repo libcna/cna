@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// Public Texture2D creation matrix for the SKIA raster backend: current CNA accepts only
-// SurfaceFormat::Color, while dimensions must be accepted through the declared per-device limit.
+// Public Texture2D refusal matrix for the SKIA raster backend. Color and the three SKIA-135
+// packed formats are covered positively by skia_texture2d_packed_formats_test.cpp; every other
+// format remains a creation-time refusal, while valid dimensions reach the declared device limit.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -101,18 +102,15 @@ private:
         const char* name;
     };
 
-    static const std::array<FormatCase, 26>& UnsupportedFormats()
+    static const std::array<FormatCase, 23>& UnsupportedFormats()
     {
         static constexpr std::array formats{
-            FormatCase{SurfaceFormat::Bgr565, "Bgr565"},
             FormatCase{SurfaceFormat::Bgra5551, "Bgra5551"},
-            FormatCase{SurfaceFormat::Bgra4444, "Bgra4444"},
             FormatCase{SurfaceFormat::Dxt1, "Dxt1"},
             FormatCase{SurfaceFormat::Dxt3, "Dxt3"},
             FormatCase{SurfaceFormat::Dxt5, "Dxt5"},
             FormatCase{SurfaceFormat::NormalizedByte2, "NormalizedByte2"},
             FormatCase{SurfaceFormat::NormalizedByte4, "NormalizedByte4"},
-            FormatCase{SurfaceFormat::Rgba1010102, "Rgba1010102"},
             FormatCase{SurfaceFormat::Rg32, "Rg32"},
             FormatCase{SurfaceFormat::Rgba64, "Rgba64"},
             FormatCase{SurfaceFormat::Alpha8, "Alpha8"},
