@@ -78,7 +78,7 @@ stale, duplicated, malformed, or unrouted entries.
 | `CAP-Texture3D` | Persistent volume storage; sampling is a separate contract. | transfer-only | SKIA-144–151 | Baseline true value stays storage-only until sampling has explicit evidence. |
 | `MIP-TEXTURE2D-CONSTRUCTION` | Mipmapped construction, dimensions, count and zero initialization. | refused | SKIA-125–126 | The baseline refusal is superseded by the checked complete-chain construction and property tests. |
 | `MIP-TEXTURE2D-TRANSFER` | Full/partial SetData/GetData for each mip. | refused | SKIA-127 | The baseline refusal is superseded by shared range coverage plus direct odd/NPOT level, byte, lifetime and atomic-failure evidence. |
-| `MIP-TEXTURE2D-GENERATION` | Dirty descendant generation after upload. | refused | SKIA-128 | Odd-edge alpha-aware byte oracle required. |
+| `MIP-TEXTURE2D-GENERATION` | Dirty descendant generation after upload. | refused | SKIA-128 | Baseline refusal is superseded by exact odd/NPOT straight-RGBA area-box bytes, dirty-generation counts, and explicit-level ownership barriers. |
 | `MIP-RENDERTARGET2D` | Render, upload, readback and sample mutable target mips. | refused | SKIA-131–132 | Existing target policy proves atomic refusal and recovery. |
 | `MIP-SAMPLING-LOD` | Min/mag and mip-level selection/interpolation. | refused | SKIA-129 | Scale-transform oracle must distinguish every TextureFilter value. |
 | `FORMAT-RENDERTARGET` | Per-format renderability independent of texture sampling. | refused | SKIA-142 | Every enum needs direct route or pre-allocation refusal. |

@@ -461,6 +461,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_Texture2D_MipRoundTrip
                                    cna_test_skia_texture2d_mip_roundtrip)
 
+    cna_skia_test(cna_test_skia_texture2d_mip_generation
+                  examples/skia_texture2d_mip_generation_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_mip_generation
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_MipGeneration
+                                   cna_test_skia_texture2d_mip_generation)
+
     cna_skia_test(cna_test_skia_sampler_mipmap_filter examples/skia_sampler_mipmap_filter_test.cpp)
     cna_register_skia_display_test(Skia_Sampler_MipmapFilterPolicy cna_test_skia_sampler_mipmap_filter)
 

@@ -47,8 +47,23 @@ zero initialization and isolation, the exact 256-MiB descriptor boundary, descen
 and row-overflow atomicity, axis errors, out-of-range level access, and live/released counters.
 SKIA-126 uses this storage for public `Texture2D(..., mipMap=true, Color)` construction and exact
 `LevelCount` reporting. SKIA-127 adds exact full/partial upload and readback for every level,
-including result-preserving invalid requests and caller-memory isolation. Generation/sampling
-remain SKIA-128/129, and RenderTarget2D wiring remains SKIA-131.
+including result-preserving invalid requests and caller-memory isolation.
+
+### Deterministic Texture2D generation (SKIA-128)
+
+A changed level eagerly marks its unauthored descendants dirty and rebuilds them in ascending
+order. Each target texel uses integer area partitions
+`[floor(i*source/target), floor((i+1)*source/target))` on both axes, so an odd final row or column
+contributes exactly once. Canonical straight RGBA8 channels are averaged independently and rounded
+to nearest with `(sum + count/2) / count`; no Skia colour- or alpha-conversion path participates.
+
+A full or partial public write makes that level caller-authored. It becomes an ownership barrier:
+later changes to an ancestor stop before it, while its own changes may regenerate following
+unauthored descendants until the next authored barrier. A partial first write to a generated level
+seeds its public shadow from the backend's complete defined bytes before patching, preserving every
+untouched texel. `Skia_Texture2D_MipGeneration` locks exact 7×5→3×2→1×1 bytes, odd-edge updates,
+dirty-only rebuild counts, partial promotion, and two independent barriers. Sampling remains
+SKIA-129, and RenderTarget2D wiring remains SKIA-131.
 
 ## Pixel and precision rules
 

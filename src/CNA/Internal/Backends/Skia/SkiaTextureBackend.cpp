@@ -74,6 +74,10 @@ namespace CNA::Internal::Backends::Skia
         mipChain_ = std::make_unique<SkiaMipChain2D>(
             width_, height_, data.mipLevels > 1, 4u, resourceCounters_);
         std::memcpy(mipChain_->LevelData(0), data.pixels.data(), requiredBytes);
+        authoredMipLevels_.assign(static_cast<std::size_t>(mipChain_->LevelCount()), false);
+        dirtyMipLevels_.assign(static_cast<std::size_t>(mipChain_->LevelCount()), false);
+        mipGenerationCounts_.assign(static_cast<std::size_t>(mipChain_->LevelCount()), 0u);
+        authoredMipLevels_[0] = true;
         RebuildImage();
         if (resourceCounters_)
         {
@@ -102,6 +106,8 @@ namespace CNA::Internal::Backends::Skia
                         static_cast<std::size_t>(width_) * 4u);
         }
         RebuildImage();
+        InvalidateGeneratedDescendants(0);
+        GenerateDirtyMipLevels();
     }
 
     void SkiaTextureBackend::UpdatePixelsLevel(int level, const std::uint8_t* rgba,
@@ -121,6 +127,10 @@ namespace CNA::Internal::Backends::Skia
             return;
         }
         std::memcpy(mipChain_->LevelData(level), rgba, target.bytes);
+        authoredMipLevels_[static_cast<std::size_t>(level)] = true;
+        dirtyMipLevels_[static_cast<std::size_t>(level)] = false;
+        InvalidateGeneratedDescendants(level);
+        GenerateDirtyMipLevels();
     }
 
     bool SkiaTextureBackend::GetData(int level, int x, int y, int width, int height,
@@ -171,5 +181,84 @@ namespace CNA::Internal::Backends::Skia
         premultipliedImage_ = SkImages::RasterFromPixmapCopy(premultipliedPixmap);
         if (!straightImage_ || !premultipliedImage_)
             throw std::runtime_error("Skia failed to create a raster Texture2D image.");
+    }
+
+    std::uint64_t SkiaTextureBackend::MipGenerationCountEXT(int level) const
+    {
+        if (level < 0 || level >= static_cast<int>(mipGenerationCounts_.size()))
+            throw std::out_of_range("Skia Texture2D mip generation level is out of range.");
+        return mipGenerationCounts_[static_cast<std::size_t>(level)];
+    }
+
+    void SkiaTextureBackend::InvalidateGeneratedDescendants(int level)
+    {
+        for (int descendant = level + 1; descendant < mipChain_->LevelCount(); ++descendant)
+        {
+            if (authoredMipLevels_[static_cast<std::size_t>(descendant)])
+                break;
+            dirtyMipLevels_[static_cast<std::size_t>(descendant)] = true;
+        }
+    }
+
+    void SkiaTextureBackend::GenerateDirtyMipLevels()
+    {
+        for (int level = 1; level < mipChain_->LevelCount(); ++level)
+        {
+            if (!dirtyMipLevels_[static_cast<std::size_t>(level)])
+                continue;
+            GenerateMipLevel(level);
+            dirtyMipLevels_[static_cast<std::size_t>(level)] = false;
+            ++mipGenerationCounts_[static_cast<std::size_t>(level)];
+        }
+    }
+
+    void SkiaTextureBackend::GenerateMipLevel(int level)
+    {
+        const SkiaMipLevel2D& source = mipChain_->Level(level - 1);
+        const SkiaMipLevel2D& target = mipChain_->Level(level);
+        const std::uint8_t* sourcePixels = mipChain_->LevelData(level - 1);
+        std::uint8_t* targetPixels = mipChain_->LevelData(level);
+
+        // Integer area boxes partition the complete odd/NPOT source. For example 7 -> 3 uses
+        // [0,2), [2,4), [4,7), so the final edge contributes exactly once instead of being
+        // dropped. Canonical straight RGBA bytes are averaged independently; Skia alpha
+        // conversion is not involved in mip generation.
+        for (int y = 0; y < target.height; ++y)
+        {
+            const int sourceY0 = static_cast<int>(
+                static_cast<std::int64_t>(y) * source.height / target.height);
+            const int sourceY1 = static_cast<int>(
+                static_cast<std::int64_t>(y + 1) * source.height / target.height);
+            for (int x = 0; x < target.width; ++x)
+            {
+                const int sourceX0 = static_cast<int>(
+                    static_cast<std::int64_t>(x) * source.width / target.width);
+                const int sourceX1 = static_cast<int>(
+                    static_cast<std::int64_t>(x + 1) * source.width / target.width);
+                const unsigned int sampleCount = static_cast<unsigned int>(
+                    (sourceX1 - sourceX0) * (sourceY1 - sourceY0));
+                for (int channel = 0; channel < 4; ++channel)
+                {
+                    unsigned int sum = 0u;
+                    for (int sourceY = sourceY0; sourceY < sourceY1; ++sourceY)
+                    {
+                        for (int sourceX = sourceX0; sourceX < sourceX1; ++sourceX)
+                        {
+                            const std::size_t sourceOffset =
+                                static_cast<std::size_t>(sourceY) * source.rowBytes
+                                + static_cast<std::size_t>(sourceX) * 4u
+                                + static_cast<std::size_t>(channel);
+                            sum += sourcePixels[sourceOffset];
+                        }
+                    }
+                    const std::size_t targetOffset =
+                        static_cast<std::size_t>(y) * target.rowBytes
+                        + static_cast<std::size_t>(x) * 4u
+                        + static_cast<std::size_t>(channel);
+                    targetPixels[targetOffset] = static_cast<std::uint8_t>(
+                        (sum + sampleCount / 2u) / sampleCount);
+                }
+            }
+        }
     }
 } // namespace CNA::Internal::Backends::Skia

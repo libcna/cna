@@ -67,7 +67,7 @@ verified subset is nevertheless broad enough to require a precise cross-referenc
 companion table below maps the same feature families without implying full 3D parity. For this
 table, ✅ means complete within the stated 2D contract, ⚠️ means a deliberately bounded direct or
 emulated route, and ❌ means direct support was absent and the named emulation was evaluated and
-rejected. The full row-per-API inventory is the 248-entry
+rejected. The full row-per-API inventory is the 249-entry
 [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md).
 
 ## Skia CPU-raster 2D companion matrix (SKIA-111)
@@ -84,7 +84,7 @@ rejected. The full row-per-API inventory is the 248-entry
 | MSAA backbuffer/targets | ❌ | Selected raster `SkSurface` owns zero physical samples. Backbuffer requests from zero through oversized values clamp to 0; real `RenderTarget2D` requests reject. A fake resolve or multisample mask is not exposed. | [surface-mode ADR](skia-surface-mode-adr.md), [SKIA-56, SKIA-76–77](../plan_skia.md), `Skia_RenderTarget2D_MsaaPolicy` |
 | Mutable `RenderTarget2D` mip chain | ❌ | Skia default immutable mip generation was evaluated; it cannot supply CNA's mutable per-level/readback target contract. | [SKIA-70](../plan_skia.md), `Skia_Texture2D_MipmapPolicy` |
 | `Texture2D` level-0 Set/Get/partial/NPOT sampling | ✅ | Exact CPU shadow plus direct raster image path; transfer and validation contracts share sources with EasyGL. | [SKIA-22–30, SKIA-106, SKIA-109](../plan_skia.md), [API contract comparison](skia-api-contract-comparison.md) |
-| `Texture2D` mip levels above zero | ⚠️ | Public `mipMap=true` construction owns a complete checked CNA chain, and full/partial SetData/GetData is exact at every odd/NPOT level with caller-memory isolation. Deterministic generation and mip-filter sampling remain SKIA-128/129. | [SKIA-125–127](../plan_skia.md), [resource policy](skia-successor-resource-oracles.md), `Skia_Texture2D_MipConstruction`, `Skia_Texture2D_MipTransfer` |
+| `Texture2D` mip levels above zero | ⚠️ | Public `mipMap=true` construction owns a complete checked CNA chain; full/partial transfer is exact and changed parents deterministically area-box-generate only unauthored descendants. Explicit levels are ownership barriers. Mip-filter sampling remains SKIA-129. | [SKIA-125–128](../plan_skia.md), [resource policy](skia-successor-resource-oracles.md), `Skia_Texture2D_MipConstruction`, `Skia_Texture2D_MipTransfer`, `Skia_Texture2D_MipGeneration` |
 | `TextureCube`/`Texture3D` Set/Get including mips | ⚠️ | Exact bounded CPU face/voxel transfer storage; this capability does not imply shader sampling. | [SKIA-80–84](../plan_skia.md), [texture storage policy](skia-texture-storage.md), shared 56-check contracts |
 | Cube/volume texture sampling | ❌ | No compatible Skia raster sampler or accepted CNA 3D effect route; CPU transfer storage cannot emulate directional/volume sampling. | [SKIA-82–84, SKIA-101–102](../plan_skia.md), [3D ADR](skia-3d-emulation-adr.md), `Skia_3D_Refusal` |
 | Non-`Color` surface formats | ❌ | Selected surfaces are RGBA8888; format-conversion emulation is not advertised because the public resource format/storage contract would differ. | [SKIA-25, SKIA-109](../plan_skia.md), `Skia_Contract_SurfaceFormat` |

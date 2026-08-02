@@ -24,7 +24,7 @@ on it) rather than assuming either way.
   Diligent Engine backend, the one backend whose native graphics API is chosen at run time rather
   than by the CMake option; task breakdown is in `../plan_diligent.md`.
 - **[`skia-backend.md`](skia-backend.md)** — current verified CPU-raster 2D capability boundary,
-  dependency policy, tests, and explicit direct/emulation decisions; the 248-entry API ledger is
+  dependency policy, tests, and explicit direct/emulation decisions; the 249-entry API ledger is
   [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md), active work is in
   `../plan_skia.md`, Skia-only continuity is in `../NEXT_skia.md`, and the fresh-checkout procedure
   is [`skia-developer-build.md`](skia-developer-build.md). The accepted raster-versus-GPU decision

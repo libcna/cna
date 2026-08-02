@@ -33,7 +33,7 @@ authoritative compact capability boundary; later sections explain the individual
 | `SpriteBatch` draw overloads, sorting, transforms, source rectangles, tint, flips and `SpriteFont` | Verified direct 2D path | Direct `SkCanvas` image operations preserve the shared XNA-shaped batching and font-atlas layout. | [SKIA-31–40](../plan_skia.md); [2D EasyGL registration](skia-2d-easygl-registration.md); [XNA oracle](skia-xna-oracle.md) |
 | Point/linear filtering, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear and tile modes map directly. Level-zero Anisotropic is byte-identical to the documented Linear fallback; the capability stays false and mip-dependent modes reject. | [SKIA-43–46, SKIA-70, SKIA-78–79](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_Sampler_MipmapFilterPolicy` |
 | Blend presets, arbitrary raster states, and target-0 colour-write masks | Verified direct/generated runtime-blender path | All 714,025 valid factor/function tuples, independent RGB/alpha equations, live constants, and all target-0 masks draw. Invalid raw selectors and sample/MRT-only state reject before drawing. | [SKIA-47–57, SKIA-108, SKIA-119–124](../plan_skia.md); [generated blender](skia-generated-blender.md); `Skia_BlendMapping_Raster`, `Skia_GeneratedBlend_PublicCorpus` |
-| `Texture2D` image path, checked mip allocation and per-level transfer | Verified direct/bounded CPU path | Level zero owns the two established Skia images; `mipMap=true` owns/reports a complete CNA chain and every level supports exact full/partial SetData/GetData. Generation and sampling remain staged as SKIA-128/129. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–127](../plan_skia.md); [resource policy](skia-successor-resource-oracles.md); `Skia_Texture2D_MipConstruction`, `Skia_Texture2D_MipTransfer` |
+| `Texture2D` image path, checked mip allocation, transfer and generation | Verified direct/bounded CPU path | Level zero owns the two established Skia images; `mipMap=true` owns/reports a complete CNA chain, every level supports exact full/partial SetData/GetData, and changed parents deterministically generate only unauthored descendants. Mip sampling remains staged as SKIA-129. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–128](../plan_skia.md); [resource policy](skia-successor-resource-oracles.md); `Skia_Texture2D_MipConstruction`, `Skia_Texture2D_MipTransfer`, `Skia_Texture2D_MipGeneration` |
 | `RenderTarget2D` colour rendering, readback, sampling and Preserve/Discard | Verified direct level-0 raster target | Direct `SkSurface`; real depth, mip chains and MSAA are unavailable rather than fabricated. | [SKIA-61–75](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_DepthPolicy`, `Skia_RenderTarget2D_MsaaPolicy` |
 | `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
 | `RenderTargetCube` face rendering, transfers, Preserve/Discard and generated mips | Verified bounded six-surface 2D emulation | Each face is an independent raster target. Cube sampling, real depth and real MSAA reject explicitly. | [SKIA-85–86](../plan_skia.md); `Skia_RenderTargetCube_Policy` and four shared cube contracts |
@@ -234,8 +234,10 @@ NPOT dimensions, report the shared 16384 maximum single axis, and reject a dimen
 limit before allocation. SKIA-125/126 replace the old Texture2D constructor refusal with a checked
 CNA-owned chain: all levels are allocated contiguously, zero initialized, and reported through the
 public `LevelCount`. Only level zero is converted into the two alpha-labelled Skia images at this
-checkpoint. Full and partial upload/readback preserve exact bytes at every level; mip generation
-and sampling remain SKIA-128/129. `mipMap=true` `RenderTarget2D` construction still raises
+checkpoint. Full and partial upload/readback preserve exact bytes at every level. Changed levels
+area-box-generate only following unauthored descendants; any full or partial caller write becomes
+an ownership barrier and preserves explicitly written bytes across later ancestor uploads. Mip
+sampling remains SKIA-129. `mipMap=true` `RenderTarget2D` construction still raises
 `System::NotSupportedException` until the separate stable-surface work in SKIA-131. CNA does not
 bind Skia's private `src/core` mip builder. The six `TextureFilter` values that name a mip selection
 rule are likewise rejected during `SpriteBatch::Begin`; they are never silently treated as a
@@ -699,7 +701,7 @@ level-zero Point or Linear request.
     Ganesh, Graphite, GL, Vulkan and Dawn remain disabled, so no accelerated Skia suite exists to
     run or advertise. See `docs/skia-sanitizer-validation.md`.
 84. SKIA-111 synchronizes the backend guide, feature matrix, selection documentation, capability
-    comments, and the live 248-entry parity ledger. Only bounded CPU Texture3D transfer storage is
+    comments, and the live 249-entry parity ledger. Only bounded CPU Texture3D transfer storage is
     true beyond the verified 2D path; every GPU/3D family names its refusal or emulation evidence.
 85. SKIA-112 supplies the reproducible pinned-dependency build procedure, and SKIA-113 verifies
     fresh native Skia/EasyGL/SDL_Renderer/Software/Vulkan/BGFX builds plus available MinGW/Wine
@@ -758,12 +760,18 @@ level-zero Point or Linear request.
     chain. Authored level zero is copied while every descendant starts at zero; invalid dimensions
     and incomplete internal level counts publish no resource, and explicit disposal plus ordinary
     destruction return all image/chain counters to baseline. Generation and sampling remain
-    explicit SKIA-128/129 boundaries.
+    explicit SKIA-128/129 boundaries at this historical checkpoint.
 95. `Skia_Texture2D_MipTransfer` closes SKIA-127 with exact public and backend transfer evidence.
     Odd/NPOT levels preserve arbitrary translucent bytes, partial rectangles and untouched texels;
     start offsets and excess capacity retain guards, invalid levels/ranges reject atomically, and
     the backend owns bytes after the caller mutates its source. The shared EasyGL mip fixture now
     runs under Skia as a second complete-chain round trip.
+96. `Skia_Texture2D_MipGeneration` closes SKIA-128. Exact integer area boxes include every odd
+    source edge once and average canonical straight RGBA bytes without a Skia alpha conversion.
+    Changed parents rebuild only dirty unauthored descendants; full or partial caller writes become
+    ownership barriers, partial promotion preserves untouched generated texels, and later ancestor
+    uploads cannot replace explicit levels. Generation counters prove no redundant rebuilds across
+    a 7×5→3×2→1×1 chain. Mip-filter sampling remains the explicit SKIA-129 boundary.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

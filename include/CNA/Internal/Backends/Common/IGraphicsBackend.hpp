@@ -339,6 +339,13 @@ namespace CNA::Internal::Backends
         virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
         /// Uploads a specific mip level. levelW/levelH are the dimensions at that level.
         virtual void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) {}
+        /**
+         * Reports whether the backend owns deterministic readable bytes for a mip level even when
+         * Texture2D has no caller-authored CPU shadow for it. The default is false: allocated GPU
+         * mip storage is not necessarily initialized or readable. Backends returning true must
+         * complete GetData for every valid rectangle of that level without fabricating bytes.
+         */
+        [[nodiscard]] virtual bool HasDefinedMipLevel(int /*level*/) const noexcept { return false; }
         /// Binds the underlying GL texture handle (no-op on non-GL backends).
         virtual void BindGL() const {}
         /// Shares a reference to the CPU pixel buffer owned by Texture2D::cpuPixels_.

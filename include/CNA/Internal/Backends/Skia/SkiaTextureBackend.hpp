@@ -18,8 +18,9 @@ namespace CNA::Internal::Backends::Skia
      *
      * mipChain_ stays in CNA's top-row-first RGBA8 convention. The two level-0 Skia snapshots label
      * those bytes for the two XNA source-alpha conventions; the active BlendState selects one at
-     * draw time without rewriting public data. Every level supports exact CPU upload/readback;
-     * deterministic generation and sampling are staged by SKIA-128/129.
+     * draw time without rewriting public data. Every level supports exact CPU upload/readback.
+     * Unauthored descendants are generated deterministically; mip-filter sampling is staged by
+     * SKIA-129.
      */
     class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource
     {
@@ -34,6 +35,10 @@ namespace CNA::Internal::Backends::Skia
 
         void UpdatePixels(const std::uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const std::uint8_t* rgba, int levelWidth, int levelHeight) override;
+        [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override
+        {
+            return mipChain_ && level >= 0 && level < mipChain_->LevelCount();
+        }
         [[nodiscard]] bool GetData(int level, int x, int y, int width, int height,
                                    void* data, int dataLength) const override;
 
@@ -52,13 +57,20 @@ namespace CNA::Internal::Backends::Skia
         {
             return *mipChain_;
         }
+        NOXNA [[nodiscard]] std::uint64_t MipGenerationCountEXT(int level) const;
 
     private:
         void RebuildImage();
+        void InvalidateGeneratedDescendants(int level);
+        void GenerateDirtyMipLevels();
+        void GenerateMipLevel(int level);
 
         int width_ = 0;
         int height_ = 0;
         std::unique_ptr<SkiaMipChain2D> mipChain_;
+        std::vector<bool> authoredMipLevels_;
+        std::vector<bool> dirtyMipLevels_;
+        std::vector<std::uint64_t> mipGenerationCounts_;
         sk_sp<SkImage> straightImage_;
         sk_sp<SkImage> premultipliedImage_;
         std::shared_ptr<SkiaResourceCounters> resourceCounters_;
