@@ -8,6 +8,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     macro(cna_skia_test target src)
         add_executable(${target} ${src})
+        # A handful of raster-boundary fixtures intentionally call virtual Skia APIs directly.
+        # Match the adapter's narrow UBSan exception: the pinned no-RTTI Skia archives cannot
+        # provide the typeinfo required by `vptr`, while every other undefined check stays live.
+        if(CNA_SANITIZE MATCHES "(^|,)undefined(,|$)"
+           AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(${target} PRIVATE -fno-sanitize=vptr)
+        endif()
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
             target_link_libraries(${target} PRIVATE
                 -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group

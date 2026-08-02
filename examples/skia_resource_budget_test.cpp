@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-74: prove bounded raster snapshots and live-resource counter release/reuse.
+// SKIA-74/SKIA-110: prove bounded raster snapshots, live-resource counter release/reuse, and
+// repeated presenter reconstruction while a target and its immutable sampling snapshot are live.
 
 #include "CNA/Internal/Backends/Skia/SkiaGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -28,6 +29,7 @@ using CNA::Internal::Backends::Skia::SkiaResourceStats;
 namespace
 {
     constexpr int kCycles = 64;
+    const Color kBlack(0, 0, 0, 255);
     const Color kBlue(0, 0, 255, 255);
     const Color kRed(255, 0, 0, 255);
 }
@@ -101,20 +103,46 @@ protected:
                   && backend->GetResourceStatsEXT().targetSnapshots == 0,
               "target destruction releases its surface and cached snapshot");
 
+        int lostCount = 0;
+        int resettingCount = 0;
+        int resetCount = 0;
+        device.DeviceLost += [&lostCount](System::Object*, const System::EventArgs&) { ++lostCount; };
+        device.DeviceResetting += [&resettingCount](System::Object*, const System::EventArgs&)
+        {
+            ++resettingCount;
+        };
+        device.DeviceReset += [&resetCount](System::Object*, const System::EventArgs&) { ++resetCount; };
+
         bool boundedAcrossCycles = true;
+        bool recoveredAcrossCycles = true;
         for (int cycle = 0; cycle < kCycles; ++cycle)
         {
             auto transient = std::make_unique<RenderTarget2D>(device, 2, 2, false, SurfaceFormat::Color,
                                                                DepthFormat::None, 0,
                                                                RenderTargetUsage::PreserveContents);
+            const Color expected = (cycle & 1) == 0 ? kBlue : kRed;
             device.SetRenderTarget(transient.get());
-            device.Clear((cycle & 1) == 0 ? kBlue : kRed);
+            device.Clear(expected);
             device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             DrawTarget(*transient);
             const SkiaResourceStats live = backend->GetResourceStatsEXT();
             boundedAcrossCycles = boundedAcrossCycles && live.renderTargets == 1
                 && live.targetSnapshots == 1 && live.targetSurfaceBytes == 16
                 && live.targetSnapshotBytes == 16;
+
+            // Reconstruct SDL's presentation renderer/texture while both the mutable target and
+            // immutable SkImage snapshot are live. Reuse the snapshot after recovery so stats alone
+            // cannot hide a stale Skia or backend pointer.
+            backend->DebugSimulateContextLoss();
+            device.Clear(kBlack);
+            DrawTarget(*transient);
+            device.Present();
+            Color actual(0, 0, 0, 0);
+            const Rectangle sample(0, 0, 1, 1);
+            device.GetBackBufferData(&sample, &actual, 0, 1);
+            recoveredAcrossCycles = recoveredAcrossCycles && SameStats(
+                live, backend->GetResourceStatsEXT()) && actual == expected;
+
             transient.reset();
             const SkiaResourceStats released = backend->GetResourceStatsEXT();
             boundedAcrossCycles = boundedAcrossCycles && released.renderTargets == 0
@@ -122,6 +150,9 @@ protected:
                 && released.targetSnapshotBytes == 0;
         }
         Check(boundedAcrossCycles, "64 target/snapshot cycles release and reuse a bounded cache");
+        Check(recoveredAcrossCycles && lostCount == 0 && resettingCount == kCycles
+                  && resetCount == kCycles,
+              "64 paired presenter recreations preserve live targets, snapshots, pixels, and reset events");
 
         texture.reset();
         Check(IsEmpty(backend->GetResourceStatsEXT()), "all debug resource counters return to zero after release");
@@ -129,6 +160,23 @@ protected:
     }
 
 private:
+    [[nodiscard]] static bool SameStats(const SkiaResourceStats& left,
+                                        const SkiaResourceStats& right)
+    {
+        return left.textureBackends == right.textureBackends
+            && left.textureImageViews == right.textureImageViews
+            && left.cpuTextureCubeBackends == right.cpuTextureCubeBackends
+            && left.cpuTexture3DBackends == right.cpuTexture3DBackends
+            && left.renderTargets == right.renderTargets
+            && left.renderTargetCubes == right.renderTargetCubes
+            && left.targetSnapshots == right.targetSnapshots
+            && left.textureImageBytes == right.textureImageBytes
+            && left.cpuTextureStorageBytes == right.cpuTextureStorageBytes
+            && left.targetSurfaceBytes == right.targetSurfaceBytes
+            && left.cubeTargetStorageBytes == right.cubeTargetStorageBytes
+            && left.targetSnapshotBytes == right.targetSnapshotBytes;
+    }
+
     [[nodiscard]] static bool IsEmpty(const SkiaResourceStats& stats)
     {
         return stats.textureBackends == 0 && stats.textureImageViews == 0 && stats.renderTargets == 0

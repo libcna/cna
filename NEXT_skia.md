@@ -976,11 +976,39 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   Debug, Release, ASan, and EasyGL display caches are restored to `:0`; `NEXT.md` was not read or
   changed.
 
+## Completed in this session: SKIA-110
+
+- Expanded `Skia_ResourceBudget` from separate lifetime pressure into 64 paired target/snapshot
+  and presenter-reconstruction cycles. Each cycle creates and snapshots a target, rebuilds SDL's
+  renderer/streaming texture while both remain live, reuses the snapshot into the backbuffer,
+  presents and verifies the exact pixel, preserves every resource counter, and releases the target
+  back to baseline. The complete run requires 64 ordered `DeviceResetting`/`DeviceReset` pairs and
+  zero `DeviceLost` events.
+- Reconfigured the persistent sanitizer build for `address,undefined`. UBSan initially could not
+  link because its `vptr` member requires RTTI symbols such as `typeinfo for SkCanvas`, while the
+  pinned raster archives deliberately export none. CMake now disables only `vptr` on the Skia
+  adapter and Skia fixture boundary; all other UBSan checks and ASan remain active, and the rest of
+  CNA/sharp-runtime retains the complete sanitizer set.
+- The full Skia suite passes 132/132 under ASan+UBSan in 26.85 seconds with `--parallel 8`, and
+  Debug passes 132/132 in 21.53 seconds (16 Raster, 113 Display, three Audit). The expanded gate
+  also passes in Release in 3.16 seconds.
+- With LSan enabled, all 16 display-free Raster tests pass in 4.52 seconds. The 64-cycle gate passes
+  clean with `SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software`. Default Xvfb/X11 reports
+  100,956 bytes in 449 allocations, all rooted in `libGLX_mesa.so.0`; the one-presenter
+  `Skia_Presentation_Edge` control reports the exact same residual, proving it does not grow across
+  the 64 reconstructions. No broad suppression was added. The symbolized current-host result
+  supersedes the historical 2,864-byte display-stack baseline recorded by older sessions.
+- `ctest -N -L Accelerated` reports zero tests because the pinned build disables Ganesh, Graphite,
+  GL, Vulkan, and Dawn and CNA exposes only raster Skia. This is an explicit unavailable branch,
+  not a skipped parity claim. `docs/skia-sanitizer-validation.md` records the commands and boundary.
+  Debug, Release, sanitizer, and EasyGL display caches are restored to `:0`; `NEXT.md` was not read
+  or changed.
+
 ## Next candidates
 
-1. SKIA-110: run the broader raster/display sanitizer and repeated recreation gate, retaining the
-   documented display-stack leak boundary rather than masking new CNA ownership failures.
-2. SKIA-111: synchronize public backend/capability documentation with verified behavior only.
+1. SKIA-111: synchronize public backend/capability documentation with verified behavior only.
+2. SKIA-112: add fresh-checkout developer build/test instructions after the verified capability
+   documents agree.
 3. Reassess earlier open architecture rows (especially SKIA-5/6/76/77) against the accepted
    raster-only ADR before doing the final release-gate tasks.
 

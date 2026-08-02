@@ -637,5 +637,15 @@ selection rule are likewise rejected with `System::NotSupportedException` during
     new Skia registrations pass in Release and ASan (`detect_leaks=0`), and the full Debug Skia
     suite passes 132/132 in 21.66 seconds (16 Raster, 113 Display, three Audit). See
     `docs/skia-api-contract-comparison.md`.
+83. SKIA-110 expands `Skia_ResourceBudget` into 64 paired target/snapshot and SDL presenter
+    reconstruction cycles. Every recovery reuses the live snapshot, presents and reads an exact
+    pixel, preserves all resource counters, emits one ordered reset pair without DeviceLost, and
+    releases the target back to baseline. The complete 132-test suite passes under ASan+UBSan;
+    all 16 display-free raster tests and the dummy/software-isolated recreation gate pass with
+    LSan enabled. The pinned no-RTTI Skia archives require disabling only UBSan's RTTI-dependent
+    `vptr` check at the adapter/fixture boundary. Default Xvfb runs report the same non-growing,
+    fully `libGLX_mesa.so.0`-rooted 100,956-byte residual for the stress and one-presenter control.
+    Ganesh, Graphite, GL, Vulkan and Dawn remain disabled, so no accelerated Skia suite exists to
+    run or advertise. See `docs/skia-sanitizer-validation.md`.
 
 Automated Skia raster/display tests, SpriteBatch, textures, render targets, and the GPU strategy remain tracked in `plan_skia.md`.

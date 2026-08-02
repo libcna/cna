@@ -133,6 +133,15 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 CNA::Skia)
+    # The pinned upstream raster archives are built with `skia_enable_ganesh=false` and RTTI
+    # disabled. GCC/Clang's broad `undefined` group otherwise instruments virtual calls made by
+    # this adapter with `vptr` checks and then requires typeinfo symbols (for example SkCanvas)
+    # which those archives deliberately do not export. Keep every other UBSan check enabled and
+    # exclude only the incompatible RTTI-dependent check at the third-party boundary.
+    if(CNA_SANITIZE MATCHES "(^|,)undefined(,|$)"
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${BACKEND_TARGET} PRIVATE -fno-sanitize=vptr)
+    endif()
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_backend_graphics_sdl_renderer_core)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
