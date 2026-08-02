@@ -664,6 +664,7 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
             int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
             int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: vec4 whose x is texture unit 4's flag (PbrEffect only)
+            int loc_instanced       = -1;  ///< REMED-GFX-122: stock-program per-instance matrix gate
             void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
         };
 

@@ -85,6 +85,22 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
 
+// REMED-GFX-122: stock EasyGL effects share one optional per-instance world matrix input. Locations
+// 12-15 reserve the final four slots of GLES 3's guaranteed 16-attribute floor. That leaves the
+// complete XNA profile budget (12 per-vertex elements + 4 matrix columns) available instead of
+// colliding with an otherwise-legal extended mesh declaration. uCnaInstanced keeps the same
+// programs byte-for-byte equivalent for ordinary draws; only DrawInstancedPrimitivesEx enables
+// the transform and binds these four attributes.
+#define CNA_GL_INSTANCE_TRANSFORM_DECL \
+"layout(location=12) in vec4 cnaInstanceCol0;\n" \
+"layout(location=13) in vec4 cnaInstanceCol1;\n" \
+"layout(location=14) in vec4 cnaInstanceCol2;\n" \
+"layout(location=15) in vec4 cnaInstanceCol3;\n" \
+"uniform float uCnaInstanced;\n" \
+"mat4 cnaInstanceMatrix(){return mat4(cnaInstanceCol0,cnaInstanceCol1,cnaInstanceCol2,cnaInstanceCol3);}\n" \
+"vec4 cnaInstancePosition(vec4 p){return (uCnaInstanced>0.5)?cnaInstanceMatrix()*p:p;}\n" \
+"vec3 cnaInstanceDirection(vec3 d){return (uCnaInstanced>0.5)?mat3(cnaInstanceMatrix())*d:d;}\n"
+
 namespace CNA::Internal::Backends::EasyGL
 {
     using namespace Microsoft::Xna::Framework;
@@ -3213,6 +3229,64 @@ void main()
             }
             return { 3, ::easygl::DataType::Float, false, false };
         }
+
+        void ConfigureDeclarationAttributes(
+            ::easygl::VertexArray& vao,
+            const EasyGLVertexBufferBackend& buffer,
+            unsigned int firstLocation,
+            int vertexOffset,
+            unsigned int divisor,
+            std::size_t elementCount)
+        {
+            const auto& declaration = buffer.GetDeclarationElements();
+            if (elementCount > declaration.size() || firstLocation + elementCount > 16)
+            {
+                throw System::InvalidOperationException(
+                    "EasyGL instanced drawing requires a complete vertex declaration within "
+                    "the 16-attribute XNA profile limit.");
+            }
+
+            const std::size_t stride = buffer.GetStride();
+            buffer.vbo.bind(::easygl::BufferTarget::Array);
+            for (std::size_t i = 0; i < elementCount; ++i)
+            {
+                const VertexElement& element = declaration[i];
+                const VertexAttribFormat desc =
+                    DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                const unsigned int location = firstLocation + static_cast<unsigned int>(i);
+                const std::size_t byteOffset =
+                    static_cast<std::size_t>(vertexOffset) * stride +
+                    static_cast<std::size_t>(element.getOffsetProperty());
+                const void* pointer = reinterpret_cast<const void*>(
+                    static_cast<std::uintptr_t>(byteOffset));
+                vao.enable_attribute(location);
+                if (desc.isInteger)
+                {
+                    vao.set_attribute_i_pointer(
+                        location, desc.componentCount, desc.type, stride, pointer);
+                }
+                else
+                {
+                    vao.set_attribute_pointer(
+                        location, desc.componentCount, desc.type,
+                        desc.normalized, stride, pointer);
+                }
+                vao.set_attribute_divisor(location, divisor);
+            }
+        }
+
+        void DisableDeclarationAttributes(
+            ::easygl::VertexArray& vao,
+            unsigned int firstLocation,
+            std::size_t elementCount)
+        {
+            for (std::size_t i = 0; i < elementCount; ++i)
+            {
+                const unsigned int location = firstLocation + static_cast<unsigned int>(i);
+                vao.disable_attribute(location);
+                vao.set_attribute_divisor(location, 0);
+            }
+        }
     }
 
     void EasyGLVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
@@ -3617,12 +3691,14 @@ void main()
 "precision highp float;\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec4 aColor;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
 "out vec4 vColor;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
 "    vColor=aColor;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
@@ -3630,7 +3706,7 @@ void main()
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3671,12 +3747,14 @@ void main()
 "precision highp float;\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec2 aUV;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
@@ -3684,7 +3762,7 @@ void main()
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3726,13 +3804,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec4 aColor;\n"
 "layout(location=2) in vec2 aUV;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
 "out vec4 vColor;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
@@ -3741,7 +3821,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3787,6 +3867,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -3796,8 +3877,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
-"    vNormal=uNormalMatrix*aNormal;\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
+"    vNormal=uNormalMatrix*cnaInstanceDirection(aNormal);\n"
 "    vUV=aUV;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
@@ -3805,8 +3887,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
-"    vWorldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
+"    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3907,6 +3989,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -3937,7 +4020,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "out vec3 vLitRGB;\n"
 "out vec3 vSpecularRGB;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
@@ -3945,9 +4029,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
-"    vec3 worldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
-"    vec3 N=normalize(uNormalMatrix*aNormal);\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
+"    vec3 worldPos=(uWorld*cnaPos).xyz;\n"
+"    vec3 N=normalize(uNormalMatrix*cnaInstanceDirection(aNormal));\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
 "    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
@@ -4017,12 +4101,14 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "precision highp float;\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec2 aUV;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
@@ -4030,7 +4116,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -4079,13 +4165,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec4 aColor;\n"
 "layout(location=2) in vec2 aUV;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform vec4 uFogVector;\n"
 "out vec4 vColor;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
@@ -4094,7 +4182,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -4144,6 +4232,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec2 aUV;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uWorld;\n"
@@ -4158,9 +4247,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "out float vFogFactor;\n"
 "out float vFresnel;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
-"    vec3 worldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
-"    vec3 worldNormal=normalize(uNormalMatrix*aNormal);\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
+"    vec3 worldPos=(uWorld*cnaPos).xyz;\n"
+"    vec3 worldNormal=normalize(uNormalMatrix*cnaInstanceDirection(aNormal));\n"
 "    vec3 eyeVector=normalize(uEyePosition-worldPos);\n"
 "    vWorldNormal=worldNormal;\n"
 "    vEyeDir=eyeVector;\n"
@@ -4179,7 +4269,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -4269,6 +4359,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=3) in vec4 aBoneWeights;\n"
 "layout(location=4) in uvec4 aBoneIndices;\n"
 "layout(location=5) in vec4 aColor;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -4287,7 +4378,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
 "    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
-"    gl_Position=uWVP*skinnedPos;\n"
+"    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
+"    gl_Position=uWVP*cnaPos;\n"
 // A vertex blended near-evenly between two bones whose current relative rotation is
 // close to 180 degrees (reachable in practice: wide weight-blend joint regions x a
 // large-angle animation pose, e.g. Wave) can make the linearly-blended skinMat's
@@ -4308,9 +4400,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // the bone 3x3, then Lighting.fxh applies mul(normal, WorldInverseTranspose); this shader dropped
 // the outer world factor entirely (audit Variant A), so any rotated or non-uniformly-scaled
 // skinned model was lit as if World were identity. The fragment stage re-normalizes vNormal.
-"    vNormal=uNormalMatrix*boneNormal;\n"
+"    vNormal=uNormalMatrix*cnaInstanceDirection(boneNormal);\n"
 "    vUV=aUV;\n"
-"    vWorldPos=(uWorld*skinnedPos).xyz;\n"
+"    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vColor=aColor;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
@@ -4319,7 +4411,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
 // Skinned: dot the POST-skin position (FNA Skin() mutates vin.Position before ComputeFogFactor).
-"    vFogFactor=1.0-clamp(dot(vec4(skinnedPos.xyz,1.0),uFogVector),0.0,1.0);\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
 
         static const char* fsrc =
@@ -4447,6 +4539,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=3) in vec4 aBoneWeights;\n"
 "layout(location=4) in uvec4 aBoneIndices;\n"
 "layout(location=5) in vec4 aColor;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -4481,7 +4574,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
 "    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
-"    gl_Position=uWVP*skinnedPos;\n"
+"    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
+"    gl_Position=uWVP*cnaPos;\n"
 "    vUV=aUV;\n"
 "    vColor=aColor;\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
@@ -4490,8 +4584,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
 // uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
 // degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
-"    vFogFactor=1.0-clamp(dot(vec4(skinnedPos.xyz,1.0),uFogVector),0.0,1.0);\n"
-"    vec3 worldPos=(uWorld*skinnedPos).xyz;\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
+"    vec3 worldPos=(uWorld*cnaPos).xyz;\n"
 // Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
 // comment for the root cause) -- this vertex-lit sibling does the identical skinning
 // and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
@@ -4503,7 +4597,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 // the identical missing-world-factor defect (audit Variant A) as EnsureSkinnedProgram; unlike that
 // per-pixel program (whose fragment stage re-normalizes vNormal), lighting here is evaluated in
 // this stage, so the world-transformed normal must be re-normalized before the dot products.
-"    vec3 N=normalize(uNormalMatrix*boneNormal);\n"
+"    vec3 N=normalize(uNormalMatrix*cnaInstanceDirection(boneNormal));\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
 "    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
@@ -4600,6 +4694,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -4611,17 +4706,18 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "void main(){\n"
-"    gl_Position=uWVP*vec4(aPos,1.0);\n"
-"    vNormal=uNormalMatrix*aNormal;\n"
+"    vec4 cnaPos=cnaInstancePosition(vec4(aPos,1.0));\n"
+"    gl_Position=uWVP*cnaPos;\n"
+"    vNormal=uNormalMatrix*cnaInstanceDirection(aNormal);\n"
 // Tangent transforms as a plain direction under mat3(uWorld) (not the inverse-transpose
 // uNormalMatrix use for the normal) -- correct for uniform-scale World transforms, a documented
 // simplification for non-uniform scale shared with most real-time engines lacking a full
 // per-tangent inverse-transpose.
-"    vTangent=mat3(uWorld)*aTangent.xyz;\n"
+"    vTangent=mat3(uWorld)*cnaInstanceDirection(aTangent.xyz);\n"
 "    vBitangentSign=aTangent.w;\n"
 "    vUV=aUV;\n"
-"    vWorldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
-"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
+"    vWorldPos=(uWorld*cnaPos).xyz;\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
 
         static const char* fsrc =
@@ -4749,6 +4845,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=3) in vec2 aUV;\n"
 "layout(location=4) in vec4 aBoneWeights;\n"
 "layout(location=5) in uvec4 aBoneIndices;\n"
+CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
@@ -4766,19 +4863,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
 "    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
-"    gl_Position=uWVP*skinnedPos;\n"
+"    vec4 cnaPos=cnaInstancePosition(skinnedPos);\n"
+"    gl_Position=uWVP*cnaPos;\n"
 "    mat3 skinNormalMat=mat3(skinMat);\n"
 // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix (uNormalMatrix),
 // not raw mat3(uWorld). Raw World is only correct for rotation and uniform scale and diverges from
 // FNA's mul(normal, WorldInverseTranspose) under non-uniform scale; it also contradicted this
 // file's own unskinned EnsurePbrProgram, which already uses uNormalMatrix. The tangent stays on
 // raw World: tangents transform as directions, not as normals (glTF convention, unchanged).
-"    vNormal=normalize(uNormalMatrix*(skinNormalMat*aNormal));\n"
-"    vTangent=mat3(uWorld)*(skinNormalMat*aTangent.xyz);\n"
+"    vNormal=normalize(uNormalMatrix*cnaInstanceDirection(skinNormalMat*aNormal));\n"
+"    vTangent=mat3(uWorld)*cnaInstanceDirection(skinNormalMat*aTangent.xyz);\n"
 "    vBitangentSign=aTangent.w;\n"
 "    vUV=aUV;\n"
-"    vWorldPos=(uWorld*skinnedPos).xyz;\n"
-"    vFogFactor=1.0-clamp(dot(vec4(skinnedPos.xyz,1.0),uFogVector),0.0,1.0);\n"
+"    vWorldPos=(uWorld*cnaPos).xyz;\n"
+"    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
 
         static const char* fsrc =
@@ -4988,6 +5086,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
     {
         p.loc_rt_flip_v    = p.prog.uniform_location("uRtFlipV");
         p.loc_rt_flip_v_hi = p.prog.uniform_location("uRtFlipVHi");
+        p.loc_instanced    = p.prog.uniform_location("uCnaInstanced");
     }
 
     void EasyGLGraphicsBackend::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
@@ -5006,6 +5105,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         wvp.ToColumnMajor(wvp_col);
         if (p.loc_wvp >= 0)
             p.prog.set_uniform_matrix4(p.loc_wvp, wvp_col);
+        if (p.loc_instanced >= 0)
+            p.prog.set_uniform(p.loc_instanced, params.instanceVb != nullptr ? 1.0f : 0.0f);
 
         // Normal matrix — transpose(inverse(world3x3)), via the cofactor/det shortcut, so
         // non-uniform-scale World transforms don't skew the transformed normal (Task 398 fix;
@@ -5689,82 +5790,98 @@ CNA_GL_RT_SAMPLE_UV_DECL
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         const auto idxType = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                              : ::easygl::DataType::UnsignedShort;
+        const int indexSize = ib.thirtyTwoBit ? 4 : 2;
+        const void* indexOffset = reinterpret_cast<const void*>(
+            static_cast<std::uintptr_t>(params.startIndex) *
+            static_cast<std::uintptr_t>(indexSize));
+
+        const auto& meshDecl = vb.GetDeclarationElements();
+        if (params.vertexBufferOffset != 0 && meshDecl.empty())
+        {
+            throw System::InvalidOperationException(
+                "EasyGL instanced drawing cannot apply a nonzero vertex-buffer offset "
+                "without a VertexDeclaration.");
+        }
+
+        const EasyGLVertexBufferBackend* instVb = nullptr;
+        unsigned int instanceBaseLocation = 0;
+        std::size_t instanceElementCount = 0;
+        if (params.instanceVb != nullptr)
+        {
+            instVb = &static_cast<const EasyGLVertexBufferBackend&>(*params.instanceVb);
+            instanceBaseLocation = params.customEffectBackend != nullptr
+                ? static_cast<unsigned int>(meshDecl.size())
+                : 12u;
+            instanceElementCount = params.customEffectBackend != nullptr
+                ? instVb->GetDeclarationElements().size()
+                : 4u;
+            if (instanceElementCount == 0 ||
+                instanceElementCount > instVb->GetDeclarationElements().size() ||
+                instanceBaseLocation < meshDecl.size() ||
+                instanceBaseLocation + instanceElementCount > 16)
+            {
+                throw System::InvalidOperationException(
+                    "EasyGL instanced drawing requires a complete per-instance declaration "
+                    "within the 16-attribute XNA profile limit.");
+            }
+        }
+
+        auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        vao.bind();
+        if (params.vertexBufferOffset != 0)
+        {
+            ConfigureDeclarationAttributes(
+                vao, vb, 0, params.vertexBufferOffset, 0, meshDecl.size());
+        }
+        if (instVb != nullptr)
+        {
+            ConfigureDeclarationAttributes(
+                vao, *instVb, instanceBaseLocation, params.instanceVertexOffset,
+                static_cast<unsigned int>(std::max(1, params.instanceFrequency)),
+                instanceElementCount);
+        }
 
         if (params.customEffectBackend)
         {
-            // Task 1082: hardware instancing with a custom ShaderEffect. The per-vertex mesh
-            // buffer's own attributes are already bound (via ApplyLayout, at SetData time) into
-            // vb's own VAO; bind the *second*, per-instance buffer's own attributes into that
-            // same VAO here, continuing at locations right after the mesh buffer's own, each
-            // with a divisor of 1 (advance once per instance -- InstancedModel.fx's own
-            // `instanceTransform : BLENDWEIGHT` case, XNA's most common instancing pattern; a
-            // non-1 `VertexBufferBinding.InstanceFrequency` is a documented, deliberate scope
-            // reduction, not threaded through -- see this task's own plan_graphics.md write-up).
             BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
-
-            // vb_in/vb are const (matching the interface's own signature), but attribute-config
-            // calls below mutate GPU-side VAO state only, not C++ object state -- the same
-            // category easy-gl's own bind()/unbind() are already marked const for; this const_cast
-            // is a local workaround for that inconsistency, not a real constness violation.
-            auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
-
-            vao.bind();
-
-            if (params.instanceVb)
-            {
-                const auto& instVb = static_cast<const EasyGLVertexBufferBackend&>(*params.instanceVb);
-                const auto& meshDecl = vb.GetDeclarationElements();
-                const auto& instDecl = instVb.GetDeclarationElements();
-                const auto baseLocation = static_cast<unsigned int>(meshDecl.size());
-                const int instStride = static_cast<int>(instVb.GetStride());
-
-                instVb.vbo.bind(::easygl::BufferTarget::Array);
-                for (std::size_t i = 0; i < instDecl.size(); ++i)
-                {
-                    const VertexElement& element = instDecl[i];
-                    const VertexAttribFormat desc =
-                        DescribeVertexElementFormat(element.getVertexElementFormatProperty());
-                    const auto location = baseLocation + static_cast<unsigned int>(i);
-                    const void* offset = reinterpret_cast<void*>(
-                        static_cast<std::uintptr_t>(element.getOffsetProperty()));
-                    vao.enable_attribute(location);
-                    if (desc.isInteger)
-                        vao.set_attribute_i_pointer(location, desc.componentCount, desc.type,
-                                                    instStride, offset);
-                    else
-                        vao.set_attribute_pointer(location, desc.componentCount, desc.type,
-                                                  desc.normalized, instStride, offset);
-                    vao.set_attribute_divisor(location, 1);
-                }
-            }
-
             ib.ibo.bind(::easygl::BufferTarget::ElementArray);
-            device.draw_elements_instanced(ToEasyGl(primitive), index_count, idxType,
-                                           nullptr, instanceCount);
-
-            if (params.instanceVb)
-            {
-                const auto& instVb = static_cast<const EasyGLVertexBufferBackend&>(*params.instanceVb);
-                const auto& meshDecl = vb.GetDeclarationElements();
-                const auto& instDecl = instVb.GetDeclarationElements();
-                const auto baseLocation = static_cast<unsigned int>(meshDecl.size());
-                for (std::size_t i = 0; i < instDecl.size(); ++i)
-                    vao.disable_attribute(baseLocation + static_cast<unsigned int>(i));
-            }
-
-            vao.unbind();
-            return;
+        }
+        else
+        {
+            Prog3D& p = SelectProgram(vb.GetStride(), params);
+            p.prog.use();
+            BindDrawParams(p, world, view, projection, params);
+            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         }
 
-        Prog3D& p = SelectProgram(vb.GetStride(), params);
-        p.prog.use();
-        BindDrawParams(p, world, view, projection, params);
+        if (params.baseVertex == 0)
+        {
+            device.draw_elements_instanced(
+                ToEasyGl(primitive), index_count, idxType, indexOffset, instanceCount);
+        }
+        else
+        {
+            ::metagl::glDrawElementsInstancedBaseVertex(
+                ToEasyGl(primitive), index_count, idxType, indexOffset,
+                instanceCount, params.baseVertex);
+        }
 
-        vb.vao.bind();
-        ib.ibo.bind(::easygl::BufferTarget::ElementArray);
-        device.draw_elements_instanced(ToEasyGl(primitive), index_count, idxType,
-                                       nullptr, instanceCount);
-        vb.vao.unbind();
+        if (instVb != nullptr)
+        {
+            DisableDeclarationAttributes(
+                vao, instanceBaseLocation, instanceElementCount);
+        }
+        if (params.vertexBufferOffset != 0)
+        {
+            ConfigureDeclarationAttributes(vao, vb, 0, 0, 0, meshDecl.size());
+        }
+        if (params.customEffectBackend == nullptr)
+        {
+            Prog3D& p = SelectProgram(vb.GetStride(), params);
+            if (p.loc_instanced >= 0)
+                p.prog.set_uniform(p.loc_instanced, 0.0f);
+        }
+        vao.unbind();
     }
 }
 

@@ -772,6 +772,12 @@ namespace CNA::Internal::Backends
         /// Per-instance vertex buffer backend pointer; cast to the concrete type inside the backend.
         /// Null when not instancing. Only valid for the duration of the DrawInstancedPrimitivesEx call.
         const IVertexBufferBackend* instanceVb = nullptr;
+        /// First per-vertex record selected by the public VertexBufferBinding, in vertex elements.
+        int vertexBufferOffset = 0;
+        /// First per-instance record selected by the public VertexBufferBinding, in vertex elements.
+        int instanceVertexOffset = 0;
+        /// Number of instances that reuse each per-instance record; zero when no instance stream is bound.
+        int instanceFrequency = 0;
         /// First vertex index for non-indexed draws (maps to glDrawArrays `first` / vkCmdDraw `firstVertex`).
         int vertexStart = 0;
         /// First index in the IBO for indexed draws (maps to glDrawElements byte offset / vkCmdDrawIndexed `firstIndex`).

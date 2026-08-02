@@ -21,11 +21,12 @@
 // read from a SECOND, per-instance vertex stream (4 consecutive Vector4 attributes at
 // BLENDWEIGHT0-3, the classic D3D9 hardware-instancing convention: HLSL reconstructs these 4
 // stream elements into a float4x4 parameter's 4 ROWS, in declaration order). Task 1082 closes the
-// backend gap for this (see EasyGLGraphicsBackend.cpp's `DrawInstancedPrimitivesEx`): the XNA API
-// layer (`GraphicsDevice::DrawInstancedPrimitives`/`SetVertexBuffers`/`VertexBufferBinding`) was
-// already fully wired; the only missing piece was the EasyGL backend's own custom-effect branch
-// actually binding the per-instance buffer's attributes (continuing at the GLSL locations right
-// after the mesh buffer's own) with `glVertexAttribDivisor(location, 1)`.
+// backend gap for this (see EasyGLGraphicsBackend.cpp's `DrawInstancedPrimitivesEx`). REMED-GFX-122
+// additionally proves that the custom-effect branch keeps the complete public range: the mesh
+// stream begins at VertexOffset=4, baseVertex=1 selects the real quad after one more decoy vertex,
+// startIndex=3 skips an index-prefix triangle, and the instance stream begins at VertexOffset=1.
+// Its attributes continue at the GLSL locations immediately after the mesh declaration and use
+// the exact public InstanceFrequency divisor.
 //
 // Packing derivation (this test controls both the upload and the shader, so it is free to choose
 // any packing that reproduces the correct math -- see plan_graphics.md Task 1082 for the full
@@ -42,9 +43,9 @@
 // transform -- verified algebraically and by hand-tracing a concrete translation example before
 // writing this file. The same construction, truncated to mat3, is used for the normal.
 //
-// Check design -- 2 instances drawn in ONE DrawInstancedPrimitives call, from a single small
-// (0.3x0.3 world unit) quad mesh, so a per-instance-varying readback proves real per-instance data
-// (not just "some instance renders somewhere"):
+// Check design -- 2 instances drawn in ONE nonzero-offset DrawInstancedPrimitives call, from a
+// single small (0.3x0.3 world unit) quad mesh, so a per-instance-varying readback proves real
+// per-instance data (not just "some instance renders somewhere"):
 //   Instance 0: pure translation (-0.3,0,0). Local normal (0,0,1) is unrotated by a pure
 //     translation, so worldNormal=(0,0,1); with LightDirection=(0,0,-1) (this test's own simpler
 //     substitute for XNA's normalize(-1,-1,-1), chosen since only alignment with a flat quad's
@@ -68,7 +69,7 @@
 // Mutation test performed manually during development (not re-run automatically by this binary):
 // changing the new `vao.set_attribute_divisor(location, 1)` in `DrawInstancedPrimitivesEx` to `0`
 // makes the per-instance attributes advance per-VERTEX instead of per-INSTANCE, reading
-// out-of-bounds records from the 2-instance (128-byte) buffer for indices 2 and 3 -- confirmed
+// out-of-bounds records from the 3-record (192-byte) buffer for later vertices -- confirmed
 // both checks fail (garbage/degenerate transform) before reverting.
 //
 // Exit code 0 = both PASS, 1 = either FAIL.
@@ -218,18 +219,28 @@ protected:
             VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
         });
 
-        meshVb_ = std::make_unique<VertexBuffer>(device, meshDecl, 4, BufferUsage::None);
-        const MeshVertex verts[4] = {
+        // Five asymmetric decoy records precede the real quad. VertexOffset=4 and baseVertex=1
+        // below must both be applied exactly once; dropping either consumes a decoy or a mixed
+        // decoy/real triangle instead of the centred quad.
+        meshVb_ = std::make_unique<VertexBuffer>(device, meshDecl, 9, BufferUsage::None);
+        const MeshVertex verts[9] = {
+            {  3.0f,  3.0f, 0.0f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f },
+            {  3.2f,  3.0f, 0.0f,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f },
+            {  3.0f,  3.2f, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f },
+            { -3.0f, -3.0f, 0.0f, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f },
+            { -3.2f, -3.0f, 0.0f,  0.0f,-1.0f, 0.0f,  0.0f, 0.0f },
             { -0.15f,  0.15f, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f },
             { -0.15f, -0.15f, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f },
             {  0.15f, -0.15f, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f },
             {  0.15f,  0.15f, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f },
         };
-        meshVb_->SetDataRaw(verts, 4, sizeof(MeshVertex));
+        meshVb_->SetDataRaw(verts, 9, sizeof(MeshVertex));
 
-        const std::uint16_t indices[6] = { 0, 1, 2, 0, 2, 3 };
-        ib_ = std::make_unique<IndexBuffer>(device, 6);
-        ib_->SetData(indices, 6);
+        // The first three index elements form a decoy triangle. startIndex=3 selects only the
+        // following quad range and therefore distinguishes an element offset from a byte offset.
+        const std::uint16_t indices[9] = { 0, 0, 0, 0, 1, 2, 0, 2, 3 };
+        ib_ = std::make_unique<IndexBuffer>(device, 9);
+        ib_->SetData(indices, 9);
 
         const VertexDeclaration instDecl(64, {
             VertexElement(0,  VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
@@ -238,14 +249,16 @@ protected:
             VertexElement(48, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 3),
         });
 
-        instVb_ = std::make_unique<VertexBuffer>(device, instDecl, 2, BufferUsage::None);
+        instVb_ = std::make_unique<VertexBuffer>(device, instDecl, 3, BufferUsage::None);
 
+        const Matrix decoyInstance = Matrix::CreateTranslation(0.0f, 4.0f, 0.0f);
         const Matrix instance0 = Matrix::CreateTranslation(-0.3f, 0.0f, 0.0f);
         const Matrix instance1 = Matrix::CreateRotationY(MathHelper::Pi) *
                                   Matrix::CreateTranslation(0.3f, 0.0f, 0.0f);
 
-        const InstanceVertex instData[2] = { PackInstance(instance0), PackInstance(instance1) };
-        instVb_->SetDataRaw(instData, 2, sizeof(InstanceVertex));
+        const InstanceVertex instData[3] = {
+            PackInstance(decoyInstance), PackInstance(instance0), PackInstance(instance1) };
+        instVb_->SetDataRaw(instData, 3, sizeof(InstanceVertex));
     }
 
     void Draw(const GameTime&) override
@@ -282,11 +295,11 @@ protected:
         fx->SetUniformVec3("AmbientLight", 0.25f, 0.25f, 0.25f);
 
         device.SetVertexBuffers({
-            VertexBufferBinding(meshVb_.get()),
-            VertexBufferBinding(instVb_.get(), 0, 1),
+            VertexBufferBinding(meshVb_.get(), 4, 0),
+            VertexBufferBinding(instVb_.get(), 1, 1),
         });
         device.setIndicesProperty(ib_.get());
-        device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, 4, 0, 2, 2);
+        device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 1, 0, 4, 3, 2, 2);
 
         Color left(0, 0, 0, 0);
         Color right(0, 0, 0, 0);

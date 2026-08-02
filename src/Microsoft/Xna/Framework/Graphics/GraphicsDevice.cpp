@@ -585,9 +585,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer)
     {
-        if (vertexBuffer && vertexBuffer->getIsDisposedProperty())
-            throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
-        currentVertexBuffer_ = vertexBuffer;
+        SetVertexBuffer(vertexBuffer, 0);
     }
 
     void GraphicsDevice::SetIndexBuffer(const IndexBuffer* indexBuffer)
@@ -826,10 +824,18 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The requested primitive range exceeds the bound index buffer.");
         }
 
+        int vertexBufferOffset = 0;
+        if (!currentVertexBuffers_.empty() &&
+            currentVertexBuffers_[0].getVertexBufferProperty() == currentVertexBuffer_)
+        {
+            vertexBufferOffset = currentVertexBuffers_[0].getVertexOffsetProperty();
+        }
+
         const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
-        if (baseVertex > availableVertexCount ||
-            minVertexIndex > availableVertexCount - baseVertex ||
-            numVertices > availableVertexCount - baseVertex - minVertexIndex)
+        if (vertexBufferOffset > availableVertexCount ||
+            baseVertex > availableVertexCount - vertexBufferOffset ||
+            minVertexIndex > availableVertexCount - vertexBufferOffset - baseVertex ||
+            numVertices > availableVertexCount - vertexBufferOffset - baseVertex - minVertexIndex)
         {
             throw System::ArgumentOutOfRangeException(
                 "numVertices", std::to_string(numVertices),
@@ -845,23 +851,33 @@ namespace Microsoft::Xna::Framework::Graphics
         p.baseVertex    = baseVertex;
         p.minVertexIndex = minVertexIndex;
         p.numVertices    = numVertices;
+        p.vertexBufferOffset = vertexBufferOffset;
         // Find the per-instance vertex buffer binding (instanceFrequency > 0).
         for (const auto& binding : currentVertexBuffers_) {
             if (binding.getInstanceFrequencyProperty() > 0) {
                 if (auto* vb = binding.getVertexBufferProperty()) {
                     p.instanceVb = &vb->GetBackend();
+                    p.instanceVertexOffset = binding.getVertexOffsetProperty();
+                    p.instanceFrequency = binding.getInstanceFrequencyProperty();
                     break;
                 }
             }
         }
-        // REMED-GFX-118: the per-instance stream must be able to supply every requested instance.
-        // Without this the backends copy min(requested, available) bytes and quietly render the
-        // surplus instances from uninitialised per-instance memory.
-        if (p.instanceVb != nullptr && instanceCount > p.instanceVb->GetVertexCount())
+        // One instance element is consumed for each complete instanceFrequency-sized group. The
+        // binding offset is an element offset, just like FNA3D's stride multiplication in
+        // ApplyVertexBufferBindings; it is never interpreted as a raw byte count.
+        if (p.instanceVb != nullptr)
         {
-            throw System::ArgumentOutOfRangeException(
-                "instanceCount", std::to_string(instanceCount),
-                "The requested instance count exceeds the bound per-instance vertex buffer.");
+            const int requiredInstanceElements =
+                1 + (instanceCount - 1) / p.instanceFrequency;
+            const int availableInstanceElements = p.instanceVb->GetVertexCount();
+            if (p.instanceVertexOffset > availableInstanceElements ||
+                requiredInstanceElements > availableInstanceElements - p.instanceVertexOffset)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "instanceCount", std::to_string(instanceCount),
+                    "The requested instance range exceeds the bound per-instance vertex buffer.");
+            }
         }
         applySamplerStatesToBackend();
         backend_->DrawInstancedPrimitivesEx(
@@ -2494,9 +2510,19 @@ namespace Microsoft::Xna::Framework::Graphics
         return currentRenderTargets_;
     }
 
-    void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer, int /*vertexOffset*/)
+    void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer, int vertexOffset)
     {
-        SetVertexBuffer(vertexBuffer);
+        System::ArgumentOutOfRangeException::ThrowIfNegative(vertexOffset, "vertexOffset");
+        if (vertexBuffer && vertexBuffer->getIsDisposedProperty())
+            throw System::ObjectDisposedException(vertexBuffer->getNameProperty());
+
+        currentVertexBuffer_ = vertexBuffer;
+        currentVertexBuffers_.clear();
+        if (vertexBuffer != nullptr)
+        {
+            currentVertexBuffers_.emplace_back(
+                const_cast<VertexBuffer*>(vertexBuffer), vertexOffset, 0);
+        }
     }
 
     void GraphicsDevice::SetVertexBuffers(const std::vector<VertexBufferBinding>& vertexBuffers)

@@ -379,8 +379,10 @@ namespace Microsoft::Xna::Framework::Graphics
          * an index-element offset, @p primitiveCount fixes the exact topology-derived index count,
          * and @p baseVertex is added to every decoded index exactly once. @p instanceCount is
          * independent of that range — it never widens or narrows the consumed geometry, and the
-         * geometry never changes how many instances are submitted. The per-instance data comes from
-         * the bound `VertexBufferBinding` whose instance frequency is greater than zero.
+         * geometry never changes how many instances are submitted. Each binding's vertex offset is
+         * an element offset. Per-instance data comes from the bound `VertexBufferBinding` whose
+         * instance frequency is greater than zero, advances once per frequency-sized group, and
+         * begins at that binding's vertex offset.
          *
          * @param primitiveType  The type of primitive to draw.
          * @param baseVertex     Offset added to each index before reading from the vertex buffer.
@@ -393,8 +395,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @throws System::ArgumentOutOfRangeException if @p primitiveCount, @p numVertices or
          *         @p instanceCount is not positive; if @p baseVertex, @p minVertexIndex or
          *         @p startIndex is negative; if the requested index range leaves the bound index
-         *         buffer; if the declared vertex range leaves the bound vertex buffer after
-         *         @p baseVertex; or if @p instanceCount exceeds the bound per-instance buffer.
+         *         buffer; if the declared vertex range leaves the bound vertex buffer after its
+         *         binding offset and @p baseVertex; or if the required per-instance element range
+         *         leaves its bound buffer after applying binding offset and instance frequency.
          */
         void DrawInstancedPrimitives(PrimitiveType primitiveType,
                                      int baseVertex, int minVertexIndex,
