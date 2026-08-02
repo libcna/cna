@@ -46,7 +46,7 @@ namespace CNA::Internal::Backends::Skia
 
         struct MaskedBlendUniform
         {
-            // source-over, additive, destination-colour runtime route, unused
+            // source-over, XNA NonPremultiplied, XNA Additive, destination-colour runtime route
             float route[4];
             float writeMask[4];
         };
@@ -60,11 +60,24 @@ namespace CNA::Internal::Backends::Skia
                     uniform float4 route;
                     uniform float4 writeMask;
                     half4 main(half4 src, half4 dst) {
-                        // route=(source-over, additive, DestinationColor runtime, unused).
+                        // Skia supplies premultiplied src. For straight-labelled XNA input,
+                        // src.rgb therefore already includes the colour SourceAlpha factor, but
+                        // XNA's independent alpha equation still needs src.a * src.a. Recover
+                        // the logical destination RGB channels before applying XNA factors, then
+                        // premultiply the independently computed result for SkSurface storage so
+                        // public unpremultiplied readback returns those same logical channels.
+                        half3 dstColor = dst.a > 0.0 ? dst.rgb / dst.a : half3(0.0);
+                        half nonPremulAlpha = saturate(src.a * src.a + dst.a * (1.0 - src.a));
+                        half3 nonPremulColor = saturate(src.rgb + dstColor * (1.0 - src.a));
+                        half additiveAlpha = saturate(src.a * src.a + dst.a);
+                        half3 additiveColor = saturate(src.rgb + dstColor);
                         half4 blended = src;
                         blended = mix(blended, src + dst * (1.0 - src.a), route.x);
-                        blended = mix(blended, src + dst, route.y);
-                        blended = mix(blended, half4(src.rgb * dst.rgb, src.a), route.z);
+                        blended = mix(blended,
+                            half4(nonPremulColor * nonPremulAlpha, nonPremulAlpha), route.y);
+                        blended = mix(blended,
+                            half4(additiveColor * additiveAlpha, additiveAlpha), route.z);
+                        blended = mix(blended, half4(src.rgb * dst.rgb, src.a), route.w);
                         // XNA ColorWriteChannels is an output-merger write mask: choose after
                         // calculating the blend result, retaining disabled destination channels.
                         return half4(mix(dst, blended, writeMask));
@@ -84,14 +97,24 @@ namespace CNA::Internal::Backends::Skia
         [[nodiscard]] sk_sp<SkBlender> MakeMaskedBlender(const SkiaBlendMapping& mapping, int writeMask)
         {
             MaskedBlendUniform uniform{};
-            if (mapping.route == SkiaBlendMappingRoute::RuntimeDestinationColorPrototype)
-                uniform.route[2] = 1.0f;
-            else if (mapping.mode == SkBlendMode::kSrcOver)
-                uniform.route[0] = 1.0f;
-            else if (mapping.mode == SkBlendMode::kPlus)
-                uniform.route[1] = 1.0f;
-            else if (mapping.mode != SkBlendMode::kSrc)
-                throw std::runtime_error("Skia has no masked runtime formula for this blend mapping.");
+            switch (mapping.route)
+            {
+                case SkiaBlendMappingRoute::DirectBlendMode:
+                    if (mapping.mode == SkBlendMode::kSrcOver)
+                        uniform.route[0] = 1.0f;
+                    else if (mapping.mode != SkBlendMode::kSrc)
+                        throw std::runtime_error("Skia has no masked runtime formula for this blend mapping.");
+                    break;
+                case SkiaBlendMappingRoute::RuntimeNonPremultiplied:
+                    uniform.route[1] = 1.0f;
+                    break;
+                case SkiaBlendMappingRoute::RuntimeAdditive:
+                    uniform.route[2] = 1.0f;
+                    break;
+                case SkiaBlendMappingRoute::RuntimeDestinationColorPrototype:
+                    uniform.route[3] = 1.0f;
+                    break;
+            }
 
             for (int channel = 0; channel < 4; ++channel)
                 uniform.writeMask[channel] = (writeMask & (1 << channel)) ? 1.0f : 0.0f;

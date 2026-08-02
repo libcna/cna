@@ -226,6 +226,19 @@ protected:
             }
         }
         Check(alphaMatrix, "the alpha write bit selects source alpha or preserves destination alpha for all masks");
+
+        device.Clear(Color::Black);
+        Draw(*whiteTexture_, BlendRoute::NonPremultiplied, 15, Color(255, 0, 0, 128));
+        Draw(*whiteTexture_, BlendRoute::NonPremultiplied, 15, Color(0, 255, 0, 128));
+        const Color nonPremultipliedAlpha = ReadBackbuffer(device);
+        Check(Equal(nonPremultipliedAlpha, Color(64, 128, 0, 159)),
+              "NonPremultiplied preserves XNA's independent color and alpha equations");
+
+        device.Clear(Color(0, 0, 0, 64));
+        Draw(*transparentBlackTexture_, BlendRoute::Additive, 15, Color::White);
+        const Color additiveAlpha = ReadBackbuffer(device);
+        Check(Equal(additiveAlpha, Color(0, 0, 0, 128)),
+              "Additive preserves XNA's independent alpha equation");
         Exit();
     }
 

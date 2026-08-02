@@ -39,12 +39,13 @@ int main()
     Check(alphaBlend && alphaBlend->mode == SkBlendMode::kSrcOver
               && alphaBlend->sourceAlphaConvention == SkiaSourceAlphaConvention::Premultiplied,
           "AlphaBlend maps to kSrcOver with premultiplied source bytes");
-    Check(nonPremultiplied && nonPremultiplied->mode == SkBlendMode::kSrcOver
+    Check(nonPremultiplied
+              && nonPremultiplied->route == SkiaBlendMappingRoute::RuntimeNonPremultiplied
               && nonPremultiplied->sourceAlphaConvention == SkiaSourceAlphaConvention::Straight,
-          "NonPremultiplied maps to kSrcOver with straight source bytes");
-    Check(additive && additive->mode == SkBlendMode::kPlus
+          "NonPremultiplied selects a straight-source runtime route with independent XNA alpha");
+    Check(additive && additive->route == SkiaBlendMappingRoute::RuntimeAdditive
               && additive->sourceAlphaConvention == SkiaSourceAlphaConvention::Straight,
-          "Additive maps to kPlus with straight source bytes");
+          "Additive selects a straight-source runtime route with independent XNA alpha");
     const auto* destinationColor = Find(6, 0, 1, 1);
     Check(destinationColor
               && destinationColor->route == SkiaBlendMappingRoute::RuntimeDestinationColorPrototype

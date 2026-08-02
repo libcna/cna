@@ -85,9 +85,10 @@ protected:
               "AlphaBlend premultiplied source with semi-transparent tint", premultiplied);
 
         // Straight source (255,0,0,128) gets the same tint before NonPremultiplied's source-alpha
-        // factor: (128,0,0,64) * (64/255) over blue -> (32,0,191,255).
+        // factor: colour (128,0,0) and alpha 64 over blue become (32,0,191), while XNA's
+        // independent alpha equation is 64*(64/255) + 255*(191/255) = 207.
         const Color straight = drawAndRead(*straightTexture_, BlendState::NonPremultiplied);
-        Check(Matches(straight, Color(32, 0, 191, 255)),
+        Check(Matches(straight, Color(32, 0, 191, 207)),
               "NonPremultiplied straight source with semi-transparent tint", straight);
 
         Exit();

@@ -11,6 +11,8 @@ namespace CNA::Internal::Backends::Skia
     enum class SkiaBlendMappingRoute
     {
         DirectBlendMode,
+        RuntimeNonPremultiplied,
+        RuntimeAdditive,
         RuntimeDestinationColorPrototype,
     };
 
@@ -37,9 +39,9 @@ namespace CNA::Internal::Backends::Skia
          SkBlendMode::kSrc,     SkiaSourceAlphaConvention::Premultiplied, "Opaque"},
         {0, 0, 5, 5, SkiaBlendMappingRoute::DirectBlendMode,
          SkBlendMode::kSrcOver, SkiaSourceAlphaConvention::Premultiplied, "AlphaBlend"},
-        {4, 4, 5, 5, SkiaBlendMappingRoute::DirectBlendMode,
+        {4, 4, 5, 5, SkiaBlendMappingRoute::RuntimeNonPremultiplied,
          SkBlendMode::kSrcOver, SkiaSourceAlphaConvention::Straight,       "NonPremultiplied"},
-        {4, 4, 0, 0, SkiaBlendMappingRoute::DirectBlendMode,
+        {4, 4, 0, 0, SkiaBlendMappingRoute::RuntimeAdditive,
          SkBlendMode::kPlus,    SkiaSourceAlphaConvention::Straight,       "Additive"},
         {6, 0, 1, 1, SkiaBlendMappingRoute::RuntimeDestinationColorPrototype,
          SkBlendMode::kSrcOver, SkiaSourceAlphaConvention::Premultiplied, "DestinationColorPrototype"},
