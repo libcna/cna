@@ -18,9 +18,10 @@ claims below change only after the successor release gate passes.
 
 The 27-format byte/sampling/renderability contract is the checked
 [`skia-surface-format-matrix.md`](skia-surface-format-matrix.md). It classifies future pinned-raster
-routes and records promoted ones. SKIA-135/136 enable `Bgr565`, `Bgra4444`, `Rgba1010102`,
-`ColorBgraEXT`, and `ColorSrgbEXT` for Skia `Texture2D`; all other non-`Color` rows and every
-non-`Color` render target remain refused until their independent SKIA-137–143 gates pass.
+routes and records promoted ones. SKIA-135–137 enable `Bgr565`, `Bgra4444`, `Rgba1010102`,
+`Rg32`, `Rgba64`, `Alpha8`, `ColorBgraEXT`, `ColorSrgbEXT`, `ByteEXT`, and `UShortEXT` for Skia
+`Texture2D`; all other non-`Color` rows and every non-`Color` render target remain refused until
+their independent SKIA-138–143 gates pass.
 
 The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback,
 logical-size handling, window-coordinate transforms, every `Texture2D` mip upload/readback, CPU-raster
@@ -39,7 +40,7 @@ authoritative compact capability boundary; later sections explain the individual
 | `SpriteBatch` draw overloads, sorting, transforms, source rectangles, tint, flips and `SpriteFont` | Verified direct 2D path | Direct `SkCanvas` image operations preserve the shared XNA-shaped batching and font-atlas layout. | [SKIA-31–40](../plan_skia.md); [2D EasyGL registration](skia-2d-easygl-registration.md); [XNA oracle](skia-xna-oracle.md) |
 | All nine TextureFilter ordinals, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear tile sampling is direct; affine mip LOD and inter-level interpolation are bounded raster routes. Anisotropic is byte-identical to complete Linear while the capability stays false. | [SKIA-43–46, SKIA-70, SKIA-78–79, SKIA-129](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy` |
 | Blend presets, arbitrary raster states, and target-0 colour-write masks | Verified direct/generated runtime-blender path | All 714,025 valid factor/function tuples, independent RGB/alpha equations, live constants, and all target-0 masks draw. Invalid raw selectors and sample/MRT-only state reject before drawing. | [SKIA-47–57, SKIA-108, SKIA-119–124](../plan_skia.md); [generated blender](skia-generated-blender.md); `Skia_BlendMapping_Raster`, `Skia_GeneratedBlend_PublicCorpus` |
-| `Texture2D` image path, promoted formats, checked mip allocation, transfer, generation, sampling and content loading | Verified direct/bounded CPU path | `Color`, direct `Bgr565`/`Rgba1010102`/`ColorBgraEXT`, conversion-shadow `Bgra4444`, and colour-managed `ColorSrgbEXT` transfer/sample exactly. `mipMap=true` owns a complete native-width CNA chain; changed parents generate only unauthored descendants, and exact DDS/XNB level spans upload as authored `Color` barriers. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–130, SKIA-135–136](../plan_skia.md); [format matrix](skia-surface-format-matrix.md); `Skia_Texture2D_PackedFormats`, `Skia_Texture2D_ColourFormats`, `Skia_Texture2D_MipGeneration`, `Skia_Sampler_MipmapFilterPolicy`, `Skia_Texture2D_ContentMips` |
+| `Texture2D` image path, promoted formats, checked mip allocation, transfer, generation, sampling and content loading | Verified direct/bounded CPU path | `Color`; direct packed/BGRA/one-, two- and four-channel UNORM routes; conversion-shadow `Bgra4444`; and colour-managed `ColorSrgbEXT` transfer/sample exactly. `mipMap=true` owns a complete native-width CNA chain; changed parents generate only unauthored descendants, and exact DDS/XNB level spans upload as authored `Color` barriers. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–130, SKIA-135–137](../plan_skia.md); [format matrix](skia-surface-format-matrix.md); `Skia_Texture2D_PackedFormats`, `Skia_Texture2D_ColourFormats`, `Skia_Texture2D_UnormFormats`, `Skia_Texture2D_MipGeneration`, `Skia_Sampler_MipmapFilterPolicy`, `Skia_Texture2D_ContentMips` |
 | `RenderTarget2D` colour rendering, per-level transfer/sampling, and Preserve/Discard | Verified bounded raster target | Level zero is a directly bindable `SkSurface`; mipmapped targets own stable surfaces and exact canonical shadows at every level. Parent uploads and pass-boundary resolves deterministically regenerate dirty descendants once. Real depth and MSAA stay unavailable rather than fabricated. | [SKIA-61–75, SKIA-131–132](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_MipStorage`, `Skia_RenderTarget2D_MipGeneration`, `Skia_RenderTarget2D_MsaaPolicy` |
 | `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
 | `RenderTargetCube` face rendering, transfers, Preserve/Discard and generated mips | Verified bounded six-surface 2D emulation | Each face is an independent raster target. Cube sampling, real depth and real MSAA reject explicitly. | [SKIA-85–86](../plan_skia.md); `Skia_RenderTargetCube_Policy` and four shared cube contracts |
@@ -234,10 +235,10 @@ including zero, is rejected rather than being silently ignored or pretending to 
 control.
 
 The current Skia public `Texture2D` format policy accepts `SurfaceFormat::Color`, `Bgr565`,
-`Bgra4444`, `Rgba1010102`, `ColorBgraEXT`, and `ColorSrgbEXT`. The remaining 21 values are rejected
-by backend-local validation before a Skia allocation is attempted; shared cube/volume validation
-remains `Color`-only and non-`Color` `RenderTarget2D` construction refuses before allocating a
-Color surface. Raster textures accept one-pixel and
+`Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `ColorBgraEXT`, `ColorSrgbEXT`, `ByteEXT`,
+and `UShortEXT`. The remaining 16 values are rejected by backend-local validation before a Skia
+allocation is attempted; shared cube/volume validation remains `Color`-only and non-`Color`
+`RenderTarget2D` construction refuses before allocating a Color surface. Raster textures accept one-pixel and
 NPOT dimensions, report the shared 16384 maximum single axis, and reject a dimension above that
 limit before allocation. SKIA-125/126 replace the old Texture2D constructor refusal with a checked
 CNA-owned chain: all levels are allocated contiguously, zero initialized, and reported through the
@@ -277,6 +278,13 @@ describes linear-sRGB working components: linear destinations do not decode twic
 sRGB destinations re-encode once. CNA generates sRGB mip RGB in linear light while alpha remains
 an ordinary linear byte average. Both formats retain exact public transfer bytes and remain
 Texture2D-only until the independent target gate.
+SKIA-137 adds exact `kAlpha_8`, `kR8_unorm`, `kR16_unorm`, `kR16G16_unorm`, and
+`kR16G16B16A16_unorm` Texture2D views. Public `Alpha8`, `Rg32`, and `Rgba64` packed-vector
+overloads serialize their properties rather than polymorphic object memory; `ByteEXT` and
+`UShortEXT` use typed unsigned transfers. Multi-byte storage is explicit little-endian, generated
+mips average every native UNORM component, and pinned Skia gather semantics provide zero missing
+colour channels and opaque missing alpha without an emulated swizzle. These five formats remain
+Texture2D-only until SKIA-142.
 
 ## Verification recorded for the initial slice
 
@@ -285,16 +293,18 @@ Texture2D-only until the independent target gate.
 3. The `CNA` static-library target compiled successfully with the SKIA backend selection using `cmake --build ... --parallel 2`.
 4. A second C++23 smoke target uploaded and updated a two-pixel `SkiaTextureBackend`, drew it to a `SkiaSurface`, and compared the exact RGBA8 readback bytes after each draw.
 5. The same smoke target uploaded a `SkiaRenderTargetBackend`, sampled its immutable `SkImage` snapshot, and checked exact target readback bytes.
-6. `cmake/Tests/SkiaTests.cmake` registers 99 SKIA-only CTests: nine window-independent raster
-   tests, 88 display-required public tests, and two display-free source audits. The raster tests
+6. `cmake/Tests/SkiaTests.cmake` registers 154 SKIA-only CTests: 21 window-independent raster
+   tests, 127 display-required public tests, and six display-free source audits. The raster tests
    pass without a display. The capability test verifies only storage-only `Texture3D` is true and
    every GPU/3D capability remains false; 3D calls still throw. The public `Texture2D::GetData` and transfer-range contract tests pass 40/40 and
    70/70 checks respectively against the raster backend; the demo smoke exits successfully after
    three frames in Xvfb.
-7. `Skia_Texture2D_Constraints` verifies the successful `Color` path, all 23 still-unsupported
+7. `Skia_Texture2D_Constraints` verifies the successful `Color` path, all 16 still-unsupported
    `SurfaceFormat` values, 1×1 and 3×5 uploads, a large valid single axis, zero dimensions, and
    the precise above-limit rejection. `Skia_Texture2D_PackedFormats` adds 42 exact checks for the
-   three promoted packed formats. `Skia_Texture2D_NpotSampling` then samples both 3×5 and
+   three promoted packed formats; `Skia_Texture2D_ColourFormats` adds BGRA/sRGB evidence; and
+   `Skia_Texture2D_UnormFormats` adds 63 exact checks for the five SKIA-137 formats.
+   `Skia_Texture2D_NpotSampling` then samples both 3×5 and
    7×11 textures and reads each distinct source row back from the rendered frame.
 8. `Skia_SpriteBatch_BeginEnd`, `Skia_SpriteBatch_SourceRect`, and
    `Skia_SpriteBatch_Overloads` exercise real public SpriteBatch sessions. They verify invalid
@@ -854,6 +864,13 @@ Texture2D-only until the independent target gate.
     Texture2D refusal matrix from 23 to 21 rows without widening cube, volume, or target support.
     Its focused Debug, Release and ASan+UBSan gates pass on virtual `:99`; the complete Debug Skia
     suite passes 153/153 (21 Raster, 126 Display, six Audit).
+105. `Skia_Texture2D_UnormFormats` closes SKIA-137 with 63/63 checks for exact typed transfers,
+    pinned little-endian storage, caller guards, failure atomicity, native-component generated
+    mips and typed mip images, exact Skia metadata, missing-channel sampling, transactional target
+    refusal, and full resource release. The five promoted formats reduce the creation-time refusal
+    matrix from 21 to 16 without widening cube, volume, or render-target support. Its focused
+    Debug, Release and ASan+UBSan gates pass on isolated virtual Xvfb; the complete Debug Skia
+    suite passes 154/154 (21 Raster, 127 Display, six Audit) in 213.17 seconds.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

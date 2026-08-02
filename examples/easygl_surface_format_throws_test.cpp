@@ -131,12 +131,10 @@ protected:
         expectThrows("Texture2D Dxt1", [&]{
             Texture2D t(dev, 4, 4, false, SurfaceFormat::Dxt1);
         });
-        expectThrows("Texture2D Alpha8", [&]{
-            Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
-        });
 #if defined(CNA_BACKEND_SKIA)
-        // SKIA-135 promotes these packed formats for Texture2D only. The SKIA-136
-        // colour formats were handled above; other backends retain the Color-only boundary.
+        // SKIA-135–137 promote these exact transfer/sampling formats for Texture2D only.
+        // The SKIA-136 colour formats were handled above; render targets remain independently
+        // gated and other backends retain the Color-only boundary.
         expectNoThrow("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
         });
@@ -146,9 +144,39 @@ protected:
         expectNoThrow("Texture2D Rgba1010102", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Rgba1010102);
         });
+        expectNoThrow("Texture2D Rg32", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Rg32);
+        });
+        expectNoThrow("Texture2D Rgba64", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Rgba64);
+        });
+        expectNoThrow("Texture2D Alpha8", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
+        });
+        expectNoThrow("Texture2D ByteEXT", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::ByteEXT);
+        });
+        expectNoThrow("Texture2D UShortEXT", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::UShortEXT);
+        });
 #else
         expectThrows("Texture2D Bgr565", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Bgr565);
+        });
+        expectThrows("Texture2D Alpha8", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Alpha8);
+        });
+        expectThrows("Texture2D Rg32", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Rg32);
+        });
+        expectThrows("Texture2D Rgba64", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::Rgba64);
+        });
+        expectThrows("Texture2D ByteEXT", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::ByteEXT);
+        });
+        expectThrows("Texture2D UShortEXT", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::UShortEXT);
         });
 #endif
         expectThrows("Texture2D Vector4", [&]{

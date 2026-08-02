@@ -412,14 +412,15 @@ TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
 {
+#ifdef CNA_BACKEND_SKIA
+    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
+#else
     EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
+#endif
 }
 
-// Task 290: exhaustive sweep over every SurfaceFormat value. The individual tests above already
-// cover 20 of the 27 values one at a time (added incrementally across Tasks 176/286-289); this
-// test guarantees the remaining 7 (Bgra5551/Bgra4444/Dxt3/Dxt5/Rg32/ByteEXT/UShortEXT) are covered
-// too and stays correct automatically if SurfaceFormat ever grows a 28th value, since every entry
-// is listed here explicitly rather than assumed.
+// Task 290: exhaustive sweep over every SurfaceFormat value. This stays correct automatically if
+// SurfaceFormat grows because every entry is listed explicitly rather than assumed.
 TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsClearly)
 {
     static const SurfaceFormat kAllFormats[] = {
@@ -459,8 +460,13 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra4444
             || format == SurfaceFormat::Rgba1010102
+            || format == SurfaceFormat::Rg32
+            || format == SurfaceFormat::Rgba64
+            || format == SurfaceFormat::Alpha8
             || format == SurfaceFormat::ColorBgraEXT
             || format == SurfaceFormat::ColorSrgbEXT
+            || format == SurfaceFormat::ByteEXT
+            || format == SurfaceFormat::UShortEXT
 #endif
             ;
         if (supported)

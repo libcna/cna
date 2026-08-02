@@ -19,11 +19,12 @@ namespace CNA::Internal::Backends::Skia
      * CPU-backed Texture2D mip storage for the raster Skia backend.
      *
      * mipChain_ stays in CNA's exact top-row-first public transfer layout. Direct Skia colour types
-     * label Color, Bgr565, Rgba1010102, ColorBgraEXT and ColorSrgbEXT storage; Bgra4444 keeps exact
-     * A:R:G:B words and uses a bounded RGBA working conversion. The sRGB colour type decodes once
-     * into an explicitly linear-sRGB working space. The active BlendState selects the source-alpha
-     * labelled view without rewriting public data. Every level supports exact CPU upload/readback
-     * and deterministic format-appropriate generation.
+     * label Color, Bgr565, Rgba1010102, Rg32, Rgba64, Alpha8, ColorBgraEXT, ColorSrgbEXT,
+     * ByteEXT and UShortEXT storage; Bgra4444 keeps exact A:R:G:B words and uses a bounded RGBA
+     * working conversion. The sRGB colour type decodes once into an explicitly linear-sRGB working
+     * space. The active BlendState selects the source-alpha-labelled view without rewriting public
+     * data. Every level supports exact CPU upload/readback and deterministic format-appropriate
+     * generation.
      */
     class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource
     {

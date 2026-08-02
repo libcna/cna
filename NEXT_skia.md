@@ -1555,9 +1555,35 @@ level-boundary contract.
   passes 153/153 in 238.67 seconds: 21 Raster, 126 Display and six Audit tests. No real display or
   subagent was used, and `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-137
+
+- Skia `Texture2D` now promotes `Alpha8`, `ByteEXT`, `UShortEXT`, `Rg32`, and `Rgba64` without
+  widening `RenderTarget2D`, cube, or volume format gates. They use pinned direct
+  `kAlpha_8`, `kR8_unorm`, `kR16_unorm`, `kR16G16_unorm`, and `kR16G16B16A16_unorm` images;
+  Skia's own gather stages supply zero missing colour channels and opaque missing alpha exactly.
+- Public whole-level/rectangle Set/Get overloads accept packed `Alpha8`, `Rg32`, and `Rgba64`
+  values plus unsigned 8/16-bit ByteEXT/UShortEXT values. Every packed property or primitive word
+  is encoded/decoded explicitly little-endian; polymorphic packed-vector object memory is never
+  treated as a transfer word. Existing caller-window validation, partial preservation, generated-
+  mip seeding and CPU/backend readback routes remain shared.
+- Generated mips area-average each native 8- or 16-bit UNORM component with nearest-integer
+  rounding. `Skia_Texture2D_UnormFormats` exercises exact full/partial transfer, guards, raw endian
+  bytes, failed-write atomicity, typed mip images, metadata, normalized missing-channel pixels,
+  five pre-allocation target refusals and exact resource-counter release in 63/63 checks.
+- The new test plus `Skia_Texture2D_Constraints` and `Skia_Contract_SurfaceFormat` pass 3/3 in
+  Debug, Release and ASan+UBSan (`detect_leaks=0` only for the documented external Mesa/X11
+  residual). All 12 `UnsupportedFormatConstructionTest` cases pass, and the EasyGL reference
+  contract still rejects all five formats and passes 20/20.
+- The complete Debug tree builds with `--parallel 2`. The complete sequential Skia suite passes
+  154/154 in 213.17 seconds on an isolated auto-selected Xvfb display: 21 Raster, 127 Display and
+  six Audit tests. No real display or subagent was used; `NEXT.md` remained untouched.
+- Assumption retained: direct pinned Skia multi-byte raster layouts require the documented
+  little-endian artifact. Public transfers are explicitly serialized, but a future big-endian
+  build must additionally prove or refuse the Skia colour-type interpretation.
+
 ## Next candidates
 
-1. SKIA-137–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
+1. SKIA-138–143: implement truthful remaining non-Color Texture2D/content/RenderTarget2D formats in dependency
    order, retaining exact pre-allocation refusals until each format passes transfer and pixels.
 2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.

@@ -9,6 +9,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <SDL3/SDL.h>
@@ -18,9 +19,12 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Alpha8.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgr565.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Bgra4444.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rg32.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/IO/Stream.hpp"
 #include "System/FormatException.hpp"
@@ -86,8 +90,13 @@ namespace Microsoft::Xna::Framework::Graphics
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra4444
             || format == SurfaceFormat::Rgba1010102
+            || format == SurfaceFormat::Rg32
+            || format == SurfaceFormat::Rgba64
+            || format == SurfaceFormat::Alpha8
             || format == SurfaceFormat::ColorBgraEXT
-            || format == SurfaceFormat::ColorSrgbEXT)
+            || format == SurfaceFormat::ColorSrgbEXT
+            || format == SurfaceFormat::ByteEXT
+            || format == SurfaceFormat::UShortEXT)
         {
             return;
         }
@@ -647,6 +656,47 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
+        template <typename Word>
+        std::vector<std::uint8_t> EncodeUnsignedElements(
+            const Word* data, int startIndex, int elementCount)
+        {
+            static_assert(std::is_unsigned_v<Word>);
+            if (!data || elementCount <= 0)
+                throw std::invalid_argument("Texture2D::SetData: data must not be null");
+            if (startIndex < 0)
+                throw std::out_of_range("Texture2D::SetData: startIndex must be >= 0");
+            std::vector<std::uint8_t> result(
+                static_cast<std::size_t>(elementCount) * sizeof(Word));
+            for (int index = 0; index < elementCount; ++index)
+            {
+                const Word word = data[startIndex + index];
+                for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                {
+                    result[static_cast<std::size_t>(index) * sizeof(Word) + byte] =
+                        static_cast<std::uint8_t>(word >> (byte * 8u));
+                }
+            }
+            return result;
+        }
+
+        template <typename Word>
+        void DecodeUnsignedElements(const std::vector<std::uint8_t>& bytes, int requiredElements,
+                                    Word* data, int startIndex)
+        {
+            static_assert(std::is_unsigned_v<Word>);
+            for (int index = 0; index < requiredElements; ++index)
+            {
+                Word word = 0;
+                for (std::size_t byte = 0; byte < sizeof(Word); ++byte)
+                {
+                    word |= static_cast<Word>(bytes[static_cast<std::size_t>(index)
+                                                     * sizeof(Word) + byte])
+                        << (byte * 8u);
+                }
+                data[startIndex + index] = word;
+            }
+        }
+
         int ValidatedRequestedTexelCount(const char* api, int baseWidth, int baseHeight,
                                          int level, int levelCount, const Rectangle* rect)
         {
@@ -720,6 +770,95 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto bytes = EncodePackedElements<PackedVector::Rgba1010102, std::uint32_t>(
             data, startIndex, requiredElements);
         SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+    }
+
+    void Texture2D::SetData(const PackedVector::Alpha8* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Alpha8* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Alpha8)
+            throw std::invalid_argument("Texture2D::SetData: Alpha8 data requires Alpha8 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::Alpha8, std::uint8_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
+    }
+
+    void Texture2D::SetData(const PackedVector::Rg32* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Rg32* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Rg32)
+            throw std::invalid_argument("Texture2D::SetData: Rg32 data requires Rg32 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::Rg32, std::uint32_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+    }
+
+    void Texture2D::SetData(const PackedVector::Rgba64* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const PackedVector::Rgba64* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::Rgba64)
+            throw std::invalid_argument("Texture2D::SetData: Rgba64 data requires Rgba64 format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodePackedElements<PackedVector::Rgba64, std::uint64_t>(
+            data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
+    }
+
+    void Texture2D::SetData(const std::uint8_t* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const std::uint8_t* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::ByteEXT)
+            throw std::invalid_argument("Texture2D::SetData: byte data requires ByteEXT format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodeUnsignedElements(data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
+    }
+
+    void Texture2D::SetData(const std::uint16_t* data, int elementCount)
+    {
+        SetData(0, nullptr, data, 0, elementCount);
+    }
+
+    void Texture2D::SetData(int level, const Rectangle* rect, const std::uint16_t* data,
+                            int startIndex, int elementCount)
+    {
+        if (format_ != SurfaceFormat::UShortEXT)
+            throw std::invalid_argument(
+                "Texture2D::SetData: ushort data requires UShortEXT format");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::SetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::SetData", startIndex, elementCount, requiredElements);
+        const auto bytes = EncodeUnsignedElements(data, startIndex, requiredElements);
+        SetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
     }
 
     void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
@@ -1128,6 +1267,135 @@ namespace Microsoft::Xna::Framework::Graphics
         GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
         DecodePackedElements<PackedVector::Rgba1010102, std::uint32_t>(
             bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(PackedVector::Alpha8* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::Alpha8* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Alpha8* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Alpha8)
+            throw std::invalid_argument("Texture2D::GetData: Alpha8 data requires Alpha8 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements));
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
+        DecodePackedElements<PackedVector::Alpha8, std::uint8_t>(
+            bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(PackedVector::Rg32* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::Rg32* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Rg32* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Rg32)
+            throw std::invalid_argument("Texture2D::GetData: Rg32 data requires Rg32 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 4u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 4);
+        DecodePackedElements<PackedVector::Rg32, std::uint32_t>(
+            bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(PackedVector::Rgba64* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(PackedVector::Rgba64* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, PackedVector::Rgba64* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::Rgba64)
+            throw std::invalid_argument("Texture2D::GetData: Rgba64 data requires Rgba64 format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 8u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 8);
+        DecodePackedElements<PackedVector::Rgba64, std::uint64_t>(
+            bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(std::uint8_t* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(std::uint8_t* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, std::uint8_t* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::ByteEXT)
+            throw std::invalid_argument("Texture2D::GetData: byte data requires ByteEXT format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements));
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 1);
+        DecodeUnsignedElements(bytes, requiredElements, data, startIndex);
+    }
+
+    void Texture2D::GetData(std::uint16_t* data, int startIndex, int elementCount) const
+    {
+        GetData(0, nullptr, data, startIndex, elementCount);
+    }
+
+    void Texture2D::GetData(std::uint16_t* data, int elementCount) const
+    {
+        GetData(data, 0, elementCount);
+    }
+
+    void Texture2D::GetData(int level, const Rectangle* rect, std::uint16_t* data,
+                            int startIndex, int elementCount) const
+    {
+        if (format_ != SurfaceFormat::UShortEXT)
+            throw std::invalid_argument(
+                "Texture2D::GetData: ushort data requires UShortEXT format");
+        if (!data)
+            throw std::invalid_argument("Texture2D::GetData: data must not be null");
+        const int requiredElements = ValidatedRequestedTexelCount(
+            "Texture2D::GetData", width, height, level, levelCount_, rect);
+        validateTransferWindow("Texture2D::GetData", startIndex, elementCount, requiredElements);
+        std::vector<std::uint8_t> bytes(static_cast<std::size_t>(requiredElements) * 2u);
+        GetDataBytes(level, rect, bytes.data(), 0, requiredElements, 2);
+        DecodeUnsignedElements(bytes, requiredElements, data, startIndex);
     }
 
     // -----------------------------------------------------------------------

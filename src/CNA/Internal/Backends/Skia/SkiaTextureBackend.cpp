@@ -25,8 +25,13 @@ namespace CNA::Internal::Backends::Skia
                 || format == SurfaceFormat::Bgr565
                 || format == SurfaceFormat::Bgra4444
                 || format == SurfaceFormat::Rgba1010102
+                || format == SurfaceFormat::Rg32
+                || format == SurfaceFormat::Rgba64
+                || format == SurfaceFormat::Alpha8
                 || format == SurfaceFormat::ColorBgraEXT
-                || format == SurfaceFormat::ColorSrgbEXT;
+                || format == SurfaceFormat::ColorSrgbEXT
+                || format == SurfaceFormat::ByteEXT
+                || format == SurfaceFormat::UShortEXT;
         }
 
         [[nodiscard]] std::size_t BytesPerTexel(SurfaceFormat format)
@@ -35,12 +40,19 @@ namespace CNA::Internal::Backends::Skia
             {
                 case SurfaceFormat::Color:
                 case SurfaceFormat::Rgba1010102:
+                case SurfaceFormat::Rg32:
                 case SurfaceFormat::ColorBgraEXT:
                 case SurfaceFormat::ColorSrgbEXT:
                     return 4u;
                 case SurfaceFormat::Bgr565:
                 case SurfaceFormat::Bgra4444:
+                case SurfaceFormat::UShortEXT:
                     return 2u;
+                case SurfaceFormat::Rgba64:
+                    return 8u;
+                case SurfaceFormat::Alpha8:
+                case SurfaceFormat::ByteEXT:
+                    return 1u;
                 default:
                     throw System::NotSupportedException(
                         "Skia Texture2D has no promoted representation for this SurfaceFormat.");
@@ -66,6 +78,15 @@ namespace CNA::Internal::Backends::Skia
                 case SurfaceFormat::Rgba1010102:
                     return SkImageInfo::Make(
                         width, height, kRGBA_1010102_SkColorType, alphaType);
+                case SurfaceFormat::Rg32:
+                    return SkImageInfo::Make(
+                        width, height, kR16G16_unorm_SkColorType, kOpaque_SkAlphaType);
+                case SurfaceFormat::Rgba64:
+                    return SkImageInfo::Make(
+                        width, height, kR16G16B16A16_unorm_SkColorType, alphaType);
+                case SurfaceFormat::Alpha8:
+                    return SkImageInfo::Make(
+                        width, height, kAlpha_8_SkColorType, kPremul_SkAlphaType);
                 case SurfaceFormat::ColorBgraEXT:
                     return SkImageInfo::Make(
                         width, height, kBGRA_8888_SkColorType, alphaType);
@@ -77,6 +98,12 @@ namespace CNA::Internal::Backends::Skia
                     return SkImageInfo::Make(
                         width, height, kSRGBA_8888_SkColorType, alphaType,
                         SkColorSpace::MakeSRGBLinear());
+                case SurfaceFormat::ByteEXT:
+                    return SkImageInfo::Make(
+                        width, height, kR8_unorm_SkColorType, kOpaque_SkAlphaType);
+                case SurfaceFormat::UShortEXT:
+                    return SkImageInfo::Make(
+                        width, height, kR16_unorm_SkColorType, kOpaque_SkAlphaType);
                 default:
                     throw System::NotSupportedException(
                         "Skia Texture2D has no image info for this SurfaceFormat.");
@@ -508,6 +535,27 @@ namespace CNA::Internal::Backends::Skia
                             sums[2] += word & 0xFu;
                             sums[3] += (word >> 12u) & 0xFu;
                         }
+                        else if (format_ == SurfaceFormat::Alpha8
+                                 || format_ == SurfaceFormat::ByteEXT)
+                        {
+                            sums[0] += texel[0];
+                        }
+                        else if (format_ == SurfaceFormat::UShortEXT)
+                        {
+                            sums[0] += ReadU16Le(texel);
+                        }
+                        else if (format_ == SurfaceFormat::Rg32)
+                        {
+                            sums[0] += ReadU16Le(texel);
+                            sums[1] += ReadU16Le(texel + 2u);
+                        }
+                        else if (format_ == SurfaceFormat::Rgba64)
+                        {
+                            sums[0] += ReadU16Le(texel);
+                            sums[1] += ReadU16Le(texel + 2u);
+                            sums[2] += ReadU16Le(texel + 4u);
+                            sums[3] += ReadU16Le(texel + 6u);
+                        }
                         else
                         {
                             const std::uint32_t word = ReadU32Le(texel);
@@ -537,6 +585,27 @@ namespace CNA::Internal::Backends::Skia
                     WriteU16Le(output, static_cast<std::uint16_t>(
                         (average(sums[3]) << 12u) | (average(sums[0]) << 8u)
                         | (average(sums[1]) << 4u) | average(sums[2])));
+                }
+                else if (format_ == SurfaceFormat::Alpha8
+                         || format_ == SurfaceFormat::ByteEXT)
+                {
+                    output[0] = static_cast<std::uint8_t>(average(sums[0]));
+                }
+                else if (format_ == SurfaceFormat::UShortEXT)
+                {
+                    WriteU16Le(output, static_cast<std::uint16_t>(average(sums[0])));
+                }
+                else if (format_ == SurfaceFormat::Rg32)
+                {
+                    WriteU16Le(output, static_cast<std::uint16_t>(average(sums[0])));
+                    WriteU16Le(output + 2u, static_cast<std::uint16_t>(average(sums[1])));
+                }
+                else if (format_ == SurfaceFormat::Rgba64)
+                {
+                    WriteU16Le(output, static_cast<std::uint16_t>(average(sums[0])));
+                    WriteU16Le(output + 2u, static_cast<std::uint16_t>(average(sums[1])));
+                    WriteU16Le(output + 4u, static_cast<std::uint16_t>(average(sums[2])));
+                    WriteU16Le(output + 6u, static_cast<std::uint16_t>(average(sums[3])));
                 }
                 else
                 {

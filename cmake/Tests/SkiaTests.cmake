@@ -463,6 +463,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_Texture2D_ColourFormats
                                    cna_test_skia_texture2d_colour_formats)
 
+    # SKIA-137: exact Alpha8/R8/R16/RG16/RGBA16 transfers, native mips and missing-channel
+    # sampling semantics, plus transactional type/target refusal gates.
+    cna_skia_test(cna_test_skia_texture2d_unorm_formats
+                  examples/skia_texture2d_unorm_formats_test.cpp)
+    target_include_directories(cna_test_skia_texture2d_unorm_formats
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_Texture2D_UnormFormats
+                                   cna_test_skia_texture2d_unorm_formats)
+
     cna_skia_test(cna_test_skia_texture2d_dispose examples/sdlrenderer_texture2d_dispose_test.cpp)
     cna_register_skia_display_test(Skia_Texture2D_Dispose cna_test_skia_texture2d_dispose)
 

@@ -102,7 +102,7 @@ private:
         const char* name;
     };
 
-    static const std::array<FormatCase, 21>& UnsupportedFormats()
+    static const std::array<FormatCase, 16>& UnsupportedFormats()
     {
         static constexpr std::array formats{
             FormatCase{SurfaceFormat::Bgra5551, "Bgra5551"},
@@ -111,9 +111,6 @@ private:
             FormatCase{SurfaceFormat::Dxt5, "Dxt5"},
             FormatCase{SurfaceFormat::NormalizedByte2, "NormalizedByte2"},
             FormatCase{SurfaceFormat::NormalizedByte4, "NormalizedByte4"},
-            FormatCase{SurfaceFormat::Rg32, "Rg32"},
-            FormatCase{SurfaceFormat::Rgba64, "Rgba64"},
-            FormatCase{SurfaceFormat::Alpha8, "Alpha8"},
             FormatCase{SurfaceFormat::Single, "Single"},
             FormatCase{SurfaceFormat::Vector2, "Vector2"},
             FormatCase{SurfaceFormat::Vector4, "Vector4"},
@@ -124,8 +121,6 @@ private:
             FormatCase{SurfaceFormat::Dxt5SrgbEXT, "Dxt5SrgbEXT"},
             FormatCase{SurfaceFormat::Bc7EXT, "Bc7EXT"},
             FormatCase{SurfaceFormat::Bc7SrgbEXT, "Bc7SrgbEXT"},
-            FormatCase{SurfaceFormat::ByteEXT, "ByteEXT"},
-            FormatCase{SurfaceFormat::UShortEXT, "UShortEXT"},
         };
         return formats;
     }

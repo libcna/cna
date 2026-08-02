@@ -27,9 +27,9 @@ the compact successor index; the format matrix is the normative input for SKIA-1
 | `FMT-NormalizedByte2` | Signed normalized two-channel transfer and raw sampling. | refused | SKIA-139 | Explicit signed normalization and missing-channel defaults require byte oracles. |
 | `FMT-NormalizedByte4` | Signed normalized four-channel transfer and raw sampling. | refused | SKIA-139 | Explicit signed normalization must avoid color-space conversion. |
 | `FMT-Rgba1010102` | Packed 10:10:10:2 transfer, sampling and renderability. | refused | SKIA-135 | Promoted for Texture2D: compatible pinned storage passes exact endian, native mip, sampled colour and two-bit-alpha evidence; targets stay refused. |
-| `FMT-Rg32` | Two unsigned 16-bit channels and normalized raw sampling. | refused | SKIA-137 | Use compatible RG16 storage or exact conversion shadow. |
-| `FMT-Rgba64` | Four unsigned 16-bit channels and normalized raw sampling. | refused | SKIA-137 | Use compatible RGBA16 storage and preserve original transfer words. |
-| `FMT-Alpha8` | One alpha byte with zero RGB sampling semantics. | refused | SKIA-137 | Pinned Alpha8 path needs exact swizzle and target policy evidence. |
+| `FMT-Rg32` | Two unsigned 16-bit channels and normalized raw sampling. | refused | SKIA-137 | Promoted for Texture2D: exact LE RG16 transfers/mips use `kR16G16_unorm` and sample B=0/A=1; targets stay refused. |
+| `FMT-Rgba64` | Four unsigned 16-bit channels and normalized raw sampling. | refused | SKIA-137 | Promoted for Texture2D: exact LE RGBA16 transfers/mips use `kR16G16B16A16_unorm`; targets stay refused. |
+| `FMT-Alpha8` | One alpha byte with zero RGB sampling semantics. | refused | SKIA-137 | Promoted for Texture2D: exact A8 storage uses pinned `kAlpha_8`, whose gather supplies zero RGB; targets stay refused. |
 | `FMT-Single` | One IEEE float channel and raw sampling. | refused | SKIA-138 | Preserve bit patterns and define NaN, infinity and renderability. |
 | `FMT-Vector2` | Two IEEE float channels and raw sampling. | refused | SKIA-138 | Preserve RG float layout without color management. |
 | `FMT-Vector4` | Four IEEE float channels, sampling and HDR operations. | refused | SKIA-138 | Use RGBA_F32 where supported and bound precision/readback behavior. |
@@ -42,8 +42,8 @@ the compact successor index; the format matrix is the normative input for SKIA-1
 | `FMT-Dxt5SrgbEXT` | BC3 blocks with sRGB RGB sampling and linear alpha. | refused | SKIA-140 | Combine exact compressed shadow with explicit sRGB decoded image. |
 | `FMT-Bc7EXT` | BC7 block transfer, modes and sampled pixels. | refused | SKIA-141 | Requires a bounded license-compatible conformant decoder. |
 | `FMT-Bc7SrgbEXT` | BC7 blocks with sRGB RGB sampling. | refused | SKIA-141 | Decoder and color-space path must be proven together. |
-| `FMT-ByteEXT` | One unsigned normalized R byte. | refused | SKIA-137 | Use raw R8 semantics rather than grayscale/color-managed sampling. |
-| `FMT-UShortEXT` | One unsigned normalized R 16-bit value. | refused | SKIA-137 | Use raw R16 semantics with exact little-endian transfer. |
+| `FMT-ByteEXT` | One unsigned normalized R byte. | refused | SKIA-137 | Promoted for Texture2D: exact R8 transfer/mips use `kR8_unorm`, which supplies zero GB and opaque alpha; targets stay refused. |
+| `FMT-UShortEXT` | One unsigned normalized R 16-bit value. | refused | SKIA-137 | Promoted for Texture2D: exact LE R16 transfer/mips use `kR16_unorm`, which supplies zero GB and opaque alpha; targets stay refused. |
 | `BLEND-One` | Unit source/destination multiplier. | bounded | SKIA-120 | Public scalar-oracle pixels cover all four selector positions in SKIA-123. |
 | `BLEND-Zero` | Zero source/destination multiplier. | bounded | SKIA-120 | Public scalar-oracle pixels cover all four selector positions in SKIA-123. |
 | `BLEND-SourceColor` | Per-channel source-color multiplier. | bounded | SKIA-120 | Public generated pixels use the declared premultiplied working convention. |

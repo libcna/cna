@@ -21,6 +21,10 @@ SKIA-136 colour Texture2D promotion: PASS. `ColorBgraEXT` preserves exact BGRA t
 `ColorSrgbEXT` preserves exact encoded bytes and performs one sRGB decode with linear-light mips.
 Both are Texture2D-only; non-Color target, cube, and volume routes remain refused.
 
+SKIA-137 UNORM Texture2D promotion: PASS. `Alpha8`, `ByteEXT`, `UShortEXT`, `Rg32`, and `Rgba64`
+have exact typed transfer, native-component mip, missing-channel sampling and lifecycle evidence.
+They remain Texture2D-only; non-Color target, cube, and volume routes remain refused.
+
 Scope: experimental `CNA_GRAPHICS_BACKEND=SKIA` CPU-raster 2D backend at the SKIA-114 checkpoint.
 This is not a Ganesh/Graphite, general 3D, or full EasyGL feature-equivalence claim.
 
@@ -77,6 +81,7 @@ audit can pass.
 | RenderTarget2D mip storage/transfer/sampling | Bounded CNA-owned surfaces and exact shadows; dirty descendants resolve once after upload/pass writes | `Skia_RenderTarget2D_MipStorage`, `Skia_RenderTarget2D_MipGeneration`, `Skia_EasyGL_RenderTarget2D_MipComplete`; SKIA-131–132 |
 | Packed `Texture2D` formats | Direct `Bgr565`/`Rgba1010102` storage plus exact `Bgra4444` conversion shadow | `Skia_Texture2D_PackedFormats` 42/42 in Debug, Release and ASan+UBSan; SKIA-135 |
 | BGRA/sRGB `Texture2D` formats | Direct `kBGRA_8888`; exact encoded `kSRGBA_8888` with linear-sRGB working metadata and linear-light mips | `Skia_Texture2D_ColourFormats` 31/31 including explicit linear/sRGB destinations; SKIA-136 |
+| One/two/four-channel UNORM `Texture2D` formats | Direct pinned Alpha8/R8/R16/RG16/RGBA16 types with exact typed little-endian transfers and native mips | `Skia_Texture2D_UnormFormats` 63/63 including missing-channel pixels and target refusal; SKIA-137 |
 | Non-Color target formats | Refused pending the format phase | stable pre-allocation diagnostics; SKIA-142–143 |
 | MRT, depth/stencil, wireframe, 3D, stock 3D effects, cube/volume sampling, queries | Refused after emulation investigation | MRT/3D/query ADRs and atomic refusal suite |
 | Ganesh/Graphite acceleration | Not selected or advertised | surface-mode ADR; zero `Accelerated` CTests in the raster build |
@@ -147,6 +152,12 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   ASan+UBSan (`detect_leaks=0` only for the documented external Mesa GLX residual). The complete
   tree builds with `--parallel 2`; non-Color targets and non-Color cube/volume resources stay
   refused.
+- SKIA-137 one/two/four-channel-UNORM Texture2D promotion: complete sequential Debug Skia suite
+  154/154 PASS on isolated virtual Xvfb in 213.17 seconds (21 Raster, 127 Display, six Audit).
+  `Skia_Texture2D_UnormFormats` passes 63/63 checks; it and the constructor/refusal contracts pass
+  as a three-test set in Debug, Release and ASan+UBSan (`detect_leaks=0` only for the documented
+  external Mesa/X11 residual). The EasyGL Color-only control passes 20/20. The complete tree builds
+  with `--parallel 2`; non-Color targets and non-Color cube/volume resources stay refused.
 - `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`,
   `Skia_ReleaseGate_Audit`, `Skia_SuccessorContracts_Audit`, and
   `Skia_SurfaceFormats_Audit`: PASS. The last audit covers all 27 SKIA-134 format rows and does not

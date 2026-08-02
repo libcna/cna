@@ -23,9 +23,12 @@ namespace CNA::Internal::Backends
 
 namespace Microsoft::Xna::Framework::Graphics::PackedVector
 {
+    struct Alpha8;
     struct Bgr565;
     struct Bgra4444;
+    struct Rg32;
     struct Rgba1010102;
+    struct Rgba64;
 }
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -137,6 +140,31 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Uploads exact packed Rgba1010102 texels to a mip level or rectangle. */
         void SetData(int level, const Rectangle* rect, const PackedVector::Rgba1010102* data,
                      int startIndex, int elementCount);
+        /** @brief Uploads exact packed Alpha8 texels to an Alpha8 texture. */
+        void SetData(const PackedVector::Alpha8* data, int elementCount);
+        /** @brief Uploads exact packed Alpha8 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Alpha8* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Rg32 texels to an Rg32 texture. */
+        void SetData(const PackedVector::Rg32* data, int elementCount);
+        /** @brief Uploads exact packed Rg32 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Rg32* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact packed Rgba64 texels to an Rgba64 texture. */
+        void SetData(const PackedVector::Rgba64* data, int elementCount);
+        /** @brief Uploads exact packed Rgba64 texels to a mip level or rectangle. */
+        void SetData(int level, const Rectangle* rect, const PackedVector::Rgba64* data,
+                     int startIndex, int elementCount);
+        /** @brief Uploads exact unsigned bytes to a ByteEXT texture. */
+        NOXNA void SetData(const std::uint8_t* data, int elementCount);
+        /** @brief Uploads exact unsigned bytes to a ByteEXT mip level or rectangle. */
+        NOXNA void SetData(int level, const Rectangle* rect, const std::uint8_t* data,
+                           int startIndex, int elementCount);
+        /** @brief Uploads exact unsigned 16-bit values to a UShortEXT texture. */
+        NOXNA void SetData(const std::uint16_t* data, int elementCount);
+        /** @brief Uploads exact unsigned 16-bit values to a UShortEXT mip level or rectangle. */
+        NOXNA void SetData(int level, const Rectangle* rect, const std::uint16_t* data,
+                           int startIndex, int elementCount);
 
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void SetData(std::nullptr_t, int elementCount)
@@ -196,6 +224,41 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Reads exact packed Rgba1010102 texels from a mip level or rectangle. */
         void GetData(int level, const Rectangle* rect, PackedVector::Rgba1010102* data,
                      int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Alpha8 texels from an Alpha8 texture. */
+        void GetData(PackedVector::Alpha8* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Alpha8 texels from an Alpha8 texture. */
+        void GetData(PackedVector::Alpha8* data, int elementCount) const;
+        /** @brief Reads exact packed Alpha8 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Alpha8* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Rg32 texels from an Rg32 texture. */
+        void GetData(PackedVector::Rg32* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Rg32 texels from an Rg32 texture. */
+        void GetData(PackedVector::Rg32* data, int elementCount) const;
+        /** @brief Reads exact packed Rg32 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Rg32* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact packed Rgba64 texels from an Rgba64 texture. */
+        void GetData(PackedVector::Rgba64* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact packed Rgba64 texels from an Rgba64 texture. */
+        void GetData(PackedVector::Rgba64* data, int elementCount) const;
+        /** @brief Reads exact packed Rgba64 texels from a mip level or rectangle. */
+        void GetData(int level, const Rectangle* rect, PackedVector::Rgba64* data,
+                     int startIndex, int elementCount) const;
+        /** @brief Reads exact unsigned bytes from a ByteEXT texture. */
+        NOXNA void GetData(std::uint8_t* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact unsigned bytes from a ByteEXT texture. */
+        NOXNA void GetData(std::uint8_t* data, int elementCount) const;
+        /** @brief Reads exact unsigned bytes from a ByteEXT mip level or rectangle. */
+        NOXNA void GetData(int level, const Rectangle* rect, std::uint8_t* data,
+                           int startIndex, int elementCount) const;
+        /** @brief Reads exact unsigned 16-bit values from a UShortEXT texture. */
+        NOXNA void GetData(std::uint16_t* data, int startIndex, int elementCount) const;
+        /** @brief Reads all exact unsigned 16-bit values from a UShortEXT texture. */
+        NOXNA void GetData(std::uint16_t* data, int elementCount) const;
+        /** @brief Reads exact unsigned 16-bit values from a UShortEXT mip level or rectangle. */
+        NOXNA void GetData(int level, const Rectangle* rect, std::uint16_t* data,
+                           int startIndex, int elementCount) const;
 
         /** @brief Preserves the legacy null-pointer overload resolution after packed overloads. */
         void GetData(std::nullptr_t, int elementCount) const

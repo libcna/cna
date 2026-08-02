@@ -1,15 +1,15 @@
 # Skia `SurfaceFormat` contract matrix
 
-Status: normative SKIA-134 contract; SKIA-135/136 Texture2D routes promoted
+Status: normative SKIA-134 contract; SKIA-135–137 Texture2D routes promoted
 
 This matrix fixes the byte and sampling contract for every public format.
 It is based on CNA's `SurfaceFormat`, `Texture::GetBlockSizeSquaredEXT` and
 `Texture::GetFormatSizeEXT`, the CNA packed-vector implementations, and FNA/FNA3D's OpenGL
-transfer mappings. `Skia representation` names the pinned CPU-raster building block. SKIA-135/136
-now enable `Bgr565`, `Bgra4444`, `Rgba1010102`, `ColorBgraEXT`, and `ColorSrgbEXT` for Skia
-`Texture2D` only after their transfer and pixel gates passed. Every other non-`Color` texture row
-remains refused until its owner passes; non-`Color` render targets remain independently refused
-pending SKIA-142.
+transfer mappings. `Skia representation` names the pinned CPU-raster building block. SKIA-135–137
+now enable `Bgr565`, `Bgra4444`, `Rgba1010102`, `Rg32`, `Rgba64`, `Alpha8`, `ColorBgraEXT`,
+`ColorSrgbEXT`, `ByteEXT`, and `UShortEXT` for Skia `Texture2D` only after their transfer and pixel
+gates passed. Every other non-`Color` texture row remains refused until its owner passes;
+non-`Color` render targets remain independently refused pending SKIA-142.
 
 All multi-byte words and IEEE values below use the little-endian host layout required by the
 pinned Skia raster artifact. A future big-endian build must add explicit byte conversion or refuse
@@ -35,9 +35,9 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
 | 7 | `NormalizedByte2` | 1 | 2 | bytes X s8, Y s8 | RG SNORM, B=0, A=1 | exact byte shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
 | 8 | `NormalizedByte4` | 1 | 4 | bytes X s8, Y s8, Z s8, W s8 | RGBA SNORM | exact byte shadow plus decoded `kRGBA_F32` working image | FNA coerces to Color; Skia refuses target | conversion-shadow | SKIA-139 |
 | 9 | `Rgba1010102` | 1 | 4 | LE u32 A31:30, B29:20, G19:10, R9:0 | RGBA UNORM | promoted Texture2D `kRGBA_1010102` exact word | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-135 |
-| 10 | `Rg32` | 1 | 4 | LE u16 R, then LE u16 G | RG UNORM, B=0, A=1 | `kR16G16_unorm` exact words | renderable; direct raster candidate | direct | SKIA-137 |
-| 11 | `Rgba64` | 1 | 8 | LE u16 R, G, B, A | RGBA UNORM | `kR16G16B16A16_unorm` exact words | renderable; direct raster candidate | direct | SKIA-137 |
-| 12 | `Alpha8` | 1 | 1 | one byte A8 | R=0, G=0, B=0, A UNORM | `kAlpha_8` exact byte | FNA coerces to Color; Skia refuses target | direct-texture-only | SKIA-137 |
+| 10 | `Rg32` | 1 | 4 | LE u16 R, then LE u16 G | RG UNORM, B=0, A=1 | promoted Texture2D `kR16G16_unorm` exact words | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-137 |
+| 11 | `Rgba64` | 1 | 8 | LE u16 R, G, B, A | RGBA UNORM | promoted Texture2D `kR16G16B16A16_unorm` exact words | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-137 |
+| 12 | `Alpha8` | 1 | 1 | one byte A8 | R=0, G=0, B=0, A UNORM | promoted Texture2D `kAlpha_8` exact byte | FNA coerces to Color; Skia refuses target | direct-texture-only | SKIA-137 |
 | 13 | `Single` | 1 | 4 | LE IEEE binary32 R | R float, G=0, B=0, A=1 | exact bit shadow plus expanded `kRGBA_F32` working image | renderable; conversion raster candidate | conversion-shadow | SKIA-138 |
 | 14 | `Vector2` | 1 | 8 | LE IEEE binary32 R, G | RG float, B=0, A=1 | exact bit shadow plus expanded `kRGBA_F32` working image | renderable; conversion raster candidate | conversion-shadow | SKIA-138 |
 | 15 | `Vector4` | 1 | 16 | LE IEEE binary32 R, G, B, A | RGBA float | `kRGBA_F32` exact words | renderable; direct raster candidate | direct | SKIA-138 |
@@ -50,8 +50,8 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
 | 22 | `Dxt5SrgbEXT` | 16 | 16 | one BC3 block per 4x4 texels with sRGB RGB | linear RGB after BC3 decode and one sRGB decode, A UNORM | exact block shadow plus bounded RGBA8 sRGB decoder | FNA coerces to Color; Skia refuses target | compressed-shadow | SKIA-140 |
 | 23 | `Bc7EXT` | 16 | 16 | one BC7 block per 4x4 texels | RGBA UNORM | exact block shadow plus license-compatible bounded decoder | FNA coerces to Color; Skia refuses target | decoder-required | SKIA-141 |
 | 24 | `Bc7SrgbEXT` | 16 | 16 | one BC7 block per 4x4 texels with sRGB RGB | linear RGB after BC7 decode and one sRGB decode, A UNORM | exact block shadow plus license-compatible bounded sRGB decoder | FNA coerces to Color; Skia refuses target | decoder-required | SKIA-141 |
-| 25 | `ByteEXT` | 1 | 1 | one byte R8 | R UNORM, G=0, B=0, A=1 | `kR8_unorm` exact byte | renderable; direct raster candidate | direct | SKIA-137 |
-| 26 | `UShortEXT` | 1 | 2 | LE u16 R | R UNORM, G=0, B=0, A=1 | `kR16_unorm` exact word | renderable; direct raster candidate | direct | SKIA-137 |
+| 25 | `ByteEXT` | 1 | 1 | one byte R8 | R UNORM, G=0, B=0, A=1 | promoted Texture2D `kR8_unorm` exact byte | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-137 |
+| 26 | `UShortEXT` | 1 | 2 | LE u16 R | R UNORM, G=0, B=0, A=1 | promoted Texture2D `kR16_unorm` exact word | renderable; Skia target remains refused pending SKIA-142 | direct | SKIA-137 |
 
 ## Decisions fixed by SKIA-134
 
@@ -72,3 +72,7 @@ changing `RenderTarget2D::Format` would make exact transfer/readback impossible.
 - Pinned `kSRGBA_8888` itself decodes encoded RGB while gathering. Its Skia colour-space metadata
   therefore describes the post-gather linear-sRGB working values, not the encoded storage. A
   linear destination performs no second decode; an explicit sRGB destination encodes exactly once.
+- Pinned alpha/R/RG UNORM colour types provide the required missing-channel constants directly:
+  Alpha8 gathers zero RGB, while R8/R16/RG16 gather zero absent colour channels and opaque alpha.
+  SKIA-137 therefore needs no shader swizzle or expanded conversion shadow for these Texture2D
+  routes; typed transfers still serialize every multi-byte word explicitly little-endian.
