@@ -31,15 +31,27 @@ namespace CNA::Internal::Backends::Llgl
          * @brief Takes ownership of an already-created LLGL texture.
          *
          * @param renderSystem Render system that created @p texture and will release it.
+         * @param owner        Backend to defer this texture's release through (see the destructor's
+         *                     own comment); null falls back to releasing immediately.
          * @param texture      The texture resource; must not be null.
          * @param width        Width in pixels of mip level 0.
          * @param height       Height in pixels of mip level 0.
          * @param mipLevels    Number of mip levels the texture was created with.
          */
-        LlglTextureBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* texture,
-                           int width, int height, int mipLevels);
+        LlglTextureBackend(LLGL::RenderSystem* renderSystem, LlglGraphicsBackend* owner,
+                           LLGL::Texture* texture, int width, int height, int mipLevels);
 
-        /** @brief Releases the LLGL texture. */
+        /**
+         * @brief Defers releasing the LLGL texture, mirroring `LlglVertexBufferBackend`'s own
+         * `ScheduleBufferReleaseEXT` precedent: a `Texture2D` that goes out of scope before
+         * `Present()` (create it, draw it via `SpriteBatch`, let it die, all within one `Draw()`) is
+         * a perfectly normal XNA pattern, and the still-queued `FrameCommand`/`FrameCommandBucket`
+         * this texture was drawn through may not replay until `Present()`/`GetBackBufferData()`
+         * actually flushes the frame -- releasing here immediately left that replay pointing at
+         * freed memory (found via `backbuffer_readback_dimension_test.cpp`'s own A1 leg, a plain
+         * SpriteBatch draw of a locally-scoped `Texture2D` followed by an unflushed readback,
+         * segfaulting inside `VKDescriptorCache::EmplaceDescriptor`).
+         */
         ~LlglTextureBackend() override;
 
         LlglTextureBackend(const LlglTextureBackend&) = delete;
@@ -98,11 +110,12 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] LLGL::Texture* GetLlglTexture() const { return texture_; }
 
     private:
-        LLGL::RenderSystem* renderSystem_ = nullptr;
-        LLGL::Texture*      texture_      = nullptr;
-        int                 width_        = 0;
-        int                 height_       = 0;
-        int                 mipLevels_    = 1;
+        LLGL::RenderSystem*  renderSystem_ = nullptr;
+        LlglGraphicsBackend* owner_        = nullptr;
+        LLGL::Texture*       texture_      = nullptr;
+        int                  width_        = 0;
+        int                  height_       = 0;
+        int                  mipLevels_    = 1;
     };
 
     /**
@@ -121,14 +134,17 @@ namespace CNA::Internal::Backends::Llgl
          * @brief Takes ownership of an already-created LLGL cube texture.
          *
          * @param renderSystem Render system that created @p texture and will release it.
+         * @param owner        Backend to defer this texture's release through; null falls back to
+         *                     releasing immediately. See `LlglTextureBackend`'s own destructor
+         *                     comment for why this matters.
          * @param texture      The texture resource; must not be null.
          * @param size         Width and height in pixels of mip level 0 (cube faces are square).
          * @param mipLevels    Number of mip levels the texture was created with.
          */
-        LlglTextureCubeBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* texture,
-                               int size, int mipLevels);
+        LlglTextureCubeBackend(LLGL::RenderSystem* renderSystem, LlglGraphicsBackend* owner,
+                               LLGL::Texture* texture, int size, int mipLevels);
 
-        /** @brief Releases the LLGL texture. */
+        /** @brief Defers releasing the LLGL texture; see `LlglTextureBackend`'s own destructor. */
         ~LlglTextureCubeBackend() override;
 
         LlglTextureCubeBackend(const LlglTextureCubeBackend&) = delete;
@@ -152,10 +168,11 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] LLGL::Texture* GetLlglTexture() const { return texture_; }
 
     private:
-        LLGL::RenderSystem* renderSystem_ = nullptr;
-        LLGL::Texture*      texture_      = nullptr;
-        int                 size_         = 0;
-        int                 mipLevels_    = 1;
+        LLGL::RenderSystem*  renderSystem_ = nullptr;
+        LlglGraphicsBackend* owner_        = nullptr;
+        LLGL::Texture*       texture_      = nullptr;
+        int                  size_         = 0;
+        int                  mipLevels_    = 1;
     };
 
     /**
@@ -172,16 +189,19 @@ namespace CNA::Internal::Backends::Llgl
          * @brief Takes ownership of an already-created LLGL volume texture.
          *
          * @param renderSystem Render system that created @p texture and will release it.
+         * @param owner        Backend to defer this texture's release through; null falls back to
+         *                     releasing immediately. See `LlglTextureBackend`'s own destructor
+         *                     comment for why this matters.
          * @param texture      The texture resource; must not be null.
          * @param width        Width in voxels of mip level 0.
          * @param height       Height in voxels of mip level 0.
          * @param depth        Depth in voxels of mip level 0.
          * @param mipLevels    Number of mip levels the texture was created with.
          */
-        LlglTexture3DBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* texture,
-                             int width, int height, int depth, int mipLevels);
+        LlglTexture3DBackend(LLGL::RenderSystem* renderSystem, LlglGraphicsBackend* owner,
+                             LLGL::Texture* texture, int width, int height, int depth, int mipLevels);
 
-        /** @brief Releases the LLGL texture. */
+        /** @brief Defers releasing the LLGL texture; see `LlglTextureBackend`'s own destructor. */
         ~LlglTexture3DBackend() override;
 
         LlglTexture3DBackend(const LlglTexture3DBackend&) = delete;
@@ -205,12 +225,13 @@ namespace CNA::Internal::Backends::Llgl
         [[nodiscard]] LLGL::Texture* GetLlglTexture() const { return texture_; }
 
     private:
-        LLGL::RenderSystem* renderSystem_ = nullptr;
-        LLGL::Texture*      texture_      = nullptr;
-        int                 width_        = 0;
-        int                 height_       = 0;
-        int                 depth_        = 0;
-        int                 mipLevels_    = 1;
+        LLGL::RenderSystem*  renderSystem_ = nullptr;
+        LlglGraphicsBackend* owner_        = nullptr;
+        LLGL::Texture*       texture_      = nullptr;
+        int                  width_        = 0;
+        int                  height_       = 0;
+        int                  depth_        = 0;
+        int                  mipLevels_    = 1;
     };
 
     /**
@@ -1681,6 +1702,18 @@ namespace CNA::Internal::Backends::Llgl
                                             LLGL::Texture* colorTexture,
                                             LLGL::Texture* depthTexture,
                                             LLGL::Buffer* spriteProjectionBuffer);
+
+        /**
+         * @brief Defers releasing a plain `Texture2D`/`TextureCube`/`Texture3D`'s own LLGL texture,
+         * same reasoning as `ScheduleBufferReleaseEXT`: `LlglTextureBackend`/`LlglTextureCubeBackend`/
+         * `LlglTexture3DBackend`'s destructors call this instead of releasing immediately, because a
+         * texture that goes out of scope before `Present()`/`GetBackBufferData()` flushes the frame
+         * is a perfectly normal XNA pattern and `FrameCommand::texture`/`envMapTexture`/
+         * `pbrNormalTexture` (etc.) may still reference it by raw pointer.
+         *
+         * @param texture Texture to release once the frame referencing it has been submitted.
+         */
+        void ScheduleTextureReleaseEXT(LLGL::Texture* texture);
 
         /**
          * @brief Defers releasing an occlusion query's `LLGL::QueryHeap`, same reasoning as

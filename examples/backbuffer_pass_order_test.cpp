@@ -254,6 +254,24 @@ namespace
 #elif defined(CNA_BACKEND_D3D12)
     constexpr Contract kContract{"D3D12", Support::Exact, true, Support::Exact,
                                  true, true, true, true, true, true, true, true, true, false};
+#elif defined(CNA_BACKEND_LLGL)
+    // `orderedBackbufferSegments` is false: RecordAndSubmitFrame()/CaptureBackbuffer() group the
+    // whole frame's queued commands into one FrameCommandBucket per DISTINCT TARGET IDENTITY
+    // (GroupFrameCommandsByTargetEXT), replayed in FIRST-APPEARANCE order -- a target that is
+    // produced, consumed by the backbuffer, then produced again still gets ONE bucket covering
+    // both production cycles, replayed as one pass BEFORE the trailing backbuffer bucket runs. The
+    // same shape REMED-GFX-143 fixed on Vulkan/SdlGpu (a trailing pass, not per-bind-cycle
+    // segments), not yet fixed here.
+    // Every other field reflects this backend's own single ordered `frameCommands_` stream: Clear/
+    // Sprite/Primitives commands share ONE vector in public queue order (no separate per-family
+    // queues), so `mixedQueuesKeepPublicOrder` is real, and a `Clear()` queued after a draw within
+    // the SAME bucket replays after it too (`clearAfterDrawWinsOnBackbuffer`).
+    // `backbufferSpriteViewportIsLocal` and `backbufferSpriteScissorApplies` are both real (LLGL-39:
+    // sprite geometry is translated by the active Viewport's own X/Y before the letterbox scale;
+    // ComputeEffectiveScissor intersects the effective scissor with both the Viewport and any
+    // explicit ScissorRectangle, captured per FrameCommand at queue time).
+    constexpr Contract kContract{"LLGL", Support::Exact, true, Support::Exact,
+                                 true, false, true, true, true, true, true, true, true, false};
 #else
 #error "REMED-GFX-143: this backend has no declared backbuffer command-order contract."
 #endif

@@ -462,9 +462,10 @@ namespace CNA::Internal::Backends::Llgl
     // LlglTextureBackend
     // -----------------------------------------------------------------------------------------
 
-    LlglTextureBackend::LlglTextureBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* texture,
-                                           int width, int height, int mipLevels)
+    LlglTextureBackend::LlglTextureBackend(LLGL::RenderSystem* renderSystem, LlglGraphicsBackend* owner,
+                                           LLGL::Texture* texture, int width, int height, int mipLevels)
         : renderSystem_(renderSystem)
+        , owner_(owner)
         , texture_(texture)
         , width_(width)
         , height_(height)
@@ -476,7 +477,12 @@ namespace CNA::Internal::Backends::Llgl
 
     LlglTextureBackend::~LlglTextureBackend()
     {
-        if (renderSystem_ != nullptr && texture_ != nullptr)
+        if (texture_ == nullptr)
+            return;
+
+        if (owner_ != nullptr)
+            owner_->ScheduleTextureReleaseEXT(texture_);
+        else if (renderSystem_ != nullptr)
             renderSystem_->Release(*texture_);
     }
 
@@ -555,8 +561,10 @@ namespace CNA::Internal::Backends::Llgl
     // -----------------------------------------------------------------------------------------
 
     LlglTextureCubeBackend::LlglTextureCubeBackend(LLGL::RenderSystem* renderSystem,
+                                                    LlglGraphicsBackend* owner,
                                                     LLGL::Texture* texture, int size, int mipLevels)
         : renderSystem_(renderSystem)
+        , owner_(owner)
         , texture_(texture)
         , size_(size)
         , mipLevels_(mipLevels > 0 ? mipLevels : 1)
@@ -567,7 +575,12 @@ namespace CNA::Internal::Backends::Llgl
 
     LlglTextureCubeBackend::~LlglTextureCubeBackend()
     {
-        if (renderSystem_ != nullptr && texture_ != nullptr)
+        if (texture_ == nullptr)
+            return;
+
+        if (owner_ != nullptr)
+            owner_->ScheduleTextureReleaseEXT(texture_);
+        else if (renderSystem_ != nullptr)
             renderSystem_->Release(*texture_);
     }
 
@@ -633,9 +646,11 @@ namespace CNA::Internal::Backends::Llgl
     // LlglTexture3DBackend
     // -----------------------------------------------------------------------------------------
 
-    LlglTexture3DBackend::LlglTexture3DBackend(LLGL::RenderSystem* renderSystem, LLGL::Texture* texture,
-                                               int width, int height, int depth, int mipLevels)
+    LlglTexture3DBackend::LlglTexture3DBackend(LLGL::RenderSystem* renderSystem, LlglGraphicsBackend* owner,
+                                               LLGL::Texture* texture, int width, int height, int depth,
+                                               int mipLevels)
         : renderSystem_(renderSystem)
+        , owner_(owner)
         , texture_(texture)
         , width_(width)
         , height_(height)
@@ -648,7 +663,12 @@ namespace CNA::Internal::Backends::Llgl
 
     LlglTexture3DBackend::~LlglTexture3DBackend()
     {
-        if (renderSystem_ != nullptr && texture_ != nullptr)
+        if (texture_ == nullptr)
+            return;
+
+        if (owner_ != nullptr)
+            owner_->ScheduleTextureReleaseEXT(texture_);
+        else if (renderSystem_ != nullptr)
             renderSystem_->Release(*texture_);
     }
 
@@ -3807,7 +3827,7 @@ namespace CNA::Internal::Backends::Llgl
         }
 
         LLGL::Texture* texture = renderer_->CreateTexture(textureDesc, initialImage);
-        return std::make_unique<LlglTextureBackend>(renderer_.get(), texture, data.width, data.height,
+        return std::make_unique<LlglTextureBackend>(renderer_.get(), this, texture, data.width, data.height,
                                                     static_cast<int>(textureDesc.mipLevels));
     }
 
@@ -3840,7 +3860,7 @@ namespace CNA::Internal::Backends::Llgl
         // No initial image -- the shared TextureCube layer always follows construction with its
         // own SetData() call per face/level, exactly like Texture2D's own typed constructors do.
         LLGL::Texture* texture = renderer_->CreateTexture(textureDesc, nullptr);
-        return std::make_unique<LlglTextureCubeBackend>(renderer_.get(), texture, size, mipLevels);
+        return std::make_unique<LlglTextureCubeBackend>(renderer_.get(), this, texture, size, mipLevels);
     }
 
     std::unique_ptr<ITexture3DBackend> LlglGraphicsBackend::CreateTexture3D(
@@ -3879,7 +3899,7 @@ namespace CNA::Internal::Backends::Llgl
         // No initial image -- the shared Texture3D layer always follows construction with its own
         // SetData() call per level, exactly like Texture2D's own typed constructors do.
         LLGL::Texture* texture = renderer_->CreateTexture(textureDesc, nullptr);
-        return std::make_unique<LlglTexture3DBackend>(renderer_.get(), texture, w, h, depth, mipLevels);
+        return std::make_unique<LlglTexture3DBackend>(renderer_.get(), this, texture, w, h, depth, mipLevels);
     }
 
     std::unique_ptr<ISpriteBatchBackend> LlglGraphicsBackend::CreateSpriteBatch()
@@ -4502,6 +4522,22 @@ namespace CNA::Internal::Backends::Llgl
         pendingBufferReleases_.push_back(buffer);
     }
 
+    void LlglGraphicsBackend::ScheduleTextureReleaseEXT(LLGL::Texture* texture)
+    {
+        if (texture == nullptr)
+            return;
+
+        // Nothing recorded refers to it, so there is nothing to wait for -- same reasoning as
+        // ScheduleBufferReleaseEXT.
+        if (frameCommands_.empty())
+        {
+            renderer_->Release(*texture);
+            return;
+        }
+
+        pendingTextureReleases_.push_back(texture);
+    }
+
     void LlglGraphicsBackend::ScheduleRenderTargetReleaseEXT(LLGL::RenderTarget* renderTarget,
                                                               LLGL::Texture* colorTexture,
                                                               LLGL::Texture* depthTexture,
@@ -4657,8 +4693,24 @@ namespace CNA::Internal::Backends::Llgl
     std::vector<LlglGraphicsBackend::FrameCommandBucket> LlglGraphicsBackend::GroupFrameCommandsByTargetEXT() const
     {
         std::vector<FrameCommandBucket> buckets;
+        // The swap chain's own commands are pulled out into this bucket as they're found, instead
+        // of taking their place in `buckets` at their own first-appearance position, so the swap
+        // chain always replays LAST regardless of when the frame first touched it. Without this, a
+        // Clear() (or any other backbuffer command) queued before an ordinary "render to a target,
+        // then composite it onto the backbuffer" sequence made the swap chain's bucket the FIRST one
+        // built, so the composite draw sampled the target BEFORE its own producer's bucket had even
+        // run -- reading whatever undefined content a fresh texture starts with, not merely stale
+        // content from an earlier cycle (REMED-GFX-143-shaped, found wiring plan_llgl.md's Phase
+        // LLGL-7 LLGL-40 via backbuffer_pass_order_test.cpp's own A1/A2 checks).
+        FrameCommandBucket swapChainBucket;
         for (const FrameCommand& command : frameCommands_)
         {
+            if (command.target == nullptr)
+            {
+                swapChainBucket.commands.push_back(&command);
+                continue;
+            }
+
             const auto found = std::find_if(buckets.begin(), buckets.end(),
                 [&](const FrameCommandBucket& bucket) { return bucket.target == command.target; });
             if (found != buckets.end())
@@ -4675,12 +4727,9 @@ namespace CNA::Internal::Backends::Llgl
 
         // Every RecordAndSubmitFrame/CaptureBackbuffer caller needs a swap-chain pass regardless of
         // whether this frame drew to it directly (Present() must always submit something, and
-        // CaptureBackbuffer's framebuffer copy can only run inside one), so one is appended here
-        // rather than duplicated at each call site.
-        const bool hasSwapChainBucket = std::any_of(buckets.begin(), buckets.end(),
-            [](const FrameCommandBucket& bucket) { return bucket.target == nullptr; });
-        if (!hasSwapChainBucket)
-            buckets.push_back(FrameCommandBucket{});
+        // CaptureBackbuffer's framebuffer copy can only run inside one), so it is always appended
+        // here, even when empty, rather than duplicated at each call site.
+        buckets.push_back(std::move(swapChainBucket));
 
         return buckets;
     }

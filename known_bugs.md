@@ -510,6 +510,129 @@ see `cmake/Tests/LlglTests.cmake`'s own comment there for the full explanation).
 
 ---
 
+## LLGL backend: the swap chain's own render pass replayed wherever it FIRST appeared, not last — FIXED 2026-08-02
+
+**Symptom:** discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
+`backbuffer_pass_order_test.cpp`). The ordinary XNA pattern "render to a texture, then composite it
+onto the backbuffer in the SAME unflushed frame" (`RenderTarget2D t; SetRenderTarget(&t); fill red;
+SetRenderTarget(null); draw t onto the backbuffer`) sampled `t` as pure zero/transparent-black
+content instead of red, whenever ANY earlier command in that same frame had already touched the
+backbuffer (e.g. an initial `GraphicsDevice.Clear()` before the render-target work) -- checks A1/A2
+of `backbuffer_pass_order_test.cpp` failed with `(0,0,0,0)`, not merely a stale/wrong colour.
+
+**Root cause:** `GroupFrameCommandsByTargetEXT()` built `FrameCommandBucket`s in FIRST-APPEARANCE
+order across every distinct target INCLUDING the swap chain (`target == nullptr`) -- so a frame
+whose very first queued command was a backbuffer `Clear()` put the swap chain's own bucket FIRST in
+replay order, before the render-target bucket that hadn't been touched yet even ran. A backbuffer
+draw that samples a render target as a texture therefore executed before that target had ever been
+written to at all, reading whatever a freshly-created texture starts with (not "the target's content
+as of an earlier cycle", which is what the file's own documented "backbuffer trails everything"
+architecture -- see `docs/llgl-backend.md`'s "One render pass per distinct target" bullet -- was
+already supposed to guarantee).
+
+**Fix:** the swap chain's own commands are now pulled into a separate bucket as they're found
+(instead of taking a slot in `buckets` at their own first-appearance position) and that bucket is
+unconditionally appended LAST, after every render-target bucket, regardless of when the frame first
+touched the backbuffer. This matches what `docs/llgl-backend.md` already documented as the intended
+design and is the same "trailing pass" shape Vulkan/SdlGpu had before their own REMED-GFX-143 fixes
+-- `orderedBackbufferSegments` in the new `backbuffer_pass_order_test.cpp` `CNA_BACKEND_LLGL`
+Contract branch stays declared `false` (this backend still does not give each backbuffer cycle its
+own segment), but the COLLAPSED result the `false` declaration predicts is now what actually happens
+(both consumers see the target's FINAL content), rather than an undefined/garbage read.
+
+**Verified:** `backbuffer_pass_order_test.cpp` 30/30 PASS on the default (Vulkan) module (29/30 run
+cleanly under `CNA_LLGL_RENDERER=opengl` before hitting the separate, pre-existing
+`hasCubeTextures not supported` gap on check M2). Full `Llgl` (67/67) + `CnaTests` sweep run clean
+afterward with zero regressions.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40`.
+
+---
+
+## LLGL backend: a `Texture2D`/`TextureCube`/`Texture3D` destroyed before `Present()` segfaulted — FIXED 2026-08-02
+
+**Symptom:** discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
+`backbuffer_readback_dimension_test.cpp`/`backbuffer_first_read_test.cpp`). A completely ordinary
+pattern -- create a `Texture2D`, draw it via `SpriteBatch` inside a helper function, let it go out of
+scope when that function returns, THEN call `GraphicsDevice.GetBackBufferData()` later in the same
+`Draw()` -- crashed with `SIGSEGV` inside LLGL's own `VKDescriptorCache::EmplaceDescriptor`, reached
+through `ReplayFrameCommandsList()`'s `Sprite` case dereferencing a `command.texture` that no longer
+pointed at a live `LLGL::Texture`. Confirmed with `gdb`: `LlglTextureBackend::~LlglTextureBackend()`
+released the underlying `LLGL::Texture` IMMEDIATELY and unconditionally, the instant the C++
+`Texture2D` wrapper went out of scope -- but this backend defers replaying queued sprite/primitive
+commands until `Present()`/`GetBackBufferData()` actually flushes the frame, so any `FrameCommand`
+that had already captured a pointer to that texture (`command.texture`, `envMapTexture`,
+`pbrNormalTexture`, etc.) was left dangling well before the frame that referenced it ever replayed.
+`LlglTextureCubeBackend`/`LlglTexture3DBackend` had the exact same immediate-release destructor and
+the identical bug, just not yet independently triggered by a test.
+
+**Fix:** all three texture backend classes now take an owning `LlglGraphicsBackend*` at construction
+(mirroring `LlglVertexBufferBackend`'s own `ScheduleBufferReleaseEXT` precedent) and their
+destructors call a new `ScheduleTextureReleaseEXT()` instead of releasing immediately -- it releases
+right away only when no frame is currently queued (nothing could be referencing the texture), and
+otherwise defers into the already-existing `pendingTextureReleases_` pool (previously only fed by
+`RenderTargetCube`'s own colour/depth textures), drained by the already-existing
+`ReleasePendingBuffers()` after every frame submission's `queue_->WaitIdle()`.
+
+**Verified:** the crash reproduced on `backbuffer_readback_dimension_test.cpp`'s very first leg
+(A1, a plain rectangle-less read after one ordinary `SpriteBatch` draw) and `backbuffer_first_read
+_test.cpp` (12/13 legs crashed) before the fix; both run to completion with zero crashes after it
+(`backbuffer_readback_dimension_test.cpp`: 8/8 PASS; `backbuffer_first_read_test.cpp`: 9/13 PASS,
+the other 4 blocked on a separate, unrelated finding -- see the next entry). Full `Llgl` + `CnaTests`
+sweep run clean afterward with zero regressions.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40`.
+
+---
+
+## LLGL backend: `FixedHeightDynamicWidth`'s logical width ignores the requested backbuffer width — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
+`backbuffer_first_read_test.cpp`). Root cause identified with confidence; not fixed here (needs
+comparison against how other backends implement the same `CnaPresentationMode`, out of scope for a
+test-wiring task).
+
+**Symptom:** `backbuffer_first_read_test.cpp`'s D63/D64/D65 legs (backbuffers 63x17/64x17/65x17,
+deliberately probing GPU row-pitch alignment boundaries) and E1 (64x32) all fail with columns near
+and past a specific boundary reading back as pure `(0,0,0,alpha)` -- the frame's own `Clear()`
+colour, not the drawn pattern -- while every other leg using a size below that boundary (`A1`/`A3`/
+`A4`/`A6`/`B1`-`B4`/`C1`, and separately every size `backbuffer_readback_dimension_test.cpp` probes:
+37x23, 41x29, 50x40, 30x20) passes cleanly.
+
+**Root cause:** `ComputePresentationRect()`'s `CnaPresentationMode::FixedHeightDynamicWidth` branch
+(this backend's own default presentation mode) computes `logicalWidth = round(physicalWidth *
+logicalHeight / physicalHeight)` -- deriving the logical (virtual-resolution) coordinate space's own
+WIDTH purely from the PHYSICAL window's aspect ratio, discarding `virtualWidth_` (the game's own
+requested `PreferredBackBufferWidth`, correctly captured via `SetVirtualResolution()`) entirely. In
+this project's own headless test environment the physical window consistently ends up ~800x480
+regardless of what a game requests (confirmed via `SDL_GetWindowSizeInPixels` immediately after
+`SDL_CreateWindow`, independent of any CNA/LLGL code -- an environment/SDL/X11 characteristic, not
+something this backend controls), so a request for a very SHORT backbuffer (height 17 or 32) derives
+a narrow logical width (round(800*17/480)=28, round(800*32/480)=53) that is SMALLER than what a wide
+aspect ratio actually requested (63-65, or 64) -- every column at or past the derived boundary falls
+outside this backend's own internal coordinate space (used for BOTH `QueueSpriteEXT`'s geometry
+baking and `ReadBackbuffer`'s own sampling), landing on whatever the frame's `Clear()` left there
+instead of the drawn content. `backbuffer_readback_dimension_test.cpp`'s own probed sizes all happen
+to keep the requested width under their own derived boundary, which is why that file did not surface
+this on its own, and why it is safe to keep registered as-is.
+
+**Why this needs more than a test-wiring fix:** `presentationParameters_.getBackBufferWidthProperty()`
+already correctly reports the game's own requested width (63, not 28) -- `GraphicsDevice::
+GetBackBufferData` sizes its read from that, which is why every affected leg still returns the FULL
+requested element count with none of it left unwritten (poison-free), just with wrong CONTENT past
+the derived boundary. Whether `FixedHeightDynamicWidth` is SUPPOSED to let the logical width diverge
+from the requested width like this (an intentional "cinematic" width-follows-window-aspect feature)
+or whether other backends implementing the same named mode instead keep the logical extent pinned to
+the requested size and apply the aspect mismatch purely as a physical-fit letterbox/scale was not
+established here -- fixing it correctly requires settling that question first, not just patching
+this one formula.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40` (no CTest registration for
+`backbuffer_first_read_test.cpp` until this is resolved -- see `cmake/Tests/LlglTests.cmake`'s own
+comment there for the full per-leg breakdown).
+
+---
+
 ## LLGL backend: untextured+unlit `BasicEffect` with no vertex-colour attribute throws — OPEN
 
 **Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause

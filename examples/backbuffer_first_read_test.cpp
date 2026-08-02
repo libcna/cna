@@ -97,6 +97,9 @@ namespace
 #elif defined(CNA_BACKEND_D3D12)
     constexpr const char* kBackendName = "D3D12";
     constexpr bool kRasterizes = true;
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kBackendName = "LLGL";
+    constexpr bool kRasterizes = true;
 #else
 #error "REMED-GFX-161: this backend has no declared first-read contract."
 #endif

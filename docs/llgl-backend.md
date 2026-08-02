@@ -365,10 +365,22 @@ Destroying a `RenderTarget2D` before `Present()` (create it, draw into it, sampl
 of scope, all within one `Draw()`) is safe: like `VertexBuffer`/`IndexBuffer`, the underlying LLGL
 objects are released only once the frame that may still reference them has actually been
 submitted. `RenderTarget2D::GetData()` also forces any of its own still-queued draws to be
-submitted first — its content, unlike a plain `Texture2D`'s, only exists once they are.
+submitted first — its content only exists once they are.
 `RenderTargetCube`'s destructor does the same for its 6 face targets, releasing the shared colour
 and depth textures exactly once (not 6 times) regardless of how many of the 6 faces were ever
 drawn into.
+
+**A plain `Texture2D`/`TextureCube`/`Texture3D` destroyed before `Present()` is safe too (LLGL-40
+fix, previously a crash — see `known_bugs.md`).** All three now take the owning backend at
+construction and defer releasing their underlying `LLGL::Texture` through the same
+`pendingTextureReleases_` pool `RenderTargetCube`'s own colour/depth attachments already used
+(`ScheduleTextureReleaseEXT`, mirroring `ScheduleBufferReleaseEXT`), instead of releasing
+immediately. Before this fix, drawing a locally-scoped `Texture2D` via `SpriteBatch` inside a
+helper function and letting it go out of scope before the frame flushed (create it, draw it, let it
+die, then `GetBackBufferData()`/`Present()` later in the same `Draw()`) segfaulted — the queued
+`FrameCommand` still pointed at the now-freed texture. Found via
+`backbuffer_readback_dimension_test.cpp`'s own A1 leg, the very first check to exercise exactly
+that ordinary pattern.
 
 Unlike `RenderTarget2D`'s anonymous (textureless) depth/stencil attachment, `RenderTargetCube`'s
 shared depth/stencil buffer is a real, explicitly-owned `LLGL::Texture` — it has to be, since all 6
@@ -785,6 +797,14 @@ batch remain deliberately unregistered after being found to genuinely fail here 
 identified reasons -- see `known_bugs.md`'s open entries for
 `rasterizerstate_cullmode_indexed_basiceffect_test.cpp` and
 `rasterizerstate_cullmode_camera_test.cpp`.
+Three more, from Phase LLGL-7's `LLGL-40` back-buffer batch, are wired up too:
+`Llgl_BackBuffer_PassOrder` (30/30, the swap-chain-bucket-ordering fix above),
+`Llgl_BackBuffer_ReadbackDimension` (8/8, the texture-lifetime fix above -- `GetBackBufferData`'s
+required element count is authoritative regardless of viewport/round-trips/resize) and
+`Llgl_BackBuffer_HeadlessReject`'s own `LLGL` Contract branch (12/12, needed no fix). A fourth file
+from the same batch, `backbuffer_first_read_test.cpp`, stays unregistered: 9/13 legs pass, but its
+own row-pitch matrix (widths 63/64/65 against a fixed height of 17) and one more (64x32) hit the
+open `FixedHeightDynamicWidth` logical-width finding in `known_bugs.md`.
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED
