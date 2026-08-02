@@ -1,6 +1,9 @@
 # Skia CPU-raster release gate
 
-Status: passed
+Status: passed for the SKIA-1–114 CPU-raster baseline
+
+Successor status: SKIA-115–170 is active and is not covered by this passed baseline gate. New
+features remain unadvertised until their individual evidence and SKIA-170 pass.
 
 Scope: experimental `CNA_GRAPHICS_BACKEND=SKIA` CPU-raster 2D backend at the SKIA-114 checkpoint.
 This is not a Ganesh/Graphite, general 3D, or full EasyGL feature-equivalence claim.
@@ -94,6 +97,7 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
 
 ## Reopening rule
 
-Any change to the Skia revision/GN flags, execution mode, capability true set, alpha convention,
-sampling fallback, or 3D decision must reopen SKIA-114, update this checklist and the relevant ADR,
-and rerun the complete release audit and pixel suite before being advertised.
+The completed SKIA-1–114 evidence remains a regression baseline. Any successor change to the Skia
+revision/GN flags, execution mode, capability true set, alpha convention, sampling fallback, or 3D
+decision must update this checklist and the relevant ADR, then pass SKIA-170 and the complete
+release audit/pixel suite before being advertised.

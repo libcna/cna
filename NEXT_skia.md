@@ -3,9 +3,9 @@
 ## Session status
 
 - Branch: `feature/skia`; commits are pushed through the SSH `origin` remote.
-- Scope: release-gated experimental CPU-raster `CNA_GRAPHICS_BACKEND=SKIA`, with pixel-verified
-  2D parity for every accepted observable EasyGL/CNA contract. Do not claim 3D drawing, GPU
-  presentation,
+- Scope: release-gated experimental CPU-raster `CNA_GRAPHICS_BACKEND=SKIA`, with the verified
+  SKIA-1–114 baseline retained while SKIA-115–170 actively expands 2D parity and investigates an
+  opt-in Ganesh mode. Do not claim 3D drawing, GPU presentation,
   depth, MSAA, renderable/Texture2D mipmaps, MRT, cube/volume sampling, or arbitrary effects until
   their individual `plan_skia.md` evidence exists. Plain cube/volume CPU transfer storage is
   separately proven by SKIA-80–84, and six-face 2D RenderTargetCube emulation by SKIA-85/86 does
@@ -590,9 +590,8 @@
 
 ## Current task
 
-The original `plan_skia.md` is complete: all SKIA-1 through SKIA-114 rows are signed off for the
-selected CPU-raster release. There is no active implementation task in this plan. Any accelerated
-Skia work requires a successor plan and reopening the accepted surface-mode ADR and release gate.
+SKIA-115/116 are complete. Continue with SKIA-117's exact contract inventory, SKIA-118's shared
+resource/oracle boundary, and then the raster arbitrary-blend implementation in SKIA-119–124.
 
 ## Completed in this session: SKIA-93
 
@@ -1113,14 +1112,31 @@ Skia work requires a successor plan and reopening the accepted surface-mode ADR 
   focused assertion now state the accepted permanent raster refusal without implying scheduled
   acceleration.
 
+## Completed in this session: SKIA-115 and SKIA-116
+
+- Reopened `plan_skia.md` with 56 contiguous successor rows, SKIA-115–170, while preserving the
+  signed SKIA-1–114 raster release as a regression baseline. The phases cover arbitrary blends,
+  2D/target mip chains, every SurfaceFormat family, bounded cube/volume sampling, wider explicit
+  SkSL/SkMesh effects, opt-in Ganesh/OpenGL with MSAA/anisotropy, MRT re-evaluation, integration,
+  and a successor release gate. Unsupported full GLSL/MRT behavior remains conditional on exact
+  feasibility evidence rather than being silently promised.
+- Updated `docs/skia-release-gate.md` to state that its pass covers only SKIA-1–114 and that no
+  successor feature is advertised before SKIA-170. `validate_skia_release_gate.py` now enforces
+  the complete baseline plus gap-free/unique/status-valid successor rows, validates the expansion
+  banner endpoint, and reports baseline and successor completion independently.
+- All four direct audits pass; the release audit reports 114/114 baseline tasks, 2/56 successor
+  tasks, and 9/9 baseline capabilities. Registered `Skia_ReleaseGate_Audit` passes as a display-free
+  CTest. No product capability or rendering behavior changed, and `NEXT.md` was not touched.
+
 ## Next candidates
 
-1. No task remains in `plan_skia.md`. Preserve the release-gated raster backend unless a concrete
-   defect is found.
-2. Future Ganesh/OpenGL acceleration is intentionally outside this completed plan. Start it only
-   with a successor plan, an updated pinned artifact, and the six reopening proofs in
-   `docs/skia-surface-mode-adr.md`.
-3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+1. SKIA-117/118: build the successor contract/resource/oracle inventory.
+2. SKIA-119–124: complete arbitrary raster blend states before starting mip/format storage work.
+3. SKIA-125–158: implement mipmaps, formats, bounded cube/volume sampling, and wider explicit 2D
+   effects in dependency order.
+4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+   successor gate only after the raster extensions are stable.
+5. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions

@@ -9,7 +9,7 @@ import sys
 from collections import Counter
 
 
-LAST_TASK = 114
+BASELINE_LAST_TASK = 114
 
 
 def main() -> int:
@@ -44,7 +44,8 @@ def main() -> int:
         flags=re.MULTILINE,
     )
     task_counts = Counter(int(task) for task, _ in task_rows)
-    expected_tasks = set(range(1, LAST_TASK + 1))
+    highest_task = max(max(task_counts, default=0), BASELINE_LAST_TASK)
+    expected_tasks = set(range(1, highest_task + 1))
     actual_tasks = set(task_counts)
     for task in sorted(expected_tasks - actual_tasks):
         errors.append(f"{plan_path}: missing SKIA-{task} row")
@@ -53,11 +54,40 @@ def main() -> int:
     for task, count in sorted(task_counts.items()):
         if count != 1:
             errors.append(f"{plan_path}: SKIA-{task} appears {count} times")
-    for task, status in task_rows:
-        if status.strip() != "✅":
-            errors.append(f"{plan_path}: SKIA-{task} is not complete ({status.strip()!r})")
+    allowed_statuses = {"✅", "⬜", "🟨"}
+    successor_statuses: list[str] = []
+    for task_text, status_text in task_rows:
+        task = int(task_text)
+        status = status_text.strip()
+        if status not in allowed_statuses:
+            errors.append(f"{plan_path}: SKIA-{task} has unknown status {status!r}")
+        if task <= BASELINE_LAST_TASK and status != "✅":
+            errors.append(f"{plan_path}: baseline SKIA-{task} is not complete ({status!r})")
+        if task > BASELINE_LAST_TASK:
+            successor_statuses.append(status)
     if "Status: COMPLETE — verified CPU-raster 2D backend." not in plan:
-        errors.append(f"{plan_path}: final COMPLETE status banner is missing")
+        errors.append(f"{plan_path}: baseline COMPLETE status banner is missing")
+
+    if successor_statuses:
+        expansion_match = re.search(
+            r"Expansion status: (ACTIVE|COMPLETE) — SKIA-115 through SKIA-(\d+)", plan
+        )
+        if not expansion_match:
+            errors.append(f"{plan_path}: successor expansion status banner is missing")
+        else:
+            expansion_status, expansion_last_text = expansion_match.groups()
+            expansion_last = int(expansion_last_text)
+            if expansion_last != highest_task:
+                errors.append(
+                    f"{plan_path}: expansion banner ends at SKIA-{expansion_last}, "
+                    f"but the highest row is SKIA-{highest_task}"
+                )
+            if expansion_status == "COMPLETE" and any(
+                status != "✅" for status in successor_statuses
+            ):
+                errors.append(
+                    f"{plan_path}: expansion banner says COMPLETE while successor rows remain open"
+                )
 
     capability_match = re.search(
         r"enum class GraphicsCapability\s*\{(?P<body>.*?)\n\s*\};",
@@ -139,8 +169,10 @@ def main() -> int:
         return 1
 
     print(
-        f"Skia release gate passed: {len(task_rows)}/{LAST_TASK} tasks, "
-        f"{len(release_rows)}/{len(capability_names)} capabilities, raster-only mode"
+        f"Skia release gate passed: {BASELINE_LAST_TASK}/{BASELINE_LAST_TASK} baseline tasks, "
+        f"{sum(status == '✅' for status in successor_statuses)}/{len(successor_statuses)} "
+        f"successor tasks, {len(release_rows)}/{len(capability_names)} capabilities, "
+        f"raster baseline"
     )
     return 0
 

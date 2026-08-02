@@ -5,6 +5,11 @@
 > cross-backend matrix, and release audit are complete. Accelerated Skia was explicitly deferred
 > by the surface-mode ADR and may not be inferred from the SDL presenter.
 >
+> **Expansion status: ACTIVE — SKIA-115 through SKIA-170.** The completed SKIA-1–114 release
+> remains the regression baseline while a successor phase pursues additional EasyGL-compatible
+> raster features, bounded sampling/effect emulations, and an opt-in Ganesh/OpenGL mode. New
+> features are not advertised until their individual rows and the successor release gate pass.
+>
 > **Goal:** add `CNA_GRAPHICS_BACKEND=SKIA` to CNA. The first usable delivery is a complete,
 > pixel-verified **2D** backend. Its target is every part of `EASYGL` that Skia can express
 > directly. A missing one-to-one Skia API is *not* by itself a reason to omit an XNA feature: an
@@ -13,11 +18,11 @@
 > `SupportsCapability()` and deterministic `NotSupportedException`/`runtime_error` paths; they
 > must never become silent no-ops.
 
-## Final release snapshot
+## Baseline release snapshot and active expansion
 
-- **Plan:** SKIA-1 through SKIA-114 are complete; there is no remaining implementation row in this
-  plan. The signed checklist and reopening rules are in
-  [`docs/skia-release-gate.md`](docs/skia-release-gate.md).
+- **Baseline:** SKIA-1 through SKIA-114 are complete and remain protected by the signed checklist
+  in [`docs/skia-release-gate.md`](docs/skia-release-gate.md). SKIA-115 through SKIA-170 form the
+  active successor scope requested after that release.
 - **Execution mode:** the accepted release is deterministic CPU raster. The pinned artifact has no
   Ganesh/Graphite/GL/Vulkan/Dawn path, and the selected build registers zero `Accelerated` tests.
   Future Ganesh/OpenGL work requires a successor plan and must reopen
@@ -31,7 +36,8 @@
   additionally passes in Debug, Release, and ASan+UBSan.
 - **Continuity:** the authoritative current boundaries are the release gate, the 248-entry API
   parity ledger, the 347-entry EasyGL test matrix, and the 37/37 3D decision audit. Historical
-  per-task test counts below intentionally record the checkpoint at which each row closed.
+  per-task test counts below intentionally record the checkpoint at which each row closed. The
+  new rows must update those inventories as their public surface changes.
 
 Skia is a 2D graphics library, although it can render through raster, OpenGL, Vulkan, and other
 device backends. `SkCanvas` has 2D images, geometry, transforms, clipping, compositing, shaders,
@@ -312,6 +318,107 @@ listed contract, including depth/stencil and stock-effect tests, passes.
 | SKIA-113 | Perform a clean-worktree, fresh-configure smoke across `SKIA`, EasyGL, SDL_Renderer, Software, and all platform-gated backends available in CI. | ✅ | From clean baseline `77c3a604`, fresh Debug `CNA` builds pass for Skia, EasyGL, SDL_Renderer, Software, Vulkan and BGFX. Fresh MinGW `RelWithDebInfo` builds pass for CNA, D3D11/D3D12, and every backend-owned executable; Wine runtime passes D3D11 41/41 under DXVK and D3D12 2/2 under vkd3d-proton. `docs/skia-nonskia-build-matrix.md` records exact commands, the unavailable Emscripten/native-MSVC boundaries, and the pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet registration failure. No selection fell back to another renderer. |
 | SKIA-114 | Hold a release gate: verify every supported capability is demonstrated, every unimplemented EasyGL feature has an explicit direct/emulation decision, and no plan row is incorrectly marked complete. | ✅ | `docs/skia-release-gate.md` signs off all 114 rows, all nine live capability values, every direct/bounded/refused EasyGL family, the raster/acceleration and 3D ADRs, validation results, and known boundaries. `Skia_ReleaseGate_Audit` enforces the contiguous completed plan, exact capability table/implementation agreement, accepted raster decision, required release markers, and zero accelerated registrations. Final validation passes 133/133 Debug tests (16 Raster, 113 Display, four Audit), the Release and ASan+UBSan policy pair, all four source audits, the 248-entry parity ledger, the 347-entry test matrix, and the 37/37 3D decision audit. |
 
+## Phase S11 — successor scope and regression guardrails
+
+The following rows extend the completed CPU-raster release. They do not retroactively weaken its
+capability claims. Each feature begins with the exact FNA/EasyGL contract, preserves the existing
+resource limits and atomic-refusal rules, and must pass both focused and complete Skia regression
+tests before it can change capability or compatibility documentation.
+
+| ID | Task | Status | Acceptance evidence |
+|---|---|---|---|
+| SKIA-115 | Reopen the Skia plan as a successor expansion while retaining SKIA-1–114 as the immutable release baseline. | ✅ | The active SKIA-115–170 banner, baseline release snapshot, `docs/skia-release-gate.md`, and `NEXT_skia.md` distinguish completed baseline evidence from unadvertised successor work. Eight phases cover every requested feature without changing current capability claims. |
+| SKIA-116 | Extend plan/release validation for contiguous successor rows and their independent completion status. | ✅ | `validate_skia_release_gate.py` still requires SKIA-1–114 exactly once and complete, rejects any gap/duplicate/unknown status through the highest successor ID, verifies the banner endpoint and completion state, and reports 2/56 successor rows after this checkpoint. Direct execution and registered `Skia_ReleaseGate_Audit` pass. |
+| SKIA-117 | Inventory the exact FNA/CNA/EasyGL contracts and existing fixtures for mipmaps, every `SurfaceFormat`, arbitrary blend states, custom effects, MSAA, anisotropy, MRT, and cube/volume sampling. | ⬜ | A checked matrix maps every requested behavior, exception, transfer layout, capability value, oracle, and platform dependency to one successor task; source audit rejects missing or stale rows. |
+| SKIA-118 | Define shared successor resource budgets, checked-size helpers, pixel/precision tolerance rules, and cross-feature oracle scenes. | ⬜ | New storage and shader paths remain bounded, expose exact accounting, fail atomically, and have reusable Debug/Release/sanitizer fixtures before feature implementation begins. |
+
+## Phase S12 — complete blend-state coverage on raster Skia
+
+| ID | Task | Status | Acceptance evidence |
+|---|---|---|---|
+| SKIA-119 | Establish a deterministic straight/premultiplied source convention for every public blend-state route, including textures, targets, tint, and custom effects. | ⬜ | A table and raw-byte probes distinguish source storage from Skia working colour for translucent inputs; no blend tuple guesses its alpha convention. |
+| SKIA-120 | Generate a bounded runtime `SkBlender` for all 13 blend factors and five blend functions with independent RGB/alpha equations. | ⬜ | Every selector compiles once or reports a deterministic construction error; constant colour, source-alpha saturation, min/max, reverse-subtract, and separate alpha match scalar reference math. |
+| SKIA-121 | Implement `BlendFactor`, `BlendEnabled`, and all `ColorWriteChannels` interactions for generated blend states. | ⬜ | Blend constants update without stale state, disabled blending performs source replacement, all 16 target-0 masks preserve destination bytes, and unsupported multisample masks still reject. |
+| SKIA-122 | Integrate generated blenders into Deferred, Immediate, texture-sort, and effect-backed SpriteBatch paths without state leakage. | ⬜ | Translucent texture/target/custom-effect inputs produce the same pixels in all batch modes and stock state is reusable after success or failure. |
+| SKIA-123 | Add exhaustive selector tests and a discriminating public pixel corpus for arbitrary blend combinations. | ⬜ | All 714,025 tuples have a stable direct/generated/refusal result; a minimized pixel set exercises every factor/function branch against EasyGL/reference output in Debug, Release, and ASan+UBSan. |
+| SKIA-124 | Promote exactly the proven arbitrary blend surface and synchronize the parity ledger, feature matrix, diagnostics, and release audit. | ⬜ | No proven tuple remains rejected, no unproven tuple silently draws, and complete Skia plus reusable EasyGL blend regressions pass. |
+
+## Phase S13 — Texture2D and RenderTarget2D mip chains
+
+| ID | Task | Status | Acceptance evidence |
+|---|---|---|---|
+| SKIA-125 | Design a checked CNA-owned 2D mip-chain abstraction with stable per-level storage, dimensions, offsets, and accounting. | ⬜ | Odd/NPOT dimensions halve to 1×1, all arithmetic is overflow-checked, allocation stays within documented limits, and construction failure leaves counters unchanged. |
+| SKIA-126 | Enable mipmapped `Texture2D` construction and exact level-count/property reporting. | ⬜ | Zero-initialized levels, one-dimensional chains, maximum legal chains, invalid dimensions, and disposal match the public FNA/CNA contract. |
+| SKIA-127 | Implement full/partial `Texture2D::SetData` and `GetData` for every mip level. | ⬜ | Shared transfer fixtures cover offsets/counts/rectangles, arbitrary translucent bytes, untouched texels, invalid levels/ranges, and caller-memory lifetime. |
+| SKIA-128 | Implement deterministic mip generation and invalidation after level-0 upload while preserving explicitly written levels according to the public contract. | ⬜ | Exact box-filter or contract-selected generation handles odd edges and alpha once, rebuilds only dirty descendants, and produces stable checked-in bytes. |
+| SKIA-129 | Implement `PointMipPoint`, `PointMipLinear`, `LinearMipPoint`, and `LinearMipLinear` sampling with correct LOD selection. | ⬜ | Minification matrices discriminate level choice and inter-level interpolation; Clamp/Wrap/Mirror, source rectangles, transforms, and magnification remain exact. |
+| SKIA-130 | Load mipmapped 2D content and compressed-source assets into the mutable chain without losing source format or level boundaries. | ⬜ | XNB/DDS fixtures round-trip every declared level, reject malformed/truncated chains, and do not fabricate absent mips. |
+| SKIA-131 | Implement mipmapped `RenderTarget2D` storage using stable per-level raster surfaces or an equivalently exact bounded representation. | ⬜ | Binding, Clear, draw, upload, readback, viewport/scissor reset, Preserve/Discard, and snapshots identify the correct level without aliasing. |
+| SKIA-132 | Define and implement render-target mip invalidation/generation at pass boundaries and after `SetData`. | ⬜ | Unbind/sample/readback order is deterministic, descendant levels refresh exactly once when dirty, failed binds leave prior target and chain unchanged, and presenter recovery preserves the resource. |
+| SKIA-133 | Complete mip lifecycle, resource-budget, performance, Release, and sanitizer validation and update capability documentation. | ⬜ | Focused Texture2D/RenderTarget2D mip suites and the complete Skia suite pass; counters return to baseline and no old level-0 behavior regresses. |
+
+## Phase S14 — SurfaceFormat expansion
+
+| ID | Task | Status | Acceptance evidence |
+|---|---|---|---|
+| SKIA-134 | Map every `SurfaceFormat` enum to exact CNA byte layout, Skia colour/raw representation, sampling semantics, renderability, and fallback/refusal route. | ⬜ | The matrix covers all current enum values exactly once and is checked against headers and EasyGL/FNA behavior. |
+| SKIA-135 | Implement direct packed/unorm formats where Skia storage is layout-compatible: Bgr565, Bgra4444, Rgba1010102, and compatible RGBA/BGRA variants. | ⬜ | Full/partial transfers, clear/draw conversion, sampling, readback, endian/channel order, alpha quantization, and disposal pass format-specific oracles. |
+| SKIA-136 | Implement `ColorBgraEXT`, `ColorSrgbEXT`, and explicit colour-space handling without accidental double conversion. | ⬜ | Raw transfer bytes remain exact while sampled/rendered colours match EasyGL tolerances in linear and sRGB destinations. |
+| SKIA-137 | Implement Alpha8, ByteEXT, UShortEXT, Rg32, Rgba64, and compatible one/two/four-channel unorm data paths. | ⬜ | Raw shaders or explicit swizzles preserve missing-channel defaults, normalized sampling, Set/Get layout, and render-target restrictions. |
+| SKIA-138 | Implement Single, Vector2, Vector4, HalfSingle, HalfVector2, HalfVector4, and HdrBlendable where Skia float storage and raster operations are exact. | ⬜ | IEEE/half bit patterns round-trip, extended range/NaN/Inf policy is explicit, and sampling/blending precision has bounded oracle tolerances. |
+| SKIA-139 | Implement NormalizedByte2/4 and Bgra5551 through checked conversion/shadow storage when no layout-compatible `SkColorType` exists. | ⬜ | Signed normalization, packing, channel order, sampling, partial transfer, and exact original-byte readback are independently proven. |
+| SKIA-140 | Implement Dxt1/Dxt3/Dxt5 sampled textures with preserved compressed CPU blocks and deterministic decompression. | ⬜ | Block alignment/range validation, alpha modes, NPOT edge policy, mip chains, exact compressed `GetData`, decoded sampling, malformed data, and memory accounting pass. |
+| SKIA-141 | Evaluate and implement BC7/Bc7SrgbEXT sampled textures only with a bounded, license-compatible decoder. | ⬜ | Decoder choice/license/build impact is documented; conformance assets, sRGB handling, block transfers, invalid input, and deterministic fallback/refusal are tested. |
+| SKIA-142 | Establish per-format RenderTarget2D support and refuse non-renderable/compressed formats before allocation without weakening texture support. | ⬜ | Every format has a demonstrated render/readback route or an exact actionable refusal; format failure does not alter active target or counters. |
+| SKIA-143 | Run exhaustive format contracts, content loading, cross-backend comparisons, resource limits, Release/sanitizer tests, and synchronize documentation. | ⬜ | All promoted formats have public transfer and pixel evidence; capability prose never equates texture-only formats with render-target support. |
+
+## Phase S15 — bounded cube and volume sampling
+
+| ID | Task | Status | Acceptance evidence |
+|---|---|---|---|
+| SKIA-144 | Define explicit cube-direction and volume-coordinate sampling ABI, orientation, addressing, filtering, mip/LOD, precision, and resource limits. | ⬜ | The contract maps XNA face axes and 3D coordinates to SkSL child operations with no dependency on unsupported stock 3D geometry. |
+| SKIA-145 | Prototype and implement cube sampling from six 2D child shaders using dominant-axis face selection. | ⬜ | Axis and edge/corner directions choose the exact face/UV orientation; point/linear behavior and arbitrary face updates are observable through pixels. |
+| SKIA-146 | Add cube mip selection, cross-face seam policy, filtering, and RenderTargetCube snapshot invalidation. | ⬜ | Mip/LOD and all face transitions have discriminating tests; updates become visible without stale snapshots or hidden unbounded copies. |
+| SKIA-147 | Prototype and implement volume sampling through a bounded slice atlas or equivalent 2D-child representation. | ⬜ | Point sampling selects exact voxels/slices for NPOT dimensions and all axes; atlas padding cannot bleed between slices. |
+| SKIA-148 | Add volume trilinear interpolation, mip selection, address modes, partial updates, and precision tests. | ⬜ | Eight-voxel interpolation and inter-level selection match scalar references; Clamp/Wrap/Mirror and dirty-range updates are deterministic. |
+| SKIA-149 | Integrate cube/volume bindings into the explicit SkSL effect ABI with weak lifetime tracking and actionable type/unit errors. | ⬜ | Bind/update/dispose/clone behavior is safe; 2D/cube/volume children cannot be confused and failed binding leaves the next stock draw reusable. |
+| SKIA-150 | Add public sampling oracles, content-loaded resources, target-produced inputs, and cross-backend comparisons. | ⬜ | CPU transfer bytes and sampled pixels agree across generated/content/target inputs in Debug, Release, and ASan+UBSan. |
+| SKIA-151 | Finalize cube/volume sampling capability wording, resource budgets, performance bounds, and parity documentation. | ⬜ | `Texture3D` reporting distinguishes storage from the promoted sampling subset, and no stock 3D or general effect capability is implied. |
+
+## Phase S16 — wider programmable 2D effects
+
+| ID | Task | Status | Acceptance evidence |
+|---|---|---|---|
+| SKIA-152 | Inventory all EasyGL GLSL effect sources and classify language, vertex attributes/varyings, uniforms, samplers, discard, derivatives, MRT, depth, and 3D dependencies. | ⬜ | Every checked-in source has a direct SkSL, SkMesh, restricted-translation, 3D-only, or impossible disposition and an evidence task. |
+| SKIA-153 | Prototype `SkMeshSpecification` for the complete reusable 2D vertex/fragment subset, including transforms, colour, UV interpolation, clipping, and child sampling. | ⬜ | Perspective/affine interpolation, both windings, SpriteBatch ordering, alpha convention, and raster/GPU behavior match the chosen EasyGL 2D oracle. |
+| SKIA-154 | Define and implement a versioned explicit SkSL mesh/effect ABI with bounded attributes, varyings, uniforms, textures, source sizes, and compilation cache. | ⬜ | Public opt-in cannot be mistaken for GLSL; reflection/type/layout/lifetime diagnostics are exact and clones isolate mutable state. |
+| SKIA-155 | Implement a deliberately restricted GLSL-to-SkSL translator only for the source constructs proven equivalent by SKIA-152/153. | ⬜ | Accepted grammar and semantic rewrites are documented and differential-tested; unsupported preprocessor, stage, precision, derivative, discard, depth, MRT, cube/volume, or backend-specific constructs reject with source locations. |
+| SKIA-156 | Harden effect compilation, caching, resource/time limits, error propagation, and recovery across raster and future GPU modes. | ⬜ | Malicious/oversized/invalid inputs stay bounded, cache keys include ABI/mode/source/layout, failures do not poison later draws, and sanitizer stress passes. |
+| SKIA-157 | Integrate the promoted effect subset through `ShaderEffect`, content descriptors, SpriteBatch/SkMesh draws, setters, textures, clones, and disposal. | ⬜ | All accepted constructors/setters and both explicit SkSL/restricted GLSL routes have public tests; arbitrary EasyGL GLSL still cannot silently fall back. |
+| SKIA-158 | Compare every promoted 2D effect against EasyGL/XNA-style goldens and publish the final programmable-effect boundary. | ⬜ | Pixel tolerances are feature-specific, `CustomEffects` changes only if its complete enum contract is actually met, and all rejected families remain explicit. |
+
+## Phase S17 — opt-in Ganesh/OpenGL, MSAA, and anisotropy
+
+| ID | Task | Status | Acceptance evidence |
+|---|---|---|---|
+| SKIA-159 | Produce a separately pinned Ganesh/OpenGL Skia artifact and CMake dependency target without changing the validated raster artifact. | ⬜ | Exact GN args, archive list, ABI/license/NOTICE, offline configure, cache behavior, and missing/mismatched artifact diagnostics are reproducible. |
+| SKIA-160 | Add an explicit construction-time raster/Ganesh mode selection and mode-specific capability diagnostic with no silent runtime fallback. | ⬜ | Raster remains the default regression mode; requested Ganesh either initializes fully or fails transactionally, and tests can select/label each mode. |
+| SKIA-161 | Implement backend-owned SDL OpenGL context, Ganesh context/surface wrapping, flush/submit, swap, readback, and destruction order. | ⬜ | A visible smoke and automated pixel test prove the real default framebuffer path, top/bottom origin, alpha/channel order, and absence of EasyGL delegation. |
+| SKIA-162 | Implement resize, fullscreen, presentation mappings, resource synchronization, presenter/context loss, and recovery for Ganesh. | ⬜ | Live textures/targets/effects survive or report deterministic loss/reset events; no stale GPU object or raster-mode switch occurs. |
+| SKIA-163 | Run complete raster-versus-Ganesh 2D parity, lifecycle, resource-budget, performance, Release, and sanitizer suites. | ⬜ | Exact/toleranced oracle results, ownership, state leakage, repeated reconstruction, and platform boundaries pass before Ganesh is advertised. |
+| SKIA-164 | Probe and implement GPU MSAA for backbuffer and RenderTarget2D, including count normalization, resolve, readback, resize, and capability reporting. | ⬜ | Requests 0/1/2/4/oversized use real device limits; resolved pixels and target properties match applied counts, while raster policy stays unchanged. |
+| SKIA-165 | Probe and implement true GPU anisotropic sampling through `SkSamplingOptions::Aniso`, device clamping, mip interaction, and capability reporting. | ⬜ | Minification oracles distinguish anisotropy from Linear fallback at 1/4/max/oversized requests; unsupported devices report false without pixel/state corruption. |
+
+## Phase S18 — MRT decision, integration, and successor release gate
+
+| ID | Task | Status | Acceptance evidence |
+|---|---|---|---|
+| SKIA-166 | Re-evaluate MRT after SkMesh/Ganesh integration using shaders with distinct outputs, blending, masks, target formats/sizes, and failure ordering. | ⬜ | The spike proves whether public Skia can produce independent locations 0–3; identical-output replay is explicitly insufficient evidence. |
+| SKIA-167 | Implement full MRT only if SKIA-166 can reproduce distinct public outputs exactly; otherwise retain atomic refusal and document the fundamental public-Skia boundary. | ⬜ | Two/three/four-target oracles pass with independent values and masks, or all counts above one reject before mutation with a proof that no exact route exists. |
+| SKIA-168 | Run combined mip/format/blend/effect/cube/volume/MSAA/anisotropy/MRT interaction tests and update all source audits. | ⬜ | Cross-feature state transitions, target switching, disposal, reset, content, and error precedence pass without combinatorial silent fallbacks. |
+| SKIA-169 | Run fresh raster and Ganesh builds, complete Debug/Release/sanitizer suites, reusable EasyGL comparisons, demos, and available platform backend matrix checks. | ⬜ | Commands, exact counts/timings, unsupported hosts, warnings, and any external-stack sanitizer baseline are recorded from clean configurations using at most eight workers. |
+| SKIA-170 | Hold the successor release gate and advertise only features with direct public evidence. | ⬜ | All SKIA-115–170 rows have an accurate implemented/emulated/refused disposition; capability code, ledgers, matrices, ADRs, build guide, `NEXT_skia.md`, and release summary agree. |
+
 ## Completed dependency order
 
 1. SKIA-1 through SKIA-9 settled dependency, surface ownership, and the raster release mode.
@@ -323,15 +430,15 @@ listed contract, including depth/stencil and stock-effect tests, passes.
 6. SKIA-106 through SKIA-114 completed regression coverage, documentation, cross-backend checks,
    and the release gate.
 
-## Final exclusions and reopening rule
+## Baseline exclusions during the active expansion
 
-The completed investigation confirms that this release must **not** advertise or silently
+The completed SKIA-1–114 investigation confirms that the baseline release must **not** advertise or silently
 approximate generic EasyGL GLSL vertex/fragment `ShaderEffect`, full XNA 3D primitive rendering,
 depth/stencil state, occlusion queries, instancing, wireframe, arbitrary cube/volume texture
 *sampling*, MRT, native MSAA, or native anisotropy. SKIA-76–SKIA-105 evaluated the relevant direct
-and bounded-emulation routes and recorded their final fallback or refusal decisions. Reversing one
-of those decisions requires new evidence, an updated ADR where applicable, and reopening SKIA-114
-through a successor plan.
+and bounded-emulation routes and recorded their baseline fallback or refusal decisions. The active
+successor tasks may replace a decision only after new direct evidence, an updated ADR where
+applicable, and the SKIA-170 gate; until then the baseline claim remains authoritative.
 
 The completed CPU-raster delivery includes Texture2D/SpriteBatch/SpriteFont, transforms, source
 rectangles, flip/rotation/origin, the documented sampler addressing/filtering subset, standard and
