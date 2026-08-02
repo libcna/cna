@@ -385,24 +385,61 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # rendertargetcube_plural_binding_test.cpp, rasterizerstate_cullmode_camera_test.cpp,
-    # rasterizerstate_cullmode_indexed_basiceffect_test.cpp, spritebatch_custom_viewport_test.cpp
-    # and spritebatch_viewport_switch_test.cpp are deliberately NOT registered here -- all five
-    # genuinely fail on this backend for real, understood (not silently ignored) reasons. See
-    # known_bugs.md's own two new open entries: three of the five (rendertargetcube_plural_binding
-    # via its own EnvironmentMapEffect-based SampleFaces() probe, spritebatch_custom_viewport's
-    # Check C1/C2, spritebatch_viewport_switch) trace to the SAME single root cause -- this
-    # backend's replay only calls LLGL::CommandBuffer::SetViewport() ONCE per render-pass BUCKET
-    # (grouped by target identity), not once per queued draw/batch, so a game that sets a
-    # DIFFERENT Viewport for each of several draws into the SAME target within one unflushed frame
-    # has every one of those draws silently rasterize with whichever viewport was set LAST. The
-    # other two are separate, unrelated findings: rasterizerstate_cullmode_indexed_basiceffect
-    # crashes on an untextured+unlit+no-vertex-colour BasicEffect draw (VertexPositionNormalTexture,
-    # TextureEnabled=false, VertexColorEnabled=false) -- AcquirePrimitiveVertexShader() has no
-    # shader variant for that combination at all and throws by name; rasterizerstate_cullmode_camera
-    # hits a scenario-setup failure specific to its own Orthographic+CreateLookAt scenario (every
-    # other scenario in the same file, including Perspective+CreateLookAt with the identical camera,
-    # passes) -- root cause not yet identified.
+    # rasterizerstate_cullmode_indexed_basiceffect_test.cpp and rasterizerstate_cullmode_camera_test.cpp
+    # are deliberately NOT registered here -- both fail for real, understood, UNRELATED reasons (see
+    # known_bugs.md): rasterizerstate_cullmode_indexed_basiceffect crashes on an untextured+unlit+
+    # no-vertex-colour BasicEffect draw (VertexPositionNormalTexture, TextureEnabled=false,
+    # VertexColorEnabled=false) -- AcquirePrimitiveVertexShader() has no shader variant for that
+    # combination at all and throws by name; rasterizerstate_cullmode_camera hits a scenario-setup
+    # failure specific to its own Orthographic+CreateLookAt scenario (every other scenario in the
+    # same file, including Perspective+CreateLookAt with the identical camera, passes) -- root cause
+    # not yet identified.
+    #
+    # rendertargetcube_plural_binding_test.cpp, spritebatch_custom_viewport_test.cpp and
+    # spritebatch_viewport_switch_test.cpp previously failed here too, all three tracing to the same
+    # root cause (now fixed, see CaptureFrameCommandViewportEXT()): this backend's frame replay only
+    # called LLGL::CommandBuffer::SetViewport() once per render-pass bucket, and sprite geometry was
+    # never offset by a custom Viewport's X/Y at all (only clipped to it via scissor), so a game that
+    # set a DIFFERENT Viewport for each of several draws into the SAME target within one unflushed
+    # frame got either the wrong GPU viewport (3D primitives) or the wrong screen position (sprites).
+    # The fix captures a per-command physical viewport (narrowed only for Primitives, matching the
+    # scissor precedent) and bakes the Viewport-local sprite offset into QueueSpriteEXT's own CPU-side
+    # geometry, matching the FNA SpriteBatch.cs PrepRenderState contract these tests assert against.
+    # This same fix also resolved an independent, pre-existing bug found along the way: LlglSpriteBatchBackend
+    # ::Begin() unconditionally reset its own transform_ to identity, discarding whatever SpriteBatch::Begin()
+    # had just set via SetTransformMatrix() immediately before calling it.
+    #
+    # No _OpenGL variant of any of the three: verified failing (all Red/Blue pixels empty) on this
+    # project's own OpenGL module (GLX/llvmpipe) specifically whenever the effective scissor/viewport
+    # rectangle has a NON-ZERO Y offset into the swap chain's default framebuffer -- a Y-offset-only
+    # scissor against the backbuffer renders nothing, while the identical rectangle with Y=0 (or an
+    # X-offset-only rectangle, as in Llgl_RenderTarget_ViewportScissorReset's own right-half scissor)
+    # renders correctly. This points at LLGL's own upper-left/lower-left screen-origin flip for the
+    # GL module's default framebuffer (GLStateManager::AdjustScissor/AdjustViewport, gated on whether
+    # glClipControl(GL_UPPER_LEFT) is actually honoured) rather than anything in this backend's own
+    # coordinate math, which is identical for both modules and produces byte-exact results on Vulkan.
+    # Plausible cause: this environment's software GLX/llvmpipe driver not exposing ARB_clip_control,
+    # forcing LLGL's CPU-side emulation path, which appears inconsistent between the geometry and the
+    # scissor/viewport rectangle for a Y-offset sub-region specifically. rendertargetcube_plural_binding
+    # additionally hits the separate, already-documented "hasCubeTextures not supported" gap on this
+    # same OpenGL module regardless of this finding. See known_bugs.md for the full writeup.
+    cna_llgl_test(cna_test_llgl_rendertargetcube_plural_binding
+                  examples/rendertargetcube_plural_binding_test.cpp)
+    cna_register_backend_test(NAME Llgl_RenderTargetCube_PluralBinding COMMAND cna_test_llgl_rendertargetcube_plural_binding
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_spritebatch_custom_viewport
+                  examples/spritebatch_custom_viewport_test.cpp)
+    cna_register_backend_test(NAME Llgl_SpriteBatch_CustomViewport COMMAND cna_test_llgl_spritebatch_custom_viewport
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_llgl_test(cna_test_llgl_spritebatch_viewport_switch
+                  examples/spritebatch_viewport_switch_test.cpp)
+    cna_register_backend_test(NAME Llgl_SpriteBatch_ViewportSwitch COMMAND cna_test_llgl_spritebatch_viewport_switch
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_llgl_test(cna_test_llgl_viewport_reset_after_resize
                   examples/viewport_reset_after_resize_test.cpp)

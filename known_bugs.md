@@ -380,60 +380,133 @@ actually being issued with the value this backend thinks it queued.
 
 ---
 
-## LLGL backend: per-draw `Viewport` is not captured/replayed, only per-render-pass-bucket — OPEN
-
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause
-identified with confidence; not fixed here.
+## LLGL backend: per-draw `Viewport` is not captured/replayed, only per-render-pass-bucket — FIXED 2026-08-02
 
 **Symptom:** a game that sets a DIFFERENT `GraphicsDevice.Viewport` before each of several draws
-into the SAME target within one unflushed frame (no `GetData()`/`Present()` between them) gets
+into the SAME target within one unflushed frame (no `GetData()`/`Present()` between them) got
 every one of those draws rasterized with whichever viewport was set LAST, not its own. Confirmed by
 three independent, unrelated test files all failing the same way:
 
-- `examples/spritebatch_viewport_switch_test.cpp` (2/6 PASS): two `SpriteBatch` batches, each
-  `Begin()`'d after its own distinct `Viewport`, both drawing into the back buffer in one frame --
-  the SECOND batch's sprite lands correctly, the FIRST batch's sprite is read back at the SECOND
-  viewport's own footprint instead of its own.
-- `examples/spritebatch_custom_viewport_test.cpp` (7/13 PASS): Check C1/C2 specifically (a
-  transformed sprite drawn under a custom sub-region `Viewport`) fail; checks that only ever use
-  the default full-target viewport (B1/B2/D1-D3) pass.
-- `examples/rendertargetcube_plural_binding_test.cpp` (9/14 PASS): its own `SampleFaces()` helper
-  draws 6 `EnvironmentMapEffect` quads into 6 DIFFERENT sub-rectangles of the back buffer (one per
-  cube face, via `device.setViewportProperty(Viewport(x0,y0,...))` immediately before each
-  `DrawUserPrimitives()` call) in one unflushed frame, then reads the whole back buffer back at the
-  end -- 4 of the 6 faces come back wrong (stable, reproducible wrong values, not garbage), 2
-  coincidentally still correct. This looked at first like a genuine cube-face-index/array-layer
-  mapping bug (the kind LLGL-36's own investigation would have taken seriously), but is not: the
-  cube-face WRITE side of this test uses the plain, already-thoroughly-verified singular
-  `SetRenderTarget(cube, face)` API (LLGL-36: 56/56 PASS on the dedicated `GetData` contract
-  oracle); only the READ-back side (`SampleFaces`'s own multi-viewport back-buffer probe) is
-  affected, confirming the same root cause as the two `SpriteBatch` files above, not a new one.
+- `examples/spritebatch_viewport_switch_test.cpp` (2/6 PASS before the fix): two `SpriteBatch`
+  batches, each `Begin()`'d after its own distinct `Viewport`, both drawing into the back buffer in
+  one frame -- the SECOND batch's sprite landed correctly, the FIRST batch's sprite was read back
+  at the SECOND viewport's own footprint instead of its own.
+- `examples/spritebatch_custom_viewport_test.cpp` (7/13 PASS before the fix): Check C1/C2
+  specifically (a transformed sprite drawn under a custom sub-region `Viewport`) failed; checks
+  that only ever used the default full-target viewport (B1/B2/D1-D3) passed.
+- `examples/rendertargetcube_plural_binding_test.cpp` (9/14 PASS before the fix): its own
+  `SampleFaces()` helper draws 6 `EnvironmentMapEffect` quads into 6 DIFFERENT sub-rectangles of
+  the back buffer (one per cube face, via `device.setViewportProperty(Viewport(x0,y0,...))`
+  immediately before each `DrawUserPrimitives()` call) in one unflushed frame, then reads the whole
+  back buffer back at the end -- 4 of the 6 faces came back wrong (stable, reproducible wrong
+  values, not garbage), 2 coincidentally still correct. This looked at first like a genuine
+  cube-face-index/array-layer mapping bug, but was not: the cube-face WRITE side of this test uses
+  the plain, already-thoroughly-verified singular `SetRenderTarget(cube, face)` API (LLGL-36:
+  56/56 PASS on the dedicated `GetData` contract oracle); only the READ-back side (`SampleFaces`'s
+  own multi-viewport back-buffer probe) was affected, confirming the same root cause as the two
+  `SpriteBatch` files above, not a new one.
 
-**Root cause:** `RecordAndSubmitFrame()`/`CaptureBackbuffer()` call
-`commands_->SetViewport(LLGL::Viewport{0, 0, resolution.width, resolution.height})` exactly ONCE
-per `FrameCommandBucket` -- i.e. once per DISTINCT TARGET IDENTITY the frame's queued commands
-group into (see `GroupFrameCommandsByTargetEXT()`), always sized to the WHOLE target, never to
-whatever `GraphicsDevice.Viewport` sub-rectangle was active when a given command was queued. A
-custom viewport is therefore only ever picked up if it happens to still be active during a SEPARATE
-render pass (a different target, or after an intervening flush) -- never for two different
-viewports used against the SAME target within one frame.
+**Root cause, and why it was actually TWO bugs:**
 
-**Fix shape (not implemented):** capture the active `Viewport` onto each `FrameCommand` at QUEUE
-time, exactly like `command.target`/`command.mipRegenColorTexture` already are, and have
-`ReplayFrameCommandsList()` issue `commands_->SetViewport()` per command (or per contiguous run of
-commands sharing one viewport) instead of `RecordAndSubmitFrame()`/`CaptureBackbuffer()` issuing it
-once before replaying the whole bucket. `ScissorRectangle` should be checked for the identical gap
-while this is being fixed (not independently confirmed broken here, but captured with the same
-"once per bucket, not once per command" shape if it works the same way).
+1. `RecordAndSubmitFrame()`/`CaptureBackbuffer()` called
+   `commands_->SetViewport(LLGL::Viewport{0, 0, resolution.width, resolution.height})` exactly
+   ONCE per `FrameCommandBucket` -- i.e. once per DISTINCT TARGET IDENTITY the frame's queued
+   commands group into (see `GroupFrameCommandsByTargetEXT()`), always sized to the WHOLE target,
+   never to whatever `GraphicsDevice.Viewport` sub-rectangle was active when a given command was
+   queued. This is the bug that actually needed a GPU-level `SetViewport()` fix: 3D primitives
+   resolve their clip-space position to the screen through the GPU's own rasterizer viewport
+   transform, so a stale/wrong GPU viewport genuinely misplaces them.
+2. Sprites, however, turned out to work differently: `QueueSpriteEXT()` bakes sprite geometry
+   straight into window/target PIXELS at queue time (a deliberate design choice -- see its own
+   comment -- so the GPU viewport can stay at the whole target and the projection can stay constant
+   for the whole frame), and it never added a custom `Viewport`'s X/Y offset to that geometry at
+   all -- only the SCISSOR was narrowed to the viewport rectangle (`ComputeEffectiveScissor()`), so
+   a sprite drawn under a sub-region `Viewport` still baked its position as if the viewport were
+   the whole target, then got clipped (not repositioned) by the scissor. Per FNA's own contract
+   (`SpriteBatch.cs PrepRenderState`: `CreateOrthographicOffCenter(0, Viewport.Width,
+   Viewport.Height, 0, 0, 1)`), sprite destination coordinates are VIEWPORT-LOCAL and the rasterizer
+   viewport transform is what actually positions them on screen -- so the FIX for sprites is a pure
+   translation by `Viewport.X`/`Viewport.Y`, not a GPU viewport change at all.
 
-**Also affects (not yet independently confirmed, same shape expected):**
-`examples/deferred_viewport_capture_test.cpp` (`plan_llgl.md` LLGL-43) and
-`examples/rasterizerstate_cullmode_camera_test.cpp` if that file's own separate, still-unexplained
-Orthographic scenario failure (see the next entry) turns out to share this cause after all --
-current evidence does not point that way, but it was not ruled out.
+**Fix:** `CaptureFrameCommandViewportEXT()` fills a new `FrameCommand::viewport[4]` physical-pixel
+rectangle for every queued command, exactly like `command.scissor`/`command.scissorEnabled` already
+were -- the whole target by default, narrowed only for `Primitives` commands when a custom
+`Viewport` is active (mirroring `ComputeEffectiveScissor`'s own viewport-narrowing branch).
+`ReplayFrameCommandsList()` now issues `commands_->SetViewport()` per `Clear`/`Primitives`/`Sprite`
+command instead of `RecordAndSubmitFrame()`/`CaptureBackbuffer()` issuing it once per bucket before
+the replay loop -- this is what actually fixes 3D primitives (`rendertargetcube_plural_binding`'s
+own `EnvironmentMapEffect` draws). Separately, `QueueSpriteEXT()` now adds `viewportRect_[0]`/`[1]`
+(when `viewportSet_`) to sprite geometry before the existing letterbox scale is applied -- this is
+what actually fixes the two `SpriteBatch` files.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7 (blocks `LLGL-39`'s deferred registrations, and likely
-several of `LLGL-40`..`LLGL-44`'s files too).
+**A third, unrelated bug found and fixed along the way:** `LlglSpriteBatchBackend::Begin()`
+unconditionally reset its own `transform_` member to identity -- but `SpriteBatch::Begin()` always
+calls `backend_->SetTransformMatrix(transformMatrix_)` BEFORE `backend_->Begin()`, so any custom
+`transformMatrix` passed to `SpriteBatch.Begin()` was silently discarded the instant `Begin()` ran.
+This is what `spritebatch_custom_viewport_test.cpp`'s Check C1/C2 (a transformed sprite) was
+actually hitting once the viewport-offset fix above was in place -- fixed by simply not resetting
+`transform_` in `Begin()` (nothing needs resetting: it's always freshly set immediately before).
+
+**Verified:** all three files now PASS in full under the default/`auto` (Vulkan) module: 14/14
+(`rendertargetcube_plural_binding`), 13/13 (`spritebatch_custom_viewport`), 6/6
+(`spritebatch_viewport_switch`). See the next entry for a newly-found, separate OpenGL-module-only
+limitation these files still hit under `CNA_LLGL_RENDERER=opengl`.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-39`.
+
+---
+
+## LLGL backend: OpenGL module renders nothing for a Y-offset scissor/viewport against the backbuffer — OPEN
+
+**Status:** open, discovered while verifying the per-draw-`Viewport` fix above (previous entry)
+under `CNA_LLGL_RENDERER=opengl`. Root cause narrowed to LLGL's own OpenGL screen-origin handling;
+not fixed here (third-party pinned dependency, not this project's code).
+
+**Symptom:** `spritebatch_custom_viewport_test.cpp` and `spritebatch_viewport_switch_test.cpp` PASS
+completely (13/13, 6/6) under the default/`auto` (Vulkan) module but read back ZERO matching pixels
+-- not wrong position, entirely empty -- for every check whose effective scissor/viewport rectangle
+against the SWAP CHAIN has a NON-ZERO Y offset, specifically under `CNA_LLGL_RENDERER=opengl`
+(GLX/llvmpipe software rasterizer). A rectangle with a non-zero X offset but Y=0 (e.g.
+`rendertarget_viewport_scissor_reset_test.cpp`'s own right-half scissor, already registered and
+passing on both modules) renders correctly on OpenGL too -- only the Y axis is affected.
+
+**What was ruled out:** this is not a regression from the fix above, and not a coordinate-math bug
+in this backend's own code -- `ComputeEffectiveScissor()`/`CaptureFrameCommandViewportEXT()` compute
+byte-identical rectangles for both modules (confirmed via temporary debug instrumentation), and
+those exact numbers produce correct, byte-exact results on Vulkan. `rendertargetcube_plural_binding
+_test.cpp` cannot be used to confirm this finding independently: it already hits the separate,
+pre-existing `LLGL::RenderingFeatures::hasCubeTextures not supported` gap on this same OpenGL module
+(see `docs/llgl-backend.md`'s "SkinnedEffect"/environment-map sections), so it never reaches a draw.
+
+**Root cause (narrowed, not confirmed):** LLGL's OpenGL command buffer passes `Viewport`/`Scissor`
+x/y straight to `glViewport`/`glScissor` without any flip of its own
+(`GLImmediateCommandBuffer::SetViewport`/`SetScissor`); the upper-left-origin normalization this
+project's own code relies on (see `UploadFrameResources()`'s own comment: "LLGL normalizes
+[viewport and scissor rectangles] to upper-left everywhere") is instead applied one layer down, in
+`GLStateManager::AdjustViewport`/`AdjustScissor`, gated on `flipViewportYPos_` -- itself set from
+whether `glClipControl(GL_UPPER_LEFT, ...)` is genuinely honoured by the driver
+(`GLStateManager::SetClipControl`). For the swap chain/default framebuffer specifically,
+`GLStateManager::BindRenderTarget` requests `GL_LOWER_LEFT` (OpenGL's native origin) and relies on
+LLGL's own CPU-side flip to compensate, rather than asking the driver to remap the origin -- a path
+that requires `ARB_clip_control` to be genuinely available and consistently applied to both the
+vertex-shader-visible clip space and the viewport/scissor rectangle. A software GLX/llvmpipe driver
+not exposing (or inconsistently emulating) `ARB_clip_control` is the most likely explanation for a
+mismatch that only appears on a Y-offset sub-region against the backbuffer specifically -- but this
+was not independently confirmed by reading Mesa/llvmpipe's own capability reporting, only inferred
+from LLGL's own source.
+
+**Why this project can't easily work around it:** the affected rectangles are computed identically
+for both modules and are provably correct on Vulkan; adding a module-specific manual Y-flip in
+CNA's own code would require either (a) discovering the EXACT compensation LLGL's own emulation
+path is failing to apply (risking a second, harder-to-diagnose mismatch if the real cause turns out
+to be something else in this specific environment), or (b) bypassing LLGL's screen-origin
+abstraction entirely for the GL module, which the project's own architecture (a single call site per
+draw kind, backend-agnostic) is not set up for. Filed as an environment/module limitation rather
+than attempted blind.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-39` (no `_OpenGL` CTest variant registered for
+`spritebatch_custom_viewport`/`spritebatch_viewport_switch`/`rendertargetcube_plural_binding` --
+see `cmake/Tests/LlglTests.cmake`'s own comment there for the full explanation).
 
 ---
 

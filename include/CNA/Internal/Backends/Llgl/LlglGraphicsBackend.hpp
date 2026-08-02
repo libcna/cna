@@ -1916,6 +1916,13 @@ namespace CNA::Internal::Backends::Llgl
             bool             usesBlendFactor = false;
             std::int32_t     scissor[4]   = {0, 0, 0, 0};
             bool             scissorEnabled = false;
+            /** @brief The physical-pixel GPU viewport rectangle (x, y, width, height) this command
+             *  must be drawn with -- filled by `CaptureFrameCommandViewportEXT()` for every kind,
+             *  since the render-pass-wide `SetViewport()` at the top of a `FrameCommandBucket` is
+             *  only a default that a narrowed Primitives command can leave behind for whatever
+             *  replays after it. See that method's own doc comment for why only Primitives ever
+             *  narrows this. */
+            float            viewport[4]  = {0.0f, 0.0f, 0.0f, 0.0f};
 
             /** @brief Primitives only: the caller's own vertex buffer, and index buffer if any. */
             LLGL::Buffer*    vertexBuffer = nullptr;
@@ -2114,6 +2121,14 @@ namespace CNA::Internal::Backends::Llgl
         void UploadFrameResources();
         void RecordAndSubmitFrame();
         [[nodiscard]] bool ComputeEffectiveScissor(std::int32_t outRect[4]) const;
+        /// Fills `command.viewport` with the physical-pixel GPU viewport rectangle this command
+        /// must be drawn with. Sprite/Clear commands always get the whole target (sprite geometry
+        /// is baked into window pixels at queue time in QueueSpriteEXT, see its own comment) --
+        /// only a Primitives command whose active XNA Viewport is a genuine sub-rectangle
+        /// (viewportSet_) gets a narrower rect, since 3D vertex positions are only resolved to
+        /// screen space by the GPU's own viewport transform at draw time, not pre-baked on the
+        /// CPU like sprites are.
+        void CaptureFrameCommandViewportEXT(FrameCommand& command) const;
 
         SDL_Window*                 window_        = nullptr;
         Detail::RendererModule      module_        = Detail::RendererModule::OpenGL;

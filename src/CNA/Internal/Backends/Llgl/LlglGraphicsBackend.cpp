@@ -1476,7 +1476,10 @@ namespace CNA::Internal::Backends::Llgl
 
     void LlglSpriteBatchBackend::Begin()
     {
-        transform_ = Matrix::getIdentityProperty();
+        // Nothing to reset here: SpriteBatch::Begin() always calls SetTransformMatrix() (with
+        // either the caller's transform or Matrix::getIdentityProperty() as its own default)
+        // BEFORE this runs, so unconditionally overwriting transform_ back to identity here
+        // silently discarded any custom transformMatrix passed to SpriteBatch::Begin().
     }
 
     void LlglSpriteBatchBackend::End()
@@ -3426,6 +3429,7 @@ namespace CNA::Internal::Backends::Llgl
         command.usesBlendFactor = UsesConstantBlendFactorState();
         std::memcpy(command.scissor, scissor, sizeof(command.scissor));
         command.scissorEnabled = scissorEnabled;
+        CaptureFrameCommandViewportEXT(command);
 
         if (indexBuffer != nullptr)
         {
@@ -3959,6 +3963,7 @@ namespace CNA::Internal::Backends::Llgl
             std::memcpy(command.clearColor, color, sizeof(command.clearColor));
         command.clearDepth = depth;
         command.clearStencil = stencil;
+        CaptureFrameCommandViewportEXT(command);
         frameCommands_.push_back(command);
         backbufferCacheValid_ = false;
     }
@@ -4046,9 +4051,13 @@ namespace CNA::Internal::Backends::Llgl
         const float scaleX = rect.width / rect.logicalWidth;
         const float scaleY = rect.height / rect.logicalHeight;
 
-        // A sub-viewport clips drawing in XNA. This backend keeps the GPU viewport at the whole
-        // window (sprite geometry is already baked into window pixels) and expresses that clipping
-        // through the scissor instead, intersected with any scissor the game set itself.
+        // A sub-viewport clips drawing in XNA. Sprite geometry is baked into window pixels at
+        // queue time (see QueueSpriteEXT) and its GPU viewport always stays the whole target (see
+        // CaptureFrameCommandViewportEXT()'s doc comment), so THAT clipping has to come from here
+        // instead. Primitives now also get a real narrowed GPU viewport (which clips on its own),
+        // so this intersection is redundant-but-harmless for them -- kept unconditional so both
+        // kinds share one code path. Either way, this is further intersected with any scissor the
+        // game set itself.
         float left = rect.x;
         float top = rect.y;
         float right = rect.x + rect.width;
@@ -4081,6 +4090,36 @@ namespace CNA::Internal::Backends::Llgl
         outRect[2] = static_cast<std::int32_t>(std::max(0.0f, std::round(right - left)));
         outRect[3] = static_cast<std::int32_t>(std::max(0.0f, std::round(bottom - top)));
         return true;
+    }
+
+    void LlglGraphicsBackend::CaptureFrameCommandViewportEXT(FrameCommand& command) const
+    {
+        const LLGL::Extent2D resolution = currentRenderTargetBackend_ != nullptr
+            ? LLGL::Extent2D{static_cast<std::uint32_t>(std::max(0, currentRenderTargetBackend_->GetWidth())),
+                             static_cast<std::uint32_t>(std::max(0, currentRenderTargetBackend_->GetHeight()))}
+            : swapChain_->GetResolution();
+
+        command.viewport[0] = 0.0f;
+        command.viewport[1] = 0.0f;
+        command.viewport[2] = static_cast<float>(resolution.width);
+        command.viewport[3] = static_cast<float>(resolution.height);
+
+        if (command.kind != FrameCommand::Kind::Primitives || !viewportSet_)
+            return;
+
+        const PresentationRect rect = GetActiveDrawRect();
+        if (rect.width <= 0.0f || rect.height <= 0.0f ||
+            rect.logicalWidth <= 0.0f || rect.logicalHeight <= 0.0f)
+        {
+            return;
+        }
+
+        const float scaleX = rect.width / rect.logicalWidth;
+        const float scaleY = rect.height / rect.logicalHeight;
+        command.viewport[0] = rect.x + static_cast<float>(viewportRect_[0]) * scaleX;
+        command.viewport[1] = rect.y + static_cast<float>(viewportRect_[1]) * scaleY;
+        command.viewport[2] = static_cast<float>(viewportRect_[2]) * scaleX;
+        command.viewport[3] = static_cast<float>(viewportRect_[3]) * scaleY;
     }
 
     void LlglGraphicsBackend::QueueSpriteEXT(const ITextureBackend& texture,
@@ -4156,14 +4195,24 @@ namespace CNA::Internal::Backends::Llgl
             static_cast<float>(color.getAProperty()) / 255.0f
         };
 
+        // A sub-Viewport is VIEWPORT-LOCAL in XNA/FNA (SpriteBatch.cs PrepRenderState): sprite
+        // (0,0) is the viewport's own top-left corner, translated -- not rescaled -- by
+        // Viewport.X/Y (see spritebatch_custom_viewport_test.cpp's own extensive comment on why
+        // Width/Height only matter for the internal NDC math and cancel out of the final screen
+        // position). This backend never changes the GPU rasterizer viewport for sprites (it stays
+        // the whole target, see CaptureFrameCommandViewportEXT()'s doc comment), so that offset
+        // has to be baked into the geometry here instead.
+        const float viewportOffsetX = viewportSet_ ? static_cast<float>(viewportRect_[0]) : 0.0f;
+        const float viewportOffsetY = viewportSet_ ? static_cast<float>(viewportRect_[1]) : 0.0f;
+
         const auto firstVertex = static_cast<std::uint32_t>(spriteVertexData_.size() / kSpriteVertexFloats);
         for (const int cornerIndex : kQuadIndices)
         {
             // Baked straight into window pixels: the letterbox offset and scale live in the
             // geometry, which leaves the GPU viewport free to stay at the full window and the
             // projection constant for the whole frame.
-            const float px = rect.x + points[cornerIndex].X * rect.width / rect.logicalWidth;
-            const float py = rect.y + points[cornerIndex].Y * rect.height / rect.logicalHeight;
+            const float px = rect.x + (viewportOffsetX + points[cornerIndex].X) * rect.width / rect.logicalWidth;
+            const float py = rect.y + (viewportOffsetY + points[cornerIndex].Y) * rect.height / rect.logicalHeight;
             spriteVertexData_.insert(spriteVertexData_.end(),
                 {px, py, uv[cornerIndex].X, uv[cornerIndex].Y, rgba[0], rgba[1], rgba[2], rgba[3]});
         }
@@ -4230,6 +4279,7 @@ namespace CNA::Internal::Backends::Llgl
         command.usesBlendFactor = UsesConstantBlendFactorState();
         std::memcpy(command.scissor, scissor, sizeof(command.scissor));
         command.scissorEnabled = scissorEnabled;
+        CaptureFrameCommandViewportEXT(command);
         frameCommands_.push_back(command);
         backbufferCacheValid_ = false;
     }
@@ -4644,6 +4694,8 @@ namespace CNA::Internal::Backends::Llgl
             {
                 case FrameCommand::Kind::Clear:
                 {
+                    commands_->SetViewport(LLGL::Viewport{command.viewport[0], command.viewport[1],
+                                                          command.viewport[2], command.viewport[3]});
                     LLGL::ClearValue clearValue;
                     std::memcpy(clearValue.color, command.clearColor, sizeof(clearValue.color));
                     clearValue.depth = command.clearDepth;
@@ -4672,6 +4724,8 @@ namespace CNA::Internal::Backends::Llgl
                         break;
                     }
 
+                    commands_->SetViewport(LLGL::Viewport{command.viewport[0], command.viewport[1],
+                                                          command.viewport[2], command.viewport[3]});
                     commands_->SetPipelineState(*command.pipeline);
                     if (command.usesBlendFactor)
                         commands_->SetBlendFactor(command.blendFactor);
@@ -4779,6 +4833,8 @@ namespace CNA::Internal::Backends::Llgl
                         break;
                     }
 
+                    commands_->SetViewport(LLGL::Viewport{command.viewport[0], command.viewport[1],
+                                                          command.viewport[2], command.viewport[3]});
                     commands_->SetPipelineState(*command.pipeline);
                     if (command.usesBlendFactor)
                         commands_->SetBlendFactor(command.blendFactor);

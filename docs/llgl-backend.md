@@ -344,18 +344,22 @@ Two implementation choices are worth knowing if you are debugging a render-targe
   compatibility rule only requires matching attachment formats and sample counts, not the same
   `VkRenderPass` object. The 3D path (`BasicEffect`, depth-tested `VertexBuffer` draws) works into
   a render target too, not just `SpriteBatch` — both share the same reused pipelines.
-* **`GraphicsDevice.Viewport` is applied once per render-pass bucket, not once per draw (OPEN
-  finding, `known_bugs.md`).** `RecordAndSubmitFrame()`/`CaptureBackbuffer()` issue
-  `commands_->SetViewport()` exactly once per `FrameCommandBucket` (sized to the whole target,
-  never to a sub-region), before replaying every command grouped into that bucket. A game that sets
+* **`GraphicsDevice.Viewport` is applied per draw, not once per render-pass bucket (LLGL-39
+  finding, FIXED — see `known_bugs.md`).** `ReplayFrameCommandsList()` now issues
+  `commands_->SetViewport()` per `Clear`/`Primitives`/`Sprite` command using a physical-pixel
+  rectangle `CaptureFrameCommandViewportEXT()` captured onto each `FrameCommand` at queue time —
+  the whole target by default, narrowed only for `Primitives` when a custom `Viewport` was active,
+  mirroring `ComputeEffectiveScissor`'s own narrowing. Sprites needed a separate, second fix:
+  `QueueSpriteEXT()`'s CPU-baked geometry never added a custom `Viewport`'s own X/Y offset (only the
+  scissor was narrowed to it), so it now translates by `viewportRect_[0]`/`[1]` before the existing
+  letterbox scale, matching FNA's viewport-local `SpriteBatch` coordinate contract. A game that sets
   a DIFFERENT `Viewport` before each of several draws into the SAME target within one unflushed
-  frame gets every one of those draws rasterized with whichever viewport was set LAST — confirmed
-  by three independent test files (`spritebatch_viewport_switch_test.cpp`,
-  `spritebatch_custom_viewport_test.cpp`'s own Check C1/C2, and
-  `rendertargetcube_plural_binding_test.cpp`'s own multi-viewport `EnvironmentMapEffect` read-back
-  probe — NOT a cube-face-mapping bug, ruled out against the already-verified singular-bind path).
-  Not fixed here; see `known_bugs.md`'s own entry for the fix shape (capture `Viewport` per
-  `FrameCommand` at queue time, like `command.target` already is).
+  frame now gets each draw rasterized with its own viewport, not whichever was set last — verified
+  by the same three test files that exposed the bug (`spritebatch_viewport_switch_test.cpp`,
+  `spritebatch_custom_viewport_test.cpp`, `rendertargetcube_plural_binding_test.cpp`), all now fully
+  passing under the default (Vulkan) module. A separate, OpenGL-module-only limitation (Y-offset
+  scissor/viewport against the backbuffer renders nothing under `CNA_LLGL_RENDERER=opengl`) remains
+  open — see `known_bugs.md`'s new entry.
 
 Destroying a `RenderTarget2D` before `Present()` (create it, draw into it, sample it, let it go out
 of scope, all within one `Draw()`) is safe: like `VertexBuffer`/`IndexBuffer`, the underlying LLGL
@@ -765,18 +769,22 @@ the default all-ones mask resolving normally, and `MultiSampleMask=0` resolving 
 on a module that honours it -- module-dependent, `[SKIP]` on the OpenGL module rather than failed,
 since its sample-mask application is permanently disabled in vendored LLGL (see "Render targets"
 above).
-Five more shared, cross-backend tests (already registered on EasyGL and usually several other
+Eight more shared, cross-backend tests (already registered on EasyGL and usually several other
 backends) were newly wired up here (`plan_llgl.md` Phase LLGL-7, `LLGL-39`):
 `Llgl_RenderTarget2D_DepthBuffer` (a `RenderTarget2D`'s own depth buffer really gates draws, not
 just stores a property), `Llgl_RenderTarget_ViewportScissorReset` (binding/unbinding a render
 target resets `Viewport`/`ScissorRectangle` to the new target's/back buffer's size),
 `Llgl_SkinnedEffect_LightingConformance` (analytic ambient/emissive lighting term isolation),
-`Llgl_ViewportResetAfterResize` (a backbuffer resize resets `Viewport` unconditionally), and
+`Llgl_ViewportResetAfterResize` (a backbuffer resize resets `Viewport` unconditionally),
 `Llgl_GraphicsDevice_ClearDepth` (`Clear()`'s own `depth` parameter genuinely reaches the depth
-buffer). Five OTHER files from the same batch were deliberately left unregistered after being
-found to genuinely fail here for real, identified reasons -- see `known_bugs.md`'s three new open
-entries and this doc's own "`GraphicsDevice.Viewport` is applied once per render-pass bucket, not
-once per draw" bullet above.
+buffer), and three more that initially failed and are covered above under "`GraphicsDevice.Viewport`
+is applied per draw" -- `Llgl_RenderTargetCube_PluralBinding`, `Llgl_SpriteBatch_CustomViewport`,
+`Llgl_SpriteBatch_ViewportSwitch` (all fully passing under the default/Vulkan module; no `_OpenGL`
+variant, see `known_bugs.md`'s new OpenGL-Y-offset-scissor entry). Two OTHER files from the same
+batch remain deliberately unregistered after being found to genuinely fail here for real, unrelated,
+identified reasons -- see `known_bugs.md`'s open entries for
+`rasterizerstate_cullmode_indexed_basiceffect_test.cpp` and
+`rasterizerstate_cullmode_camera_test.cpp`.
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED
