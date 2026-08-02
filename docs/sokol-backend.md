@@ -66,13 +66,14 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `RenderTarget2D` MSAA + resolve (`MultiSampleCount` > 1) | ✅ | `Sokol_RenderTarget2D_Msaa` -- a real differential anti-aliasing proof (a solid binary edge at `MultiSampleCount=0` vs. genuinely blended pixels at `8`), not just "resolve doesn't corrupt solid colours" |
 | `Viewport.MinDepth`/`MaxDepth` | ✅ | `Sokol_Viewport_MinMaxDepth` -- REMED-GFX-079's 25-check backend-agnostic 3D-viewport oracle, including a real depth-remap proof (compressing `MaxDepth` pulls a farther quad in front of a nearer one) |
 | `GetBackBufferData` while a `RenderTarget2D`/`RenderTargetCube` face is bound (reads the bound target's own content) | ✅ | Same oracle's check G; matches `EasyGLGraphicsBackend::ReadBackbuffer`'s "read from whatever's bound" convention |
-| `RenderTarget2D`/`RenderTargetCube::GetData` (direct CPU readback) | ✅ | A throwaway GL FBO around the raw GL texture `sg_gl_query_image_info()` exposes. Fixed two real bugs it surfaced: sampling a render target as a texture was exactly vertically mirrored (REMED-GFX-147, fixed with a per-draw `rtFlipV` shader uniform), and a target bound/`Clear()`-ed/unbound with no draw in between never reached the GPU at all (`Present()` already had this fix for the backbuffer; the render-target bind path now has it too). `Sokol_RenderTarget_SamplingOrientation` 53/53, plus the whole SOKOL-25/26 render-target oracle suite re-verified with real pixels |
+| `RenderTarget2D`/`RenderTargetCube::GetData` (direct CPU readback) | ✅ | A throwaway GL FBO around the raw GL texture `sg_gl_query_image_info()` exposes. Fixed two real bugs it surfaced: sampling a render target as a texture was exactly vertically mirrored (REMED-GFX-147, fixed with a per-draw `rtFlipV` shader uniform), and a target bound/`Clear()`-ed/unbound with no draw in between never reached the GPU at all (`Present()` already had this fix for the backbuffer; the render-target bind path now has it too). `Sokol_RenderTarget_SamplingOrientation` 53/53 (55/55 as of `SOKOL-33`, once its own DualTextureEffect legs stopped degrading to an INFO skip), plus the whole SOKOL-25/26 render-target oracle suite re-verified with real pixels |
+| `DualTextureEffect` (base + overlay texture, `base.rgb *= 2` doubling factor, no alpha test) | ✅ | `Sokol_DualTextureEffect_VertexColor` (Task 889's own backend-agnostic oracle) -- both texture slots reuse the same `texcoord0` (this codebase's project-wide DualTextureEffect convention, not real XNA's separate UV sets) and independently fall back to opaque white when null |
 
 ## What does not work yet
 
 | Feature | Behaviour today | Tracked as |
 |---|---|---|
-| Dual-texture, environment-mapped, skinned or PBR 3D shading | throws, naming the unsupported combination | Phase 5 |
+| Environment-mapped, skinned or PBR 3D shading | throws, naming the unsupported combination | `SOKOL-34`/`SOKOL-35` |
 | Instanced draws | throws | Phase 5 |
 | Per-vertex (Gouraud) lighting (`BasicEffect.PreferPerPixelLighting = false`) | ignored -- always renders per-pixel, matching every CNA backend except D3D9 | not planned |
 | A lit draw whose `VertexDeclaration` has a Normal but no TextureCoordinate (or vice versa) | throws -- see the source comment on why both are required together | not planned |
@@ -169,10 +170,11 @@ ctest --test-dir cmake-build-sokol -R Sokol --output-on-failure
 | `Sokol_RenderTarget_ProducerConsumer` | 37, all real `GetData()` reads | all pass |
 | `Sokol_RenderTarget_BackbufferConsumer` | 87, all real `GetData()`/`GetBackBufferData()` reads | all pass |
 | `Sokol_RenderTarget_FirstUse` | 26, incl. a cube leg (N), all real `GetData()` reads | all pass |
-| `Sokol_RenderTarget_SamplingOrientation` | 53, all real `GetData()` reads | all pass |
+| `Sokol_RenderTarget_SamplingOrientation` | 55, all real `GetData()` reads (incl. 2 DualTextureEffect legs added by `SOKOL-33`) | all pass |
 | `Sokol_RenderTarget2D_Msaa` | 2, a real differential anti-aliasing proof | all pass |
 | `Sokol_RenderTargetCube_MsaaFace` | 9, incl. the permanent cube-MSAA boundary declaration | all pass |
 | `Sokol_Viewport_MinMaxDepth` | 25, incl. a real depth-remap proof | all pass |
+| `Sokol_DualTextureEffect_VertexColor` | 2, exact expected RGB in both cases | all pass |
 | `Sokol_OcclusionQuery_Cycle` | Begin/End/IsComplete/PixelCount plus every invalid-call-sequence and dispose-while-active case | all pass |
 | `Sokol_OcclusionQuery_VisibleQuad` | 3, real BasicEffect + depth-tested geometry | all pass |
 | `Sokol_OcclusionQuery_OccludedQuad` | 3, real BasicEffect + depth-tested geometry | all pass |

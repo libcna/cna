@@ -1731,6 +1731,10 @@ namespace CNA::Internal::Backends::Sokol
         lit3dShaderId_ = sg_make_shader(cna_lit3d_shader_desc(sg_query_backend())).id;
         if (sg_query_shader_state(MakeShaderHandle(lit3dShaderId_)) != SG_RESOURCESTATE_VALID)
             throw std::runtime_error("Sokol backend: lit-3D shader creation failed");
+
+        dualTextured3dShaderId_ = sg_make_shader(cna_dualtextured3d_shader_desc(sg_query_backend())).id;
+        if (sg_query_shader_state(MakeShaderHandle(dualTextured3dShaderId_)) != SG_RESOURCESTATE_VALID)
+            throw std::runtime_error("Sokol backend: dual-textured-3D shader creation failed");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -2772,6 +2776,23 @@ namespace CNA::Internal::Backends::Sokol
                     desc.layout.attrs[ATTR_cna_lit3d_color0].offset = key.colorOffset;
                 }
                 break;
+
+            case Shader3DKind::DualTextured:
+                // Same attribute shape as Textured: position + texcoord0, optional trailing color0.
+                desc.shader = MakeShaderHandle(dualTextured3dShaderId_);
+                desc.layout.attrs[ATTR_cna_dualtextured3d_position].format =
+                    static_cast<sg_vertex_format>(key.positionFormat);
+                desc.layout.attrs[ATTR_cna_dualtextured3d_position].offset = key.positionOffset;
+                desc.layout.attrs[ATTR_cna_dualtextured3d_texcoord0].format =
+                    static_cast<sg_vertex_format>(key.texCoordFormat);
+                desc.layout.attrs[ATTR_cna_dualtextured3d_texcoord0].offset = key.texCoordOffset;
+                if (key.colorOffset >= 0)
+                {
+                    desc.layout.attrs[ATTR_cna_dualtextured3d_color0].format =
+                        static_cast<sg_vertex_format>(key.colorFormat);
+                    desc.layout.attrs[ATTR_cna_dualtextured3d_color0].offset = key.colorOffset;
+                }
+                break;
         }
         desc.layout.buffers[0].stride = key.stride;
 
@@ -2874,13 +2895,13 @@ namespace CNA::Internal::Backends::Sokol
 
         // Everything this backend cannot shade yet is refused here rather than rendered as an
         // untextured, unlit approximation that would look plausible and be wrong. Plain texturing
-        // (SOKOL-21) and lighting (SOKOL-21) are real below; dual-texture, environment mapping,
-        // skinning and PBR are each a distinct stock effect with their own vertex/uniform contract
-        // this backend does not implement yet.
-        if (params.dualTexture || params.envMapping || params.skinned || params.pbr)
+        // (SOKOL-21), lighting (SOKOL-21) and dual-texturing (SOKOL-33) are real below;
+        // environment mapping, skinning and PBR are each a distinct stock effect with their own
+        // vertex/uniform contract this backend does not implement yet.
+        if (params.envMapping || params.skinned || params.pbr)
         {
             NotYetImplemented(kBackendName,
-                "dual-texture/environment-mapped/skinned/PBR 3D draws");
+                "environment-mapped/skinned/PBR 3D draws");
         }
         if (params.customEffectBackend != nullptr)
             NotYetImplemented(kBackendName, "custom ShaderEffect draws");
@@ -2901,6 +2922,7 @@ namespace CNA::Internal::Backends::Sokol
         }
 
         const Shader3DKind kind = params.lightingEnabled ? Shader3DKind::Lit
+                                 : params.dualTexture     ? Shader3DKind::DualTextured
                                  : params.textureEnabled  ? Shader3DKind::Textured
                                                            : Shader3DKind::Colored;
 
@@ -3016,7 +3038,7 @@ namespace CNA::Internal::Backends::Sokol
                     key.colorFormat = static_cast<int>(SG_VERTEXFORMAT_UBYTE4N);
                     break;
                 case 20:  // PositionTextureStream: float3 position @0, float2 texcoord @12.
-                    if (kind != Shader3DKind::Textured)
+                    if (kind != Shader3DKind::Textured && kind != Shader3DKind::DualTextured)
                         NotYetImplemented(kBackendName,
                             "a colored or lit 3D draw from an undeclared VertexPositionTexture "
                             "buffer");
@@ -3028,7 +3050,7 @@ namespace CNA::Internal::Backends::Sokol
                     break;
                 case 24:  // PositionColorTextureStream: float3 position @0, ubyte4n color @12,
                           // float2 texcoord @16.
-                    if (kind != Shader3DKind::Textured)
+                    if (kind != Shader3DKind::Textured && kind != Shader3DKind::DualTextured)
                         NotYetImplemented(kBackendName,
                             "a colored or lit 3D draw from an undeclared VertexPositionColorTexture "
                             "buffer");
@@ -3066,7 +3088,8 @@ namespace CNA::Internal::Backends::Sokol
             NotYetImplemented(kBackendName,
                 "a 3D draw from a VertexDeclaration with no usable Position element");
         }
-        if (kind == Shader3DKind::Textured && key.texCoordOffset < 0)
+        if ((kind == Shader3DKind::Textured || kind == Shader3DKind::DualTextured)
+            && key.texCoordOffset < 0)
         {
             NotYetImplemented(kBackendName,
                 "a textured 3D draw from a VertexDeclaration with no TextureCoordinate element");
@@ -3087,7 +3110,8 @@ namespace CNA::Internal::Backends::Sokol
         bool hasTexture = false;
         std::uint32_t textureViewId = 0;
         bool textureIsRenderTarget = false;
-        if (kind == Shader3DKind::Textured || (kind == Shader3DKind::Lit && params.textureEnabled))
+        if (kind == Shader3DKind::Textured || kind == Shader3DKind::DualTextured
+            || (kind == Shader3DKind::Lit && params.textureEnabled))
         {
             if (params.texture0 != nullptr)
             {
@@ -3101,10 +3125,35 @@ namespace CNA::Internal::Backends::Sokol
                     "Sokol backend: TextureEnabled draw with no texture bound");
             }
         }
-        if (!hasTexture && kind == Shader3DKind::Lit)
+        if (!hasTexture && (kind == Shader3DKind::Lit || kind == Shader3DKind::DualTextured))
         {
+            // Lit: the 1x1 opaque-white fallback for an untextured lit draw. DualTextured: the
+            // same null-fallback convention EasyGL/Vulkan/Bgfx already established for
+            // DualTextureEffect's own Texture slot (this codebase's docs/dualtextureeffect-support.md
+            // Task 386).
             textureViewId = GetDefaultWhiteTexture().GetViewIdEXT();
             hasTexture = true;
+        }
+
+        // DualTextureEffect's second slot (Texture2) -- same null-fallback convention as the
+        // first (Task 387). Sampled with the SAME SamplerStates[0] as texture0, matching this
+        // codebase's own established simplification (EasyGLGraphicsBackend::EnsureDualTextured3DProgram
+        // binds unit 1 with no distinct per-slot sampler lookup either), not real XNA's separate
+        // s0/s1 sampler registers.
+        std::uint32_t texture1ViewId = 0;
+        bool texture1IsRenderTarget = false;
+        if (kind == Shader3DKind::DualTextured)
+        {
+            if (params.texture1 != nullptr)
+            {
+                texture1ViewId =
+                    ResolveSampledTextureViewId(*params.texture1, "a dual-textured 3D draw");
+                texture1IsRenderTarget = IsRenderTargetSourceEXT(*params.texture1);
+            }
+            else
+            {
+                texture1ViewId = GetDefaultWhiteTexture().GetViewIdEXT();
+            }
         }
 
         BeginPassIfNeeded();
@@ -3123,6 +3172,14 @@ namespace CNA::Internal::Backends::Sokol
             const SamplerSlotState& sampler = samplerSlots_[0];
             bindings.views[VIEW_cna_tex] = MakeViewHandle(textureViewId);
             bindings.samplers[SMP_cna_smp] = MakeSamplerHandle(
+                GetSampler(sampler.filter, sampler.addressU, sampler.addressV,
+                          sampler.maxAnisotropy));
+        }
+        if (kind == Shader3DKind::DualTextured)
+        {
+            const SamplerSlotState& sampler = samplerSlots_[0];
+            bindings.views[VIEW_cna_tex2] = MakeViewHandle(texture1ViewId);
+            bindings.samplers[SMP_cna_smp2] = MakeSamplerHandle(
                 GetSampler(sampler.filter, sampler.addressU, sampler.addressV,
                           sampler.maxAnisotropy));
         }
@@ -3251,6 +3308,34 @@ namespace CNA::Internal::Backends::Sokol
 
                 sg_range fsRange{&fsUniforms, sizeof(fsUniforms)};
                 sg_apply_uniforms(UB_cna_lit3d_fs_params, &fsRange);
+                break;
+            }
+            case Shader3DKind::DualTextured:
+            {
+                cna_dualtextured3d_vs_params_t vsUniforms{};
+                worldViewProjection.ToColumnMajor(vsUniforms.mvp);
+                vsUniforms.diffuse[0] = params.diffuseColor[0];
+                vsUniforms.diffuse[1] = params.diffuseColor[1];
+                vsUniforms.diffuse[2] = params.diffuseColor[2];
+                vsUniforms.diffuse[3] = params.diffuseColor[3];
+                vsUniforms.flags[0] = vertexColorActive ? 1.0f : 0.0f;
+                vsUniforms.fogVector[0] = params.fogVector[0];
+                vsUniforms.fogVector[1] = params.fogVector[1];
+                vsUniforms.fogVector[2] = params.fogVector[2];
+                vsUniforms.fogVector[3] = params.fogVector[3];
+
+                sg_range vsRange{&vsUniforms, sizeof(vsUniforms)};
+                sg_apply_uniforms(UB_cna_dualtextured3d_vs_params, &vsRange);
+
+                cna_dualtextured3d_fs_params_t fsUniforms{};
+                fsUniforms.fogColor[0] = params.fogColor[0];
+                fsUniforms.fogColor[1] = params.fogColor[1];
+                fsUniforms.fogColor[2] = params.fogColor[2];
+                fsUniforms.rtFlipV[0] = textureIsRenderTarget ? 1.0f : 0.0f;
+                fsUniforms.rtFlipV[1] = texture1IsRenderTarget ? 1.0f : 0.0f;
+
+                sg_range fsRange2{&fsUniforms, sizeof(fsUniforms)};
+                sg_apply_uniforms(UB_cna_dualtextured3d_fs_params, &fsRange2);
                 break;
             }
         }

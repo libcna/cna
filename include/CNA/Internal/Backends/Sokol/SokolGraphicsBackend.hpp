@@ -1477,7 +1477,12 @@ namespace CNA::Internal::Backends::Sokol
             Textured,
             /** @brief lit3d.glsl -- ambient + up to 3 directional lights, always samples a texture
              *  (a real one, or the backend's 1x1 white fallback). */
-            Lit
+            Lit,
+            /** @brief dualtextured3d.glsl -- DualTextureEffect: two textures sampled at the SAME
+             *  texcoord0 (this codebase has no second UV-set concept anywhere, matching every other
+             *  CNA backend's own DualTextureEffect shape), `base.rgb *= 2` then multiplied by the
+             *  overlay and DiffuseColor. No alpha test (FNA's PSDualTexture has none). */
+            DualTextured
         };
 
         /**
@@ -1728,6 +1733,7 @@ namespace CNA::Internal::Backends::Sokol
         std::uint32_t colored3dShaderId_ = 0;
         std::uint32_t textured3dShaderId_ = 0;
         std::uint32_t lit3dShaderId_ = 0;
+        std::uint32_t dualTextured3dShaderId_ = 0;
         /// Lazily created 1x1 opaque-white texture, bound by the Lit shader whenever
         /// GpuDrawParams::textureEnabled is false -- lets one shader serve both "textured and lit"
         /// and "vertex-coloured and lit" (the multiply is then a no-op), the same convention the
