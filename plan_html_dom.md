@@ -163,7 +163,7 @@ shared, backend-agnostic `SpriteFont.cpp` logic — the same conclusion `CANVAS`
 | HTMLDOM-21 | ✅ | `UpdatePixels` re-uploads and invalidates every cached variant of that texture. |
 | HTMLDOM-22 | ✅ | `UpdatePixelsLevel(level>0)` throws — no mip chain exists here (same boundary as `CANVAS`/`SDL_RENDERER`). |
 | HTMLDOM-23 | ✅ | Variant generation + LRU cache (straight / un-premultiplied / alpha-stripped / tinted), design decision 7. |
-| HTMLDOM-24 | 🟨 | `Texture2D::GetData` on a plain texture is served by the shared CPU shadow — no backend work needed. Not separately exercised by the browser run. |
+| HTMLDOM-24 | ✅ | `Texture2D::GetData` on a plain texture is served by the shared CPU shadow — no backend work needed. Closed by HTMLDOM-96a (D14, below), which added a byte-exact browser check for exactly this path — this row's own status was left stale at the time and is corrected here. |
 
 ### D4 — SpriteBatch
 
