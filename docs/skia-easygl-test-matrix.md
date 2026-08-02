@@ -33,7 +33,7 @@ dispositions live in `docs/skia-3d-call-effect-matrix.md`.
 | `ctest:EasyGL_BlendState_Additive_Golden` | `ctest` | `2d-direct` | Existing Skia Additive route; SKIA-50. |
 | `ctest:EasyGL_RenderTarget2D_Readback` | `ctest` | `2d-direct` | Exact source also runs as `Skia_EasyGL_RenderTarget2D_Readback`; SKIA-61–62, SKIA-106. |
 | `ctest:EasyGL_RenderTarget2D_Golden` | `ctest` | `2d-direct` | Shared zero-tolerance target golden already runs on Skia; SKIA-75. |
-| `ctest:EasyGL_RenderTarget2D_MipComplete` | `ctest` | `2d-direct` | SKIA-131 now supplies direct bounded target mip storage/sampling; SKIA-132 owns the remaining generated-descendant parity leg. |
+| `ctest:EasyGL_RenderTarget2D_MipComplete` | `ctest` | `2d-direct` | The exact source now also runs as `Skia_EasyGL_RenderTarget2D_MipComplete`; SKIA-131–132 supply bounded target storage plus resolve-generated descendants. |
 | `ctest:EasyGL_RenderTarget_ViewportScissorReset` | `ctest` | `2d-direct` | Existing target-local viewport/scissor coverage; SKIA-41–42. |
 | `ctest:EasyGL_SpriteFont_Properties` | `ctest` | `2d-direct` | Exact source runs as `Skia_Contract_SpriteFontProperties`; SKIA-38, SKIA-109. |
 | `ctest:EasyGL_SpriteEffects_Flip` | `ctest` | `2d-direct` | Existing flip coverage; SKIA-34. |

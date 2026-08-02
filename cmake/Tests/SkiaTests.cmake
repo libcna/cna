@@ -489,6 +489,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_display_test(Skia_RenderTarget2D_MipStorage
                                    cna_test_skia_rendertarget2d_mip_storage)
 
+    cna_skia_test(cna_test_skia_rendertarget2d_mip_generation
+                  examples/skia_rendertarget2d_mip_generation_test.cpp)
+    target_include_directories(cna_test_skia_rendertarget2d_mip_generation
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_RenderTarget2D_MipGeneration
+                                   cna_test_skia_rendertarget2d_mip_generation)
+
+    # Unchanged EasyGL parity fixture: render level zero, resolve, then sample through a
+    # mip-requiring public filter. Solid blue proves the complete descendant chain is usable.
+    cna_skia_test(cna_test_skia_easygl_rendertarget2d_mip_complete
+                  examples/easygl_rendertarget2d_mip_test.cpp)
+    cna_register_skia_display_test(Skia_EasyGL_RenderTarget2D_MipComplete
+                                   cna_test_skia_easygl_rendertarget2d_mip_complete)
+
     # Pixel-level sampling companion to the CPU readback cases above: two odd NPOT dimensions,
     # source-row selection, PointClamp, and backbuffer readback all pass through the public API.
     cna_skia_test(cna_test_skia_npot_texture examples/sdlrenderer_npot_texture_test.cpp)

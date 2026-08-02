@@ -72,4 +72,10 @@ namespace CNA::Internal::Backends::Skia
         std::shared_ptr<SkiaResourceCounters> resourceCounters_;
         bool resourceRegistered_ = false;
     };
+
+    /**
+     * Replaces one RGBA8 level with the deterministic area-box reduction of its direct parent.
+     * Odd and NPOT source axes are partitioned completely; every source texel contributes once.
+     */
+    void GenerateSkiaRgba8MipLevel(SkiaMipChain2D& chain, int level);
 } // namespace CNA::Internal::Backends::Skia

@@ -41,10 +41,12 @@ The 2D resource behavior they overlap remains executable through `Skia_Texture2D
 covered by `Skia_3D_Refusal`. Thus the comparison records a deliberate scope boundary, not an
 unexplained contract discrepancy.
 
-The broad EasyGL RenderTarget2D property fixture also requires construction of mipmapped and
-multisampled targets. Raster Skia intentionally refuses those requests; its property and refusal
-contracts remain covered by `Skia_RenderTarget2D_DepthPolicy`, `Skia_RenderTarget2D_MsaaPolicy`,
-and `Skia_Texture2D_MipmapPolicy` rather than changing the EasyGL expectation.
+The broad EasyGL RenderTarget2D property fixture also requires multisampled targets. Raster Skia
+still intentionally refuses real sample counts, while SKIA-131–132 now support mipmapped Color
+targets with deterministic resolve-generated descendants. Their property, generation and refusal
+contracts are covered by `Skia_RenderTarget2D_MipStorage`, `MipGeneration`,
+`Skia_EasyGL_RenderTarget2D_MipComplete`, and `Skia_RenderTarget2D_MsaaPolicy` without weakening
+the EasyGL expectation.
 
 ## Test defect found
 

@@ -21,6 +21,7 @@
 
 #include "include/core/SkImage.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -234,13 +235,22 @@ protected:
             std::vector<Color> publicLevelThree(1, kBlack);
             target.GetData(2, nullptr, publicLevelTwo.data(), 0, 4);
             target.GetData(3, nullptr, publicLevelThree.data(), 0, 1);
+            const std::vector<Color> renderedLevelOne{
+                kWhite, kBlack, kBlack, kBlack,
+                kBlack, kBlack, kBlack, kBlack,
+                kBlack, kBlack, kBlack, kBlack,
+                kBlack, kBlack, kBlack, kBlack};
+            const std::vector<Color> renderedLevelTwo{
+                Color(64, 64, 64, 255), kBlack, kBlack, kBlack};
+            const std::vector<Color> renderedLevelThree{
+                Color(16, 16, 16, 255)};
             Check(renderedLevelZero[0] == kWhite && renderedLevelZero[9] == kWhite
                       && renderedLevelZero[2] == kBlack && renderedLevelZero[63] == kBlack,
                   "Clear and SpriteBatch draw mutate the bound level-zero surface");
-            Check(SameColors(publicLevelOne, levelOne)
-                      && SameColors(publicLevelTwo, levelTwo)
-                      && SameColors(publicLevelThree, levelThree),
-                  "level-zero rendering does not alias explicitly uploaded descendants");
+            Check(SameColors(publicLevelOne, renderedLevelOne)
+                      && SameColors(publicLevelTwo, renderedLevelTwo)
+                      && SameColors(publicLevelThree, renderedLevelThree),
+                  "level-zero rendering deterministically replaces every descendant without aliasing");
 
             device.SetRenderTarget(&target);
             Color preserved(0, 0, 0, 0);
@@ -260,8 +270,8 @@ protected:
             spriteBatch_->End();
             Color sampled(0, 0, 0, 0);
             device.GetBackBufferData(&preservedPixel, &sampled, 0, 1);
-            Check(sampled == kYellow,
-                  "public minification samples the distinct authored 1x1 target mip");
+            Check(sampled == renderedLevelThree[0],
+                  "public minification samples the regenerated 1x1 target mip");
         }
 
         Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
@@ -279,8 +289,9 @@ protected:
             discard.GetData(0, nullptr, levelZero.data(), 0, 64);
             discard.GetData(1, nullptr, retainedHigh.data(), 0, 16);
             Check(levelZero.front() == kBlack && levelZero.back() == kBlack
-                      && SameColors(retainedHigh, high),
-                  "DiscardContents replaces level zero without aliasing higher storage");
+                      && std::all_of(retainedHigh.begin(), retainedHigh.end(),
+                                     [](Color value) { return value == kBlack; }),
+                  "DiscardContents replaces level zero and regenerates its higher storage");
         }
         Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
               "discard target release also returns every counter to baseline");

@@ -558,6 +558,21 @@ namespace CNA::Internal::Backends::Skia
     void SkiaGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* renderTarget)
     {
         AssertOwnership("SetRenderTarget2D");
+
+        // Validate the requested destination before resolving the current one. A failed foreign
+        // or cross-device bind is not a pass boundary and must leave both the active selection and
+        // its dirty mip chain byte-for-byte unchanged.
+        SkiaRenderTargetBackend* skiaTarget = nullptr;
+        if (renderTarget)
+        {
+            skiaTarget = dynamic_cast<SkiaRenderTargetBackend*>(renderTarget);
+            if (!skiaTarget || !skiaTarget->BelongsToBindingEXT(targetBinding_))
+            {
+                throw std::runtime_error(
+                    "Skia cannot bind a render target created by a different graphics backend.");
+            }
+        }
+
         if (SkiaRasterTarget* activeTarget = targetBinding_->ActiveTarget())
             activeTarget->FinalizeWriteEXT();
         if (!renderTarget)
@@ -570,9 +585,6 @@ namespace CNA::Internal::Backends::Skia
             return;
         }
 
-        auto* skiaTarget = dynamic_cast<SkiaRenderTargetBackend*>(renderTarget);
-        if (!skiaTarget)
-            throw std::runtime_error("Skia cannot bind a render target created by a different backend.");
         skiaTarget->PrepareForBind();
         targetBinding_->Bind(skiaTarget, &skiaTarget->Surface());
         TraceSkiaState("surface=render-target id=%llu size=%dx%d",

@@ -71,17 +71,25 @@ namespace CNA::Internal::Backends::Skia
         {
             return *mipChain_;
         }
+        NOXNA [[nodiscard]] std::uint64_t MipGenerationCountEXT(int level) const;
+        NOXNA [[nodiscard]] bool MipLevelDirtyEXT(int level) const;
+        [[nodiscard]] bool BelongsToBindingEXT(
+            const std::shared_ptr<SkiaRenderTargetBinding>& binding) const noexcept;
 
     private:
         [[nodiscard]] SkiaSurface* LevelSurface(int level) noexcept;
         [[nodiscard]] const SkiaSurface* LevelSurface(int level) const noexcept;
         void SynchronizeRenderedLevelZero();
+        void InvalidateDescendants(int level) noexcept;
+        void GenerateDirtyMipLevels();
         void InvalidateSnapshot(int level) noexcept;
 
         std::unique_ptr<SkiaMipChain2D> mipChain_;
         std::vector<std::unique_ptr<SkiaSurface>> surfaces_;
         bool preserveContents_ = false;
         bool levelZeroDirty_ = false;
+        std::vector<bool> dirtyMipLevels_;
+        std::vector<std::uint64_t> mipGenerationCounts_;
         std::size_t surfaceStorageBytes_ = 0u;
         std::weak_ptr<SkiaRenderTargetBinding> binding_;
         std::shared_ptr<SkiaResourceCounters> resourceCounters_;

@@ -234,51 +234,6 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaTextureBackend::GenerateMipLevel(int level)
     {
-        const SkiaMipLevel2D& source = mipChain_->Level(level - 1);
-        const SkiaMipLevel2D& target = mipChain_->Level(level);
-        const std::uint8_t* sourcePixels = mipChain_->LevelData(level - 1);
-        std::uint8_t* targetPixels = mipChain_->LevelData(level);
-
-        // Integer area boxes partition the complete odd/NPOT source. For example 7 -> 3 uses
-        // [0,2), [2,4), [4,7), so the final edge contributes exactly once instead of being
-        // dropped. Canonical straight RGBA bytes are averaged independently; Skia alpha
-        // conversion is not involved in mip generation.
-        for (int y = 0; y < target.height; ++y)
-        {
-            const int sourceY0 = static_cast<int>(
-                static_cast<std::int64_t>(y) * source.height / target.height);
-            const int sourceY1 = static_cast<int>(
-                static_cast<std::int64_t>(y + 1) * source.height / target.height);
-            for (int x = 0; x < target.width; ++x)
-            {
-                const int sourceX0 = static_cast<int>(
-                    static_cast<std::int64_t>(x) * source.width / target.width);
-                const int sourceX1 = static_cast<int>(
-                    static_cast<std::int64_t>(x + 1) * source.width / target.width);
-                const unsigned int sampleCount = static_cast<unsigned int>(
-                    (sourceX1 - sourceX0) * (sourceY1 - sourceY0));
-                for (int channel = 0; channel < 4; ++channel)
-                {
-                    unsigned int sum = 0u;
-                    for (int sourceY = sourceY0; sourceY < sourceY1; ++sourceY)
-                    {
-                        for (int sourceX = sourceX0; sourceX < sourceX1; ++sourceX)
-                        {
-                            const std::size_t sourceOffset =
-                                static_cast<std::size_t>(sourceY) * source.rowBytes
-                                + static_cast<std::size_t>(sourceX) * 4u
-                                + static_cast<std::size_t>(channel);
-                            sum += sourcePixels[sourceOffset];
-                        }
-                    }
-                    const std::size_t targetOffset =
-                        static_cast<std::size_t>(y) * target.rowBytes
-                        + static_cast<std::size_t>(x) * 4u
-                        + static_cast<std::size_t>(channel);
-                    targetPixels[targetOffset] = static_cast<std::uint8_t>(
-                        (sum + sampleCount / 2u) / sampleCount);
-                }
-            }
-        }
+        GenerateSkiaRgba8MipLevel(*mipChain_, level);
     }
 } // namespace CNA::Internal::Backends::Skia

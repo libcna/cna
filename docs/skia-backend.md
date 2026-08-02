@@ -34,7 +34,7 @@ authoritative compact capability boundary; later sections explain the individual
 | All nine TextureFilter ordinals, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear tile sampling is direct; affine mip LOD and inter-level interpolation are bounded raster routes. Anisotropic is byte-identical to complete Linear while the capability stays false. | [SKIA-43–46, SKIA-70, SKIA-78–79, SKIA-129](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy` |
 | Blend presets, arbitrary raster states, and target-0 colour-write masks | Verified direct/generated runtime-blender path | All 714,025 valid factor/function tuples, independent RGB/alpha equations, live constants, and all target-0 masks draw. Invalid raw selectors and sample/MRT-only state reject before drawing. | [SKIA-47–57, SKIA-108, SKIA-119–124](../plan_skia.md); [generated blender](skia-generated-blender.md); `Skia_BlendMapping_Raster`, `Skia_GeneratedBlend_PublicCorpus` |
 | `Texture2D` image path, checked mip allocation, transfer, generation, sampling and content loading | Verified direct/bounded CPU path | `mipMap=true` owns/reports a complete CNA chain; every level transfers exactly, changed parents generate only unauthored descendants, synchronous no-copy views feed all nine min/mag/mip combinations, and exact DDS/XNB level spans upload as authored barriers. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–130](../plan_skia.md); [resource policy](skia-successor-resource-oracles.md); `Skia_Texture2D_MipGeneration`, `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy`, `Skia_Texture2D_ContentMips` |
-| `RenderTarget2D` colour rendering, per-level transfer/sampling, and Preserve/Discard | Verified bounded raster target | Level zero is a directly bindable `SkSurface`; mipmapped targets own stable isolated surfaces and exact canonical shadows at every level. Automatic rendered-descendant generation remains SKIA-132. Real depth and MSAA stay unavailable rather than fabricated. | [SKIA-61–75, SKIA-131–132](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_MipStorage`, `Skia_RenderTarget2D_MsaaPolicy` |
+| `RenderTarget2D` colour rendering, per-level transfer/sampling, and Preserve/Discard | Verified bounded raster target | Level zero is a directly bindable `SkSurface`; mipmapped targets own stable surfaces and exact canonical shadows at every level. Parent uploads and pass-boundary resolves deterministically regenerate dirty descendants once. Real depth and MSAA stay unavailable rather than fabricated. | [SKIA-61–75, SKIA-131–132](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_MipStorage`, `Skia_RenderTarget2D_MipGeneration`, `Skia_RenderTarget2D_MsaaPolicy` |
 | `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
 | `RenderTargetCube` face rendering, transfers, Preserve/Discard and generated mips | Verified bounded six-surface 2D emulation | Each face is an independent raster target. Cube sampling, real depth and real MSAA reject explicitly. | [SKIA-85–86](../plan_skia.md); `Skia_RenderTargetCube_Policy` and four shared cube contracts |
 | Multiple render targets | Unsupported | Direct support is absent because `SkCanvas` has one colour result; replay emulation was evaluated and rejected because distinct shader outputs for slots 0–3 cannot be reproduced. Empty or one-target plural binding remains supported. | [SKIA-87–88](../plan_skia.md); `Skia_MRT_Rejection` |
@@ -245,10 +245,14 @@ SKIA-131 gives `RenderTarget2D(mipMap=true)` one stable raster surface and one e
 straight-RGBA shadow per complete floor-halved level. Only level zero is bindable, matching the
 public XNA target API; every level is independently uploadable, readable and sampleable, and a
 single cross-level immutable snapshot cache prevents retained-cache growth. The combined surface
-plus shadow footprint is checked against 256 MiB before allocation. A rendered level-zero pass
-does not yet regenerate descendants: that pass-boundary invalidation rule is deliberately isolated
-in SKIA-132. CNA still does not bind Skia's private `src/core` mip builder, and cube/volume sampling
-remains a separate unsupported route.
+plus shadow footprint is checked against 256 MiB before allocation. SKIA-132 makes the backend the
+sole truth for every target level: a level-zero canvas write dirties the full suffix, parent
+`SetData` eagerly regenerates its suffix, and unbind, valid readback or sampling resolves every
+dirty level exactly once. The same integer area partition as Texture2D includes every odd/NPOT
+edge. Invalid foreign/cross-device binds validate before resolving the current target, while a
+presenter recreation preserves both clean and dirty CPU-owned chains. CNA still does not bind
+Skia's private `src/core` mip builder, and cube/volume sampling remains a separate unsupported
+route.
 
 ## Verification recorded for the initial slice
 
@@ -401,10 +405,11 @@ remains a separate unsupported route.
     reading runtime route in RenderTarget2D, and alpha-bit selection with distinct 128/255 source
     and destination alpha values. `Skia_GeneratedBlendState_Policy` extends the matrix to generated
     equations, live constants, disabled replacement, and re-enable restoration.
-44. `Skia_Texture2D_MipmapPolicy` records the post-SKIA-126 split: a mipmapped Texture2D constructs,
-    reports its full chain, and draws level zero, while a mipmapped target still refuses before
-    construction because deterministic per-level target readback and invalidation remain
-    unimplemented. A new level-0 target still renders, reads back, unbinds, and samples normally.
+44. `Skia_Texture2D_MipmapPolicy` originally recorded the post-SKIA-126 transition split. It now
+    requires both mipmapped Texture2D and RenderTarget2D construction with complete level counts;
+    SKIA-131–132's dedicated storage/generation fixtures own exact target-level readback,
+    invalidation and resolve evidence. A level-0 target still renders, reads back, unbinds and
+    samples normally as the unchanged regression control.
 45. `Skia_Resize_Presentation` keeps a `RenderTarget2D` and `SpriteBatch` alive across an active-
     target resize and two fullscreen/windowed presentation resets. It checks all three ordered
     device-reset pairs, old/new presentation dimensions, retained target readback, new-backbuffer
@@ -796,8 +801,14 @@ remains a separate unsupported route.
 99. `Skia_RenderTarget2D_MipStorage` closes SKIA-131's storage slice. An 8×8 target owns four
     isolated surfaces plus four canonical shadows, round-trips translucent and partial higher-mip
     uploads exactly, keeps one level-identified snapshot cache, binds/draws only level zero, samples
-    the authored 1×1 level under minification, and preserves higher levels across level-zero
-    Preserve/Discard cycles. Combined over-budget storage rejects before allocation/accounting.
+    the final 1×1 level under minification, and materializes deterministic descendants after
+    level-zero Preserve/Discard passes. Combined over-budget storage rejects before allocation.
+100. `Skia_RenderTarget2D_MipGeneration` closes SKIA-132. Exact 7×5→3×2→1×1 bytes and counters
+    prove SetData, unbind, readback and snapshot barriers generate each dirty level once; partial
+    higher-level updates preserve backend-owned texels, later parent writes replace descendants,
+    self-sampling leaves the destination dirty, failed foreign/cross-device binds are atomic, and
+    presenter recovery preserves a live dirty chain. The unchanged EasyGL mip-completeness source
+    also passes as `Skia_EasyGL_RenderTarget2D_MipComplete`.
 
 The original SKIA-1–114 CPU-raster plan is complete. The active successor plan keeps those claims
 immutable while expanded features pass their own implementation and promotion gates.

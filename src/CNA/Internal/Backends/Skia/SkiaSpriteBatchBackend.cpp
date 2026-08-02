@@ -375,12 +375,6 @@ namespace CNA::Internal::Backends::Skia
             return;
         }
 
-        // SkSurface snapshots remain valid images after a later write. Invalidate the bounded
-        // target cache before mutating the current canvas so the next target sampling draw sees
-        // exactly these new pixels rather than a prior frame's immutable snapshot.
-        if (SkiaRasterTarget* target = targetBinding->ActiveTarget())
-            target->BeforeWriteEXT();
-
         const auto* skiaImageSource = dynamic_cast<const SkiaImageSource*>(&texture);
         const SkiaSourceAlphaConvention sourceAlphaConvention = sourceAlphaConvention_
             ? *sourceAlphaConvention_
@@ -490,6 +484,17 @@ namespace CNA::Internal::Backends::Skia
                                sourceRectangle, origin));
         }
 
+        // Delay the destination notification until every source snapshot and shader exists. In
+        // particular, self-sampling an active target may resolve its pending mip chain while the
+        // source image is captured; marking the destination dirty afterwards ensures the actual
+        // draw still creates one later pass-boundary regeneration. A failed source setup leaves
+        // the selected target unchanged.
+        const auto beforeDestinationWrite = [&targetBinding]()
+        {
+            if (SkiaRasterTarget* target = targetBinding->ActiveTarget())
+                target->BeforeWriteEXT();
+        };
+
         if (customEffect_)
         {
             // The child shader uses the same source-pixel coordinate mapping and public sampler
@@ -506,6 +511,7 @@ namespace CNA::Internal::Backends::Skia
             if (!shader)
                 throw std::runtime_error("Skia failed to instantiate the explicit SkSL SpriteBatch effect.");
             paint.setShader(std::move(shader));
+            beforeDestinationWrite();
             canvas->drawRect(destination, paint);
             return;
         }
@@ -514,6 +520,7 @@ namespace CNA::Internal::Backends::Skia
             if (!primary)
                 throw std::runtime_error("Skia failed to instantiate the mip interpolation shader.");
             paint.setShader(std::move(primary));
+            beforeDestinationWrite();
             canvas->drawRect(destination, paint);
             return;
         }
@@ -521,6 +528,7 @@ namespace CNA::Internal::Backends::Skia
         {
             // Strict source clipping is more precise than a clamp shader for atlas sub-rectangles:
             // with Linear filtering it prevents neighbouring texels from bleeding into the crop.
+            beforeDestinationWrite();
             canvas->drawImageRect(lowerImage.get(), source, destination, sampling,
                                   &paint, SkCanvas::kStrict_SrcRectConstraint);
             return;
@@ -534,6 +542,7 @@ namespace CNA::Internal::Backends::Skia
         if (!primary)
             throw std::runtime_error("Skia failed to create the SpriteBatch image shader.");
         paint.setShader(std::move(primary));
+        beforeDestinationWrite();
         canvas->drawRect(destination, paint);
     }
 } // namespace CNA::Internal::Backends::Skia

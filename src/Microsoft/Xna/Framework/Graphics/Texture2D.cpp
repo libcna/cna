@@ -279,8 +279,9 @@ namespace Microsoft::Xna::Framework::Graphics
             if (gpuOnlyContent_)
             {
                 // Subsequent draws change the target surface directly, so retain no stale CPU
-                // upload shadow that could mask real target readback.
+                // upload shadow that could mask real target readback or generated descendants.
                 cpuPixels_.reset();
+                extraMipLevels_.reset();
                 return;
             }
             cpuPixels_ = std::make_shared<std::vector<uint8_t>>(std::move(img.pixels));
@@ -324,6 +325,18 @@ namespace Microsoft::Xna::Framework::Graphics
         // zero-filled buffer wholesale and silently overwrite already-uploaded GPU content
         // outside the region with black. Fail loudly instead of corrupting the texture.
         const bool coversFullLevel = (x == 0 && y == 0 && w == levelW && h == levelH);
+
+        // RenderTarget2D content has one authoritative owner: its live backend. A previous
+        // higher-level upload may have left a common-layer staging shadow, but rendering or a
+        // parent upload is allowed to regenerate that level later. Drop every target mip staging
+        // buffer before composing this transfer so partial updates are always seeded from the
+        // backend's current chain rather than from stale bytes.
+        if (gpuOnlyContent_)
+        {
+            cpuPixels_.reset();
+            extraMipLevels_.reset();
+        }
+
         if (level == 0 && backend_ && !cpuPixels_ && !coversFullLevel)
         {
             if (!gpuOnlyContent_)
@@ -401,6 +414,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 // See the full-level overload: target rendering must always read back the live
                 // surface rather than this temporary partial-update staging buffer.
                 cpuPixels_.reset();
+                extraMipLevels_.reset();
                 return;
             }
             MaybeFreeCpuPixels();
@@ -408,12 +422,21 @@ namespace Microsoft::Xna::Framework::Graphics
         else if (backend_)
         {
             backend_->UpdatePixelsLevel(level, buf.data(), levelW, levelH);
+            if (gpuOnlyContent_)
+                extraMipLevels_.reset();
         }
     }
 
     void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
     {
         if (!backend_ || !data || pixelCount <= 0) return;
+        if (gpuOnlyContent_)
+        {
+            backend_->UpdatePixels(data, width * 4);
+            cpuPixels_.reset();
+            extraMipLevels_.reset();
+            return;
+        }
         storeCpuPixels(data, pixelCount);
         backend_->UpdatePixels(data, width * 4);
     }
@@ -489,43 +512,44 @@ namespace Microsoft::Xna::Framework::Graphics
         const int total = width * height;
         validateTransferWindow("Texture2D::GetData", startIndex, elementCount, total);
 
+        // RenderTarget2D always delegates level zero too. Even a temporary SetData staging
+        // buffer is not authoritative because a later canvas write may have replaced it.
+        if (gpuOnlyContent_ && backend_ && total > 0)
+        {
+            traceTransfer("whole-level(gpu)", width, height, 0, 0, 0, width, height,
+                          startIndex, elementCount, total, "backend");
+            // REMED-GFX-127: `pixels` is scratch memory THIS layer owns and zero-initializes,
+            // so converting it unconditionally is not "leaving the caller's buffer untouched"
+            // when the backend has no readback -- it fabricates a complete transparent-black
+            // frame. Conversion happens only when the backend reports it wrote the whole
+            // region; otherwise the caller's `data` is left byte-for-byte as it was and the
+            // missing capability is raised instead of being answered with invented content.
+            //
+            // Sized to the REQUESTED REGION, not to elementCount: the backend fills exactly
+            // width*height texels, so a larger elementCount would otherwise hand the caller
+            // this buffer's untouched tail as if it were content.
+            std::vector<uint8_t> pixels(static_cast<std::size_t>(total) * 4, 0);
+            if (!backend_->GetData(0, 0, 0, width, height, pixels.data(),
+                                   static_cast<int>(pixels.size())))
+            {
+                throw System::NotSupportedException(
+                    "Texture2D::GetData: this graphics backend cannot read a render target's "
+                    "colour attachment back to the CPU");
+            }
+            for (int i = 0; i < total; ++i)
+            {
+                const int src = i * 4;
+                data[startIndex + i] =
+                    Color(pixels[src + 0], pixels[src + 1], pixels[src + 2], pixels[src + 3]);
+            }
+            return;
+        }
+
+        // For a plain Texture2D, an empty shadow means it was freed because context recovery is
+        // disabled (MaybeFreeCpuPixels). That must throw rather than silently read back whatever
+        // the backend texture currently holds.
         if (!cpuPixels_ || cpuPixels_->empty())
         {
-            // No CPU-side shadow. For a RenderTarget2D (gpuOnlyContent_), that's normal -- its
-            // content comes from GPU rendering, not SetData() -- so fall back to a real backend
-            // readback. For a plain Texture2D, an empty shadow means it was freed because context
-            // recovery is disabled (MaybeFreeCpuPixels) -- that must still throw below, not
-            // silently read back whatever the backend's GPU texture currently holds.
-            if (gpuOnlyContent_ && backend_ && total > 0)
-            {
-                traceTransfer("whole-level(gpu)", width, height, 0, 0, 0, width, height,
-                              startIndex, elementCount, total, "backend");
-                // REMED-GFX-127: `pixels` is scratch memory THIS layer owns and zero-initializes,
-                // so converting it unconditionally is not "leaving the caller's buffer untouched"
-                // when the backend has no readback -- it fabricates a complete transparent-black
-                // frame. Conversion happens only when the backend reports it wrote the whole
-                // region; otherwise the caller's `data` is left byte-for-byte as it was and the
-                // missing capability is raised instead of being answered with invented content.
-                //
-                // Sized to the REQUESTED REGION, not to elementCount: the backend fills exactly
-                // width*height texels, so a larger elementCount would otherwise hand the caller
-                // this buffer's untouched tail as if it were content.
-                std::vector<uint8_t> pixels(static_cast<std::size_t>(total) * 4, 0);
-                if (!backend_->GetData(0, 0, 0, width, height, pixels.data(),
-                                       static_cast<int>(pixels.size())))
-                {
-                    throw System::NotSupportedException(
-                        "Texture2D::GetData: this graphics backend cannot read a render target's "
-                        "colour attachment back to the CPU");
-                }
-                for (int i = 0; i < total; ++i)
-                {
-                    const int src = i * 4;
-                    data[startIndex + i] =
-                        Color(pixels[src + 0], pixels[src + 1], pixels[src + 2], pixels[src + 3]);
-                }
-                return;
-            }
             throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
         }
 
@@ -565,7 +589,10 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        const std::vector<uint8_t>* buf = getMipBufferConst(level);
+        // A RenderTarget2D's backend is authoritative for every mip. Its descendants may be
+        // regenerated after a later render pass or parent SetData, so a common-layer transfer
+        // staging buffer must never mask the live target chain during readback.
+        const std::vector<uint8_t>* buf = gpuOnlyContent_ ? nullptr : getMipBufferConst(level);
         if (!buf)
         {
             // Render targets normally own live backend pixels. A plain texture may also expose a

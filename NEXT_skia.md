@@ -1422,15 +1422,14 @@ level-boundary contract.
   backend readback, `HasDefinedMipLevel`, image snapshots and SpriteBatch LOD sampling address
   every valid level independently. A single level-tagged immutable snapshot cache stays bounded
   across the whole chain.
-- Level-zero Clear/draw marks the live surface dirty and synchronizes exact public readback at the
-  pass boundary. It deliberately does not regenerate descendants yet; that invalidation and
-  generation policy is the next task, SKIA-132. Preserve/Discard affect the bindable level without
-  aliasing higher storage.
+- At the SKIA-131 checkpoint, level-zero Clear/draw synchronized exact public readback without
+  regenerating descendants. SKIA-132 has since superseded that transition state with deterministic
+  dirty descendant generation; the stable independent storage remains the underlying mechanism.
 - Added `Skia_RenderTarget2D_MipStorage`, covering four-level properties/accounting, exact
   translucent full/partial transfer, distinct snapshot dimensions/identity, viewport/scissor
-  reset, Clear/SpriteBatch output, Preserve/Discard isolation, public 1×1 mip selection,
-  over-budget failure atomicity, and complete resource release. The old transition-policy and
-  SetData fixtures now require target mip support rather than refusal.
+  reset, Clear/SpriteBatch output, the then-current pre-resolve storage isolation, public 1×1 mip
+  selection, over-budget failure atomicity, and complete resource release. SKIA-132 subsequently
+  updated this fixture to require deterministic descendants after parent passes.
 - The three focused tests pass in Debug and Release and under ASan+UBSan with only the documented
   external Mesa GLX leak check disabled. Sixteen existing target, mip-sampler, pass-boundary and
   presenter-recovery regressions pass on virtual `:99`. The complete Debug Skia suite passes
@@ -1438,10 +1437,39 @@ level-boundary contract.
   215.52 seconds. Every build used `--parallel 2`; no real display or subagent was used, and
   `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-132
+
+- `SkiaRenderTargetBackend` now treats every level-zero canvas write as invalidating the complete
+  target mip suffix. Unbind, valid readback and sampling snapshots are equivalent resolve barriers:
+  they synchronize canonical straight RGBA level zero and area-box-generate each dirty odd/NPOT
+  descendant exactly once. Generation counters and dirty-state test seams make duplicate work
+  observable.
+- Target `SetData` follows mutable render-target/EasyGL resolve ownership rather than ordinary
+  Texture2D authored barriers: a parent write replaces all descendants, while a higher-level write
+  regenerates only its suffix. `Texture2D` now discards all common target transfer staging and
+  delegates every target mip read to the live backend, preventing stale higher-level shadows after
+  a later render pass. Partial uploads seed untouched texels from backend-owned bytes.
+- SpriteBatch captures all source snapshots before notifying the active destination of a write.
+  This preserves the exact ordering for self-sampling: any source resolve completes first, then the
+  actual destination draw remains dirty for one later regeneration. Failed shader/source setup no
+  longer dirties an untouched destination.
+- `SetRenderTarget2D` validates both backend type and creating binding before finalizing the current
+  target. Foreign and cross-device failures therefore preserve the prior active selection, dirty
+  bytes and generation counts; successful switches retain the existing resolve-before-bind order.
+- Added `Skia_RenderTarget2D_MipGeneration`, covering exact 7x5->3x2->1x1 bytes, eager full/partial
+  uploads, one-shot unbind/readback/snapshot barriers, self-sampling, failed-bind atomicity, dirty
+  presenter recovery, public minification and resource release. The unchanged EasyGL source now
+  also runs as `Skia_EasyGL_RenderTarget2D_MipComplete`. The older storage fixture now verifies the
+  active descendant resolve semantics instead of the superseded transition isolation policy.
+- The complete Debug tree builds with `--parallel 2`. Twenty-five focused target/mip/pass/cube/MRT
+  and recovery regressions pass on virtual `:99`; the five focused generation/storage/SetData/parity
+  tests pass in Release and under ASan+UBSan with only the documented external Mesa GLX leak check
+  disabled. No real display or subagent was used, and `NEXT.md` remained untouched.
+
 ## Next candidates
 
-1. SKIA-132–133: implement deterministic RenderTarget2D descendant invalidation/generation and
-   close the complete mip lifecycle/release gate.
+1. SKIA-133: run the complete Debug Skia suite plus final resource/performance/Release/sanitizer
+   closure, then freeze the finished 2D mip capability documentation.
 2. SKIA-134–158: implement formats, bounded cube/volume
    sampling, and wider explicit 2D
    effects in dependency order.
@@ -1459,9 +1487,10 @@ level-boundary contract.
 - Mipmapped Texture2D construction, exact level reporting, full/partial transfer at every level,
   deterministic generation with explicit-level ownership barriers, and all nine TextureFilter
   sampling routes are supported. Complete DDS/XNB chains preserve authored levels; partial asset
-  prefixes reject rather than fabricating their suffix. Mipmapped RenderTarget2D now has stable
-  per-level surfaces, exact transfer/readback and sampling; rendered descendant regeneration is
-  deliberately pending SKIA-132.
+  prefixes reject rather than fabricating their suffix. Mipmapped RenderTarget2D has stable
+  per-level surfaces, exact transfer/readback/sampling, and deterministic dirty descendant resolve
+  after rendering or parent uploads. Unlike ordinary textures, target descendants are not authored
+  barriers and a later parent pass deliberately replaces them, matching EasyGL resolve behavior.
 - `docs/graphics-backend-feature-matrix.md` contains a separate verified Skia CPU-raster companion
   table, not an established GPU/3D column. Keep its task/test evidence synchronized with the live
   capability ledger and do not copy aspirational accelerated claims into it.

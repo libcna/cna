@@ -321,7 +321,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /// True only for instances built via the RenderTarget2D-exclusive protected constructor
         /// above -- their content genuinely comes from GPU rendering, never SetData(), so an empty
-        /// CPU shadow means "ask the backend", not "the shadow was freed" (see GetData()'s fallback).
+        /// CPU shadow means "ask the backend", not "the shadow was freed" (see GetData()'s
+        /// fallback). This applies to every mip: target descendants can be regenerated after a
+        /// render pass or parent upload, so common-layer transfer staging is never authoritative.
         bool gpuOnlyContent_ = false;
 
         /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.

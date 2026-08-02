@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// SKIA-27 / SKIA-70 / SKIA-126 / SKIA-131: transition policy for complete 2D mip storage.
+// SKIA-27 / SKIA-70 / SKIA-126 / SKIA-131 / SKIA-132: complete 2D mip policy.
 //
 // SkImage::withDefaultMipmaps() is public in the pinned Skia revision, but it returns an immutable
 // image snapshot.  Its public API neither exposes per-level raster readback nor defines the
 // invalidation/resolve contract CNA needs when a mutable SkSurface target is rebound or uploaded.
-// SKIA-126 allocates a CNA-owned Texture2D chain, SKIA-129 samples it, and SKIA-131 gives
-// RenderTarget2D the same stable per-level addressing. Automatic target descendant generation is
-// deliberately the next transition, SKIA-132.
+// SKIA-126 allocates a CNA-owned Texture2D chain, SKIA-129 samples it, SKIA-131 gives
+// RenderTarget2D the same stable per-level addressing, and SKIA-132 implements deterministic
+// target descendant generation at upload and resolve boundaries.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"

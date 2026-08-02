@@ -41,6 +41,9 @@ namespace CNA::Internal::Backends::Skia
 
         mipChain_ = std::make_unique<SkiaMipChain2D>(
             width, height, mipMap, 4u, resourceCounters_);
+        dirtyMipLevels_.assign(static_cast<std::size_t>(mipChain_->LevelCount()), false);
+        mipGenerationCounts_.assign(
+            static_cast<std::size_t>(mipChain_->LevelCount()), 0u);
         surfaceStorageBytes_ = chainBytes;
         surfaces_.reserve(layout.size());
         for (const SkiaMipLevel2D& level : layout)
@@ -82,7 +85,9 @@ namespace CNA::Internal::Backends::Skia
                         static_cast<std::size_t>(GetWidth()) * 4u);
         }
         levelZeroDirty_ = false;
-        InvalidateSnapshot(0);
+        InvalidateDescendants(0);
+        InvalidateSnapshot();
+        GenerateDirtyMipLevels();
     }
 
     void SkiaRenderTargetBackend::UpdatePixelsLevel(
@@ -109,13 +114,20 @@ namespace CNA::Internal::Backends::Skia
             throw std::runtime_error(
                 "Skia RenderTarget2D mip upload dimensions do not match the requested level.");
         }
+
+        // Order a higher-level upload after any preceding level-zero canvas work. Otherwise the
+        // eventual pass resolve would silently overwrite a SetData that happened later in time.
+        FinalizeWriteEXT();
         if (!surface->WritePixels(0, 0, target.width, target.height,
                                   rgba, target.width * 4))
         {
             throw std::runtime_error("Skia RenderTarget2D failed to replace mip RGBA pixels.");
         }
         std::memcpy(mipChain_->LevelData(level), rgba, target.bytes);
-        InvalidateSnapshot(level);
+        dirtyMipLevels_[static_cast<std::size_t>(level)] = false;
+        InvalidateDescendants(level);
+        InvalidateSnapshot();
+        GenerateDirtyMipLevels();
     }
 
     bool SkiaRenderTargetBackend::GetData(int level, int x, int y, int width, int height,
@@ -132,8 +144,9 @@ namespace CNA::Internal::Backends::Skia
         {
             return false;
         }
-        if (level == 0 && levelZeroDirty_)
-            const_cast<SkiaRenderTargetBackend*>(this)->SynchronizeRenderedLevelZero();
+        // Any valid target readback is a deterministic resolve barrier. This mirrors sampling and
+        // unbinding, so observing level zero first cannot leave descendants stale for a later read.
+        const_cast<SkiaRenderTargetBackend*>(this)->FinalizeWriteEXT();
 
         const SkiaMipLevel2D& source = mipChain_->Level(level);
         auto* destination = static_cast<std::uint8_t*>(data);
@@ -176,6 +189,7 @@ namespace CNA::Internal::Backends::Skia
         const SkiaSurface* surface = LevelSurface(level);
         if (!surface)
             return nullptr;
+        const_cast<SkiaRenderTargetBackend*>(this)->FinalizeWriteEXT();
         // Keep exactly one immutable target snapshot across the complete chain. Mip-linear draws
         // retain the first returned image locally while this cache switches to the adjacent one,
         // so the backend cannot grow one retained cache entry per level.
@@ -193,12 +207,14 @@ namespace CNA::Internal::Backends::Skia
     void SkiaRenderTargetBackend::BeforeWriteEXT() noexcept
     {
         levelZeroDirty_ = true;
-        InvalidateSnapshot(0);
+        InvalidateDescendants(0);
+        InvalidateSnapshot();
     }
 
     void SkiaRenderTargetBackend::FinalizeWriteEXT()
     {
         SynchronizeRenderedLevelZero();
+        GenerateDirtyMipLevels();
     }
 
     void SkiaRenderTargetBackend::PrepareForBind()
@@ -235,6 +251,57 @@ namespace CNA::Internal::Backends::Skia
                 "Skia RenderTarget2D failed to synchronize rendered level-zero pixels.");
         }
         levelZeroDirty_ = false;
+    }
+
+    void SkiaRenderTargetBackend::InvalidateDescendants(int level) noexcept
+    {
+        for (int descendant = level + 1; descendant < mipChain_->LevelCount(); ++descendant)
+            dirtyMipLevels_[static_cast<std::size_t>(descendant)] = true;
+    }
+
+    void SkiaRenderTargetBackend::GenerateDirtyMipLevels()
+    {
+        for (int level = 1; level < mipChain_->LevelCount(); ++level)
+        {
+            if (!dirtyMipLevels_[static_cast<std::size_t>(level)])
+                continue;
+
+            GenerateSkiaRgba8MipLevel(*mipChain_, level);
+            const SkiaMipLevel2D& generated = mipChain_->Level(level);
+            SkiaSurface* surface = LevelSurface(level);
+            if (!surface || !surface->WritePixels(
+                    0, 0, generated.width, generated.height,
+                    mipChain_->LevelData(level), static_cast<int>(generated.rowBytes)))
+            {
+                throw std::runtime_error(
+                    "Skia RenderTarget2D failed to materialize a generated mip surface.");
+            }
+            InvalidateSnapshot(level);
+            dirtyMipLevels_[static_cast<std::size_t>(level)] = false;
+            ++mipGenerationCounts_[static_cast<std::size_t>(level)];
+        }
+    }
+
+    std::uint64_t SkiaRenderTargetBackend::MipGenerationCountEXT(int level) const
+    {
+        if (level < 0 || level >= static_cast<int>(mipGenerationCounts_.size()))
+            throw std::out_of_range(
+                "Skia RenderTarget2D mip generation level is out of range.");
+        return mipGenerationCounts_[static_cast<std::size_t>(level)];
+    }
+
+    bool SkiaRenderTargetBackend::MipLevelDirtyEXT(int level) const
+    {
+        if (level < 0 || level >= static_cast<int>(dirtyMipLevels_.size()))
+            throw std::out_of_range("Skia RenderTarget2D dirty mip level is out of range.");
+        return level == 0 ? levelZeroDirty_
+                          : dirtyMipLevels_[static_cast<std::size_t>(level)];
+    }
+
+    bool SkiaRenderTargetBackend::BelongsToBindingEXT(
+        const std::shared_ptr<SkiaRenderTargetBinding>& binding) const noexcept
+    {
+        return binding && binding_.lock() == binding;
     }
 
     void SkiaRenderTargetBackend::InvalidateSnapshot(int level) noexcept
