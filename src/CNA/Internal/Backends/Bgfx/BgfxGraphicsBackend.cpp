@@ -28,6 +28,11 @@ namespace CNA::Internal::Backends::Bgfx
     {
         const char* kRendererOverrideEnvVar = "CNA_BGFX_RENDERER";
 
+        // SurfaceFormat::Color is CNA's only supported Bgfx backbuffer format. bgfx's native
+        // swapchain spelling for it is BGRA8 (also the Resolution default), made explicit here so
+        // init and every later capability check/reset cannot drift apart.
+        constexpr bgfx::TextureFormat::Enum kBackbufferFormat = bgfx::TextureFormat::BGRA8;
+
         // REMED-GFX-185: BGFX_TEXTURE_RT_MSAA_Xn allocates multisample storage, while this
         // independent per-draw bit makes rasterization actually evaluate all of its samples.
         // Every SpriteBatch and 3D submit carries it; on a single-sample target it is a no-op.
@@ -968,7 +973,44 @@ namespace CNA::Internal::Backends::Bgfx
 
         void ResetBackbufferEXT(uint16_t width, uint16_t height, uint32_t flags)
         {
-            bgfx::reset(width, height, flags);
+            const bgfx::RendererType::Enum rendererType = bgfx::getRendererType();
+            const uint32_t formatCaps = bgfx::getCaps()->formats[kBackbufferFormat];
+            const bool hasBackbuffer =
+                (formatCaps & BGFX_CAPS_FORMAT_TEXTURE_BACKBUFFER) != 0;
+
+            if (const char* trace = SDL_getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
+                trace != nullptr && trace[0] != '\0' && trace[0] != '0')
+            {
+                std::fprintf(stderr,
+                             "[CNA bgfx reset] renderer=%s width=%u height=%u flags=0x%08x "
+                             "format=BGRA8 formatCaps=0x%08x action=%s\n",
+                             bgfx::getRendererName(rendererType), static_cast<unsigned>(width),
+                             static_cast<unsigned>(height), static_cast<unsigned>(flags),
+                             static_cast<unsigned>(formatCaps),
+                             rendererType == bgfx::RendererType::Noop ? "skip-no-backbuffer" :
+                             (hasBackbuffer ? "reset" : "reject"));
+                std::fflush(stderr);
+            }
+
+            // bgfx's Noop renderer intentionally owns no swapchain/backbuffer. Its format table
+            // advertises zero BACKBUFFER bits for every format, and renderer_noop.cpp's flip() is
+            // empty. Width, height and interval remain CNA presentation state; there is no native
+            // object to reconfigure and no rendering support to claim.
+            if (rendererType == bgfx::RendererType::Noop)
+                return;
+
+            // Do not let a renderer/format negotiation defect cross bgfx's BX_ASSERT boundary.
+            // A real renderer that cannot back its explicitly selected format is rejected before
+            // reset with a catchable diagnostic, without falling back or fabricating the caps bit.
+            if (!hasBackbuffer)
+            {
+                throw std::runtime_error(
+                    std::string("BGFX renderer ") + bgfx::getRendererName(rendererType) +
+                    " cannot reset CNA's BGRA8 backbuffer: "
+                    "BGFX_CAPS_FORMAT_TEXTURE_BACKBUFFER is not advertised.");
+            }
+
+            bgfx::reset(width, height, flags, kBackbufferFormat);
             // Restore only the bindings that name a real framebuffer: reset has already left every
             // other view on the backbuffer, which is what an invalid entry means.
             const auto& mirror = ViewFrameBufferMirror();
@@ -1621,6 +1663,7 @@ namespace CNA::Internal::Backends::Bgfx
         init.resolution.width = initialWidth;
         init.resolution.height = initialHeight;
         init.resolution.reset = resetFlags_;
+        init.resolution.formatColor = kBackbufferFormat;
         init.callback = &readbackCallback_;
 
         if (!init.platformData.nwh)
@@ -1831,19 +1874,34 @@ namespace CNA::Internal::Backends::Bgfx
             // Task 456: one-time startup capability dump.
             {
                 const bgfx::Caps* caps = bgfx::getCaps();
-                std::cout << "CNA: Bgfx capabilities -- MRT up to "
-                          << std::min<int>(static_cast<int>(caps->limits.maxFBAttachments), 4)
-                          << " targets (FNA MAX_RENDERTARGET_BINDINGS, device supports up to "
-                          << static_cast<int>(caps->limits.maxFBAttachments) << "); "
-                             "render-target MSAA up to " << static_cast<int>(caps->limits.maxMsaa)
-                          << "x; "
-                             "occlusion query: " << ((caps->supported & BGFX_CAPS_OCCLUSION_QUERY) ? "supported" : "NOT supported")
-                          << "; texture blit/readback: "
-                          << ((caps->supported & (BGFX_CAPS_TEXTURE_BLIT | BGFX_CAPS_TEXTURE_READ_BACK))
-                                  == (BGFX_CAPS_TEXTURE_BLIT | BGFX_CAPS_TEXTURE_READ_BACK) ? "supported" : "NOT supported")
-                          << "; anisotropic filtering: applied via BGFX_SAMPLER_ANISOTROPIC flags "
-                             "(device-dependent effect, no separate capability flag); "
-                             "SurfaceFormat: Color only (Task 176)" << std::endl;
+                if (rendererType == bgfx::RendererType::Noop)
+                {
+                    std::cout << "CNA: Bgfx capabilities -- Noop command-validation renderer; "
+                                 "no rasterization, storage, native backbuffer/readback, or public "
+                                 "rendering capabilities; BGRA8 backbuffer capability: "
+                              << ((caps->formats[kBackbufferFormat] &
+                                   BGFX_CAPS_FORMAT_TEXTURE_BACKBUFFER) ?
+                                  "advertised" : "NOT advertised")
+                              << "; render-target MSAA up to "
+                              << static_cast<int>(caps->limits.maxMsaa)
+                              << "x; SurfaceFormat negotiation: Color only (Task 176)" << std::endl;
+                }
+                else
+                {
+                    std::cout << "CNA: Bgfx capabilities -- MRT up to "
+                              << std::min<int>(static_cast<int>(caps->limits.maxFBAttachments), 4)
+                              << " targets (FNA MAX_RENDERTARGET_BINDINGS, device supports up to "
+                              << static_cast<int>(caps->limits.maxFBAttachments) << "); "
+                                 "render-target MSAA up to " << static_cast<int>(caps->limits.maxMsaa)
+                              << "x; "
+                                 "occlusion query: " << ((caps->supported & BGFX_CAPS_OCCLUSION_QUERY) ? "supported" : "NOT supported")
+                              << "; texture blit/readback: "
+                              << ((caps->supported & (BGFX_CAPS_TEXTURE_BLIT | BGFX_CAPS_TEXTURE_READ_BACK))
+                                      == (BGFX_CAPS_TEXTURE_BLIT | BGFX_CAPS_TEXTURE_READ_BACK) ? "supported" : "NOT supported")
+                              << "; anisotropic filtering: applied via BGFX_SAMPLER_ANISOTROPIC flags "
+                                 "(device-dependent effect, no separate capability flag); "
+                                 "SurfaceFormat: Color only (Task 176)" << std::endl;
+                }
             }
         }
         catch (...)
@@ -1869,6 +1927,14 @@ namespace CNA::Internal::Backends::Bgfx
 
     bool BgfxGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
     {
+        // bgfx's Noop caps intentionally "pretend all features are available" so applications can
+        // exercise command encoding without a GPU. CNA's public capability query instead promises
+        // real rendering support. Noop rasterizes, stores and presents nothing, so reporting any of
+        // these capabilities would be false even though its native validation harness accepts the
+        // corresponding commands.
+        if (bgfx::getRendererType() == bgfx::RendererType::Noop)
+            return false;
+
         switch (capability)
         {
             case CNA::GraphicsCapability::OcclusionQuery:

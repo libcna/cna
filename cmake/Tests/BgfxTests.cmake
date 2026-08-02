@@ -591,6 +591,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_bgfx_gfx185_msaa_capability
         TIMEOUT 120 ENVIRONMENT
             "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
+
+    # REMED-GFX-196: Noop is an explicitly selectable, active zero-capability renderer. It has no
+    # native backbuffer and advertises no BACKBUFFER-capable texture format, so initialization,
+    # public reset and resize must not route through bgfx::reset's fatal format assertion. The
+    # process-isolated fixture classifies a catchable rejection, native fatal and renderer fallback
+    # separately, covers default/explicit Color negotiation and repeated 0/minimal/ordinary reset
+    # cycles, verifies teardown, and runs an ordinary active-OpenGL control.
+    cna_bgfx_test(cna_test_bgfx_gfx196_noop_reset
+                  examples/bgfx_gfx196_noop_reset_test.cpp)
+    cna_register_backend_test(NAME Bgfx_GFX196_NoopReset
+        COMMAND cna_test_bgfx_gfx196_noop_reset
+        TIMEOUT 180 ENVIRONMENT
+            "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     # Task 906: RenderTarget2D mip chains are genuinely generated (bgfx's own built-in
     # hasMips+BGFX_RESOLVE_AUTO_GEN_MIPS mechanism), not just present-but-undefined storage.
     cna_bgfx_test(cna_test_bgfx_rendertarget2d_mip

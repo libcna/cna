@@ -97,7 +97,13 @@ namespace CNA::Internal::Backends::Bgfx
         void ForgetFrameBufferEXT(bgfx::FrameBufferHandle fb);
 
         /**
-         * @brief Calls bgfx::reset and restores the view->framebuffer bindings it discards.
+         * @brief Applies a real renderer backbuffer reset, or records the no-backbuffer Noop reset.
+         *
+         * REMED-GFX-196: Noop deliberately advertises no texture format with
+         * `BGFX_CAPS_FORMAT_TEXTURE_BACKBUFFER`; it has no native backbuffer to resize. Issuing
+         * `bgfx::reset` anyway reaches bgfx's fatal format assertion before its unchanged-reset
+         * early return. The Noop path therefore performs no native reset, while every renderer
+         * with a real backbuffer is capability-checked before the same reset-and-restore sequence.
          *
          * @param width  New backbuffer width.
          * @param height New backbuffer height.
