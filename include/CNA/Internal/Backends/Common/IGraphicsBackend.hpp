@@ -773,6 +773,12 @@ namespace CNA::Internal::Backends
         /// Null when not instancing. Only valid for the duration of the DrawInstancedPrimitivesEx call.
         const IVertexBufferBackend* instanceVb = nullptr;
         /// First per-vertex record selected by the public VertexBufferBinding, in vertex elements.
+        /// REMED-GFX-200: populated by `DrawInstancedPrimitivesEx` ONLY. The ordinary routes carry
+        /// the same public offset in `vertexStart`/`baseVertex` instead -- it is the identical
+        /// element-unit shift of the one per-vertex stream they hand the backend, so folding it
+        /// there reaches every backend's existing single stride multiplication. A backend must
+        /// therefore never add this field to `vertexStart`/`baseVertex`, and this field must stay
+        /// 0 on the ordinary routes: either would apply the public offset twice.
         int vertexBufferOffset = 0;
         /// First per-instance record selected by the public VertexBufferBinding, in vertex elements.
         int instanceVertexOffset = 0;

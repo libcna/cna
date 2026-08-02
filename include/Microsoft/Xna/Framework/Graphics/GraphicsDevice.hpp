@@ -1130,6 +1130,14 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] void* AcquireUserVertexScratch(std::size_t bytes);
         [[nodiscard]] void* AcquireUserIndexScratch(std::size_t bytes);
 
+        // REMED-GFX-200: the per-vertex geometry stream's VertexBufferBinding.VertexOffset, in
+        // vertex ELEMENTS. Binding 0 is that stream on every draw route -- SetVertexBuffer() and
+        // SetVertexBuffers() both make it so, and Draw*PrimitivesEx hand the backend exactly one
+        // per-vertex stream -- so a later binding never supplies this offset. Returns 0 when no
+        // binding describes the bound buffer, which is the only value that leaves a
+        // no-VertexBufferBinding draw byte-identical to its pre-REMED-GFX-200 behavior.
+        [[nodiscard]] int CurrentVertexBufferOffset() const;
+
         // The one object-to-GPU-stream conversion behind every built-in vertex type's explicit
         // VertexDeclaration draw: the values are packed into the stream that type's declaration
         // describes, and the packed stream is then consumed by the raw overloads exactly like a

@@ -667,6 +667,16 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    int GraphicsDevice::CurrentVertexBufferOffset() const
+    {
+        if (currentVertexBuffers_.empty() ||
+            currentVertexBuffers_[0].getVertexBufferProperty() != currentVertexBuffer_)
+        {
+            return 0;
+        }
+        return currentVertexBuffers_[0].getVertexOffsetProperty();
+    }
+
     void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount)
     {
         if (backend_ == nullptr)
@@ -688,8 +698,11 @@ namespace Microsoft::Xna::Framework::Graphics
         const int consumedVertexCount =
             CheckedPrimitiveElementCount(primitiveType, primitiveCount);
         const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
-        if (vertexStart > availableVertexCount ||
-            consumedVertexCount > availableVertexCount - vertexStart)
+        // REMED-GFX-200: the binding offset moves the whole range, so it is part of what must fit.
+        const int bindingVertexOffset = CurrentVertexBufferOffset();
+        if (bindingVertexOffset > availableVertexCount ||
+            vertexStart > availableVertexCount - bindingVertexOffset ||
+            consumedVertexCount > availableVertexCount - bindingVertexOffset - vertexStart)
         {
             throw System::ArgumentOutOfRangeException(
                 "primitiveCount", std::to_string(primitiveCount),
@@ -700,7 +713,15 @@ namespace Microsoft::Xna::Framework::Graphics
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
-        p.vertexStart = vertexStart;
+        // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts the stream base, and vertexStart
+        // indexes that stream -- both in the same vertex elements, against the same declaration
+        // stride, on the one per-vertex stream this route hands the backend. Their sum is the
+        // first record fetched, so carrying it in vertexStart delivers the offset through the
+        // element-unit channel every backend already converts to bytes exactly once with the
+        // stream's own stride, and applies each of the two exactly once. p.vertexBufferOffset is
+        // deliberately left at 0 here: it is the instanced route's separate per-stream channel
+        // (REMED-GFX-122/123), and populating it as well would apply this offset twice.
+        p.vertexStart = vertexStart + bindingVertexOffset;
         applySamplerStatesToBackend();
         backend_->DrawPrimitivesEx(
             currentVertexBuffer_->GetBackend(),
@@ -748,9 +769,13 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
-        if (baseVertex > availableVertexCount ||
-            minVertexIndex > availableVertexCount - baseVertex ||
-            numVertices > availableVertexCount - baseVertex - minVertexIndex)
+        // REMED-GFX-200: the binding offset moves the whole declared range, so it is part of what
+        // must fit -- exactly as DrawInstancedPrimitives below has counted it since REMED-GFX-118.
+        const int bindingVertexOffset = CurrentVertexBufferOffset();
+        if (bindingVertexOffset > availableVertexCount ||
+            baseVertex > availableVertexCount - bindingVertexOffset ||
+            minVertexIndex > availableVertexCount - bindingVertexOffset - baseVertex ||
+            numVertices > availableVertexCount - bindingVertexOffset - baseVertex - minVertexIndex)
         {
             throw System::ArgumentOutOfRangeException(
                 "numVertices", std::to_string(numVertices),
@@ -762,7 +787,15 @@ namespace Microsoft::Xna::Framework::Graphics
         CNA::Internal::Backends::GpuDrawParams p;
         currentEffect_->FillGpuDrawParams(p);
         p.startIndex = startIndex;
-        p.baseVertex = baseVertex;
+        // REMED-GFX-200: VertexBufferBinding.VertexOffset shifts the stream base and baseVertex is
+        // added to every decoded index -- both in the same vertex elements, against the same
+        // declaration stride, on the one per-vertex stream this route hands the backend. Their sum
+        // is what each decoded index is displaced by, so carrying it in baseVertex delivers the
+        // offset through the element-unit channel every backend already converts to bytes exactly
+        // once with the stream's own stride, and applies each of the two exactly once. startIndex
+        // is untouched: it selects index elements, which the binding offset never displaces.
+        // p.vertexBufferOffset is deliberately left at 0 here -- see DrawPrimitives above.
+        p.baseVertex = baseVertex + bindingVertexOffset;
         p.minVertexIndex = minVertexIndex;
         p.numVertices = numVertices;
         applySamplerStatesToBackend();
@@ -824,12 +857,12 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The requested primitive range exceeds the bound index buffer.");
         }
 
-        int vertexBufferOffset = 0;
-        if (!currentVertexBuffers_.empty() &&
-            currentVertexBuffers_[0].getVertexBufferProperty() == currentVertexBuffer_)
-        {
-            vertexBufferOffset = currentVertexBuffers_[0].getVertexOffsetProperty();
-        }
+        // REMED-GFX-200: the same binding-0 rule the ordinary routes above now use, single-sourced.
+        // This route keeps carrying the offset in its own GpuDrawParams::vertexBufferOffset field
+        // rather than folding it into baseVertex, because the per-instance stream has an
+        // independent offset that baseVertex cannot express and REMED-GFX-122/123's backends
+        // reconfigure both streams' native bindings together.
+        const int vertexBufferOffset = CurrentVertexBufferOffset();
 
         const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
         if (vertexBufferOffset > availableVertexCount ||
