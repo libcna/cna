@@ -45,9 +45,10 @@ or accounting update.
 `Skia_MipChain2D_Raster` proves odd 7×5 offsets, 1×9/9×1 chains, level-zero-only storage,
 zero initialization and isolation, the exact 256-MiB descriptor boundary, descendant-over-budget
 and row-overflow atomicity, axis errors, out-of-range level access, and live/released counters.
-SKIA-126 now uses this storage for public `Texture2D(..., mipMap=true, Color)` construction and
-exact `LevelCount` reporting. Higher-level transfer begins in SKIA-127; generation/sampling remain
-SKIA-128/129, and RenderTarget2D wiring remains SKIA-131.
+SKIA-126 uses this storage for public `Texture2D(..., mipMap=true, Color)` construction and exact
+`LevelCount` reporting. SKIA-127 adds exact full/partial upload and readback for every level,
+including result-preserving invalid requests and caller-memory isolation. Generation/sampling
+remain SKIA-128/129, and RenderTarget2D wiring remains SKIA-131.
 
 ## Pixel and precision rules
 

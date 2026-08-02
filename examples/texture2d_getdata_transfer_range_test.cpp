@@ -124,9 +124,9 @@ namespace
      * Declared, not probed, for the same reason as RtContract: three backends document that their
      * 2D texture API has no mip chain (SDL_Renderer, the ASCII backend that wraps it, and DX3's
      * IDirectDrawSurface), and Canvas the same. Most still create a mipmapped resource and reject
-     * `SetData(level=1, ...)`. SKIA-126 now joins that construction-with-rejected-upload boundary
-     * while its complete higher-level transfer implementation remains staged as SKIA-127. These
-     * honest policies must not be conflated by a test that terminates before reporting them.
+     * `SetData(level=1, ...)`. SKIA-127 now implements that upload/readback path after SKIA-126
+     * opened construction. These honest policies must not be conflated by a test that terminates
+     * before reporting them.
      */
     enum class MipPolicy
     {
@@ -196,7 +196,7 @@ namespace
 #elif defined(CNA_BACKEND_SKIA)
     constexpr RtContract kRtContract = RtContract::Exact;
     constexpr const char* kBackendName = "SKIA";
-    constexpr MipPolicy kMipPolicy = MipPolicy::RejectUpload;
+    constexpr MipPolicy kMipPolicy = MipPolicy::Supported;
 #else
 #error "REMED-GFX-149: this backend has no declared Texture2D::GetData render-target contract."
 #endif

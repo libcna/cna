@@ -18,8 +18,8 @@ namespace CNA::Internal::Backends::Skia
      *
      * mipChain_ stays in CNA's top-row-first RGBA8 convention. The two level-0 Skia snapshots label
      * those bytes for the two XNA source-alpha conventions; the active BlendState selects one at
-     * draw time without rewriting public data. Higher-level transfer and sampling are staged by
-     * SKIA-127–129 after SKIA-126's complete zeroed allocation/property contract.
+     * draw time without rewriting public data. Every level supports exact CPU upload/readback;
+     * deterministic generation and sampling are staged by SKIA-128/129.
      */
     class SkiaTextureBackend final : public ITextureBackend, public SkiaImageSource
     {

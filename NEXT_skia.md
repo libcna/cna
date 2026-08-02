@@ -6,7 +6,7 @@
 - Scope: release-gated experimental CPU-raster `CNA_GRAPHICS_BACKEND=SKIA`, with the verified
   SKIA-1–114 baseline retained while SKIA-115–170 actively expands 2D parity and investigates an
   opt-in Ganesh mode. Do not claim 3D drawing, GPU presentation,
-  depth, MSAA, Texture2D mip transfer/generation/sampling, renderable mipmaps, MRT,
+  depth, MSAA, Texture2D mip generation/sampling, renderable mipmaps, MRT,
   cube/volume sampling, or arbitrary effects until
   their individual `plan_skia.md` evidence exists. Plain cube/volume CPU transfer storage is
   separately proven by SKIA-80–84, and six-face 2D RenderTargetCube emulation by SKIA-85/86 does
@@ -25,7 +25,7 @@
 - Recent relevant pushed commits include `3811d0a0` (transactional backend construction) and
   `40fdb6ce` (Skia compile-selection identity coverage).
 - The signed SKIA-114 baseline records 133 Skia CTests. The current successor configure selects
-  142: 20 raster-only, 117 display-required tests, and five display-free source audits.
+  144: 20 raster-only, 119 display-required tests, and five display-free source audits.
   Validation uses the persistent in-repository `cmake-build-skia` directory, per `CLAUDE.md`.
 
 ## Completed in this session: SKIA-80 through SKIA-84
@@ -590,7 +590,8 @@
 
 ## Current task
 
-SKIA-115–126 are complete. Continue with SKIA-127's complete per-level Texture2D transfer contract.
+SKIA-115–127 are complete. Continue with SKIA-128's deterministic Texture2D mip generation and
+invalidation contract.
 
 ## Completed in this session: SKIA-93
 
@@ -1334,10 +1335,28 @@ SKIA-115–126 are complete. Continue with SKIA-127's complete per-level Texture
   stress, resource recovery, and demo smoke. Every build used `--parallel 2`; every windowed test
   used Xvfb, and `NEXT.md` was neither read nor changed.
 
+## Completed in this session: SKIA-127
+
+- `SkiaTextureBackend::UpdatePixelsLevel` now validates and owns uploads for every complete mip
+  level; `GetData` validates and row-copies any full or partial rectangle from the requested level.
+  Level zero retains its two alpha-labelled Skia image views, while higher levels remain stable CNA
+  bytes until SKIA-128/129 add generation and sampling.
+- Added `Skia_Texture2D_MipTransfer`. A public odd/NPOT 7×5 chain round-trips arbitrary translucent
+  bytes at all three levels, partial SetData preserves untouched texels, partial GetData honors a
+  destination offset and excess capacity, and invalid levels/ranges leave caller/resource memory
+  unchanged. Direct-backend checks prove row pitch, dimension rejection and caller-memory lifetime.
+- Registered the existing 4×4 EasyGL mip fixture under Skia as `Skia_Texture2D_MipRoundTrip` and
+  promoted the Skia branch of the shared 70-check transfer-range fixture to its supported policy.
+- Focused transfer validation passes 3/3 in Debug and Release and 3/3 under ASan+UBSan with only
+  the documented external Mesa GLX leak check disabled. The complete Debug Skia suite passes
+  144/144 in sequential virtual-X11 blocks: 20 Raster, 119 Display and five Audit. Every build used
+  at most `--parallel 2`; no real display or subagent was used, and `NEXT.md` remained untouched.
+
 ## Next candidates
 
-1. SKIA-127: implement exact full/partial SetData and GetData for every Texture2D mip level.
-2. SKIA-128–158: implement mip generation/sampling, formats, bounded cube/volume
+1. SKIA-128: implement deterministic mip generation/invalidation after level-zero upload while
+   preserving explicitly authored levels according to the public contract.
+2. SKIA-129–158: implement mip sampling, formats, bounded cube/volume
    sampling, and wider explicit 2D
    effects in dependency order.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
@@ -1351,9 +1370,9 @@ SKIA-115–126 are complete. Continue with SKIA-127's complete per-level Texture
   to 2+ are rejected and the capability remains false.
 - Level-zero `TextureFilter::Anisotropic` deliberately falls back byte-exactly to Linear while the
   anisotropy capability remains false; mip/LOD-dependent sampler paths still reject.
-- Mipmapped Texture2D construction and exact level reporting are supported. Higher-level transfer,
-  generation, and sampling remain SKIA-127–129; mipmapped RenderTarget2D remains rejected until
-  SKIA-131.
+- Mipmapped Texture2D construction, exact level reporting, and full/partial transfer at every level
+  are supported. Generation and sampling remain SKIA-128/129; mipmapped RenderTarget2D remains
+  rejected until SKIA-131.
 - `docs/graphics-backend-feature-matrix.md` contains a separate verified Skia CPU-raster companion
   table, not an established GPU/3D column. Keep its task/test evidence synchronized with the live
   capability ledger and do not copy aspirational accelerated claims into it.

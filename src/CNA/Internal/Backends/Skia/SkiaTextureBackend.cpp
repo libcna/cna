@@ -107,19 +107,32 @@ namespace CNA::Internal::Backends::Skia
     void SkiaTextureBackend::UpdatePixelsLevel(int level, const std::uint8_t* rgba,
                                                 int levelWidth, int levelHeight)
     {
-        if (level != 0)
-            throw std::runtime_error("Skia raster Texture2D does not implement mip-level uploads.");
-        if (levelWidth != width_ || levelHeight != height_)
-            throw std::runtime_error("Skia level-0 Texture2D upload dimensions do not match the texture.");
-        UpdatePixels(rgba, width_ * 4);
+        if (!rgba)
+            throw std::runtime_error("Skia Texture2D mip upload received null RGBA data.");
+        const SkiaMipLevel2D& target = mipChain_->Level(level);
+        if (levelWidth != target.width || levelHeight != target.height)
+        {
+            throw std::runtime_error(
+                "Skia Texture2D mip upload dimensions do not match the requested level.");
+        }
+        if (level == 0)
+        {
+            UpdatePixels(rgba, levelWidth * 4);
+            return;
+        }
+        std::memcpy(mipChain_->LevelData(level), rgba, target.bytes);
     }
 
     bool SkiaTextureBackend::GetData(int level, int x, int y, int width, int height,
                                      void* data, int dataLength) const
     {
+        if (!data || level < 0 || level >= mipChain_->LevelCount())
+            return false;
+        const SkiaMipLevel2D& sourceLevel = mipChain_->Level(level);
         std::size_t requiredBytes = 0;
-        if (level != 0 || !data || width < 0 || height < 0 || x < 0 || y < 0
-            || x > width_ - width || y > height_ - height
+        if (width <= 0 || height <= 0 || x < 0 || y < 0
+            || width > sourceLevel.width || height > sourceLevel.height
+            || x > sourceLevel.width - width || y > sourceLevel.height - height
             || !CheckedTexelBytes2D(static_cast<std::size_t>(width),
                                     static_cast<std::size_t>(height), 4u, requiredBytes)
             || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredBytes)
@@ -130,9 +143,10 @@ namespace CNA::Internal::Backends::Skia
         auto* destination = static_cast<std::uint8_t*>(data);
         for (int row = 0; row < height; ++row)
         {
-            const auto sourceOffset = (static_cast<std::size_t>(y + row) * width_ + x) * 4u;
+            const auto sourceOffset =
+                (static_cast<std::size_t>(y + row) * sourceLevel.width + x) * 4u;
             std::memcpy(destination + static_cast<std::size_t>(row) * width * 4u,
-                        mipChain_->LevelData(0) + sourceOffset,
+                        mipChain_->LevelData(level) + sourceOffset,
                         static_cast<std::size_t>(width) * 4u);
         }
         return true;

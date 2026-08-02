@@ -49,10 +49,10 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `ITextureBackend::GetHeight/0` | Reports GL texture height; Texture2D tests. | Reports the CPU image height. | `implemented` | SKIA-22, SKIA-26 |
 | `ITextureBackend::GetNativeTexture/0` | EasyGL exposes no SDL texture. | Returns null; Skia owns an `SkImage`. | `internal` | SKIA-22 |
 | `ITextureBackend::UpdatePixels/2` | Replaces level zero with a GL upload. | Rebuilds both alpha-labelled CPU images. | `implemented` | SKIA-22–24 |
-| `ITextureBackend::UpdatePixelsLevel/4` | Uploads a requested GL mip level. | Level zero works; mip levels reject. | `bounded` | SKIA-27 |
+| `ITextureBackend::UpdatePixelsLevel/4` | Uploads a requested GL mip level. | Uploads every valid level into stable checked CNA mip storage; invalid levels/dimensions reject before mutation. | `implemented` | SKIA-27, SKIA-125–127; `Skia_Texture2D_MipTransfer` |
 | `ITextureBackend::BindGL/0` | Binds EasyGL's native texture. | Intentional no-op; SpriteBatch samples `SkImage`. | `internal` | SKIA-22, SKIA-32 |
 | `ITextureBackend::ShareCpuPixels/1` | Shares restoration shadow with EasyGL. | Common texture shadow already owns the bytes. | `internal` | SKIA-23, SKIA-28 |
-| `ITextureBackend::GetData/7` | Reads GL target pixels when no CPU shadow exists. | Exact level-zero Texture2D/target readback. | `bounded` | SKIA-23–24, SKIA-62 |
+| `ITextureBackend::GetData/7` | Reads GL target pixels when no CPU shadow exists. | Exact full/partial readback for every Texture2D mip; RenderTarget2D remains exact at level zero only. | `bounded` | SKIA-23–24, SKIA-62, SKIA-127; `Skia_Texture2D_MipTransfer` |
 | `IRenderTargetBackend::BindAsRenderTarget/0` | Binds an EasyGL FBO. | Selection is owned by checked Skia target binding. | `implemented` | SKIA-61, SKIA-69 |
 | `IRenderTargetBackend::UnbindAsRenderTarget/0` | Resolves/unbinds the EasyGL FBO. | Binding restores the raster backbuffer. | `implemented` | SKIA-61, SKIA-69 |
 | `IRenderTargetBackend::GetColorGLHandle/0` | Returns the FBO color texture name. | Returns zero; sampling uses snapshots. | `internal` | SKIA-63, SKIA-74 |
@@ -103,7 +103,7 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::TransformLogicalToWindow/4` | Converts inverse EasyGL presentation mapping. | Uses SDL's DPI-aware inverse mapping. | `implemented` | SKIA-14, SKIA-72 |
 | `IGraphicsBackend::GetWindowInternal/0` | Returns the owned SDL window. | Returns the checked presenter window. | `internal` | SKIA-12, SKIA-18 |
 | `IGraphicsBackend::GetRendererInternal/0` | EasyGL has no SDL renderer. | Returns owned SDL presenter renderer. | `internal` | SKIA-12, SKIA-18 |
-| `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates the complete checked zeroed 2D mip chain and level-zero alpha-labelled Skia images; higher-level transfer/sampling remain bounded. | `bounded` | SKIA-22–30, SKIA-125–126 |
+| `IGraphicsBackend::CreateTexture/1` | Allocates an EasyGL 2D texture. | Allocates the complete checked zeroed 2D mip chain and level-zero alpha-labelled Skia images; every level transfers exactly while generation/sampling remain bounded. | `bounded` | SKIA-22–30, SKIA-125–127 |
 | `IGraphicsBackend::CreateSpriteBatch/0` | Allocates EasyGL sprite renderer state. | Allocates checked SkCanvas adapter. | `implemented` | SKIA-31–40 |
 | `IGraphicsBackend::ReadBackbuffer/5` | Reads GL framebuffer top-left RGBA. | Exact active-surface RGBA8 readback. | `implemented` | SKIA-7, SKIA-62 |
 | `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Creates a refusal object: safe false/zero properties; Begin/End throw after SKIA-104 disproves raster emulation. | `unsupported` | SKIA-102, SKIA-104–105 |

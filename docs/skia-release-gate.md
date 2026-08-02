@@ -60,7 +60,8 @@ audit can pass.
 | RenderTarget2D and single RenderTargetCube face binding | Direct raster target / six-surface bounded emulation | readback, sampling, usage, pass, lifecycle and transfer contracts |
 | TextureCube/Texture3D transfer storage | Bounded CPU face/voxel emulation | checked limits, mips, partial transfers, disposal and exhaustive contracts |
 | Explicit `CNA_SKIA_SKSL_V1` SpriteBatch fragment effects | Bounded opt-in extension | compiler/ABI/uniform/texture/security-limit tests |
-| Mipmapped Texture2D construction/storage | Bounded CNA-owned CPU chain | exact level/property, zero initialization, maximum-axis, invalid-construction and disposal evidence; higher transfers/sampling remain gated |
+| Mipmapped Texture2D construction/storage | Bounded CNA-owned CPU chain | exact level/property, zero initialization, maximum-axis, invalid-construction and disposal evidence; generation/sampling remain gated |
+| Texture2D per-mip transfer | Direct checked CPU-chain transfer | exact full/partial SetData/GetData at every valid level; invalid requests and caller memory remain unchanged |
 | RenderTarget2D mips and non-Color formats | Refused after focused feasibility/policy work | stable pre-draw or construction diagnostics and recovery tests |
 | MRT, depth/stencil, wireframe, 3D, stock 3D effects, cube/volume sampling, queries | Refused after emulation investigation | MRT/3D/query ADRs and atomic refusal suite |
 | Ganesh/Graphite acceleration | Not selected or advertised | surface-mode ADR; zero `Accelerated` CTests in the raster build |
@@ -81,6 +82,10 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
   (20 Raster, 117 Display, five Audit). The construction/policy/shared-transfer set passes 3/3 in
   Debug, Release, and ASan+UBSan; its unchanged EasyGL branch passes 1/1. Builds use at most
   `--parallel 2`, and all windowed execution uses Xvfb.
+- SKIA-127 successor checkpoint: complete Debug Skia suite 144/144 PASS in sequential virtual-X11
+  blocks (20 Raster, 119 Display, five Audit). The new transfer, shared mip-round-trip, and shared
+  70-check transfer-range fixtures pass 3/3 in Debug and Release and 3/3 under ASan+UBSan with
+  only the documented Mesa GLX leak check disabled. All builds use at most `--parallel 2`.
 - `Skia_ParityLedger_Audit`, `Skia_TestMatrix_Audit`, `Skia_3DDecision_Audit`, and
   `Skia_ReleaseGate_Audit`: PASS.
 - Updated `Skia_Sampler_MipmapFilterPolicy` and `Skia_RenderTarget2D_MsaaPolicy`: 2/2 PASS on the
@@ -103,8 +108,8 @@ refusal decision. No row relies on a silent no-op or an implicit EasyGL fallback
 - The only supported Skia artifact is pinned CPU raster on the documented GNU/Clang ELF build
   shape. Native Windows/MSVC, Emscripten, and accelerated Skia artifacts are not claimed.
 - SDL may use a GPU renderer to upload the completed CPU image. This is not a Skia GPU surface.
-- Real MSAA, native anisotropy, depth/stencil, general 3D, MRT, queries, Texture2D higher-level
-  transfer/generation/sampling, 2D-target mips, non-RGBA8 resources, and cube/volume sampling remain
+- Real MSAA, native anisotropy, depth/stencil, general 3D, MRT, queries, Texture2D mip
+  generation/sampling, 2D-target mips, non-RGBA8 resources, and cube/volume sampling remain
   unavailable as documented.
 - Windowed LSan retains the already isolated, non-growing Mesa GLX process-exit baseline; the same
   64-cycle ownership test is clean with SDL dummy/software presentation.
