@@ -17,7 +17,7 @@ cmake --build build --target CNA CnaTests
 ctest --test-dir build --output-on-failure
 ```
 
-> **Looking for a specific doc?** `docs/` has 92 Markdown documents — see [`docs/README.md`](docs/README.md)
+> **Looking for a specific doc?** `docs/` has 93 Markdown documents — see [`docs/README.md`](docs/README.md)
 > for an index of what's current vs. historical.
 
 ### Project Status
@@ -225,8 +225,9 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
       artifact rather than downloading a dependency during ordinary CMake configuration.
     - Provides the verified CPU-raster 2D boundary above. It is not a fallback alias for EasyGL,
       and SDL is used only to present the completed CPU image.
-    - See [`docs/skia-backend.md`](docs/skia-backend.md) for the exact capability and dependency
-      policy; reproducible developer setup is tracked by `plan_skia.md` SKIA-112.
+    - See [`docs/skia-backend.md`](docs/skia-backend.md) for the exact capability policy and
+      [`docs/skia-developer-build.md`](docs/skia-developer-build.md) for the pinned artifact,
+      fresh-checkout build, Xvfb tests, fallback policy, and diagnostics.
 
 ## 7. 🌐 Networking, Services & Avatar
 

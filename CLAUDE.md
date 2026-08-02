@@ -437,8 +437,9 @@ Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
 `plan_diligent.md` and `docs/diligent-backend.md`.
 `SKIA` is a separate experimental CPU-raster 2D backend backed by a pinned external Skia artifact;
 it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
-Use `plan_skia.md`, `NEXT_skia.md`, and `docs/skia-backend.md` for that subsystem; do not reconstruct
-its state from the general `NEXT.md`.
+Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-backend.md`, and
+`docs/skia-developer-build.md` for that subsystem; do not reconstruct its state from the general
+`NEXT.md`.
 
 ---
 

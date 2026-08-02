@@ -49,7 +49,14 @@ The current link adapter requires every archive emitted by the minimal raster bu
 
 ## Reproducible Linux raster build
 
-The following is the supported initial build input. It assumes a C++23-capable Clang, Ninja, Python 3, and Skia's `gn` tool. Use no more than two jobs where the host requires that limit.
+The complete fresh-checkout developer procedure, prerequisite list, test commands, deliberate
+fallback policy, and diagnostics are maintained in
+[`skia-developer-build.md`](skia-developer-build.md). The exact artifact recipe is repeated here so
+the dependency pin remains visible at the backend boundary.
+
+The following is the supported initial build input. It assumes a C++23-capable Clang, Ninja,
+Python 3, and Skia's `gn` tool. Adjust the job count to the host's global limit; the validated
+developer procedure uses at most eight workers.
 
 ```sh
 git clone https://skia.googlesource.com/skia.git /path/to/skia
@@ -57,7 +64,7 @@ git -C /path/to/skia checkout ebf50520d720a1ce9d842d942d04c6c39c3fbc7b
 cd /path/to/skia
 bin/fetch-gn
 bin/gn gen /path/to/skia-out/raster --args='is_official_build=true is_debug=false cc="clang" cxx="clang++" skia_use_gl=false skia_enable_ganesh=false skia_use_vulkan=false skia_use_dawn=false skia_enable_graphite=false skia_enable_pdf=false skia_use_freetype=false skia_use_fontconfig=false skia_use_libpng_decode=false skia_use_libjpeg_turbo_decode=false skia_use_libwebp_decode=false skia_use_wuffs=false skia_use_icu=false skia_enable_tools=false'
-ninja -C /path/to/skia-out/raster -j2 skia
+ninja -C /path/to/skia-out/raster -j8 skia
 ```
 
 The output directory must contain `libskia.a`, `libskcms.a`, `liballocator_base.a`, `liballocator_core.a`, `liballocator_shim.a`, and `libraw_ptr.a`.
@@ -65,11 +72,12 @@ The output directory must contain `libskia.a`, `libskcms.a`, `liballocator_base.
 ## Configure CNA
 
 ```sh
+export CMAKE_BUILD_PARALLEL_LEVEL=8
 cmake -S . -B build-skia -G Ninja \
   -DCNA_GRAPHICS_BACKEND=SKIA \
   -DCNA_SKIA_ROOT=/path/to/skia \
   -DCNA_SKIA_BUILD_DIR=/path/to/skia-out/raster
-cmake --build build-skia --parallel 2
+cmake --build build-skia --parallel 8
 ```
 
 `cmake/ThirdPartySkia.cmake` exports `CNA::Skia`, including the header root, all six static archives in a linker group, threads, and `dl` where needed. It is intentionally limited to the tested GNU/Clang ELF raster configuration until platform-specific adapters are added.

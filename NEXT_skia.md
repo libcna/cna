@@ -1025,13 +1025,36 @@ TextureCube/Texture3D transfer and RenderTargetCube-face behavior.
   permission-denied starts; after Ninja reached a no-work state, the clean full rerun had zero
   failures. The persistent display cache is restored to `:0`; `NEXT.md` was not read or changed.
 
+## Completed in this session: SKIA-112
+
+- Added `docs/skia-developer-build.md`, a standalone fresh-checkout procedure covering Debian
+  prerequisites, the sibling `sharp-runtime` and non-recursive CNA submodules, exact pinned Skia
+  revision/GN arguments, all six required archives, offline CNA configuration, display-free/Xvfb/
+  real-display tests, demo/state tracing, sanitizer routing, future accelerated prerequisites,
+  deliberate non-Skia fallback, and actionable common-failure diagnostics.
+- The procedure exports `CMAKE_BUILD_PARALLEL_LEVEL=8` before the first CNA configure. This also
+  caps the configure-time vendored SDL helper's otherwise unnumbered `cmake --build --parallel`;
+  every explicit GN, CNA build, and CTest command also uses at most eight workers.
+- Validated against a clean source tree exported from commit `36ac1e61` into
+  `/tmp/cna-skia112-clean.GUGb2w/cnaskia`, with fresh CMake/Ninja state and the checked-out
+  submodule contents, sibling `sharp-runtime`, and pinned Skia artifact supplied as external
+  inputs. The full Debug build reached `ninja: no work to do`; 19/19 Audit+Raster tests pass and
+  the exact Xvfb recipe passes 132/132 in 24.40 seconds (16 Raster, 113 Display, three Audit).
+  `ctest -N -L Accelerated` correctly reports zero.
+- Validation corrected two unsafe draft commands before publication. `CNA_ENABLE_NET=OFF` cannot
+  be used with the current full `CnaTests` target because its ENet source remains registered, so
+  the supported procedure keeps the default vendored ENet path. The 2D demo must run with
+  `build-skia` as its working directory because its copied `Content/` tree is relative; the final
+  `cmake -E chdir` Xvfb command completes three frames and prints the exact pinned raster startup
+  line plus state trace.
+- The disposable validation cache and all persistent Debug, Release, sanitizer, and EasyGL caches
+  are restored to `CNA_TEST_DISPLAY=:0`. `NEXT.md` was not read or changed.
+
 ## Next candidates
 
-1. SKIA-112: add fresh-checkout developer build/test instructions now that the verified capability
-   documents agree.
-2. SKIA-113: perform the clean-worktree/fresh-configure cross-backend smoke after the developer
+1. SKIA-113: perform the clean-worktree/fresh-configure cross-backend smoke now that the developer
    procedure is reproducible.
-3. Reassess earlier open architecture rows (especially SKIA-5/6) against the accepted
+2. Reassess earlier open architecture rows (especially SKIA-5/6) against the accepted
    raster-only ADR before doing the final release-gate tasks.
 
 ## Known boundaries / assumptions
