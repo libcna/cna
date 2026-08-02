@@ -146,6 +146,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # LLGL-37: SkinnedEffect.VertexColorEnabled (NOXNA extension property) -- a genuinely new
+    # skinned3d_color.vert/frag.glsl shader pair, selected instead of skinned3d.vert/frag.glsl only
+    # for a stride-56 (colour-carrying) vertex layout. Plain SkinnedEffect works on both modules, so
+    # this gets an _OpenGL variant below too.
+    cna_llgl_test(cna_test_llgl_skinnedeffect_vertexcolor
+                  examples/llgl_skinnedeffect_vertexcolor_test.cpp)
+    cna_register_backend_test(NAME Llgl_SkinnedEffect_VertexColor COMMAND cna_test_llgl_skinnedeffect_vertexcolor
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # LLGL-26 follow-up: RenderTargetCube -- 6 independent LLGL::RenderTargets sharing one
     # TextureCube colour texture (a different arrayLayer each) and one shared depth texture,
     # mirroring CreateRenderTarget2D's own established pattern. No _OpenGL variant, same reason as
@@ -333,6 +343,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_backend_test(NAME Llgl_SkinnedEffect_TwoBoneBlend_OpenGL COMMAND cna_test_llgl_skinnedeffect_twobone_blend
+        TIMEOUT 90 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
+    cna_register_backend_test(NAME Llgl_SkinnedEffect_VertexColor_OpenGL COMMAND cna_test_llgl_skinnedeffect_vertexcolor
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_LLGL_RENDERER=opengl")
     cna_register_backend_test(NAME Llgl_MRT_OpenGL COMMAND cna_test_llgl_mrt

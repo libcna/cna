@@ -553,12 +553,30 @@ registered on both modules. Both tests were ported (not verbatim-shared, but ada
 class name/comment changed) from the Vulkan backend's own `examples/vulkan_skinnedeffect_*_test.cpp`,
 which are already fully backend-agnostic real-XNA-API code.
 
+**`SkinnedEffect.VertexColorEnabled` is real too (LLGL-37, `NOXNA` extension property; real XNA has
+no such property -- CNB-66/67 added it project-wide for glTF `COLOR_0` import support).** A stride-56
+vertex layout (the stride-52 layout above with a colour attribute APPENDED at offset 52, location 1
+per this backend's own `MapVertexUsage()` mapping, matching `ResolveVertexAttributes()`'s own
+"append rather than insert" convention for every other colour-carrying layout here) selects a
+SEPARATE compiled shader pair -- `shaders/skinned3d_color.vert/frag.glsl` + `.gl.` variants -- instead
+of the plain `skinned3d.vert/frag.glsl` above, mirroring `AcquirePrimitiveVertexShader()`'s own
+per-layout-shape shader-file-selection convention rather than EasyGL's single shader with an
+always-declared, conditionally-read attribute. The enable/disable gate reuses `emissiveColorPad.w`
+(otherwise unused, since `SkinnedEffect` pre-folds ambient into `EmissiveColor.xyz` and has no
+separate ambient term of its own to occupy the fourth component) -- the same free-slot-reuse trick
+`BasicEffect`'s own `ambientColorLighting.w` uses -- written unconditionally by `FillSkinnedUniforms`
+(harmless for the plain shader, which never reads it). Modulation order matches every other backend's
+own implementation exactly: vertex-colour alpha multiplies into the combined output BEFORE the
+specular highlight is added, vertex-colour RGB multiplies the WHOLE combined diffuse+specular output
+AFTER it, so `VertexColorEnabled=true` with a pure black vertex colour genuinely zeroes the pixel
+rather than leaking an unmodulated specular term through. `Llgl_SkinnedEffect_VertexColor`/`_OpenGL`
+verify this with an analytically-derived straight-on camera/light case (not a golden image) --
+4/4 PASS on both modules.
+
 **Out of scope**: real XNA's `PreferPerPixelLighting` selecting a genuinely different, per-vertex
 (Gouraud) lit shader -- this backend is per-pixel-lit only, matching every established CNA backend
-except D3D9 (`GpuDrawParams::preferPerPixelLighting`'s own documented deviation). The
-`VertexColorEnabled` CNA-only (`NOXNA`) extension property and its stride-56 vertex-colour variant
-are not implemented. `SkinnedPbrEffect` (stride 68, `PbrEffect` combined with skinning) is done
-too -- see "PbrEffect" below.
+except D3D9 (`GpuDrawParams::preferPerPixelLighting`'s own documented deviation). `SkinnedPbrEffect`
+(stride 68, `PbrEffect` combined with skinning) is done too -- see "PbrEffect" below.
 
 ## PbrEffect
 
@@ -674,7 +692,11 @@ source, covering `EnvironmentMapEffect`'s alpha-scaled cube-map base lerp (Task 
 limitation of this project's own OpenGL module, not a gap in this backend).
 `Llgl_SkinnedEffect_IdentityBones`/`Llgl_SkinnedEffect_TwoBoneBlend` are ported (not verbatim, but
 adapted with only the class name/comment changed) from the Vulkan backend's own sources -- see
-"SkinnedEffect" above. `Llgl_RenderTargetCube` covers 6 independent per-face draw/`GetData()` round
+"SkinnedEffect" above. `Llgl_SkinnedEffect_VertexColor` (LLGL-37) is adapted the same way from
+`examples/vulkan_skinnedeffect_vertexcolor_test.cpp`'s own analytically-derived technique (checks
+(a)/(b)/(c) only; that file's own (d)/(e) are an unrelated Vulkan dynamic-blend-factor finding) --
+plain `SkinnedEffect` works on both modules, so this gets an `_OpenGL` twin too.
+`Llgl_RenderTargetCube` covers 6 independent per-face draw/`GetData()` round
 trips plus sampling the result through `EnvironmentMapEffect`; like the `EnvironmentMapEffect` test
 it has no `_OpenGL` twin, for the same `hasCubeTextures` reason.
 `Llgl_Msaa_RenderTargetCube` (LLGL-34) reuses `Llgl_Msaa_RenderTarget`'s own diagonal-edge technique

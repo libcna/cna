@@ -46,6 +46,8 @@ SHADERS = [
     ("EnvMap3dFrag", "env_map3d.frag.glsl", "env_map3d.gl.frag.glsl", "frag"),
     ("Skinned3dVert", "skinned3d.vert.glsl", "skinned3d.gl.vert.glsl", "vert"),
     ("Skinned3dFrag", "skinned3d.frag.glsl", "skinned3d.gl.frag.glsl", "frag"),
+    ("Skinned3dColorVert", "skinned3d_color.vert.glsl", "skinned3d_color.gl.vert.glsl", "vert"),
+    ("Skinned3dColorFrag", "skinned3d_color.frag.glsl", "skinned3d_color.gl.frag.glsl", "frag"),
     ("Pbr3dVert", "pbr3d.vert.glsl", "pbr3d.gl.vert.glsl", "vert"),
     ("Pbr3dFrag", "pbr3d.frag.glsl", "pbr3d.gl.frag.glsl", "frag"),
     ("Pbr3dSkinnedVert", "pbr3d_skinned.vert.glsl", "pbr3d_skinned.gl.vert.glsl", "vert"),

@@ -1360,6 +1360,20 @@ namespace CNA::Internal::Backends::Llgl
                 addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 32);
                 addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 48);
                 break;
+            // SkinnedEffect.VertexColorEnabled (LLGL-37, NOXNA extension property): the stride-52
+            // layout above with a trailing normalized ubyte4 Color APPENDED at offset 52 -- matches
+            // every other backend's own "append rather than insert" convention for this vertex shape
+            // (EasyGL/Vulkan/etc's own local SkinnedColorGpuVertex test structs), keeping locations
+            // 0-4/offsets 0-51 byte-identical to the no-colour case above. Colour location 1 matches
+            // MapVertexUsage()'s own mapping, same as every other colour-carrying layout here.
+            case 56:
+                addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
+                addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
+                addAttribute("texCoord", LLGL::Format::RG32Float, 2, 24);
+                addAttribute("aBoneWeights", LLGL::Format::RGBA32Float, 4, 32);
+                addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 48);
+                addAttribute("color", LLGL::Format::RGBA8UNorm, 1, 52);
+                break;
             // SkinnedPbrEffect (LLGL-25 follow-up): VertexPositionNormalTangentTextureSkinned's own
             // byte layout -- the stride-48 PbrGpuVertex layout above with the stride-52 skinning
             // suffix (BlendWeight, BlendIndices) appended, matching
@@ -1746,6 +1760,8 @@ namespace CNA::Internal::Backends::Llgl
             renderer_->Release(*primitiveEnvMapFragmentShader_);
         if (primitiveSkinnedFragmentShader_ != nullptr)
             renderer_->Release(*primitiveSkinnedFragmentShader_);
+        if (primitiveSkinnedColorFragmentShader_ != nullptr)
+            renderer_->Release(*primitiveSkinnedColorFragmentShader_);
         if (primitivePbrFragmentShader_ != nullptr)
             renderer_->Release(*primitivePbrFragmentShader_);
         if (primitiveLayout_ != nullptr)
@@ -1971,6 +1987,9 @@ namespace CNA::Internal::Backends::Llgl
         primitiveSkinnedFragmentShader_ = createFragmentShader(
             Shaders::kSkinned3dFragGlsl, Shaders::kSkinned3dFragSpv,
             sizeof(Shaders::kSkinned3dFragSpv), "skinned 3D fragment shader");
+        primitiveSkinnedColorFragmentShader_ = createFragmentShader(
+            Shaders::kSkinned3dColorFragGlsl, Shaders::kSkinned3dColorFragSpv,
+            sizeof(Shaders::kSkinned3dColorFragSpv), "skinned 3D vertex-colour fragment shader");
         primitivePbrFragmentShader_ = createFragmentShader(
             Shaders::kPbr3dFragGlsl, Shaders::kPbr3dFragSpv,
             sizeof(Shaders::kPbr3dFragSpv), "PBR 3D fragment shader");
@@ -2393,15 +2412,21 @@ namespace CNA::Internal::Backends::Llgl
             return cached->second;
 
         // SkinnedEffect is always textured and lit (GpuDrawParams::textureEnabled/lightingEnabled
-        // are unconditionally true in SkinnedEffect::FillGpuDrawParams), so like
-        // AcquirePrimitiveEnvMapVertexShader() there is only one shader variant -- just the vertex
-        // layout (and hence caching) varies.
+        // are unconditionally true in SkinnedEffect::FillGpuDrawParams); the only shape that
+        // actually varies is whether the vertex layout carries a colour attribute (LLGL-37,
+        // SkinnedEffect.VertexColorEnabled -- a NOXNA extension property), which selects a whole
+        // separate compiled shader pair rather than an always-declared, conditionally-read
+        // attribute -- matching AcquirePrimitiveVertexShader()'s own colored/textured shader-file
+        // split, since a shader declaring an input the bound buffer does not supply reads undefined
+        // data on Vulkan.
+        bool hasColor = false;
         bool hasTexCoord = false;
         bool hasNormal = false;
         bool hasBoneWeights = false;
         bool hasBoneIndices = false;
         for (const LLGL::VertexAttribute& attribute : attributes)
         {
+            if (attribute.location == 1) hasColor = true;
             if (attribute.location == 2) hasTexCoord = true;
             if (attribute.location == 3) hasNormal = true;
             if (attribute.location == 4) hasBoneWeights = true;
@@ -2415,31 +2440,26 @@ namespace CNA::Internal::Backends::Llgl
                 "at least one");
         }
 
-        std::vector<LLGL::VertexAttribute> shaderAttributes;
-        for (const LLGL::VertexAttribute& attribute : attributes)
-        {
-            if (attribute.location == 1) // vertex colour: this shader never reads one
-                continue;
-            shaderAttributes.push_back(attribute);
-        }
-
         const LLGL::RenderingCapabilities& caps = renderer_->GetRenderingCaps();
 
         LLGL::ShaderDescriptor vertexDesc;
         vertexDesc.type = LLGL::ShaderType::Vertex;
         if (SupportsShadingLanguage(caps, LLGL::ShadingLanguage::GLSL))
         {
-            vertexDesc.source = Shaders::kSkinned3dVertGlsl;
+            vertexDesc.source = hasColor ? Shaders::kSkinned3dColorVertGlsl : Shaders::kSkinned3dVertGlsl;
             vertexDesc.sourceType = LLGL::ShaderSourceType::CodeString;
         }
         else
         {
-            vertexDesc.source = reinterpret_cast<const char*>(Shaders::kSkinned3dVertSpv);
-            vertexDesc.sourceSize = sizeof(Shaders::kSkinned3dVertSpv);
+            vertexDesc.source = hasColor
+                ? reinterpret_cast<const char*>(Shaders::kSkinned3dColorVertSpv)
+                : reinterpret_cast<const char*>(Shaders::kSkinned3dVertSpv);
+            vertexDesc.sourceSize = hasColor ? sizeof(Shaders::kSkinned3dColorVertSpv)
+                                             : sizeof(Shaders::kSkinned3dVertSpv);
             vertexDesc.sourceType = LLGL::ShaderSourceType::BinaryBuffer;
             vertexDesc.entryPoint = "main";
         }
-        vertexDesc.vertex.inputAttribs = shaderAttributes;
+        vertexDesc.vertex.inputAttribs = attributes;
 
         LLGL::Shader* shader = renderer_->CreateShader(vertexDesc);
         if (shader == nullptr)
@@ -2684,8 +2704,21 @@ namespace CNA::Internal::Backends::Llgl
                                    : skinned ? AcquirePrimitiveSkinnedVertexShader(attributes)
                                    : envMapping ? AcquirePrimitiveEnvMapVertexShader(attributes)
                                    : AcquirePrimitiveVertexShader(attributes, textured, lit);
+        // SkinnedEffect.VertexColorEnabled (LLGL-37): a colour-carrying skinned vertex layout
+        // (stride 56) needs the vertex-colour-reading fragment shader variant instead of the plain
+        // one -- see AcquirePrimitiveSkinnedVertexShader()'s own doc comment for why this is a
+        // separate compiled shader rather than an always-declared attribute.
+        bool skinnedHasColor = false;
+        if (skinned)
+        {
+            for (const LLGL::VertexAttribute& attribute : attributes)
+            {
+                if (attribute.location == 1) { skinnedHasColor = true; break; }
+            }
+        }
         // pbrSkinned reuses primitivePbrFragmentShader_ verbatim -- see its own doc comment.
         pipelineDesc.fragmentShader = pbr ? primitivePbrFragmentShader_
+                                    : skinned && skinnedHasColor ? primitiveSkinnedColorFragmentShader_
                                     : skinned ? primitiveSkinnedFragmentShader_
                                     : envMapping ? primitiveEnvMapFragmentShader_
                                     : dualTexture ? primitiveDualTextureFragmentShader_
@@ -2942,6 +2975,12 @@ namespace CNA::Internal::Backends::Llgl
         uniforms[36] = params.emissiveColor[0];
         uniforms[37] = params.emissiveColor[1];
         uniforms[38] = params.emissiveColor[2];
+        // SkinnedEffect.VertexColorEnabled (LLGL-37): reuses emissiveColorPad's own otherwise-free
+        // .w component as the gate, matching BasicEffect's identical ambientColorLighting.w reuse
+        // trick -- SkinnedEffect has no separate ambient term of its own to occupy this slot.
+        // Written unconditionally (not just for the colour-carrying shader variant): harmless for
+        // the plain skinned3d.frag.glsl, which never reads it.
+        uniforms[39] = params.vertexColorEnabled ? 1.0f : 0.0f;
 
         const float* lightDirs[3]      = {params.light0Dir, params.light1Dir, params.light2Dir};
         const float* lightDiffuses[3]  = {params.light0Diffuse, params.light1Diffuse, params.light2Diffuse};

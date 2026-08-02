@@ -2165,6 +2165,13 @@ namespace CNA::Internal::Backends::Llgl
         /// has. See AcquirePrimitiveSkinnedVertexShader() and shaders/skinned3d.vert.glsl.
         LLGL::PipelineLayout*       primitiveSkinnedLayout_ = nullptr;
         LLGL::Shader*               primitiveSkinnedFragmentShader_ = nullptr;
+        /// `SkinnedEffect.VertexColorEnabled` (LLGL-37, NOXNA extension property): a SEPARATE
+        /// fragment shader reading the extra `vColor` varying, selected instead of
+        /// `primitiveSkinnedFragmentShader_` only when the bound vertex layout carries a colour
+        /// attribute (stride 56) -- see AcquirePrimitiveSkinnedVertexShader()'s own doc comment for
+        /// why this is a separate shader file rather than an always-declared attribute, and
+        /// shaders/skinned3d_color.vert.glsl.
+        LLGL::Shader*               primitiveSkinnedColorFragmentShader_ = nullptr;
         std::map<std::uint64_t, LLGL::Shader*> primitiveSkinnedVertexShaderCache_;
         /// One small constant buffer per SkinnedEffect draw in a frame for the non-bone parameters
         /// (kSkinnedUniformFloats) -- same reasoning as envMapUniformBuffers_ above.
