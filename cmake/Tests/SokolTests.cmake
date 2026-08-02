@@ -160,4 +160,13 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         COMMAND cna_test_sokol_rendertargetcube_msaa_face
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sokol.md SOKOL-37: Viewport.MinDepth/MaxDepth. REMED-GFX-079's own backend-agnostic 3D
+    # viewport oracle (despite its "software_" filename) -- checks A-G/I-O already exercise the
+    # general viewport transform this backend already had; check H is the MinDepth/MaxDepth depth
+    # remap this task adds.
+    cna_sokol_test(cna_test_sokol_3d_viewport examples/software_3d_viewport_test.cpp)
+    cna_register_backend_test(NAME Sokol_Viewport_MinMaxDepth COMMAND cna_test_sokol_3d_viewport
+        TIMEOUT 30 LABELS "Sokol"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

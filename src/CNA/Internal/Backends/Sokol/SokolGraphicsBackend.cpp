@@ -1769,6 +1769,13 @@ namespace CNA::Internal::Backends::Sokol
     {
         if (!passActive_) return;
 
+#if CNA_SOKOL_HAS_GL_READBACK
+        // See SetViewport's own doc comment: sokol_gfx has no viewport depth-range call, so this
+        // reaches past it, GL-only, the same escape hatch ReadBackbuffer/SokolOcclusionQueryBackend
+        // already use.
+        glDepthRangef(viewportMinDepth_, viewportMaxDepth_);
+#endif
+
         if (currentRenderTarget_ != nullptr || currentRenderTargetCube_ != nullptr)
         {
             // A render target's pixel space IS logical space -- no window letterbox scaling
@@ -2285,9 +2292,17 @@ namespace CNA::Internal::Backends::Sokol
         viewportRect_[2] = w;
         viewportRect_[3] = h;
 
-        // sokol_gfx's viewport call carries no depth range; a non-default Viewport.MinDepth/
-        // MaxDepth would need the 3D projection path to fold it into the pipeline instead.
-        (void)minDepth; (void)maxDepth;
+        // sokol_gfx's own viewport call (sg_apply_viewport) carries no depth-range parameter, but
+        // the raw GL context underneath it is already reached for other purposes
+        // (SokolOcclusionQueryBackend, ReadBackbuffer) -- glDepthRangef is the same escape hatch,
+        // applied in ApplyPendingViewportAndScissor alongside the viewport/scissor rect it already
+        // reapplies on every bind and every SetViewport/SetScissorRect call. GL-only, matching
+        // ReadBackbuffer's own boundary: ignored (stays at the GL default 0..1) on any non-GL
+        // CNA_SOKOL_API. Unlike glBeginQuery/glEndQuery, glDepthRangef never raises a GL error for
+        // any input (the spec clamps both values into [0,1] instead), so it needs none of
+        // SokolOcclusionQueryBackend's pending-error guarding.
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
 
         if (passActive_) ApplyPendingViewportAndScissor();
     }
@@ -2488,16 +2503,8 @@ namespace CNA::Internal::Backends::Sokol
         if (pixels == nullptr || w <= 0 || h <= 0)
             throw std::runtime_error("Sokol backend: ReadBackbuffer called with an empty region");
 
-        // Real XNA's GraphicsDevice.GetBackBufferData always reads the actual presented window
-        // surface, never whatever RenderTarget2D happens to be currently bound -- and this
-        // implementation reads whatever pass is active, which would be the wrong surface while a
-        // target is bound. Refusing loudly beats returning the wrong pixels silently; matching the
-        // real semantic (temporarily unbinding, reading, then rebinding) is plan_sokol.md SOKOL-25b.
-        if (currentRenderTarget_ != nullptr || currentRenderTargetCube_ != nullptr)
-        {
-            NotYetImplemented(kBackendName,
-                "GetBackBufferData while a RenderTarget2D or RenderTargetCube face is bound");
-        }
+        const bool boundToCustomTarget =
+            currentRenderTarget_ != nullptr || currentRenderTargetCube_ != nullptr;
 
         // BeginPassIfNeeded() first, for the same reason Present() does it: a Clear() only records
         // a pending pass action, so a Clear()-then-read-back sequence with nothing drawn in
@@ -2509,17 +2516,38 @@ namespace CNA::Internal::Backends::Sokol
         EndPassIfActive();
         glFinish();
 
+        // GraphicsDevice.GetBackBufferData reads from whatever is CURRENTLY BOUND, matching the
+        // established cross-backend convention in this codebase (EasyGLGraphicsBackend::
+        // ReadBackbuffer reads from whatever FBO is bound_; the DX3/ASCII/Software backends document
+        // the identical behaviour) -- not "always the literal presented window surface", which an
+        // earlier version of this method assumed and refused to honour instead. sokol_gfx's own GL
+        // backend does not rebind GL_FRAMEBUFFER back to 0 inside sg_end_pass() for an offscreen
+        // pass (only GLES3 restores it, and only after an MSAA resolve, to the SAME pass FBO) --
+        // so after EndPassIfActive() above, the currently bound GL framebuffer is exactly the
+        // render target's own FBO (or, for a multisampled target, sg_end_pass()'s own MSAA-resolve
+        // blit target), and a plain glReadPixels below reads its content correctly with no extra
+        // binding call needed.
         int physicalWidth = 0;
         int physicalHeight = 0;
-        GetPhysicalSizeEXT(physicalWidth, physicalHeight);
+        double scale = 1.0;
+        if (boundToCustomTarget)
+        {
+            // A render target's pixel space IS logical space -- no window letterbox scaling
+            // applies, mirroring ApplyPendingViewportAndScissor's identical reasoning.
+            GetCurrentTargetSizeEXT(physicalWidth, physicalHeight);
+        }
+        else
+        {
+            GetPhysicalSizeEXT(physicalWidth, physicalHeight);
 
-        int logicalWidth = 0;
-        int logicalHeight = 0;
-        GetLogicalSizeEXT(logicalWidth, logicalHeight);
+            int logicalWidth = 0;
+            int logicalHeight = 0;
+            GetLogicalSizeEXT(logicalWidth, logicalHeight);
 
-        const double scale = (logicalHeight > 0)
-            ? static_cast<double>(physicalHeight) / static_cast<double>(logicalHeight)
-            : 1.0;
+            scale = (logicalHeight > 0)
+                ? static_cast<double>(physicalHeight) / static_cast<double>(logicalHeight)
+                : 1.0;
+        }
         const int physicalX = static_cast<int>(x * scale + 0.5);
         const int physicalY = static_cast<int>(y * scale + 0.5);
         const int physicalW = std::max(1, static_cast<int>(w * scale + 0.5));

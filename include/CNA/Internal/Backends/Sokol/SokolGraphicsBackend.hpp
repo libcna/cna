@@ -1655,6 +1655,11 @@ namespace CNA::Internal::Backends::Sokol
         int scissorRect_[4] = {0, 0, 0, 0};
         bool viewportSet_ = false;
         int viewportRect_[4] = {0, 0, 0, 0};
+        /// Viewport.MinDepth/MaxDepth (plan_sokol.md SOKOL-37). Applied via a raw glDepthRangef call
+        /// in ApplyPendingViewportAndScissor -- see SetViewport's own doc comment for why sokol_gfx
+        /// itself has no equivalent call.
+        float viewportMinDepth_ = 0.0f;
+        float viewportMaxDepth_ = 1.0f;
 
         int cullMode_ = 0;         // CullMode::None
         int fillMode_ = 0;         // FillMode::Solid

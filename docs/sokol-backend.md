@@ -64,6 +64,8 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | `OcclusionQuery` (real `GL_SAMPLES_PASSED` sample count, GL-only) | ✅ | `Sokol_OcclusionQuery_Cycle`, `Sokol_OcclusionQuery_VisibleQuad`, `Sokol_OcclusionQuery_OccludedQuad` |
 | `RasterizerState.DepthBias`/`SlopeScaleDepthBias` | ✅ | `Sokol_RasterizerState_DepthBias` -- a real coplanar-redraw proof, both constant and slope-scaled bias |
 | `RenderTarget2D` MSAA + resolve (`MultiSampleCount` > 1) | ✅ | `Sokol_RenderTarget2D_Msaa` -- a real differential anti-aliasing proof (a solid binary edge at `MultiSampleCount=0` vs. genuinely blended pixels at `8`), not just "resolve doesn't corrupt solid colours" |
+| `Viewport.MinDepth`/`MaxDepth` | ✅ | `Sokol_Viewport_MinMaxDepth` -- REMED-GFX-079's 25-check backend-agnostic 3D-viewport oracle, including a real depth-remap proof (compressing `MaxDepth` pulls a farther quad in front of a nearer one) |
+| `GetBackBufferData` while a `RenderTarget2D`/`RenderTargetCube` face is bound (reads the bound target's own content) | ✅ | Same oracle's check G; matches `EasyGLGraphicsBackend::ReadBackbuffer`'s "read from whatever's bound" convention |
 
 ## What does not work yet
 
@@ -83,7 +85,6 @@ letting the build reach a confusing `GL/gl.h: No such file or directory`.
 | Custom `Effect` via `SpriteBatch.Begin(effect)` / `ShaderEffect` | `CreateEffectBackend` returns null | `SOKOL-28` |
 | `RasterizerState.FillMode` (`WireFrame`) | accepted and ignored — sokol_gfx exposes no polygon fill mode at all, unlike EasyGL's CPU-side triangle-to-`GL_LINES` re-expansion at draw time (not implemented here). A permanent, not-just-"not yet" gap | `SOKOL-23` |
 | `BlendState.MultiSampleMask` | ignored — sokol_gfx has no per-sample coverage mask (it exposes alpha-to-coverage only) | no upstream API |
-| `Viewport.MinDepth` / `MaxDepth` | ignored — `sg_apply_viewport` carries no depth range | `SOKOL-21` |
 | `CNA_SOKOL_API` other than `GLCORE` | configure warns; construction throws | `SOKOL-31` |
 
 `GraphicsDevice::SupportsCapability()` reports this boundary, so a game can query ahead of time
