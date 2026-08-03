@@ -931,4 +931,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     if(TARGET cna_demo_2d)
         cna_register_skia_display_test(Skia_Demo2D_Smoke cna_demo_2d --smoke 3)
     endif()
+
+    # SKIA-160: construction-time raster/Ganesh mode selection, proven transactional in both
+    # directions. The same test source (examples/skia_ganesh_mode_test.cpp) is registered under a
+    # different label/helper depending on CNA_SKIA_MODE, matching what that specific build
+    # actually proves -- RASTER mode's refusal path touches no SDL/GL and needs no display; GANESH
+    # mode's real GrDirectContext construction needs a real GLX-capable display (not Xvfb, same
+    # requirement as the EasyGL golden build) and gives the long-reserved Accelerated label its
+    # first real member.
+    cna_skia_test(cna_test_skia_ganesh_mode examples/skia_ganesh_mode_test.cpp)
+    if(CNA_SKIA_MODE STREQUAL "GANESH")
+        cna_register_skia_accelerated_test(Skia_Ganesh_ModeConstruction cna_test_skia_ganesh_mode)
+    else()
+        cna_register_skia_raster_test(Skia_Ganesh_ModeRefusal_Raster cna_test_skia_ganesh_mode)
+    endif()
 endif()

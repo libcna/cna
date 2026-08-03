@@ -132,7 +132,10 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
-    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 CNA::Skia)
+    # SKIA-160: CNA_SKIA_LINK_TARGET is CNA::Skia (raster, default) or CNA::SkiaGanesh (GANESH
+    # mode), set by BackendSelection.cmake's CNA_SKIA_MODE branch above -- never both; the two are
+    # mutually exclusive GN builds of the same checkout and cannot be linked into one binary.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ${CNA_SKIA_LINK_TARGET})
     # SKIA-140/141: SkiaTextureBackend.cpp calls CNA::Internal::Graphics::DxtUtil/Bc7Util, which
     # live in the main CNA library, not this backend target. CNA already PUBLIC-links
     # ${BACKEND_TARGET} above (CnaLibrary.cmake), so a plain executable's link command scans

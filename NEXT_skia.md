@@ -2711,15 +2711,62 @@ level-boundary contract.
   `include/CNA/Internal/Backends/Skia/`; the raster suite's 170/170 pass count and pixel evidence
   are unaffected.
 
+## Completed in this session: SKIA-160
+
+- New `docs/skia-ganesh-artifact.md` "SKIA-160" section fixes the contract first. Raster and
+  Ganesh/GL are mutually exclusive GN builds of the same Skia checkout (SKIA-159) -- they define
+  the identical `libskia.a` symbol set, so linking both into one binary is impossible;
+  "construction-time mode selection" is a new `CNA_SKIA_MODE` CMake cache option (`RASTER`
+  default / `GANESH`), a sub-selector of `CNA_GRAPHICS_BACKEND=SKIA` rather than a new backend
+  identity, that picks which single archive set gets linked (`CNA::Skia` vs `CNA::SkiaGanesh`, via
+  a new `CNA_SKIA_LINK_TARGET` variable). Zero lines of the existing raster call sites changed.
+- New `CNA::Internal::Backends::Skia::SkiaGaneshContext` (deliberately not an `IGraphicsBackend` --
+  that remains SKIA-161's job) is where "no silent runtime fallback" actually lives: compiled
+  unconditionally into `cna_backend_graphics_skia` in *both* modes (its .cpp branches on the new
+  `CNA_SKIA_MODE_GANESH` compile definition). In a `RASTER` build its constructor throws
+  immediately and unconditionally, before touching SDL or GL at all. In a `GANESH` build it
+  performs the real sequence SKIA-159's probe already proved works (`SDL_GL_CreateContext`,
+  `SDL_GL_MakeCurrent`, `GrDirectContexts::MakeGL()`) and throws with full resource unwind
+  (mirroring `SkiaGraphicsBackend`'s own established constructor try/catch pattern) if any step
+  fails; on success it exposes a runtime-computed diagnostic (`surface=ganesh-gl`, pinned
+  revision, a genuinely queried `max-texture-size`, unlike raster's fixed `constexpr` string).
+- New `examples/skia_ganesh_mode_test.cpp` compiles and runs correctly in *either* mode from one
+  source file, registered differently depending on which: under `Skia;Raster` (no display needed)
+  in a `RASTER` build, proving the refusal path; under the long-reserved-but-empty
+  `Skia;Accelerated;Display` label (unused since SKIA-1) in a `GANESH` build -- the first test that
+  label has ever contained -- proving a real `GrDirectContext` constructs correctly, including a
+  second independent context on the same window (no cross-instance state leak).
+- Updated `scripts/validate_skia_release_gate.py`'s previously-absolute "zero accelerated test
+  registrations" check to instead require any such registration be directly guarded by
+  `if(CNA_SKIA_MODE STREQUAL "GANESH")` -- catches an accidentally-unconditional accelerated
+  registration while allowing this deliberate, opt-in one.
+- Built a new stable, reusable `cmake-build-skia-ganesh/` directory from scratch (this project's
+  own `cmake-build-<variant>/` convention, not a per-ticket one-off) with
+  `-DCNA_SKIA_MODE=GANESH -DCNA_SKIA_GANESH_BUILD_DIR=~/deps/skia-out/ganesh -DCNA_TEST_DISPLAY=:0`
+  (real desktop display, not Xvfb -- same real-GLX requirement as the EasyGL golden build).
+- Verified in both directions: in `cmake-build-skia-ganesh`, `Skia_Ganesh_ModeConstruction` passes
+  all 7 checks and `ctest -L Accelerated` now finds 1 test (previously 0), while the full
+  pre-existing raster suite (170 tests, +1 = 171) also passes unchanged in that same Ganesh-linked
+  directory -- the Ganesh GN build is a strict superset of the raster APIs, not a divergent
+  implementation. In the original `cmake-build-skia` (still `RASTER`, reconfigured and rebuilt
+  incrementally in place), the new test registers as `Skia_Ganesh_ModeRefusal_Raster` under
+  `Skia;Raster`, the full suite is 171/171 (up from 170), and `ctest -N -L Accelerated` continues
+  to report zero tests -- the default regression build's behavior is provably unchanged.
+- Updated `docs/skia-surface-mode-adr.md` (gate 1 of the six reopening requirements now fully
+  closed, not just its artifact half) and `docs/skia-developer-build.md` (new "6. Optional: build
+  in Ganesh/OpenGL mode" section with exact commands; updated the accelerated-prerequisites list).
+- `docs/skia-backend.md`/`docs/skia-release-gate.md` deliberately untouched, per their existing
+  freeze-until-SKIA-170 policy.
+
 ## Next candidates
 
-1. SKIA-160: add an explicit construction-time raster/Ganesh mode selection and mode-specific
-   capability diagnostic with no silent runtime fallback -- the natural next step now that
-   `CNA::SkiaGanesh` exists but nothing selects it.
-2. SKIA-161-170: implement backend-owned Ganesh context/surface wrapping, resize/loss/recovery,
-   probe real MSAA/anisotropy, re-evaluate MRT, and hold the successor gate only after the raster
-   extensions are stable -- also where the mesh-effect cache's deferred "mode" key axis (see
-   SKIA-156 above) should actually be added, now that a second compilation target genuinely exists.
+1. SKIA-161: implement backend-owned SDL OpenGL context, Ganesh context/surface wrapping,
+   flush/submit, swap, readback, and destruction order -- the natural next step now that
+   `SkiaGaneshContext` proves a real `GrDirectContext` constructs but nothing presents through it.
+2. SKIA-162-170: resize/presentation/loss/recovery for Ganesh, probe real MSAA/anisotropy,
+   re-evaluate MRT, and hold the successor gate only after the raster extensions are stable --
+   also where the mesh-effect cache's deferred "mode" key axis (see SKIA-156 above) should
+   actually be added, now that a second compilation target genuinely exists.
 3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
@@ -2734,10 +2781,12 @@ level-boundary contract.
 
 ## Known boundaries / assumptions
 
-- The `CNA_GRAPHICS_BACKEND=SKIA` selection is still raster-only; its current requested MSAA 0/1
-  reports 0, and requests normalizing to 2+ are rejected with the capability remaining false. A
-  separate Ganesh/OpenGL artifact and CMake target now exist (SKIA-159,
-  `docs/skia-ganesh-artifact.md`) but nothing selects or constructs them yet.
+- `CNA_GRAPHICS_BACKEND=SKIA`'s default `CNA_SKIA_MODE=RASTER` build is still raster-only; its
+  current requested MSAA 0/1 reports 0, and requests normalizing to 2+ are rejected with the
+  capability remaining false. An opt-in `CNA_SKIA_MODE=GANESH` build (SKIA-159/160,
+  `docs/skia-ganesh-artifact.md`) can construct a real `GrDirectContext`
+  (`SkiaGaneshContext`), but no `IGraphicsBackend` wraps it yet -- there is still no presentable
+  Ganesh backbuffer, resize, or capability probing (SKIA-161+).
 - `TextureFilter::Anisotropic` deliberately falls back byte-exactly to complete Linear, including
   mip interpolation, while the real anisotropy capability remains false.
 - Mipmapped Texture2D construction, exact level reporting, full/partial transfer at every level,

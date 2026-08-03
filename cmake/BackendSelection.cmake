@@ -478,13 +478,33 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     add_compile_definitions(CNA_BACKEND_CANVAS)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_CANVAS")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SKIA")
-    message(STATUS "CNA: Using SKIA raster graphics backend")
+    # SKIA-160: CNA_SKIA_MODE is a sub-selector of CNA_GRAPHICS_BACKEND=SKIA, not a separate
+    # backend identity -- RASTER (default) and GANESH are two mutually exclusive GN builds of the
+    # same pinned Skia checkout (docs/skia-ganesh-artifact.md), never linked together in one
+    # binary. Every source file under BACKEND_DIR compiles in both modes (SkiaGaneshContext.cpp
+    # branches on CNA_SKIA_MODE_GANESH internally, matching the established safe-default-throws
+    # extensibility pattern); only which single Skia archive set gets linked differs.
+    set(CNA_SKIA_MODE "RASTER" CACHE STRING
+        "Skia surface mode: RASTER (default, release-gated) or GANESH (SKIA-159/160, experimental, requires CNA_SKIA_GANESH_BUILD_DIR)")
+    set_property(CACHE CNA_SKIA_MODE PROPERTY STRINGS "RASTER" "GANESH")
+
     set(BACKEND_DIR "src/CNA/Internal/Backends/Skia")
     set(BACKEND_TARGET "cna_backend_graphics_skia")
     add_compile_definitions(CNA_BACKEND_SKIA)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_SKIA")
-    include(cmake/ThirdPartySkia.cmake)
-    cna_configure_skia()
+
+    if(CNA_SKIA_MODE STREQUAL "GANESH")
+        message(STATUS "CNA: Using SKIA backend in Ganesh/OpenGL mode (experimental, SKIA-159/160)")
+        add_compile_definitions(CNA_SKIA_MODE_GANESH)
+        include(cmake/ThirdPartySkiaGanesh.cmake)
+        cna_configure_skia_ganesh()
+        set(CNA_SKIA_LINK_TARGET CNA::SkiaGanesh)
+    else()
+        message(STATUS "CNA: Using SKIA raster graphics backend")
+        include(cmake/ThirdPartySkia.cmake)
+        cna_configure_skia()
+        set(CNA_SKIA_LINK_TARGET CNA::Skia)
+    endif()
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     message(STATUS "CNA: Using ASCII (SDL-windowed glyph-grid) graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Ascii")

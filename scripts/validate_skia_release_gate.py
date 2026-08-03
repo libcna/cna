@@ -177,14 +177,24 @@ def main() -> int:
                     f"{path}: completed SKIA-124 requires promotion marker {marker!r}"
                 )
 
-    accelerated_registrations = len(
-        re.findall(r"^\s*cna_register_skia_accelerated_test\s*\(", tests, flags=re.MULTILINE)
-    )
-    if accelerated_registrations != 0:
-        errors.append(
-            f"{tests_path}: expected no registered accelerated test, found "
-            f"{accelerated_registrations}"
+    # SKIA-160: an accelerated test registration is now expected -- but only ever reachable behind
+    # an explicit CNA_SKIA_MODE STREQUAL "GANESH" guard, never unconditionally. This keeps the
+    # original guarantee (an ordinary raster regression build, CNA_SKIA_MODE defaulting to RASTER,
+    # registers zero Accelerated-labeled tests) while allowing the deliberate, opt-in one.
+    tests_lines = tests.splitlines()
+    for index, line in enumerate(tests_lines):
+        if not re.match(r"^\s*cna_register_skia_accelerated_test\s*\(", line):
+            continue
+        preceding = next(
+            (candidate.strip() for candidate in reversed(tests_lines[:index]) if candidate.strip()),
+            "",
         )
+        if preceding != 'if(CNA_SKIA_MODE STREQUAL "GANESH")':
+            errors.append(
+                f"{tests_path}:{index + 1}: cna_register_skia_accelerated_test must be directly "
+                'guarded by if(CNA_SKIA_MODE STREQUAL "GANESH"), found preceding line '
+                f"{preceding!r} -- an ordinary raster build must never register an accelerated test"
+            )
 
     if errors:
         print("Skia release gate failed:", file=sys.stderr)

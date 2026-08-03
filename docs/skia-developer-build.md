@@ -195,29 +195,81 @@ presentation path on a display-independent fixture, as documented in
 [`skia-sanitizer-validation.md`](skia-sanitizer-validation.md). The same document gives the
 ASan+UBSan configure command and explains the narrow no-RTTI `vptr` exception.
 
+## 6. Optional: build in Ganesh/OpenGL mode (experimental, SKIA-159/160)
+
+This is not the release-gated configuration -- see
+[Accelerated prerequisites and raster fallback policy](#accelerated-prerequisites-and-raster-fallback-policy)
+below and [`skia-ganesh-artifact.md`](skia-ganesh-artifact.md) for the full contract. It exists to
+build and exercise `SkiaGaneshContext` and the `Skia_Ganesh_ModeConstruction` test; it does not add
+a presentable Ganesh backbuffer to `SkiaGraphicsBackend`.
+
+First build the separately pinned Ganesh GN artifact, reusing the exact same `$CNA_SKIA_SRC`
+checkout from step 2 above (never re-clone Skia for this):
+
+```sh
+export CNA_SKIA_GANESH_OUT=/absolute/path/to/skia-out/ganesh
+"$CNA_SKIA_SRC/bin/gn" gen "$CNA_SKIA_GANESH_OUT" --args='is_official_build=true is_debug=false cc="clang" cxx="clang++" skia_use_gl=true skia_enable_ganesh=true skia_use_vulkan=false skia_use_dawn=false skia_enable_graphite=false skia_enable_pdf=false skia_use_freetype=false skia_use_fontconfig=false skia_use_libpng_decode=false skia_use_libjpeg_turbo_decode=false skia_use_libwebp_decode=false skia_use_wuffs=false skia_use_icu=false skia_enable_tools=false'
+ninja -C "$CNA_SKIA_GANESH_OUT" -j3 skia
+```
+
+Then configure a new, stable, reusable build directory -- `cmake-build-skia-ganesh`, following this
+project's own `cmake-build-<variant>/` convention, not a per-ticket one-off:
+
+```sh
+cmake -S . -B cmake-build-skia-ganesh -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCNA_GRAPHICS_BACKEND=SKIA \
+  -DCNA_SKIA_MODE=GANESH \
+  -DCNA_SKIA_ROOT="$CNA_SKIA_SRC" \
+  -DCNA_SKIA_GANESH_BUILD_DIR="$CNA_SKIA_GANESH_OUT" \
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_BUILD_EXAMPLES=ON \
+  -DCNA_USE_CCACHE=ON \
+  -DCNA_TEST_DISPLAY=:0
+cmake --build cmake-build-skia-ganesh -j3
+```
+
+Expected configure output includes `CNA: Using SKIA backend in Ganesh/OpenGL mode (experimental,
+SKIA-159/160)`, distinct from step 3's `CNA: Using SKIA raster graphics backend`.
+`-DCNA_TEST_DISPLAY=:0` must be a real desktop display, not Xvfb -- the same requirement already
+established for the EasyGL golden build; Xvfb provides no real hardware GLX, and
+`Skia_Ganesh_ModeConstruction` needs one. The other 170+ raster-labeled tests already present in
+this same build directory run identically over `:0` as they would over Xvfb.
+
+```sh
+ctest --test-dir cmake-build-skia-ganesh -L Accelerated --output-on-failure
+```
+
+This is the one command in this whole document that requires the Ganesh artifact and a real
+display; every other command in this file continues to describe the release-gated raster build.
+
 ## Accelerated prerequisites and raster fallback policy
 
-There is no accelerated Skia binary or runtime fallback wired into the `SKIA` backend selection in
-this revision. The raster artifact's pinned GN arguments disable every Skia GPU API, and `SKIA`
-construction always selects raster regardless of what else is built. SDL may use a GPU only to
-upload/present the completed CPU image; that does not change the Skia execution mode.
+There is no accelerated Skia binary or runtime fallback wired into `SkiaGraphicsBackend` (the real
+`IGraphicsBackend` implementation) in this revision. The default `CNA_SKIA_MODE=RASTER` build's
+pinned GN arguments disable every Skia GPU API, and `SKIA` construction always selects raster
+regardless of what else is built. SDL may use a GPU only to upload/present the completed CPU image;
+that does not change the Skia execution mode.
 
-A separate, independently pinned Ganesh/OpenGL GN artifact and CMake target (`CNA::SkiaGanesh`) do
-now exist (SKIA-159, [`skia-ganesh-artifact.md`](skia-ganesh-artifact.md)) and are functionally
-verified below the API, but neither `CNA_GRAPHICS_BACKEND=SKIA` nor any other backend selection links
-or constructs them -- there is still no way to select an accelerated mode at runtime.
+A separate, independently pinned Ganesh/OpenGL GN artifact and CMake target (`CNA::SkiaGanesh`,
+SKIA-159) exist, selectable at CMake configure time via `-DCNA_SKIA_MODE=GANESH` (SKIA-160,
+[`skia-ganesh-artifact.md`](skia-ganesh-artifact.md)), and a real, testable
+`SkiaGaneshContext` proves a genuine `GrDirectContext` constructs (or fails transactionally) in that
+mode. Neither is wired into `SkiaGraphicsBackend` itself, though -- there is still no presentable
+Ganesh backbuffer, and ordinary `CNA_GRAPHICS_BACKEND=SKIA` builds default to `RASTER` and are
+completely unaffected.
 
 The accepted [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md) selects raster for this release
 and names Ganesh/OpenGL only as the first future candidate. Any successor accelerated plan must
 reopen the SKIA-6 proof rather than treating its conditional current-release closure as GPU
 evidence. Before such a path can be built or advertised it needs, at minimum:
 
-1. a separately named pinned GN artifact with the selected GPU API enabled (the artifact half is
-   done -- SKIA-159; the CMake target it needs is `CNA::SkiaGanesh`);
+1. a separately named pinned GN artifact with the selected GPU API enabled, plus construction-time
+   mode selection and a mode-specific startup diagnostic (**done** -- SKIA-159/160; `CNA::SkiaGanesh`,
+   `CNA_SKIA_MODE`, `SkiaGaneshContext`);
 2. explicit SDL/native context or device ownership and framebuffer/surface interop;
-3. construction-time mode selection and a mode-specific startup diagnostic;
-4. a tested device-loss/reset and fallback contract; and
-5. the CPU/GPU parity corpus listed in [`skia-verification-boundary.md`](skia-verification-boundary.md).
+3. a tested device-loss/reset and fallback contract; and
+4. the CPU/GPU parity corpus listed in [`skia-verification-boundary.md`](skia-verification-boundary.md).
 
 Until those gates close, missing Skia headers/archives or presenter construction is a hard error,
 not permission to switch implementation. To choose a deliberate non-Skia fallback, use a separate
