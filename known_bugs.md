@@ -633,49 +633,113 @@ comment there for the full per-leg breakdown).
 
 ---
 
-## LLGL backend: two `RenderTargetCube` faces sharing a depth buffer replay out of public order — OPEN
+## LLGL backend: a target revisited after depending on another target replays out of public order — OPEN
 
 **Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-41`,
-`rendertarget_depthstencil_usage_test.cpp`). Root cause identified with confidence; not fixed here
-(the correct fix is architectural -- interleaved cross-bucket replay for aliased resources -- and
-out of scope for a test-wiring task).
+`rendertarget_depthstencil_usage_test.cpp` and `rendertarget_effect_source_test.cpp`). Root cause
+identified with confidence; not fixed here (the correct fix is architectural -- interleaved
+cross-bucket replay, or segmenting every public bind cycle into its own pass -- and out of scope for
+a test-wiring task).
 
-**Symptom:** `rendertarget_depthstencil_usage_test.cpp`'s U2 check (28/29 checks otherwise pass) --
-clear face A and face B of a `RenderTargetCube` to depth 1.0 each, then draw into face A at depth
-0.25, then draw into face B (depth-tested) at depth 0.50 -- expects face B's draw to be REJECTED
-(0.50 is farther than the 0.25 face A's draw already wrote into the depth buffer they share, per
-FNA's own one-`glDepthStencilBuffer`-per-cube convention this backend already implements for
-storage). Instead face B's draw is ACCEPTED, as if the shared depth buffer still read 1.0.
+**Symptom, two independent reproductions of the same root cause:**
+- `rendertarget_depthstencil_usage_test.cpp`'s U2 check (28/29 checks otherwise pass): clear face A
+  and face B of a `RenderTargetCube` to depth 1.0 each, then draw into face A at depth 0.25, then
+  draw into face B (depth-tested) at depth 0.50 -- expects face B's draw to be REJECTED (0.50 is
+  farther than the 0.25 face A's draw already wrote into the depth buffer they share, per FNA's own
+  one-`glDepthStencilBuffer`-per-cube convention this backend already implements for storage).
+  Instead face B's draw is ACCEPTED, as if the shared depth buffer still read 1.0.
+- `rendertarget_effect_source_test.cpp`'s F1 check ("A -> B -> A round trip"): produce a pattern
+  into target A, consume A into target B (an ordinary 3D draw sampling A as a texture), then consume
+  B back into A again, then read A -- expects A to end up holding the pattern (relayed through B).
+  Instead A reads back as `(0,0,0,0)` -- the consume-B-into-A draw sampled B before B had ever been
+  produced into at all.
 
-**Root cause:** each of a `RenderTargetCube`'s 6 faces is its own distinct `LLGL::RenderTarget`
-object (`CreateRenderTargetCube`'s own per-face loop), all six referencing the SAME physical depth
-`LLGL::Texture` -- so `GroupFrameCommandsByTargetEXT()` puts each face's commands in its OWN bucket
-(keyed by that face's own `LLGL::RenderTarget*`), not one shared bucket. Buckets replay fully,
-one at a time, in first-appearance order -- so the public sequence "clear A; clear B; draw A;
-draw B" replays as [face-A bucket: clear, draw] then [face-B bucket: clear, draw] -- face B's own
-EARLIER "clear to depth 1.0" command (queued before face A's draw, but living in face B's own
-bucket) ends up REPLAYED AFTER face A's draw, because bucket-level ordering only respects
-first-appearance of the BUCKET, not the true interleaved position of every command inside it. Face
-B's stale clear then wipes the shared depth value face A's draw had just written, so face B's own
-draw sees a fresh 1.0 instead of face A's 0.25. This is the same general shape as the (now-fixed)
-LLGL-40 swap-chain-bucket-ordering bug, but between two RENDER TARGETS that alias one physical
-resource rather than between a render target and the backbuffer -- `GroupFrameCommandsByTargetEXT`'s
-"replay each target's bucket fully, in first-appearance order" model is correct for buckets that
-never touch each other's resources, and wrong whenever two different-identity buckets alias the same
-underlying GPU memory (as cube faces deliberately do for depth, by design).
+**Root cause:** `GroupFrameCommandsByTargetEXT()` buckets commands by target IDENTITY and replays
+each bucket FULLY, one at a time, in the bucket's own first-appearance order -- correct only when
+buckets never depend on each other's content. Both symptoms break that assumption a different way:
+- U2: two DIFFERENT `LLGL::RenderTarget` objects (one per cube face) alias the SAME physical depth
+  `LLGL::Texture`. The public sequence "clear A; clear B; draw A; draw B" replays as [face-A bucket:
+  clear, draw] then [face-B bucket: clear, draw] -- face B's own EARLIER "clear to 1.0" (queued
+  before face A's draw, but living in face B's bucket) ends up replayed AFTER face A's draw, wiping
+  the shared depth value face A had just written.
+- F1: target A is bound TWICE -- once to be produced, once again (later, after B depends on A) to
+  consume B. Because A's bucket already exists (and already appeared first), the SECOND bind's
+  commands are simply APPENDED to A's existing bucket rather than getting their own later position
+  -- so A's bucket (draining fully before B's bucket even starts) replays its own later "consume
+  B" command before B's bucket has produced anything into B at all.
+
+Both are the same underlying model failure: a bucket, once it has any commands, drains its ENTIRE
+accumulated command list as one contiguous unit at its OWN first-appearance position, regardless of
+whether some of that bucket's LATER commands should, in true public order, run interleaved with (or
+after) some OTHER bucket's commands that appeared in between. This is the same general shape as the
+(now-fixed) `LLGL-40` swap-chain-bucket-ordering bug, generalized: that fix special-cased ONE target
+(the swap chain) to always trail every other bucket, which works because the backbuffer never
+PRODUCES something another bucket depends on. Two ordinary render targets (or two faces sharing one
+resource) can depend on each other in either direction, so no single "always goes last" rule can fix
+this case -- a general fix needs either true interleaved replay across buckets, or replacing the
+whole "one bucket per target identity" model with "one native pass per public bind cycle,
+positioned in true public order" (the real form of `segmentsBindCycles`/`orderedBackbufferSegments`
+these test files' own Contracts describe as the ideal, currently-undeclared-as-true shape).
 
 **Why this needs more than a test-wiring fix:** a real fix requires either (a) true interleaved
-replay across buckets that alias a resource (a general capability the target-identity-bucket
-architecture does not have today), or (b) detecting the aliasing case specifically and special-
-casing cube-face depth replay -- both are architectural changes with real risk to the (large, only
+replay across buckets whenever a later-appearing bucket's commands were queued before some of an
+earlier bucket's own commands, or (b) segmenting every public bind cycle into its own native pass
+regardless of target identity -- both are architectural changes with real risk to the (large, only
 recently stabilized) rest of this backend's frame-replay model, not something to attempt blind at
-the end of a long session. Every OTHER depth/stencil check in the same file (single-target
-preserve/discard, MSAA, colour-vs-depth clear-flag isolation, disposal) passes cleanly, including
-U1 (a single face's own depth surviving its own unbind/rebind cycle) -- this is specifically about
-two DIFFERENT faces' commands interleaving correctly with each other.
+the end of a long session. Every OTHER check in both affected files passes cleanly, including U1 (a
+single cube face's own depth surviving its own unbind/rebind cycle) and every `rendertarget_pass
+_boundary_test.cpp` check (`LLGL-41`'s own already-registered `Llgl_RenderTarget_PassBoundary`,
+43/43) -- this is specifically about two DIFFERENT buckets' commands needing to interleave with each
+other, which no check in that already-passing file happens to require.
 
 **Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
-`rendertarget_depthstencil_usage_test.cpp` until this is resolved).
+`rendertarget_depthstencil_usage_test.cpp` or `rendertarget_effect_source_test.cpp` until this is
+resolved -- the latter also has a second, unrelated, separately-documented crash, see the next
+entry).
+
+---
+
+## LLGL backend: a custom `ShaderEffect` using multiple Vulkan descriptor sets crashes the driver — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-41`,
+`rendertarget_effect_source_test.cpp`'s own C1 check). Root cause identified with confidence; not
+fixed here (a real fix needs SPIR-V reflection to validate shader/layout compatibility before
+attempting pipeline creation, a nontrivial addition, and the narrower option -- rejecting multi-set
+shaders with a clear error -- still needs that same reflection to detect the case at all).
+
+**Symptom:** `rendertarget_effect_source_test.cpp`'s C1 check crashes the whole process
+(`SIGSEGV`) partway through (15/20 legs otherwise pass, 1 crashed) the moment it compiles and first
+uses a custom `ShaderEffect` whose GLSL source declares resources across THREE different Vulkan
+descriptor sets (`layout(set = 1, binding = 0)`, `set = 2`, `set = 3`). `custom.IsEffectValid()`
+reports true (shaderc compiles the GLSL to SPIR-V without error), so the test proceeds to draw with
+it; the crash happens later, inside `LLGL::VKGraphicsPSO::CreateVkPipeline` -> deep inside the
+Vulkan driver itself (`libvulkan_lvp.so`, the lavapipe software rasterizer this project's own test
+environment runs on), confirmed via `gdb`.
+
+**Root cause:** `LlglGraphicsBackend::AcquireCustomEffectLayoutEXT()` builds ONE `VkDescriptorSetLayout`
+(Vulkan descriptor set 0) with three bindings (`PC` at binding 1, `colorMap` at binding 2,
+`samplerState` at binding 3) -- matching this project's OWN `llgl_shadereffect_test.cpp` fixture,
+whose shader correctly omits `set = ...` entirely (`layout(binding = 2) uniform sampler2D
+colorMap;`, defaulting to set 0 in GLSL). `rendertarget_effect_source_test.cpp`'s shared,
+cross-backend fixture shader instead explicitly spreads its resources across sets 1/2/3 -- a
+convention other backends' own custom-effect infrastructure apparently tolerates, but this
+backend's single-descriptor-set `AcquireCustomEffectLayoutEXT()` does not. Creating a
+`VkPipeline` from a SPIR-V module that references descriptor sets the bound `VkPipelineLayout`
+never declared corresponding `VkDescriptorSetLayout`s for is undefined per the Vulkan spec; this
+project's test environment has no validation layers enabled to turn that into a clean
+`VK_ERROR_*` instead of a driver crash.
+
+**Why this needs more than a test-wiring fix:** this backend's custom-effect pipeline layout is a
+genuine, narrower capability than what this shared test fixture assumes (single descriptor set
+only) -- a real fix is either (a) extending `AcquireCustomEffectLayoutEXT`/`CompileProgram` to
+support multiple descriptor sets (a real feature addition, not a bug fix), or (b) adding SPIR-V
+reflection to `CompileProgram` so a shader whose resources do not fit this backend's single-set
+layout is rejected with a clear compile error (matching the `custom.IsEffectValid()` boundary this
+test already has a path for) instead of reaching pipeline creation and crashing. Neither is a
+test-wiring change.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
+`rendertarget_effect_source_test.cpp` until this is resolved).
 
 ---
 

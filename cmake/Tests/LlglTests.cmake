@@ -470,6 +470,24 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     # RenderTargetCube faces sharing one depth buffer, replayed out of public order) hits a real,
     # separate, OPEN finding -- see known_bugs.md's new entry.
 
+    # rendertarget_effect_source_test.cpp: 18/20 legs pass once EnvironmentMapEffect/SkinnedEffect
+    # are declared (like D3D9/D3D11/D3D12/WebGPU already are) as needing a normal/bone-weight-bearing
+    # vertex stream this fixture's plain VertexPositionTexture does not provide. The other two legs
+    # are registered nowhere: F1 hits the same bucket-ordering finding as
+    # rendertarget_depthstencil_usage_test.cpp's own U2 (see known_bugs.md), and C1 crashes the
+    # Vulkan driver via a custom ShaderEffect that uses multiple descriptor sets this backend's
+    # custom-effect pipeline layout does not support -- also known_bugs.md, a separate, distinct
+    # finding. Registered per-leg (not as one supervisor run) specifically so C1's crash cannot take
+    # the other 18 legs' own coverage down with it.
+    cna_llgl_test(cna_test_llgl_rendertarget_effect_source
+                  examples/rendertarget_effect_source_test.cpp)
+    foreach(_llgl_res_leg A1 A2 A3 B1 D1 E1 G1 H1 I1 J1 K1 L1 M1 M2 M3 N1 O1 P1)
+        cna_register_backend_test(NAME "Llgl_RenderTarget_EffectSource_${_llgl_res_leg}"
+            COMMAND cna_test_llgl_rendertarget_effect_source --leg=${_llgl_res_leg}
+            TIMEOUT 90 LABELS "Llgl"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endforeach()
+
     # backbuffer_first_read_test.cpp is deliberately NOT registered here: 9/13 legs pass
     # (A1, A3, A4, A6, B1, B2, B3, B4, C1), but D63/D64/D65 (its own row-pitch matrix, widths
     # 63/64/65 against a fixed height of 17) and E1 (64x32) all fail for a real, identified,

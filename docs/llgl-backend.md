@@ -805,6 +805,17 @@ required element count is authoritative regardless of viewport/round-trips/resiz
 from the same batch, `backbuffer_first_read_test.cpp`, stays unregistered: 9/13 legs pass, but its
 own row-pitch matrix (widths 63/64/65 against a fixed height of 17) and one more (64x32) hit the
 open `FixedHeightDynamicWidth` logical-width finding in `known_bugs.md`.
+Phase LLGL-7's `LLGL-41` `RenderTarget`/`RenderTargetCube` batch adds `Llgl_RenderTarget_
+PassBoundary` (43/43 -- `segmentsBindCycles` reads true even though buckets group by target
+identity, because every command inside one bucket, including each bind's own explicit
+`DiscardContents` `Clear()`, still replays in original public order) and 18 of
+`rendertarget_effect_source_test.cpp`'s own 20 legs, registered individually as `Llgl_RenderTarget_
+EffectSource_<leg>` so its own C1 leg's driver crash cannot take the other 18's coverage down with
+it. `rendertarget_depthstencil_usage_test.cpp` (28/29) and that same C1/F1 pair stay unregistered:
+both trace to a genuine, open, general bucket-ordering finding (a target revisited after depending
+on another target, or two targets aliasing one physical resource, replay out of public order) plus
+(C1 only) a second, unrelated crash from a custom `ShaderEffect` using multiple Vulkan descriptor
+sets -- see `known_bugs.md`'s two open entries for the full analysis.
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED

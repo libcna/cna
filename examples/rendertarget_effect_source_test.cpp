@@ -188,6 +188,8 @@ namespace
     constexpr const char* kBackendName = "D3D11";
 #elif defined(CNA_BACKEND_D3D12)
     constexpr const char* kBackendName = "D3D12";
+#elif defined(CNA_BACKEND_LLGL)
+    constexpr const char* kBackendName = "LLGL";
 #else
 #error "REMED-GFX-152: this backend has no declared render-target effect-source contract."
 #endif
@@ -237,7 +239,7 @@ namespace
      */
     constexpr bool kSkinnedFamiliesAcceptPositionTexture =
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12)
+    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_LLGL)
         false;
 #else
         true;
@@ -281,7 +283,8 @@ namespace
      * sub-check is recorded rather than asserted there, and its face-aliasing checks still run.
      */
     constexpr bool kEnvMapAcceptsPositionTexture =
-#if defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
+#if defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12) || \
+    defined(CNA_BACKEND_LLGL)
         false;
 #else
         true;
