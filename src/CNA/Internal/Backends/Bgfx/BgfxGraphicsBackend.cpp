@@ -4593,18 +4593,63 @@ namespace CNA::Internal::Backends::Bgfx
         const BgfxIndexedRange range = ResolveIndexedRange(
             vb, ib, primitive, primitiveCount, params.startIndex, params.baseVertex);
 
+        // REMED-GFX-211: the GEOMETRY binding's own VertexOffset, which this route dropped
+        // entirely. bgfx has no draw-time base-vertex argument -- setVertexBuffer's startVertex is
+        // the only term that reaches a decoded index, and REMED-GFX-107/118 already deliver
+        // baseVertex through it. The instanced route folds NOTHING into params.baseVertex
+        // (REMED-GFX-202), unlike the ordinary routes, so this stream's whole public offset must be
+        // added to that same term here, exactly once: the fetched element becomes
+        // `VertexOffset + baseVertex + index`. The index buffer is untouched and startIndex stays
+        // an index-element offset. RejectUnsupportedStreamCombination above guarantees exactly one
+        // per-vertex stream on this route, so the fold advances that stream and no other.
+        const GpuVertexStreamBinding* perVertexStream = FirstPerVertexStream(params);
+        const int perVertexOffset = perVertexStream != nullptr ? perVertexStream->vertexOffset : 0;
+        // The shared ValidateVertexStreamRanges runs first, and is strictly tighter, for any draw
+        // that arrived through GraphicsDevice. This exists because Draw*PrimitivesEx is a public
+        // interface method a harness may call with a hand-built GpuDrawParams, and because an
+        // offset that was previously ignored now moves a real native binding -- an out-of-range one
+        // must name its slot here rather than bind past the end of its own buffer.
+        if (perVertexOffset < 0 ||
+            perVertexOffset >= static_cast<int>(static_cast<uint32_t>(vb.vertexCount) -
+                                                range.vertexStart))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "VertexOffset", std::to_string(perVertexOffset),
+                "The requested vertex range exceeds the vertex buffer bound to slot " +
+                    std::to_string(perVertexStream != nullptr ? perVertexStream->slot : 0) + '.');
+        }
+
         ApplyViewportOverride();
 
         const int instCount = std::max(1, instanceCount);
         const uint16_t instStride = static_cast<uint16_t>(instVb.stride > 0 ? instVb.stride : 64);
+
+        // REMED-GFX-213: instance i takes source record `VertexOffset + i / InstanceFrequency` --
+        // the same rule glVertexAttribDivisor and D3D11's InstanceDataStepRate define. bgfx's
+        // public instancing API represents no divisor at all: setInstanceDataBuffer takes only
+        // (buffer, start, num), every supplied record advances exactly once per drawn instance, and
+        // no renderer-specific step-rate mechanism is exposed through it -- so the grouping is
+        // expanded into the instance-data buffer this route already allocates, exactly as
+        // REMED-GFX-213 did for Vulkan.
+        const int instanceFrequency = std::max(1, instanceStream->instanceFrequency);
 
         // REMED-GFX-118: the per-instance stream owes every requested instance its own record.
         // Copying min(requested, available) instead left the surplus instances reading
         // uninitialised transient memory; an over-long instance range is now rejected -- before
         // the transient-capacity probe below, so an invalid request is never reported as a
         // temporary out-of-memory skip.
+        //
+        // REMED-GFX-211/213: what the stream must hold is the highest SOURCE record the draw reads,
+        // which is neither `instanceCount` records nor records starting at zero once the binding
+        // carries an offset and a frequency. This is ValidateInstanceStreamRanges' arithmetic, in
+        // this stream's own elements.
         const std::size_t copyBytes = static_cast<std::size_t>(instCount) * instStride;
-        if (copyBytes > instVb.cpuData.size())
+        const std::int64_t availableRecords =
+            static_cast<std::int64_t>(instVb.cpuData.size() / instStride);
+        const std::int64_t lastSourceRecord =
+            static_cast<std::int64_t>(instanceStream->vertexOffset) +
+            (static_cast<std::int64_t>(instCount) - 1) / instanceFrequency;
+        if (instanceStream->vertexOffset < 0 || lastSourceRecord >= availableRecords)
         {
             throw System::ArgumentOutOfRangeException(
                 "instanceCount", std::to_string(instanceCount),
@@ -4617,7 +4662,26 @@ namespace CNA::Internal::Backends::Bgfx
 
         bgfx::InstanceDataBuffer idb{};
         bgfx::allocInstanceDataBuffer(&idb, static_cast<uint32_t>(instCount), instStride);
-        std::memcpy(idb.data, instVb.cpuData.data(), copyBytes);
+        // REMED-GFX-211: the first source record is this stream's OWN VertexOffset, converted with
+        // this stream's own stride -- never binding 0's stride, and never baseVertex, which
+        // addresses a per-vertex stream only.
+        const uint8_t* instSrc = instVb.cpuData.data() +
+            static_cast<std::size_t>(instanceStream->vertexOffset) * instStride;
+        if (instanceFrequency == 1)
+        {
+            // Frequency 1 keeps the single bulk copy it has always been.
+            std::memcpy(idb.data, instSrc, copyBytes);
+        }
+        else
+        {
+            // Exactly instCount destination records, one per instance, so nothing about the native
+            // binding, the program or the vertex layout moves -- the divisor is a data-preparation
+            // concern only, and no allocation beyond the single instance-data buffer above.
+            for (int i = 0; i < instCount; ++i)
+                std::memcpy(idb.data + static_cast<std::size_t>(i) * instStride,
+                            instSrc + static_cast<std::size_t>(i / instanceFrequency) * instStride,
+                            instStride);
+        }
 
         const Matrix vp = view * projection;
         float vp_col[16];
@@ -4627,19 +4691,29 @@ namespace CNA::Internal::Backends::Bgfx
 
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
+        // REMED-GFX-211: the wireframe path rebases its expanded indices to absolute vertex
+        // elements and then binds the stream from zero, so the geometry binding's offset has to
+        // ride the addend here instead of the native start below -- once, on the same term as
+        // baseVertex.
         const bool useWireframe = wireframe_
             && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
-                                      params.baseVertex, 0, wireTib);
+                                      params.baseVertex + perVertexOffset, 0, wireTib);
         // REMED-GFX-118: bind the exact requested geometry range, the same way the ordinary
         // indexed path has since REMED-GFX-107. This call previously passed the whole-buffer
         // setVertexBuffer/setIndexBuffer overloads, so baseVertex, startIndex and the
         // topology-derived index count never reached the native instanced draw at all -- every
         // instance consumed the complete index buffer from element zero. instanceCount stays
         // independent of this range: it only chooses how many instances consume it.
-        const uint32_t vertexStart = useWireframe ? 0u : range.vertexStart;
+        //
+        // REMED-GFX-211: the geometry binding's VertexOffset joins baseVertex in the native start,
+        // and the bound remainder shrinks by exactly as much, so the binding still ends at the
+        // buffer's last element.
+        const uint32_t vertexStart = useWireframe
+            ? 0u
+            : range.vertexStart + static_cast<uint32_t>(perVertexOffset);
         const uint32_t vertexCount = useWireframe
             ? static_cast<uint32_t>(vb.vertexCount)
-            : range.vertexCount;
+            : static_cast<uint32_t>(vb.vertexCount) - vertexStart;
         bgfx::setVertexBuffer(0, vb.handle, vertexStart, vertexCount);
         vb.MarkSubmitted();
         lastInstancedVertexBindStartEXT_ = vertexStart;

@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
@@ -111,12 +112,13 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 
 // REMED-GFX-123: the binding-offset/InstanceFrequency oracle is asserted only on the backends whose
 // instanced path has actually been corrected to consume VertexBufferBinding.VertexOffset and
-// InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123) and Vulkan
+// InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan and bgfx
 // (REMED-GFX-211/213). The other suite backends run the index-range contract above; whether they
 // honour the binding offsets is a separate question that belongs to its own finding, not to this
-// file's compiled expectations -- for bgfx and WebGPU that finding is REMED-GFX-211/213, still open.
+// file's compiled expectations -- for WebGPU that finding is REMED-GFX-211/213, still open.
 #if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_VULKAN)
+    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_VULKAN) || \
+    defined(CNA_BACKEND_BGFX)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
 #endif
 
@@ -2213,6 +2215,109 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedRangesAllocateNoPerDrawNativeResourc
     ASSERT_NE(nullptr, stats);
     EXPECT_EQ(processVertexBaseline, stats->numDynamicVertexBuffers);
     EXPECT_EQ(processIndexBaseline, stats->numDynamicIndexBuffers);
+}
+
+// REMED-GFX-213: the divisor is expanded into the instance-data buffer this route already
+// allocates, so raising InstanceFrequency must cost nothing a caller can observe -- the SAME number
+// of bgfx submissions, views, primitives and transient bytes as the frequency-1 draw it replaces.
+// A divisor implemented with a second draw, an extra view, a per-frequency program or a wider
+// instance buffer would move one of these counters.
+TEST_F(InstancedDrawRangeTest, BgfxInstanceFrequencyCostsNoExtraSubmissionOrTransientMemory)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = BackbufferLayout();
+    const InstancedFixture fixture = BuildFixture(layout);
+    constexpr int kElementCount = kSlotCount * kVerticesPerSlot;
+
+    VertexBuffer meshBuffer(
+        device, PositionColorDeclaration(), kElementCount, BufferUsage::None);
+    meshBuffer.SetData(fixture.mesh.data(), kElementCount);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices.data(), kElementCount);
+    VertexBuffer instanceBuffer(
+        device, InstanceMatrixDeclaration(), kRowCount, BufferUsage::None);
+    instanceBuffer.SetDataRaw(
+        fixture.instances.data(), kRowCount, static_cast<int>(sizeof(InstanceMatrix)));
+
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+
+    /// One frame of four instanced draws at @p frequency, and the bgfx counters it cost.
+    struct FrameCost
+    {
+        std::uint32_t draws;
+        std::uint32_t prims;
+        std::int32_t transientVb;
+        std::int32_t transientIb;
+        std::uint16_t views;
+    };
+    const auto costOfFrameAt = [&](int frequency, int drawCount) {
+        device.Clear(Color::Black);
+        device.SetVertexBuffers({
+            VertexBufferBinding(&meshBuffer, 0, 0),
+            VertexBufferBinding(&instanceBuffer, 0, frequency),
+        });
+        for (int draw = 0; draw < drawCount; ++draw)
+        {
+            ApplyInstancedEffect(effect);
+            device.DrawInstancedPrimitives(
+                PrimitiveType::TriangleList, 0, 0, kElementCount, 0, 1, kRowCount);
+        }
+        device.Present();
+        // bgfx::getStats() reports the last RENDERED frame, which is one behind the last submitted
+        // one -- a second (empty) Present is what makes the frame just built the one being read.
+        device.Present();
+        const bgfx::Stats* frameStats = bgfx::getStats();
+        EXPECT_NE(nullptr, frameStats);
+        if (frameStats == nullptr)
+            return FrameCost{};
+        return FrameCost{
+            frameStats->numDraw, frameStats->numPrims[bgfx::Topology::TriList],
+            frameStats->transientVbUsed, frameStats->transientIbUsed, frameStats->numViews};
+    };
+
+    // A warm-up frame at each frequency first: the first frame of a process also submits whatever
+    // one-off work device creation left pending, which is not what this leg is measuring.
+    costOfFrameAt(1, 4);
+    costOfFrameAt(2, 4);
+    const FrameCost fourAtOne  = costOfFrameAt(1, 4);
+    const FrameCost eightAtOne = costOfFrameAt(1, 8);
+    const FrameCost fourAtTwo  = costOfFrameAt(2, 4);
+    const FrameCost eightAtTwo = costOfFrameAt(2, 8);
+
+    const auto print = [](const char* leg, const FrameCost& cost) {
+        std::cout << "[ MEASURE  ] REMED-GFX-213 bgfx " << leg << ": submissions=" << cost.draws
+                  << " triList=" << cost.prims << " transientVb=" << cost.transientVb
+                  << " transientIb=" << cost.transientIb << " views=" << cost.views << std::endl;
+    };
+    print("4 draws @frequency=1", fourAtOne);
+    print("8 draws @frequency=1", eightAtOne);
+    print("4 draws @frequency=2", fourAtTwo);
+    print("8 draws @frequency=2", eightAtTwo);
+
+    // The per-draw cost itself, isolated from whatever fixed work a frame carries (the Clear's own
+    // submission above): four more public draws must be four more bgfx submissions, never eight.
+    EXPECT_EQ(4u, eightAtOne.draws - fourAtOne.draws)
+        << "four more public instanced draws must be exactly four more bgfx submissions at "
+           "InstanceFrequency 1";
+    EXPECT_EQ(4u, eightAtTwo.draws - fourAtTwo.draws)
+        << "four more public instanced draws must be exactly four more bgfx submissions at "
+           "InstanceFrequency 2 -- the divisor must not cost a second draw";
+
+    // And the same frame costs the same at either frequency.
+    EXPECT_EQ(fourAtOne.draws, fourAtTwo.draws)
+        << "InstanceFrequency 2 submitted a different number of bgfx draws than frequency 1 ("
+        << fourAtOne.draws << " vs " << fourAtTwo.draws << ')';
+    EXPECT_EQ(fourAtOne.prims, fourAtTwo.prims)
+        << "InstanceFrequency 2 rasterized a different number of primitives than frequency 1";
+    EXPECT_EQ(fourAtOne.transientVb, fourAtTwo.transientVb)
+        << "InstanceFrequency 2 consumed a different amount of transient vertex memory";
+    EXPECT_EQ(fourAtOne.transientIb, fourAtTwo.transientIb)
+        << "InstanceFrequency 2 consumed a different amount of transient index memory";
+    EXPECT_EQ(fourAtOne.views, fourAtTwo.views)
+        << "InstanceFrequency 2 used a different number of bgfx views";
 }
 #endif
 

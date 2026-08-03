@@ -153,11 +153,12 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 #endif
 
 // The backends whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
-// InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123) and Vulkan
+// InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan and bgfx
 // (REMED-GFX-211/213). InstancedDrawRangeTests.cpp uses exactly this set for the same reason.
-// bgfx and WebGPU still ignore both (REMED-GFX-211/213, open for those two backends).
+// WebGPU still ignores both (REMED-GFX-211/213, open for that backend).
 #if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || \
-    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_VULKAN)
+    defined(CNA_BACKEND_D3D12) || defined(CNA_BACKEND_VULKAN) || \
+    defined(CNA_BACKEND_BGFX)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
 #endif
 
@@ -167,12 +168,12 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // exactly that measurement on exactly these backends, so the record is a fact about what they do
 // rather than a gate recording that somebody once believed they were broken; each arm fails the
 // moment its backend is corrected, which is what forces the arm's own removal. Vulkan was in this
-// set until REMED-GFX-211/213 corrected it and every arm here duly failed; it now sits in
-// CNA_INSTANCED_BINDING_OFFSET_ORACLE above, and the two remaining backends keep their own
+// set until REMED-GFX-211/213 corrected it and every arm here duly failed, and bgfx followed it
+// out; both now sit in CNA_INSTANCED_BINDING_OFFSET_ORACLE above, and WebGPU alone keeps its own
 // measured boundary. D3D9 is deliberately NOT here: it is outside
 // CNA_INSTANCED_BINDING_OFFSET_ORACLE too, but no D3D display was available to measure it, and an
 // unmeasured backend must not be asserted either way.
-#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_BACKEND_WEBGPU)
 #define CNA_INSTANCED_OFFSET_DEFECT_MEASURED 1
 #endif
 
@@ -1818,7 +1819,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryIns
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
     EXPECT_EQ(std::string("instance-offset-honoured"), reading)
-        << "REMED-GFX-122/123 corrected this backend: the per-instance binding's own VertexOffset "
+        << "REMED-GFX-122/123/211/213 corrected this backend: the per-instance binding's own VertexOffset "
            "must select records 1..4, not 0..3"
         << DescribeFrame(snapshot, layout);
 #elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
@@ -1898,7 +1899,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryIn
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
     EXPECT_EQ(std::string("vertex-offset-honoured"), reading)
-        << "REMED-GFX-122/123 corrected this backend: the geometry binding's own VertexOffset must "
+        << "REMED-GFX-122/123/211/213 corrected this backend: the geometry binding's own VertexOffset must "
            "skip the decoy triangle on the instanced route too"
         << DescribeFrame(snapshot, layout);
 #elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
@@ -1988,7 +1989,7 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInsta
 
 #ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
     EXPECT_EQ(std::string("both-offsets-honoured"), reading)
-        << "REMED-GFX-122/123 corrected this backend: each binding's own VertexOffset applies to "
+        << "REMED-GFX-122/123/211/213 corrected this backend: each binding's own VertexOffset applies to "
            "its own stream, exactly once"
         << DescribeFrame(snapshot, layout);
 #elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
@@ -2100,8 +2101,8 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
     EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
         << "this backend implements the per-instance divisor -- REMED-GFX-123 by keying D3D11/D3D12's "
            "input layout on the step rate, EasyGL through glVertexAttribDivisor, REMED-GFX-213 by "
-           "expanding the grouping into Vulkan's own instance staging copy: six instances at "
-           "InstanceFrequency 2 must consume records 0,0,1,1,2,2";
+           "expanding the grouping into Vulkan's and bgfx's own instance staging copies: six "
+           "instances at InstanceFrequency 2 must consume records 0,0,1,1,2,2";
 #elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
     EXPECT_EQ(std::string("divisor-1-silently"), atTwo)
         << "REMED-GFX-213 boundary on " << kTriageBackendName << ": an instance buffer holding "
@@ -2377,8 +2378,7 @@ TEST_F(InstancedDrawMultiStreamTest, InstanceFrequencyFixesTheExactConsumedRecor
     });
     effect.Apply();
     // Exactly enough: the SHARED layer must accept it. A backend may still reject afterwards -- it
-    // may implement no instanced path at all, or, like bgfx, size its instance copy by
-    // `instanceCount` records because it has no per-instance divisor (REMED-GFX-213). Those are
+    // may implement no instanced path at all, or bound its own staging copy more tightly. Those are
     // native capability limits, not verdicts on the public range, so they are told apart by the
     // shared gate's own wording: only it names the offending slot.
     try
@@ -3137,5 +3137,140 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsAndFrequencyHoldOnDynamicBuff
         ExpectedCellsForDraw(shifts, kInstanceOffset, kInstanceCount, kFrequency, kBaseColumn),
         "a dynamic per-vertex and a dynamic per-instance buffer, both re-uploaded before the draw, "
         "kept their own VertexOffset and InstanceFrequency");
+}
+
+// ---------------------------------------------------------------------------
+// The three terms together, at a frequency neither the triage nor the return-to-zero legs use: a
+// nonzero per-vertex offset, a nonzero instance offset AND a divisor of three on the same draw.
+// Each of the three can only be dropped, doubled or cross-applied into a different cell set --
+// losing the instance offset lands on records 0,0,0,1,1,1, losing the geometry offset on the mesh
+// decoy, and losing the divisor on records 2..5 rather than 2 and 3.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldAtFrequencyThree)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<InstanceShift> shifts = LiveColumnShifts(6);
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, true, shifts);
+
+    constexpr int kPerVertexOffset = kTriageMeshPrefix + 1 * kVerticesPerSlot;
+    constexpr int kBaseColumn      = 1;
+    constexpr int kInstanceOffset  = 2;
+    constexpr int kFrequency       = 3;
+    constexpr int kInstances       = 6;
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    meshBuffer.SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, kPerVertexOffset, 0),
+        VertexBufferBinding(&matrixBuffer, kInstanceOffset, kFrequency),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyMeshEffect(effect);
+    device.DrawInstancedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstances);
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    ExpectExactlyTheseCellsIgnoringColour(
+        snapshot, layout,
+        ExpectedCellsForDraw(shifts, kInstanceOffset, kInstances, kFrequency, kBaseColumn),
+        "both bindings kept their own nonzero VertexOffset while the instance stream advanced once "
+        "per three instances");
+}
+
+// ---------------------------------------------------------------------------
+// The frequency must be a property of each DRAW, not of the frame or of anything cached across
+// draws: three queued draws at frequencies 2, 1 and 2, in that order, in ONE frame. A backend that
+// carries the intervening frequency-1 state into the third draw lights band 3 as well; one that
+// carries the first draw's 2 into the second loses a cell in band 1. Each draw also has its own
+// pair of offsets, so no leg can pass on another's numbers.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicFrequencyAlternatesWithinOneFrame)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    // Eight instance records, TWO per band: record r displaces `r % 2` columns and `r / 2` bands.
+    std::vector<InstanceShift> shifts;
+    for (int r = 0; r < 8; ++r)
+        shifts.push_back(InstanceShift{r % 2, r / 2});
+    const ClassicOffsetFixture fixture = BuildClassicOffsetFixture(layout, true, shifts);
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(fixture.packed.size()),
+        BufferUsage::None);
+    meshBuffer.SetDataRaw(
+        fixture.packed.data(), static_cast<int>(fixture.packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(fixture.matrices.size()),
+        BufferUsage::None);
+    matrixBuffer.SetDataRaw(
+        fixture.matrices.data(), static_cast<int>(fixture.matrices.size()), 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(fixture.indices16.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+
+    struct AlternatingLeg
+    {
+        int baseColumn;      ///< the geometry group this leg renders
+        int instanceOffset;
+        int frequency;
+        int instanceCount;
+    };
+    // Bands 0, 1 and 2 respectively, so the three legs cannot overlap; the geometry columns are
+    // chosen so the mesh decoy's own cell (4, 2) belongs to none of them.
+    const std::vector<AlternatingLeg> legs{
+        {0, 0, 2, 4},
+        {2, 2, 1, 2},
+        {5, 4, 2, 4},
+    };
+
+    std::vector<ExpectedCell> expected;
+    for (const AlternatingLeg& leg : legs)
+    {
+        device.SetVertexBuffers({
+            VertexBufferBinding(
+                &meshBuffer, kTriageMeshPrefix + leg.baseColumn * kVerticesPerSlot, 0),
+            VertexBufferBinding(&matrixBuffer, leg.instanceOffset, leg.frequency),
+        });
+        ApplyMeshEffect(effect);
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, leg.instanceCount);
+        const std::vector<ExpectedCell> cells = ExpectedCellsForDraw(
+            shifts, leg.instanceOffset, leg.instanceCount, leg.frequency, leg.baseColumn);
+        expected.insert(expected.end(), cells.begin(), cells.end());
+    }
+
+    device.SetRenderTarget(nullptr);
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    ExpectExactlyTheseCellsIgnoringColour(
+        snapshot, layout, expected,
+        "an InstanceFrequency of 2, then 1, then 2 again in the same frame gave each draw its own "
+        "step rate and its own offsets");
 }
 #endif   // CNA_INSTANCED_BINDING_OFFSET_ORACLE
