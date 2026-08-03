@@ -787,13 +787,36 @@ DRI3-capable-Xvfb verification (see above).
 
 ---
 
-## LLGL backend: a custom `ShaderEffect` using multiple Vulkan descriptor sets crashes the driver — OPEN
+## LLGL backend: a custom `ShaderEffect` using multiple Vulkan descriptor sets crashes the driver — FIXED (implementation verified in isolation; end-to-end Vulkan run still needed)
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-41`,
-`rendertarget_effect_source_test.cpp`'s own C1 check). Root cause identified with confidence; not
-fixed here (a real fix needs SPIR-V reflection to validate shader/layout compatibility before
-attempting pipeline creation, a nontrivial addition, and the narrower option -- rejecting multi-set
-shaders with a clear error -- still needs that same reflection to detect the case at all).
+**Status:** fixed by `plan_llgl.md` `LLGL-46`/`LLGL-47` (2026-08-03) via option (b) from this entry's
+own original "why this needs more than a test-wiring fix" analysis: `LlglEffectBackend::CompileProgram()`
+now scans the SPIR-V shaderc just compiled for any `OpDecorate .../DescriptorSet` value other than 0
+(`SpirvUsesOnlyDescriptorSetZero()`, a minimal targeted binary scan -- not a full reflection library,
+matching this class's own established "no SPIRV-Cross dependency" precedent) and fails compilation
+(`compileError_` set, `valid_` stays false, no `LLGL::Shader`/pipeline object ever created) before
+reaching the crash-prone path, instead of letting a mismatched shader through to
+`LLGL::VKGraphicsPSO::CreateVkPipeline`. `rendertarget_effect_source_test.cpp`'s own C1 leg already
+has a graceful escape hatch for exactly this outcome (`if (!custom.IsEffectValid()) { boundary(...);
+return; }`), so the fix does not need to make a multi-descriptor-set shader WORK, only fail safely.
+
+**Verified so far (2026-08-03):** a standalone scratch program (not part of the project, `libshaderc`
+linked directly) compiled the EXACT shader source text from both
+`examples/llgl_shadereffect_test.cpp` (the currently-passing custom-effect test, which omits `set=`
+entirely, defaulting to set 0) and `rendertarget_effect_source_test.cpp`'s own C1 shaders (`set = 1`/
+`set = 2`/`set = 3`) through the real `shaderc_compile_into_spv`, then ran the EXACT
+`SpirvUsesOnlyDescriptorSetZero()` logic now in `LlglGraphicsBackend.cpp` against the real compiled
+bytes: the working shader's SPIR-V is correctly `allowed`, and C1's own vertex AND fragment SPIR-V
+are both correctly `rejected`. A broad OpenGL-module regression sweep (including
+`Llgl_ShaderEffect`, unaffected since that path never reaches shaderc at all on this module) shows no
+regressions.
+
+**Not yet verified end-to-end:** this sandbox's Vulkan module cannot present under its own Xvfb (no
+DRI3), so `rendertarget_effect_source_test.cpp`'s C1 leg itself cannot actually be run through the
+real backend here to confirm the graceful `boundary()` path is reached in practice (as opposed to
+the isolated logic check above) -- the same infrastructure gap `LLGL-45`'s own U2 and `LLGL-46`'s
+Vulkan-module verification hit. `Llgl_RenderTarget_EffectSource_C1` is not registered as a CTest
+until `LLGL-38`'s real-hardware pass or a DRI3-capable Xvfb (`LLGL-55`) can confirm it there.
 
 **Symptom:** `rendertarget_effect_source_test.cpp`'s C1 check crashes the whole process
 (`SIGSEGV`) partway through (15/20 legs otherwise pass, 1 crashed) the moment it compiles and first
@@ -817,17 +840,13 @@ never declared corresponding `VkDescriptorSetLayout`s for is undefined per the V
 project's test environment has no validation layers enabled to turn that into a clean
 `VK_ERROR_*` instead of a driver crash.
 
-**Why this needs more than a test-wiring fix:** this backend's custom-effect pipeline layout is a
-genuine, narrower capability than what this shared test fixture assumes (single descriptor set
-only) -- a real fix is either (a) extending `AcquireCustomEffectLayoutEXT`/`CompileProgram` to
-support multiple descriptor sets (a real feature addition, not a bug fix), or (b) adding SPIR-V
-reflection to `CompileProgram` so a shader whose resources do not fit this backend's single-set
-layout is rejected with a clear compile error (matching the `custom.IsEffectValid()` boundary this
-test already has a path for) instead of reaching pipeline creation and crashing. Neither is a
-test-wiring change.
+**The fix took option (b)** from this entry's own original analysis (reject with a clear error
+rather than extend the pipeline layout to genuinely support multiple sets) -- see this entry's
+opening paragraphs for the implementation and how far it has been verified.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
-`rendertarget_effect_source_test.cpp` until this is resolved).
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-47` -- fixed and verified in isolation (see
+above); `Llgl_RenderTarget_EffectSource_C1` still needs an end-to-end Vulkan run (`LLGL-38`/`LLGL-55`)
+before it can be registered.
 
 ---
 

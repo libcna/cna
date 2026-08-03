@@ -630,7 +630,7 @@ reported before submission.
 | --- | --- | --- | --- | --- |
 | LLGL-45 | P0 | **Replace target-identity bucket replay with ordered render-pass segments.** Preserve the public order of target binds, clears, producer/consumer sampling, back-buffer reads and cube-face operations. Implement real `PreserveContents` across flush/rebind either with load-capable passes, an explicit copy/restore path, or another design proven equivalent; do not rely on incidental one-bucket behaviour or the unconditional swap-chain-last rule. | Register and pass all legs of `rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`, `rendertarget_producer_consumer_test.cpp`, `rendertarget_backbuffer_consumer_test.cpp` and `rendertarget_pass_boundary_test.cpp`, including A→B→A, target→backbuffer→target, shared cube depth and mid-frame readback cases. No ordering-specific exclusion remains. | 🟡 |
 | LLGL-46 | P0 | **Version deferred vertex/index data.** A queued draw must retain the exact buffer contents and native resource lifetime visible at its public draw call even if `SetData()` later overwrites or enlarges the same object. Prefer immutable per-frame slices/ring allocation or explicit versioned upload commands over in-place writes; releasing a replaced buffer must remain deferred until its last queued consumer is submitted. | Register `frontface_winding_test.cpp`; all W3 persistent-buffer reuse entry points pass for indexed/non-indexed and dynamic/static buffers on Vulkan and OpenGL. Add a focused grow-capacity regression proving the old resource is neither freed early nor reused with new contents. | 🟡 |
-| LLGL-47 | P0 | **Make custom-effect resource layouts safe.** Reflect or validate compiled GLSL/SPIR-V before LLGL pipeline creation. Either build every referenced descriptor set/binding or reject unsupported set numbers, resource types and stage visibility with a deterministic CNA exception; malformed/unsupported shader input must never reach a driver-crash path. | Enable `rendertarget_effect_source_test.cpp` C1 and add shaders using sets 0+1, missing bindings and conflicting declarations. Each supported shader renders correctly; each unsupported shader throws before `CreatePipelineState`. Run with Vulkan validation enabled where available. | ⬜ |
+| LLGL-47 | P0 | **Make custom-effect resource layouts safe.** Reflect or validate compiled GLSL/SPIR-V before LLGL pipeline creation. Either build every referenced descriptor set/binding or reject unsupported set numbers, resource types and stage visibility with a deterministic CNA exception; malformed/unsupported shader input must never reach a driver-crash path. | Enable `rendertarget_effect_source_test.cpp` C1 and add shaders using sets 0+1, missing bindings and conflicting declarations. Each supported shader renders correctly; each unsupported shader throws before `CreatePipelineState`. Run with Vulkan validation enabled where available. | 🟡 |
 | LLGL-48 | P1 | **Use collision-free typed pipeline-cache keys.** Replace ad-hoc multiply/truncate packing with key structs whose equality and hash include every field consumed by the relevant LLGL pipeline descriptor: vertex layout, topology, render-pass signature, depth/raster state, all blend factors/functions/write masks, full 32-bit `MultiSampleMask`, scissor enable and effective sample count. | Register `gfx077_colorwritechannels_3d_test.cpp`; add pairwise tests for blend factors/functions and masks that differ only above bit 3, including an 8x-MSAA mask when supported. Instrumented test builds assert that descriptor equality and key equality cannot disagree. `Llgl_BasicEffect` alpha blending remains green. | ⬜ |
 | LLGL-49 | P1 | **Track and capture sampler state per texture slot.** Store at least every slot consumed by stock effects, acquire the correct sampler for each slot, and capture those sampler objects in each deferred command so later state changes cannot leak backward. | Register `stock_effect_sampler_contract_test.cpp` at 65/65 or better. Add independent filter/address tests for `DualTextureEffect` slot 1 and all five `PbrEffect` maps; slot 0 changes must not alter another slot and vice versa. | ⬜ |
 | LLGL-50 | P1 | **Separate logical back-buffer dimensions from presentation scaling.** `FixedHeightDynamicWidth` may choose a presentation rectangle, but it must not silently shrink an explicitly requested readable back buffer or make valid columns unreachable. Define the mode contract once and make draw, readback, viewport and resize code use the same dimensions. | Register and fully pass `backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp` and `deferred_source_lifetime_test.cpp` with their 72x36 cases. Add wider-than-window and narrower-than-window aspect tests plus resize round-trips. | ⬜ |
@@ -700,6 +700,30 @@ render target/mip render target/lighting/ShaderEffect/resize/occlusion query/the
 files) shows no regressions. **Not yet verified on the Vulkan module**, same infrastructure gap as
 `LLGL-45`'s own U2 (this sandbox's Xvfb has no DRI3) -- needs `LLGL-38`'s real-hardware pass or a
 DRI3-capable Xvfb (`LLGL-55`) to confirm there too before this row can close fully.
+
+**`LLGL-47` progress (2026-08-03): fixed via option (b) (reject, don't extend); verified in
+isolation, end-to-end Vulkan run still needed.** `LlglEffectBackend::CompileProgram()` now scans the
+SPIR-V `shaderc` just compiled for any `OpDecorate .../DescriptorSet` value other than 0
+(`SpirvUsesOnlyDescriptorSetZero()`, a minimal targeted binary scan reading only the SPIR-V header
+and `OpDecorate` shape -- not a full reflection library, matching this class's own doc comment that
+already declined SPIRV-Cross as an added dependency) and fails compilation before any
+`LLGL::Shader`/pipeline object is created, instead of letting a shader whose resources spread across
+multiple Vulkan descriptor sets reach `LLGL::VKGraphicsPSO::CreateVkPipeline` (previously undefined
+per the Vulkan spec and a real driver crash, see `known_bugs.md`).
+`rendertarget_effect_source_test.cpp`'s own C1 leg already has a graceful escape hatch for exactly
+this outcome (`if (!custom.IsEffectValid()) { boundary(...); return; }`), so the fix only needs to
+make an unsupported shader fail safely, not actually work. **Verified in isolation**: a standalone
+scratch program (not part of the project) compiled the EXACT shader source text from both
+`examples/llgl_shadereffect_test.cpp` (the currently-passing custom-effect test, set 0 implicit) and
+`rendertarget_effect_source_test.cpp`'s own C1 shaders (`set = 1`/`set = 2`/`set = 3`) through the
+real `shaderc_compile_into_spv`, then ran the exact scan logic now in the backend against the real
+compiled bytes: the working shader is correctly `allowed`, C1's own vertex and fragment SPIR-V are
+both correctly `rejected`. A broad OpenGL-module regression sweep (including `Llgl_ShaderEffect`,
+unaffected since GLSL never reaches `shaderc` at all on that module) shows no regressions. **Not yet
+verified end-to-end**: this sandbox's Vulkan module cannot present under its own Xvfb (no DRI3), so
+C1 itself cannot actually be run through the real backend here -- same infrastructure gap as
+`LLGL-45`'s U2 and `LLGL-46`'s Vulkan-module verification. `Llgl_RenderTarget_EffectSource_C1` is not
+registered until `LLGL-38`'s real-hardware pass or a DRI3-capable Xvfb (`LLGL-55`) confirms it.
 
 ---
 

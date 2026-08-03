@@ -418,6 +418,66 @@ namespace CNA::Internal::Backends::Llgl
             shaderc_compiler_release(compiler);
             return true;
         }
+
+        // LLGL-47: AcquireCustomEffectLayoutEXT() below builds exactly ONE VkDescriptorSetLayout
+        // (Vulkan descriptor set 0); creating a VkPipeline from a SPIR-V module that references any
+        // OTHER descriptor set is undefined per the Vulkan spec and previously crashed the driver
+        // (LLGL::VKGraphicsPSO::CreateVkPipeline, see known_bugs.md) instead of failing cleanly,
+        // since shaderc itself compiles multi-set GLSL without complaint. Scanning compiled SPIR-V
+        // for OpDecorate/DescriptorSet is a minimal, targeted read of one well-defined, stable part
+        // of the binary format -- not a full reflection library (this class's own doc comment
+        // already declines SPIRV-Cross as an added dependency, and this scan needs none either).
+        bool SpirvUsesOnlyDescriptorSetZero(const std::vector<std::uint8_t>& spirv)
+        {
+            constexpr std::uint32_t kSpirvMagic = 0x07230203u;
+            constexpr std::uint32_t kOpDecorate = 71u;
+            constexpr std::uint32_t kDecorationDescriptorSet = 34u;
+            constexpr std::size_t kHeaderWords = 5;
+
+            if (spirv.size() < kHeaderWords * sizeof(std::uint32_t))
+                return true; // too short to be a real module -- let shader creation report the error
+
+            std::uint32_t magic = 0;
+            std::memcpy(&magic, spirv.data(), sizeof(magic));
+            if (magic != kSpirvMagic)
+                return true; // unexpected byte order/format -- do not guess, let LLGL validate it
+
+            const std::size_t totalWords = spirv.size() / sizeof(std::uint32_t);
+            std::size_t wordIndex = kHeaderWords;
+            while (wordIndex < totalWords)
+            {
+                std::uint32_t instructionHeader = 0;
+                std::memcpy(&instructionHeader, spirv.data() + wordIndex * sizeof(std::uint32_t),
+                           sizeof(instructionHeader));
+                const std::uint32_t wordCount = instructionHeader >> 16;
+                const std::uint32_t opcode = instructionHeader & 0xFFFFu;
+                // Malformed (a zero-length instruction, or one reaching past the module's own word
+                // count) -- stop scanning and let LLGL's own shader creation report the real error
+                // instead of reading further into memory this module never claimed.
+                if (wordCount == 0 || wordIndex + wordCount > totalWords)
+                    break;
+
+                // OpDecorate %target DescriptorSet <literal>: target (word 1), decoration (word 2),
+                // literal (word 3) -- four words total including the instruction header itself.
+                if (opcode == kOpDecorate && wordCount >= 4)
+                {
+                    std::uint32_t decoration = 0;
+                    std::memcpy(&decoration, spirv.data() + (wordIndex + 2) * sizeof(std::uint32_t),
+                               sizeof(decoration));
+                    if (decoration == kDecorationDescriptorSet)
+                    {
+                        std::uint32_t setNumber = 0;
+                        std::memcpy(&setNumber, spirv.data() + (wordIndex + 3) * sizeof(std::uint32_t),
+                                   sizeof(setNumber));
+                        if (setNumber != 0)
+                            return false;
+                    }
+                }
+
+                wordIndex += wordCount;
+            }
+            return true;
+        }
     }
 
     /// A sampled resource resolved from whichever concrete ITextureBackend the caller handed in.
@@ -1076,6 +1136,16 @@ namespace CNA::Internal::Backends::Llgl
             if (!CompileGlslToSpirv(fragSrc, kShadercFragmentShader, "ShaderEffect.frag", fragSpirv, shadercError))
             {
                 compileError_ = "fragment shader: " + shadercError;
+                return false;
+            }
+
+            // LLGL-47: reject BEFORE shader/pipeline creation rather than crash inside the Vulkan
+            // driver later -- see SpirvUsesOnlyDescriptorSetZero()'s own doc comment.
+            if (!SpirvUsesOnlyDescriptorSetZero(vertSpirv) || !SpirvUsesOnlyDescriptorSetZero(fragSpirv))
+            {
+                compileError_ = "shader references a Vulkan descriptor set other than 0, which this "
+                                "backend's single-descriptor-set custom-effect pipeline layout does "
+                                "not support";
                 return false;
             }
 
