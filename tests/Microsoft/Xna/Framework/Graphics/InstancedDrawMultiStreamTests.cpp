@@ -81,6 +81,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -156,6 +157,18 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // this set for the same reason. Vulkan, bgfx and WebGPU still ignore it (REMED-GFX-211).
 #if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_D3D12)
 #define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
+#endif
+
+// The three backends the REMED-GFX-211/213 checkpoint triage MEASURED, at pixel level, dropping
+// both bindings' VertexOffset and rendering InstanceFrequency 2 at an effective divisor of one --
+// silently, on the classic supported shape. The triage group at the bottom of this file asserts
+// exactly that measurement on exactly these backends, so the record is a fact about what they do
+// rather than a gate recording that somebody once believed they were broken; each arm fails the
+// moment its backend is corrected, which is what forces the arm's own removal. D3D9 is deliberately
+// NOT here: it is outside CNA_INSTANCED_BINDING_OFFSET_ORACLE too, but no D3D display was available
+// to measure it, and an unmeasured backend must not be asserted either way.
+#if defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU)
+#define CNA_INSTANCED_OFFSET_DEFECT_MEASURED 1
 #endif
 
 namespace
@@ -1539,6 +1552,665 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOff
         "the per-instance stream's own VertexOffset skips its decoy record");
 }
 #endif   // CNA_INSTANCED_BINDING_OFFSET_ORACLE
+
+// ===========================================================================
+// The CHECKPOINT TRIAGE group (REMED-GFX-211, REMED-GFX-213).
+//
+// The legs above are gated to the backends already known to honour the contract they assert. These
+// four run on EVERY backend that rasterizes an instanced draw at all -- the three that were never
+// taught to consume `VertexBufferBinding.VertexOffset` on this route included -- and instead of
+// asserting one expected frame they CLASSIFY the frame against every reading a defect of this class
+// can produce, then print the reading and the full cell map unconditionally. A gate that merely
+// excludes a backend records that somebody once believed it was broken; a leg that names which
+// records the backend actually consumed records what it does, and stays useful when it is fixed.
+//
+// The shape is deliberately the CLASSIC one: exactly one per-vertex stream and exactly one
+// per-instance stream, the arrangement every instancing backend already accepts and which reaches
+// no `MultiStreamVertexInput` capability check by design. Whatever these legs measure is therefore
+// measured on a SUPPORTED public path, which is what separates a checkpoint blocker from deferred
+// capability work.
+// ===========================================================================
+
+namespace
+{
+    /// The compile-time backend identity, so a printed measurement names its own backend rather
+    /// than relying on the reader to remember which build directory produced the log.
+    constexpr const char* kTriageBackendName =
+#if defined(CNA_BACKEND_EASYGL)
+        "EasyGL";
+#elif defined(CNA_BACKEND_VULKAN)
+        "Vulkan";
+#elif defined(CNA_BACKEND_BGFX)
+        "bgfx";
+#elif defined(CNA_BACKEND_WEBGPU)
+        "WebGPU";
+#elif defined(CNA_BACKEND_D3D9)
+        "D3D9";
+#elif defined(CNA_BACKEND_D3D11)
+        "D3D11";
+#elif defined(CNA_BACKEND_D3D12)
+        "D3D12";
+#else
+        "unknown";
+#endif
+
+    /// The column and band a single per-instance record displaces its geometry by.
+    struct InstanceShift
+    {
+        int column;
+        int band;
+    };
+
+    /// The triage mesh's own decoy cell. Deliberately NOT the fixture's corner decoy at
+    /// (kPositionDecoyColumn, kPositionDecoyBand): a per-vertex offset dropped there displaces its
+    /// four instances to columns 7..10 and bands 3..4, so three of the four fall off the target and
+    /// the reading loses the resolution that tells "the geometry stream read its decoy" apart from
+    /// "the draw rendered almost nothing". From (4, 2) every instance stays on the grid.
+    constexpr int kTriageMeshDecoyColumn = 4;
+    constexpr int kTriageMeshDecoyBand = 2;
+
+    /// The triage mesh's decoy prefix, and therefore its "skip the decoy" VertexOffset.
+    constexpr int kTriageMeshPrefix = kVerticesPerSlot;
+
+    /// The packed 16-byte position+colour vertex every instancing backend recognizes -- the classic
+    /// single per-vertex stream, so nothing here depends on multi-stream input.
+    struct TriagePackedVertex
+    {
+        PositionRecord position;
+        ColorRecord color;
+    };
+    static_assert(sizeof(TriagePackedVertex) == 16);
+
+    VertexDeclaration TriagePackedDeclaration()
+    {
+        return VertexDeclaration(
+            16,
+            {
+                VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            });
+    }
+
+    /// The triage geometry stream: optionally one decoy triangle at the triage decoy cell, then one
+    /// live triangle per column in `kLiveBand`.
+    std::vector<TriagePackedVertex> BuildTriagePackedStream(const GridLayout& layout, bool withDecoy)
+    {
+        std::vector<TriagePackedVertex> packed;
+        if (withDecoy)
+        {
+            const auto decoy = GroupTriangle(layout, kTriageMeshDecoyColumn, kTriageMeshDecoyBand);
+            for (int v = 0; v < kVerticesPerSlot; ++v)
+                packed.push_back(TriagePackedVertex{
+                    decoy[static_cast<std::size_t>(v)], RecordForCode(ColorCode::Prefix)});
+        }
+        for (int group = 0; group < kSlotCount; ++group)
+        {
+            const auto triangle = GroupTriangle(layout, group, kLiveBand);
+            const ColorRecord color = RecordForCode(LiveCodeForGroup(group));
+            for (int v = 0; v < kVerticesPerSlot; ++v)
+                packed.push_back(TriagePackedVertex{
+                    triangle[static_cast<std::size_t>(v)], color});
+        }
+        return packed;
+    }
+
+    std::vector<WholeMatrixRecord> MatricesFromShifts(const std::vector<InstanceShift>& shifts)
+    {
+        std::vector<WholeMatrixRecord> matrices;
+        matrices.reserve(shifts.size());
+        for (const InstanceShift& shift : shifts)
+            matrices.push_back(MakeWholeMatrixRecord(shift.column, shift.band));
+        return matrices;
+    }
+
+    /// The distinct cells @p instanceCount instances light when the geometry group's base cell is
+    /// (@p baseColumn, @p baseBand) and instance `i` consumes record
+    /// `firstRecord + i / divisor` of @p shifts. A record displaced off the target is clipped and
+    /// therefore lights nothing, and a divisor greater than one repeats a cell, so both are folded
+    /// out here -- the reading is a SET of lit cells, not a sequence.
+    std::vector<ExpectedCell> CellsForDraw(
+        const std::vector<InstanceShift>& shifts, int firstRecord, int instanceCount, int divisor,
+        int baseColumn, int baseBand)
+    {
+        std::vector<ExpectedCell> cells;
+        for (int i = 0; i < instanceCount; ++i)
+        {
+            const int record = firstRecord + i / divisor;
+            if (record < 0 || static_cast<std::size_t>(record) >= shifts.size())
+                continue;
+            const int column = baseColumn + shifts[static_cast<std::size_t>(record)].column;
+            const int band = baseBand + shifts[static_cast<std::size_t>(record)].band;
+            if (column < 0 || column >= kSlotCount || band < 0 || band >= kBandCount)
+                continue;
+            const bool alreadyListed = std::any_of(
+                cells.begin(), cells.end(), [column, band](const ExpectedCell& cell) {
+                    return cell.column == column && cell.band == band;
+                });
+            if (!alreadyListed)
+                cells.push_back(ExpectedCell{column, band, ColorCode::Unknown});
+        }
+        return cells;
+    }
+
+    /// One candidate reading of a triage frame: the cells it lights and the name the record keeps.
+    struct FrameReading
+    {
+        const char* name;
+        std::vector<ExpectedCell> cells;
+    };
+
+    /// True when exactly @p cells are lit and no pixel outside them is. The "nothing else lit"
+    /// half is what keeps one reading from matching another's superset.
+    bool FrameShowsExactly(
+        const FrameSnapshot& snapshot, const GridLayout& layout,
+        const std::vector<ExpectedCell>& cells)
+    {
+        int accounted = 0;
+        for (const ExpectedCell& cell : cells)
+        {
+            const int lit = CountLitInCell(snapshot, layout, cell.column, cell.band);
+            if (lit <= 0)
+                return false;
+            accounted += lit;
+        }
+        return accounted == snapshot.CountLit();
+    }
+
+    std::string ReadFrame(
+        const FrameSnapshot& snapshot, const GridLayout& layout,
+        const std::vector<FrameReading>& readings)
+    {
+        for (const FrameReading& reading : readings)
+            if (FrameShowsExactly(snapshot, layout, reading.cells))
+                return reading.name;
+        return "UNCLASSIFIED";
+    }
+
+    /// A triage leg that does not print what it measured leaves nothing behind when it is removed,
+    /// so every one of them prints its reading AND the full cell map whether it passes or fails.
+    void PrintTriageMeasurement(
+        const char* ticket, const char* leg, const std::string& reading,
+        const FrameSnapshot& snapshot, const GridLayout& layout)
+    {
+        std::cout << "[  TRIAGE  ] " << ticket << ' ' << kTriageBackendName << ' ' << leg
+                  << ": reading = " << reading << DescribeFrame(snapshot, layout) << std::endl;
+    }
+
+    /// Runs @p draw and returns an empty string, or the exception text when it is rejected. A
+    /// rejection is a legitimate outcome of every leg here -- it is precisely what separates
+    /// "declares the limit and refuses" from "accepts and renders the wrong records".
+    template <typename Draw>
+    std::string RejectionTextOf(Draw&& draw)
+    {
+        try
+        {
+            draw();
+        }
+        catch (const std::exception& e)
+        {
+            return std::string(e.what());
+        }
+        return std::string();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// REMED-GFX-211 leg A: the PER-INSTANCE stream's own VertexOffset, on the classic 1+1 shape, with
+// the per-vertex offset held at zero so nothing else can move the geometry. One decoy record sits
+// in front of the four live ones, so dropping the offset lights the decoy's own cell (5, 3) and
+// loses the last live record's (3, 1).
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryInstancingBackend)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<TriagePackedVertex> packed = BuildTriagePackedStream(layout, false);
+
+    std::vector<InstanceShift> shifts;
+    shifts.push_back(InstanceShift{kColumnDecoyShift, kBandDecoyShift});
+    for (int i = 0; i < kInstanceCount; ++i)
+        shifts.push_back(InstanceShift{i, i / kBandStreamFrequency});
+    const std::vector<WholeMatrixRecord> matrices = MatricesFromShifts(shifts);
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(packed.size()), BufferUsage::None);
+    meshBuffer.SetDataRaw(packed.data(), static_cast<int>(packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(matrices.size()), BufferUsage::None);
+    matrixBuffer.SetDataRaw(matrices.data(), static_cast<int>(matrices.size()), 64);
+    const std::vector<std::uint16_t> indices = BuildIdentityIndices16();
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, 0, 0),
+        VertexBufferBinding(&matrixBuffer, 1, 1),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyMeshEffect(effect);
+    const std::string rejection = RejectionTextOf([&] {
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+    });
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    const std::string reading = rejection.empty()
+        ? ReadFrame(snapshot, layout, {
+              {"instance-offset-honoured", CellsForDraw(shifts, 1, kInstanceCount, 1, 0, kLiveBand)},
+              {"instance-offset-ignored", CellsForDraw(shifts, 0, kInstanceCount, 1, 0, kLiveBand)},
+          })
+        : "rejected: " + rejection;
+    PrintTriageMeasurement("REMED-GFX-211", "legA(instance-offset)", reading, snapshot, layout);
+
+#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
+    EXPECT_EQ(std::string("instance-offset-honoured"), reading)
+        << "REMED-GFX-122/123 corrected this backend: the per-instance binding's own VertexOffset "
+           "must select records 1..4, not 0..3"
+        << DescribeFrame(snapshot, layout);
+#elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
+    EXPECT_EQ(std::string("instance-offset-ignored"), reading)
+        << "REMED-GFX-211 boundary on " << kTriageBackendName << ": this backend was measured "
+           "consuming instance records 0..3 instead of the requested 1..4 -- the decoy record's "
+           "own cell is lit and the last live record is lost. If this now reports the offset "
+           "honoured the defect is FIXED here: delete this arm and add the backend to "
+           "CNA_INSTANCED_BINDING_OFFSET_ORACLE"
+        << DescribeFrame(snapshot, layout);
+#else
+    EXPECT_NE(std::string("UNCLASSIFIED"), reading)
+        << "REMED-GFX-211 triage on " << kTriageBackendName << ": the frame matched no reading "
+           "this leg can name, so the measurement is not decisive and the ticket cannot be "
+           "classified from it"
+        << DescribeFrame(snapshot, layout);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// REMED-GFX-211 leg B: the PER-VERTEX side of the same classic route, isolated. The per-instance
+// offset is zero and the geometry stream carries the decoy, so this leg answers -- independently of
+// leg A -- whether the geometry binding's own offset survives. The ticket asserts "the per-vertex
+// side is equally affected"; nothing in the record measured it.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryInstancingBackend)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<TriagePackedVertex> packed = BuildTriagePackedStream(layout, true);
+
+    std::vector<InstanceShift> shifts;
+    for (int i = 0; i < kInstanceCount; ++i)
+        shifts.push_back(InstanceShift{i, i / kBandStreamFrequency});
+    const std::vector<WholeMatrixRecord> matrices = MatricesFromShifts(shifts);
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(packed.size()), BufferUsage::None);
+    meshBuffer.SetDataRaw(packed.data(), static_cast<int>(packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(matrices.size()), BufferUsage::None);
+    matrixBuffer.SetDataRaw(matrices.data(), static_cast<int>(matrices.size()), 64);
+    const std::vector<std::uint16_t> indices = BuildIdentityIndices16();
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, kTriageMeshPrefix, 0),
+        VertexBufferBinding(&matrixBuffer, 0, 1),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyMeshEffect(effect);
+    const std::string rejection = RejectionTextOf([&] {
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+    });
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    const std::string reading = rejection.empty()
+        ? ReadFrame(snapshot, layout, {
+              {"vertex-offset-honoured",
+               CellsForDraw(shifts, 0, kInstanceCount, 1, 0, kLiveBand)},
+              {"vertex-offset-ignored",
+               CellsForDraw(shifts, 0, kInstanceCount, 1,
+                            kTriageMeshDecoyColumn, kTriageMeshDecoyBand)},
+          })
+        : "rejected: " + rejection;
+    PrintTriageMeasurement("REMED-GFX-211", "legB(per-vertex-offset)", reading, snapshot, layout);
+
+#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
+    EXPECT_EQ(std::string("vertex-offset-honoured"), reading)
+        << "REMED-GFX-122/123 corrected this backend: the geometry binding's own VertexOffset must "
+           "skip the decoy triangle on the instanced route too"
+        << DescribeFrame(snapshot, layout);
+#elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
+    EXPECT_EQ(std::string("vertex-offset-ignored"), reading)
+        << "REMED-GFX-211 boundary on " << kTriageBackendName << ": the PER-VERTEX side of the "
+           "classic instanced route drops its binding's VertexOffset too -- every instance renders "
+           "the decoy triangle. If this now reports the offset honoured the defect is FIXED here: "
+           "delete this arm and add the backend to CNA_INSTANCED_BINDING_OFFSET_ORACLE"
+        << DescribeFrame(snapshot, layout);
+#else
+    EXPECT_NE(std::string("UNCLASSIFIED"), reading)
+        << "REMED-GFX-211 triage on " << kTriageBackendName << ": the frame matched no reading "
+           "this leg can name, so the per-vertex side cannot be classified from it"
+        << DescribeFrame(snapshot, layout);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// REMED-GFX-211 leg C: BOTH offsets nonzero and DIFFERENT (3 vertices, 1 instance record), so the
+// three failures legs A and B cannot see are separated too -- one binding's offset applied to both
+// streams, the instance offset applied twice, and both offsets lost together. Two tail records past
+// the live four give the double-application reading somewhere real to land.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInstancingBackend)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<TriagePackedVertex> packed = BuildTriagePackedStream(layout, true);
+
+    std::vector<InstanceShift> shifts;
+    shifts.push_back(InstanceShift{kColumnDecoyShift, kBandDecoyShift});
+    for (int i = 0; i < kInstanceCount; ++i)
+        shifts.push_back(InstanceShift{i, i / kBandStreamFrequency});
+    shifts.push_back(InstanceShift{6, 2});
+    shifts.push_back(InstanceShift{7, 2});
+    const std::vector<WholeMatrixRecord> matrices = MatricesFromShifts(shifts);
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(packed.size()), BufferUsage::None);
+    meshBuffer.SetDataRaw(packed.data(), static_cast<int>(packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(matrices.size()), BufferUsage::None);
+    matrixBuffer.SetDataRaw(matrices.data(), static_cast<int>(matrices.size()), 64);
+    const std::vector<std::uint16_t> indices = BuildIdentityIndices16();
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kMeshElementCount);
+
+    RenderTarget2D target = MakeTarget();
+    BasicEffect effect(device);
+
+    device.SetVertexBuffers({
+        VertexBufferBinding(&meshBuffer, kTriageMeshPrefix, 0),
+        VertexBufferBinding(&matrixBuffer, 1, 1),
+    });
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    ApplyMeshEffect(effect);
+    const std::string rejection = RejectionTextOf([&] {
+        device.DrawInstancedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kInstanceCount);
+    });
+    device.SetRenderTarget(nullptr);
+
+    const FrameSnapshot snapshot = CaptureTarget(target);
+    const std::string reading = rejection.empty()
+        ? ReadFrame(snapshot, layout, {
+              {"both-offsets-honoured",
+               CellsForDraw(shifts, 1, kInstanceCount, 1, 0, kLiveBand)},
+              {"instance-offset-ignored",
+               CellsForDraw(shifts, 0, kInstanceCount, 1, 0, kLiveBand)},
+              {"vertex-offset-ignored",
+               CellsForDraw(shifts, 1, kInstanceCount, 1,
+                            kTriageMeshDecoyColumn, kTriageMeshDecoyBand)},
+              {"both-offsets-ignored",
+               CellsForDraw(shifts, 0, kInstanceCount, 1,
+                            kTriageMeshDecoyColumn, kTriageMeshDecoyBand)},
+              {"instance-offset-applied-twice",
+               CellsForDraw(shifts, 2, kInstanceCount, 1, 0, kLiveBand)},
+              {"vertex-offset-applied-to-instance-stream",
+               CellsForDraw(shifts, kTriageMeshPrefix, kInstanceCount, 1, 0, kLiveBand)},
+          })
+        : "rejected: " + rejection;
+    PrintTriageMeasurement("REMED-GFX-211", "legC(both-offsets)", reading, snapshot, layout);
+
+#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
+    EXPECT_EQ(std::string("both-offsets-honoured"), reading)
+        << "REMED-GFX-122/123 corrected this backend: each binding's own VertexOffset applies to "
+           "its own stream, exactly once"
+        << DescribeFrame(snapshot, layout);
+#elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
+    EXPECT_EQ(std::string("both-offsets-ignored"), reading)
+        << "REMED-GFX-211 boundary on " << kTriageBackendName << ": BOTH bindings lose their own "
+           "VertexOffset together -- the reading is neither of the single-sided failures, and it "
+           "is not a cross-applied or doubly-applied offset either, so the two streams fail "
+           "independently and a correction must carry both. If this now reports both honoured the "
+           "defect is FIXED here: delete this arm and add the backend to "
+           "CNA_INSTANCED_BINDING_OFFSET_ORACLE"
+        << DescribeFrame(snapshot, layout);
+#else
+    EXPECT_NE(std::string("UNCLASSIFIED"), reading)
+        << "REMED-GFX-211 triage on " << kTriageBackendName << ": the frame matched none of the "
+           "six readings this leg can name"
+        << DescribeFrame(snapshot, layout);
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// REMED-GFX-213: the per-instance DIVISOR on the classic 1+1 shape. Six instances at
+// InstanceFrequency 2 must consume records 0,0,1,1,2,2; a backend that has no divisor consumes
+// 0,1,2,3,4,5 and one that collapses the stream consumes 0 six times, and the three light three
+// visibly different cell sets. The instance buffer holds SIX records -- twice the three a correct
+// divisor needs -- so neither the shared range gate nor a backend sizing its own copy by
+// `instanceCount` can refuse the draw, which is the exact inference the ticket records as unmeasured.
+//
+// A frequency-1 control on the same buffer proves the leg can see the divisor-1 sequence at all,
+// and a return to frequency 2 afterwards proves the first reading was not stale state.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEveryInstancingBackend)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<TriagePackedVertex> packed = BuildTriagePackedStream(layout, false);
+
+    // Six records, every one in its own cell, so any consumed sequence is readable from one frame.
+    const std::vector<InstanceShift> shifts{
+        {0, 0}, {1, 0}, {2, 0}, {3, 1}, {4, 1}, {5, 1},
+    };
+    const std::vector<WholeMatrixRecord> matrices = MatricesFromShifts(shifts);
+    constexpr int kDivisorInstances = 6;
+    constexpr int kDivisor = 2;
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(packed.size()), BufferUsage::None);
+    meshBuffer.SetDataRaw(packed.data(), static_cast<int>(packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(matrices.size()), BufferUsage::None);
+    matrixBuffer.SetDataRaw(matrices.data(), static_cast<int>(matrices.size()), 64);
+    const std::vector<std::uint16_t> indices = BuildIdentityIndices16();
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kMeshElementCount);
+
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+
+    const std::vector<FrameReading> divisorReadings{
+        {"divisor-2-honoured",
+         CellsForDraw(shifts, 0, kDivisorInstances, kDivisor, 0, kLiveBand)},
+        {"divisor-1-silently",
+         CellsForDraw(shifts, 0, kDivisorInstances, 1, 0, kLiveBand)},
+        {"constant-first-record",
+         CellsForDraw(shifts, 0, 1, 1, 0, kLiveBand)},
+    };
+
+    const auto drawAtFrequency = [&](int frequency, const char* leg,
+                                     const std::vector<FrameReading>& readings) {
+        RenderTarget2D target = MakeTarget();
+        device.SetVertexBuffers({
+            VertexBufferBinding(&meshBuffer, 0, 0),
+            VertexBufferBinding(&matrixBuffer, 0, frequency),
+        });
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        ApplyMeshEffect(effect);
+        const std::string rejection = RejectionTextOf([&] {
+            device.DrawInstancedPrimitives(
+                PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, kDivisorInstances);
+        });
+        device.SetRenderTarget(nullptr);
+        const FrameSnapshot snapshot = CaptureTarget(target);
+        const std::string reading =
+            rejection.empty() ? ReadFrame(snapshot, layout, readings) : "rejected: " + rejection;
+        PrintTriageMeasurement("REMED-GFX-213", leg, reading, snapshot, layout);
+        return reading;
+    };
+
+    const std::string atTwo = drawAtFrequency(kDivisor, "frequency=2", divisorReadings);
+    const std::string atOne = drawAtFrequency(
+        1, "frequency=1(control)",
+        {{"divisor-1-honoured", CellsForDraw(shifts, 0, kDivisorInstances, 1, 0, kLiveBand)},
+         {"constant-first-record", CellsForDraw(shifts, 0, 1, 1, 0, kLiveBand)}});
+    const std::string atTwoAgain =
+        drawAtFrequency(kDivisor, "frequency=2(after-frequency-1)", divisorReadings);
+
+    // The control is the leg's own calibration: a backend that cannot even advance one record per
+    // instance says nothing about a divisor of two.
+    EXPECT_EQ(std::string("divisor-1-honoured"), atOne)
+        << "the frequency-1 control must consume one record per instance on any backend that "
+           "rasterizes an instanced draw at all; without it the frequency-2 reading means nothing";
+    EXPECT_EQ(atTwo, atTwoAgain)
+        << "the frequency-2 reading changed after an intervening frequency-1 draw, so the backend "
+           "carries stale per-instance step state across draws";
+
+#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
+    EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
+        << "REMED-GFX-123 keyed this backend's input layout on the step rate: six instances at "
+           "InstanceFrequency 2 must consume records 0,0,1,1,2,2";
+#elif defined(CNA_INSTANCED_OFFSET_DEFECT_MEASURED)
+    EXPECT_EQ(std::string("divisor-1-silently"), atTwo)
+        << "REMED-GFX-213 boundary on " << kTriageBackendName << ": an instance buffer holding "
+           "twice the records a divisor of two needs passes every range and capacity check, "
+           "reaches the native draw, and renders one record per instance -- InstanceFrequency 2 "
+           "produces exactly the frame InstanceFrequency 1 does, with no diagnostic. If this now "
+           "reports the divisor honoured the defect is FIXED here: delete this arm";
+#else
+    EXPECT_NE(std::string("UNCLASSIFIED"), atTwo)
+        << "REMED-GFX-213 triage on " << kTriageBackendName << ": the frequency-2 frame matched "
+           "no reading this leg can name, so the ticket cannot be classified from it";
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// REMED-GFX-212: what `BasicEffect.VertexColorEnabled` means on the instanced route, measured
+// against the ONE thing that needs no reference at all -- the same backend's own ordinary route,
+// same effect state, same buffer, same triangle, same cell.
+//
+// The reference makes this draw-call-independent. FNA's `GraphicsDevice.DrawInstancedPrimitives`
+// is `ApplyState()` + `PrepareVertexBindingArray(baseVertex)` + the driver call and touches no
+// effect state; `BasicEffect.OnApply` derives its shader index from fog, vertex colour, texture and
+// lighting only, with no instancing term; and every vertex-colour permutation in BasicEffect.fx
+// multiplies `vout.Diffuse *= vin.Color`. The same vertex shader therefore runs for both routes,
+// so a backend whose instanced permutation substitutes DiffuseColor for the bound COLOR0 stream
+// disagrees with the reference AND with itself.
+//
+// One instance, an identity per-instance record and VertexOffset zero everywhere: nothing this leg
+// measures can be confused with REMED-GFX-211's offset defect.
+// ---------------------------------------------------------------------------
+TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColorEnabled)
+{
+    RequireInstancedRendering();
+
+    const GridLayout layout = TargetLayout();
+    const std::vector<TriagePackedVertex> packed = BuildTriagePackedStream(layout, false);
+    const std::vector<WholeMatrixRecord> matrices =
+        MatricesFromShifts(std::vector<InstanceShift>{{0, 0}});
+
+    VertexBuffer meshBuffer(
+        device, TriagePackedDeclaration(), static_cast<int>(packed.size()), BufferUsage::None);
+    meshBuffer.SetDataRaw(packed.data(), static_cast<int>(packed.size()), 16);
+    VertexBuffer matrixBuffer(
+        device, WholeMatrixDeclaration(), static_cast<int>(matrices.size()), BufferUsage::None);
+    matrixBuffer.SetDataRaw(matrices.data(), static_cast<int>(matrices.size()), 64);
+    const std::vector<std::uint16_t> indices = BuildIdentityIndices16();
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshElementCount, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kMeshElementCount);
+
+    BasicEffect effect(device);
+    device.SetIndexBuffer(&indexBuffer);
+
+    // Group 0's triangle carries LiveCodeForGroup(0) -- red -- and DiffuseColor is white, which is
+    // no colour code at all. The cell therefore reads red when the bound COLOR0 stream reached the
+    // shader and "unknown" when DiffuseColor was substituted for it.
+    const auto colourOfCellZero = [&](bool instanced, const char* leg) {
+        RenderTarget2D target = MakeTarget();
+        if (instanced)
+            device.SetVertexBuffers({
+                VertexBufferBinding(&meshBuffer, 0, 0),
+                VertexBufferBinding(&matrixBuffer, 0, 1),
+            });
+        else
+            device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        ApplyMeshEffect(effect);
+        const std::string rejection = RejectionTextOf([&] {
+            if (instanced)
+                device.DrawInstancedPrimitives(
+                    PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1, 1);
+            else
+                device.DrawIndexedPrimitives(
+                    PrimitiveType::TriangleList, 0, 0, kVerticesPerSlot, 0, 1);
+        });
+        device.SetRenderTarget(nullptr);
+        const FrameSnapshot snapshot = CaptureTarget(target);
+        int lit = 0;
+        const ColorCode code = DominantCodeInCell(snapshot, layout, 0, kLiveBand, lit);
+        const std::string reading = !rejection.empty() ? "rejected: " + rejection
+                                  : lit == 0           ? std::string("nothing-rendered")
+                                                       : std::string(CodeName(code));
+        PrintTriageMeasurement("REMED-GFX-212", leg, reading, snapshot, layout);
+        return reading;
+    };
+
+    const std::string ordinary = colourOfCellZero(false, "ordinary-route");
+    const std::string instanced = colourOfCellZero(true, "instanced-route");
+
+    // The calibration: the ordinary route is the one XNA route whose vertex-colour contract is not
+    // in question anywhere in this campaign. If it does not carry the stream colour, this leg is
+    // measuring its own bug rather than the instanced route's.
+    EXPECT_EQ(std::string(CodeName(LiveCodeForGroup(0))), ordinary)
+        << "VertexColorEnabled = true with a bound COLOR0 stream and a white DiffuseColor must "
+           "produce the stream's own colour on the ORDINARY route";
+
+#if defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU)
+    EXPECT_NE(ordinary, instanced)
+        << "REMED-GFX-212 boundary on " << kTriageBackendName << ": this backend was measured "
+           "colouring the instanced route from DiffuseColor while its own ordinary route colours "
+           "from the bound COLOR0 stream, under identical effect state. If the two routes now "
+           "agree the defect is FIXED here: delete this arm";
+#elif defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_BGFX)
+    EXPECT_EQ(ordinary, instanced)
+        << "REMED-GFX-212: this backend was measured honouring VertexColorEnabled on BOTH routes, "
+           "which is the reference contract -- BasicEffect's shader index has no instancing term, "
+           "so the same vertex shader runs for both";
+#else
+    // D3D9, D3D11 and D3D12: REMED-GFX-212 identifies D3D11/D3D12 from source as colouring the
+    // instanced route from DiffuseColor, but no D3D display was reachable from the triage session
+    // (SDL reports "x11 not available" under Wine on the Xvfb displays this environment permits),
+    // so neither arm above may claim them. The measurement above still prints on any host that can
+    // run this backend, which is the whole evidence the ticket is missing for them.
+    SUCCEED() << "unmeasured backend: ordinary=" << ordinary << " instanced=" << instanced;
+#endif
+}
 
 #endif   // CNA_INSTANCED_MULTI_STREAM_ORACLE
 
