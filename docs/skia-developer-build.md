@@ -195,13 +195,13 @@ presentation path on a display-independent fixture, as documented in
 [`skia-sanitizer-validation.md`](skia-sanitizer-validation.md). The same document gives the
 ASan+UBSan configure command and explains the narrow no-RTTI `vptr` exception.
 
-## 6. Optional: build in Ganesh/OpenGL mode (experimental, SKIA-159/160)
+## 6. Optional: build in Ganesh/OpenGL mode (experimental, SKIA-159-161)
 
 This is not the release-gated configuration -- see
 [Accelerated prerequisites and raster fallback policy](#accelerated-prerequisites-and-raster-fallback-policy)
 below and [`skia-ganesh-artifact.md`](skia-ganesh-artifact.md) for the full contract. It exists to
-build and exercise `SkiaGaneshContext` and the `Skia_Ganesh_ModeConstruction` test; it does not add
-a presentable Ganesh backbuffer to `SkiaGraphicsBackend`.
+build and exercise `SkiaGaneshContext`/`SkiaGaneshSurface` and their `Skia_Ganesh_*` tests; it does
+not wire a presentable Ganesh backbuffer into `SkiaGraphicsBackend`/`IGraphicsBackend` itself.
 
 First build the separately pinned Ganesh GN artifact, reusing the exact same `$CNA_SKIA_SRC`
 checkout from step 2 above (never re-clone Skia for this):
@@ -225,23 +225,48 @@ cmake -S . -B cmake-build-skia-ganesh -G Ninja \
   -DCNA_BUILD_TESTS=ON \
   -DCNA_BUILD_EXAMPLES=ON \
   -DCNA_USE_CCACHE=ON \
-  -DCNA_TEST_DISPLAY=:0
+  -DCNA_TEST_DISPLAY=:99
 cmake --build cmake-build-skia-ganesh -j3
 ```
 
 Expected configure output includes `CNA: Using SKIA backend in Ganesh/OpenGL mode (experimental,
-SKIA-159/160)`, distinct from step 3's `CNA: Using SKIA raster graphics backend`.
-`-DCNA_TEST_DISPLAY=:0` must be a real desktop display, not Xvfb -- the same requirement already
-established for the EasyGL golden build; Xvfb provides no real hardware GLX, and
-`Skia_Ganesh_ModeConstruction` needs one. The other 170+ raster-labeled tests already present in
-this same build directory run identically over `:0` as they would over Xvfb.
+SKIA-159-161)`, distinct from step 3's `CNA: Using SKIA raster graphics backend`. Unlike this
+section's own earlier revision, `-DCNA_TEST_DISPLAY` does **not** need to be a real desktop display:
+confirmed directly (SKIA-161) that Xvfb (`:99`/`:101`, the same displays step 4 already uses for the
+raster suite) provides a real, if software-only (Mesa llvmpipe), GLX implementation, sufficient for
+every Ganesh correctness check this backend has -- prefer the existing Xvfb displays for this reason
+(and to avoid disturbing a real desktop session); a real display also works if that is what is
+available. `Skia_Ganesh_ModeConstruction`/`Skia_Ganesh_Backbuffer` and the 170+ raster-labeled tests
+already present in this same build directory all run identically either way.
 
 ```sh
 ctest --test-dir cmake-build-skia-ganesh -L Accelerated --output-on-failure
 ```
 
-This is the one command in this whole document that requires the Ganesh artifact and a real
-display; every other command in this file continues to describe the release-gated raster build.
+For ASan+UBSan coverage of the Ganesh path, configure a second stable directory the same way as
+step 3's `cmake-build-skia-asan`, adding the same `CNA_SKIA_MODE`/`CNA_SKIA_GANESH_BUILD_DIR`
+options as above:
+
+```sh
+cmake -S . -B cmake-build-skia-ganesh-asan -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCNA_GRAPHICS_BACKEND=SKIA \
+  -DCNA_SKIA_MODE=GANESH \
+  -DCNA_SKIA_ROOT="$CNA_SKIA_SRC" \
+  -DCNA_SKIA_GANESH_BUILD_DIR="$CNA_SKIA_GANESH_OUT" \
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_BUILD_EXAMPLES=ON \
+  -DCNA_USE_CCACHE=ON \
+  -DCNA_SANITIZE=address,undefined \
+  -DCNA_TEST_DISPLAY=:99
+cmake --build cmake-build-skia-ganesh-asan -j3
+ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+  ctest --test-dir cmake-build-skia-ganesh-asan -R '^Skia_' --output-on-failure
+```
+
+The `detect_leaks=0` matches [`skia-sanitizer-validation.md`](skia-sanitizer-validation.md)'s
+already-documented host `libGLX_mesa.so.0` residual baseline -- not specific to Ganesh mode, the
+same real GLX presenter every Display-labeled Skia test already opens in any build.
 
 ## Accelerated prerequisites and raster fallback policy
 

@@ -15,8 +15,10 @@
 // ordinary CNA_GRAPHICS_BACKEND=SKIA (raster) build never sets it, so this target does not exist
 // there and the validated raster artifact/build graph is unaffected.
 //
-// Needs a real GLX-capable display (e.g. DISPLAY=:0), not Xvfb -- the same requirement already
-// established for the EasyGL golden build; Xvfb does not provide real hardware GLX.
+// Runs fine against this repository's usual Xvfb test displays (:99/:101): Mesa provides a real,
+// if software-only (llvmpipe), GLX implementation there, sufficient for correctness -- confirmed
+// directly (SKIA-161) after this comment originally, incorrectly, claimed Xvfb would not work at
+// all. A real desktop display works too; neither is required over the other for this probe.
 //
 // Exit codes: 0 = a real GrDirectContext was constructed and reports a positive max texture size,
 // 1 = SDL/GL context setup failed, 2 = GrDirectContexts::MakeGL() returned null.

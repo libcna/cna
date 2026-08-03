@@ -6,6 +6,7 @@
 #include <string>
 
 struct SDL_Window;
+class GrDirectContext;
 
 namespace CNA::Internal::Backends::Skia
 {
@@ -53,6 +54,12 @@ namespace CNA::Internal::Backends::Skia
 
         /// @brief The real, driver-reported maximum texture dimension for this Ganesh context.
         [[nodiscard]] int MaxTextureSize() const noexcept { return maxTextureSize_; }
+
+        /// @brief The real GrDirectContext this instance owns, for SKIA-161's
+        /// SkiaGaneshSurface to wrap a backend render target with. Never null on a successfully
+        /// constructed instance (construction throws otherwise); the type is only forward-
+        /// declared here, matching this header's mode-agnostic, Ganesh-include-free design.
+        [[nodiscard]] GrDirectContext* NativeContextEXT() const noexcept;
 
     private:
         // The real sk_sp<GrDirectContext> lives behind this Pimpl (defined only in the .cpp) so

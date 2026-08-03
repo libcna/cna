@@ -31,6 +31,11 @@ namespace CNA::Internal::Backends::Skia
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+        // SKIA-161: matches EasyGL's own established precedent (SkiaGraphicsBackend has no GL
+        // context of its own to compare against). Without this, SkiaGaneshSurface's
+        // GrBackendRenderTargets::MakeGL wrap would see 0 stencil bits, silently disabling
+        // stencil-based SkCanvas clip paths that raster's software clipper never needed to skip.
+        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
         glContext_ = SDL_GL_CreateContext(window_);
         if (!glContext_)
@@ -84,6 +89,11 @@ namespace CNA::Internal::Backends::Skia
         if (glContext_)
             SDL_GL_DestroyContext(glContext_);
     }
+
+    GrDirectContext* SkiaGaneshContext::NativeContextEXT() const noexcept
+    {
+        return impl_ ? impl_->grContext.get() : nullptr;
+    }
 #else
     // No SkiaGaneshContext::Impl definition exists in a RASTER-mode build: this build links
     // CNA::Skia (raster-only archives, skia_enable_ganesh=false), which contains no Ganesh/GL
@@ -105,5 +115,10 @@ namespace CNA::Internal::Backends::Skia
     }
 
     SkiaGaneshContext::~SkiaGaneshContext() = default;
+
+    GrDirectContext* SkiaGaneshContext::NativeContextEXT() const noexcept
+    {
+        return nullptr;
+    }
 #endif
 } // namespace CNA::Internal::Backends::Skia

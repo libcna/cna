@@ -2758,15 +2758,79 @@ level-boundary contract.
 - `docs/skia-backend.md`/`docs/skia-release-gate.md` deliberately untouched, per their existing
   freeze-until-SKIA-170 policy.
 
+## Completed in this session: SKIA-161
+
+- New `docs/skia-ganesh-artifact.md` "SKIA-161" section fixes the contract first.
+- New `CNA::Internal::Backends::Skia::SkiaGaneshSurface` composes (not duplicates) SKIA-160's
+  `SkiaGaneshContext` and wraps its `GrDirectContext` around the real window-system default
+  framebuffer: `GrGLFramebufferInfo{fFBOID=0, fFormat=GL_RGBA8}`, live-queried stencil bits
+  (`SkiaGaneshContext`'s GL context creation extended to request an 8-bit stencil buffer, matching
+  EasyGL's own precedent, since Skia requires exactly 0/8/16), `GrBackendRenderTargets::MakeGL`,
+  and `kBottomLeft_GrSurfaceOrigin` -- the real GL default framebuffer's row 0 is the bottom row in
+  memory, hidden from every caller by `SkCanvas`/`readPixels()`'s ordinary top-down coordinates,
+  but only correct with the right origin here. Deliberately still not an `IGraphicsBackend`: no
+  wiring into `SpriteBatch`/`GraphicsDevice`, no resize/loss/recovery *policy* (`Resize()` is
+  caller-invoked, not automatic; loss/recovery remains SKIA-162's job).
+- Two real bugs found and fixed by this task's own test, not reasoned in advance:
+  1. The initial `WrapBackbuffer`/`ReadPixels` copied raster's `SkColorSpace::MakeSRGBLinear()`
+     verbatim, which told Skia the surface stores linear-light values and silently gamma-encoded/
+     decoded every draw/readback -- invisible for pure 0/255 primaries (fixed points of a gamma
+     curve) but caught by a genuine mid-tone clear colour reading back wrong (128,64,200 as
+     55,13,147). Fixed by passing `nullptr` (no colour management), matching the real GL_RGBA8
+     framebuffer's plain-bytes contract.
+  2. The first test draft read pixels back *after* `Present()`'s `SDL_GL_SwapWindow`, which leaves
+     a double-buffered context's new back buffer with driver-dependent undefined contents. Fixed
+     by reading before swapping (`SkSurface::readPixels()` already flushes pending work on its
+     own) and exercising `Present()` separately, once per frame, purely to prove the swap
+     mechanism itself does not fail.
+- New `examples/skia_ganesh_backbuffer_test.cpp` (`Skia_Ganesh_Backbuffer`, the second real member
+  the long-reserved `Accelerated` label has ever had) proves origin correctness (asymmetric
+  top-left-quadrant rect), alpha blending, `Present()` not throwing, a real SDL window resize
+  (`SDL_SetWindowSize` + `SDL_SyncWindow`) followed by `Resize()` rewrapping correctly, a second
+  independent surface with no cross-instance state leak, and structurally zero references to
+  `src/CNA/Internal/Backends/EasyGL/`. The same binary is also the "visible smoke" proof via a
+  `--visible` flag (not passed by CTest) -- a real on-screen window running the identical
+  assertions, then holding a freshly-redrawn pattern for three seconds -- mirroring `cna_demo_2d
+  --smoke N`'s own dual-purpose design rather than a second tool. Not registered in `RASTER`-mode
+  builds (its real assertions are `#if`'d out entirely there; the refusal path is already proven
+  by SKIA-160's `Skia_Ganesh_ModeRefusal_Raster`).
+- Found and fixed a third, unrelated real gap while building the dedicated ASan+UBSan Ganesh
+  directory this task promised (SKIA-160 explicitly deferred that "to SKIA-161, where the real
+  Ganesh rendering code lands"): `cna_skia_ganesh_artifact_probe` (SKIA-159's own harness,
+  registered directly in `cmake/Harnesses.cmake` rather than through `cna_skia_test()`) had never
+  received the established `-fno-sanitize=vptr` exception every other Skia-linked executable gets
+  for the pinned no-RTTI archives, so it failed to link under UBSan the first time anything
+  actually built it under a sanitizer. Fixed by adding the same conditional exception directly.
+- Mid-task correction: all Ganesh-mode testing (this task, and retroactively SKIA-159/160's own
+  docs) now runs against this repository's existing `:99` Xvfb display rather than a real desktop
+  display -- confirmed directly that Mesa's software rasterizer (llvmpipe) provides a real,
+  correctness-sufficient GLX implementation there, so the earlier "needs a real display, Xvfb has
+  no GLX" claims were corrected in place rather than left standing.
+- Verified in both directions, in Debug, Release, and ASan+UBSan: Ganesh build
+  (`cmake-build-skia-ganesh`, plus new permanent `cmake-build-skia-ganesh-asan`) 172/172 in both
+  (up from 171, +1), `Accelerated` now 2 members, zero sanitizer findings; raster build
+  (`cmake-build-skia`/`-release`/`-asan`, still default) unchanged 171/171 in all three, zero
+  sanitizer findings, `Accelerated` still 0.
+- Updated `docs/skia-surface-mode-adr.md`: real but partial progress on gate 3 ("wrap and present
+  the real backbuffer, including resize and loss/recovery" -- wrap/present/resize done, loss/
+  recovery remains SKIA-162's) and gate 5 ("accelerated ASan/UBSan/lifetime coverage" -- this
+  surface now has it, the full 2D corpus gate 4 requires does not exist through Ganesh yet); gates
+  2/4/6 fully untouched.
+- `docs/skia-backend.md`/`docs/skia-release-gate.md` deliberately untouched, per their existing
+  freeze-until-SKIA-170 policy.
+
 ## Next candidates
 
-1. SKIA-161: implement backend-owned SDL OpenGL context, Ganesh context/surface wrapping,
-   flush/submit, swap, readback, and destruction order -- the natural next step now that
-   `SkiaGaneshContext` proves a real `GrDirectContext` constructs but nothing presents through it.
-2. SKIA-162-170: resize/presentation/loss/recovery for Ganesh, probe real MSAA/anisotropy,
-   re-evaluate MRT, and hold the successor gate only after the raster extensions are stable --
-   also where the mesh-effect cache's deferred "mode" key axis (see SKIA-156 above) should
-   actually be added, now that a second compilation target genuinely exists.
+1. SKIA-162: implement resize, fullscreen, presentation mappings, resource synchronization,
+   presenter/context loss, and recovery for Ganesh -- the natural next step now that
+   `SkiaGaneshSurface` proves the happy-path wrap/present/resize mechanics but has no loss/recovery
+   policy at all.
+2. SKIA-163-170: complete raster-vs-Ganesh 2D parity/lifecycle/resource-budget/performance suites
+   (the point where Ganesh would need real `IGraphicsBackend`/`SpriteBatch` wiring, not attempted
+   by SKIA-159-162), probe real MSAA/anisotropy, re-evaluate MRT, and hold the successor gate only
+   after the raster extensions are stable -- also where the mesh-effect cache's deferred "mode" key
+   axis (see SKIA-156 above) should actually be added, now that a second compilation target
+   genuinely exists.
 3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 4. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
@@ -2783,10 +2847,11 @@ level-boundary contract.
 
 - `CNA_GRAPHICS_BACKEND=SKIA`'s default `CNA_SKIA_MODE=RASTER` build is still raster-only; its
   current requested MSAA 0/1 reports 0, and requests normalizing to 2+ are rejected with the
-  capability remaining false. An opt-in `CNA_SKIA_MODE=GANESH` build (SKIA-159/160,
-  `docs/skia-ganesh-artifact.md`) can construct a real `GrDirectContext`
-  (`SkiaGaneshContext`), but no `IGraphicsBackend` wraps it yet -- there is still no presentable
-  Ganesh backbuffer, resize, or capability probing (SKIA-161+).
+  capability remaining false. An opt-in `CNA_SKIA_MODE=GANESH` build (SKIA-159-161,
+  `docs/skia-ganesh-artifact.md`) can now genuinely draw, flush/submit, swap, read back, and resize
+  a real default-framebuffer `SkSurface` (`SkiaGaneshSurface`), pixel-proven below the API -- but
+  no `IGraphicsBackend` wraps it, so there is still no `SpriteBatch`/`GraphicsDevice` integration,
+  no loss/recovery policy, and no MSAA/anisotropy capability probing (SKIA-162+).
 - `TextureFilter::Anisotropic` deliberately falls back byte-exactly to complete Linear, including
   mip interpolation, while the real anisotropy capability remains false.
 - Mipmapped Texture2D construction, exact level reporting, full/partial transfer at every level,

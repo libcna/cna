@@ -945,4 +945,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     else()
         cna_register_skia_raster_test(Skia_Ganesh_ModeRefusal_Raster cna_test_skia_ganesh_mode)
     endif()
+
+    # SKIA-161: real Ganesh default-framebuffer wrapping, flush/submit, swap, readback, resize,
+    # and destruction order, proven with actual drawn-and-read-back pixels (origin, channel/alpha
+    # order). Only registered in a GANESH build -- in RASTER mode the test source's own real
+    # assertions are `#if`'d out entirely (SkiaGaneshSurface's construction-time refusal is
+    # already proven by Skia_Ganesh_ModeRefusal_Raster above), so registering it there would add
+    # a vacuous always-pass CTest entry rather than genuine coverage.
+    cna_skia_test(cna_test_skia_ganesh_backbuffer examples/skia_ganesh_backbuffer_test.cpp)
+    target_include_directories(cna_test_skia_ganesh_backbuffer PRIVATE "${CNA_SKIA_ROOT}")
+    if(CNA_SKIA_MODE STREQUAL "GANESH")
+        cna_register_skia_accelerated_test(Skia_Ganesh_Backbuffer cna_test_skia_ganesh_backbuffer)
+    endif()
 endif()

@@ -260,6 +260,16 @@ if(CNA_SKIA_GANESH_BUILD_DIR)
     add_executable(cna_skia_ganesh_artifact_probe
         tools/skia/skia_ganesh_artifact_probe.cpp
     )
+    # SKIA-161: matches cmake/Tests/SkiaTests.cmake's cna_skia_test() macro's own exception --
+    # the pinned no-RTTI Skia archives cannot provide the typeinfo required by `vptr`, so linking
+    # this target under UBSan fails with "undefined reference to typeinfo for GrDirectContext"
+    # without it. Found by an actual ASan+UBSan build of cmake-build-skia-ganesh-asan, not
+    # reasoned in advance; every other Skia-linked executable already had this exception because
+    # it goes through cna_skia_test(), which this Harnesses.cmake-registered target does not.
+    if(CNA_SANITIZE MATCHES "(^|,)undefined(,|$)"
+       AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(cna_skia_ganesh_artifact_probe PRIVATE -fno-sanitize=vptr)
+    endif()
     target_link_libraries(cna_skia_ganesh_artifact_probe
         PRIVATE
         CNA::SkiaGanesh

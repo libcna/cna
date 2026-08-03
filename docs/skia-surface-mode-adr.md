@@ -94,7 +94,17 @@ Gate 1 is now fully closed: SKIA-159 (`docs/skia-ganesh-artifact.md`) produced a
 Ganesh/OpenGL GN artifact and a `CNA::SkiaGanesh` CMake target, functionally verified below the API
 (a real `GrDirectContexts::MakeGL()` context over a real SDL GL context); SKIA-160 added the
 explicit construction-time mode selector (`CNA_SKIA_MODE`, `SkiaGaneshContext`) on top of it, with a
-mode-specific diagnostic and no silent runtime fallback in either direction. Gates 2-6 remain fully
-open -- `CNA_GRAPHICS_BACKEND=SKIA`'s default `RASTER` mode is completely unaffected, no
-`IGraphicsBackend` wraps the Ganesh artifact yet, and this note does not itself change the release
-claim above.
+mode-specific diagnostic and no silent runtime fallback in either direction.
+
+SKIA-161 makes real, but partial, progress on two further gates without closing either: gate 3
+("wrap and present the real backbuffer, including resize and loss/recovery") now has a real,
+pixel-proven default-framebuffer wrap, flush/submit, swap, readback, and caller-invoked resize
+(`SkiaGaneshSurface`) -- but no loss/recovery, which remains SKIA-162's job. Gate 5 ("add
+accelerated ASan/UBSan/lifetime coverage where the platform permits it") now has a real, permanent
+sanitizer build (`cmake-build-skia-ganesh-asan`) exercising this surface-wrapping code -- but not
+the full 2D XNA oracle/API-contract corpus gate 4 requires, since none of that corpus can run
+through Ganesh yet (no `IGraphicsBackend` wraps it).
+
+Gates 2, 4, and 6 remain fully untouched. `CNA_GRAPHICS_BACKEND=SKIA`'s default `RASTER` mode is
+completely unaffected throughout; no `IGraphicsBackend` wraps the Ganesh artifact yet; and this note
+does not itself change the release claim above.

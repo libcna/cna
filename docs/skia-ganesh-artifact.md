@@ -1,10 +1,14 @@
-# Skia Ganesh/OpenGL artifact (SKIA-159/160)
+# Skia Ganesh/OpenGL artifact (SKIA-159/160/161)
 
-Status: normative SKIA-159/160 contract. SKIA-159 produced a second, separately pinned GN artifact
-and a new optional CMake target; SKIA-160 (see its own section below) added the construction-time
-mode selector and diagnostic on top of it. Neither task changes the validated raster artifact, its
-CMake target, or its selection logic. Together they close gate 1 of
-`docs/skia-surface-mode-adr.md`'s six reopening requirements in full; gates 2-6 remain open.
+Status: normative SKIA-159/160/161 contract. SKIA-159 produced a second, separately pinned GN
+artifact and a new optional CMake target; SKIA-160 added the construction-time mode selector and
+diagnostic on top of it; SKIA-161 (see its own section below) added real default-framebuffer
+wrapping, flush/submit, swap, readback, resize, and destruction order on top of that. None of the
+three change the validated raster artifact, its CMake target, or its selection logic. SKIA-159/160
+together close gate 1 of `docs/skia-surface-mode-adr.md`'s six reopening requirements in full;
+gates 2-6 remain open (SKIA-161 makes real progress on gate 3, "wrap and present the real
+backbuffer, including resize and loss/recovery," but does not close it -- loss/recovery is
+SKIA-162's job).
 
 ## Why a second artifact, not a second mode of the existing one
 
@@ -152,8 +156,7 @@ not having touched its files. The probe binary and its intermediate object files
 recording the result below, per this repository's build-probe hygiene convention; the CMake
 registration and source remain, so rebuilding it is a one-line, ccache-accelerated operation.
 
-Run against the real desktop display (`DISPLAY=:0`), not Xvfb -- the same requirement already
-established for the EasyGL golden build; Xvfb provides no real hardware GLX:
+Run against the real desktop display at the time (`DISPLAY=:0`):
 
 ```text
 $ DISPLAY=:0 SDL_VIDEODRIVER=x11 ./cna_skia_ganesh_artifact_probe
@@ -165,6 +168,13 @@ $ echo $?
 A real `GrDirectContext` was constructed over a real GLX-backed OpenGL context and reports a
 plausible, non-degenerate `maxTextureSize` (16384) -- not just "the archives link," but "Skia's own
 Ganesh GL code path genuinely initializes against this machine's OpenGL driver."
+
+**Correction (SKIA-161):** this section originally claimed Xvfb "provides no real hardware GLX" and
+must not be used. That is only half right -- Xvfb provides no *hardware-accelerated* GLX, but Mesa's
+software rasterizer (llvmpipe) genuinely implements GLX on top of it, confirmed directly by running
+SKIA-161's own tests against this repository's existing `:99`/`:101` Xvfb displays with identical
+results to the real desktop display. Nothing here needed a real display specifically; a real display
+was simply what was used at the time. See SKIA-161's own section below.
 
 ## What SKIA-159 explicitly did not do
 
@@ -242,15 +252,17 @@ cmake -S . -B cmake-build-skia-ganesh -G Ninja \
   -DCNA_BUILD_TESTS=ON \
   -DCNA_BUILD_EXAMPLES=ON \
   -DCNA_USE_CCACHE=ON \
-  -DCNA_TEST_DISPLAY=:0
+  -DCNA_TEST_DISPLAY=:99
 cmake --build cmake-build-skia-ganesh -j3
 ```
 
-`CNA_TEST_DISPLAY=:0` (a real desktop display, not Xvfb) is required for the same reason the EasyGL
-golden build needs it: Xvfb provides no real hardware GLX, and `Skia_Ganesh_ModeConstruction` needs
-one. The other 170 raster-labeled tests in this same build directory run identically over `:0` as
-they would over Xvfb -- they do not care which kind of X11 server they see -- so one display setting
-covers the whole directory.
+`CNA_TEST_DISPLAY=:99` -- one of this repository's existing Xvfb displays, the same ones the raster
+suite already uses -- is enough: Mesa's software rasterizer (llvmpipe) provides a real, correctness-
+sufficient GLX implementation there, confirmed directly (SKIA-161) by running these same tests
+against both `:99` and a real desktop display with identical results. A real display works too; it
+is simply not required, and Xvfb avoids disturbing a real desktop session. The other 170 raster-
+labeled tests in this same build directory run identically regardless of which kind of X11 server
+they see, so one display setting covers the whole directory.
 
 ### Verification
 
@@ -268,3 +280,118 @@ confirmed:
 - Back in the original `cmake-build-skia` (still `RASTER`, the default): the new test registers as
   `Skia_Ganesh_ModeRefusal_Raster` under `Skia;Raster`, passes, and `ctest -N -L Accelerated`
   continues to report zero tests -- the default regression build's behavior is provably unchanged.
+
+## SKIA-161: real default-framebuffer wrapping, flush/submit, swap, readback, resize
+
+`SkiaGaneshContext` (SKIA-160) deliberately stopped at "a `GrDirectContext` exists" -- it wraps no
+surface at all. SKIA-161 is the first task to actually draw and read back a pixel through the
+Ganesh path. It stays inside the same boundary every prior below-the-API Skia task in this backend
+has: no `IGraphicsBackend` implementation, no wiring into `SpriteBatch`/`GraphicsDevice`, no
+resize/loss/recovery *policy* (SKIA-162 -- `Resize()` here is a mechanism the caller must invoke
+explicitly, not an automatic reaction to a window event).
+
+### `SkiaGaneshSurface`: composes, does not duplicate, `SkiaGaneshContext`
+
+New `CNA::Internal::Backends::Skia::SkiaGaneshSurface` owns a `SkiaGaneshContext` by value (not by
+inheritance or duplicated construction logic) and wraps its `GrDirectContext` around the real
+window-system default framebuffer:
+
+- `GrGLFramebufferInfo{fFBOID=0, fFormat=GL_RGBA8}` -- FBO id 0 is always the real default
+  framebuffer; this class never wraps an off-screen FBO-based render target (out of scope).
+- `GrBackendRenderTargets::MakeGL(width, height, sampleCnt=1, stencilBits, fbInfo)`, where
+  `stencilBits` is queried live via `glGetIntegerv(GL_STENCIL_BITS, ...)` rather than assumed --
+  `SkiaGaneshContext`'s GL context creation was extended (SKIA-160's own file) to request an 8-bit
+  stencil buffer, matching `SkiaGraphicsBackend`'s EasyGL sibling's established precedent, since
+  Skia's own header requires this value be exactly 0, 8, or 16.
+- `kBottomLeft_GrSurfaceOrigin` -- the real GL default framebuffer's row 0 is the bottom row in
+  device memory. `SkSurface`/`SkCanvas` hide this from every caller (draws and `readPixels()` both
+  use ordinary top-down coordinates regardless), but only the correct origin here makes that
+  abstraction actually correct rather than accidentally flipped -- exactly what this task's own
+  acceptance text asks to be *proven*, not just declared.
+- `SkSurfaces::WrapBackendRenderTarget(..., colorSpace=nullptr, ...)`.
+
+### A real bug this task's own test caught: the wrong `SkColorSpace`
+
+The first implementation copied `SkiaSurface.cpp`'s raster convention verbatim --
+`SkColorSpace::MakeSRGBLinear()` -- for both the wrap and every `readPixels()` call. That colour
+space tells Skia the surface stores *linear-light* values, so Skia silently gamma-encoded every
+`SkColor` draw going in and gamma-decoded every `readPixels()` coming out. The real GL_RGBA8 default
+framebuffer this class wraps stores plain gamma-encoded bytes (no `GL_FRAMEBUFFER_SRGB` was
+requested), so that transform was simply wrong here. Pure primaries (0 or 255 per channel) are fixed
+points of a gamma curve, so every early check using pure red/blue/green passed anyway; a genuine
+mid-tone clear colour (128, 64, 200) first exposed it, reading back as (55, 13, 147) -- matching the
+sRGB encode of that value almost exactly. Fixed by passing `nullptr` (no colour management) for both
+the wrap and every `readPixels()` call, matching this class's actual plain-bytes contract. Whether
+raster's own `MakeSRGBLinear()` choice is itself correct for its own (different) surface type is out
+of this task's scope; this fix only concerns `SkiaGaneshSurface`'s own real default framebuffer.
+
+### The double-buffered swap ordering bug
+
+The first test draft called `Present()` (flush + submit + `SDL_GL_SwapWindow`) and *then* read
+pixels back to verify them. That is backwards for a double-buffered GL context: after a swap, the
+buffer that becomes the new back buffer has driver-dependent, effectively undefined contents (it is
+not guaranteed to retain the previous frame, and empirically did not). `SkSurface::readPixels()`
+already flushes any pending Skia work on its own, so the correct order is: draw, `ReadPixels()` to
+verify (no swap needed for this), *then* `Present()` if the frame should actually reach the screen.
+`Skia_Ganesh_Backbuffer`'s draw/verify passes only ever read before their frame's `Present()` call;
+`Present()` itself is exercised once per frame purely to prove the swap mechanism does not fail, not
+paired with a post-swap readback.
+
+### Verification
+
+`examples/skia_ganesh_backbuffer_test.cpp` (`Skia_Ganesh_Backbuffer`, `Skia;Accelerated;Display`,
+the second member the long-reserved label has ever had) proves, run with a hidden window (CTest's
+default) against this repository's `:99` Xvfb display -- confirmed to also pass identically against
+a real desktop display, so neither is specifically required:
+
+- wrapping reports a positive size and a real `SkCanvas`;
+- an asymmetric top-left-quadrant red rect over a blue background reads back red at the top-left
+  sample and blue at all three other corners -- the actual origin-correctness proof, not a
+  full-surface clear that would look identical whether the origin were right or flipped;
+- a translucent overlay measurably blends rather than being fully replaced or discarded, proving
+  alpha is genuinely interpreted through this path;
+- `Present()` (flush/submit + `SDL_GL_SwapWindow`) does not throw;
+- a real SDL window resize (`SDL_SetWindowSize` + `SDL_SyncWindow` to block until it actually
+  applies, mirroring `examples/easygl_real_window_resize_test.cpp`'s own established real-resize
+  precedent) followed by `Resize()` rewraps the framebuffer at its new dimensions, which are then
+  genuinely drawable and readable;
+- a second, independent `SkiaGaneshSurface` constructed on the same window after the first is
+  destroyed also wraps, draws, and reads back correctly (including the mid-tone colour that caught
+  the colour-space bug above), proving no state leaked across instances;
+- structurally, `SkiaGaneshSurface`/`SkiaGaneshContext` and their tests contain zero references to
+  `src/CNA/Internal/Backends/EasyGL/` (checked directly) -- the "absence of EasyGL delegation" this
+  task's acceptance text asks for.
+
+The same binary also serves as this task's "visible smoke" proof -- the other half of the
+acceptance text a hidden-window automated CTest entry cannot satisfy on its own -- via a `--visible`
+flag (not passed by CTest, which always runs the hidden/automated form): opens a real, on-screen,
+480x480 window instead of a hidden 64x64 one, runs the identical assertions above, then redraws the
+same red/blue quadrant pattern once more and holds it on screen for three seconds (pumping events so
+the window manager does not consider it unresponsive) before exiting. One binary, two roles,
+matching `cna_demo_2d --smoke N`'s own established dual-purpose design rather than maintaining a
+second tool.
+
+Not registered in `RASTER`-mode builds: the test's own real assertions are `#if`'d out entirely
+there (no Ganesh-only Skia symbol is referenced), since `SkiaGaneshSurface`'s construction-time
+refusal in that mode is already proven by `Skia_Ganesh_ModeRefusal_Raster`; registering a
+permanently-vacuous always-pass entry would add CTest noise, not coverage.
+
+Verified in both directions exactly like SKIA-160: the Ganesh build (`cmake-build-skia-ganesh`) is
+172/172 (up from 171, +1), `Accelerated` now has 2 members; the raster build (`cmake-build-skia`,
+still the default) is unchanged at 171/171, `Accelerated` still 0. A new, permanent
+`cmake-build-skia-ganesh-asan` directory (Debug + `address,undefined`) was also built from scratch
+-- unlike SKIA-160, which explicitly deferred Ganesh-mode sanitizer coverage "to SKIA-161, where the
+real Ganesh rendering code lands," this task is that moment: `SkiaGaneshSurface` does real manual
+GL/SDL resource management (`SDL_GL_CreateContext`/`DestroyContext`, raw `glGetIntegerv`, Skia's own
+`sk_sp` reference counting across a Pimpl) that genuinely benefits from ASan+UBSan scrutiny. That
+build is 172/172 as well (`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1
+UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`, matching `skia-sanitizer-validation.md`'s already-
+documented invocation), zero sanitizer findings. Building it caught one real, separate gap along the
+way: `cna_skia_ganesh_artifact_probe` (SKIA-159's own harness, registered directly in
+`cmake/Harnesses.cmake` rather than through `cna_skia_test()`) had never received the `-fno-sanitize=
+vptr` exception every Skia-linked test executable needs for the pinned no-RTTI archives (documented
+in `skia-sanitizer-validation.md`), so it failed to link under UBSan with "undefined reference to
+typeinfo for GrDirectContext" the first time anything actually built it under a sanitizer. Fixed by
+adding the same conditional exception `cna_skia_test()` already applies. All Ganesh-mode testing in
+this task ran against this repository's `:99` Xvfb display, not a real desktop display (see the
+SKIA-159 correction note above).
