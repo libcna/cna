@@ -774,6 +774,19 @@ protected:
         check("Texture2D mip selection includes SpriteBatch transform", 0, 0,
               Color(0, 0, 255, 255));
 
+        // D2D-74: TextureFilter::Linear's MipFilter component is Linear, so it must interpolate
+        // between the two mip levels bracketing a fractional LOD rather than snapping to the
+        // nearest one. A batch scale of 2^-1.5 puts the LOD exactly halfway between level 1
+        // (green) and level 2 (blue): expect an even blend of both, not either solid color.
+        SamplerState linearSampler = SamplerState::LinearClamp;
+        device.Clear(Color::Black);
+        const Matrix mipBlendScale = Matrix::CreateScale(0.35355338f);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &linearSampler, nullptr,
+                        &scissorDisabled, nullptr, mipBlendScale);
+        sprites_->Draw(mipTexture, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+        sprites_->End();
+        check("Texture2D MipLinear blends adjacent levels", 0, 0, Color(0, 128, 128, 255));
+
         // Generating a mip while the target remains bound ends the Direct2D recording interval.
         // A subsequent draw in the same bind interval has to invalidate the chain again; otherwise
         // level one incorrectly keeps the red value read before the green draw below.

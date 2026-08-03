@@ -150,8 +150,9 @@ namespace CNA::Internal::Backends::Direct2D
         {
             // TextureFilter ordinals are documented in TextureFilter.hpp. Direct2D has no
             // implicit mip chain for our per-level bitmaps, but it does expose the requested
-            // spatial filter. The four mixed modes therefore select their min or mag component
-            // honestly, while mip-linear values retain the documented nearest-level policy.
+            // in-plane spatial filter; the four mixed modes select their min or mag component
+            // honestly. Interpolation ACROSS mip levels for the MipLinear-family values below is
+            // handled separately (D2D-74, MakeMipBlendedSpritePixels), not by this in-plane mode.
             switch (textureFilter)
             {
                 case 0: return D2D1_INTERPOLATION_MODE_LINEAR; // Linear
@@ -167,6 +168,16 @@ namespace CNA::Internal::Backends::Direct2D
                                       : D2D1_INTERPOLATION_MODE_LINEAR;
             }
             throw std::runtime_error("Direct2D received an unknown TextureFilter value.");
+        }
+
+        /// D2D-74: TextureFilter values whose MipFilter component is Linear (interpolate between
+        /// the two mip levels bracketing the LOD), as opposed to Point (nearest level only).
+        /// TextureFilter ordinals: Linear=0, Point=1, Anisotropic=2, LinearMipPoint=3,
+        /// PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
+        /// MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8.
+        [[nodiscard]] bool FilterWantsMipLinear(int textureFilter)
+        {
+            return textureFilter == 0 || textureFilter == 4 || textureFilter == 5 || textureFilter == 7;
         }
 
         [[nodiscard]] bool IsWhite(const Color& color)
@@ -229,6 +240,45 @@ namespace CNA::Internal::Backends::Direct2D
                                     0.0f, 0.0f, 0.0f, a,
                                     0.0f, 0.0f, 0.0f, 0.0f);
         }
+
+        struct MinificationSigma
+        {
+            double sigmaMin = 1.0;
+            bool minifying = false;
+        };
+
+        /// Shared core of PreferredMipLevelForTransform/FractionalMipLevelForTransform: the
+        /// smallest singular value of scale * rotation * batch * presentation's linear part, the
+        /// most strongly minified direction, correct for shear, rotation and non-uniform
+        /// presentation scaling.
+        [[nodiscard]] MinificationSigma ComputeMinificationSigma(
+            int sourceWidth, int sourceHeight, int destinationWidth, int destinationHeight,
+            float rotation, const Matrix& batchTransform, float presentationScaleX,
+            float presentationScaleY)
+        {
+            if (sourceWidth <= 0 || sourceHeight <= 0 || destinationWidth == 0 || destinationHeight == 0)
+                return {1.0, false};
+
+            const double scaleX = std::abs(static_cast<double>(destinationWidth)) / sourceWidth;
+            const double scaleY = std::abs(static_cast<double>(destinationHeight)) / sourceHeight;
+            const double cosine = std::cos(static_cast<double>(rotation));
+            const double sine = std::sin(static_cast<double>(rotation));
+
+            const double a = (scaleX * cosine * batchTransform.M11 + scaleX * sine * batchTransform.M21) *
+                             std::abs(static_cast<double>(presentationScaleX));
+            const double b = (scaleX * cosine * batchTransform.M12 + scaleX * sine * batchTransform.M22) *
+                             std::abs(static_cast<double>(presentationScaleY));
+            const double c = (-scaleY * sine * batchTransform.M11 + scaleY * cosine * batchTransform.M21) *
+                             std::abs(static_cast<double>(presentationScaleX));
+            const double d = (-scaleY * sine * batchTransform.M12 + scaleY * cosine * batchTransform.M22) *
+                             std::abs(static_cast<double>(presentationScaleY));
+            const double trace = a * a + b * b + c * c + d * d;
+            const double determinant = a * d - b * c;
+            const double discriminant = std::sqrt(std::max(0.0, trace * trace - 4.0 * determinant * determinant));
+            const double sigmaMinSquared = std::max(0.0, 0.5 * (trace - discriminant));
+            const double sigmaMin = std::sqrt(sigmaMinSquared);
+            return {sigmaMin, sigmaMin < 1.0};
+        }
     }
 
     Direct2DBlendMode BlendStateToDirect2DBlendMode(
@@ -269,38 +319,28 @@ namespace CNA::Internal::Backends::Direct2D
         float rotation, const Matrix& batchTransform, float presentationScaleX,
         float presentationScaleY, bool* minifying)
     {
-        if (sourceWidth <= 0 || sourceHeight <= 0 || destinationWidth == 0 || destinationHeight == 0)
-        {
-            if (minifying) *minifying = false;
-            return 0;
-        }
+        const MinificationSigma sigma = ComputeMinificationSigma(
+            sourceWidth, sourceHeight, destinationWidth, destinationHeight, rotation,
+            batchTransform, presentationScaleX, presentationScaleY);
+        if (minifying) *minifying = sigma.minifying;
+        if (!sigma.minifying) return 0;
+        if (sigma.sigmaMin <= std::numeric_limits<double>::epsilon()) return std::numeric_limits<int>::max();
+        return std::max(0, static_cast<int>(std::floor(std::log2(1.0 / sigma.sigmaMin))));
+    }
 
-        const double scaleX = std::abs(static_cast<double>(destinationWidth)) / sourceWidth;
-        const double scaleY = std::abs(static_cast<double>(destinationHeight)) / sourceHeight;
-        const double cosine = std::cos(static_cast<double>(rotation));
-        const double sine = std::sin(static_cast<double>(rotation));
-
-        // Row-vector linear part of scale * rotation * batch * presentation. The smallest
-        // singular value is the most strongly minified direction and remains correct for shear,
-        // rotation and non-uniform presentation scaling.
-        const double a = (scaleX * cosine * batchTransform.M11 + scaleX * sine * batchTransform.M21) *
-                         std::abs(static_cast<double>(presentationScaleX));
-        const double b = (scaleX * cosine * batchTransform.M12 + scaleX * sine * batchTransform.M22) *
-                         std::abs(static_cast<double>(presentationScaleY));
-        const double c = (-scaleY * sine * batchTransform.M11 + scaleY * cosine * batchTransform.M21) *
-                         std::abs(static_cast<double>(presentationScaleX));
-        const double d = (-scaleY * sine * batchTransform.M12 + scaleY * cosine * batchTransform.M22) *
-                         std::abs(static_cast<double>(presentationScaleY));
-        const double trace = a * a + b * b + c * c + d * d;
-        const double determinant = a * d - b * c;
-        const double discriminant = std::sqrt(std::max(0.0, trace * trace - 4.0 * determinant * determinant));
-        const double sigmaMinSquared = std::max(0.0, 0.5 * (trace - discriminant));
-        const double sigmaMin = std::sqrt(sigmaMinSquared);
-        const bool isMinifying = sigmaMin < 1.0;
-        if (minifying) *minifying = isMinifying;
-        if (!isMinifying) return 0;
-        if (sigmaMin <= std::numeric_limits<double>::epsilon()) return std::numeric_limits<int>::max();
-        return std::max(0, static_cast<int>(std::floor(std::log2(1.0 / sigmaMin))));
+    double FractionalMipLevelForTransform(
+        int sourceWidth, int sourceHeight, int destinationWidth, int destinationHeight,
+        float rotation, const Matrix& batchTransform, float presentationScaleX,
+        float presentationScaleY, bool* minifying)
+    {
+        const MinificationSigma sigma = ComputeMinificationSigma(
+            sourceWidth, sourceHeight, destinationWidth, destinationHeight, rotation,
+            batchTransform, presentationScaleX, presentationScaleY);
+        if (minifying) *minifying = sigma.minifying;
+        if (!sigma.minifying) return 0.0;
+        if (sigma.sigmaMin <= std::numeric_limits<double>::epsilon())
+            return std::numeric_limits<double>::infinity();
+        return std::max(0.0, std::log2(1.0 / sigma.sigmaMin));
     }
 
     Rectangle MapSourceRectangleToMip(const Rectangle& sourceRectangle,
@@ -405,6 +445,14 @@ namespace CNA::Internal::Backends::Direct2D
         while (preferredLevel > 0 && !mipBitmaps_[static_cast<std::size_t>(preferredLevel - 1)])
             --preferredLevel;
         return preferredLevel;
+    }
+
+    bool Direct2DTextureBackend::IsMipLevelInitialized(int level) const
+    {
+        owner_->EnsureResourceGeneration(deviceGeneration_, "Texture2D");
+        if (level < 0 || level > static_cast<int>(mipBitmaps_.size())) return false;
+        if (level == 0) return true;
+        return static_cast<bool>(mipBitmaps_[static_cast<std::size_t>(level - 1)]);
     }
 
     const std::vector<uint8_t>& Direct2DTextureBackend::RgbaPixelsForLevel(int level) const
@@ -1841,6 +1889,81 @@ namespace CNA::Internal::Backends::Direct2D
         return result;
     }
 
+    std::vector<uint8_t> Direct2DGraphicsBackend::MakeMipBlendedSpritePixels(
+        const Direct2DTextureBackend& texture, const Rectangle& lowerSource,
+        const Rectangle& upperSource, int lowerLevel, int upperLevel, float blendFraction,
+        const Color& color, SpriteEffects effects, int addressU, int addressV) const
+    {
+        // D2D-74: samples both mip levels bracketing a fractional LOD and linearly blends them
+        // (in the same premultiplied-or-not space MakeSpritePixels uses) before tinting, rather
+        // than snapping to a single nearest level. Output is on lowerSource's pixel grid; upper-
+        // level samples are proportionally rescaled onto that same grid.
+        const int sourceWidth = lowerSource.Width;
+        const int sourceHeight = lowerSource.Height;
+        std::vector<uint8_t> result(static_cast<std::size_t>(sourceWidth) * sourceHeight * 4u, 0);
+        const bool flipH = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0;
+        const bool flipV = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0;
+        const auto sampleCoordinate = [](int coordinate, int size, int addressMode) -> int
+        {
+            if (coordinate >= 0 && coordinate < size) return coordinate;
+            if (addressMode == 0) return PositiveModulo(coordinate, size); // Wrap
+            if (addressMode == 2) return MirrorCoordinate(coordinate, size); // Mirror
+            return std::clamp(coordinate, 0, size - 1);
+        };
+        const int lowerMipWidth = std::max(1, texture.GetWidth() >> lowerLevel);
+        const int lowerMipHeight = std::max(1, texture.GetHeight() >> lowerLevel);
+        const int upperMipWidth = std::max(1, texture.GetWidth() >> upperLevel);
+        const int upperMipHeight = std::max(1, texture.GetHeight() >> upperLevel);
+        const std::vector<uint8_t>& lowerPixels = texture.RgbaPixelsForLevel(lowerLevel);
+        const std::vector<uint8_t>& upperPixels = texture.RgbaPixelsForLevel(upperLevel);
+        const double xScale = static_cast<double>(upperSource.Width) / std::max(1, lowerSource.Width);
+        const double yScale = static_cast<double>(upperSource.Height) / std::max(1, lowerSource.Height);
+        const double weightLower = 1.0 - static_cast<double>(blendFraction);
+        const double weightUpper = static_cast<double>(blendFraction);
+
+        for (int dy = 0; dy < sourceHeight; ++dy)
+        {
+            for (int dx = 0; dx < sourceWidth; ++dx)
+            {
+                const int unflippedX = flipH ? sourceWidth - 1 - dx : dx;
+                const int unflippedY = flipV ? sourceHeight - 1 - dy : dy;
+                const int lsx = sampleCoordinate(lowerSource.X + unflippedX, lowerMipWidth, addressU);
+                const int lsy = sampleCoordinate(lowerSource.Y + unflippedY, lowerMipHeight, addressV);
+                const int usx = sampleCoordinate(
+                    upperSource.X + static_cast<int>(std::floor(unflippedX * xScale)), upperMipWidth, addressU);
+                const int usy = sampleCoordinate(
+                    upperSource.Y + static_cast<int>(std::floor(unflippedY * yScale)), upperMipHeight, addressV);
+                if (lsx < 0 || lsy < 0 || usx < 0 || usy < 0) continue;
+
+                const uint8_t* lowerInput = lowerPixels.data() + (static_cast<std::size_t>(lsy) * lowerMipWidth + lsx) * 4u;
+                const uint8_t* upperInput = upperPixels.data() + (static_cast<std::size_t>(usy) * upperMipWidth + usx) * 4u;
+                const auto premultipliedChannel = [&](const uint8_t* input, int channel) -> double
+                {
+                    return nonPremultipliedSource_
+                        ? static_cast<double>(input[channel]) * input[3] / 255.0
+                        : static_cast<double>(input[channel]);
+                };
+                const double blendedR = premultipliedChannel(lowerInput, 0) * weightLower +
+                                        premultipliedChannel(upperInput, 0) * weightUpper;
+                const double blendedG = premultipliedChannel(lowerInput, 1) * weightLower +
+                                        premultipliedChannel(upperInput, 1) * weightUpper;
+                const double blendedB = premultipliedChannel(lowerInput, 2) * weightLower +
+                                        premultipliedChannel(upperInput, 2) * weightUpper;
+                const double blendedA = static_cast<double>(lowerInput[3]) * weightLower +
+                                        static_cast<double>(upperInput[3]) * weightUpper;
+
+                uint8_t* output = result.data() + (static_cast<std::size_t>(dy) * sourceWidth + dx) * 4u;
+                // D2D-34: same independent RGB/A tint as MakeSpritePixels -- Color.A scales only
+                // the blended alpha, never the blended RGB a second time.
+                output[0] = static_cast<uint8_t>(std::lround(blendedR * color.getRProperty() / 255.0));
+                output[1] = static_cast<uint8_t>(std::lround(blendedG * color.getGProperty() / 255.0));
+                output[2] = static_cast<uint8_t>(std::lround(blendedB * color.getBProperty() / 255.0));
+                output[3] = static_cast<uint8_t>(std::lround(blendedA * color.getAProperty() / 255.0));
+            }
+        }
+        return result;
+    }
+
     void Direct2DGraphicsBackend::DrawSprite(
         const ITextureBackend& texture, const Rectangle& destinationRectangle,
         const Rectangle& sourceRectangle, const Color& color, float rotation, const Vector2& origin,
@@ -1866,19 +1989,46 @@ namespace CNA::Internal::Backends::Direct2D
         Vector2 bitmapOrigin = origin;
         int selectedMipLevel = 0;
         bool minifying = false;
+        bool mipBlendActive = false;
+        int mipBlendUpperLevel = 0;
+        float mipBlendFraction = 0.0f;
+        Rectangle mipBlendUpperSource{};
         if (ordinaryTexture || renderTargetTexture)
         {
             // ID2D1Bitmap1 has no implicit mip chain. Select the nearest authored/generated level
             // from the complete 2D output transform, including SpriteBatch shear/scale and the
             // eventual physical presentation scale.
             const PresentationTransform presentation = GetPresentationTransform();
-            const int preferredMip = PreferredMipLevelForTransform(
+            const double fractionalLod = FractionalMipLevelForTransform(
                 sourceRectangle.Width, sourceRectangle.Height,
                 destinationRectangle.Width, destinationRectangle.Height,
                 rotation, batchTransform, presentation.scaleX, presentation.scaleY, &minifying);
+            const int preferredMip = std::isfinite(fractionalLod)
+                ? static_cast<int>(std::floor(fractionalLod)) : std::numeric_limits<int>::max();
             selectedMipLevel = ordinaryTexture
                 ? ordinaryTexture->SelectAvailableMipLevel(preferredMip)
                 : renderTargetTexture->SelectAvailableMipLevel(preferredMip);
+
+            // D2D-74: for MipLinear-family filters, interpolate between the two mip levels
+            // bracketing the fractional LOD instead of snapping to the nearest one. Only ordinary
+            // Texture2D sources have the CPU-side RGBA shadow this needs; RenderTarget2D mips stay
+            // GPU-only/nearest-level (a separate, still-open limitation). Both bracketing levels
+            // must actually be initialized -- an incomplete mip chain still falls back to nearest.
+            if (ordinaryTexture && FilterWantsMipLinear(textureFilter) && std::isfinite(fractionalLod))
+            {
+                const int maxLevel = ordinaryTexture->MaxMipLevel();
+                const int lowerLevel = std::clamp(static_cast<int>(std::floor(fractionalLod)), 0, maxLevel);
+                const int upperLevel = std::min(lowerLevel + 1, maxLevel);
+                if (upperLevel > lowerLevel && ordinaryTexture->IsMipLevelInitialized(lowerLevel) &&
+                    ordinaryTexture->IsMipLevelInitialized(upperLevel))
+                {
+                    mipBlendActive = true;
+                    mipBlendUpperLevel = upperLevel;
+                    mipBlendFraction = static_cast<float>(fractionalLod - lowerLevel);
+                    selectedMipLevel = lowerLevel;
+                }
+            }
+
             if (selectedMipLevel > 0)
             {
                 const int mipWidth = std::max(1, texture.GetWidth() >> selectedMipLevel);
@@ -1888,6 +2038,13 @@ namespace CNA::Internal::Backends::Direct2D
                 bitmapOrigin = Vector2(
                     origin.X * static_cast<float>(mipWidth) / texture.GetWidth(),
                     origin.Y * static_cast<float>(mipHeight) / texture.GetHeight());
+            }
+            if (mipBlendActive)
+            {
+                const int upperMipWidth = std::max(1, texture.GetWidth() >> mipBlendUpperLevel);
+                const int upperMipHeight = std::max(1, texture.GetHeight() >> mipBlendUpperLevel);
+                mipBlendUpperSource = MapSourceRectangleToMip(sourceRectangle, texture.GetWidth(),
+                                                               texture.GetHeight(), upperMipWidth, upperMipHeight);
             }
         }
         const D2D1_INTERPOLATION_MODE interpolation = ToInterpolationMode(textureFilter, minifying);
@@ -1899,9 +2056,14 @@ namespace CNA::Internal::Backends::Direct2D
 
         const bool copyBlend = blendMode_ == Direct2DBlendMode::Copy;
         const bool needsTintEffect = !IsWhite(color);
-        const bool requiresCpuBitmap = ordinaryTexture && (needsTintEffect || nonPremultipliedSource_) &&
-            ((needsTintEffect && !SupportsColorMatrixEffect()) ||
-             (nonPremultipliedSource_ && !SupportsPremultiplyEffect()));
+        // D2D-74: a mip-linear blend has no GPU built-in-effect equivalent here, so it always
+        // takes the CPU path (MakeMipBlendedSpritePixels), independent of ColorMatrix/Premultiply
+        // effect support.
+        const bool requiresCpuBitmap = ordinaryTexture &&
+            (mipBlendActive ||
+             ((needsTintEffect || nonPremultipliedSource_) &&
+              ((needsTintEffect && !SupportsColorMatrixEffect()) ||
+               (nonPremultipliedSource_ && !SupportsPremultiplyEffect()))));
 
         ComPtr<ID2D1Bitmap1> transient;
         ID2D1Bitmap1* bitmap = ordinaryTexture
@@ -1915,8 +2077,12 @@ namespace CNA::Internal::Backends::Direct2D
                 throw System::ArgumentOutOfRangeException(
                     "sourceRectangle", "too large",
                     "The Direct2D CPU fallback source exceeds the device maximum bitmap size.");
-            const std::vector<uint8_t> pixels = MakeSpritePixels(*ordinaryTexture, localSource, color,
-                                                                  effects, addressU, addressV, selectedMipLevel);
+            const std::vector<uint8_t> pixels = mipBlendActive
+                ? MakeMipBlendedSpritePixels(*ordinaryTexture, localSource, mipBlendUpperSource,
+                                              selectedMipLevel, mipBlendUpperLevel, mipBlendFraction,
+                                              color, effects, addressU, addressV)
+                : MakeSpritePixels(*ordinaryTexture, localSource, color, effects, addressU, addressV,
+                                   selectedMipLevel);
             transient.Attach(CreateBitmapFromRgba(pixels.data(), localSource.Width, localSource.Height,
                                                    false));
             bitmap = transient.Get();

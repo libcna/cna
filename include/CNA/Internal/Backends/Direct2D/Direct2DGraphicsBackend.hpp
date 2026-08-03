@@ -49,6 +49,14 @@ namespace CNA::Internal::Backends::Direct2D
                                       float rotation, const Matrix& batchTransform,
                                       float presentationScaleX, float presentationScaleY,
                                       bool* minifying = nullptr);
+    /// D2D-74: the continuous (unfloored) LOD PreferredMipLevelForTransform derives its integer
+    /// result from. 0.0 when not minifying; +infinity for a singular (zero-area) transform,
+    /// matching PreferredMipLevelForTransform's INT_MAX sentinel for that same case.
+    double FractionalMipLevelForTransform(int sourceWidth, int sourceHeight,
+                                          int destinationWidth, int destinationHeight,
+                                          float rotation, const Matrix& batchTransform,
+                                          float presentationScaleX, float presentationScaleY,
+                                          bool* minifying = nullptr);
     Rectangle MapSourceRectangleToMip(const Rectangle& sourceRectangle,
                                       int baseWidth, int baseHeight,
                                       int mipWidth, int mipHeight);
@@ -74,6 +82,12 @@ namespace CNA::Internal::Backends::Direct2D
         /// sampling black/uninitialized storage during minification.
         [[nodiscard]] int SelectAvailableMipLevel(int preferredLevel) const;
         [[nodiscard]] const std::vector<uint8_t>& RgbaPixelsForLevel(int level) const;
+        /// D2D-74: whether @p level has actually been uploaded (level 0 always has; a lower level
+        /// only if Texture2D::SetData(level, ...) wrote it). Used to decide whether the two levels
+        /// bracketing a fractional LOD are both available to interpolate between.
+        [[nodiscard]] bool IsMipLevelInitialized(int level) const;
+        /// Highest valid mip level index (0 for a non-mipmapped texture).
+        [[nodiscard]] int MaxMipLevel() const { return static_cast<int>(mipBitmaps_.size()); }
 
     private:
         friend class Direct2DGraphicsBackend;
@@ -305,6 +319,13 @@ namespace CNA::Internal::Backends::Direct2D
                                                              const Color& color, SpriteEffects effects,
                                                              int addressU, int addressV,
                                                              int mipLevel) const;
+        /// D2D-74: same contract as MakeSpritePixels, but samples and linearly blends two mip
+        /// levels (lowerSource/lowerLevel and upperSource/upperLevel) before tinting, for
+        /// MipLinear-family TextureFilter values. Output is sized to lowerSource.
+        [[nodiscard]] std::vector<uint8_t> MakeMipBlendedSpritePixels(
+            const Direct2DTextureBackend& texture, const Rectangle& lowerSource,
+            const Rectangle& upperSource, int lowerLevel, int upperLevel, float blendFraction,
+            const Color& color, SpriteEffects effects, int addressU, int addressV) const;
         [[nodiscard]] static D2D1_MATRIX_3X2_F ToD2DMatrix(const Matrix& matrix);
         [[nodiscard]] static D2D1_MATRIX_3X2_F Multiply(const D2D1_MATRIX_3X2_F& left,
                                                          const D2D1_MATRIX_3X2_F& right);

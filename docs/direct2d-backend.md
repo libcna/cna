@@ -14,9 +14,14 @@ does not grow a parallel 3D implementation.
   Direct2D anisotropic filtering and normal 2D source rectangles. Minification selects the nearest
   initialized mip from the complete sprite/batch/presentation transform; an uninitialized lower
   level safely falls back to level zero. Mixed min/mag `TextureFilter` values select the requested
-  spatial filter for the actual direction. Values requesting mip-linear interpolation retain a
-  documented nearest-level policy because the backend stores independent Direct2D bitmaps rather
-  than a native mip-chain resource.
+  spatial filter for the actual direction. `TextureFilter` values whose mip component is Linear
+  (`Linear`, `PointMipLinear`, `MinLinearMagPointMipLinear`, `MinPointMagLinearMipLinear`)
+  independently sample and linearly blend the two mip levels bracketing the fractional LOD (a
+  CPU-side blend, since the backend stores independent Direct2D bitmaps rather than a native
+  mip-chain resource) when both bracketing levels are actually initialized; an incomplete mip
+  chain still falls back to the nearest available level. `RenderTarget2D` mip-linear interpolation
+  is not yet implemented (its mips are GPU-only, with no CPU-side pixel data to blend) and still
+  selects the nearest level.
 - `RenderTarget2D` rendering, sampling after unbind, and CPU readback. Native Direct2D uses
   `CopyFromRenderTarget`; if a runtime exposes the target bitmap but returns `E_NOTIMPL` there,
   the backend uses `CopyFromBitmap` into the same CPU-readable Direct2D bitmap. GPU-only
