@@ -1,7 +1,8 @@
 name: 32-bit Arithmetic Coverage
 
-# REMED-MEDIA-001 / GDI-067: compiles and RUNS AudioTagParser and SoftwareFramebuffer
-# width-dependent std::size_t bounds checks at a genuine 32-bit width, on a real i386
+# REMED-MEDIA-001 / GDI-067 / GDI-076: compiles and RUNS AudioTagParser, SoftwareFramebuffer,
+# and SoftwareTexture width-dependent std::size_t bounds checks at a genuine 32-bit width, on a
+# real i386
 # GitHub-hosted runner target via gcc-multilib/g++-multilib -- not a
 # uint32_t-arithmetic simulation on a 64-bit host, which is what
 # AudioTagParserTests.cpp's own Id3v23FrameSizeOverflowIsCaughtOnANarrow32BitSizeT
@@ -32,8 +33,11 @@ on:
       - 'include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp'
       - 'tools/media/**'
       - 'tools/graphics/framebuffer_allocation_32bit_check.cpp'
+      - 'tools/graphics/texture_allocation_32bit_check.cpp'
       - 'include/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp'
       - 'src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp'
+      - 'include/CNA/Internal/Backends/Software/SoftwareTextureAllocation.hpp'
+      - 'src/CNA/Internal/Backends/Software/SoftwareTextureAllocation.cpp'
       - '.github/workflows/32bit-arithmetic-ci.yml'
   pull_request:
     paths:
@@ -43,8 +47,11 @@ on:
       - 'include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp'
       - 'tools/media/**'
       - 'tools/graphics/framebuffer_allocation_32bit_check.cpp'
+      - 'tools/graphics/texture_allocation_32bit_check.cpp'
       - 'include/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.hpp'
       - 'src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp'
+      - 'include/CNA/Internal/Backends/Software/SoftwareTextureAllocation.hpp'
+      - 'src/CNA/Internal/Backends/Software/SoftwareTextureAllocation.cpp'
       - '.github/workflows/32bit-arithmetic-ci.yml'
   workflow_dispatch: {}
 
@@ -74,3 +81,4 @@ jobs:
         run: |
           ./cmake-build-32bit-arithmetic/cna_audio_tag_parser_32bit_overflow_check
           ./cmake-build-32bit-arithmetic/cna_framebuffer_allocation_32bit_overflow_check
+          ./cmake-build-32bit-arithmetic/cna_texture_allocation_32bit_overflow_check

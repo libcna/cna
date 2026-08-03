@@ -49,10 +49,22 @@ target_include_directories(cna_framebuffer_allocation_32bit_overflow_check PRIVA
     "${CNA_ROOT}/include"
 )
 
+# GDI-076: the CPU texture layout planner gets the same genuine-32-bit coverage as the
+# framebuffer planner above -- see tools/graphics/texture_allocation_32bit_check.cpp.
+add_executable(cna_texture_allocation_32bit_overflow_check
+    "${CNA_ROOT}/tools/graphics/texture_allocation_32bit_check.cpp"
+    "${CNA_ROOT}/src/CNA/Internal/Backends/Software/SoftwareTextureAllocation.cpp"
+)
+target_include_directories(cna_texture_allocation_32bit_overflow_check PRIVATE
+    "${CNA_ROOT}/include"
+)
+
 if(MINGW)
     target_link_options(cna_audio_tag_parser_32bit_overflow_check PRIVATE
         -static-libgcc -static-libstdc++)
     target_link_options(cna_framebuffer_allocation_32bit_overflow_check PRIVATE
+        -static-libgcc -static-libstdc++)
+    target_link_options(cna_texture_allocation_32bit_overflow_check PRIVATE
         -static-libgcc -static-libstdc++)
 endif()
 
@@ -61,3 +73,5 @@ add_test(NAME AudioTagParser32BitOverflowCheck
          COMMAND cna_audio_tag_parser_32bit_overflow_check)
 add_test(NAME FramebufferAllocation32BitOverflowCheck
          COMMAND cna_framebuffer_allocation_32bit_overflow_check)
+add_test(NAME TextureAllocation32BitOverflowCheck
+         COMMAND cna_texture_allocation_32bit_overflow_check)
