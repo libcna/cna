@@ -407,10 +407,37 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   triangle batches now pass their contiguous `GlideVertex` storage and `sizeof(GlideVertex)`
   directly; the 1024-triangle state/tile flush boundaries are unchanged. The x86 fake-DLL build
   resolves the 16-byte stdcall export; runtime FIFO/image validation remains in GLIDE-AUD-007.
-- [ ] **GLIDE-FUT-015 — Batch SpriteBatch without changing its ordering contract.** Profile the
-  native immediate sprite path, then add a bounded queue for adjacent sprites with identical
-  texture/sampler/blend/scissor state. Flush at every observable ordering/state boundary and
-  compare translucent overlapping sprites, not just opaque throughput scenes.
+- [x] **GLIDE-FUT-015 — Batch SpriteBatch without changing its ordering contract.**
+  `DrawSprite()` previously issued `grTexSource`/`grTexFilterMode`/`grTexClampMode`/
+  `grTexMipMapMode`/`grTexLodBiasValue` plus two immediate `grDrawTriangle` calls per sprite per
+  tile, even for consecutive sprites sharing the same texture/tile/sampler. It now accumulates
+  compatible quads into `Impl::pendingSpriteTriangles` and submits them with one
+  `grDrawVertexArrayContiguous` call (bounded at `kMaxPendingSpriteVertices = 3072`, matching the
+  existing 3D triangle batch cap), rebinding TMU0 only when the tile's native address or the
+  filter/address-mode parameters actually change (tracked by native TMU address, not a C++
+  pointer, to avoid any lifetime assumption about `Tile` object addresses).
+  **Ordering-contract audit (mandatory, since this changes previously-immediate submission into
+  deferred submission):** every `GlideGraphicsBackend` method that either mutates cached/native
+  rendering state read at flush time (blend, depth, cull, scissor, viewport, virtual resolution,
+  the shared `samplerLodBias`) or issues its own native draw/clear/present/readback command now
+  calls `impl_->FlushSpriteBatch()` first, so a queued-but-unsubmitted sprite can never be
+  rendered under a state it wasn't actually drawn with, and can never be reordered relative to
+  another native submission. Protected entry points: `Clear`, `Present`, `ReadBackbuffer`,
+  `SetVirtualResolution`, `SetViewport`, `SetRenderTarget2D`, `SetRenderTargets`,
+  `SetScissorRect`, `ApplyBlendState`, `SetBlendEnabled`, `ApplyDepthStencilState`,
+  `SetDepthTestEnabled`, `SetDepthWriteEnabled`, `ApplyRasterizerState`, `ApplySamplerMipState`,
+  `ClearColorAndDepth`, `ClearDepth`, and `DrawPrimitiveRange` (the single funnel point for all
+  six 3D draw entry points). Verified this list is exhaustive with a scripted sweep of every
+  `GlideGraphicsBackend::` method body for native `gr*` calls or writes to the relevant `impl_`
+  fields; the only method the sweep flagged besides the ones above (`SetPresentationMode`) was
+  confirmed to only ever reassign `presentationMode` to the value it is already statically
+  guaranteed to hold, with no other code reading it — a true no-op requiring no flush.
+  `ApplySamplerState` (TMU sampler filter/address for the *3D* path) and `SetSwapInterval` were
+  confirmed independent of the sprite queue and intentionally left unprotected. Verified with
+  i686 MinGW `-fsyntax-only` recompilation of the whole backend and the unaffected portable Glide
+  unit suite (44/44). Native call-count reduction and translucent-overlap image comparisons
+  remain blocked by the same external i686 `sharp-runtime` `__int128` dependency as
+  GLIDE-AUD-006/007.
 - [ ] **GLIDE-FUT-016 — Make presentation and mode changes more complete, only through controlled
   recreation.** Investigate native fullscreen/windowed mode selection, higher swap intervals and
   post-start virtual-resolution changes via an atomic `grSstWinClose`/`grSstWinOpen` rebuild that

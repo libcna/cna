@@ -554,6 +554,34 @@ namespace CNA::Internal::Backends::Glide
             api.grColorMask(colorMaskRgb, colorMaskAlpha);
         }
 
+        // Adjacent SpriteBatch quads that keep the same native TMU binding and sampler settings
+        // are queued here and submitted with one grDrawVertexArrayContiguous call instead of two
+        // grDrawTriangle calls per sprite. Every other GlideGraphicsBackend entry point that
+        // changes rendering state, submits geometry through a different path, or reads/clears/
+        // presents the framebuffer MUST call FlushSpriteBatch() first, so a queued-but-unsubmitted
+        // sprite is never rendered under a state it wasn't actually drawn with, and never
+        // reordered relative to other native submissions.
+        static constexpr std::size_t kMaxPendingSpriteVertices = 3u * 1024u;
+        std::vector<GlideVertex> pendingSpriteTriangles;
+        bool spriteBatchBound = false;
+        FxU32 spriteBoundTmuAddress = 0;
+        int spriteSamplerFilter = 0;
+        int spriteSamplerAddressU = 0;
+        int spriteSamplerAddressV = 0;
+
+        void FlushSpriteBatch()
+        {
+            if (pendingSpriteTriangles.empty())
+            {
+                return;
+            }
+            api.grDrawVertexArrayContiguous(
+                kPrimitiveTriangles, static_cast<FxU32>(pendingSpriteTriangles.size()),
+                pendingSpriteTriangles.data(), static_cast<FxU32>(sizeof(GlideVertex)));
+            pendingSpriteTriangles.clear();
+            spriteBatchBound = false;
+        }
+
         void ClearDepthOnly(std::uint16_t depth)
         {
             api.grDepthBufferMode(kDepthBufferZ);
@@ -1381,6 +1409,7 @@ namespace CNA::Internal::Backends::Glide
 
     void GlideGraphicsBackend::Clear(float r, float g, float b, float a)
     {
+        impl_->FlushSpriteBatch();
         impl_->api.grRenderBuffer(kBufferBack);
         impl_->ClearColorOnly(PackArgb(r, g, b, a),
                               static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f + 0.5f));
@@ -1388,6 +1417,7 @@ namespace CNA::Internal::Backends::Glide
 
     void GlideGraphicsBackend::Present()
     {
+        impl_->FlushSpriteBatch();
         impl_->api.grBufferSwap(impl_->swapInterval > 0 ? 1u : 0u);
         impl_->api.grRenderBuffer(kBufferBack);
     }
@@ -1414,6 +1444,7 @@ namespace CNA::Internal::Backends::Glide
             throw std::runtime_error("GLIDE ReadBackbuffer requested an invalid rectangle");
         }
 
+        impl_->FlushSpriteBatch();
         impl_->api.grFinish();
         std::vector<std::uint16_t> source(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
         if (impl_->api.grLfbReadRegion(kBufferBack, static_cast<FxU32>(x), static_cast<FxU32>(y),
@@ -1439,6 +1470,7 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE virtual resolution exceeds the native Glide context selected at startup");
         }
+        impl_->FlushSpriteBatch();
         impl_->virtualWidth = width;
         impl_->virtualHeight = height;
         if (impl_->scissorX + impl_->scissorWidth > width || impl_->scissorY + impl_->scissorHeight > height)
@@ -1477,6 +1509,7 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE backend received an invalid Viewport");
         }
+        impl_->FlushSpriteBatch();
         impl_->viewportX = x;
         impl_->viewportY = y;
         impl_->viewportWidth = w;
@@ -1514,6 +1547,7 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE backend does not support RenderTarget2D");
         }
+        impl_->FlushSpriteBatch();
         impl_->api.grRenderBuffer(kBufferBack);
     }
 
@@ -1523,11 +1557,13 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE backend does not support render targets or multiple render targets");
         }
+        impl_->FlushSpriteBatch();
         impl_->api.grRenderBuffer(kBufferBack);
     }
 
     void GlideGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
     {
+        impl_->FlushSpriteBatch();
         impl_->scissorX = x;
         impl_->scissorY = y;
         impl_->scissorWidth = w;
@@ -1578,6 +1614,7 @@ namespace CNA::Internal::Backends::Glide
                 "auxiliary buffer cannot hold both a Z plane and destination-alpha data, which the "
                 "Glide 3.0 reference documents as producing undefined results");
         }
+        impl_->FlushSpriteBatch();
         impl_->colorSrcBlend = resolvedColorSrc;
         impl_->colorDstBlend = resolvedColorDst;
         impl_->alphaSrcBlend = resolvedAlphaSrc;
@@ -1608,6 +1645,7 @@ namespace CNA::Internal::Backends::Glide
                 "InverseDestinationAlpha/SourceAlphaSaturation blend factor is active: Glide's "
                 "auxiliary buffer cannot hold both a Z plane and destination-alpha data at once");
         }
+        impl_->FlushSpriteBatch();
         impl_->depthTestEnabled = depthEnable;
         impl_->depthWriteEnabled = depthWriteEnable;
         impl_->depthCompare = resolvedDepthCompare;
@@ -1628,6 +1666,7 @@ namespace CNA::Internal::Backends::Glide
                 "GLIDE RasterizerState depth bias is unsupported: Glide's integer depth-bias scale "
                 "cannot faithfully represent XNA's normalized/slope-scaled bias");
         }
+        impl_->FlushSpriteBatch();
         switch (cullMode)
         {
             case 0: impl_->api.grCullMode(kCullDisable); break;
@@ -1684,6 +1723,10 @@ namespace CNA::Internal::Backends::Glide
         {
             throw std::runtime_error("GLIDE SamplerState LOD bias must be finite and within [-8, 7.75]");
         }
+        // DrawSprite() reads samplerLodBias too; a mid-batch change must not be silently skipped
+        // for sprites already queued under the old bias (sameBinding does not compare it, since
+        // it is not one of the SpriteBatch-owned sampler parameters).
+        impl_->FlushSpriteBatch();
         impl_->samplerLodBias = lodBias;
     }
 
@@ -1715,10 +1758,6 @@ namespace CNA::Internal::Backends::Glide
         // `texture` is publicly const during a draw, but its backend owns mutable native cache
         // storage. Rebuild only address-dependent gutters/padding before TMU0 sees the tile.
         const_cast<GlideTextureBackend*>(glideTexture)->EnsureAddressMode(addressU, addressV);
-
-        // A preceding colored 3D draw leaves the fixed function combiner untextured. Restore
-        // the SpriteBatch path explicitly instead of relying on accidental Glide state.
-        impl_->ConfigureSpriteCombiner();
 
         const GlideSamplerSettings sampler = ToGlideSamplerSettings(textureFilter);
         const float sourceWidth = static_cast<float>(sourceRectangle.Width);
@@ -1790,25 +1829,54 @@ namespace CNA::Internal::Backends::Glide
                     texcoords[index].Y,
                     1.0f };
             };
-            impl_->api.grTexSource(0, tile.range.address, kMipMapBoth,
-                                    const_cast<GlideTexInfo*>(&tile.nativeInfo));
-            impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
-            // Geometry has already been restricted to the selected tile; letting native Wrap or
-            // Mirror escape into its power-of-two padding would sample a wrong logical tile.
-            impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
-            impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
-            impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
+            // Adjacent sprites that keep the same native TMU binding and sampler settings share
+            // one pending batch; anything else (a different tile/texture, a different filter or
+            // address mode, or any other GlideGraphicsBackend call in between) flushes first, so
+            // a queued sprite is never rendered under state it wasn't actually drawn with.
+            const bool sameBinding = impl_->spriteBatchBound &&
+                impl_->spriteBoundTmuAddress == tile.range.address &&
+                impl_->spriteSamplerFilter == textureFilter &&
+                impl_->spriteSamplerAddressU == addressU && impl_->spriteSamplerAddressV == addressV;
+            if (!sameBinding)
+            {
+                impl_->FlushSpriteBatch();
+                // A preceding colored 3D draw leaves the fixed function combiner untextured.
+                // Restore the SpriteBatch path explicitly instead of relying on accidental state.
+                impl_->ConfigureSpriteCombiner();
+                impl_->api.grTexSource(0, tile.range.address, kMipMapBoth,
+                                        const_cast<GlideTexInfo*>(&tile.nativeInfo));
+                impl_->api.grTexFilterMode(0, sampler.minFilter, sampler.magFilter);
+                // Geometry has already been restricted to the selected tile; letting native Wrap
+                // or Mirror escape into its power-of-two padding would sample a wrong logical tile.
+                impl_->api.grTexClampMode(0, kTexClampClamp, kTexClampClamp);
+                impl_->api.grTexMipMapMode(0, kMipMapNearest, sampler.lodBlend);
+                impl_->api.grTexLodBiasValue(0, impl_->samplerLodBias);
+                impl_->spriteBatchBound = true;
+                impl_->spriteBoundTmuAddress = tile.range.address;
+                impl_->spriteSamplerFilter = textureFilter;
+                impl_->spriteSamplerAddressU = addressU;
+                impl_->spriteSamplerAddressV = addressV;
+            }
             const GlideVertex topLeft = makeVertex(0);
             const GlideVertex topRight = makeVertex(1);
             const GlideVertex bottomRight = makeVertex(2);
             const GlideVertex bottomLeft = makeVertex(3);
-            impl_->api.grDrawTriangle(&topLeft, &topRight, &bottomRight);
-            impl_->api.grDrawTriangle(&topLeft, &bottomRight, &bottomLeft);
+            impl_->pendingSpriteTriangles.push_back(topLeft);
+            impl_->pendingSpriteTriangles.push_back(topRight);
+            impl_->pendingSpriteTriangles.push_back(bottomRight);
+            impl_->pendingSpriteTriangles.push_back(topLeft);
+            impl_->pendingSpriteTriangles.push_back(bottomRight);
+            impl_->pendingSpriteTriangles.push_back(bottomLeft);
+            if (impl_->pendingSpriteTriangles.size() >= GlideGraphicsBackend::Impl::kMaxPendingSpriteVertices)
+            {
+                impl_->FlushSpriteBatch();
+            }
         }
     }
 
     void GlideGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
+        impl_->FlushSpriteBatch();
         impl_->api.grRenderBuffer(kBufferBack);
         impl_->ClearColorAndDepth(PackArgb(r, g, b, a),
                                   static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f + 0.5f),
@@ -1817,6 +1885,7 @@ namespace CNA::Internal::Backends::Glide
 
     void GlideGraphicsBackend::ClearDepth(float depth)
     {
+        impl_->FlushSpriteBatch();
         impl_->api.grRenderBuffer(kBufferBack);
         impl_->ClearDepthOnly(ToGlideDepth(depth));
     }
@@ -1835,6 +1904,7 @@ namespace CNA::Internal::Backends::Glide
                 "InverseDestinationAlpha/SourceAlphaSaturation blend factor is active: Glide's "
                 "auxiliary buffer cannot hold both a Z plane and destination-alpha data at once");
         }
+        impl_->FlushSpriteBatch();
         impl_->depthTestEnabled = enabled;
         impl_->ApplyDepthState();
     }
@@ -1849,12 +1919,14 @@ namespace CNA::Internal::Backends::Glide
                 "SourceAlphaSaturation blend factor while depth buffering is enabled: Glide's "
                 "auxiliary buffer cannot hold both a Z plane and destination-alpha data at once");
         }
+        impl_->FlushSpriteBatch();
         impl_->blendEnabled = enabled;
         impl_->ApplyBlendState();
     }
 
     void GlideGraphicsBackend::SetDepthWriteEnabled(bool enabled)
     {
+        impl_->FlushSpriteBatch();
         impl_->depthWriteEnabled = enabled;
         impl_->ApplyDepthState();
     }
@@ -2063,6 +2135,10 @@ namespace CNA::Internal::Backends::Glide
                                                   PrimitiveType primitive, int primitiveCount, int vertexStart,
                                                   const GpuDrawParams& params)
     {
+        // Every 3D draw entry point funnels through here. A pending SpriteBatch queue must
+        // submit before this draw's own combiner/texture/alpha-test state takes over TMU0,
+        // otherwise queued sprites would render after this 3D geometry instead of before it.
+        impl_->FlushSpriteBatch();
         ValidateFixedFunctionDrawParams(params);
         // Decoding never fails (DecodeAlphaTest is total over its float inputs), but do not push
         // it to native Glide yet: several checks below (buffer/texture casts, bounds, the lighting
