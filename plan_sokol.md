@@ -15,16 +15,17 @@
 > for affected older tasks (`SOKOL-9`, `SOKOL-15`, `SOKOL-28`, `SOKOL-29`, `SOKOL-39`) until their
 > corrective tasks and regression tests are complete.
 >
-> **Remediation update (2026-08-03, same day): SOKOL-40/41/42/43/44/45 closed.** All six of that
-> day's Phase 8 corrective-follow-up tasks landed with committed regression tests (commits
-> `fbf91773`, `38220666`) -- blend-factor pipeline caching, full raw-GL graphics state in both
-> custom-effect draw paths, `OcclusionQuery`/`ShaderEffect` backend release on `Dispose()`,
-> cross-object occlusion-query coordination, custom-effect texture-rebind survival across
-> `SetData()` (with one documented residual boundary for `Texture2D.SetData(Color[], int)`
-> specifically -- see SOKOL-44's own row), and transactional GL-context construction. All 34
-> registered Sokol CTest cases pass, plus the `CnaTests` `OcclusionQuery`/`ShaderEffect`/`Effect`
-> suites. `SOKOL-46` (doc/comment sync), `SOKOL-47` (committed `RenderTargetCube` mip coverage) and
-> `SOKOL-48` (broader state-transition/lifetime regression matrix) remain open.
+> **Remediation update (2026-08-03, same day): Phase 8 CLOSED, all nine tasks (SOKOL-40..48).**
+> Every corrective-follow-up task from the audit above landed with committed regression tests
+> (commits `fbf91773`, `38220666`, `929abaf8`, `374d676f`, `7a49419d`) -- blend-factor pipeline
+> caching, full raw-GL graphics state in both custom-effect draw paths, `OcclusionQuery`/
+> `ShaderEffect` backend release on `Dispose()`, cross-object occlusion-query coordination,
+> custom-effect texture-rebind survival across `SetData()` (with one documented residual boundary
+> for `Texture2D.SetData(Color[], int)` specifically -- see SOKOL-44's own row), transactional
+> GL-context construction, a doc/comment sync against the landed implementation, committed
+> `RenderTargetCube` mip coverage, and a compact state-transition/lifetime regression matrix. All
+> 36 registered Sokol CTest cases pass, plus the `CnaTests` `OcclusionQuery`/`ShaderEffect`/
+> `Effect` suites.
 >
 > **Historical status (2026-07-31): the 2D baseline was implemented and pixel-verified.**
 > `CNA_GRAPHICS_BACKEND=SOKOL` configures, fetches sokol at a pinned commit, builds
@@ -241,16 +242,16 @@ variant remains unimplemented -- no task is assigned for it here since that is s
 
 ---
 
-### Phase 8 — Post-implementation audit remediation (SOKOL-40..47 closed 2026-08-03; SOKOL-48 open)
+### Phase 8 — Post-implementation audit remediation (SOKOL-40..48 CLOSED 2026-08-03)
 
 This phase records defects found by reviewing the `GLCORE` implementation at commit `63a308d4`.
 They were not contradicted by the green integration suite at the time: the existing tests exercised
 the principal happy paths but did not cover repeated cache-key state changes, raw-GL state inherited
 from a previous draw, two query objects active at once, resources that outlive device disposal, or a
-texture upload between `ShaderEffect::SetTexture()` and the eventual draw. `SOKOL-40`/`SOKOL-41`/
-`SOKOL-42`/`SOKOL-43`/`SOKOL-44`/`SOKOL-45`/`SOKOL-46`/`SOKOL-47` are now closed with committed
-regression tests (commits `fbf91773`, `38220666`, `929abaf8`, `374d676f`); `SOKOL-48` (broader
-state-transition/lifetime regression matrix) remains open.
+texture upload between `ShaderEffect::SetTexture()` and the eventual draw. All nine tasks
+(`SOKOL-40`..`SOKOL-48`) are now closed with committed regression tests (commits `fbf91773`,
+`38220666`, `929abaf8`, `374d676f`, `7a49419d`); 36 registered Sokol CTest cases pass in full,
+plus `CnaTests`' `OcclusionQuery`/`ShaderEffect`/`Effect` suites.
 
 | ID | Task | Status | Finding and acceptance criteria |
 |---|---|---|---|
@@ -262,7 +263,7 @@ state-transition/lifetime regression matrix) remains open.
 | SOKOL-45 | Make GL-context construction fully transactional (`SOKOL-9` corrective follow-up) | ✅ | `CreateGpuContext()` is called before the constructor's cleanup `try` block. If `SDL_GL_CreateContext()` succeeds but `SDL_GL_MakeCurrent()` fails, construction throws while leaking the new context. **Closed 2026-08-03**: context creation now runs inside the same `try` block as `sg_setup()`/sprite-resource creation, sharing one `DestroyGpuContextIfAnyEXT()` cleanup path used by both the constructor's catch block and the destructor. A new NOXNA test-only constructor overload (`forceMakeCurrentFailureEXT`, `contextDestroyCountEXT`) makes the failure path injectable without needing to actually break SDL. New `Sokol_GLContext_Transactional` test forces a real `SDL_GL_CreateContext()` success followed by a forced `SDL_GL_MakeCurrent()` failure, verifying construction throws, exactly one context is destroyed, no backend is left registered, and the same window can immediately construct a real working backend afterward. |
 | SOKOL-46 | Synchronize the plan, public capability document and inline comments with the landed implementation | ✅ | Several statements are historical but still written as current fact: old rows say 3D/custom effects/render targets/cube readback/mipmaps are absent; `docs/sokol-backend.md` says render targets cannot be multisampled and says `SOKOL-34` has not landed; the backend class/CreateRenderTarget/DrawPrimitives comments still describe the 2D-only boundary; the capability comments contradict the implementation/test contract. **Closed 2026-08-03**: rewrote `SokolGraphicsBackend`'s class-level Doxygen comment, `CreateRenderTarget2D`/`CreateRenderTargetCube`'s `@param mipMap`/`@param multiSampleCount` docs, `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`'s effect-coverage comment, and `SupportsCapability()`'s `MultiSampleAntiAliasing`/`ThreeD` inline comments against the actual current implementation. `docs/sokol-backend.md`'s intro, its `RenderTargetCube` mip row, and its "entries need reading carefully" note were all similarly stale and rewritten; added the five SOKOL-40/41/42/44/45 regression tests to its verification table. No CMake cube-MSAA comment was found to be stale (grepped `cmake/`; none exists). |
 | SOKOL-47 | Commit reproducible RenderTargetCube mipmap coverage (`SOKOL-39` verification follow-up) | ✅ | The cube half of `SOKOL-39` is marked ✅ using only a throwaway, uncommitted program, and its note incorrectly says `SOKOL-34`/cube sampling has not landed. **Closed 2026-08-03**: new `Sokol_RenderTargetCube_Mip` fills face `PositiveX` level 0 solid, unbinds (regenerating mips), then reads back every texel of levels 1 (16x16) and 2 (8x8) via `RenderTargetCube::GetData()`, plus `LevelCount` itself -- 3/3 pass. Sampling through `EnvironmentMapEffect` was deliberately not attempted: that effect has no explicit mip-bias/LOD control, so a full-screen quad has no reliable way to force a non-zero level over level 0 -- automatic GLSL LOD selection is not a controllable, reproducible test signal; direct `GetData()` readback is. |
-| SOKOL-48 | Add a compact state-transition/lifetime regression matrix | ⬜ | Preserve the existing 28 happy-path GPU tests, but add focused coverage for the failure dimensions exposed by this audit: first-use vs cached reuse, A→B→A state transitions, stock/custom draw ordering, two independent resource instances, mutation between bind and draw, and resource destruction after device disposal. These tests should run under the same Xvfb/llvmpipe CTest setup and must fail on the pre-fix implementation for `SOKOL-40..45`. |
+| SOKOL-48 | Add a compact state-transition/lifetime regression matrix | ✅ | Preserve the existing 28 happy-path GPU tests, but add focused coverage for the failure dimensions exposed by this audit: first-use vs cached reuse, A→B→A state transitions, stock/custom draw ordering, two independent resource instances, mutation between bind and draw, and resource destruction after device disposal. **Closed 2026-08-03**: most of these dimensions are already covered by SOKOL-40/41/42/44/45's own per-ticket tests (A→B→A: `Sokol_BlendFactor_PipelineCache`; stock/custom ordering: `Sokol_CustomEffect_BlendStateOrder`; mutation between bind and draw: `Sokol_CustomEffect_TextureReupload`; destruction after device disposal: `Sokol_DisposeOrder_OcclusionQueryShaderEffect`); new `Sokol_StateLifetimeRegressionMatrix` adds the two dimensions those tickets' own closing notes explicitly deferred here: two independent `OcclusionQuery` instances interleaved in both begin/end orders plus a healthy fresh query afterward (SOKOL-43's own "two independent resource instances" gap), and `DrawCustomEffect3D`'s `CullMode` applied independently of a preceding stock draw's leftover GL cull state (SOKOL-41's own "the `DrawCustomEffect3D` (3D) path left to SOKOL-48" gap) -- 7/7 checks pass. |
 
 The pre-existing incomplete work remains open independently of this audit: `SOKOL-22` (remaining
 vertex usages), `SOKOL-23` (wireframe boundary), `SOKOL-24` (upload performance), and portability/
