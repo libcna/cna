@@ -87,6 +87,8 @@ namespace CNA::Internal::Backends::Gdi
         [[nodiscard]] bool DebugIsNativeClientInvalidated() const;
         /** @brief Makes the next DIB blit report zero lines, exercising failure retention. */
         void DebugForceNextDibBlitFailure() { debugForceNextDibBlitFailure_ = true; }
+        /** @brief Makes the next Present()'s checked ReleaseDC report failure (GDI-077). */
+        void DebugForceNextReleaseDcFailure() { debugForceNextReleaseDcFailure_ = true; }
         /** @brief Returns the most recent presentation plan/result telemetry. */
         [[nodiscard]] bool DebugGetLastPresentationTelemetry(
             GdiPresentationTelemetry& telemetry) const;
@@ -208,6 +210,7 @@ namespace CNA::Internal::Backends::Gdi
         int backbufferDirtyWidth_ = 0;
         int backbufferDirtyHeight_ = 0;
         bool debugForceNextDibBlitFailure_ = false;
+        bool debugForceNextReleaseDcFailure_ = false;
         GdiPresentationTelemetry lastPresentationTelemetry_{};
     };
 } // namespace CNA::Internal::Backends::Gdi

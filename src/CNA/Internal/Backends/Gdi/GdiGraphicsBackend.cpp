@@ -123,6 +123,13 @@ namespace CNA::Internal::Backends::Gdi
                                      FormatWin32Error(error));
         }
 
+        /// GDI-077: result of the explicit, checked ReleaseDC attempt below.
+        struct WindowDeviceContextReleaseResult
+        {
+            bool success = true;
+            std::uint32_t win32Error = 0;
+        };
+
         /// One GetDC/ReleaseDC pair on every return and exception path.
         class WindowDeviceContext final
         {
@@ -137,14 +144,38 @@ namespace CNA::Internal::Backends::Gdi
 
             ~WindowDeviceContext()
             {
+                // GDI-077: a fallback only. The checked presentation transaction always calls
+                // Release() explicitly before this destructor runs; this path exists solely so an
+                // exception thrown earlier in Present() still releases the DC. It must never throw.
                 if (context_ != nullptr)
+                {
+                    SetLastError(ERROR_SUCCESS);
                     (void)ReleaseDC(window_, context_);
+                    context_ = nullptr;
+                }
             }
 
             WindowDeviceContext(const WindowDeviceContext&) = delete;
             WindowDeviceContext& operator=(const WindowDeviceContext&) = delete;
 
             [[nodiscard]] HDC Get() const { return context_; }
+
+            /// Explicit, checked release. Exactly one real (or, under test injection, simulated)
+            /// ReleaseDC attempt is made per instance: after this returns, the destructor is a
+            /// no-op, so a failed release can never be retried or double-released.
+            [[nodiscard]] WindowDeviceContextReleaseResult Release(bool forceFailure = false)
+            {
+                if (context_ == nullptr)
+                    return {true, 0};
+                const HDC context = context_;
+                context_ = nullptr;
+                if (forceFailure)
+                    return {false, static_cast<std::uint32_t>(ERROR_INVALID_HANDLE)};
+                SetLastError(ERROR_SUCCESS);
+                if (ReleaseDC(window_, context) == 0)
+                    return {false, static_cast<std::uint32_t>(GetLastError())};
+                return {true, 0};
+            }
 
         private:
             HWND window_ = nullptr;
@@ -493,6 +524,20 @@ namespace CNA::Internal::Backends::Gdi
         }
         ApplyOptionalDwmPacing(configuration_.dwmFlush);
 
+        // GDI-077: include the DC release itself in the checked transaction rather than leaving
+        // it to WindowDeviceContext's non-throwing destructor, whose result was previously
+        // discarded. A failed release must be visible in telemetry and must not let damage/the
+        // invalidation generation be acknowledged as if the frame were fully committed.
+        const bool forceReleaseFailure = debugForceNextReleaseDcFailure_;
+        debugForceNextReleaseDcFailure_ = false;
+        const WindowDeviceContextReleaseResult releaseResult = windowDc.Release(forceReleaseFailure);
+        if (!releaseResult.success)
+        {
+            lastPresentationTelemetry_.result = {
+                false, blitResult.copiedLines, releaseResult.win32Error, "ReleaseDC"};
+            ThrowWin32Failure("ReleaseDC", releaseResult.win32Error);
+        }
+
         // Commit only after every correctness-relevant native operation succeeds. Any exception
         // above leaves both CPU damage and the watched invalidation generation pending.
         ResetBackbufferDamage();
@@ -538,8 +583,23 @@ namespace CNA::Internal::Backends::Gdi
     {
         // Validate before mutating any state: a failed request leaves the previous presentation
         // geometry active and cannot flow into switch statements as an impossible enum value.
-        presentationMode_ = ValidatePresentationMode(mode);
-        SynchronizeBackbufferSize();
+        const CnaPresentationMode requestedMode = ValidatePresentationMode(mode);
+        const CnaPresentationMode previousMode = presentationMode_;
+        presentationMode_ = requestedMode;
+        try
+        {
+            SynchronizeBackbufferSize();
+        }
+        catch (...)
+        {
+            // GDI-075: an ordinal-valid mode can still derive a logical size that exceeds the
+            // framebuffer's axis or byte budget (e.g. FixedHeightDynamicWidth against an extreme
+            // drawable aspect). SynchronizeBackbufferSize()'s own resize is already transactional,
+            // so restoring only presentationMode_ fully rolls the whole request back: the retained
+            // framebuffer's dimensions, pixels, and damage are already untouched.
+            presentationMode_ = previousMode;
+            throw;
+        }
         MarkBackbufferFullyDirty();
     }
 

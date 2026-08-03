@@ -35,6 +35,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "GDI")
     cna_add_gdi_test(cna_test_gdi_framebuffer_allocation
         examples/gdi_framebuffer_allocation_test.cpp)
     cna_add_gdi_test(cna_test_gdi_msaa_contract examples/gdi_msaa_contract_test.cpp)
+    cna_add_gdi_test(cna_test_gdi_presentation_mode_transaction
+        examples/gdi_presentation_mode_transaction_test.cpp)
+    cna_add_gdi_test(cna_test_gdi_dc_release_transaction
+        examples/gdi_dc_release_transaction_test.cpp)
+    cna_add_gdi_test(cna_test_gdi_texture_allocation
+        examples/gdi_texture_allocation_test.cpp)
     # Benchmark target, deliberately not a CTest: wall-clock performance depends on the Win32/Wine
     # display compositor and the host CPU. It reports CPU raster and GDI Present separately.
     cna_add_gdi_test(cna_bench_gdi_2d examples/gdi_2d_benchmark.cpp)
@@ -73,6 +79,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "GDI")
             ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
         cna_register_backend_test(NAME GDI_MsaaContract
             COMMAND cna_test_gdi_msaa_contract
+            TIMEOUT 30 LABELS "GDI"
+            ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
+        cna_register_backend_test(NAME GDI_PresentationModeTransaction
+            COMMAND cna_test_gdi_presentation_mode_transaction
+            TIMEOUT 30 LABELS "GDI"
+            ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
+        cna_register_backend_test(NAME GDI_DcReleaseTransaction
+            COMMAND cna_test_gdi_dc_release_transaction
+            TIMEOUT 30 LABELS "GDI"
+            ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
+        cna_register_backend_test(NAME GDI_TextureAllocation
+            COMMAND cna_test_gdi_texture_allocation
             TIMEOUT 30 LABELS "GDI"
             ENVIRONMENT "CNA_GDI_DWM_FLUSH=0")
         # GDI-056: keep these as separate tests so dashboards identify the exact configuration.

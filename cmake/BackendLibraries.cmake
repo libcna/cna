@@ -43,6 +43,7 @@ set(CNA_GDI_SOFTWARE_SOURCES)
 if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
     set(CNA_GDI_SOFTWARE_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebufferAllocation.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareTextureAllocation.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareFramebuffer.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareTexture2D.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareRenderTarget2D.cpp"
@@ -50,6 +51,13 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "GDI")
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareSpriteBatch.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend2D.cpp"
     )
+    # GDI-078: report the actual GDI archive boundary at configure time, so plan_gdi.md/NEXT_gdi.md
+    # source/object counts can be checked against generated evidence instead of a copied number.
+    list(LENGTH CNA_GDI_SOFTWARE_SOURCES CNA_GDI_SHARED_SOURCE_COUNT)
+    math(EXPR CNA_GDI_ARCHIVE_TOTAL "${CNA_GDI_SHARED_SOURCE_COUNT} + 3")
+    message(STATUS
+        "CNA: GDI backend archive = ${CNA_GDI_SHARED_SOURCE_COUNT} shared CPU-2D sources + 3 "
+        "GDI-owned units = ${CNA_GDI_ARCHIVE_TOTAL} translation units")
 endif()
 
 # Backend target
