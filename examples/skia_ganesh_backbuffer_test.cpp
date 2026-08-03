@@ -187,6 +187,71 @@ int main(int argc, char** argv)
         Check(MatchesColor(afterResize, 0, 255, 0, 255),
               "the resized surface is genuinely drawable and readable at its new dimensions");
         surface.Present();
+
+        // SKIA-162: DebugSimulateContextLossEXT() is a genuine GL context destroy+recreate
+        // (mirroring EasyGLGraphicsBackend::DebugSimulateContextLoss()'s own real recreate, not a
+        // faked one) -- three cycles in a row, proving the recreate path itself is repeatable and
+        // leaves no stale GPU object behind each time, not just once.
+        for (int cycle = 0; cycle < 3; ++cycle)
+        {
+            surface.DebugSimulateContextLossEXT();
+            SkCanvas* recoveredCanvas = surface.Canvas();
+            const SkColor cycleColor = SkColorSetARGB(255, 255, 128, 0); // opaque orange
+            recoveredCanvas->clear(cycleColor);
+            const auto afterLoss = SamplePixel(surface, 2, 2);
+            Check(MatchesColor(afterLoss, 255, 128, 0, 255),
+                  "recovered surface is genuinely drawable and readable after a simulated "
+                  "context loss (cycle)");
+            surface.Present();
+        }
+
+        // Best-effort fullscreen: SDL_SetWindowFullscreen can fail or no-op under a headless/
+        // virtual display (documented precedent: examples/easygl_fullscreen_field_test.cpp).
+        // A failure here is not this code's fault and must not fail the test -- only verify the
+        // resize mechanism still works correctly on the rare environment where it does succeed.
+        if (SDL_SetWindowFullscreen(window, true))
+        {
+            SDL_SyncWindow(window);
+            const int preFullscreenWidth = surface.Width();
+            const int preFullscreenHeight = surface.Height();
+            bool fullscreenResized = false;
+            for (int attempt = 0; attempt < 20; ++attempt)
+            {
+                SDL_PumpEvents();
+                int w = 0, h = 0;
+                if (SDL_GetWindowSizeInPixels(window, &w, &h)
+                    && (w != preFullscreenWidth || h != preFullscreenHeight))
+                {
+                    fullscreenResized = true;
+                    break;
+                }
+                SDL_Delay(50);
+            }
+            if (fullscreenResized)
+            {
+                surface.Resize();
+                SkCanvas* fullscreenCanvas = surface.Canvas();
+                fullscreenCanvas->clear(SkColorSetARGB(255, 200, 0, 200)); // opaque magenta
+                const auto afterFullscreen = SamplePixel(surface, 2, 2);
+                Check(MatchesColor(afterFullscreen, 200, 0, 200, 255),
+                      "Resize() correctly rewraps after a real fullscreen-triggered drawable "
+                      "size change");
+                surface.Present();
+            }
+            else
+            {
+                std::printf("[INFO] fullscreen toggle reported success but the drawable size did "
+                            "not change under this display -- skipping the fullscreen resize "
+                            "check (not a failure; see examples/easygl_fullscreen_field_test.cpp)\n");
+            }
+            SDL_SetWindowFullscreen(window, false);
+            SDL_SyncWindow(window);
+        }
+        else
+        {
+            std::printf("[INFO] SDL_SetWindowFullscreen failed (expected under a headless/virtual "
+                        "display) -- skipping the fullscreen resize check, not a failure\n");
+        }
     }
     // The destructor above must have released the wrapped surface and Ganesh context cleanly
     // (surface before context, matching SkiaGaneshSurface's own declared member order) before

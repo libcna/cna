@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 class SkCanvas;
 
@@ -13,12 +14,20 @@ namespace CNA::Internal::Backends::Skia
 {
     /// SKIA-161: wraps SkiaGaneshContext's real GrDirectContext around the SDL-owned default
     /// OpenGL framebuffer (FBO 0), producing a real, presentable, read-backable SkSurface -- the
-    /// piece SkiaGaneshContext (SKIA-160) explicitly deferred. Deliberately still not an
-    /// `IGraphicsBackend`: no resize/loss/recovery *policy* (SKIA-162 -- `Resize()` here is a
-    /// mechanism the caller must invoke, not an automatic reaction to a window event), and no
-    /// wiring into `SpriteBatch`/`GraphicsDevice`. In `RASTER`-mode builds, construction always
-    /// throws (inherited unconditionally from `SkiaGaneshContext`) before any Ganesh-only Skia
-    /// symbol is referenced.
+    /// piece SkiaGaneshContext (SKIA-160) explicitly deferred. SKIA-162 added
+    /// DebugSimulateContextLossEXT(), a genuine GL context destroy+recreate (mirroring
+    /// EasyGLGraphicsBackend::DebugSimulateContextLoss()'s own established real recreate, not a
+    /// simulated/faked one), proving the reconstruction path leaves no stale GPU object behind.
+    /// Deliberately still not an `IGraphicsBackend`: `Resize()`/loss-recovery here are mechanisms
+    /// the caller must invoke, not an automatic reaction to a window/device event, and there is no
+    /// wiring into `SpriteBatch`/`GraphicsDevice`. Also deliberately out of scope: any
+    /// `CnaPresentationMode`-equivalent virtual-resolution/letterbox/overscan coordinate mapping
+    /// (this class always uses the window's raw drawable pixels 1:1) and any cross-resource
+    /// synchronization (no textures/targets/effects exist in the Ganesh path yet to synchronize
+    /// against) -- both remain real, open, un-vacuous scope once `IGraphicsBackend` integration
+    /// actually happens (SKIA-163+), not attempted here. In `RASTER`-mode builds, construction
+    /// always throws (inherited unconditionally from `SkiaGaneshContext`) before any Ganesh-only
+    /// Skia symbol is referenced.
     ///
     /// Uses only the real default framebuffer (`kBottomLeft_GrSurfaceOrigin`, FBO id 0) -- never
     /// an off-screen FBO-based render target, which remains out of this task's scope. This class
@@ -62,6 +71,16 @@ namespace CNA::Internal::Backends::Skia
         /// underlying readback otherwise fails.
         [[nodiscard]] bool ReadPixels(int x, int y, int width, int height, std::uint8_t* outRgba8) const;
 
+        /// @brief Destroys and reconstructs the underlying GL context, GrDirectContext, and
+        /// wrapped surface from scratch, simulating recovery from a lost Ganesh/GL context. A real
+        /// context loss cannot be safely forced on this platform (matching why
+        /// SkiaGraphicsBackend/EasyGLGraphicsBackend's own debug loss simulations are also a real
+        /// destroy+recreate cycle, not a forced fault); this proves the recreate path itself
+        /// leaves a fully live, non-stale object behind. Throws std::runtime_error transactionally
+        /// (same failure modes as the constructor) if reconstruction fails -- this instance must
+        /// not be used afterward if it throws.
+        void DebugSimulateContextLossEXT();
+
         /// @brief The wrapped surface's current width in pixels.
         [[nodiscard]] int Width() const noexcept { return width_; }
 
@@ -74,7 +93,10 @@ namespace CNA::Internal::Backends::Skia
         SDL_Window* window_ = nullptr;
         // Declared before impl_ so impl_ (the wrapped SkSurface, which depends on the GrDirectContext
         // context_ owns) is destroyed first -- members destruct in reverse declaration order.
-        SkiaGaneshContext context_;
+        // std::optional (not a plain value) so DebugSimulateContextLossEXT() can destroy and
+        // reconstruct it in place -- SkiaGaneshContext itself is a single-shot RAII object with no
+        // reconstruct-in-place operation of its own, by design (SKIA-160).
+        std::optional<SkiaGaneshContext> context_;
 
         struct Impl;
         std::unique_ptr<Impl> impl_;

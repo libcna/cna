@@ -96,14 +96,21 @@ Ganesh/OpenGL GN artifact and a `CNA::SkiaGanesh` CMake target, functionally ver
 explicit construction-time mode selector (`CNA_SKIA_MODE`, `SkiaGaneshContext`) on top of it, with a
 mode-specific diagnostic and no silent runtime fallback in either direction.
 
-SKIA-161 makes real, but partial, progress on two further gates without closing either: gate 3
-("wrap and present the real backbuffer, including resize and loss/recovery") now has a real,
-pixel-proven default-framebuffer wrap, flush/submit, swap, readback, and caller-invoked resize
-(`SkiaGaneshSurface`) -- but no loss/recovery, which remains SKIA-162's job. Gate 5 ("add
-accelerated ASan/UBSan/lifetime coverage where the platform permits it") now has a real, permanent
-sanitizer build (`cmake-build-skia-ganesh-asan`) exercising this surface-wrapping code -- but not
-the full 2D XNA oracle/API-contract corpus gate 4 requires, since none of that corpus can run
-through Ganesh yet (no `IGraphicsBackend` wraps it).
+Gate 3 ("wrap and present the real backbuffer, including resize and loss/recovery") is now fully
+closed: SKIA-161 delivered a real, pixel-proven default-framebuffer wrap, flush/submit, swap,
+readback, and caller-invoked resize (`SkiaGaneshSurface`); SKIA-162 added genuine GL context
+loss/recovery (`DebugSimulateContextLossEXT()`, a real destroy+recreate cycle mirroring
+`EasyGLGraphicsBackend::DebugSimulateContextLoss()`'s own established precedent) and a best-effort
+real-fullscreen resize proof on top of it. "Live textures/targets/effects survive... loss/reset
+events" is satisfied vacuously, not yet non-vacuously: none exist in the Ganesh path today (no
+`IGraphicsBackend` wraps it), so there is nothing yet that could fail to survive -- a real,
+non-vacuous version of that proof is genuinely open scope for whichever task first gives Ganesh an
+`IGraphicsBackend` (SKIA-163+), not claimed as closed here.
+
+Gate 5 ("add accelerated ASan/UBSan/lifetime coverage where the platform permits it") also has real,
+permanent sanitizer builds (`cmake-build-skia-ganesh-asan`, extended by SKIA-162 to also cover the
+loss/recovery path) exercising everything that exists in this path so far -- but not the full 2D XNA
+oracle/API-contract corpus gate 4 requires, since none of that corpus can run through Ganesh yet.
 
 Gates 2, 4, and 6 remain fully untouched. `CNA_GRAPHICS_BACKEND=SKIA`'s default `RASTER` mode is
 completely unaffected throughout; no `IGraphicsBackend` wraps the Ganesh artifact yet; and this note

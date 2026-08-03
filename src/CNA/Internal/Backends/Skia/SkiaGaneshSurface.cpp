@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -33,7 +34,7 @@ namespace CNA::Internal::Backends::Skia
 
     SkiaGaneshSurface::SkiaGaneshSurface(SDL_Window* window)
         : window_(window)
-        , context_(window)
+        , context_(std::in_place, window)
     {
         int width = 0;
         int height = 0;
@@ -51,7 +52,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGaneshSurface::WrapBackbuffer(int width, int height)
     {
-        GrDirectContext* grContext = context_.NativeContextEXT();
+        GrDirectContext* grContext = context_->NativeContextEXT();
 
         GLint stencilBits = 0;
         glGetIntegerv(GL_STENCIL_BITS, &stencilBits);
@@ -129,7 +130,7 @@ namespace CNA::Internal::Backends::Skia
 
     void SkiaGaneshSurface::Present()
     {
-        context_.NativeContextEXT()->flushAndSubmit(impl_->surface.get());
+        context_->NativeContextEXT()->flushAndSubmit(impl_->surface.get());
         if (!SDL_GL_SwapWindow(window_))
             throw std::runtime_error(std::string("SkiaGaneshSurface SDL_GL_SwapWindow failed: ") + SDL_GetError());
     }
@@ -139,6 +140,28 @@ namespace CNA::Internal::Backends::Skia
         const SkImageInfo info = SkImageInfo::Make(
             width, height, kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr);
         return impl_->surface->readPixels(info, outRgba8, static_cast<size_t>(width) * 4u, x, y);
+    }
+
+    void SkiaGaneshSurface::DebugSimulateContextLossEXT()
+    {
+        // Mirrors EasyGLGraphicsBackend::DebugSimulateContextLoss()'s own established desktop
+        // path exactly: destroy the GL context, create a brand new one, and rebuild everything
+        // that depended on the old one. There is no ResourceRegistry-equivalent recreate step
+        // here (unlike EasyGL) because no textures/targets/effects exist in the Ganesh path yet
+        // to recreate -- the wrapped backbuffer surface is the only thing that depends on the
+        // context, and rewrapping it is exactly WrapBackbuffer's job.
+        impl_->surface.reset(); // release the surface that depends on the OLD context first
+        context_.reset();       // destroy the OLD GL context + GrDirectContext
+        context_.emplace(window_); // construct a brand NEW GL context + GrDirectContext; throws on failure
+
+        int width = 0;
+        int height = 0;
+        if (!SDL_GetWindowSizeInPixels(window_, &width, &height) || width <= 0 || height <= 0)
+        {
+            throw std::runtime_error(
+                std::string("SkiaGaneshSurface SDL_GetWindowSizeInPixels failed: ") + SDL_GetError());
+        }
+        WrapBackbuffer(width, height); // rewrap fresh, at the current (possibly changed) size
     }
 #else
     // No SkiaGaneshSurface::Impl definition or Ganesh-symbol reference exists in a RASTER-mode
@@ -153,7 +176,7 @@ namespace CNA::Internal::Backends::Skia
 
     SkiaGaneshSurface::SkiaGaneshSurface(SDL_Window* window)
         : window_(window)
-        , context_(window)
+        , context_(std::in_place, window)
     {
     }
 
@@ -164,6 +187,8 @@ namespace CNA::Internal::Backends::Skia
     SkCanvas* SkiaGaneshSurface::Canvas() const noexcept { return nullptr; }
 
     void SkiaGaneshSurface::Resize() {}
+
+    void SkiaGaneshSurface::DebugSimulateContextLossEXT() {}
 
     void SkiaGaneshSurface::Present() {}
 

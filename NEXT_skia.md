@@ -2819,15 +2819,58 @@ level-boundary contract.
 - `docs/skia-backend.md`/`docs/skia-release-gate.md` deliberately untouched, per their existing
   freeze-until-SKIA-170 policy.
 
+## Completed in this session: SKIA-162
+
+- New `docs/skia-ganesh-artifact.md` "SKIA-162" section fixes the contract first. `Resize()` itself
+  is unchanged from SKIA-161 -- this task's job was loss/recovery, proved via the real,
+  already-established precedent for this exact architecture:
+  `EasyGLGraphicsBackend::DebugSimulateContextLoss()` (the closer sibling to Ganesh than raster's
+  own simulated-presenter-only version, since both are real GL-based backends), which does a
+  genuine `SDL_GL_DestroyContext`/`SDL_GL_CreateContext` cycle plus a resource-registry recreate,
+  not a faked/no-op one.
+- New `SkiaGaneshSurface::DebugSimulateContextLossEXT()` mirrors it exactly, adapted to what
+  actually exists in this path: release the wrapped `SkSurface` first, destroy the old
+  `SkiaGaneshContext` (a real `SDL_GL_DestroyContext`), construct a brand new one
+  (`context_.emplace(window_)` -- a real `SDL_GL_CreateContext` + `GrDirectContexts::MakeGL()`,
+  throwing transactionally on failure exactly like the constructor), then rewrap the backbuffer --
+  the one genuine simplification versus EasyGL's own resource-registry step, since no
+  textures/targets/effects exist in the Ganesh path at all yet to recreate. `context_` changed
+  from a plain `SkiaGaneshContext` value member to `std::optional<SkiaGaneshContext>` specifically
+  to support this in-place destroy+reconstruct.
+- `examples/skia_ganesh_backbuffer_test.cpp` gained three consecutive
+  `DebugSimulateContextLossEXT()` cycles (each followed by a fresh draw/readback proving the
+  recovered object is genuinely live, not just once) and a best-effort real fullscreen toggle --
+  confirmed to genuinely no-op under this repository's `:99` Xvfb display (toggle reports success,
+  drawable size does not change), logged as `[INFO]` and skipped rather than failed, matching the
+  documented precedent that `SDL_SetWindowFullscreen` "may fail in headless / virtual-display
+  environments" (`examples/easygl_fullscreen_field_test.cpp`).
+- Explicitly declared, not silently skipped, boundaries: "live textures/targets/effects survive...
+  loss/reset events" is vacuously true today (none exist in the Ganesh path yet); no
+  `CnaPresentationMode`-equivalent virtual-resolution/letterbox/overscan mapping was added
+  (`SkiaGaneshSurface` still uses raw window pixels 1:1); no resource-synchronization mechanism was
+  added (one GL context, one thread, nothing concurrent). All three remain real, open scope for
+  whichever task first gives Ganesh an `IGraphicsBackend` (SKIA-163+), not claimed as closed here.
+- Verified in both directions, in Debug, Release, and ASan+UBSan: Ganesh build
+  (`cmake-build-skia-ganesh` + `cmake-build-skia-ganesh-asan`) 172/172 in both, zero sanitizer
+  findings; raster build (`cmake-build-skia`/`-release`/`-asan`, still default) unchanged 171/171
+  in all three, zero sanitizer findings. Several isolated transient parallel-`-j2` test failures
+  (all pre-existing, unrelated tests never touched by this task) each confirmed to pass cleanly in
+  isolation and on a full sequential rerun -- none a real regression.
+- Updated `docs/skia-surface-mode-adr.md`: gate 3 ("wrap and present the real backbuffer,
+  including resize and loss/recovery") now fully closed by SKIA-161/162 together; gate 5 extended
+  to cover the loss/recovery path too. Gates 2/4/6 remain fully untouched.
+- `docs/skia-backend.md`/`docs/skia-release-gate.md` deliberately untouched, per their existing
+  freeze-until-SKIA-170 policy.
+- Session-scoped build note: all compilation from this task onward was capped at `-j2` (down from
+  the repo's own `-j3`) per an explicit mid-session request, not a change to the standing default.
+
 ## Next candidates
 
-1. SKIA-162: implement resize, fullscreen, presentation mappings, resource synchronization,
-   presenter/context loss, and recovery for Ganesh -- the natural next step now that
-   `SkiaGaneshSurface` proves the happy-path wrap/present/resize mechanics but has no loss/recovery
-   policy at all.
-2. SKIA-163-170: complete raster-vs-Ganesh 2D parity/lifecycle/resource-budget/performance suites
-   (the point where Ganesh would need real `IGraphicsBackend`/`SpriteBatch` wiring, not attempted
-   by SKIA-159-162), probe real MSAA/anisotropy, re-evaluate MRT, and hold the successor gate only
+1. SKIA-163: run complete raster-vs-Ganesh 2D parity, lifecycle, resource-budget, performance,
+   Release, and sanitizer suites -- the point where Ganesh would need real
+   `IGraphicsBackend`/`SpriteBatch` wiring for the first time, not attempted by SKIA-159-162, which
+   all deliberately stayed below the public API.
+2. SKIA-164-170: probe real MSAA/anisotropy, re-evaluate MRT, and hold the successor gate only
    after the raster extensions are stable -- also where the mesh-effect cache's deferred "mode" key
    axis (see SKIA-156 above) should actually be added, now that a second compilation target
    genuinely exists.

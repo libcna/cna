@@ -1,14 +1,14 @@
-# Skia Ganesh/OpenGL artifact (SKIA-159/160/161)
+# Skia Ganesh/OpenGL artifact (SKIA-159-162)
 
-Status: normative SKIA-159/160/161 contract. SKIA-159 produced a second, separately pinned GN
-artifact and a new optional CMake target; SKIA-160 added the construction-time mode selector and
-diagnostic on top of it; SKIA-161 (see its own section below) added real default-framebuffer
-wrapping, flush/submit, swap, readback, resize, and destruction order on top of that. None of the
-three change the validated raster artifact, its CMake target, or its selection logic. SKIA-159/160
-together close gate 1 of `docs/skia-surface-mode-adr.md`'s six reopening requirements in full;
-gates 2-6 remain open (SKIA-161 makes real progress on gate 3, "wrap and present the real
-backbuffer, including resize and loss/recovery," but does not close it -- loss/recovery is
-SKIA-162's job).
+Status: normative SKIA-159-162 contract. SKIA-159 produced a second, separately pinned GN artifact
+and a new optional CMake target; SKIA-160 added the construction-time mode selector and diagnostic
+on top of it; SKIA-161 added real default-framebuffer wrapping, flush/submit, swap, readback, and
+resize; SKIA-162 (see its own section below) added genuine GL context loss/recovery and a
+best-effort fullscreen proof on top of that. None of the four change the validated raster artifact,
+its CMake target, or its selection logic. SKIA-159/160 together close gate 1 of
+`docs/skia-surface-mode-adr.md`'s six reopening requirements in full; SKIA-161/162 together close
+gate 3 ("wrap and present the real backbuffer, including resize and loss/recovery") in full too.
+Gates 2, 4, and 6 remain fully open.
 
 ## Why a second artifact, not a second mode of the existing one
 
@@ -395,3 +395,88 @@ typeinfo for GrDirectContext" the first time anything actually built it under a 
 adding the same conditional exception `cna_skia_test()` already applies. All Ganesh-mode testing in
 this task ran against this repository's `:99` Xvfb display, not a real desktop display (see the
 SKIA-159 correction note above).
+
+## SKIA-162: genuine context loss/recovery, and a best-effort fullscreen proof
+
+SKIA-161 deliberately proved only the happy path: construct once, draw, resize, done. SKIA-162
+closes gate 3 ("wrap and present the real backbuffer, including resize and loss/recovery") by
+adding the loss/recovery half, using the real, already-established precedent
+`EasyGLGraphicsBackend::DebugSimulateContextLoss()` set for this exact architecture (a GL-based
+backend on desktop Linux/Mesa), not inventing a new approach.
+
+### `DebugSimulateContextLossEXT()`: a genuine destroy+recreate, mirroring EasyGL exactly
+
+A real GL context loss cannot be safely forced on this platform (no portable way exists to make a
+healthy Mesa/GLX driver actually lose a context on demand). `SkiaGraphicsBackend`'s own raster
+`DebugSimulateContextLoss()` does not attempt one either -- it reconstructs the SDL presenter while
+keeping CPU-owned resources live. `EasyGLGraphicsBackend::DebugSimulateContextLoss()`, the closer
+architectural sibling (also GL-based), goes further because it has to: it does a real
+`SDL_GL_DestroyContext`/`SDL_GL_CreateContext` cycle, reloads GL function pointers, and notifies a
+resource registry to recreate every GL-backed resource (shaders/textures/buffers/VAOs) from its
+CPU-side description.
+
+New `SkiaGaneshSurface::DebugSimulateContextLossEXT()` mirrors EasyGL's real destroy+recreate
+exactly, adapted to what actually exists in this path:
+
+1. Release the wrapped `SkSurface` first (it depends on the old `GrDirectContext`).
+2. Destroy the old `SkiaGaneshContext` (`context_.reset()` -- a real `SDL_GL_DestroyContext`).
+3. Construct a brand new one (`context_.emplace(window_)` -- a real `SDL_GL_CreateContext` +
+   `GrDirectContexts::MakeGL()`, throwing transactionally if either fails, exactly like the
+   constructor).
+4. Rewrap the backbuffer at the window's current drawable size (`WrapBackbuffer`).
+
+Step 4 is the one genuine simplification versus EasyGL's own "notify a resource registry" step:
+there is no resource registry here because no textures/targets/effects exist in the Ganesh path at
+all yet (`SkiaGaneshSurface` is not an `IGraphicsBackend`) -- the wrapped backbuffer surface is the
+*only* thing that depends on the context, and rewrapping it is the complete recreate. This is a
+declared, not silent, scope boundary: "live textures/targets/effects survive or report deterministic
+loss/reset events" (this task's own acceptance text) is vacuously true today because none exist to
+fail to survive; a real, non-vacuous version of that claim is real, open, un-vacuous scope for
+whichever task first gives Ganesh an `IGraphicsBackend` (SKIA-163+), not attempted here.
+
+`context_` changed from a plain `SkiaGaneshContext` value member to `std::optional<SkiaGaneshContext>`
+specifically to support this in-place destroy+reconstruct -- `SkiaGaneshContext` itself remains a
+single-shot RAII object with no reconstruct operation of its own, by design (SKIA-160); the
+`optional` is what makes reconstruction possible without changing that.
+
+### Resize and fullscreen
+
+`Resize()` itself is unchanged from SKIA-161 -- this task's contribution is proving it more
+thoroughly, not changing its mechanism. `examples/skia_ganesh_backbuffer_test.cpp` gained:
+
+- three consecutive `DebugSimulateContextLossEXT()` cycles on the same surface, each followed by a
+  fresh draw/readback proving the recovered object is genuinely live and non-stale, not just once;
+- a best-effort real fullscreen toggle (`SDL_SetWindowFullscreen`), matching the documented
+  precedent that this call "may fail in headless / virtual-display environments"
+  (`examples/easygl_fullscreen_field_test.cpp`'s own comment): if the toggle itself fails, or
+  succeeds but the drawable size does not actually change (confirmed to be exactly what happens
+  under this repository's `:99` Xvfb display), the check logs an `[INFO]` line and is skipped --
+  not counted as a failure, since a virtual display's inability to truly fullscreen is not this
+  code's fault. On a platform where fullscreen genuinely changes the drawable size, the same
+  `Resize()` mechanism the ordinary resize check already proved is exercised again and verified.
+
+No new "presentation mapping" concept (`CnaPresentationMode`-equivalent virtual resolution,
+letterbox, or overscan) was added -- `SkiaGaneshSurface` still uses the window's raw drawable pixels
+1:1, exactly as SKIA-161 left it. This is a declared boundary, not an oversight: building a parallel
+presentation-mapping system for a component with no `IGraphicsBackend`/`GraphicsDeviceManager` to
+actually drive it would be speculative scope with nothing real to test it against; the real system
+already exists for raster (`CnaPresentationMode`) and is the one any future Ganesh
+`IGraphicsBackend` should reuse or mirror once that integration genuinely happens.
+
+"Resource synchronization" (also named in this task's acceptance text) is likewise vacuously
+satisfied today: `SkiaGaneshSurface` owns exactly one GL context, used from exactly one thread, with
+no concurrent or shared resources to synchronize -- there is nothing for this task to add there
+either, until real backend integration introduces some.
+
+### Verification
+
+Same doubled proof shape as every prior Ganesh task: `cmake-build-skia-ganesh` (Debug) and
+`cmake-build-skia-ganesh-asan` (Debug + `address,undefined`) are both 172/172 (test *count*
+unchanged from SKIA-161 -- this task extended `Skia_Ganesh_Backbuffer`'s existing checks rather than
+registering a new CTest entry), zero sanitizer findings; the raster builds
+(`cmake-build-skia`/`-release`/`-asan`, still default) are unchanged at 171/171 in Debug, Release,
+and ASan+UBSan, zero sanitizer findings. Two isolated transient test failures during parallel
+`-j2` runs (`Skia_RenderTarget2D_Switch`, `Skia_SpriteBatch_NegativeScale`, `Skia_CpuDepthRaster_Spike`,
+`Skia_SpriteFont_DefaultChar` -- all pre-existing, unrelated tests, none touched by this task) were
+each confirmed to pass cleanly in isolation and on a full sequential rerun, matching this
+repository's own established transient-Xvfb-under-parallel-load pattern; none is a real regression.
