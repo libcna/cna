@@ -3378,15 +3378,23 @@ void main()
             std::size_t elementCount = 0;
         };
 
+        /// Fixed-capacity, so an instanced draw still allocates nothing: there can never be more
+        /// per-instance streams than XNA's own binding ceiling.
+        struct InstanceStreamPlacements
+        {
+            std::array<InstanceStreamPlacement, kMaxVertexStreams> entries{};
+            int count = 0;
+        };
+
         /// Walks the per-instance streams in public slot order, concatenating their declarations
         /// after @p baseLocation. Returns false when a bound per-instance stream has no
         /// declaration at all or would receive no location.
         bool PlaceInstanceStreams(
             const GpuDrawParams& params,
             unsigned int baseLocation,
-            std::vector<InstanceStreamPlacement>& placements)
+            InstanceStreamPlacements& placements)
         {
-            placements.clear();
+            placements.count = 0;
             unsigned int location = baseLocation;
             for (int i = 0; i < params.vertexStreamCount; ++i)
             {
@@ -3403,7 +3411,8 @@ void main()
                     static_cast<std::size_t>(kMaxAttributeLocations - location);
                 const std::size_t count =
                     std::min(buffer->GetDeclarationElements().size(), available);
-                placements.push_back(InstanceStreamPlacement{location, count});
+                placements.entries[static_cast<std::size_t>(placements.count++)] =
+                    InstanceStreamPlacement{location, count};
                 location += static_cast<unsigned int>(count);
             }
             return true;
@@ -6008,7 +6017,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 
         // REMED-GFX-202: every per-instance stream, not just the first, each at its own locations
         // with its own stride, element offset and divisor.
-        std::vector<InstanceStreamPlacement> instancePlacements;
+        InstanceStreamPlacements instancePlacements;
         const unsigned int instanceBaseLocation = params.customEffectBackend != nullptr
             ? PerVertexLocationCount(params)
             : kStockInstanceBaseLocation;
@@ -6046,7 +6055,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
                 const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
                 if (stream.instanceFrequency <= 0)
                     continue;
-                const InstanceStreamPlacement& placement = instancePlacements[placementIndex++];
+                const InstanceStreamPlacement& placement =
+                    instancePlacements.entries[placementIndex++];
                 // The divisor IS the public InstanceFrequency: GL advances the attribute once per
                 // `divisor` instances, which is `floor(instanceIndex / frequency)` -- the same rule
                 // D3D11's InstanceDataStepRate defines. The element offset is this stream's own
@@ -6090,10 +6100,12 @@ CNA_GL_RT_SAMPLE_UV_DECL
 
         // REMED-GFX-202: every location this draw claimed is released again, in reverse, so a later
         // draw through the same VAO never inherits a stale divisor or a pointer into a foreign VBO.
-        for (std::size_t i = instancePlacements.size(); i-- > 0;)
+        for (int i = instancePlacements.count; i-- > 0;)
         {
+            const InstanceStreamPlacement& placement =
+                instancePlacements.entries[static_cast<std::size_t>(i)];
             DisableDeclarationAttributes(
-                vao, instancePlacements[i].firstLocation, instancePlacements[i].elementCount);
+                vao, placement.firstLocation, placement.elementCount);
         }
         if (reconfigurePerVertex)
         {
