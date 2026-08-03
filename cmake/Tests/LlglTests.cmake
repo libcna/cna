@@ -495,6 +495,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
     cna_llgl_test(cna_test_llgl_rendertarget_sampling_orientation
                   examples/rendertarget_sampling_orientation_test.cpp)
 
+    # rendertarget_producer_consumer_test.cpp is deliberately NOT registered here: 39/41 checks pass
+    # (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate), but D5 and I2 -- both "a
+    # target revisited after depending on another target" -- hit the same real, separate, OPEN
+    # finding as rendertarget_depthstencil_usage_test.cpp's own U2 and rendertarget_effect_source
+    # _test.cpp's own F1; see known_bugs.md's broadened entry, which now covers all four legs across
+    # three files.
+    cna_llgl_test(cna_test_llgl_rendertarget_producer_consumer
+                  examples/rendertarget_producer_consumer_test.cpp)
+
     # backbuffer_first_read_test.cpp is deliberately NOT registered here: 9/13 legs pass
     # (A1, A3, A4, A6, B1, B2, B3, B4, C1), but D63/D64/D65 (its own row-pitch matrix, widths
     # 63/64/65 against a fixed height of 17) and E1 (64x32) all fail for a real, identified,

@@ -636,10 +636,10 @@ comment there for the full per-leg breakdown).
 ## LLGL backend: a target revisited after depending on another target replays out of public order — OPEN
 
 **Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-41`,
-`rendertarget_depthstencil_usage_test.cpp` and `rendertarget_effect_source_test.cpp`). Root cause
-identified with confidence; not fixed here (the correct fix is architectural -- interleaved
-cross-bucket replay, or segmenting every public bind cycle into its own pass -- and out of scope for
-a test-wiring task).
+`rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp` and
+`rendertarget_producer_consumer_test.cpp`). Root cause identified with confidence; not fixed here
+(the correct fix is architectural -- interleaved cross-bucket replay, or segmenting every public bind
+cycle into its own pass -- and out of scope for a test-wiring task).
 
 **Symptom, two independent reproductions of the same root cause:**
 - `rendertarget_depthstencil_usage_test.cpp`'s U2 check (28/29 checks otherwise pass): clear face A
@@ -653,6 +653,24 @@ a test-wiring task).
   B back into A again, then read A -- expects A to end up holding the pattern (relayed through B).
   Instead A reads back as `(0,0,0,0)` -- the consume-B-into-A draw sampled B before B had ever been
   produced into at all.
+- `rendertarget_producer_consumer_test.cpp`'s D5 check ("A -> B -> A"): produce a pattern into A,
+  consume A into B, then produce an ALT pattern into A again (a second, later bind cycle) -- expects
+  B to hold the FIRST cycle's content (what it actually sampled) and A, read last, to hold the
+  SECOND cycle's content. Instead B reads back the alt pattern too: A's bucket drains both of its own
+  cycles as one unit before B's bucket (positioned later, since B first appeared after A's first
+  cycle) ever runs, so B's own draw -- despite being queued between A's two cycles -- samples A only
+  after A's SECOND cycle has already overwritten it.
+- `rendertarget_producer_consumer_test.cpp`'s I2 check: produce target `u` (cycle 1), sample `u` onto
+  the BACKBUFFER (cycle 2), reproduce `u` with different content (cycle 3), then -- after an unrelated
+  target is produced and read mid-frame -- read the backbuffer back. Expects the backbuffer draw to
+  show cycle 1's content (what it actually sampled, mid-frame). Instead it shows cycle 3's content:
+  `u`'s bucket (cycles 1 and 3) drains fully at its own first-appearance position, and the swap-chain
+  bucket -- forced to always trail every other bucket by the `LLGL-40` fix -- ends up sampling `u`
+  only after cycle 3 has already overwritten it, even though cycle 2's own draw was queued BETWEEN
+  `u`'s two cycles. The very fix that resolved the swap-chain's own FIRST-appearance-order bug
+  (`LLGL-40`) is what makes this manifestation possible: forcing the swap chain to a fixed trailing
+  position is exactly wrong when some earlier bucket gets revisited after the swap chain's own read
+  was supposed to happen.
 
 **Root cause:** `GroupFrameCommandsByTargetEXT()` buckets commands by target IDENTITY and replays
 each bucket FULLY, one at a time, in the bucket's own first-appearance order -- correct only when
@@ -693,9 +711,9 @@ _boundary_test.cpp` check (`LLGL-41`'s own already-registered `Llgl_RenderTarget
 other, which no check in that already-passing file happens to require.
 
 **Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
-`rendertarget_depthstencil_usage_test.cpp` or `rendertarget_effect_source_test.cpp` until this is
-resolved -- the latter also has a second, unrelated, separately-documented crash, see the next
-entry).
+`rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`, or
+`rendertarget_producer_consumer_test.cpp` until this is resolved -- the second file also has a
+second, unrelated, separately-documented crash, see the next entry).
 
 ---
 

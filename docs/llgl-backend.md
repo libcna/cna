@@ -818,6 +818,13 @@ both trace to a genuine, open, general bucket-ordering finding (a target revisit
 on another target, or two targets aliasing one physical resource, replay out of public order) plus
 (C1 only) a second, unrelated crash from a custom `ShaderEffect` using multiple Vulkan descriptor
 sets -- see `known_bugs.md`'s two open entries for the full analysis.
+`rendertarget_producer_consumer_test.cpp` also stays unregistered (39/41): D5 ("A -> B -> A", the
+same shape as the F1 finding above) and I2 (a backbuffer draw sampling a target that gets rebound
+again LATER in the same frame, after the swap-chain-always-trails-last rule from the `LLGL-40` fix
+forces its own read to happen last) are two more reproductions of the identical bucket-ordering
+finding -- `known_bugs.md`'s entry now covers all four legs across three files. Every other check in
+this file, including the D1-D4 producer chains, MSAA and mip-mapped producers, `RenderTargetUsage`
+variants and the never-read-target sampling legs, passes.
 `rendertarget_sampling_orientation_test.cpp` also stays unregistered: its first 10 checks (`SpriteBatch`
 orientation into and out of a `RenderTarget2D`, `BasicEffect`/`AlphaTestEffect` mesh-UV sampling,
 `RenderTarget2D` vs. `Texture2D` byte-exact agreement) all pass, but its CD4 check -- a lit, textured
