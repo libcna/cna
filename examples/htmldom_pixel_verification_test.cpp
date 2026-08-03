@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 20;
+    constexpr int kExpectedChecks = 24;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -859,7 +859,130 @@ protected:
                   "compose correctly with the edge extension, not just an untinted 1:1 draw");
         }
 
+        // plan_html_dom.md HTMLDOM-105: re-derived each preset's RAW factor-based RGBA equation
+        // (colour AND alpha, independent of any browser) -- see HtmlDomState.hpp's own doc comment
+        // for the full derivation. AlphaBlend's alpha factor is `One`, matching CSS's own Porter-Duff
+        // "over" alpha exactly, so it needs no new check here (already pixel-verified translucent,
+        // HTMLDOM-85). NonPremultiplied and Additive both use `SourceAlpha` as their OWN alpha
+        // factor, so their real alpha equations SQUARE the source alpha's own contribution -- neither
+        // `source-over` nor `lighter` can reproduce that (no per-channel blend-factor model in CSS),
+        // an accepted architectural limitation for TRANSLUCENT sources specifically (opaque sources,
+        // src_a=255, make the two formulas coincide exactly, which is why every earlier opaque-only
+        // test -- HTMLDOM-87 included -- could never have caught this). These checks MEASURE this
+        // backend's actual (CSS-native, non-squared) result with real translucent source AND
+        // destination data and raw RGBA readback, documenting the XNA-exact delta by hand rather than
+        // asserting pixel-exactness that is not architecturally achievable here.
         if (frame_ == 18)
+        {
+            // NonPremultiplied, single translucent draw onto a transparent target: CSS-native
+            // source-over onto fully-transparent dst always yields the source unchanged (a standard
+            // Porter-Duff identity), including alpha. XNA's own squared formula would instead give
+            // alpha = round(128*128/255) = 64 here -- a real, measurable divergence on the very
+            // FIRST draw, not just a multi-draw accumulation effect.
+            const Color npSingle = [&] {
+                Texture2D tex = Make1x1(dev, 200, 100, 50, 128);
+                const auto pixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied,
+                                        nullptr, nullptr, nullptr);
+                    spriteBatch_->Draw(tex, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+                    spriteBatch_->End();
+                });
+                return pixels[static_cast<std::size_t>(2) * 20 + 2];
+            }();
+            std::printf("       NonPremultiplied single-draw-onto-transparent alpha: measured=%d "
+                        "(CSS-native expects 128, hypothetical XNA-exact squared formula gives 64)\n",
+                        npSingle.getAProperty());
+            check(CloseEnough(npSingle.getRProperty(), 200, 1) && CloseEnough(npSingle.getGProperty(), 100, 1) &&
+                  CloseEnough(npSingle.getBProperty(), 50, 1) && CloseEnough(npSingle.getAProperty(), 128, 1),
+                  "HTMLDOM-105: NonPremultiplied with a translucent source drawn onto a transparent "
+                  "target reproduces the source's colour AND alpha unchanged (this backend's actual, "
+                  "CSS-native source-over result) -- XNA's own literal alphaSrcBlend=SourceAlpha "
+                  "factor would instead SQUARE the source alpha here (~64, not 128), a documented "
+                  "architectural gap this backend does not reproduce");
+
+            // Additive, two sequential translucent draws (the ticket's own reported scenario: two
+            // 50%-alpha 'lighter' draws) -- reproduces the exact numbers HTMLDOM-105's own audit
+            // measured: this backend's real CSS-native result is (128,0,128,255); XNA's own squared-
+            // alpha formula, applied recursively across both draws, would give (128,0,128,~128).
+            const Color addTwoDraw = [&] {
+                Texture2D blue = Make1x1(dev, 0, 0, 255, 128);
+                Texture2D red = Make1x1(dev, 255, 0, 0, 128);
+                const auto pixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Additive, nullptr, nullptr, nullptr);
+                    spriteBatch_->Draw(blue, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+                    spriteBatch_->End();
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Additive, nullptr, nullptr, nullptr);
+                    spriteBatch_->Draw(red, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+                    spriteBatch_->End();
+                });
+                return pixels[static_cast<std::size_t>(2) * 20 + 2];
+            }();
+            std::printf("       Additive two-translucent-draw result: (%d,%d,%d,%d) (CSS-native "
+                        "expects (128,0,128,255); hypothetical XNA-exact squared formula gives "
+                        "(128,0,128,~128))\n",
+                        addTwoDraw.getRProperty(), addTwoDraw.getGProperty(), addTwoDraw.getBProperty(),
+                        addTwoDraw.getAProperty());
+            check(CloseEnough(addTwoDraw.getRProperty(), 128, 1) && addTwoDraw.getGProperty() == 0 &&
+                  CloseEnough(addTwoDraw.getBProperty(), 128, 1) && CloseEnough(addTwoDraw.getAProperty(), 255, 1),
+                  "HTMLDOM-105: Additive with two sequential translucent draws sums colour exactly "
+                  "(128,0,128) and clamps alpha via CSS-native Porter-Duff 'plus' to 255 -- XNA's own "
+                  "squared alphaSrcBlend=SourceAlpha factor, applied recursively across both draws, "
+                  "would instead give alpha~128, a documented architectural gap this backend does "
+                  "not reproduce");
+
+            // Zero-alpha draw: both formulas trivially agree here (0*0=0), so this is a plain
+            // regression sanity check, not a divergence demonstration -- a zero-alpha sprite must
+            // leave an already-opaque destination completely untouched, byte-for-byte.
+            const Color zeroAlphaBase(10, 20, 30, 255);
+            const Color zeroAlphaResult = [&] {
+                Texture2D opaque = Make1x1(dev, 10, 20, 30, 255);
+                Texture2D invisible = Make1x1(dev, 255, 255, 255, 0);
+                const auto pixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr);
+                    spriteBatch_->Draw(opaque, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+                    spriteBatch_->End();
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied,
+                                        nullptr, nullptr, nullptr);
+                    spriteBatch_->Draw(invisible, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+                    spriteBatch_->End();
+                });
+                return pixels[static_cast<std::size_t>(2) * 20 + 2];
+            }();
+            std::printf("       zero-alpha-draw result: (%d,%d,%d,%d)\n", zeroAlphaResult.getRProperty(),
+                        zeroAlphaResult.getGProperty(), zeroAlphaResult.getBProperty(),
+                        zeroAlphaResult.getAProperty());
+            check(zeroAlphaResult == zeroAlphaBase,
+                  "HTMLDOM-105: a fully transparent (alpha=0) NonPremultiplied draw leaves an "
+                  "already-opaque destination byte-for-byte unchanged -- both the CSS-native and the "
+                  "XNA-exact alpha formulas trivially agree at src_a=0, so this is a plain regression "
+                  "check, not a divergence demonstration");
+
+            // Tint ALPHA (not texture alpha) must drive the same (documented, CSS-native) formula --
+            // an opaque texel (alpha=255) tinted with Color(255,255,255,128) must behave identically
+            // to the texture-alpha case above, proving tint alpha feeds the same effective src_a.
+            const Color npTintAlpha = [&] {
+                Texture2D opaqueTex = Make1x1(dev, 200, 100, 50, 255);
+                const auto pixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                    spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied,
+                                        nullptr, nullptr, nullptr);
+                    spriteBatch_->Draw(opaqueTex, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1),
+                                       Color(255, 255, 255, 128));
+                    spriteBatch_->End();
+                });
+                return pixels[static_cast<std::size_t>(2) * 20 + 2];
+            }();
+            std::printf("       NonPremultiplied tint-alpha result: (%d,%d,%d,%d)\n",
+                        npTintAlpha.getRProperty(), npTintAlpha.getGProperty(), npTintAlpha.getBProperty(),
+                        npTintAlpha.getAProperty());
+            check(CloseEnough(npTintAlpha.getRProperty(), 200, 1) && CloseEnough(npTintAlpha.getGProperty(), 100, 1) &&
+                  CloseEnough(npTintAlpha.getBProperty(), 50, 1) && CloseEnough(npTintAlpha.getAProperty(), 128, 1),
+                  "HTMLDOM-105: the sprite's own TINT alpha (not texture alpha) drives the identical "
+                  "effective src_a used above -- an opaque (alpha=255) texel tinted to alpha=128 "
+                  "reads back exactly like the texture-alpha=128 case, confirming tint alpha isn't "
+                  "handled by some separate, inconsistent code path");
+        }
+
+        if (frame_ == 19)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

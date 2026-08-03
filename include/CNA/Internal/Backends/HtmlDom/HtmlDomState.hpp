@@ -32,6 +32,36 @@ namespace CNA::Internal::Backends::HtmlDom
      * - `NonPremultiplied` (`srcBlend=SourceAlpha`) already matches what CSS assumes natively, so
      *   its pixels are used exactly as uploaded.
      * - `Additive` needs no pixel preparation, only `mix-blend-mode: plus-lighter`.
+     *
+     * plan_html_dom.md HTMLDOM-105: the colour-channel equivalences above are exact and pixel-
+     * verified (HTMLDOM-84/85/86/87), but re-deriving each preset's RAW factor-based RGBA equation
+     * (both colour AND alpha channels, independently of what any browser actually does) found a
+     * real, architectural ALPHA-channel gap for two presets specifically -- confirmed via a headless-
+     * Chromium probe, not assumed:
+     *
+     * - `AlphaBlend` (`alphaSrcBlend=One, alphaDstBlend=InverseSourceAlpha`) has NO gap: its alpha
+     *   equation, `result_a = src_a + dst_a*(1-src_a)`, is exactly the CSS/Canvas2D compositing
+     *   spec's own Porter-Duff "over" alpha formula. `source-over` reproduces it exactly for any
+     *   combination of source/destination alpha, not just opaque ones.
+     * - `NonPremultiplied` and `Additive` both set `alphaSrcBlend=SourceAlpha` -- i.e. the ALPHA
+     *   channel's own blend factor is `src_a` itself, so their real per-factor alpha equations are
+     *   `result_a = src_a*src_a + dst_a*(1-src_a)` (NonPremultiplied) and
+     *   `result_a = src_a*src_a + dst_a` (Additive, clamped to 1) -- src_a is literally SQUARED.
+     *   Neither `source-over` (Porter-Duff "over": `src_a + dst_a*(1-src_a)`, no squaring) nor
+     *   `lighter`/`plus-lighter` (Porter-Duff "plus": `min(1, src_a+dst_a)`, also no squaring)
+     *   reproduces that squared term -- CSS's compositing model has no per-channel-independent
+     *   blend-factor customization to express it with, and implementing it exactly would mean
+     *   per-pixel JS blending on every draw instead of native browser compositing, defeating this
+     *   backend's entire "zero cost when nothing changes, GPU-composited otherwise" performance
+     *   premise (design decisions, above) for a channel that only diverges when the SOURCE itself is
+     *   translucent (src_a=255 makes src_a*src_a==src_a, so the two formulas coincide exactly for
+     *   every opaque-source draw -- confirmed by hand and why HTMLDOM-87's own opaque-only Additive
+     *   test could never have caught this). **Accepted, documented architectural limitation**: the
+     *   ALPHA channel of a `NonPremultiplied`/`Additive` result with a translucent source will not
+     *   exactly match real XNA/D3D hardware blending; the COLOUR channels always will. Verified with
+     *   real translucent-source-and-destination raw RGBA readback (not just colour), confirming this
+     *   backend's own actual (CSS-native, non-squared) result -- see
+     *   `htmldom_pixel_verification_test.cpp`'s HTMLDOM-105 checks.
      */
     enum class DomCompositeOp
     {
