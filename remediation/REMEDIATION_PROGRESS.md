@@ -25570,3 +25570,217 @@ Only `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` changed in product
 header, no other backend, no public API, no shader. `REMED-GFX-212` was not begun,
 `REMED-GFX-204` remains deferred, and the WebGPU scopes of both tickets remain **OPEN**.
 **No new finding was created.**
+
+---
+
+## `REMED-GFX-211` and `REMED-GFX-213` — WEBGPU SCOPE (2026-08-03) — **BOTH TICKETS NOW DONE**
+
+The third and last deliberately bounded **one-backend** lane. With it both tickets are **DONE on
+every backend they name** and both leave the checkpoint-blocker set. `REMED-GFX-212` was not begun —
+it remains **OPEN** for Vulkan and WebGPU and is now the only remaining blocker from this descendant
+cluster — and `REMED-GFX-203` … `REMED-GFX-210` remain DEFERRED in `plan_postaudit.md`.
+
+### Pre-fix reproduction, on `9df8770d` with a clean tree
+
+The committed triage legs were the red-first oracle again; no new red test was needed. The cell maps
+were recorded, not just the reading names, because a reading name alone cannot show *which* records
+were consumed:
+
+| leg | pre-fix reading | pre-fix lit cells (column, band) | post-fix reading |
+|---|---|---|---|
+| GFX-211 leg A — per-instance offset | `instance-offset-ignored` | (0,0) (1,0) (2,1) (5,3), 1024 lit — records 0..3, the decoy's own cell lit and live record 4's lost | `instance-offset-honoured` |
+| GFX-211 leg B — per-vertex offset | `vertex-offset-ignored` | (4,2) (5,2) (6,3) (7,3), 1024 lit — every instance renders the mesh decoy | `vertex-offset-honoured` |
+| GFX-211 leg C — both offsets | `both-offsets-ignored` | (4,2) (5,2) (6,3), 768 lit — neither cross-applied nor doubled, so the two streams fail independently | `both-offsets-honoured` |
+| GFX-213 — frequency 2 | `divisor-1-silently` | records 0,1,2,3,4,5 — 1536 lit, byte-identical to the frequency-1 control's frame | `divisor-2-honoured` |
+| GFX-213 — frequency 1 control | `divisor-1-honoured` | records 0..5, 1536 lit | `divisor-1-honoured` |
+| GFX-213 — frequency 2 after a frequency-1 draw | `divisor-1-silently` | records 0..5, 1536 lit | `divisor-2-honoured` |
+
+### The submission shape, proven before the fix rather than assumed from Vulkan or bgfx
+
+WebGPU is **category B** for both streams: nothing is bound from the caller's own GPU buffer. Queue
+time (`WebGPUGraphicsBackend::DrawInstancedPrimitivesEx`) copies out of each backend object's CPU
+`ShadowData()` into command-owned `std::vector<std::uint8_t>` members, and replay
+(`IssueInstancedDraw`) creates a fresh `WGPUBuffer` per stream per draw, uploads with
+`wgpuQueueWriteBuffer(queue, buf, 0, data, size)` and binds with
+`wgpuRenderPassEncoderSetVertexBuffer(pass, slot, buf, /*offset=*/0, size)` — **both slots at native
+byte offset zero**, sized to the copy. The index copy is the whole shadow and `startIndex` reaches
+`wgpuRenderPassEncoderDrawIndexed`'s `firstIndex`.
+
+| stream | source resource | source byte base (pre-fix) | copied range (pre-fix) | replay buffer | native slot | native byte offset | binding size | step mode |
+|---|---|---|---|---|---|---|---|---|
+| per-vertex | `WebGPUVertexBufferBackend::ShadowData()` | 0 | whole buffer, `GetVertexCount() * pvStride` | fresh per draw | 0 | 0 | `vertexData.size()` | `Vertex` |
+| per-instance | `WebGPUVertexBufferBackend::ShadowData()` | **0** | **`instanceCount * instVbStride`, consecutive from record 0** | fresh per draw | 1 | 0 | `instVbData.size()` | `Instance` |
+
+### The exact loss points
+
+- **Per-vertex offset — NOT the copy.** Because the per-vertex copy takes the WHOLE buffer and the
+  replay binds it at native offset zero, binding 0 has no per-binding offset channel at all. The
+  only term that reaches a decoded index is `wgpuRenderPassEncoderDrawIndexed`'s own `baseVertex`,
+  and the loss point was `command.baseVertex = params.baseVertex`, which never admitted the geometry
+  binding's offset. This is **Vulkan's shape** (`d.baseVertex`), not bgfx's start-element — the
+  identical output across the three backends did not imply an identical mechanism, and the shape was
+  established from WebGPU's own code before anything was changed.
+- **Per-instance offset and divisor — one expression.**
+  `command.instVbData.assign(instShadow.begin(), instShadow.begin() + instanceCount * instVbStride)`
+  took `instanceCount` consecutive records from record zero, dropping both the binding's own
+  `VertexOffset` and the grouping.
+
+### The corrections
+
+- `command.baseVertex = params.baseVertex + perVertexOffset`, where `perVertexOffset` is
+  `FirstPerVertexStream(params)->vertexOffset`. `RejectUnsupportedStreamCombination` guarantees
+  exactly one per-vertex stream on this route, so the fold applies once, to its own stream only, and
+  the fetched element becomes `VertexOffset + baseVertex + index`. The term is a signed `int32_t` on
+  both sides, so a negative `baseVertex` is unaffected; the index buffer is untouched and
+  `startIndex` stays an index-element offset on `command.firstIndex`; and both 16-bit and 32-bit
+  index paths are unchanged (`command.index32` still comes from the bound buffer).
+- The instance copy's source base became `vertexOffset * command.instVbStride` — this stream's own
+  stride, never binding 0's, never advanced by `baseVertex` — and destination slot `i` takes source
+  record `vertexOffset + i / frequency`. Frequency 1 keeps the single bulk `memcpy`.
+
+### The WebGPU divisor capability, classified from the installed implementation
+
+Category **C**: there is no usable native divisor to enable, so the grouping is expanded in the copy
+the route already performs. Established from wgpu-native **v29.0.1.1**'s own headers rather than from
+the WebGPU core specification, because an installed native implementation may add what core does not:
+
+- `WGPUVertexBufferLayout` is exactly `{ nextInChain, stepMode, arrayStride, attributeCount,
+  attributes }` — no divisor, no step-rate field.
+- `WGPUVertexStepMode` is exactly `{ Undefined, Vertex, Instance, Force32 }` — `Instance` always
+  advances once per instance.
+- `divisor`, `stepRate`, `step_rate` and `instance_rate` occur **zero** times in `webgpu/webgpu.h`
+  **and** in wgpu-native's own extension header `webgpu/wgpu.h`.
+- The eleven `WGPUNativeSType` extension chains are DeviceExtras, NativeLimits, ShaderSourceGLSL,
+  InstanceExtras, BindGroupEntryExtras, BindGroupLayoutEntryExtras, QuerySetDescriptorExtras,
+  SurfaceConfigurationExtras, SurfaceSourceSwapChainPanel, PrimitiveStateExtras and
+  SamplerDescriptorExtras — **none extends a vertex buffer layout or vertex state**.
+- No `WGPUNativeFeature` adds a step rate, so there is no device feature CNA could enable, validate
+  or query.
+
+No feature or extension was added. Binding 1 keeps `WGPUVertexStepMode_Instance`'s implicit divisor
+of one.
+
+### Pipeline and cache identity
+
+Destination cardinality is unchanged — one record per instance at every frequency — so no pipeline
+term was needed and none was added. `GetOrCreatePipelineInstanced3D`'s key is `Make3DPipelineKey`
+over topology, strip index format, depth test/write/func, blend params, cull mode, wireframe, depth
+bias and slope-scale bias, plus a salt of `pvStride * 1000003 + instVbStride`; neither offset nor
+frequency reaches it. **The divisor is data-preparation state only**, and that is now asserted, not
+merely argued: a new `GetInstancedPipelineCacheSizeEXT()` shows `+0` variants across frequencies 1,
+2 and 3 and every offset pair exercised.
+
+### Validation
+
+The shared order (`ValidateVertexStreamRanges` → `ValidateInstanceStreamRanges` →
+`ValidateVertexStreamCapability`) is untouched and still runs before dispatch, so a draw arriving
+through `GraphicsDevice` is fully checked before any WebGPU call. Two backend-local guards were added
+for the `Draw*PrimitivesEx` interface method a harness may call with a hand-built `GpuDrawParams`:
+one rejects a per-vertex offset that leaves its own buffer, naming its slot; one rejects a
+per-instance binding that does not hold the highest SOURCE record
+`vertexOffset + (instanceCount - 1) / frequency`. Both are strictly looser than the shared checks, so
+neither can fire for a public draw. The over-long instance-range gate was thereby generalised from
+`instanceCount * stride` — the wrong count once a frequency groups instances and the wrong base once
+an offset moves them — to that highest source record, matching bgfx's. A one-record-short instance
+buffer is still rejected by the shared layer before queueing
+(`ShortSecondPerInstanceStreamIsRejected`, `InstanceFrequencyFixesTheExactConsumedRecordCount`), and
+an invalid per-vertex range never reaches WebGPU as an out-of-bounds binding.
+
+### Deferred capture and lifetime
+
+Nothing new is read at replay. `perVertexOffset` is folded into `command.baseVertex` and the instance
+records are materialised into `command.instVbData`, both **by value at the public call**, so a later
+`SetVertexBuffers`, a destroyed wrapper or a reused address cannot reach an already-queued draw.
+`QueuedClassicDrawsKeepTheirOwnOffsetsAndFrequencies` (six queued draws, six different
+offset/offset/frequency triples, public bindings cleared before replay),
+`QueuedClassicInstancedDrawSurvivesWrapperDeathAndAddressReuse` (both wrappers destroyed while the
+draw is queued, replacements allocated to encourage address reuse) and
+`ClassicOffsetsAndFrequencyHoldOnDynamicBuffers` all now run and pass on WebGPU. `REMED-GFX-159`
+ordering and `REMED-GFX-167` lifetime are unchanged.
+
+### Cardinality and performance
+
+Measured, not asserted from the source, by a new permanent regression
+(`examples/webgpu_instanced_offset_frequency_cardinality_test.cpp`, registered as
+`WebGPU_InstancedOffsetFrequency_Cardinality`, **22/22**) reading the backend's own EXT counters and
+wgpu-native's `wgpuGenerateReport()` live-object registry:
+
+| sequence | render passes | queue submits | new Instanced3D variants | new native render pipelines | live native buffers Δ | live native command buffers Δ |
+|---|---|---|---|---|---|---|
+| 4 draws × 6 instances, frequency 1 | 1 | 1 | 0 | 0 | 0 | 0 |
+| 4 draws × 6 instances, frequency 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| 8 draws × 6 instances, frequency 1 | 1 | 1 | 0 | 0 | 0 | 0 |
+| 8 draws × 6 instances, frequency 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| 4 draws × 12 instances, frequency 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| 4 draws, offsets (3,5), frequency 1 | 1 | 1 | 0 | 0 | 0 | 0 |
+| 4 draws, offsets (6,2), frequency 3 | 1 | 1 | 0 | 0 | 0 | 0 |
+| the same offsets repeated | 1 | 1 | 0 | 0 | 0 | 0 |
+
+No extra public draw, queued draw, render pass, command encoder, submit, frame, wait, readback or
+Present; no shader variant, storage-buffer lookup or second pipeline; and no allocation per logical
+instance — `instVbData` is one `resize` to `instanceCount * stride` at every frequency. What the
+native columns do and do not prove is stated in the file's own header: this backend releases a
+queued draw's transient buffers inside the same flush that creates them, so a delta across a whole
+cycle is a **net live** count and proves *no persistent growth*, while the "no second draw, pass,
+submit or pipeline variant" half is carried by the cumulative backend counters.
+
+### WebGPU validation
+
+`GetUncapturedErrorCountEXT()` delta **0** across the whole offset/frequency matrix, including the
+binding-offset, binding-size, array-stride, step-mode and index-range cases the fix touches. No
+device loss. No message was suppressed: the counter is read before and after and printed either way.
+
+### Sanitizers
+
+ASan+UBSan in `cmake-build-webgpu-asan-ubsan` (`CNA_SANITIZE=address,undefined`), runtimes proved
+linked — 56 sanitizer symbols in `CnaTests`, 54 in the cardinality binary.
+
+- `InstancedDrawMultiStreamTest` + `InstancedDrawRangeTest`: **37 passed, 7 skipped, 0 failed**,
+  **0 UBSan runtime errors**, 0 heap/stack/global overflow, 0 use-after-free, 0 double free.
+- The cardinality regression: **22/22**, 0 UBSan runtime errors.
+- Leak classification by exact A/B in the same binary: the same instanced draw at **zero offsets,
+  frequency 1** (the pre-existing minimal path this task did not change) and at **nonzero offsets,
+  frequency 3** (this task's path) both report **368 bytes in 4 allocations** — identical, and the
+  same figure `REMED-GFX-161` recorded as the external driver baseline. Every frame in those reports
+  is `<unknown module>` or an unresolved driver address; **no CNA or `Microsoft::Xna` frame appears
+  in any of them**. A leg that rejects before rendering reports 256/2, and a 23-test non-instanced
+  rendering control reports 8240/88, so the total tracks device creations, not instanced draws.
+
+### Test and regression results
+
+- `InstancedDrawMultiStreamTests.cpp` / `InstancedDrawRangeTests.cpp`: WebGPU moved into
+  `CNA_INSTANCED_BINDING_OFFSET_ORACLE`, which turns REMED-GFX-122/123's existing matrix on for it
+  — nine further oracle legs now run there, covering baseVertex + offset added exactly once, both
+  offsets under a nonzero `startIndex` on both index widths, frequency 3 / frequency > instanceCount
+  / return to 1, six queued draws with different triples, a return to zero and back around ordinary
+  draws, wrapper death and address reuse, dynamic buffers, both offsets at frequency 3, and
+  frequency 2 → 1 → 2 within one frame. WebGPU **37 passed, 7 skipped** — the 7 are the declared
+  `MultiStreamVertexInput = false` boundary (`REMED-GFX-205`, deferred), asserted in both directions.
+- That move emptied `CNA_INSTANCED_OFFSET_DEFECT_MEASURED`, so the macro and its four now-dead arms
+  were **deleted**. The triage legs themselves stay — they still print what every backend consumed —
+  and keep their `#else` UNCLASSIFIED arm for D3D9, which is outside the corrected set only because
+  no D3D display was reachable to measure it.
+- `ctest -j1` in `cmake-build-webgpu`: **5918/5924, 6 failed, 11 skipped**, 884 s. All six are
+  recorded pre-existing: `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`,
+  `CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+  `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` (`REMED-GFX-209`, deferred),
+  `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`, and `WebGPU_Clear_Readback`
+  (sampler `AddressMode` Wrap/Mirror plus a 50 %-alpha blend). None of them issues an instanced draw.
+- **EasyGL** 45/45 (the long-standing correct control), **Vulkan** 37/37 and **bgfx** 42/42 (the two
+  corrected controls), **Headless** 5/5 on the public transport group. All four rebuilt incrementally
+  against the changed shared test files.
+
+### The remaining boundary
+
+`REMED-GFX-212` is untouched and preserved, not adjusted to make the suite globally green: WebGPU
+still reads `ordinary-route = liveA(red)` and `instanced-route = unknown`, and Vulkan the same, while
+EasyGL and bgfx read `liveA(red)` on both routes. It is now the only remaining checkpoint blocker
+from this descendant cluster.
+
+### Scope held
+
+Only `src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp` and its header changed in
+production, and the header change is one inline NOXNA diagnostic accessor. No shared header, no
+other backend, no public API, no shader. `REMED-GFX-212` was not begun, `REMED-GFX-205` remains
+deferred, and `REMED-GFX-203` … `REMED-GFX-210` are unchanged.
+**No new finding was created.**

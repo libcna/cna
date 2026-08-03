@@ -152,7 +152,7 @@ answer.
 > group, which prints every reading it takes on every backend it runs on and whose per-backend arms
 > fail the moment their backend is corrected. No production file was changed by the triage.
 
-### 4.1 `REMED-GFX-211` — Vulkan, Bgfx and WebGPU ignore `VertexBufferBinding.VertexOffset` on the instanced route
+### 4.1 `REMED-GFX-211` — Vulkan, Bgfx and WebGPU ignore `VertexBufferBinding.VertexOffset` on the instanced route — **DONE (2026-08-03)**
 
 > **BACKEND-SCOPE PROGRESS, 2026-08-03 — VULKAN DONE, BGFX DONE, WEBGPU OPEN.** The ticket is
 > **still OPEN** and still **checkpoint blocker YES**; two of its three backends are now corrected.
@@ -194,8 +194,34 @@ answer.
 > **WebGPU is unchanged and its triage arms still assert its own measured defect**;
 > the four legs printed `instance-offset-ignored`, `vertex-offset-ignored`, `both-offsets-ignored`
 > and `divisor-1-silently` on it, verbatim, after this work.
+>
+> **WEBGPU (2026-08-03) — the ticket is now DONE on every backend it names.** The same two-loss-point
+> shape a third time, and the per-vertex loss point was again NOT the neighbouring copy. In
+> `WebGPUGraphicsBackend::DrawInstancedPrimitivesEx`, `command.vertexData` takes the WHOLE per-vertex
+> buffer into a command-owned CPU vector and `IssueInstancedDraw` uploads it to a fresh buffer bound
+> at `wgpuRenderPassEncoderSetVertexBuffer(pass, 0, …, /*offset=*/0, …)` — so binding 0 again has no
+> per-binding native offset channel, and the only term reaching a decoded index is
+> `wgpuRenderPassEncoderDrawIndexed`'s own `baseVertex`. The loss point was
+> `command.baseVertex = params.baseVertex`, structurally identical to Vulkan's `d.baseVertex` rather
+> than to bgfx's start-element. It is now `params.baseVertex + perVertexOffset`; the term is a signed
+> `int32_t` on both sides, so negative-`baseVertex` behaviour is unchanged. The per-instance side was
+> where the ticket said: `command.instVbData.assign(instShadow.begin(), instShadow.begin() +
+> instanceCount * stride)` took `instanceCount` consecutive records from record zero. Its source base
+> is now `vertexOffset * instVbStride` — this stream's own stride, never binding 0's, never advanced
+> by `baseVertex`. Readings on `9df8770d`, pre → post: leg A `instance-offset-ignored` (cells (0,0)
+> (1,0) (2,1) (5,3) — records 0..3, the decoy's own cell lit and live record 4's lost) →
+> `instance-offset-honoured`; leg B `vertex-offset-ignored` ((4,2) (5,2) (6,3) (7,3) — every instance
+> renders the mesh decoy) → `vertex-offset-honoured`; leg C `both-offsets-ignored` ((4,2) (5,2) (6,3),
+> 768 lit) → `both-offsets-honoured`. WebGPU moved out of `CNA_INSTANCED_OFFSET_DEFECT_MEASURED` into
+> `CNA_INSTANCED_BINDING_OFFSET_ORACLE` in both instanced test files, which turns REMED-GFX-122/123's
+> existing matrix on for it; that emptied the measured-defect set, so the macro and its four arms were
+> deleted and the triage legs keep only their `#else` UNCLASSIFIED arm for the still-unmeasured D3D9.
+> Only WebGPU production changed. **REMED-GFX-212's WebGPU boundary is preserved and untouched** —
+> `ordinary-route` still reads `liveA(red)` and `instanced-route` still reads `unknown`.
 
-**Record of status:** OPEN, MEDIUM, P2 — Vulkan and Bgfx scopes DONE 2026-08-03, WebGPU not begun.
+**Record of status:** ~~OPEN, MEDIUM, P2 — Vulkan and Bgfx scopes DONE 2026-08-03, WebGPU not
+begun.~~ → **DONE 2026-08-03 on all three named backends (Vulkan, Bgfx, WebGPU). Checkpoint blocker
+RESOLVED.** D3D9 remains unmeasured for want of a D3D display and is asserted neither way.
 **Post-audit priority:** **P1.** **Checkpoint blocker: ~~REVIEW (evidence currently points to YES)~~
 → YES, confirmed by measurement 2026-08-03 — see the TRIAGE RESULT at the end of this subsection.**
 
@@ -389,7 +415,7 @@ permutations consume the bound `COLOR0` stream when `VertexColorEnabled` is set,
 ordinary permutations already do; `OrdinaryAndInstancedRoutesAgreeOnVertexColorEnabled` is the
 acceptance gate and needs no reference oracle to run.
 
-### 4.3 `REMED-GFX-213` — Bgfx implements no per-instance divisor at all
+### 4.3 `REMED-GFX-213` — Bgfx, Vulkan and WebGPU implement no per-instance divisor at all — **DONE (2026-08-03)**
 
 > **BACKEND-SCOPE PROGRESS, 2026-08-03 — VULKAN DONE, BGFX DONE, WEBGPU OPEN.** The ticket is
 > **still OPEN** and still **checkpoint blocker YES**.
@@ -438,8 +464,41 @@ acceptance gate and needs no reference oracle to run.
 > instance offset, a frequency larger than the instance count at two offsets, and a return to
 > frequency 1 — so no special case for two could pass. **WebGPU is unchanged and still prints
 > `divisor-1-silently`.**
+>
+> **WEBGPU (2026-08-03) — the ticket is now DONE on every backend it names.** The native capability
+> was classified from the INSTALLED headers before a mechanism was chosen, as it was for Vulkan and
+> bgfx. In wgpu-native **v29.0.1.1** (`cmake-build-webgpu/_deps/wgpu-native-v29.0.1.1/include/webgpu`),
+> `WGPUVertexBufferLayout` is exactly `{ nextInChain, stepMode, arrayStride, attributeCount,
+> attributes }` — no divisor and no step-rate field; `WGPUVertexStepMode` is
+> `{ Undefined, Vertex, Instance, Force32 }` — no rate; the strings `divisor`, `stepRate`,
+> `step_rate` and `instance_rate` occur **zero** times in `webgpu.h` *and* in wgpu-native's own
+> extension header `wgpu.h`; the eleven `WGPUNativeSType` extension chains cover Device, NativeLimits,
+> ShaderSourceGLSL, Instance, BindGroupEntry, BindGroupLayoutEntry, QuerySetDescriptor,
+> SurfaceConfiguration, SurfaceSourceSwapChainPanel, PrimitiveState and SamplerDescriptor —
+> **none extends a vertex buffer layout or vertex state**; and no `WGPUNativeFeature` adds a step
+> rate. Category **C**, on the same evidential footing as the other two, and no device feature or
+> extension was added to avoid a bounded copy that already exists. Binding 1 therefore keeps
+> `WGPUVertexStepMode_Instance`'s implicit divisor of one and destination slot `i` takes source
+> record `vertexOffset + i / frequency` in the command's own `instVbData` vector. **Destination
+> cardinality is unchanged** — one record per instance — so `GetOrCreatePipelineInstanced3D`'s key
+> (`Make3DPipelineKey` over topology, strip index format, depth, blend, cull, wireframe, depth bias
+> and a `pvStride`/`instVbStride` salt) needed no frequency term and got none: the divisor is
+> data-preparation state only. Frequency 1 keeps its single bulk `memcpy`; frequency > 1 costs
+> `instanceCount` one-record `memcpy`s and no allocation beyond the same single `resize`. Readings on
+> `9df8770d`: `divisor-1-silently` → `divisor-2-honoured` at frequency 2, before and after an
+> intervening frequency-1 draw, with the frequency-1 control still `divisor-1-honoured`. Cardinality
+> **measured** by a new permanent WebGPU regression
+> (`examples/webgpu_instanced_offset_frequency_cardinality_test.cpp`, 22/22) against the backend's own
+> counters and wgpu-native's `wgpuGenerateReport()` live-object registry: a 4-draw cycle costs
+> 1 render pass, 1 queue submit, 0 new Instanced3D pipeline variants and 0 new native render pipelines
+> at frequency 1, 2 and 3 and at every offset pair tried; doubling the instance count at frequency 2
+> adds no native buffer; and repeating a sequence leaves the live native buffer, pipeline and command
+> buffer counts unchanged. WebGPU's over-long instance-range gate was generalised the same way bgfx's
+> was, to the highest SOURCE record `vertexOffset + (instanceCount - 1) / frequency`.
 
-**Record of status:** OPEN, MEDIUM, P2 — Vulkan and Bgfx scopes DONE 2026-08-03, WebGPU not begun.
+**Record of status:** ~~OPEN, MEDIUM, P2 — Vulkan and Bgfx scopes DONE 2026-08-03, WebGPU not
+begun.~~ → **DONE 2026-08-03 on all three named backends (Bgfx, Vulkan, WebGPU). Checkpoint blocker
+RESOLVED.**
 Distinct from `REMED-GFX-121` (transposed per-instance matrix on non-GLSL renderers).
 **Post-audit priority:** ~~**P2, with an explicit P1 escalation condition.**~~ → **P1: the escalation
 condition was measured and confirmed.** **Checkpoint blocker: ~~REVIEW~~ → YES, 2026-08-03 — see the
@@ -743,9 +802,9 @@ constraints and different scope.
 | `REMED-GFX-208` | D3D9 — vertex input | Backend capability completion | **Safe declared boundary**, same gate | MEDIUM / P2 | P2 | NO | NO | GFX-201, GFX-202, GFX-060, GFX-117 | Modularization, last of the six | MEDIUM | Per-stream `D3DVERTEXELEMENT9.Stream` + one `SetStreamSource` per binding; leave stream-frequency state clean |
 | `REMED-GFX-209` | Test contract — `GraphicsDeviceCapabilityTest` | Test-contract defect (encodes an incorrect backend assumption; **hides nothing**) | **Fails loudly** on six backends; cannot mask a production defect | LOW / P3 | P3 | **REVIEW** | NO | none | Before the post-integration checkpoint, with the clean-baseline work | SMALL | Gate on `CNA_BACKEND_EASYGL` or assert the query does not throw, as the neighbouring cases do |
 | `REMED-GFX-210` | Capability reporting — instancing | Capability-query / reporting + public-exception parity | **Throws**, but a `std::runtime_error` from the interface default; no advance query, no false success | LOW / P3 | P3 | NO | **CONDITIONAL** | none technical; adjacent to GFX-213 triage | First integration group adding a backend with no instanced path | MEDIUM | FNA has `FNA3D_SupportsHardwareInstancing` + `NoSuitableGraphicsDeviceException`; follow `REMED-GFX-185`'s report-what-you-do precedent |
-| `REMED-GFX-211` | ~~Vulkan, Bgfx,~~ **Vulkan DONE, Bgfx DONE** *(2026-08-03)*; WebGPU — instanced route | **Supported-path silent wrong result** — measured on all three, both stream sides | **None.** Classic 1+1 draw is accepted and submitted; instance records 0..3 consumed instead of 1..4, and the per-vertex stream renders its decoy | MEDIUM / P2 | **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | GFX-202 (value already delivered); precedent GFX-122, GFX-123 | **Immediate remediation campaign — 2 of 3 backends done** | MEDIUM | Triaged: WebGPU pixel measurement taken; per-vertex side confirmed on all three; the two streams fail **independently** (`both-offsets-ignored`), so a fix must carry both. D3D9 unmeasured — no D3D display. **Vulkan corrected §4.1: instance offset into the copy's source base, per-vertex offset folded into `vkCmdDrawIndexed`'s own `vertexOffset` — the per-vertex loss point was `d.baseVertex`, not the neighbouring copy. Bgfx corrected §4.1 the same way at its own two expressions: the instance copy's source base became `cpuData.data() + vertexOffset * instStride`, and the per-vertex offset joined `baseVertex` in `bgfx::setVertexBuffer`'s `_startVertex` — bgfx has no draw-time base-vertex argument, so that start element IS the addend, which is also why the ordinary bgfx route was already correct (it folds into `params.baseVertex` upstream) and the instanced one was not (it folds nothing, by GFX-202 design). Vulkan and Bgfx now both in `CNA_INSTANCED_BINDING_OFFSET_ORACLE`; WebGPU still prints all three ignored readings.** |
+| `REMED-GFX-211` | ~~Vulkan, Bgfx, WebGPU~~ **ALL THREE DONE — TICKET DONE** *(2026-08-03)* — instanced route | **Supported-path silent wrong result** — measured on all three, both stream sides | **None.** Classic 1+1 draw is accepted and submitted; instance records 0..3 consumed instead of 1..4, and the per-vertex stream renders its decoy | MEDIUM / P2 | **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | GFX-202 (value already delivered); precedent GFX-122, GFX-123 | ~~Immediate remediation campaign~~ **COMPLETE — checkpoint blocker RESOLVED** | MEDIUM | Triaged: WebGPU pixel measurement taken; per-vertex side confirmed on all three; the two streams fail **independently** (`both-offsets-ignored`), so a fix must carry both. D3D9 unmeasured — no D3D display. **Vulkan corrected §4.1: instance offset into the copy's source base, per-vertex offset folded into `vkCmdDrawIndexed`'s own `vertexOffset` — the per-vertex loss point was `d.baseVertex`, not the neighbouring copy. Bgfx corrected §4.1 the same way at its own two expressions: the instance copy's source base became `cpuData.data() + vertexOffset * instStride`, and the per-vertex offset joined `baseVertex` in `bgfx::setVertexBuffer`'s `_startVertex` — bgfx has no draw-time base-vertex argument, so that start element IS the addend, which is also why the ordinary bgfx route was already correct (it folds into `params.baseVertex` upstream) and the instanced one was not (it folds nothing, by GFX-202 design). Vulkan and Bgfx now both in `CNA_INSTANCED_BINDING_OFFSET_ORACLE`; WebGPU corrected §4.1 at its own two expressions, and the per-vertex loss point was Vulkan's shape rather than bgfx's: `command.vertexData` copies the whole per-vertex buffer and the replay binds it at native offset 0, so `command.baseVertex = params.baseVertex` was the only term that could carry the offset and now carries `params.baseVertex + perVertexOffset`; the instance copy's source base became `vertexOffset * instVbStride`. All three backends are now in `CNA_INSTANCED_BINDING_OFFSET_ORACLE`, which emptied `CNA_INSTANCED_OFFSET_DEFECT_MEASURED` — the macro and its four arms were deleted, leaving the triage legs' `#else` UNCLASSIFIED arm for the still-unmeasured D3D9.** |
 | `REMED-GFX-212` | Vulkan, WebGPU *(measured)*; D3D11, D3D12 *(source-identified)* — stock instanced shader | **Supported-path silent wrong result.** Reference settles it: case A | **None.** The draw renders silently in the wrong colour; no diagnostic | LOW / P3 | ~~REVIEW~~ **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | ~~an FNA reference determination~~ — **answered** | **Immediate remediation campaign** | MEDIUM *(LARGE if shader sources change)* | Triaged: FNA's shader index has no instancing term, so the same VS runs on both routes. Vulkan/WebGPU colour their **own** ordinary route from the stream and the instanced one from `DiffuseColor`. D3D11/D3D12 still unmeasured — no D3D display |
-| `REMED-GFX-213` | **~~Bgfx,~~ Bgfx DONE, ~~Vulkan~~ Vulkan DONE** *(2026-08-03)*, **WebGPU** — per-instance divisor *(scope widened by triage)* | **Supported-path silent wrong result.** Escalation condition confirmed | **None.** An adequately sized instance buffer clears every check and renders `InstanceFrequency = 2` at divisor 1 | MEDIUM / P2 | ~~P2~~ **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | GFX-202; distinct from GFX-121; shares its copy site with GFX-211 | **Immediate remediation campaign — 2 of 3 backends done** | MEDIUM | Triaged: `frequency` occurs **0 times** in all three backends' sources. Not an absent native capability — all three can emulate a divisor in the buffer they already build. **Vulkan corrected §4.3 by replication: no divisor extension is enabled (API 1.1, `VK_KHR_swapchain` only), so the binding keeps divisor 1 and slot `i` takes source record `vertexOffset + i / frequency`. Destination cardinality unchanged, so no pipeline-key term was needed. Bgfx corrected §4.3 the same way, after classifying its native capability from the installed header rather than a grep count: bgfx's whole public instancing surface (`allocInstanceDataBuffer` / `setInstanceDataBuffer` / `setInstanceCount`, `InstanceDataBuffer{data,size,offset,num,stride,handle}`) has no divisor, step-rate or frequency parameter at all, so category C again — slot `i` takes source record `vertexOffset + i / frequency` in the instance-data buffer the route already allocates. Cardinality measured identical at frequency 1 and 2 (5 submissions / 16 prims / 1024 transient B for a 4-draw frame at both). Bgfx's over-long-range gate was generalised from `instanceCount * stride` to the highest source record at the same time. WebGPU still prints `divisor-1-silently`.** |
+| `REMED-GFX-213` | **~~Bgfx, Vulkan, WebGPU~~ ALL THREE DONE — TICKET DONE** *(2026-08-03)* — per-instance divisor *(scope widened by triage)* | **Supported-path silent wrong result.** Escalation condition confirmed | **None.** An adequately sized instance buffer clears every check and renders `InstanceFrequency = 2` at divisor 1 | MEDIUM / P2 | ~~P2~~ **P1** | ~~REVIEW~~ **YES** *(triaged 2026-08-03)* | NO | GFX-202; distinct from GFX-121; shares its copy site with GFX-211 | ~~Immediate remediation campaign~~ **COMPLETE — checkpoint blocker RESOLVED** | MEDIUM | Triaged: `frequency` occurs **0 times** in all three backends' sources. Not an absent native capability — all three can emulate a divisor in the buffer they already build. **Vulkan corrected §4.3 by replication: no divisor extension is enabled (API 1.1, `VK_KHR_swapchain` only), so the binding keeps divisor 1 and slot `i` takes source record `vertexOffset + i / frequency`. Destination cardinality unchanged, so no pipeline-key term was needed. Bgfx corrected §4.3 the same way, after classifying its native capability from the installed header rather than a grep count: bgfx's whole public instancing surface (`allocInstanceDataBuffer` / `setInstanceDataBuffer` / `setInstanceCount`, `InstanceDataBuffer{data,size,offset,num,stride,handle}`) has no divisor, step-rate or frequency parameter at all, so category C again — slot `i` takes source record `vertexOffset + i / frequency` in the instance-data buffer the route already allocates. Cardinality measured identical at frequency 1 and 2 (5 submissions / 16 prims / 1024 transient B for a 4-draw frame at both). Bgfx's over-long-range gate was generalised from `instanceCount * stride` to the highest source record at the same time. WebGPU corrected §4.3 the same way and classified its native capability from the installed wgpu-native v29.0.1.1 headers rather than a grep count: `WGPUVertexBufferLayout` is only `{nextInChain, stepMode, arrayStride, attributeCount, attributes}`, `WGPUVertexStepMode` is only `{Undefined, Vertex, Instance}`, none of the eleven `WGPUNativeSType` chains extends a vertex layout or vertex state, and no `WGPUNativeFeature` adds a step rate — category C again, so slot `i` takes source record `vertexOffset + i / frequency` in the command's own `instVbData`. Cardinality measured by a new permanent WebGPU regression (22/22) against the backend counters and wgpu-native's `wgpuGenerateReport()`: 1 pass, 1 submit, 0 new pipeline variants at every frequency and offset pair, and no native buffer added by doubling the instance count.** |
 
 ---
 
@@ -813,7 +872,7 @@ For each integrated backend:
 
 | When | Tasks |
 |---|---|
-| **Before branch integration** | `REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` triage (§4) — they are mainline-backend behaviour and are cheaper to settle on a tree that is not mid-merge |
+| **Before branch integration** | ~~`REMED-GFX-211`, `REMED-GFX-212`, `REMED-GFX-213` triage (§4)~~ — triage done 2026-08-03; `REMED-GFX-211` and `REMED-GFX-213` are **DONE** on every backend they name, and **`REMED-GFX-212` is the only remaining checkpoint blocker of the cluster** (Vulkan and WebGPU scopes OPEN) |
 | **While adapting a particular branch** | None of §5. Only the adaptation checklist above, plus `REMED-GFX-210` evidence-gathering when a branch adds a backend with no instanced path |
 | **After all 19 branches are integrated** | `REMED-GFX-209` (clean principal-suite baseline before the checkpoint); `REMED-GFX-210` |
 | **During modularization** | `REMED-GFX-203` … `REMED-GFX-208`, and `REMED-GFX-213`'s implementation if triage lands it on the capability side |
