@@ -1237,6 +1237,27 @@ namespace CNA::Internal::Backends::Glide
             stride_ = strideInBytes;
         }
 
+        /**
+         * Uploads bytes under an already-resolved layout instead of parsing a VertexDeclaration
+         * or guessing one from stride. Used to carry a source buffer's exact resolved layout
+         * (whichever way it was resolved) into a derived buffer, e.g. the indexed-draw index
+         * expansion, so decoding never has a chance to disagree with the source it was copied
+         * from -- a stride that happens to match a built-in packed layout is not proof that the
+         * fields are actually arranged that way.
+         */
+        void SetDataWithLayout(const void* data, int vertexCount, const GlideVertexLayout& layout)
+        {
+            if (data == nullptr || vertexCount < 0 || vertexCount > capacity_)
+            {
+                throw std::runtime_error("GLIDE vertex-buffer upload is outside its declared capacity");
+            }
+            layout_ = layout;
+            bytes_.resize(static_cast<std::size_t>(vertexCount) * layout.stride);
+            std::memcpy(bytes_.data(), data, bytes_.size());
+            vertexCount_ = vertexCount;
+            stride_ = layout.stride;
+        }
+
         void SetVertexDeclaration(const VertexDeclaration& declaration) override
         {
             GlideVertexLayout parsed = ParseGlideVertexDeclaration(declaration);
@@ -2634,7 +2655,11 @@ namespace CNA::Internal::Backends::Glide
                         vb->Bytes().data() + static_cast<std::size_t>(resolved) * vb->Stride(), vb->Stride());
         }
         GlideVertexBufferBackend expanded(indexCount);
-        expanded.SetData(ordered.data(), indexCount, vb->Stride());
+        // Carry the source buffer's already-resolved layout forward exactly, rather than letting
+        // SetData() re-derive one from stride alone: a custom VertexDeclaration can legally use a
+        // stride that matches a built-in packed layout while arranging its fields differently, and
+        // guessing from stride would silently decode this expanded copy with the wrong offsets.
+        expanded.SetDataWithLayout(ordered.data(), indexCount, vb->Layout());
         DrawPrimitiveRange(expanded, world, view, projection, primitive, primitiveCount, 0, params);
     }
 

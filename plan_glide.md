@@ -167,13 +167,29 @@ renderer.
   only `GR_BLEND_ZERO`/`GR_BLEND_ONE` for the two alpha-channel slots; this is not enforced because
   it is chip-generation-specific and outside CNA's stated target runtime, but real first-generation
   Voodoo Graphics hardware testing under GLIDE-AUD-007 should re-check it.
-- [ ] **GLIDE-AUD-012 — Preserve custom vertex declarations in indexed draws.** The indexed path
-  currently expands bytes into a temporary vertex buffer without copying its parsed declaration,
-  then guesses the layout from stride. Refactor decoding so indices address the original buffer
-  and resolved layout directly, or explicitly carry the validated layout into the expansion.
-  Cover arbitrary legal offsets/padding and a stride that intentionally aliases a built-in layout;
-  require matching indexed/non-indexed fake-DLL vertices and dgVoodoo images. This is a release
-  blocker for the staged GLIDE-FUT-002 claim.
+- [x] **GLIDE-AUD-012 — Preserve custom vertex declarations in indexed draws.**
+  `DrawIndexedPrimitiveRange()` expanded resolved indices into a temporary `GlideVertexBufferBackend`
+  and called plain `SetData()` on it, which — because that fresh buffer had no layout of its own yet —
+  fell into the same stride-only guessing path used when no `VertexDeclaration` was ever set
+  (`KnownGlideVertexLayout`). A custom declaration whose *stride* happens to match one of the four
+  built-in packed streams but arranges its fields differently (e.g. texture coordinate before
+  colour) would therefore have its indexed copy silently decoded with the wrong offsets, even
+  though the non-indexed path (`DrawPrimitiveRange`'s `readVertex`, which reads `vb->Layout()`
+  directly) decoded the *same* source buffer correctly. Added
+  `GlideVertexBufferBackend::SetDataWithLayout(data, vertexCount, layout)`, which installs an
+  already-resolved `GlideVertexLayout` directly instead of parsing or guessing one, and changed
+  the indexed expansion to call it with the source buffer's own `vb->Layout()` — carrying forward
+  whichever layout (parsed declaration or stride guess) the source buffer actually resolved,
+  rather than re-deriving a possibly-different one. `GlideVertexLayout` was already the resolved
+  representation shared by both paths, so this makes indexed and non-indexed decoding structurally
+  identical by construction instead of by coincidence. Verified with i686 MinGW `-fsyntax-only`
+  recompilation of the whole backend and the portable Glide unit suite (31/31, unaffected since
+  the change lives entirely in the non-portable renderer class). `GlideVertexLayoutTests.cpp`
+  already covers arbitrary legal offsets/padding for `ParseGlideVertexDeclaration`; a fake-DLL
+  check that indexed and non-indexed draws of the same aliasing-stride declaration produce
+  matching native vertices, plus dgVoodoo images, remain blocked by the same external i686
+  `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007. This unblocks the GLIDE-FUT-002
+  release-blocker note.
 - [ ] **GLIDE-AUD-013 — Open the exact resolution/refresh candidate returned by Glide.** Preserve
   the refresh token while collecting `grQueryResolutions` candidates and pass that token to
   `grSstWinOpen`, or query only the refresh rate that the backend is prepared to open. Candidate
@@ -235,10 +251,10 @@ plus a dgVoodoo/real-hardware visual test before it can be advertised as support
   normal, and texture-coordinate 0 at arbitrary legal offsets and strides. Feed it into the
   existing fixed-function paths and reject unsupported semantics deterministically, instead of
   relying on accidental binary layout compatibility. **Implementation staged:** the parser and
-  portable unit coverage now exist, and the non-indexed 3D decoder uses the resolved layout. The
-  indexed expansion currently loses that layout and is tracked as a release blocker in
-  GLIDE-AUD-012; completion also requires the fake-DLL draw capture and dgVoodoo/real-hardware
-  visual checks from GLIDE-AUD-006/007.
+  portable unit coverage now exist, and both the non-indexed 3D decoder and (since GLIDE-AUD-012)
+  the indexed expansion use the same resolved layout from the source buffer. The former release
+  blocker in GLIDE-AUD-012 is closed; remaining completion requires the fake-DLL draw capture and
+  dgVoodoo/real-hardware visual checks from GLIDE-AUD-006/007.
 - [ ] **GLIDE-FUT-003 — Complete the feasible `BasicEffect` vertex-lighting subset.** Compute
   the existing FNA-compatible Blinn/Phong specular term on the CPU per vertex (eye position,
   material specular colour/power and all enabled directional lights), add it to the iterated
