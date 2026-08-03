@@ -196,7 +196,7 @@ mezi `SpriteBatch::End` a `Present`.
 
 | # | Úkol | Stav | Akceptace |
 |---|---|---|---|
-| D2D-60 | Zabraň výjimce z implicitně `noexcept` destruktoru `Direct2DRenderTargetBackend`. | ⬜ | Destruktor jen provede no-throw cleanup; explicitní `Dispose`/unbind nese případnou chybu a fault-injection test nikdy nekončí `std::terminate`. |
+| D2D-60 | Zabraň výjimce z implicitně `noexcept` destruktoru `Direct2DRenderTargetBackend`. | 🟨 | Destruktor nyní obaluje `ReleaseRenderTarget` do `try`/`catch(...)`; `RenderTarget2D::Dispose` už dřív odmítal disposal stále navázaného targetu, takže házející cesta byla dosažitelná jen mimo tuto veřejnou bránu (např. přímý `BindAsRenderTarget()` na backendu). `Direct2D_2DParity` ve Wine ověřuje přesně tento obchozí scénář (zničení přímo navázaného targetu) bez pádu a s funkčním zařízením poté. Skutečný HRESULT fault-injection test (vynucené selhání uvnitř `EndDrawing`/`EnsureMainTargetSize`) zůstává mimo rozsah této opravy — patří k širší D2D-8 fázi (D2D-62 a dál). |
 | D2D-61 | Ověř vlastnictví, disposal a device generation RT před změnou `activeRenderTarget_`. | ⬜ | Každá validační výjimka nastane před mutací logického i nativního targetu. |
 | D2D-62 | Přidej transakční test bindu stale RT po recovery. | ⬜ | Po odmítnutí stale RT zůstane původní target čitelný a přijme kontrolní draw. |
 | D2D-63 | Definuj device loss s aktivním RT vytvořeným při vypnuté recovery. | ⬜ | Backend nevytvoří tichý rozpor s veřejně navázaným RT; chování je explicitní, testované a obnovitelné. |

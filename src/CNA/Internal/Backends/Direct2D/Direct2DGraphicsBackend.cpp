@@ -481,8 +481,24 @@ namespace CNA::Internal::Backends::Direct2D
 
     Direct2DRenderTargetBackend::~Direct2DRenderTargetBackend()
     {
-        if (owner_) owner_->UnregisterRenderTarget(this);
-        if (owner_) owner_->ReleaseRenderTarget(this);
+        if (!owner_) return;
+        owner_->UnregisterRenderTarget(this);
+        // D2D-60: a destructor must never throw. The normal disposal path
+        // (RenderTarget2D::Dispose) already rejects destroying a still-bound target with a real,
+        // catchable exception before it ever reaches here; ReleaseRenderTarget's still-bound
+        // unbind (EndDrawing/EnsureMipLevelsCurrent/EnsureMainTargetSize, each capable of a
+        // Direct2D HRESULT failure) is therefore only reached for edge cases such as a target
+        // bound directly through BindAsRenderTarget() (bypassing GraphicsDevice) or teardown
+        // ordering with an already-lost device. Best-effort no-throw cleanup here beats
+        // std::terminate; a caller that needs to observe such a failure must unbind explicitly
+        // (UnbindAsRenderTarget()) before destruction.
+        try
+        {
+            owner_->ReleaseRenderTarget(this);
+        }
+        catch (...)
+        {
+        }
     }
 
     ID2D1Bitmap1* Direct2DRenderTargetBackend::Bitmap() const

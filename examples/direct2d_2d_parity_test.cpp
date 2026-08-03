@@ -1036,6 +1036,22 @@ protected:
         verifyRenderTargetUsage(RenderTargetUsage::PreserveContents, "PreserveContents", Color(173, 31, 97, 255));
         verifyRenderTargetUsage(RenderTargetUsage::PlatformContents, "PlatformContents", Color(173, 31, 97, 255));
 
+        // D2D-60: RenderTarget2D::Dispose() rejects destroying a target GraphicsDevice still
+        // considers bound, but a target bound directly through the backend (bypassing
+        // GraphicsDevice::SetRenderTarget, as CNA's device-agnostic ITextureBackend contract
+        // permits) is invisible to that guard. Destroying it while still the backend's active
+        // target must not let ~Direct2DRenderTargetBackend's unbind path escape the destructor;
+        // this exercises that edge case and proves the device stays usable afterward.
+        {
+            RenderTarget2D directBoundTarget(device, 2, 2);
+            directBoundTarget.GetRenderTargetBackend()->BindAsRenderTarget();
+        }
+        device.Clear(Color::Black);
+        sprites_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorDisabled);
+        sprites_->Draw(*white_, Rectangle(0, 0, 2, 2), Rectangle(0, 0, 1, 1), Color::White);
+        sprites_->End();
+        check("Direct2D survives destroying a directly-bound active render target", 0, 0, Color::White);
+
         auto recoveryTexture = Texture2D::CreateFromPixels(
             device, 1, 1, std::vector<uint8_t>{13, 99, 201, 255});
         RenderTarget2D recoveryTarget(device, 2, 2);
