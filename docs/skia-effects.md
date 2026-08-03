@@ -42,7 +42,7 @@ makes exact-type `SpriteEffect` recognition a compatibility alias, not a new pro
 | `SetUniformVec2Array` | Vec2 array; caller supplies element count. | Reflected array flag/count. | Implemented with the same checks and `count * 2 * sizeof(float)` byte validation. |
 | `SetTexture(unit, Texture2D)` | Binds a numeric sampler unit; GLSL separately names a sampler uniform. | Named `uniform shader` child, no numeric sampler-unit API. | Units 1–7 map exactly to optional `cnaTexture1`–`cnaTexture7`; undeclared/out-of-range/null bindings throw. A weak backend binding observes updates and expires safely on dispose. |
 | Primary SpriteBatch texture | Implicit unit 0 (`texture1` by convention in current tests). | Child image shader with chosen sampling/tile matrix. | Reserved `cnaTexture0`; it inherits the active SpriteBatch sampler and source-coordinate mapping. |
-| `SetTexture(unit, TextureCube/Texture3D)` | GLSL `samplerCube`/`sampler3D`. | Runtime-effect children are 2D shader/filter/blender objects. | Unsupported; CPU transfer storage does not create cube/volume samplers. |
+| `SetTexture(unit, TextureCube/Texture3D)` | GLSL `samplerCube`/`sampler3D`. | Runtime-effect children are 2D shader/filter/blender objects. | Still unsupported (`BindTextureCube`/`BindTexture3D` reject); SKIA-144 fixed the ABI this will use once SKIA-145/147/149 implement it -- see `docs/skia-cube-volume-sampling-contract.md`. |
 
 `IEffectBackend` has compatibility no-op defaults and `ShaderEffect` skips setters when backend
 construction returned null. `SkiaEffectBackend` overrides every applicable method: an accepted

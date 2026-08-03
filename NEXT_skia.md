@@ -1895,10 +1895,64 @@ level-boundary contract.
   persistent `:99` Xvfb display. Release and ASan+UBSan pass the new/changed test. No real display
   or subagent was used; compilation never exceeded three jobs; `NEXT.md` remained untouched.
 
+## Completed in this session: SKIA-144
+
+- Wrote `docs/skia-cube-volume-sampling-contract.md`, the normative ABI contract for Phase S15
+  (cube/volume sampling) before any sampling code exists. Read `SkiaEffectBackend.cpp`'s complete
+  existing `CNA_SKIA_SKSL_V1` compile/bind machinery first: the existing ABI hard-caps at 8 total
+  `uniform shader` children (`cnaTexture0`-primary plus `cnaTexture1`-`7`), and cube sampling alone
+  needs six simultaneous children -- so cube/volume get their own reserved child names
+  (`cnaCubeFace0`-`5`, `cnaVolumeAtlas0`+`cnaVolumeAtlasMeta0`), orthogonal to and never competing
+  with the existing 2D-texture budget, rather than trying to fit inside it.
+- Decided effect authors call CNA-provided `cnaSampleCubeEXT(dir)`/`cnaSampleVolumeEXT(uvw)`
+  helpers (a fixed, source-controlled SkSL preamble `CompileProgram` will prepend) rather than
+  writing the dominant-axis/atlas-lookup math themselves -- keeps the formula in one CNA-controlled,
+  testable place instead of duplicated and potentially diverging per effect.
+- Cube: fixed the classic D3D dominant-axis face/UV table (chosen because XNA's observable cube
+  sampling was defined against D3D9) with a deterministic corner tie-break, and confirmed by
+  inspection that its `v` formula already matches CNA's own top-row-first storage convention (every
+  `vc` term uses `-y`/`-z`, matching D3D's native top-down texture convention), so no extra V-flip
+  is needed at the `cnaCubeFace*` sample site. Addressing is Clamp-only for cube, matching real XNA/
+  D3D cube-sampler hardware (which ignores declared `AddressU/V/W` for cube maps). Explicitly
+  flagged the whole table as an unproven hypothesis, not a derivation-is-enough conclusion: SKIA-145
+  must render six distinct known solid-colour faces and sample known reference directions through
+  the real compiled preamble, and correct this document if empirical results disagree.
+- Volume: `Texture3D` CPU storage is one contiguous linear buffer (no native atlas), so
+  `SetTexture(1, Texture3D)` packs depth slices into a padded, roughly-square grid atlas
+  (`cols=ceil(sqrt(d))`, `rows=ceil(d/cols)`) with a 1-texel replicated border per tile -- fixing
+  the exact bleed problem SKIA-147's acceptance criterion calls out ("atlas padding cannot bleed
+  between slices"): a per-tile-clamped bilinear sample can never read outside its own bordered cell
+  regardless of requested `u`/`v`/`w` address mode. W-axis (slice) selection reuses the same
+  half-texel-centered convention as this backend's existing mip selection, so `w=0`/`w=1` sample
+  slice 0/`d-1` centers exactly with no half-slice bias; each of the two selected slices contributes
+  an ordinary hardware-bilinear 2D sample (4 texels), giving SKIA-148's required 8-voxel trilinear
+  interpolation. A new `cnaVolumeAtlasMeta0` reserved uniform (cols/rows/inverse atlas dimensions)
+  is written automatically by `SetTexture`, not settable by the author, matching the existing
+  `cnaTint` reserved-uniform precedent.
+- Resource limits extend the existing checked-arithmetic 256 MiB policy unchanged for cube (reuses
+  exact existing face storage bytes, no extra shadow) but treat the volume atlas as a new,
+  independently accounted allocation: padding overhead means a volume that fits its own plain
+  storage budget can still be rejected once padded, and `SetTexture` must check the padded size
+  before allocating rather than assuming the already-passed plain-storage check covers it. The atlas
+  is retained only while a `Texture3D` is actually bound, not cached per ever-bound volume.
+- Filtering/mip reuses SKIA-129's existing affine-rho 2D LOD selection for whichever face/slice is
+  already selected; only inter-mip *selection* is in scope for this phase, not continuous
+  cross-level blending, matching `TextureFilter`'s existing documented granularity for ordinary
+  `Texture2D` on this backend. Precision and storage format (`Color`-only, SkSL float/half pipeline)
+  match the already-established Skia adapter and texture-storage conventions unchanged -- SKIA-144
+  does not extend cube/volume storage to the SKIA-135–142 promoted format set, only adds a sampling
+  path for the one format already supported.
+- No code changes; this is a design/contract task (matching SKIA-134's own precedent as a
+  classification task, not an implementation one). The document's closing section enumerates
+  exactly what each of SKIA-145–151 still owes so the phase's task boundaries stay unambiguous.
+
 ## Next candidates
 
-1. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
-   order, now that Phase S14 (SurfaceFormat expansion, SKIA-134–143) is complete.
+1. SKIA-145: prototype and implement cube sampling from six 2D child shaders using dominant-axis
+   face selection, per the fixed `docs/skia-cube-volume-sampling-contract.md` contract -- and
+   empirically confirm or correct its D3D face/UV table against real rendered pixels.
+2. SKIA-146–158: continue Phase S15/S16 (cube mip/seam policy, volume sampling, effect ABI wiring,
+   wider explicit 2D effects) in dependency order.
 2. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
 3. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
