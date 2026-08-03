@@ -761,11 +761,13 @@ namespace
         }
 
         /// The same assertion WITHOUT the colour axis, for the legs that run on every instancing
-        /// backend. CNA's stock instanced shader is a CNA extension, not an XNA one, and only
-        /// EasyGL's and bgfx's colour it from the per-vertex stream -- Vulkan's, WebGPU's, D3D11's
-        /// and D3D12's take `DiffuseColor` instead (recorded as REMED-GFX-212). A cross-backend
-        /// preservation gate must therefore assert WHICH RECORDS each stream supplied, which the
-        /// cell positions alone already say, and leave the colour axis to the mixed-stream group.
+        /// backend. EasyGL, bgfx, Vulkan and WebGPU all colour the instanced route from the
+        /// per-vertex stream now (REMED-GFX-212 corrected the last two), but D3D11's and D3D12's
+        /// stock instanced shaders are still identified from source as taking `DiffuseColor`
+        /// instead, and no D3D display was reachable to measure them. A cross-backend preservation
+        /// gate must therefore assert WHICH RECORDS each stream supplied, which the cell positions
+        /// alone already say, and leave the colour axis to the mixed-stream group and to
+        /// InstancedVertexColorTests.cpp, which measures it directly on every backend it runs on.
         static void ExpectExactlyTheseCellsIgnoringColour(
             const FrameSnapshot& snapshot, const GridLayout& layout,
             const std::vector<ExpectedCell>& expected, const char* label)
@@ -1307,8 +1309,10 @@ TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFr
 //   * the per-instance VertexOffset is 0 here. Vulkan, bgfx and WebGPU ignore a nonzero one --
 //     REMED-GFX-122/123 corrected only EasyGL and D3D11/D3D12 -- which is recorded as
 //     REMED-GFX-211 and asserted separately below on the backends that do honour it.
-//   * the colour axis is not asserted (REMED-GFX-212; see
-//     ExpectExactlyTheseCellsIgnoringColour).
+//   * the colour axis is not asserted here -- only D3D11/D3D12 are still identified as colouring
+//     the instanced route from DiffuseColor and neither could be measured (REMED-GFX-212; see
+//     ExpectExactlyTheseCellsIgnoringColour, and InstancedVertexColorTests.cpp for the direct
+//     per-backend measurement).
 //   * the instance frequency is 1. bgfx implements no per-instance divisor at all
 //     (REMED-GFX-213).
 // ---------------------------------------------------------------------------
@@ -2163,13 +2167,13 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         << "VertexColorEnabled = true with a bound COLOR0 stream and a white DiffuseColor must "
            "produce the stream's own colour on the ORDINARY route";
 
-#if defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU)
-    EXPECT_NE(ordinary, instanced)
-        << "REMED-GFX-212 boundary on " << kTriageBackendName << ": this backend was measured "
-           "colouring the instanced route from DiffuseColor while its own ordinary route colours "
-           "from the bound COLOR0 stream, under identical effect state. If the two routes now "
-           "agree the defect is FIXED here: delete this arm";
-#elif defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_BGFX)
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_BGFX) || \
+    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_WEBGPU)
+    // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
+    // is why the measured-defect arm this leg used to carry for those two is gone. It carried one
+    // for as long as either backend was known to substitute DiffuseColor for the bound COLOR0
+    // stream on this route, asserting that pixel measurement until the correction landed and made
+    // the assertion fail -- which is what forced its removal.
     EXPECT_EQ(ordinary, instanced)
         << "REMED-GFX-212: this backend was measured honouring VertexColorEnabled on BOTH routes, "
            "which is the reference contract -- BasicEffect's shader index has no instancing term, "

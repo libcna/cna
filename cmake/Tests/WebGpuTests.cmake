@@ -123,6 +123,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_webgpu_instanced_offset_frequency_cardinality
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-212 structural half: honouring BasicEffect.VertexColorEnabled on the instanced
+    # route must build no render-pipeline variant per setting, must keep a position-only and a
+    # position+colour declaration in separate variants, and must add no render pass or queue
+    # submit. Counts come from the backend's own EXT counters and from wgpu-native's
+    # wgpuGenerateReport() live-object registry.
+    cna_webgpu_test(cna_test_webgpu_instanced_vertex_color_cardinality
+                    examples/webgpu_instanced_vertex_color_cardinality_test.cpp)
+    target_link_libraries(cna_test_webgpu_instanced_vertex_color_cardinality
+                          PRIVATE WebGPU::WebGPU)
+    cna_register_backend_test(NAME WebGPU_InstancedVertexColor_Cardinality
+        COMMAND cna_test_webgpu_instanced_vertex_color_cardinality
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_cnj.md CNB-58 WebGPU counterpart: pbr3d.wgsl / GetOrCreatePipelinePbr3D / PbrEffect
     # (unskinned only, stride 48), the WebGPU backend's real glTF 2.0 metallic-roughness BRDF.
     cna_webgpu_test(cna_test_webgpu_pbr3d examples/webgpu_pbr3d_test.cpp)

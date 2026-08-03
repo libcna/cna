@@ -41,6 +41,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_Orientation_Effects COMMAND cna_test_vulkan_orientation_effects
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-212 structural half: honouring BasicEffect.VertexColorEnabled on the instanced
+        # route must build no pipeline variant per setting, must keep a position-only and a
+        # position+colour declaration in separate variants, and must add no submit, wait or
+        # present. Counts come from the backend's own cumulative EXT counters.
+        cna_vulkan_test(cna_test_vulkan_instanced_vertex_color_cardinality
+                        examples/vulkan_instanced_vertex_color_cardinality_test.cpp)
+        cna_register_backend_test(NAME Vulkan_InstancedVertexColor_Cardinality
+            COMMAND cna_test_vulkan_instanced_vertex_color_cardinality
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-011: same four families rendered into a RenderTarget2D, calibrated against
         # colored3d — proves the RT path is not double-flipped relative to the backbuffer path.
         cna_vulkan_test(cna_test_vulkan_orientation_rendertarget
