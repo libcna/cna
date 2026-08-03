@@ -456,11 +456,49 @@ limitation these files still hit under `CNA_LLGL_RENDERER=opengl`.
 
 ---
 
-## LLGL backend: OpenGL module renders nothing for a Y-offset scissor/viewport against the backbuffer — OPEN
+## LLGL backend: OpenGL module renders nothing for the backbuffer after an intervening render-target bind — OPEN (LLGL-51, root cause re-investigated 2026-08-03, still not confirmed)
 
-**Status:** open, discovered while verifying the per-draw-`Viewport` fix above (previous entry)
-under `CNA_LLGL_RENDERER=opengl`. Root cause narrowed to LLGL's own OpenGL screen-origin handling;
-not fixed here (third-party pinned dependency, not this project's code).
+**Status:** open. Re-investigated for `plan_llgl.md`'s `LLGL-51` via LIVE instrumentation of the
+vendored LLGL source (temporary `fprintf` added to `~/deps/LLGL`'s own `GLStateManager.cpp`, run
+against this backend's real Xvfb/llvmpipe environment, then fully reverted via `git checkout --` --
+`~/deps/LLGL` is a pristine, unmodified pinned checkout again). This narrows out the ORIGINAL
+"Y-conversion" hypothesis below almost entirely; the real mechanism is still not confirmed.
+
+**The original "Y-offset" framing does not match the actual failing test code.** Re-reading
+`deferred_viewport_capture_test.cpp`'s own F2/F3 legs (the two that fail) shows every `SetViewport()`
+call in both legs uses `y = 0` and the FULL canvas height -- only X and width ever vary (horizontal
+bands, not vertical ones). There is no non-zero-Y viewport/scissor rectangle anywhere in either
+failing leg. The title/symptom below (inherited from `spritebatch_custom_viewport_test.cpp`'s own,
+separate, still-plausible Y-offset finding) does not explain F2/F3's own failure at all.
+
+**Live instrumentation directly contradicts every part of the original root-cause narrative below:**
+- `flipViewportYPos_` and `framebufferHeight_` (the two fields `AdjustViewport`/`AdjustScissor` use)
+  ARE correctly restored to the swap chain's own correct values (`flip=1`, `fbH=`the real logical
+  canvas height) every single time `GLStateManager::BindRenderTarget()` switches back to the swap
+  chain from an off-screen target -- both `GLSwapChain::MakeCurrent()` (resyncs `framebufferHeight_`)
+  and the immediately following `BindGLRenderTarget(nullptr)` (calls `SetClipControl(GL_LOWER_LEFT,
+  ...)`, which unconditionally resyncs `flipViewportYPos_`) fire on every swap-chain rebind, observed
+  directly via `fprintf` at every one of dozens of rebinds across a full test run -- never once stale.
+- The ACTUAL `SetViewport()` calls for F2's own green/blue backbuffer draws (`(0,0,32,72)` and
+  `(64,0,32,72)`, logical canvas 96x72) produce the CORRECT, unchanged output (`flip=1` but `y=0` so
+  the flip is a no-op either way) -- there is no visible viewport-Y miscomputation for this leg at
+  the point `glViewport` is actually issued.
+
+**What remains genuinely unexplained:** the pixels are not merely repositioned, they are ABSENT
+(read back as the clear colour, as if the draw never happened) for both F2's backbuffer portion
+(read AFTER an off-screen target was bound and returned from) and F3 (a backbuffer-only leg, no
+render target involved at all, that fails only because it runs immediately after F2 in the same
+process/GL context -- consistent with some form of state corruption from F2 leaking forward, not an
+independent Y-flip bug of its own). Since viewport application itself now measures correct, the
+likely remaining suspects are the FRAMEBUFFER-COPY/readback path (`CommandBuffer::
+CopyTextureFromFramebuffer`, used by `CaptureBackbuffer()`) or scissor-test/other draw state left
+over from the off-screen target's own bind, neither of which this pass instrumented. Whoever
+continues this should instrument THOSE paths next (same reversible `~/deps/LLGL` technique used
+here) rather than the viewport-flip math this pass already ruled out.
+
+**Original hypothesis (2026-08-02, narrowed but not confirmed at the time; superseded by the above
+for F2/F3 specifically, but may still explain `spritebatch_custom_viewport_test.cpp`'s own separate,
+genuine non-zero-Y findings -- not re-investigated this pass):
 
 **Symptom:** `spritebatch_custom_viewport_test.cpp` and `spritebatch_viewport_switch_test.cpp` PASS
 completely (13/13, 6/6) under the default/`auto` (Vulkan) module but read back ZERO matching pixels
@@ -504,9 +542,11 @@ abstraction entirely for the GL module, which the project's own architecture (a 
 draw kind, backend-agnostic) is not set up for. Filed as an environment/module limitation rather
 than attempted blind.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-39` (no `_OpenGL` CTest variant registered for
-`spritebatch_custom_viewport`/`spritebatch_viewport_switch`/`rendertargetcube_plural_binding` --
-see `cmake/Tests/LlglTests.cmake`'s own comment there for the full explanation).
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-51` (still open; also blocks `LLGL-7`'s own
+`LLGL-39` from registering `_OpenGL` variants of `spritebatch_custom_viewport`/
+`spritebatch_viewport_switch`/`rendertargetcube_plural_binding` -- see
+`cmake/Tests/LlglTests.cmake`'s own comment there). `Llgl_Deferred_Viewport`/`Llgl_Deferred_Scissor`
+remain at 37/39 / 43/47 on the OpenGL module.
 
 ---
 

@@ -725,6 +725,28 @@ C1 itself cannot actually be run through the real backend here -- same infrastru
 `LLGL-45`'s U2 and `LLGL-46`'s Vulkan-module verification. `Llgl_RenderTarget_EffectSource_C1` is not
 registered until `LLGL-38`'s real-hardware pass or a DRI3-capable Xvfb (`LLGL-55`) confirms it.
 
+**`LLGL-51` progress (2026-08-03): root cause re-investigated via live instrumentation; NOT fixed,
+original hypothesis mostly disproven.** Temporarily instrumented the vendored, pinned LLGL
+dependency itself (`~/deps/LLGL`'s own `GLStateManager.cpp`, `fprintf` added and later fully
+reverted via `git checkout --`, confirmed clean) to observe `flipViewportYPos_`/`framebufferHeight_`
+and every `SetViewport()` call live against this backend's real Xvfb/llvmpipe environment, instead of
+continuing to reason from source alone. Two findings: (1) `deferred_viewport_capture_test.cpp`'s own
+failing F2/F3 legs never actually use a non-zero-Y viewport/scissor rectangle at all (only X/width
+vary) -- the "Y-conversion" framing this task inherited from `spritebatch_custom_viewport_test.cpp`'s
+own separate finding does not describe F2/F3's own failure. (2) Live tracing shows
+`flipViewportYPos_`/`framebufferHeight_` ARE correctly resynced on every swap-chain rebind, and the
+actual `glViewport` inputs/outputs for F2's own draws are correct -- directly contradicting the
+original (2026-08-02) hypothesis that LLGL's own screen-origin/clip-control state goes stale. The
+real defect is therefore NOT in viewport/scissor application at all; F2's backbuffer portion reads
+back as fully ABSENT (clear colour) rather than merely mispositioned, and F3 (a backbuffer-only leg
+with no render target involved) only fails because it runs immediately after F2 in the same process
+-- consistent with some state leaking forward from F2 rather than an independent bug of its own. See
+`known_bugs.md`'s rewritten entry for the complete instrumentation trace and the next concrete
+leads (`CommandBuffer::CopyTextureFromFramebuffer`'s own path, or leftover scissor/draw state from
+the off-screen bind) for whoever continues this. `Llgl_Deferred_Viewport`/`Llgl_Deferred_Scissor`
+remain unchanged at 37/39 and 43/47 -- this pass corrected the understanding of the defect but did
+not close it, and no code in this repository was changed by this investigation.
+
 ---
 
 ## Closing notes
