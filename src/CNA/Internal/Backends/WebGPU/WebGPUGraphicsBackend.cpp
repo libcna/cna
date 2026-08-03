@@ -7311,6 +7311,46 @@ struct VSOut {
         const auto& webgpuInstVb =
             static_cast<const WebGPUVertexBufferBackend&>(*instanceStream->buffer);
 
+        // REMED-GFX-211: the GEOMETRY binding's own VertexOffset, which this route dropped. The
+        // command copies the whole per-vertex buffer and the replay binds that copy at byte offset
+        // zero, so binding 0 has no per-binding native offset channel to carry it -- but
+        // wgpuRenderPassEncoderDrawIndexed's own `baseVertex` is added to every decoded index,
+        // which is exactly the term this stream owes, and it reaches the per-vertex binding only.
+        // The route binds exactly one per-vertex stream (RejectUnsupportedStreamCombination above),
+        // so folding it there applies the offset once, to its own stream only: the fetched element
+        // becomes `VertexOffset + baseVertex + index`. The index buffer is untouched -- startIndex
+        // stays an index-element offset, carried by firstIndex below.
+        const GpuVertexStreamBinding* perVertexStream = FirstPerVertexStream(params);
+        const int perVertexOffset = perVertexStream != nullptr ? perVertexStream->vertexOffset : 0;
+        const int instCountClamped = std::max(1, instanceCount);
+        const int instanceFrequency = std::max(1, instanceStream->instanceFrequency);
+        const int lastInstanceRecord =
+            instanceStream->vertexOffset + (instCountClamped - 1) / instanceFrequency;
+
+        // REMED-GFX-211/213: the shared layer validates both of these before dispatch
+        // (ValidateVertexStreamRanges / ValidateInstanceStreamRanges), so neither can fire for a
+        // draw that arrived through GraphicsDevice. They exist because Draw*PrimitivesEx is a
+        // public interface method a harness may call with a hand-built GpuDrawParams, and because
+        // an offset that was previously ignored now selects a real source range -- an out-of-range
+        // one must name its slot here rather than silently select the wrong records or drop the
+        // draw at replay.
+        const int perVertexCount = webgpuVb.GetVertexCount();
+        if (perVertexOffset < 0 || perVertexOffset > perVertexCount ||
+            params.baseVertex > perVertexCount - perVertexOffset)
+        {
+            throw std::runtime_error(
+                "The WebGPU backend: the per-vertex VertexBufferBinding.VertexOffset bound to slot " +
+                std::to_string(perVertexStream != nullptr ? perVertexStream->slot : 0) +
+                " leaves its own vertex buffer.");
+        }
+        if (instanceStream->vertexOffset < 0 || lastInstanceRecord >= webgpuInstVb.GetVertexCount())
+        {
+            throw std::runtime_error(
+                "The WebGPU backend: the per-instance VertexBufferBinding bound to slot " +
+                std::to_string(instanceStream->slot) + " does not hold record " +
+                std::to_string(lastInstanceRecord) + '.');
+        }
+
         InstancedDrawCommand command;
         command.pvStride = webgpuVb.Stride() > 0 ? webgpuVb.Stride() : 20;
         command.instVbStride = webgpuInstVb.Stride() > 0 ? webgpuInstVb.Stride() : 64;
@@ -7332,29 +7372,73 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
-        command.instanceCount = static_cast<std::uint32_t>(std::max(1, instanceCount));
+        command.instanceCount = static_cast<std::uint32_t>(instCountClamped);
 
-        // Copies the FULL vertex/instance buffers (matches VulkanGraphicsBackend::
+        // Copies the FULL per-vertex buffer (matches VulkanGraphicsBackend::
         // DrawInstancedPrimitivesEx's own identical "no vertexStart applied" simplification --
         // WEBGPU-70's documented, pre-existing baseVertex/vertexStart gap, not something this task
-        // introduces).
+        // introduces). The replay binds this copy at byte offset zero, which is why REMED-GFX-211's
+        // per-vertex term rides the native draw's baseVertex rather than this copy's source base.
         const auto& vbShadow = webgpuVb.ShadowData();
         const std::size_t vertexByteCount = static_cast<std::size_t>(webgpuVb.GetVertexCount()) * command.pvStride;
         if (vertexByteCount <= vbShadow.size())
             command.vertexData.assign(vbShadow.begin(), vbShadow.begin() + static_cast<std::ptrdiff_t>(vertexByteCount));
         command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount());
 
+        // Per-instance data: one destination record per instance, exactly as before -- only WHICH
+        // source record each one takes changed.
+        //
+        // REMED-GFX-211: the first source record is this stream's own VertexOffset, converted with
+        // this stream's own stride, never binding 0's, and never advanced by baseVertex, which
+        // addresses a per-vertex stream only.
+        //
+        // REMED-GFX-213: instance i takes record `VertexOffset + i / InstanceFrequency` -- the same
+        // rule glVertexAttribDivisor and D3D11's InstanceDataStepRate define, and the one EasyGL
+        // already implements natively. The grouping is expanded here rather than bound natively
+        // because the native capability is absent, not merely unused: in wgpu-native v29.0.1.1
+        // WGPUVertexBufferLayout carries only nextInChain/stepMode/arrayStride/attributes, no
+        // WGPUNativeSType extends it, WGPUVertexStepMode offers only Vertex and Instance, and no
+        // WGPUNativeFeature adds a step rate -- so binding 1 keeps WGPUVertexStepMode_Instance's
+        // implicit divisor of one. The destination is still one record per instance, so nothing
+        // about the native binding, the pipeline or its cache key moves and no frequency reaches
+        // them: the divisor is a data-preparation concern only. Frequency 1 stays the single bulk
+        // copy it has always been.
         const auto& instShadow = webgpuInstVb.ShadowData();
-        const std::size_t instByteCount = static_cast<std::size_t>(command.instanceCount) * command.instVbStride;
-        if (instByteCount <= instShadow.size())
-            command.instVbData.assign(instShadow.begin(), instShadow.begin() + static_cast<std::ptrdiff_t>(instByteCount));
+        const std::size_t instSrcBase =
+            static_cast<std::size_t>(instanceStream->vertexOffset) * command.instVbStride;
+        const std::size_t instSrcByteCount =
+            static_cast<std::size_t>(lastInstanceRecord + 1) * command.instVbStride;
+        if (instSrcByteCount <= instShadow.size())
+        {
+            command.instVbData.resize(
+                static_cast<std::size_t>(instCountClamped) * command.instVbStride);
+            if (instanceFrequency == 1)
+            {
+                std::memcpy(command.instVbData.data(), instShadow.data() + instSrcBase,
+                            command.instVbData.size());
+            }
+            else
+            {
+                for (int i = 0; i < instCountClamped; ++i)
+                    std::memcpy(
+                        command.instVbData.data() +
+                            static_cast<std::size_t>(i) * command.instVbStride,
+                        instShadow.data() + instSrcBase +
+                            static_cast<std::size_t>(i / instanceFrequency) * command.instVbStride,
+                        command.instVbStride);
+            }
+        }
 
         command.indexed = true;
         command.index32 = webgpuIb.IsThirtyTwoBit();
         command.indexData = webgpuIb.ShadowData();
         command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
         command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
-        command.baseVertex = params.baseVertex;
+        // REMED-GFX-211: the geometry binding's VertexOffset rides the native draw's own baseVertex
+        // term alongside the caller's baseVertex -- captured by value here, so a later
+        // SetVertexBuffers cannot reach this already-queued draw. The term stays signed, so a
+        // negative baseVertex keeps behaving exactly as it did.
+        command.baseVertex = params.baseVertex + perVertexOffset;
 
         // [0..15]=View*Projection (not a full MVP -- world comes from the per-instance stream),
         // [16..31]=diffuseColor+the same unused-here tail fields as colored3d.wgsl. FillExtUniforms()
