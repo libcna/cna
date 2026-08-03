@@ -22,9 +22,16 @@
 // Check C/D -- RenderTarget2D: the SAME differential, this time through RenderTarget2D's own
 //   multiSampleCount constructor parameter. This backend gives each render target its own
 //   independent multisampled texture and resolve target, so it does not depend on check A/B's
-//   back buffer state at all (unlike Vulkan's coupled implementation).
+//   back buffer state at all (unlike Vulkan's coupled implementation). Check D also (already) uses
+//   DepthFormat::None -- DILIGENT-62's own "never use swap-chain depth support to decide a
+//   no-depth target" case, since a depth-less render target's applied sample count must not be
+//   limited by a depth format it doesn't even have.
 // Check E -- ApplyMultiSampleCount() clamps an unreasonable request (1024) to something the
 //   device actually supports rather than accepting it verbatim or throwing.
+// Check F -- DILIGENT-62's depth-having counterpart to check D: a RenderTarget2D requesting
+//   DepthFormat::Depth24Stencil8 (real D24_UNORM_S8_UINT storage this time) at the same high
+//   MultiSampleCount still resolves with genuinely blended pixels -- proving the fix's
+//   depth-format-intersection branch works, not just its "skip the depth format entirely" one.
 //
 // Exit code 0 = all checks PASS, 1 = any FAIL, 77 = no usable device.
 
@@ -62,7 +69,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSize = 32;
-    constexpr int kChecks = 5;
+    constexpr int kChecks = 6;
 
     bool IsBinary(const std::vector<Color>& row)
     {
@@ -137,10 +144,14 @@ class DiligentMsaaTest : public Game
     }
 
     // Renders the diagonal triangle into a RenderTarget2D with the given MultiSampleCount, samples
-    // it back onto the back buffer 1:1, and returns the centre row.
-    std::vector<Color> RenderRenderTargetRow(GraphicsDevice& device, int multiSampleCount)
+    // it back onto the back buffer 1:1, and returns the centre row. DILIGENT-62: the render target
+    // clamps its own applied MultiSampleCount against ITS OWN RGBA8_UNORM colour format and, only
+    // when @p depthFormat requests one, its own D24_UNORM_S8_UINT depth format -- never the swap
+    // chain's granted (possibly substituted, e.g. BGRA8_UNORM) formats.
+    std::vector<Color> RenderRenderTargetRow(GraphicsDevice& device, int multiSampleCount,
+                                             DepthFormat depthFormat = DepthFormat::None)
     {
-        RenderTarget2D rt(device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None,
+        RenderTarget2D rt(device, kSize, kSize, false, SurfaceFormat::Color, depthFormat,
                           multiSampleCount, RenderTargetUsage::DiscardContents);
         std::printf("    (RenderTarget2D requested MultiSampleCount=%d, applied %d)\n",
                     multiSampleCount, rt.getMultiSampleCountProperty());
@@ -212,6 +223,12 @@ protected:
         const std::vector<Color> rtMsaa = RenderRenderTargetRow(device, 8);
         Check(HasIntermediate(rtMsaa),
               "RenderTarget2D MultiSampleCount=8: diagonal edge has genuinely blended pixels");
+
+        const std::vector<Color> rtMsaaWithDepth =
+            RenderRenderTargetRow(device, 8, DepthFormat::Depth24Stencil8);
+        Check(HasIntermediate(rtMsaaWithDepth),
+              "RenderTarget2D MultiSampleCount=8 with DepthFormat::Depth24Stencil8: diagonal edge "
+              "has genuinely blended pixels (own D24_UNORM_S8_UINT format, not the swap chain's)");
 
         PresentationParameters extremeRequest = device.getPresentationParametersProperty();
         extremeRequest.setMultiSampleCountProperty(1024);

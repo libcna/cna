@@ -1533,11 +1533,16 @@ namespace CNA::Internal::Backends::Diligent
         [[nodiscard]] Dg::ITextureView* GetCurrentDepthStencilView() const;
         [[nodiscard]] Dg::TEXTURE_FORMAT CurrentColorFormat() const;
         [[nodiscard]] Dg::TEXTURE_FORMAT CurrentDepthStencilFormat() const;
-        /// NOXNA. Picks the largest sample count <= @p requested that the swap chain's colour AND
-        /// depth-stencil formats both report support for via `GetTextureFormatInfoExt()`; 1 (no
-        /// MSAA) if @p requested is <= 1 or the device supports nothing higher. Shared by the back
-        /// buffer (`ApplyMultiSampleCount()`/the constructor) and every `DiligentRenderTargetBackend`.
-        [[nodiscard]] int ClampSampleCount(int requested) const;
+        /// NOXNA. Picks the largest sample count <= @p requested that @p colorFormat (and
+        /// @p depthFormat, when it is not `TEX_FORMAT_UNKNOWN`) reports support for via
+        /// `GetTextureFormatInfoExt()`; 1 (no MSAA) if @p requested is <= 1 or the device supports
+        /// nothing higher. Shared by the back buffer (`ApplyMultiSampleCount()`/the constructor,
+        /// called with the swap chain's own granted formats) and every `DiligentRenderTargetBackend`
+        /// (called with its own `RGBA8_UNORM` colour format and, only when depth was requested, its
+        /// own `D24_UNORM_S8_UINT` depth format -- never the swap chain's, which may differ and
+        /// caused a real OpenGL `RenderTarget2D` MSAA-resolve failure before `DILIGENT-62`).
+        [[nodiscard]] int ClampSampleCount(int requested, Dg::TEXTURE_FORMAT colorFormat,
+                                           Dg::TEXTURE_FORMAT depthFormat = Dg::TEX_FORMAT_UNKNOWN) const;
         /// NOXNA. The sample count a pipeline drawing into whatever is currently bound must be
         /// created with: 1 for a cube-target face (no cube MSAA yet), a render target's own applied
         /// count, or the back buffer's `sampleCount_`.

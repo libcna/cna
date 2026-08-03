@@ -1426,7 +1426,9 @@ float4 main(in PSInput psIn) : SV_Target
         , width_(width)
         , height_(height)
         , mipLevels_(mipMap ? MipLevelCount(width, height) : 1)
-        , appliedMultiSampleCount_(owner_.ClampSampleCount(multiSampleCount))
+        , appliedMultiSampleCount_(owner_.ClampSampleCount(
+              multiSampleCount, Dg::TEX_FORMAT_RGBA8_UNORM,
+              depthFormat != 0 ? Dg::TEX_FORMAT_D24_UNORM_S8_UINT : Dg::TEX_FORMAT_UNKNOWN))
         , preserveContents_(preserveContents)
     {
         if (width_ <= 0 || height_ <= 0)
@@ -2271,7 +2273,8 @@ float4 main(in PSInput psIn) : SV_Target
         if (maxTextureDimension_ <= 0)
             maxTextureDimension_ = 16384;
 
-        sampleCount_ = ClampSampleCount(args.multiSampleCount);
+        sampleCount_ = ClampSampleCount(args.multiSampleCount, swapChain_->GetDesc().ColorBufferFormat,
+                                        swapChain_->GetDesc().DepthBufferFormat);
         if (sampleCount_ > 1)
         {
             RecreateMsaaBackBufferTargets();
@@ -2614,15 +2617,19 @@ float4 main(in PSInput psIn) : SV_Target
         return sampleCount_ > 1 ? sampleCount_ : 0;
     }
 
-    int DiligentGraphicsBackend::ClampSampleCount(int requested) const
+    int DiligentGraphicsBackend::ClampSampleCount(int requested, Dg::TEXTURE_FORMAT colorFormat,
+                                                  Dg::TEXTURE_FORMAT depthFormat) const
     {
         if (requested <= 1 || !device_)
             return 1;
 
-        const auto& colorInfo = device_->GetTextureFormatInfoExt(swapChain_->GetDesc().ColorBufferFormat);
-        const auto& depthInfo = device_->GetTextureFormatInfoExt(swapChain_->GetDesc().DepthBufferFormat);
-        const Dg::Uint32 supported =
-            static_cast<Dg::Uint32>(colorInfo.SampleCounts) & static_cast<Dg::Uint32>(depthInfo.SampleCounts);
+        const auto& colorInfo = device_->GetTextureFormatInfoExt(colorFormat);
+        Dg::Uint32 supported = static_cast<Dg::Uint32>(colorInfo.SampleCounts);
+        if (depthFormat != Dg::TEX_FORMAT_UNKNOWN)
+        {
+            const auto& depthInfo = device_->GetTextureFormatInfoExt(depthFormat);
+            supported &= static_cast<Dg::Uint32>(depthInfo.SampleCounts);
+        }
 
         // Largest supported power-of-two sample count not exceeding the request, matching every
         // other CNA backend's own MSAA clamp (e.g. VulkanGraphicsBackend's PickSampleCount()).
@@ -2709,7 +2716,9 @@ float4 main(in PSInput psIn) : SV_Target
 
     int DiligentGraphicsBackend::ApplyMultiSampleCount(int requestedMultiSampleCount)
     {
-        const int clamped = ClampSampleCount(requestedMultiSampleCount);
+        const int clamped = ClampSampleCount(requestedMultiSampleCount,
+                                             swapChain_->GetDesc().ColorBufferFormat,
+                                             swapChain_->GetDesc().DepthBufferFormat);
         if (clamped != sampleCount_)
         {
             sampleCount_ = clamped;
