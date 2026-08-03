@@ -36,6 +36,15 @@
 // The untinted straight variant is the base canvas itself, not a copy: it is by far the most common
 // case (an ordinary untinted sprite) and copying it would double every texture's memory for nothing.
 //
+// plan_html_dom.md HTMLDOM-106: mode 1's "RGB divided by alpha" is only correct for an UPLOADED
+// texture, whose bytes are the game's own and are, by XNA/FNA's AlphaBlend convention, assumed
+// already premultiplied. A render target's own backing canvas is never in that state: any Canvas2D
+// read or redraw of it (getImageData, or using it as a drawImage source) is guaranteed straight
+// (non-premultiplied) alpha regardless of which blend mode drew the content -- a browser contract,
+// not something this backend controls. Requesting mode 1 for a render target would therefore divide
+// already-straight bytes by alpha a second time; cnaDomGetVariant silently downgrades that request
+// to mode 0 for any entry marked isRenderTarget.
+//
 // `cnaDomEnsureUrl(variant)` pays for the PNG encode the DOM path needs, once per variant.
 // `toDataURL` is the only SYNCHRONOUS canvas-to-URL route a browser offers -- `toBlob`/
 // `convertToBlob` are asynchronous and would let a draw be issued before its own texture URL
@@ -46,6 +55,15 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
     Module['cnaDomGetVariant'] = function(id, mode, r, g, b) {
         const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
         if (!entry || !entry.ctx) return null;
+        // plan_html_dom.md HTMLDOM-106: a render target's own canvas is always straight (non-
+        // premultiplied) alpha on ANY Canvas2D read or redraw -- getImageData/drawImage's own
+        // contract, unaffected by whatever blend mode drew the content -- whereas an UPLOADED
+        // texture's bytes are the game's own and are, by XNA/FNA's AlphaBlend convention, assumed
+        // already premultiplied (mode 1 exists specifically to undo that before handing the pixels
+        // to the browser's straight-alpha-expecting compositor). Un-premultiplying a render target's
+        // already-straight bytes a second time would corrupt its colour at every non-opaque texel,
+        // so AlphaBlend sampling a render target is treated as mode 0 (already straight, as-is).
+        if (entry.isRenderTarget && mode === 1) mode = 0;
         const tinted = (r !== 255 || g !== 255 || b !== 255);
         const key = mode + ':' + r + ',' + g + ',' + b;
         let variant = entry.variants[key];
@@ -255,7 +273,11 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
 //
 // willReadFrequently: every variant this texture ever produces starts with a getImageData on this
 // context, so the browser should keep it CPU-backed instead of repeatedly reading back from the GPU.
-EM_JS(void, CNA_HtmlDom_CreateTexture, (int id, int width, int height, const uint8_t* rgba), {
+//
+// isRenderTarget: plan_html_dom.md HTMLDOM-106. True only for HtmlDomRenderTargetBackend's own
+// backing canvas (its constructor is this function's only caller with isRenderTarget != 0) -- see
+// cnaDomGetVariant's own comment for why AlphaBlend sampling needs to know this.
+EM_JS(void, CNA_HtmlDom_CreateTexture, (int id, int width, int height, const uint8_t* rgba, int isRenderTarget), {
     if (!Module['cnaDomTextures']) Module['cnaDomTextures'] = {};
     if (!Module['cnaDomNewCanvas']) {
         // Returns null where neither an OffscreenCanvas nor a document exists -- the repo's own
@@ -275,7 +297,8 @@ EM_JS(void, CNA_HtmlDom_CreateTexture, (int id, int width, int height, const uin
         const bytes = new Uint8ClampedArray(HEAPU8.subarray(rgba, rgba + width * height * 4));
         ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
     }
-    Module['cnaDomTextures'][id] = { canvas: canvas, ctx: ctx, w: width, h: height, variants: {} };
+    Module['cnaDomTextures'][id] = { canvas: canvas, ctx: ctx, w: width, h: height, variants: {},
+                                     isRenderTarget: !!isRenderTarget };
 });
 
 // plan_html_dom.md HTMLDOM-21: full level-0 re-upload. Every cached variant is dropped: they are
@@ -312,7 +335,7 @@ namespace CNA::Internal::Backends::HtmlDom
         , height_(data.height)
     {
 #if defined(__EMSCRIPTEN__)
-        CNA_HtmlDom_CreateTexture(id_, width_, height_, data.pixels.data());
+        CNA_HtmlDom_CreateTexture(id_, width_, height_, data.pixels.data(), 0);
         CNA_HtmlDom_InstallTextureHelpers();
 #endif
     }
@@ -323,7 +346,10 @@ namespace CNA::Internal::Backends::HtmlDom
         , height_(height)
     {
 #if defined(__EMSCRIPTEN__)
-        CNA_HtmlDom_CreateTexture(id_, width_, height_, nullptr);
+        // plan_html_dom.md HTMLDOM-106: isRenderTarget=1 -- this constructor is used exclusively by
+        // HtmlDomRenderTargetBackend (see this class's own header comment), never for a plain
+        // Texture2D, so it can be hardcoded here rather than threaded through as its own parameter.
+        CNA_HtmlDom_CreateTexture(id_, width_, height_, nullptr, 1);
         CNA_HtmlDom_InstallTextureHelpers();
 #endif
     }

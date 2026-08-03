@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 24;
+    constexpr int kExpectedChecks = 28;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -982,7 +982,115 @@ protected:
                   "handled by some separate, inconsistent code path");
         }
 
+        // plan_html_dom.md HTMLDOM-106 (reopens HTMLDOM-52/53/83/85): a render target's own backing
+        // canvas is ALWAYS straight (non-premultiplied) alpha on readback -- Canvas2D's getImageData
+        // contract, confirmed by leg 1 below -- regardless of which BlendState drew the content.
+        // cnaDomGetVariant's mode 1 ("un-premultiplied") exists to correct an UPLOADED texture's
+        // bytes, which the AlphaBlend contract assumes are the game's own ALREADY-premultiplied asset
+        // data; applying that SAME division to a render target's already-straight bytes divides by
+        // alpha a second time. HTMLDOM-83's existing round-trip used fully opaque content (alpha=255),
+        // where the un-premultiply branch's own `aa > 0 && aa < 255` guard never even fires -- unable
+        // to detect this by construction. This frame uses a genuinely translucent source, mirroring
+        // HTMLDOM-85's own premultiplied texel (255,100,50) at alpha=128 -> premultiplied
+        // (128,50,25,128), so the write, readback, and resample legs below are all hand-derived from
+        // the exact same already-verified numbers.
         if (frame_ == 19)
+        {
+            // Leg 1 (write + readback): draw the premultiplied texel into rtA_ under AlphaBlend, onto
+            // rtA_'s own transparent clear. Reused HTMLDOM-85 math: an AlphaBlend draw onto a fully
+            // transparent destination reduces to the un-premultiplied source, so rtA_ should now hold
+            // straight (255,100,50,128) -- confirming getImageData's straight-alpha contract applies
+            // to a render target's OWN canvas exactly as it does to the scratch target HTMLDOM-85 used.
+            Texture2D premultTex = Make1x1(dev, 128, 50, 25, 128);
+            const auto rtAPixels = ReadBackWholeTarget(*rtA_, 4, 4, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr, nullptr);
+                spriteBatch_->Draw(premultTex, Rectangle(0, 0, 4, 4), Rectangle(0, 0, 1, 1), Color::White);
+                spriteBatch_->End();
+            });
+            const Color rtAColor = rtAPixels[0];
+            std::printf("       RT A readback (write+readback leg): (%d,%d,%d,%d) want ~(255,100,50,128)\n",
+                        rtAColor.getRProperty(), rtAColor.getGProperty(), rtAColor.getBProperty(),
+                        rtAColor.getAProperty());
+            check(CloseEnough(rtAColor.getRProperty(), 255, 2) && CloseEnough(rtAColor.getGProperty(), 100, 2) &&
+                  CloseEnough(rtAColor.getBProperty(), 50, 2) && CloseEnough(rtAColor.getAProperty(), 128, 2),
+                  "HTMLDOM-106: a render target's own GetData readback after an AlphaBlend draw is "
+                  "straight (non-premultiplied) alpha, matching Canvas2D's getImageData contract");
+
+            // Leg 2 (resample onto a TRANSPARENT destination): rtA_ (straight (255,100,50,128)) drawn
+            // as an ordinary Draw() source into rtB_ under AlphaBlend. AlphaBlend-compositing an
+            // already-straight source onto a fresh-transparent destination is representation-
+            // preserving (there is nothing underneath to blend with), so the correct result is rtA_'s
+            // OWN colour, unchanged: (255,100,50,128). The pre-fix double-division bug instead first
+            // WRONGLY un-premultiplies rtA_'s straight bytes a second time (inv=255/128, clamped) to
+            // (255,199,100), then composites that -- a visibly different, measurably wrong result.
+            const auto transparentDestPixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr, nullptr);
+                spriteBatch_->Draw(*rtA_, Rectangle(2, 2, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const Color transparentDestColor = transparentDestPixels[static_cast<std::size_t>(4) * 20 + 4];
+            std::printf("       RT A -> RT B, AlphaBlend over transparent: (%d,%d,%d,%d) want ~(255,100,50,128)\n",
+                        transparentDestColor.getRProperty(), transparentDestColor.getGProperty(),
+                        transparentDestColor.getBProperty(), transparentDestColor.getAProperty());
+            check(CloseEnough(transparentDestColor.getRProperty(), 255, 2) &&
+                  CloseEnough(transparentDestColor.getGProperty(), 100, 2) &&
+                  CloseEnough(transparentDestColor.getBProperty(), 50, 2) &&
+                  CloseEnough(transparentDestColor.getAProperty(), 128, 2),
+                  "HTMLDOM-106: sampling a translucent render target as a Draw() source under "
+                  "AlphaBlend, onto a transparent destination, reproduces the render target's own "
+                  "straight colour exactly -- not divided by alpha a second time");
+
+            // Leg 3 (resample onto a NON-transparent destination): same rtA_ source, this time
+            // composited over an opaque pre-filled rtB_ background (0,0,200,255). Hand-derived via the
+            // browser's own real source-over algebra (a = 128/255): result = src*a + dst*(1-a) =
+            // (255*a, 100*a, 50*a + 200*(1-a)) = (128, ~50, ~125), alpha stays saturated at 255 since
+            // the destination was already opaque. The pre-fix bug's wrongly-divided (255,199,100)
+            // source instead composites to (128, ~100, ~150) -- a clearly different, wrong G/B pair.
+            const auto opaqueDestPixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                Texture2D bg = Make1x1(dev, 0, 0, 200, 255);
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr);
+                spriteBatch_->Draw(bg, Rectangle(0, 0, 20, 20), Rectangle(0, 0, 1, 1), Color::White);
+                spriteBatch_->End();
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr, nullptr);
+                spriteBatch_->Draw(*rtA_, Rectangle(2, 2, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const Color opaqueDestColor = opaqueDestPixels[static_cast<std::size_t>(4) * 20 + 4];
+            std::printf("       RT A -> RT B, AlphaBlend over opaque bg: (%d,%d,%d,%d) want ~(128,50,125,255)\n",
+                        opaqueDestColor.getRProperty(), opaqueDestColor.getGProperty(),
+                        opaqueDestColor.getBProperty(), opaqueDestColor.getAProperty());
+            check(CloseEnough(opaqueDestColor.getRProperty(), 128, 3) &&
+                  CloseEnough(opaqueDestColor.getGProperty(), 50, 3) &&
+                  CloseEnough(opaqueDestColor.getBProperty(), 125, 3) &&
+                  CloseEnough(opaqueDestColor.getAProperty(), 255, 3),
+                  "HTMLDOM-106: sampling the same translucent render target under AlphaBlend onto a "
+                  "NON-transparent destination blends by its real straight colour, matching the "
+                  "browser's own source-over algebra exactly -- not the double-divided value");
+
+            // Leg 4 (a second preset, confirming the fix is scoped correctly): NonPremultiplied never
+            // requested mode 1 in the first place (see HtmlDomTextureBackend.cpp's own mode table), so
+            // sampling rtA_ under NonPremultiplied onto a transparent rtB_ was never affected by this
+            // bug and must still reproduce the identical (255,100,50,128) result as leg 2 -- confirming
+            // the isRenderTarget-aware downgrade in cnaDomGetVariant is additive, not a behaviour
+            // change for a preset that was already correct.
+            const auto nonPremultDestPixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied, nullptr, nullptr, nullptr);
+                spriteBatch_->Draw(*rtA_, Rectangle(2, 2, 4, 4), Rectangle(0, 0, 4, 4), Color::White);
+                spriteBatch_->End();
+            });
+            const Color nonPremultDestColor = nonPremultDestPixels[static_cast<std::size_t>(4) * 20 + 4];
+            std::printf("       RT A -> RT B, NonPremultiplied over transparent: (%d,%d,%d,%d) want ~(255,100,50,128)\n",
+                        nonPremultDestColor.getRProperty(), nonPremultDestColor.getGProperty(),
+                        nonPremultDestColor.getBProperty(), nonPremultDestColor.getAProperty());
+            check(CloseEnough(nonPremultDestColor.getRProperty(), 255, 2) &&
+                  CloseEnough(nonPremultDestColor.getGProperty(), 100, 2) &&
+                  CloseEnough(nonPremultDestColor.getBProperty(), 50, 2) &&
+                  CloseEnough(nonPremultDestColor.getAProperty(), 128, 2),
+                  "HTMLDOM-106: NonPremultiplied sampling of the same render target was already "
+                  "unaffected by the mode-1 double-division bug and remains correct after the fix");
+        }
+
+        if (frame_ == 20)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

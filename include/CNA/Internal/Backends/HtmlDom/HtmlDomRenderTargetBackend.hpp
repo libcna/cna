@@ -70,6 +70,14 @@ namespace CNA::Internal::Backends::HtmlDom
          * and exactly; a native (non-Emscripten) build has no canvas at all and reports false rather
          * than letting the shared layer hand the caller its own zeroed scratch buffer.
          *
+         * plan_html_dom.md HTMLDOM-106: the returned bytes are always straight (non-premultiplied)
+         * alpha, regardless of which BlendState drew into this target -- `getImageData`'s own
+         * contract, not a choice this backend makes. This is a deliberate deviation from real XNA,
+         * where a render target's raw storage reflects whatever representation was actually drawn
+         * into it (e.g. premultiplied, after an AlphaBlend draw). Sampling this target back as a
+         * `Texture2D` under `BlendState.AlphaBlend` accounts for this (see `cnaDomGetVariant`'s own
+         * comment in HtmlDomTextureBackend.cpp) rather than assuming premultiplied input.
+         *
          * @param level      Mip level; only 0 exists on this backend.
          * @param x          Left edge of the requested rectangle, in pixels.
          * @param y          Top edge of the requested rectangle, in pixels.
