@@ -52,13 +52,32 @@ namespace CNA::Internal::Backends::Skia
         }
     }
 
+    void SkiaMeshEffectCacheEXT::EvictLeastRecentlyUsedIfFullEXT()
+    {
+        if (entries_.size() < kSkiaMeshEffectCacheMaxEntriesEXT)
+            return;
+        auto oldest = entries_.begin();
+        for (auto it = entries_.begin(); it != entries_.end(); ++it)
+        {
+            if (it->second.lastUsedTick < oldest->second.lastUsedTick)
+                oldest = it;
+        }
+        entries_.erase(oldest);
+    }
+
     std::shared_ptr<const SkiaMeshEffectCompiledEXT> SkiaMeshEffectCacheEXT::GetOrCompileEXT(
-        const std::string& source, std::string& compileError)
+        const std::string& marker, const std::string& source, std::string& compileError)
     {
         compileError.clear();
-        const auto cached = entries_.find(source);
+        // SKIA-156: composite key -- see the class doc comment for why "mode"/"layout" are not
+        // separate key components.
+        const std::string key = marker + '\x1e' + source;
+        const auto cached = entries_.find(key);
         if (cached != entries_.end())
-            return cached->second;
+        {
+            cached->second.lastUsedTick = ++clock_;
+            return cached->second.compiled;
+        }
 
         if (source.empty())
         {
@@ -124,7 +143,8 @@ namespace CNA::Internal::Backends::Skia
         }
 
         compiled->effect = std::move(result.effect);
-        entries_.emplace(source, compiled);
+        EvictLeastRecentlyUsedIfFullEXT();
+        entries_.emplace(key, EntryEXT{compiled, ++clock_});
         return compiled;
     }
 
@@ -178,7 +198,8 @@ namespace CNA::Internal::Backends::Skia
             return false;
         }
         std::string error;
-        std::shared_ptr<const SkiaMeshEffectCompiledEXT> compiled = cache.GetOrCompileEXT(source, error);
+        std::shared_ptr<const SkiaMeshEffectCompiledEXT> compiled =
+            cache.GetOrCompileEXT(marker, source, error);
         if (!compiled)
         {
             Fail(std::move(error));

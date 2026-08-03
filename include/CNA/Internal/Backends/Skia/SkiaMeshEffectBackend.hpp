@@ -38,29 +38,49 @@ namespace CNA::Internal::Backends::Skia
     };
 
     /**
-     * SKIA-154: basic source-keyed compilation cache for the mesh ABI. A cache hit returns the same
-     * immutable compiled program without invoking the SkSL compiler again; each `SkiaMeshEffectBackend`
-     * instance still owns its own independent mutable uniform-value buffer and bound-texture weak
-     * references, so two instances sharing one cache entry never observe each other's state (clone
-     * isolation). No eviction policy or growth bound in this task's scope -- hardening the cache
-     * (bounding growth, time limits, malicious-input stress) is SKIA-156's job, not this one's.
+     * SKIA-154/156: source-keyed, bounded-growth compilation cache for the mesh ABI. A cache hit
+     * returns the same immutable compiled program without invoking the SkSL compiler again; each
+     * `SkiaMeshEffectBackend` instance still owns its own independent mutable uniform-value buffer
+     * and bound-texture weak references, so two instances sharing one cache entry never observe
+     * each other's state (clone isolation). A failed compile/validation never inserts anything --
+     * the cache and every other already-cached entry are unaffected, so one failure cannot poison a
+     * later, different (or corrected) compile. The key is `marker + source`, not source alone
+     * (SKIA-156's "cache keys include ABI" requirement): today there is exactly one accepted marker
+     * (`kSkiaSkslMeshEffectMarkerEXT`), so this makes no observable difference yet, but it means an
+     * identical fragment string can never silently collide across a future second marker/ABI. A
+     * "mode" axis (raster vs. a future Ganesh/GPU mode) is deliberately not added: no second mode
+     * exists yet to test against, and speculatively building one now would be untested, unreachable
+     * code -- add it when SKIA-159+ actually introduces a second compilation target. Reflected
+     * uniform/child layout is not an independent key component either: it is a deterministic
+     * function of `source` alone, so keying on `source` already keys on layout.
      */
     class SkiaMeshEffectCacheEXT final
     {
     public:
         /**
-         * Returns the cached compiled program for @p source, compiling and inserting it first if
-         * this is the first time @p source has been seen. Returns null and sets @p compileError on
-         * a genuine compile/validation failure; nothing is cached in that case.
+         * Returns the cached compiled program for @p marker/@p source, compiling and inserting it
+         * first if this exact (marker, source) pair has not been seen before. Returns null and sets
+         * @p compileError on a genuine compile/validation failure; nothing is cached in that case,
+         * and every already-cached entry is left exactly as it was. Evicts the least-recently-used
+         * entry first if inserting a new program would exceed `kSkiaMeshEffectCacheMaxEntriesEXT`.
          */
         [[nodiscard]] std::shared_ptr<const SkiaMeshEffectCompiledEXT> GetOrCompileEXT(
-            const std::string& source, std::string& compileError);
+            const std::string& marker, const std::string& source, std::string& compileError);
 
-        /** NOXNA diagnostic accessor: number of distinct source strings currently cached. */
+        /** NOXNA diagnostic accessor: number of distinct (marker, source) pairs currently cached. */
         [[nodiscard]] std::size_t SizeEXT() const noexcept { return entries_.size(); }
 
     private:
-        std::map<std::string, std::shared_ptr<const SkiaMeshEffectCompiledEXT>> entries_;
+        struct EntryEXT final
+        {
+            std::shared_ptr<const SkiaMeshEffectCompiledEXT> compiled;
+            std::uint64_t lastUsedTick = 0;
+        };
+
+        void EvictLeastRecentlyUsedIfFullEXT();
+
+        std::map<std::string, EntryEXT> entries_;
+        std::uint64_t clock_ = 0;
     };
 
     /**
@@ -88,6 +108,12 @@ namespace CNA::Internal::Backends::Skia
 
         [[nodiscard]] bool IsValid() const noexcept { return compiled_ != nullptr; }
         [[nodiscard]] std::string GetCompileError() const { return compileError_; }
+
+        /** NOXNA diagnostic accessor: raw identity of the shared compiled program, or null if
+         * invalid. Two backends with the same identity share one cache entry; a source that was
+         * evicted and recompiled gets a new identity even if the source text is unchanged --
+         * exists for test/diagnostic use, not part of the mesh effect ABI itself. */
+        [[nodiscard]] const void* GetCompiledIdentityEXT() const noexcept { return compiled_.get(); }
 
         void SetUniformFloat(const char* name, float value);
         void SetUniformInt(const char* name, int value);

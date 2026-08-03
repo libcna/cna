@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/Skia/SkiaGlslToSkslTranslatorEXT.hpp"
+#include "CNA/Internal/Backends/Skia/SkiaResourcePolicy.hpp"
 
 #include <array>
 #include <cctype>
@@ -424,6 +425,17 @@ namespace CNA::Internal::Backends::Skia
 
     GlslToSkslTranslationResultEXT TranslateGlslToSkslEXT(const std::string& glslSource)
     {
+        // SKIA-156: bound the raw GLSL input before tokenizing at all, matching the same ceiling
+        // already applied to translated SkSL output at compile time (kSkiaSkslMaxSourceBytesEXT) --
+        // a malicious or pathological caller cannot force unbounded tokenizer work.
+        if (glslSource.size() > kSkiaSkslMaxSourceBytesEXT)
+        {
+            GlslToSkslTranslationResultEXT result;
+            result.success = false;
+            result.errorMessage = "Skia GLSL-to-SkSL translator: source exceeds the 65536-byte "
+                "safety limit.";
+            return result;
+        }
         std::string tokenizeError;
         std::vector<Token> tokens = Tokenize(glslSource, tokenizeError);
         if (!tokenizeError.empty())

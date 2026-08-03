@@ -298,6 +298,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_skia_raster_test(Skia_GlslTranslator
                                   cna_test_skia_glsl_translator)
 
+    # SKIA-156: hardens the SKIA-154 mesh-effect compilation cache (bounded LRU-evicted growth)
+    # and the SKIA-155 GLSL-to-SkSL translator (oversized/malformed input stays bounded, never
+    # crashes or hangs) -- a failed compile never poisons the cache or a later compile, and a
+    # many-iteration stress loop exercises both under this build's sanitizer configuration.
+    cna_skia_test(cna_test_skia_mesh_effect_hardening
+                  examples/skia_mesh_effect_hardening_test.cpp)
+    target_include_directories(cna_test_skia_mesh_effect_hardening PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_raster_test(Skia_MeshEffect_Hardening
+                                  cna_test_skia_mesh_effect_hardening)
+
     # SKIA-93: headless component spike. Alpha-test failure is coverage (clipShader), not a
     # transparent source; dual texture and colour transforms compose in one raster draw. This does
     # not promote their stock 3D Effect types, whose vertex/fog/depth contracts remain absent.

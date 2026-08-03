@@ -2517,20 +2517,58 @@ level-boundary contract.
   pre-existing test (`Skia_DoubleDispose`) under `-j2` parallel ASan load -- confirmed unrelated to
   this task by an isolated rerun (passed cleanly) and a subsequent clean full-168-test rerun.
 
+## Completed in this session: SKIA-156
+
+- Added a growth-bounded, least-recently-used-evicted policy to SKIA-154's
+  `SkiaMeshEffectCacheEXT` -- new `kSkiaMeshEffectCacheMaxEntriesEXT = 64` in
+  `SkiaResourcePolicy.hpp`, an O(entries) oldest-scan eviction (fine given the small bounded size,
+  not a hot path) driven by a monotonic tick per access rather than wall-clock time (deterministic
+  and directly testable). Extended cache keys from source-text-alone to `marker + source` --
+  literally satisfying this task's own "cache keys include ABI" acceptance wording -- but explicitly
+  did *not* add a speculative "mode" (raster vs. a future Ganesh/GPU target) key axis, since no
+  second mode exists yet to meaningfully test against; documented in the class's own doc comment
+  that this stays deferred to whichever SKIA-159+ task actually introduces a second compilation
+  target, matching this project's "don't design for hypothetical future requirements" convention
+  rather than writing untested, unreachable branches now.
+- Added a matching size bound to SKIA-155's GLSL-to-SkSL translator: it previously checked the
+  *translated SkSL output*'s size only (via the existing compile-time check) but never bounded the
+  *raw GLSL input* before tokenizing at all -- a real, previously-open gap this task closed by
+  reusing the same `kSkiaSkslMaxSourceBytesEXT` ceiling.
+- Confirmed (and locked in with an explicit regression test, not left as an unverified accident of
+  the SKIA-154 implementation) that a failed compile already could not poison the cache: every
+  validation failure path in `GetOrCompileEXT` returns before the `entries_.emplace` insertion, so
+  nothing partial or invalid is ever cached.
+- Added a small NOXNA diagnostic accessor, `SkiaMeshEffectBackend::GetCompiledIdentityEXT()`
+  (raw pointer identity of the shared compiled program), purely for test use -- needed to prove
+  eviction actually happened (same identity after many touches = never evicted; different identity
+  after recompiling an untouched entry = genuinely evicted and rebuilt) rather than asserting a
+  weaker, more easily-accidentally-true property like "still compiles successfully."
+- New `Skia_MeshEffect_Hardening` (`examples/skia_mesh_effect_hardening_test.cpp`, headless raster)
+  proves: the cache never exceeds its 64-entry ceiling after 84 distinct compiles; LRU eviction is
+  real (a repeatedly-touched entry survives far more compiles than the ceiling allows while a
+  never-touched one is evicted and gets a new identity on recompile -- verified via
+  `GetCompiledIdentityEXT()`, not a trivially-true check); a malformed compile leaves the cache
+  untouched and the same backend instance immediately recovers on a subsequent valid compile;
+  oversized GLSL input is rejected before tokenizing; empty source, an unterminated function-body
+  brace, an unterminated block comment, unstructured garbage tokens, and deeply nested unmatched
+  braces are all rejected cleanly with no crash or hang; and a 500-iteration compile/translate
+  stress loop completes cleanly under this build's own ASan+UBSan configuration -- the real
+  "sanitizer stress passes" proof, not a separate, disconnected claim.
+- Full Skia suite (up from 168 to 169 -- one net new Raster test) passes in Debug, Release, and
+  ASan+UBSan with zero regressions and zero sanitizer findings.
+
 ## Next candidates
 
-1. SKIA-156: harden effect compilation, caching, resource/time limits, error propagation, and
-   recovery across raster and future GPU modes -- for both the SKIA-154 mesh ABI's compilation
-   cache (currently no eviction/growth bound, by SKIA-154's own declared scope) and the SKIA-155
-   translator (currently no malicious-input/pathological-source stress testing).
-2. SKIA-157: integrate the promoted effect subset through `ShaderEffect`, content descriptors,
+1. SKIA-157: integrate the promoted effect subset through `ShaderEffect`, content descriptors,
    SpriteBatch/`SkVertices` draws, setters, textures, clones, and disposal -- the first task in this
-   lineage to touch the actual public API; SKIA-153/154/155 all deliberately stayed below it.
-3. SKIA-158: compare every promoted 2D effect against EasyGL/XNA-style goldens and publish the final
+   lineage to touch the actual public API; SKIA-153/154/155/156 all deliberately stayed below it.
+2. SKIA-158: compare every promoted 2D effect against EasyGL/XNA-style goldens and publish the final
    programmable-effect boundary, closing Phase S16.
-4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
-   successor gate only after the raster extensions are stable.
-5. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+   successor gate only after the raster extensions are stable -- also where the mesh-effect cache's
+   deferred "mode" key axis (see above) should actually be added, once a second compilation target
+   genuinely exists to test against.
+4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 5. Standalone follow-up (not yet a numbered task): wire `cnaVolumeAddressModesEXT` to the active
    `SamplerState` in `MakeSpriteShaderEXT` instead of the current hardcoded Clamp, so

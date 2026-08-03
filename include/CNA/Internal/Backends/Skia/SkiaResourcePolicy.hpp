@@ -17,6 +17,11 @@ namespace CNA::Internal::Backends::Skia
     inline constexpr std::size_t kSkiaSkslMaxUniformCountEXT = 64u;
     inline constexpr int kSkiaSkslMaxTextureUnitEXT = 7;
 
+    /** SKIA-156: growth bound for `SkiaMeshEffectCacheEXT` -- the oldest (least-recently-used)
+     * entry is evicted before this many distinct compiled programs would be exceeded, so a caller
+     * compiling many programmatically-generated source variants cannot grow the cache unboundedly. */
+    inline constexpr std::size_t kSkiaMeshEffectCacheMaxEntriesEXT = 64u;
+
     [[nodiscard]] inline constexpr bool IsValidSkiaResourceAxis(int value) noexcept
     {
         return value > 0 && value <= kSkiaCpuTextureMaximumAxis;
