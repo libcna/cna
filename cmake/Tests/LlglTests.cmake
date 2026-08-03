@@ -516,6 +516,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 120 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # rendertarget_backbuffer_consumer_test.cpp is deliberately NOT registered here: 88/90 checks
+    # pass (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate), but G1 -- a BACKBUFFER
+    # consumer issued between two bind cycles of the SAME target, expected to see the FIRST cycle --
+    # hits the same real, separate, OPEN bucket-ordering finding as rendertarget_producer_consumer
+    # _test.cpp's own I2; see known_bugs.md's broadened entry, which now covers all five legs across
+    # four files.
+    cna_llgl_test(cna_test_llgl_rendertarget_backbuffer_consumer
+                  examples/rendertarget_backbuffer_consumer_test.cpp)
+
     # backbuffer_first_read_test.cpp is deliberately NOT registered here: 9/13 legs pass
     # (A1, A3, A4, A6, B1, B2, B3, B4, C1), but D63/D64/D65 (its own row-pitch matrix, widths
     # 63/64/65 against a fixed height of 17) and E1 (64x32) all fail for a real, identified,

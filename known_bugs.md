@@ -641,7 +641,7 @@ comment there for the full per-leg breakdown).
 (the correct fix is architectural -- interleaved cross-bucket replay, or segmenting every public bind
 cycle into its own pass -- and out of scope for a test-wiring task).
 
-**Symptom, two independent reproductions of the same root cause:**
+**Symptom, five independent reproductions of the same root cause across four files:**
 - `rendertarget_depthstencil_usage_test.cpp`'s U2 check (28/29 checks otherwise pass): clear face A
   and face B of a `RenderTargetCube` to depth 1.0 each, then draw into face A at depth 0.25, then
   draw into face B (depth-tested) at depth 0.50 -- expects face B's draw to be REJECTED (0.50 is
@@ -671,6 +671,14 @@ cycle into its own pass -- and out of scope for a test-wiring task).
   (`LLGL-40`) is what makes this manifestation possible: forcing the swap chain to a fixed trailing
   position is exactly wrong when some earlier bucket gets revisited after the swap chain's own read
   was supposed to happen.
+- `rendertarget_backbuffer_consumer_test.cpp`'s G1 check (88/90 checks otherwise pass): produce
+  target A (cycle 1), sample A on the BACKBUFFER (consumer 1, expecting cycle 1's content), reproduce
+  A with alt content (cycle 2), then sample A on the BACKBUFFER again (consumer 2, expecting cycle
+  2's content). G2 (consumer 2) passes -- it correctly sees cycle 2, the content actually left in A's
+  bucket once it finally drains. G1 (consumer 1) fails, reading cycle 2's content instead of cycle 1's
+  -- the same swap-chain-always-trails-last interaction as `rendertarget_producer_consumer_test.cpp`'s
+  I2 above, just with the two backbuffer consumers merged into one batch's readback instead of a
+  separate mid-frame target read in between.
 
 **Root cause:** `GroupFrameCommandsByTargetEXT()` buckets commands by target IDENTITY and replays
 each bucket FULLY, one at a time, in the bucket's own first-appearance order -- correct only when
@@ -711,9 +719,10 @@ _boundary_test.cpp` check (`LLGL-41`'s own already-registered `Llgl_RenderTarget
 other, which no check in that already-passing file happens to require.
 
 **Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
-`rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`, or
-`rendertarget_producer_consumer_test.cpp` until this is resolved -- the second file also has a
-second, unrelated, separately-documented crash, see the next entry).
+`rendertarget_depthstencil_usage_test.cpp`, `rendertarget_effect_source_test.cpp`,
+`rendertarget_producer_consumer_test.cpp`, or `rendertarget_backbuffer_consumer_test.cpp` until this
+is resolved -- the second file also has a second, unrelated, separately-documented crash, see the
+next entry).
 
 ---
 

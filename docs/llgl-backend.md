@@ -828,6 +828,12 @@ variants and the never-read-target sampling legs, passes.
 `Llgl_RenderTarget_FirstUse` (26/26) establishes that a brand-new `RenderTarget2D`/`RenderTargetCube`
 constructed, bound, drawn into and read back all within one public frame already works here with no
 warm-up frame, extra `Present()`, dummy draw or manual flush -- needed no fix.
+`rendertarget_backbuffer_consumer_test.cpp` also stays unregistered (88/90): its G1 check -- a
+BACKBUFFER consumer issued between two bind cycles of the same target, expecting the FIRST cycle's
+content -- is a fifth reproduction of the same bucket-ordering finding, sharing `rendertarget
+_producer_consumer_test.cpp`'s own I2 shape exactly. Every other producer/consumer/ordering leg in the
+file passes, including MSAA and mip-mapped producers, `RenderTargetCube` face bind cycles, multi-family
+(`SpriteBatch` + 3D) replay order, and 8 same-frame bind cycles repeated across 8 consecutive frames.
 `rendertarget_sampling_orientation_test.cpp` also stays unregistered: its first 10 checks (`SpriteBatch`
 orientation into and out of a `RenderTarget2D`, `BasicEffect`/`AlphaTestEffect` mesh-UV sampling,
 `RenderTarget2D` vs. `Texture2D` byte-exact agreement) all pass, but its CD4 check -- a lit, textured
