@@ -190,12 +190,27 @@ renderer.
   matching native vertices, plus dgVoodoo images, remain blocked by the same external i686
   `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007. This unblocks the GLIDE-FUT-002
   release-blocker note.
-- [ ] **GLIDE-AUD-013 — Open the exact resolution/refresh candidate returned by Glide.** Preserve
-  the refresh token while collecting `grQueryResolutions` candidates and pass that token to
-  `grSstWinOpen`, or query only the refresh rate that the backend is prepared to open. Candidate
-  selection must be deterministic when the same dimensions occur at multiple rates. Extend the
-  fake DLL with mode matrices containing no 60 Hz entry, multiple refresh rates and a failing open;
-  assert that startup never combines a resolution from one candidate with another refresh value.
+- [x] **GLIDE-AUD-013 — Open the exact resolution/refresh candidate returned by Glide.** Startup
+  previously selected `displayMode` by pixel area alone and then always opened it with a
+  hardcoded `kRefresh60Hz`, even though `grQueryResolutions` is queried with `GR_QUERY_ANY`
+  resolution/refresh and can legitimately return the same resolution token multiple times at
+  different refresh rates — or never at 60 Hz at all for the chosen dimensions. The selection and
+  the native-open call are now driven by a new portable
+  `include/CNA/Internal/Backends/Glide/GlideDisplayModeSelection.hpp`
+  (`KnownGlideDisplayMode`/`SelectGlideDisplayMode`), which keeps each candidate's resolution and
+  refresh paired together: smaller-area candidates always win outright, and among candidates tied
+  on area, 60 Hz is preferred deterministically if any tied candidate offers it, otherwise the
+  first tied candidate encountered is kept — so the resulting `(resolution, refresh)` handed to
+  `grSstWinOpen` is always literally one of the real candidates, never a resolution from one and a
+  refresh from another. Eight portable probes cover the smallest-sufficient-resolution case, a
+  target resolution with no 60 Hz candidate at all, 60 Hz preference among multiple offered
+  refresh rates, input-order-determinism when no candidate is 60 Hz, an explicit
+  never-combines-mismatched-candidates check against an awkward multi-resolution/multi-refresh
+  matrix, and the two failure cases (nothing large enough, empty list). Verified with i686 MinGW
+  `-fsyntax-only` recompilation of the whole backend and the portable Glide unit suite (39/39). A
+  fake-DLL mode-matrix capture (no-60-Hz entries, multiple refresh rates, a failing
+  `grSstWinOpen`) and the resulting real `grSstWinOpen` argument assertion remain blocked by the
+  same external i686 `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007.
 - [x] **GLIDE-AUD-014 — Clip triangles against a strict positive-W eye plane.** Triangle/polygon
   clipping now shares the same `clipW - kGlideMinimumPositiveClipW >= 0` half-space as point/line
   clipping. The generic Sutherland-Hodgman clipper and the frustum-plane composition were moved

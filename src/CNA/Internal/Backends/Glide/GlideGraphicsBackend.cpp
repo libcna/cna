@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Glide/GlideGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Glide/GlideAbi.hpp"
 #include "CNA/Internal/Backends/Glide/GlideBlendFactor.hpp"
+#include "CNA/Internal/Backends/Glide/GlideDisplayModeSelection.hpp"
 #include "CNA/Internal/Backends/Glide/GlideLighting.hpp"
 #include "CNA/Internal/Backends/Glide/GlidePrimitiveClip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureMip.hpp"
@@ -45,9 +46,6 @@ namespace CNA::Internal::Backends::Glide
 
         // The values below are part of the public Glide 3.x ABI. Function signatures and native
         // layouts live in GlideAbi.hpp so the independent x86 fake-DLL contract can audit them.
-        constexpr FxI32 kResolution640x480 = 0x7;
-        constexpr FxI32 kResolution800x600 = 0x8;
-        constexpr FxI32 kRefresh60Hz = 0x0;
         constexpr FxI32 kColorFormatArgb = 0x0;
         constexpr FxI32 kOriginUpperLeft = 0x0;
         constexpr FxI32 kBufferBack = 0x1;
@@ -159,46 +157,6 @@ namespace CNA::Internal::Backends::Glide
             return result;
         }
 
-        struct GlideDisplayMode
-        {
-            FxI32 resolution;
-            int width;
-            int height;
-        };
-
-        [[nodiscard]] GlideDisplayMode KnownDisplayMode(FxI32 resolution)
-        {
-            switch (resolution)
-            {
-                // These are the complete historical GR_RESOLUTION_* values from Glide 3.x.
-                // Query first, then choose only a mode that this concrete runtime actually listed.
-                case 0x0: return GlideDisplayMode{resolution, 320, 200};
-                case 0x1: return GlideDisplayMode{resolution, 320, 240};
-                case 0x2: return GlideDisplayMode{resolution, 400, 256};
-                case 0x3: return GlideDisplayMode{resolution, 512, 384};
-                case 0x4: return GlideDisplayMode{resolution, 640, 200};
-                case 0x5: return GlideDisplayMode{resolution, 640, 350};
-                case 0x6: return GlideDisplayMode{resolution, 640, 400};
-                case kResolution640x480: return GlideDisplayMode{resolution, 640, 480};
-                case kResolution800x600: return GlideDisplayMode{resolution, 800, 600};
-                case 0x9: return GlideDisplayMode{resolution, 960, 720};
-                case 0xa: return GlideDisplayMode{resolution, 856, 480};
-                case 0xb: return GlideDisplayMode{resolution, 512, 256};
-                case 0xc: return GlideDisplayMode{resolution, 1024, 768};
-                case 0xd: return GlideDisplayMode{resolution, 1280, 1024};
-                case 0xe: return GlideDisplayMode{resolution, 1600, 1200};
-                case 0xf: return GlideDisplayMode{resolution, 400, 300};
-                case 0x10: return GlideDisplayMode{resolution, 1152, 864};
-                case 0x11: return GlideDisplayMode{resolution, 1280, 960};
-                case 0x12: return GlideDisplayMode{resolution, 1600, 1024};
-                case 0x13: return GlideDisplayMode{resolution, 1792, 1344};
-                case 0x14: return GlideDisplayMode{resolution, 1856, 1392};
-                case 0x15: return GlideDisplayMode{resolution, 1920, 1440};
-                case 0x16: return GlideDisplayMode{resolution, 2048, 1536};
-                case 0x17: return GlideDisplayMode{resolution, 2048, 2048};
-                default: return GlideDisplayMode{0, 0, 0};
-            }
-        }
 
         [[nodiscard]] FxI32 ToGlideDepthCompare(int xnaCompare)
         {
@@ -409,25 +367,29 @@ namespace CNA::Internal::Backends::Glide
                 {
                     throw std::runtime_error("grQueryResolutions failed while reading the Glide 3.x mode list");
                 }
-                GlideDisplayMode displayMode{};
+                // grQueryResolutions was asked for GR_QUERY_ANY resolution/refresh, so the same
+                // resolution token can legitimately appear multiple times at different refresh
+                // rates, and the runtime may not offer 60 Hz at all for the chosen dimensions.
+                // Keep each candidate's resolution and refresh paired together instead of
+                // selecting dimensions and then opening a hardcoded refresh that was never
+                // actually validated against this candidate.
+                std::vector<GlideResolutionCandidate> candidates;
+                candidates.reserve(availableModes.size());
                 for (const GlideResolution& candidate : availableModes)
                 {
-                    const GlideDisplayMode known = KnownDisplayMode(candidate.resolution);
-                    if (known.width >= virtualWidth && known.height >= virtualHeight &&
-                        (displayMode.width == 0 || known.width * known.height < displayMode.width * displayMode.height))
-                    {
-                        displayMode = known;
-                    }
+                    candidates.push_back(GlideResolutionCandidate{candidate.resolution, candidate.refresh});
                 }
-                if (displayMode.width == 0)
+                const std::optional<GlideSelectedDisplayMode> selected =
+                    SelectGlideDisplayMode(candidates, virtualWidth, virtualHeight);
+                if (!selected.has_value())
                 {
                     throw std::runtime_error(
                         "The loaded Glide runtime exposes no historical double-buffered Z mode large enough for CNA's virtual resolution");
                 }
-                nativeWidth = displayMode.width;
-                nativeHeight = displayMode.height;
-                context = api.grSstWinOpen(static_cast<FxU32>(reinterpret_cast<std::uintptr_t>(hwnd)), displayMode.resolution,
-                                           kRefresh60Hz, kColorFormatArgb, kOriginUpperLeft, 2, 1);
+                nativeWidth = selected->mode.width;
+                nativeHeight = selected->mode.height;
+                context = api.grSstWinOpen(static_cast<FxU32>(reinterpret_cast<std::uintptr_t>(hwnd)), selected->mode.resolution,
+                                           selected->refresh, kColorFormatArgb, kOriginUpperLeft, 2, 1);
                 if (context == nullptr)
                 {
                     throw std::runtime_error(
