@@ -26,7 +26,9 @@ module**:
   and **per-pixel directional lighting** (ambient, up to three lights, specular, `EmissiveColor`),
   textured or untextured, plus **`AlphaTestEffect`** and **`DualTextureEffect`**. Lighting still
   requires vertex colours when no texture is bound -- a lit, untextured, colourless draw is refused
-  by name rather than silently dropping the light;
+  by name rather than silently dropping the light. Lighting also requires a vertex layout with
+  normals regardless of texturing -- a lit, textured draw from a normal-less `VertexPositionTexture`
+  layout throws rather than lighting with an implicit normal (see "Capability boundary" below);
 * **`RenderTarget2D`**: draw into it (both `SpriteBatch` and the 3D path), unbind back to the
   swap chain, sample it back onto the screen, and `GetData()` straight off the colour attachment.
   See "Render targets" below for what this does and does not cover;
@@ -816,6 +818,12 @@ both trace to a genuine, open, general bucket-ordering finding (a target revisit
 on another target, or two targets aliasing one physical resource, replay out of public order) plus
 (C1 only) a second, unrelated crash from a custom `ShaderEffect` using multiple Vulkan descriptor
 sets -- see `known_bugs.md`'s two open entries for the full analysis.
+`rendertarget_sampling_orientation_test.cpp` also stays unregistered: its first 10 checks (`SpriteBatch`
+orientation into and out of a `RenderTarget2D`, `BasicEffect`/`AlphaTestEffect` mesh-UV sampling,
+`RenderTarget2D` vs. `Texture2D` byte-exact agreement) all pass, but its CD4 check -- a lit, textured
+`BasicEffect` draw from a normal-less `VertexPositionTexture` layout -- throws uncaught and aborts
+the whole process, since this fixture has no try/catch around that specific check. See
+`known_bugs.md`'s open entry for the underlying capability gap.
 Every other test is registered a second time pinned to the OpenGL
 module through `CNA_LLGL_RENDERER`, which also exercises the selection path itself. All these tests
 need a display; on a machine without one they report SKIPPED

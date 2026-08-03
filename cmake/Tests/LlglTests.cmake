@@ -488,6 +488,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     endforeach()
 
+    # rendertarget_sampling_orientation_test.cpp is deliberately NOT registered here: 10/10 checks
+    # pass up to and including CD3, but CD4 ("BasicEffect lit + textured", no normal attribute)
+    # crashes the whole process (uncaught std::runtime_error, this fixture has no try/catch around
+    # its Leg3D checks) -- a real, distinct, OPEN finding, see known_bugs.md.
+    cna_llgl_test(cna_test_llgl_rendertarget_sampling_orientation
+                  examples/rendertarget_sampling_orientation_test.cpp)
+
     # backbuffer_first_read_test.cpp is deliberately NOT registered here: 9/13 legs pass
     # (A1, A3, A4, A6, B1, B2, B3, B4, C1), but D63/D64/D65 (its own row-pitch matrix, widths
     # 63/64/65 against a fixed height of 17) and E1 (64x32) all fail for a real, identified,

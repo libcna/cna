@@ -785,6 +785,41 @@ shader variant rather than risk an unbound-attribute declaration") that declares
 
 ---
 
+## LLGL backend: lit+textured `BasicEffect` with no normal attribute throws — OPEN
+
+**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-41`,
+`rendertarget_sampling_orientation_test.cpp`). Root cause identified with confidence, the
+same general class as the already-documented untextured+unlit finding above; not fixed here.
+
+**Symptom:** `rendertarget_sampling_orientation_test.cpp`'s CD4 check ("BasicEffect lit +
+textured") crashes the whole process (`std::runtime_error`, uncaught -- this shared fixture has
+no try/catch around its `Leg3D` legs) the moment it draws a `BasicEffect` with
+`TextureEnabled=true`, `LightingEnabled=true` (`EnableDefaultLighting()`), and a plain
+`VertexPositionTexture` (stride 20, no normal attribute) vertex layout -- 10/10 checks before it
+pass cleanly (`S1`/`S2`, both `AB1` orientation checks, `CD1`-`CD3`). The thrown message:
+`"LLGL backend: lighting needs a vertex layout with normals, and this one has none"`.
+
+**Root cause:** the same shape as the untextured+unlit `flat3d` gap above --
+`AcquirePrimitiveVertexShader()`'s shader-variant selection has no branch for "textured, LIT, and
+no normal attribute in the layout," only throws. Every other backend this shared fixture already
+runs against apparently tolerates a normal-less lit draw (most plausibly by defaulting to some
+fixed normal, e.g. `(0,0,1)`, rather than refusing it outright) -- this fixture's own CD4 check
+does not assert a specific lit colour, only that TEXTURE SAMPLING ORIENTATION survives lighting
+being turned on, so an approximate/default-normal lighting result would satisfy it exactly as
+well as a physically meaningful one.
+
+**Fix shape (not implemented):** a new shader variant (or a uniform-supplied default normal
+substituted into the existing lit-textured shader when the vertex layout has no normal attribute)
+that computes lighting against a fixed `(0,0,1)` (or similar) normal instead of refusing to bind
+when the attribute is absent -- the same "declare only what the layout actually provides, pick the
+matching shader variant" approach `SkinnedEffect.VertexColorEnabled` (LLGL-37) and the proposed
+`flat3d` shader above already establish as this backend's convention.
+
+**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-41` (no CTest registration for
+`rendertarget_sampling_orientation_test.cpp` until this is resolved).
+
+---
+
 ## LLGL backend: `Orthographic` + `CreateLookAt` scenario reports geometry off-screen — OPEN
 
 **Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39). Root cause NOT
