@@ -827,25 +827,17 @@ namespace CNA::Internal::Backends
         bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
-        /// Per-instance vertex buffer backend pointer; cast to the concrete type inside the backend.
-        /// Null when not instancing. Only valid for the duration of the DrawInstancedPrimitivesEx call.
-        const IVertexBufferBackend* instanceVb = nullptr;
-        /// First per-vertex record selected by the public VertexBufferBinding, in vertex elements.
-        /// REMED-GFX-200: populated by `DrawInstancedPrimitivesEx` ONLY. The ordinary routes carry
-        /// the same public offset in `vertexStart`/`baseVertex` instead -- it is the identical
-        /// element-unit shift of the one per-vertex stream they hand the backend, so folding it
-        /// there reaches every backend's existing single stride multiplication. A backend must
-        /// therefore never add this field to `vertexStart`/`baseVertex`, and this field must stay
-        /// 0 on the ordinary routes: either would apply the public offset twice.
-        int vertexBufferOffset = 0;
-        /// First per-instance record selected by the public VertexBufferBinding, in vertex elements.
-        int instanceVertexOffset = 0;
-        /// Number of instances that reuse each per-instance record; zero when no instance stream is bound.
-        int instanceFrequency = 0;
-        /// REMED-GFX-201: every active `VertexBufferBinding`, in public slot order, captured by
-        /// value. `vertexStreams[0]` is always the stream `Draw*PrimitivesEx`'s own `vb` argument
-        /// refers to, so a backend that reads only `vb` still sees exactly what it saw before this
-        /// field existed. Entries at or past `vertexStreamCount` are unset and must not be read.
+        /// REMED-GFX-201/202: every active `VertexBufferBinding`, in public slot order, captured by
+        /// value -- per-vertex and per-instance alike, on EVERY draw route. `vertexStreams[0]` is
+        /// always the stream `Draw*PrimitivesEx`'s own `vb` argument refers to, so a backend that
+        /// reads only `vb` still sees exactly what it saw before this field existed. Entries at or
+        /// past `vertexStreamCount` are unset and must not be read.
+        ///
+        /// This is CNA's `FNA3D_VertexBufferBinding` array, and like FNA's own
+        /// `PrepareVertexBindingArray` it is prepared identically for `DrawPrimitives`,
+        /// `DrawIndexedPrimitives` and `DrawInstancedPrimitives`. An instance stream is simply an
+        /// entry whose `instanceFrequency` is greater than zero; there is no second representation
+        /// of "the instance buffer" anywhere.
         std::array<GpuVertexStreamBinding, kMaxVertexStreams> vertexStreams{};
         /// Active entries in `vertexStreams`. 0 only on the internal routes that bind no public
         /// buffer at all (SpriteBatch, `DrawUser*`); 1 for every single-stream draw.
@@ -857,17 +849,25 @@ namespace CNA::Internal::Backends
         /// unchanged. 0 when `vertexStreamCount == 0`.
         int combinedVertexStride = 0;
         /// First vertex index for non-indexed draws (maps to glDrawArrays `first` / vkCmdDraw `firstVertex`).
-        /// REMED-GFX-201: this already includes the smallest per-vertex binding offset of the draw
-        /// (`GraphicsDevice::FoldedVertexStreamOffset`), which is why every `vertexStreams[k].
-        /// vertexOffset` is a non-negative remainder and a single-stream draw carries its whole
-        /// public offset here exactly as REMED-GFX-200 established.
+        /// REMED-GFX-201: on the ORDINARY routes this already includes the smallest per-vertex
+        /// binding offset of the draw (`GraphicsDevice::FoldedVertexStreamOffset`), which is why
+        /// every `vertexStreams[k].vertexOffset` is a non-negative remainder there and a
+        /// single-stream draw carries its whole public offset here exactly as REMED-GFX-200
+        /// established. The instanced route folds nothing (see `baseVertex`).
         int vertexStart = 0;
         /// First index in the IBO for indexed draws (maps to glDrawElements byte offset / vkCmdDrawIndexed `firstIndex`).
         int startIndex  = 0;
         /// Value added to each index before vertex fetch (maps to glDrawElementsBaseVertex / vkCmdDrawIndexed `vertexOffset`).
-        /// REMED-GFX-201: like `vertexStart` above, this already includes the draw's folded
-        /// per-vertex binding offset, and it advances **every** per-vertex stream by that many of
-        /// that stream's own elements -- exactly FNA3D's `vertexStride * (vertexOffset + baseVertex)`.
+        /// REMED-GFX-201: on the ordinary routes, like `vertexStart` above, this already includes
+        /// the draw's folded per-vertex binding offset, and it advances **every** per-vertex stream
+        /// by that many of that stream's own elements.
+        ///
+        /// REMED-GFX-202: the INSTANCED route folds nothing into it -- every stream there carries
+        /// its whole public `VertexOffset` in `vertexStreams[k].vertexOffset`, which is exactly
+        /// FNA3D's own D3D11 driver (`offset = binding.vertexOffset * stride` per binding, with
+        /// `BaseVertexLocation = baseVertex` passed separately to `DrawIndexedInstanced`). This
+        /// value therefore advances only the PER-VERTEX streams: a per-instance slot is addressed
+        /// by instance index, which a base-vertex term does not touch.
         int baseVertex  = 0;
         /// Lowest decoded index expected by the caller, relative to `baseVertex`.
         int minVertexIndex = 0;
@@ -970,6 +970,107 @@ namespace CNA::Internal::Backends
     }
 
     /**
+     * @brief How many bound streams advance per vertex (`instanceFrequency == 0`).
+     */
+    [[nodiscard]] inline int PerVertexStreamCount(const GpuDrawParams& params)
+    {
+        int count = 0;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+            if (params.vertexStreams[i].instanceFrequency == 0)
+                ++count;
+        return count;
+    }
+
+    /**
+     * @brief How many bound streams advance per instance (`instanceFrequency > 0`).
+     *
+     * REMED-GFX-202: XNA places no limit on this -- `InstanceFrequency` is a property of each
+     * binding, so any subset of the 16 slots may be per-instance, at any frequencies. Every CNA
+     * backend that implements instancing at all currently binds exactly one, so more than one is
+     * gated by `GraphicsCapability::MultiStreamVertexInput` and rejected before submission rather
+     * than silently reduced to the first.
+     */
+    [[nodiscard]] inline int InstanceStreamCount(const GpuDrawParams& params)
+    {
+        int count = 0;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+            if (params.vertexStreams[i].instanceFrequency > 0)
+                ++count;
+        return count;
+    }
+
+    /**
+     * @brief The @p ordinal-th per-instance stream in public slot order, or null.
+     *
+     * @param params  The draw being dispatched.
+     * @param ordinal Zero-based position among the per-instance streams only.
+     */
+    [[nodiscard]] inline const GpuVertexStreamBinding* NthInstanceStream(
+        const GpuDrawParams& params, int ordinal)
+    {
+        int seen = 0;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+        {
+            const GpuVertexStreamBinding& stream = params.vertexStreams[i];
+            if (stream.instanceFrequency <= 0)
+                continue;
+            if (seen == ordinal)
+                return &stream;
+            ++seen;
+        }
+        return nullptr;
+    }
+
+    /**
+     * @brief The lowest-slot per-instance stream, or null when this is not an instanced draw.
+     *
+     * REMED-GFX-202: the direct replacement for the removed `GpuDrawParams::instanceVb` /
+     * `instanceVertexOffset` / `instanceFrequency` trio. `stream->vertexOffset` is the public
+     * `VertexBufferBinding.VertexOffset` in vertex ELEMENTS (never bytes) and
+     * `stream->instanceFrequency` is the step rate / divisor.
+     */
+    [[nodiscard]] inline const GpuVertexStreamBinding* FirstInstanceStream(
+        const GpuDrawParams& params)
+    {
+        return NthInstanceStream(params, 0);
+    }
+
+    /**
+     * @brief The @p ordinal-th per-vertex stream in public slot order, or null.
+     *
+     * @param params  The draw being dispatched.
+     * @param ordinal Zero-based position among the per-vertex streams only.
+     */
+    [[nodiscard]] inline const GpuVertexStreamBinding* NthPerVertexStream(
+        const GpuDrawParams& params, int ordinal)
+    {
+        int seen = 0;
+        for (int i = 0; i < params.vertexStreamCount; ++i)
+        {
+            const GpuVertexStreamBinding& stream = params.vertexStreams[i];
+            if (stream.instanceFrequency != 0)
+                continue;
+            if (seen == ordinal)
+                return &stream;
+            ++seen;
+        }
+        return nullptr;
+    }
+
+    /**
+     * @brief The stream `Draw*PrimitivesEx`'s own `vb` argument names, or null on the internal
+     *        routes that bind no public buffer at all.
+     *
+     * REMED-GFX-202: the direct replacement for the removed `GpuDrawParams::vertexBufferOffset` --
+     * read `FirstPerVertexStream(params)->vertexOffset`.
+     */
+    [[nodiscard]] inline const GpuVertexStreamBinding* FirstPerVertexStream(
+        const GpuDrawParams& params)
+    {
+        return NthPerVertexStream(params, 0);
+    }
+
+    /**
      * @brief Whether this draw needs more than the one stream `Draw*PrimitivesEx` names directly.
      *
      * The single-stream fast path every backend already implements stays selected by this being
@@ -977,11 +1078,92 @@ namespace CNA::Internal::Backends
      */
     [[nodiscard]] inline bool HasMultipleVertexStreams(const GpuDrawParams& params)
     {
-        int perVertexStreams = 0;
-        for (int i = 0; i < params.vertexStreamCount; ++i)
-            if (params.vertexStreams[i].instanceFrequency == 0)
-                ++perVertexStreams;
-        return perVertexStreams > 1;
+        return PerVertexStreamCount(params) > 1;
+    }
+
+    /**
+     * @brief Whether this draw binds more per-instance streams than the single one every
+     *        instancing backend already handles.
+     *
+     * REMED-GFX-202: the instanced fast path stays selected by this being false, which it is for
+     * every instanced draw CNA issued before this task.
+     */
+    [[nodiscard]] inline bool HasMultipleInstanceStreams(const GpuDrawParams& params)
+    {
+        return InstanceStreamCount(params) > 1;
+    }
+
+    /**
+     * @brief REMED-GFX-202: fills the classic one-per-vertex + one-per-instance stream pair.
+     *
+     * `GraphicsDevice` builds `vertexStreams` from the public `VertexBufferBinding` array; this is
+     * for the backend harnesses and examples that drive `DrawInstancedPrimitivesEx` directly with a
+     * hand-built `GpuDrawParams` and would otherwise each hand-roll the same two entries.
+     *
+     * @param params                 Draw parameters to populate.
+     * @param perVertexBuffer        Slot 0's buffer -- the same object passed as `vb`.
+     * @param instanceBuffer         Slot 1's buffer.
+     * @param instanceFrequency      Slot 1's `InstanceFrequency`; must be > 0.
+     * @param perVertexStrideInBytes Slot 0's declaration stride, or 0 when the backend resolves it.
+     * @param perVertexOffset        Slot 0's `VertexOffset`, in vertex elements.
+     * @param instanceStrideInBytes  Slot 1's declaration stride, or 0 when the backend resolves it.
+     * @param instanceOffset         Slot 1's `VertexOffset`, in vertex elements.
+     */
+    inline void SetInstancedVertexStreamsEXT(
+        GpuDrawParams& params,
+        const IVertexBufferBackend& perVertexBuffer,
+        const IVertexBufferBackend& instanceBuffer,
+        int instanceFrequency = 1,
+        int perVertexStrideInBytes = 0,
+        int perVertexOffset = 0,
+        int instanceStrideInBytes = 0,
+        int instanceOffset = 0)
+    {
+        GpuVertexStreamBinding& geometry = params.vertexStreams[0];
+        geometry = GpuVertexStreamBinding{};
+        geometry.slot = 0;
+        geometry.buffer = &perVertexBuffer;
+        geometry.strideInBytes = perVertexStrideInBytes;
+        geometry.vertexOffset = perVertexOffset;
+        geometry.vertexCount = perVertexBuffer.GetVertexCount();
+
+        GpuVertexStreamBinding& instances = params.vertexStreams[1];
+        instances = GpuVertexStreamBinding{};
+        instances.slot = 1;
+        instances.buffer = &instanceBuffer;
+        instances.strideInBytes = instanceStrideInBytes;
+        instances.vertexOffset = instanceOffset;
+        instances.instanceFrequency = instanceFrequency;
+        instances.vertexCount = instanceBuffer.GetVertexCount();
+
+        params.vertexStreamCount = 2;
+        params.combinedVertexStride = perVertexStrideInBytes;
+    }
+
+    /**
+     * @brief REMED-GFX-202: the deterministic rejection a backend that binds exactly one stream of
+     *        each input rate performs instead of silently rendering from a subset of the array.
+     *
+     * `GraphicsDevice` already rejects both shapes for a backend that does not report
+     * `GraphicsCapability::MultiStreamVertexInput`, so this never fires through the public API. It
+     * exists because `Draw*PrimitivesEx` is a public interface method a harness may call with a
+     * hand-built `GpuDrawParams`, and because a truncated binding array looks exactly like a
+     * correct draw of the wrong data.
+     *
+     * @param params      The draw being dispatched.
+     * @param backendName Name used in the message, e.g. "Vulkan".
+     */
+    inline void RejectUnsupportedStreamCombination(
+        const GpuDrawParams& params, const char* backendName)
+    {
+        if (!HasMultipleVertexStreams(params) && !HasMultipleInstanceStreams(params))
+            return;
+        throw std::runtime_error(
+            std::string(backendName) +
+            " cannot bind more than one VertexBufferBinding of the same input rate (" +
+            std::to_string(PerVertexStreamCount(params)) + " per-vertex and " +
+            std::to_string(InstanceStreamCount(params)) +
+            " per-instance streams were bound). The binding list is never silently truncated.");
     }
 
     /**
@@ -1350,7 +1532,24 @@ namespace CNA::Internal::Backends
             DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
         }
 
-        /// Instanced indexed draw — default throws on backends that don't support it.
+        /**
+         * @brief Instanced indexed draw — default throws on backends that don't support it.
+         *
+         * REMED-GFX-202: this route takes the SAME complete stream description the two ordinary
+         * routes take. @p vb is `params.vertexStreams[0].buffer`, kept as a named argument so the
+         * classic single-per-vertex-stream path is unchanged; the per-instance streams are the
+         * entries whose `instanceFrequency` is greater than zero, reached through
+         * `FirstInstanceStream()` / `NthInstanceStream()`. Each stream carries its own slot,
+         * declaration, stride, `VertexOffset` (in vertex ELEMENTS) and `InstanceFrequency`, and the
+         * whole array is captured by value, so a deferred backend must copy what it needs from it
+         * and must never re-read `GraphicsDevice`'s public binding state at replay.
+         *
+         * A backend that cannot express the bound combination must throw before native submission
+         * rather than render from a subset of the streams; `HasMultipleVertexStreams()` and
+         * `HasMultipleInstanceStreams()` select that branch, and `GraphicsDevice` already rejects
+         * both shapes for a backend that does not report
+         * `GraphicsCapability::MultiStreamVertexInput`.
+         */
         virtual void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb,
                                                const IIndexBufferBackend& ib,
                                                const Matrix& world,

@@ -1156,12 +1156,13 @@ namespace Microsoft::Xna::Framework::Graphics
         void FillVertexStreamBindings(
             CNA::Internal::Backends::GpuDrawParams& p, int foldedOffset) const;
 
-        // REMED-GFX-201: rejects a multi-stream ordinary draw on a backend that cannot bind one,
-        // and an over-wide binding set on one whose native input-slot ceiling is lower than XNA's
-        // 16. Deterministic and before native submission: a backend that has not been taught to
-        // re-slot its stride-derived input elements across several bindings would otherwise render
-        // from stream 0 alone, which looks like a correct draw of the wrong data. Single-stream
-        // draws never reach either check.
+        // REMED-GFX-201/202: rejects a draw whose binding set is wider than the running backend can
+        // express -- more than one per-vertex stream, more than one per-instance stream, or more
+        // per-vertex streams than its native input-slot ceiling. Deterministic and before native
+        // submission: a backend that has not been taught to re-slot its stride-derived input
+        // elements across several bindings would otherwise render from a subset of them, which
+        // looks like a correct draw of the wrong data. The classic shapes -- one per-vertex stream,
+        // and one per-vertex plus one per-instance stream -- never reach any of these checks.
         void ValidateVertexStreamCapability(
             const CNA::Internal::Backends::GpuDrawParams& p) const;
 
@@ -1176,6 +1177,16 @@ namespace Microsoft::Xna::Framework::Graphics
             int elementCount,
             const char* parameterName,
             const std::string& parameterValue) const;
+
+        // REMED-GFX-202: REMED-GFX-118's instance-range gate widened from the first per-instance
+        // binding to EVERY one of them. `instanceCount` instances consume
+        // `1 + (instanceCount - 1) / InstanceFrequency` records of each per-instance stream,
+        // beginning at that stream's own VertexOffset -- all in vertex ELEMENTS of that stream's own
+        // declaration, never bytes. A stream too short is rejected here, naming the offending slot,
+        // even when another per-instance stream is long enough.
+        void ValidateInstanceStreamRanges(
+            const CNA::Internal::Backends::GpuDrawParams& p,
+            int instanceCount) const;
 
         // The one object-to-GPU-stream conversion behind every built-in vertex type's explicit
         // VertexDeclaration draw: the values are packed into the stream that type's declaration

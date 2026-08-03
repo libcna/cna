@@ -754,7 +754,8 @@ namespace Microsoft::Xna::Framework::Graphics
             if (buffer == nullptr)
                 continue;   // SetVertexBuffers rejects nulls; a defaulted binding is simply unused
 
-            if (binding.getInstanceFrequencyProperty() == 0)
+            // REMED-GFX-202: the usage claim covers per-instance streams too, exactly as FNA3D's
+            // own drivers walk one `attrUse` table across every binding regardless of frequency.
             {
                 const auto& elements = buffer->getVertexDeclarationProperty().GetVertexElements();
                 int claimed = 0;
@@ -800,31 +801,64 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::ValidateVertexStreamCapability(
         const CNA::Internal::Backends::GpuDrawParams& p) const
     {
-        if (!CNA::Internal::Backends::HasMultipleVertexStreams(p))
-            return;   // the single-stream path every backend has always had
+        const bool multipleVertexStreams = CNA::Internal::Backends::HasMultipleVertexStreams(p);
+        const bool multipleInstanceStreams =
+            CNA::Internal::Backends::HasMultipleInstanceStreams(p);
+        if (!multipleVertexStreams && !multipleInstanceStreams)
+            return;   // the classic shapes every backend has always had
 
-        int perVertexStreams = 0;
-        for (int i = 0; i < p.vertexStreamCount; ++i)
-            if (p.vertexStreams[static_cast<std::size_t>(i)].instanceFrequency == 0)
-                ++perVertexStreams;
+        const int perVertexStreams = CNA::Internal::Backends::PerVertexStreamCount(p);
+        const int instanceStreams = CNA::Internal::Backends::InstanceStreamCount(p);
 
         if (!backend_->SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput))
         {
+            // REMED-GFX-202: one capability, one message, whichever rate is over-wide -- both are
+            // the same native gap (the backend derives its input elements from a single byte
+            // stride and binds one per-instance buffer), and both would otherwise be rendered from
+            // a subset of the bound streams.
             throw System::NotSupportedException(
-                "This graphics backend cannot bind more than one per-vertex VertexBufferBinding "
-                "to an ordinary draw (" + std::to_string(perVertexStreams) +
-                " were bound). Query GraphicsDevice::SupportsCapability("
-                "GraphicsCapability::MultiStreamVertexInput) before splitting a VertexDeclaration "
-                "across streams.");
+                "This graphics backend cannot bind more than one VertexBufferBinding of the same "
+                "input rate (" + std::to_string(perVertexStreams) + " per-vertex and " +
+                std::to_string(instanceStreams) + " per-instance streams were bound). Query "
+                "GraphicsDevice::SupportsCapability(GraphicsCapability::MultiStreamVertexInput) "
+                "before splitting a VertexDeclaration across streams or binding several "
+                "per-instance streams.");
         }
 
         const int backendMaximum = backend_->GetMaxVertexStreams();
-        if (perVertexStreams > backendMaximum)
+        if (perVertexStreams > backendMaximum || instanceStreams > backendMaximum)
         {
             throw System::NotSupportedException(
                 "This graphics backend supports at most " + std::to_string(backendMaximum) +
-                " per-vertex vertex streams, but " + std::to_string(perVertexStreams) +
-                " were bound. The binding list is never silently truncated.");
+                " vertex streams of one input rate, but " + std::to_string(perVertexStreams) +
+                " per-vertex and " + std::to_string(instanceStreams) +
+                " per-instance streams were bound. The binding list is never silently truncated.");
+        }
+    }
+
+    void GraphicsDevice::ValidateInstanceStreamRanges(
+        const CNA::Internal::Backends::GpuDrawParams& p, int instanceCount) const
+    {
+        for (int i = 0; i < p.vertexStreamCount; ++i)
+        {
+            const auto& stream = p.vertexStreams[static_cast<std::size_t>(i)];
+            if (stream.instanceFrequency <= 0)
+                continue;
+            // REMED-GFX-118's arithmetic, per stream: one record is consumed for each complete
+            // frequency-sized group of instances, and the first instance starts at record
+            // `VertexOffset` -- D3D11's StartInstanceLocation is 0 in FNA3D's own driver and
+            // OpenGL has no start-instance term at all. Every term is an element count of THIS
+            // stream, so a short stream is rejected even when another one is long enough.
+            const int requiredElements = 1 + (instanceCount - 1) / stream.instanceFrequency;
+            const int available = stream.vertexCount;
+            if (stream.vertexOffset > available ||
+                requiredElements > available - stream.vertexOffset)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "instanceCount", std::to_string(instanceCount),
+                    "The requested instance range exceeds the per-instance vertex buffer bound to "
+                    "slot " + std::to_string(stream.slot) + '.');
+            }
         }
     }
 
@@ -1057,10 +1091,6 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         // REMED-GFX-200: the same binding-0 rule the ordinary routes above now use, single-sourced.
-        // This route keeps carrying the offset in its own GpuDrawParams::vertexBufferOffset field
-        // rather than folding it into baseVertex, because the per-instance stream has an
-        // independent offset that baseVertex cannot express and REMED-GFX-122/123's backends
-        // reconfigure both streams' native bindings together.
         const int vertexBufferOffset = CurrentVertexBufferOffset();
 
         const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
@@ -1083,34 +1113,29 @@ namespace Microsoft::Xna::Framework::Graphics
         p.baseVertex    = baseVertex;
         p.minVertexIndex = minVertexIndex;
         p.numVertices    = numVertices;
-        p.vertexBufferOffset = vertexBufferOffset;
-        // Find the per-instance vertex buffer binding (instanceFrequency > 0).
-        for (const auto& binding : currentVertexBuffers_) {
-            if (binding.getInstanceFrequencyProperty() > 0) {
-                if (auto* vb = binding.getVertexBufferProperty()) {
-                    p.instanceVb = &vb->GetBackend();
-                    p.instanceVertexOffset = binding.getVertexOffsetProperty();
-                    p.instanceFrequency = binding.getInstanceFrequencyProperty();
-                    break;
-                }
-            }
-        }
-        // One instance element is consumed for each complete instanceFrequency-sized group. The
-        // binding offset is an element offset, just like FNA3D's stride multiplication in
-        // ApplyVertexBufferBindings; it is never interpreted as a raw byte count.
-        if (p.instanceVb != nullptr)
-        {
-            const int requiredInstanceElements =
-                1 + (instanceCount - 1) / p.instanceFrequency;
-            const int availableInstanceElements = p.instanceVb->GetVertexCount();
-            if (p.instanceVertexOffset > availableInstanceElements ||
-                requiredInstanceElements > availableInstanceElements - p.instanceVertexOffset)
-            {
-                throw System::ArgumentOutOfRangeException(
-                    "instanceCount", std::to_string(instanceCount),
-                    "The requested instance range exceeds the bound per-instance vertex buffer.");
-            }
-        }
+        // REMED-GFX-202: the SAME complete stream description the two ordinary routes build, from
+        // the same helper -- FNA prepares one binding array for all three draw routes and an
+        // instance stream is simply an entry whose InstanceFrequency is greater than zero.
+        //
+        // The fold is 0 here, unlike the ordinary routes. Those fold because their backends have
+        // no per-binding native offset channel at all and must deliver the offset through
+        // vertexStart/baseVertex (REMED-GFX-200); this route's backends do have one -- that is what
+        // REMED-GFX-122/123 built -- so every stream carries its whole public VertexOffset and
+        // baseVertex stays exactly the caller's value. That is also FNA3D's own D3D11 driver:
+        // `offset = binding.vertexOffset * stride` per binding, with `BaseVertexLocation`
+        // passed separately to DrawIndexedInstanced. Folding here would additionally be wrong,
+        // because baseVertex must NOT advance a per-instance stream and the smallest offset among
+        // the per-vertex streams has no reason to be shared with them.
+        FillVertexStreamBindings(p, /*foldedOffset=*/0);
+        // The declared window is [baseVertex + minVertexIndex, + numVertices) in every per-vertex
+        // stream's own elements, and every per-instance stream owes one record per complete
+        // frequency-sized group of instances. Argument validation precedes the capability gate for
+        // the reason DrawPrimitives states: an out-of-range request is wrong on every backend.
+        ValidateVertexStreamRanges(
+            p, baseVertex + minVertexIndex, numVertices,
+            "numVertices", std::to_string(numVertices));
+        ValidateInstanceStreamRanges(p, instanceCount);
+        ValidateVertexStreamCapability(p);
         applySamplerStatesToBackend();
         backend_->DrawInstancedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),

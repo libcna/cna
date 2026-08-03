@@ -53,21 +53,27 @@ namespace CNA
         Texture3D,
 
         /**
-         * @brief More than one per-vertex `VertexBufferBinding` on the ORDINARY (non-instanced)
-         * draw routes -- a `VertexDeclaration` whose elements are split across several bound
-         * buffers (REMED-GFX-201).
+         * @brief More than one `VertexBufferBinding` of the same input rate, on any draw route --
+         * a `VertexDeclaration` whose elements are split across several bound buffers
+         * (REMED-GFX-201), or several per-instance streams at their own frequencies
+         * (REMED-GFX-202).
          *
-         * XNA 4.0 allows this on every draw route, and CNA's shared layer carries the complete
-         * binding set to the backend boundary as `GpuDrawParams::vertexStreams`. Whether a backend
-         * can then express the combined layout natively is a real per-backend gap: CNA's backends
-         * derive their native input elements from a single byte stride, so a backend that has not
-         * yet been taught to re-slot those elements across several bindings would silently render
-         * from stream 0 alone. Such a backend reports false here and `DrawPrimitives`/
-         * `DrawIndexedPrimitives` reject a multi-stream draw before native submission instead.
+         * XNA 4.0 allows both on every draw route, and CNA's shared layer carries the complete
+         * binding set to the backend boundary as `GpuDrawParams::vertexStreams` -- identically for
+         * `DrawPrimitives`, `DrawIndexedPrimitives` and `DrawInstancedPrimitives`, exactly as FNA's
+         * one `PrepareVertexBindingArray` does. Whether a backend can then express the combination
+         * natively is a real per-backend gap: CNA's backends derive their native input elements
+         * from a single byte stride and bind exactly one per-instance buffer, so a backend that has
+         * not yet been taught to re-slot those elements across several bindings would silently
+         * render from a subset of the bound streams. Such a backend reports false here and
+         * `GraphicsDevice` rejects the draw before native submission instead.
+         *
+         * The classic shapes need no capability at all and are unaffected: one per-vertex stream,
+         * and one per-vertex stream plus one per-instance stream.
          *
          * The default is false: a newly added backend must make an explicit decision to claim
          * this, exactly like `IVertexBufferBackend::SetVertexDeclaration` being a required
-         * override. Single-stream drawing is unaffected and needs no capability at all.
+         * override.
          */
         MultiStreamVertexInput
     };
