@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -44,7 +45,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 46;
+    constexpr int kExpectedChecks = 48;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -317,6 +318,12 @@ class HtmlDomSmokeTest : public Game
     std::unique_ptr<Texture2D> texture_;
     std::unique_ptr<RenderTarget2D> renderTarget_;
     std::unique_ptr<SpriteFont> font_;
+    // plan_html_dom.md HTMLDOM-102: SpriteBatch::Begin() always applies EITHER the RasterizerState
+    // passed to it OR RasterizerState::CullCounterClockwise as its own default (SpriteBatch.cpp,
+    // matching FNA's PrepRenderState) -- so GraphicsDevice.RasterizerState set directly, separately
+    // from Begin(), is overwritten by the very next Begin() call regardless. Every scissor-rect
+    // check below that needs clipping to actually apply must pass this explicitly.
+    RasterizerState scissorEnabledState_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -568,10 +575,50 @@ protected:
         // between (the OLD, pre-HTMLDOM-94 test shape) would find nothing.
         if (frame_ == 7)
         {
+            // plan_html_dom.md HTMLDOM-102: RasterizerState.ScissorTestEnable, gating whether
+            // SetScissorRect's recorded rect clips anything at all -- an earlier version applied it
+            // unconditionally, matching SDL_RENDERER's own omission but not real XNA fidelity (in
+            // real XNA a game must explicitly enable scissor testing via RasterizerState; setting
+            // ScissorRectangle alone does nothing). Verified FIRST, before the HTMLDOM-80/94 checks
+            // below, all of which assume scissor testing is enabled: disabled means a narrow rect
+            // creates NO region; re-enabling on the very next batch, same rect, DOES.
+            //
+            // A real finding while writing this: GraphicsDevice.RasterizerState set directly (e.g.
+            // dev.setRasterizerStateProperty(...)) is NOT what SpriteBatch draws under -- Begin()
+            // itself always (re-)applies EITHER the RasterizerState passed to it OR
+            // RasterizerState::CullCounterClockwise (ScissorTestEnable=false) as its own default,
+            // exactly like FNA's PrepRenderState (SpriteBatch.cpp, REMED-GFX-081) -- so a plain,
+            // no-argument Begin() call always disables scissor testing regardless of anything set
+            // beforehand, and the ENABLED case has to pass scissorEnabledState_ to Begin() directly.
+            dev.setScissorRectangleProperty(Rectangle(2, 2, 4, 4));
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(2, 2), Color::White);
+            spriteBatch_->End();
+            check(JsRegionExists(2, 2, 4, 4) == 0,
+                  "HTMLDOM-102a: a plain Begin() (RasterizerState::CullCounterClockwise's own "
+                  "ScissorTestEnable=false default) means SetScissorRect's recorded rect does NOT "
+                  "clip -- no region is created for it at all");
+
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
+            spriteBatch_->Draw(*texture_, Vector2(2, 2), Color::White);
+            spriteBatch_->End();
+            check(JsRegionExists(2, 2, 4, 4) == 1,
+                  "HTMLDOM-102b: re-enabling ScissorTestEnable on the VERY NEXT batch, same "
+                  "recorded rect, now creates a real clipped region -- the enable bit is captured "
+                  "at the same per-batch granularity as the rect itself, not stale from an earlier "
+                  "flush's state");
+
+            // Every other scissor test in this file (below, and in frames 8/10/11) needs scissor
+            // testing enabled too, so each of their own Begin() calls passes scissorEnabledState_
+            // explicitly -- Begin() applies its OWN RasterizerState every time, never inherits one
+            // set separately (see the finding above).
+
             // Backbuffer is 64x64 (see the constructor below). A rect fully inside it:
             // top=10, left=10, right=64-(10+20)=34, bottom=64-(10+30)=24.
             dev.setScissorRectangleProperty(Rectangle(10, 10, 20, 30));
-            spriteBatch_->Begin();
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
             spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
             spriteBatch_->End();
             check(JsRegionClipPathInsetIs(10, 10, 20, 30, 10, 34, 24, 10) == 1,
@@ -583,7 +630,8 @@ protected:
             // Resetting to the full backbuffer must collapse to the default, unclipped region
             // (#cna-dom-root itself) rather than allocating a real (no-op) clipped container.
             dev.setScissorRectangleProperty(Rectangle(0, 0, 64, 64));
-            spriteBatch_->Begin();
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
             spriteBatch_->Draw(*texture_, Vector2(40, 0), Color::White);
             spriteBatch_->End();
             check(JsRegionExists(0, 0, 64, 64) == 0,
@@ -606,7 +654,8 @@ protected:
             // A rect extending past the surface's own bounds: right/bottom insets would go
             // negative from the raw formula and must clamp to 0 rather than expand outward.
             dev.setScissorRectangleProperty(Rectangle(50, 50, 30, 30));
-            spriteBatch_->Begin();
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
             spriteBatch_->Draw(*texture_, Vector2(50, 50), Color::White);
             spriteBatch_->End();
             check(JsRegionClipPathInsetIs(50, 50, 30, 30, 50, 0, 0, 50) == 1,
@@ -654,7 +703,8 @@ protected:
             // region for it actually gets created (HTMLDOM-94: SetScissorRect alone only records
             // the rect -- a region only exists once a batch flushes under it).
             backend.SetScissorRect(5, 5, 10, 10);
-            spriteBatch_->Begin();
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
             spriteBatch_->Draw(*texture_, Vector2(5, 5), Color::White);
             spriteBatch_->End();
             check(JsRegionClipPathInsetIs(5, 5, 10, 10, 5, 49, 49, 5) == 1,
@@ -757,19 +807,22 @@ protected:
             // could never show this, since A's own container was already placed in the DOM the
             // first time it was created and never moved after that.
             dev.setScissorRectangleProperty(Rectangle(1, 1, 5, 5));
-            spriteBatch_->Begin();
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
             spriteBatch_->Draw(*texture_, Vector2(1, 1), Color::White);
             spriteBatch_->End();
             const int zA1 = JsRegionZIndex(1, 1, 5, 5);
 
             dev.setScissorRectangleProperty(Rectangle(10, 1, 5, 5));
-            spriteBatch_->Begin();
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
             spriteBatch_->Draw(*texture_, Vector2(10, 1), Color::White);
             spriteBatch_->End();
             const int zB = JsRegionZIndex(10, 1, 5, 5);
 
             dev.setScissorRectangleProperty(Rectangle(1, 1, 5, 5));
-            spriteBatch_->Begin();
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
             spriteBatch_->Draw(*texture_, Vector2(1, 1), Color::White);
             spriteBatch_->End();
             const int zA2 = JsRegionZIndex(1, 1, 5, 5);
@@ -782,7 +835,9 @@ protected:
 
             // The DEFAULT ('full') region interleaved between two named-region flushes: 'full's
             // sprites are direct children of #cna-dom-root, siblings of every named region's own
-            // container, so this is the one case DOM position could never reproduce at all.
+            // container, so this is the one case DOM position could never reproduce at all. Plain
+            // Begin() (scissor testing disabled) is fine here on purpose: (0,0,128,128) covers the
+            // whole backbuffer either way, so it resolves to 'full' regardless of the enable bit.
             dev.setScissorRectangleProperty(Rectangle(0, 0, 128, 128));
             spriteBatch_->Begin();
             spriteBatch_->Draw(*texture_, Vector2(20, 1), Color::White);
@@ -800,7 +855,8 @@ protected:
             for (int i = 0; i < 15; ++i)
             {
                 dev.setScissorRectangleProperty(Rectangle(30 + i, 1, 2, 2));
-                spriteBatch_->Begin();
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                    &scissorEnabledState_);
                 spriteBatch_->Draw(*texture_, Vector2(30 + i, 1), Color::White);
                 spriteBatch_->End();
             }
@@ -888,7 +944,8 @@ protected:
             // texel (pure red, LoadContent's own texture layout) so the sprite's whole footprint is
             // one unambiguous colour -- no tint maths, no multi-texel quadrants to reason about.
             dev.setScissorRectangleProperty(Rectangle(60, 60, 20, 20));
-            spriteBatch_->Begin();
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr,
+                                &scissorEnabledState_);
             // Straddles the rect's own right/bottom edge: the rect spans logical x/y in [60,80),
             // this sprite spans [55,95) on both axes -- part of its footprint must actually paint,
             // part must not.
@@ -913,6 +970,7 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
+        scissorEnabledState_.setScissorTestEnableProperty(true);
     }
 
     int getResult() const { return result_; }

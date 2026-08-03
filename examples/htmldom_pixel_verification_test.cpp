@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -44,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 16;
+    constexpr int kExpectedChecks = 18;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -641,6 +642,57 @@ protected:
                   "ignored viewport offset entirely");
         }
 
+        // plan_html_dom.md HTMLDOM-102: real ctx.save()/rect()/clip() scissoring on the Canvas2D
+        // render-target path, gated on RasterizerState.ScissorTestEnable -- previously this path
+        // did not consult the scissor rect at all, regardless of the enable bit (htmldom_smoke_test
+        // .cpp's own HTMLDOM-102a/b already cover the enable bit's effect on the DOM path/region
+        // creation structurally; this is the Canvas2D path's real pixel proof).
+        if (frame_ == 14)
+        {
+            RasterizerState scissorEnabled;
+            scissorEnabled.setScissorTestEnableProperty(true);
+            Texture2D tex = Make1x1(dev, 255, 0, 255, 255);
+
+            const auto enabledPixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                dev.setScissorRectangleProperty(Rectangle(4, 4, 10, 10));
+                spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr,
+                                    nullptr, &scissorEnabled);
+                // Covers the target's whole 20x20 extent -- "outside" the scissor rect is then
+                // unambiguous: it's transparent only if the clip genuinely removed it.
+                spriteBatch_->Draw(tex, Rectangle(0, 0, 20, 20), Rectangle(0, 0, 1, 1), Color::White);
+                spriteBatch_->End();
+            });
+            const Color insideEnabled = enabledPixels[static_cast<std::size_t>(8) * 20 + 8];
+            const Color outsideEnabled = enabledPixels[static_cast<std::size_t>(1) * 20 + 1];
+            std::printf("       RT scissor enabled: inside(8,8)=(%d,%d,%d,%d) "
+                        "outside(1,1)=(%d,%d,%d,%d)\n",
+                        insideEnabled.getRProperty(), insideEnabled.getGProperty(),
+                        insideEnabled.getBProperty(), insideEnabled.getAProperty(),
+                        outsideEnabled.getRProperty(), outsideEnabled.getGProperty(),
+                        outsideEnabled.getBProperty(), outsideEnabled.getAProperty());
+            check(insideEnabled.getRProperty() > 200 && insideEnabled.getBProperty() > 200 &&
+                  outsideEnabled.getAProperty() < 50,
+                  "HTMLDOM-102c: with ScissorTestEnable=true and a real ctx.clip(), a sprite drawn "
+                  "into a bound RenderTarget2D is genuinely clipped to the scissor rect's own "
+                  "bounds -- the Canvas2D path previously ignored the scissor rect entirely");
+
+            const auto disabledPixels = ReadBackWholeTarget(*rtB_, 20, 20, [&] {
+                dev.setScissorRectangleProperty(Rectangle(4, 4, 10, 10));
+                spriteBatch_->Begin(); // plain Begin(): CullCounterClockwise's own default disables
+                                       // scissor testing
+                spriteBatch_->Draw(tex, Rectangle(0, 0, 20, 20), Rectangle(0, 0, 1, 1), Color::White);
+                spriteBatch_->End();
+            });
+            const Color outsideDisabled = disabledPixels[static_cast<std::size_t>(1) * 20 + 1];
+            std::printf("       RT scissor disabled: outside(1,1)=(%d,%d,%d,%d)\n",
+                        outsideDisabled.getRProperty(), outsideDisabled.getGProperty(),
+                        outsideDisabled.getBProperty(), outsideDisabled.getAProperty());
+            check(outsideDisabled.getAProperty() > 200,
+                  "HTMLDOM-102d: the SAME scissor rect, with ScissorTestEnable=false, does NOT "
+                  "clip -- the point that read transparent above (genuinely clipped out) now shows "
+                  "the sprite's own colour");
+        }
+
         // plan_html_dom.md HTMLDOM-97: symmetric TextureAddressMode::Mirror with an out-of-bounds
         // sourceRectangle, drawn pixel-exact for the first time (previously this threw). A 2x2
         // source Rectangle(0,0,4,4) sourceRect tiles it twice in each axis; under real mirror-repeat
@@ -650,7 +702,7 @@ protected:
         // every tile boundary" definition: effective source index for tiled position i (tile size 2)
         // is i for i<2, and (1-(i-2)) for i in [2,4) -- i.e. output index 0,1,2,3 samples source
         // index 0,1,1,0 on both axes.
-        if (frame_ == 14)
+        if (frame_ == 15)
         {
             SamplerState mirrorSampler;
             mirrorSampler.setAddressUProperty(TextureAddressMode::Mirror);
@@ -701,7 +753,7 @@ protected:
         // rect into the texture's own 2px height and does not stretch to fill the requested 4px
         // destination height, so rows y=2,3 must come back untouched (transparent), while rows
         // y=0,1 tile the source horizontally exactly like Wrap's own already-verified pattern.
-        if (frame_ == 15)
+        if (frame_ == 16)
         {
             SamplerState mixedSampler;
             mixedSampler.setAddressUProperty(TextureAddressMode::Wrap);
@@ -735,7 +787,7 @@ protected:
                   "tile, and does not stretch to fill the requested destination height)");
         }
 
-        if (frame_ == 16)
+        if (frame_ == 17)
         {
             std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
             std::fflush(stdout);

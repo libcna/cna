@@ -549,9 +549,10 @@ TEST_F(HtmlDom3DSurfaceTest, InertStateSettersAcceptArbitraryValuesWithNoObserva
     EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::Additive);
     SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
 
-    // Non-default cull/fill/depth-bias values, and scissorTestEnable=true specifically (the one
-    // field that could plausibly gate something): none of it may throw, and none of it may change
-    // whether a subsequent ApplyBlendState call still behaves normally afterward.
+    // Non-default cull/fill/depth-bias values: still genuinely inert (no 2D analogue). scissorTestEnable
+    // (HTMLDOM-102) is NOT inert any more -- see ApplyRasterizerStateReadsScissorTestEnable below for
+    // its own real, observable effect -- but this call must still leave ApplyBlendState's own
+    // composite-op state completely undisturbed regardless of what scissorTestEnable was set to.
     EXPECT_NO_THROW(backend.ApplyRasterizerState(
         /*cullMode=*/2, /*fillMode=*/1, /*scissorTestEnable=*/true,
         /*depthBias=*/0.5f, /*slopeScaleDepthBias=*/0.25f));
@@ -559,6 +560,26 @@ TEST_F(HtmlDom3DSurfaceTest, InertStateSettersAcceptArbitraryValuesWithNoObserva
     EXPECT_NO_THROW(backend.ApplyBlendState(4, 4, 5, 5, 0, 0, writeState));
     EXPECT_EQ(GetCurrentCompositeOpEXT(), DomCompositeOp::NonPremultiplied);
     SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
+    SetCurrentScissorEnableEXT(false);
+}
+
+// plan_html_dom.md HTMLDOM-102: ApplyRasterizerState's scissorTestEnable argument is the one field
+// this backend genuinely reads -- verified directly here (pure C++ state, no DOM/browser needed),
+// separately from the inert-fields test above so a future change to either can't silently mask a
+// regression in the other.
+TEST_F(HtmlDom3DSurfaceTest, ApplyRasterizerStateReadsScissorTestEnable)
+{
+    EXPECT_FALSE(GetCurrentScissorEnableEXT())
+        << "false before any ApplyRasterizerState call, matching RasterizerState's own "
+           "constructor default";
+
+    backend.ApplyRasterizerState(/*cullMode=*/0, /*fillMode=*/0, /*scissorTestEnable=*/true, 0.0f, 0.0f);
+    EXPECT_TRUE(GetCurrentScissorEnableEXT());
+
+    backend.ApplyRasterizerState(/*cullMode=*/0, /*fillMode=*/0, /*scissorTestEnable=*/false, 0.0f, 0.0f);
+    EXPECT_FALSE(GetCurrentScissorEnableEXT());
+
+    SetCurrentScissorEnableEXT(false);
 }
 
 // plan_html_dom.md HTMLDOM-98: under `node` (no __EMSCRIPTEN__), SetViewport's own EM_JS forwarding

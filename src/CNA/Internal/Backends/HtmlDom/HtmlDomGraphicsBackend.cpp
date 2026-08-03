@@ -405,6 +405,7 @@ namespace CNA::Internal::Backends::HtmlDom
         // so the shared draw-path state is rewound rather than assumed pristine.
         SetBoundRenderTargetIdEXT(0);
         SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
+        SetCurrentScissorEnableEXT(false);
 #if defined(__EMSCRIPTEN__)
         CNA_HtmlDom_EnsureRoot();
 #endif
@@ -611,6 +612,13 @@ namespace CNA::Internal::Backends::HtmlDom
         // (docs/html-dom-backend.md), not a silent drop.
         SetCurrentCompositeOpEXT(BlendStateToDomCompositeOp(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc));
+    }
+
+    void HtmlDomGraphicsBackend::ApplyRasterizerState(int /*cullMode*/, int /*fillMode*/,
+                                                      bool scissorTestEnable,
+                                                      float /*depthBias*/, float /*slopeScaleDepthBias*/)
+    {
+        SetCurrentScissorEnableEXT(scissorTestEnable);
     }
 
     void HtmlDomGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth (3D)"); }

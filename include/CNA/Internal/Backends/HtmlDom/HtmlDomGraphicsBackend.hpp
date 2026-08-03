@@ -122,8 +122,10 @@ namespace CNA::Internal::Backends::HtmlDom
          * @brief Clips subsequent rendering to the given rectangle, in logical game pixels.
          *
          * plan_html_dom.md HTMLDOM-80 / design decision 13: implemented as a real CSS
-         * `clip-path: inset()`, applied regardless of `RasterizerState.ScissorTestEnable` -- the
-         * same behaviour `SDL_RENDERER` has (it never overrides `ApplyRasterizerState` either).
+         * `clip-path: inset()`. HTMLDOM-102: only actually applied when
+         * `RasterizerState.ScissorTestEnable` is true (see `ApplyRasterizerState`) -- an earlier
+         * version applied it unconditionally, matching `SDL_RENDERER`'s own omission (which never
+         * overrides `ApplyRasterizerState` at all) but not real XNA fidelity.
          *
          * This call itself only records the rectangle; it does not touch the DOM. The recorded
          * rectangle is consumed once per `SpriteBatch` Begin/End batch, when that batch's sprites
@@ -158,26 +160,18 @@ namespace CNA::Internal::Backends::HtmlDom
          * closeable one against `EASYGL`, which supports a genuine GL sub-region `Viewport`
          * (split-screen/sub-panel rendering) -- nothing about DOM/CSS compositing rules that out.
          *
-         * Implemented by positioning and sizing `#cna-dom-root` itself to the viewport sub-rect
-         * (offset by `x`/`y`, sized to `w`/`h`) instead of always the full logical backbuffer --
-         * XNA/FNA already build `SpriteBatch`'s own projection from `Viewport.Width/Height`, so
-         * sprite-local coordinates need no change here; only the surface's own placement does. A
-         * viewport that covers the whole backbuffer (the overwhelmingly common case, and what
-         * `GraphicsDevice::UpdateViewportFromWindow()` resets to on every detected resize) collapses
-         * to exactly today's full-surface behaviour, so the common case costs nothing extra.
-         *
-         * `SetScissorRect`'s own region clip-path insets (HTMLDOM-94) are computed relative to
-         * whichever viewport is currently active, matching real GL/D3D semantics where a scissor
-         * rect is defined in the same absolute render-target pixel space as the viewport itself, not
-         * relative to the viewport's own local origin -- confirmed by reading `EasyGLGraphicsBackend`
-         * (its scissor forwards straight to `glScissor`, a window-space call, independent of
-         * whatever `glViewport` is currently set), not assumed.
-         *
-         * A bound `RenderTarget2D` already resets `Viewport` to the target's own size at the shared
-         * `GraphicsDevice` layer (confirmed while researching HTMLDOM-93) and back to the backbuffer's
-         * size on unbind, so this call is harmless (if momentarily inert) while a render target is
-         * bound -- `#cna-dom-root` is not drawn into at all during that time regardless of its own
-         * CSS sizing, and unbinding restores the correct backbuffer viewport automatically.
+         * plan_html_dom.md HTMLDOM-107: only RECORDS the viewport -- it does not touch the DOM at
+         * all, the same shape `SetScissorRect` already uses. `#cna-dom-root` always stays at the
+         * full backbuffer's own size/position; the viewport's own `(X,Y)` offset is instead
+         * captured once per `SpriteBatch` flush and applied directly to that batch's own sprites
+         * (both the DOM path and, while a `RenderTarget2D` is bound, the Canvas2D path). An earlier
+         * version resized/repositioned root itself to the viewport sub-rect, which meant a SECOND
+         * viewport set later in the same frame retroactively moved every sprite an EARLIER batch
+         * had already flushed -- the real split-screen/sub-panel use case was not actually
+         * implemented. Scissor and viewport are independent absolute-render-target-space concepts
+         * on a real GPU (confirmed by reading `EasyGLGraphicsBackend`: its scissor forwards straight
+         * to `glScissor`, unaffected by whatever `glViewport` region is active), so `SetScissorRect`'s
+         * own region clip-path insets need no viewport-offset adjustment at all.
          *
          * `minDepth`/`maxDepth` are ignored -- this backend has no depth buffer, matching how it
          * ignores `RasterizerState`'s own depth-bias fields.
@@ -272,6 +266,24 @@ namespace CNA::Internal::Backends::HtmlDom
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
+
+        /**
+         * @brief Records whether subsequent draws should honour the scissor rect.
+         *
+         * plan_html_dom.md HTMLDOM-102: `cullMode`/`fillMode`/`depthBias`/`slopeScaleDepthBias`
+         * have no 2D analogue (HTMLDOM-91's own inert-state-setter audit already covers why), so
+         * only `scissorTestEnable` is read. Stored via `SetCurrentScissorEnableEXT` -- the same
+         * plain-C++, per-batch-captured shape `ApplyBlendState` already uses for `BlendState`.
+         *
+         * @param cullMode Ignored -- no 2D analogue.
+         * @param fillMode Ignored -- no 2D analogue.
+         * @param scissorTestEnable Whether `SetScissorRect`'s recorded rectangle should clip
+         *                          subsequent draws.
+         * @param depthBias Ignored -- no depth buffer exists on this backend.
+         * @param slopeScaleDepthBias Ignored -- no depth buffer exists on this backend.
+         */
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
 
         /** @brief Always false -- neither the DOM backbuffer nor any target here has depth storage. */
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }

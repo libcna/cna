@@ -25,25 +25,24 @@
 //
 // Sprite n of THIS BATCH always lands on pool element n of the region THIS BATCH resolves to (see
 // HTMLDOM-94 below), and elements are appended to that region's container in pool order, so
-// document order within one region equals draw order within the batches that landed there --
-// painter's-algorithm ordering with no z-index bookkeeping at all, for sprites that share a region.
-// Sprites in DIFFERENT regions are painted in the order their regions were first created, which is
-// NOT necessarily interleaved draw order across regions -- an accepted, documented boundary of
-// scissor-rect-scoped clipping correctness (HTMLDOM-94), not a regression: before HTMLDOM-94 there
-// was no way to keep two different scissor rects from clipping each other's sprites at all.
+// document order within one region equals draw order within the batches that landed there.
+// Painter's-algorithm ordering ACROSS different regions (including the default 'full' one) is
+// realized via a per-flush `z-index` (HTMLDOM-103), not DOM position -- DOM position alone only
+// ever reflected each region's own FIRST-creation order, not the actual sequence its flushes
+// happened in a given frame.
 //
 // With a render target bound there is no DOM to write to (a <div> cannot render into an off-screen
 // surface), so the very same command array is replayed into that target's Canvas2D context instead
 // (design decision 10). The transform stack below is the exact CSS transform list, in the same
-// order, so both paths place a sprite identically. The bound-render-target path does not consult
-// the scissor rect at all -- that was already true before HTMLDOM-94 and is unchanged by it; scissor
-// clipping here is a DOM-backbuffer-only concept. HTMLDOM-107: the ACTIVE VIEWPORT's own (X,Y)
-// offset, by contrast, is consulted on BOTH paths -- a bound render target can itself have a
-// sub-rectangle Viewport active (e.g. rendering split-screen INTO an intermediate texture), and
-// nothing about that is DOM-backbuffer-specific.
+// order, so both paths place a sprite identically. HTMLDOM-102: the scissor rect IS now consulted
+// on the render-target path too (a real `ctx.save()/rect()/clip()`, gated on
+// RasterizerState.ScissorTestEnable) -- an earlier version left it DOM-backbuffer-only. HTMLDOM-107:
+// the ACTIVE VIEWPORT's own (X,Y) offset is likewise consulted on BOTH paths -- a bound render
+// target can itself have a sub-rectangle Viewport active (e.g. rendering split-screen INTO an
+// intermediate texture), and nothing about either concept is DOM-backbuffer-specific.
 EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                                        double m0, double m1, double m2, double m3, double m4, double m5,
-                                       int hasMatrix), {
+                                       int hasMatrix, int scissorEnabled), {
     if (count <= 0) return;
     const base = cmds >> 2;
     const targetCtx = Module['cnaDomBoundCtx'];
@@ -57,8 +56,27 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     // this per-flush offset is the only place that translation is realized now.
     const vp = Module['cnaDomViewport'];
     const vpOffX = vp ? vp.x : 0, vpOffY = vp ? vp.y : 0;
+    // plan_html_dom.md HTMLDOM-102: this flush's effective scissor rect -- null (no clip) unless
+    // RasterizerState.ScissorTestEnable was actually true when this batch's End() ran, captured at
+    // the same per-batch granularity as everything else scissor-related. An earlier version applied
+    // SetScissorRect's recorded rect unconditionally, ignoring the enable bit entirely.
+    const effectiveScissorRect = scissorEnabled ? Module['cnaDomScissorRect'] : null;
 
     if (targetCtx) {
+        // plan_html_dom.md HTMLDOM-102: real ctx.save()/rect()/clip() scissoring for the Canvas2D
+        // render-target path -- previously this path did not consult the scissor rect at all.
+        // Established ONCE for the whole batch (not per sprite) in absolute target-pixel space
+        // (setTransform reset first, since targetCtx's transform otherwise still holds whatever the
+        // PREVIOUS sprite/flush last left it at), then every sprite's own save()/restore() below
+        // nests inside it.
+        targetCtx.save();
+        if (effectiveScissorRect) {
+            targetCtx.setTransform(1, 0, 0, 1, 0, 0);
+            targetCtx.beginPath();
+            targetCtx.rect(effectiveScissorRect.x, effectiveScissorRect.y,
+                           effectiveScissorRect.w, effectiveScissorRect.h);
+            targetCtx.clip();
+        }
         for (let i = 0; i < count; ++i) {
             const o = base + i * stride;
             const flags = HEAP32[o + 14];
@@ -138,6 +156,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             }
             targetCtx.restore();
         }
+        targetCtx.restore();
         return;
     }
 
@@ -150,7 +169,11 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     // issued at End(), not captured per original Draw() call. cnaDomGetRegion resolves that rect to
     // the DOM container (and its own independent sprite pool) this whole batch's sprites belong in,
     // so a LATER batch's different scissor rect can never reach back and reclip these sprites.
-    const region = Module['cnaDomGetRegion'](Module['cnaDomScissorRect']);
+    // plan_html_dom.md HTMLDOM-102: passes effectiveScissorRect (null when ScissorTestEnable was
+    // false at this batch's End()), not the raw recorded rect -- a disabled scissor test now
+    // genuinely collapses to the same zero-cost 'full' region as no rect at all, matching real
+    // XNA/FNA. An earlier version resolved the recorded rect unconditionally.
+    const region = Module['cnaDomGetRegion'](effectiveScissorRect);
     const container = region.container;
     const pool = region.pool;
     let used = region.used;
@@ -382,7 +405,7 @@ namespace CNA::Internal::Backends::HtmlDom
         CNA_HtmlDom_FlushSprites(commands_.data(), static_cast<int>(commands_.size()),
                                  HtmlDomDrawCommandFields,
                                  matrix_[0], matrix_[1], matrix_[2], matrix_[3], matrix_[4], matrix_[5],
-                                 hasMatrix_ ? 1 : 0);
+                                 hasMatrix_ ? 1 : 0, GetCurrentScissorEnableEXT() ? 1 : 0);
 #endif
         commands_.clear();
         hasMatrix_ = false;

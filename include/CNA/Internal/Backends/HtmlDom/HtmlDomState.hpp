@@ -116,6 +116,29 @@ namespace CNA::Internal::Backends::HtmlDom
     void SetCurrentCompositeOpEXT(DomCompositeOp op);
 
     /**
+     * @brief NOXNA. Returns whether the most recent ApplyRasterizerState enabled scissor testing.
+     *
+     * plan_html_dom.md HTMLDOM-102: RasterizerState.ScissorTestEnable was previously never read by
+     * this backend at all -- SetScissorRect's clip-path/Canvas2D clip applied unconditionally,
+     * matching SDL_RENDERER's own omission but not real XNA fidelity (SDL_RENDERER itself never
+     * overrides ApplyRasterizerState either, so it has no enable bit to read in the first place;
+     * HTML_DOM now does). Kept as plain C++ state -- the same shape GetCurrentCompositeOpEXT/
+     * SetCurrentCompositeOpEXT already use for BlendState -- so it stays unit-testable outside a
+     * browser and is captured at the same per-batch granularity the scissor rect itself uses.
+     *
+     * @return true if scissor testing is currently enabled; false before any ApplyRasterizerState
+     *         call, matching RasterizerState's own constructor default.
+     */
+    [[nodiscard]] bool GetCurrentScissorEnableEXT();
+
+    /**
+     * @brief NOXNA. Records whether subsequent draws should honour the scissor rect.
+     *
+     * @param enabled The scissor-test-enable bit selected by ApplyRasterizerState.
+     */
+    void SetCurrentScissorEnableEXT(bool enabled);
+
+    /**
      * @brief NOXNA. Returns the JS-side canvas id of the currently bound render target.
      *
      * plan_html_dom.md design decision 10: while a render target is bound, draws cannot go to the

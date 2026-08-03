@@ -77,11 +77,24 @@ namespace CNA::Internal::Backends::HtmlDom
             static int id = 0;
             return id;
         }
+
+        // plan_html_dom.md HTMLDOM-102: defaults to false, matching RasterizerState's own
+        // constructor default (RasterizerState.cpp: scissorTestEnable_(false)) -- the state before
+        // any ApplyRasterizerState call has ever run.
+        bool& CurrentScissorEnable()
+        {
+            static bool enabled = false;
+            return enabled;
+        }
     }
 
     DomCompositeOp GetCurrentCompositeOpEXT() { return CurrentCompositeOp(); }
 
     void SetCurrentCompositeOpEXT(DomCompositeOp op) { CurrentCompositeOp() = op; }
+
+    bool GetCurrentScissorEnableEXT() { return CurrentScissorEnable(); }
+
+    void SetCurrentScissorEnableEXT(bool enabled) { CurrentScissorEnable() = enabled; }
 
     int GetBoundRenderTargetIdEXT() { return BoundRenderTargetId(); }
 
