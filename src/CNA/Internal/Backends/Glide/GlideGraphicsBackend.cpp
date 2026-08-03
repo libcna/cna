@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/Glide/GlideDisplayModeSelection.hpp"
 #include "CNA/Internal/Backends/Glide/GlideLighting.hpp"
 #include "CNA/Internal/Backends/Glide/GlidePrimitiveClip.hpp"
+#include "CNA/Internal/Backends/Glide/GlideTextureCoordinate.hpp"
 #include "CNA/Internal/Backends/Glide/GlideTextureMip.hpp"
 #include "CNA/Internal/Backends/Glide/GlideVertexLayout.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
@@ -1764,15 +1765,19 @@ namespace CNA::Internal::Backends::Glide
             const std::array<Vector2, 4> positions = {
                 place(localLeft, localTop), place(localRight, localTop),
                 place(localRight, localBottom), place(localLeft, localBottom) };
+            // Convert the tile-local texel offset (including its gutter padding) into Glide's
+            // native "0..256 per repeat" window-coordinate S/T units, same as the 3D draw path.
+            const float coordinateScale =
+                GlideNativeTextureCoordinateScale(tile.paddedWidth, tile.paddedHeight);
             const std::array<Vector2, 4> texcoords = {
-                Vector2(static_cast<float>(texLeft - tile.sourceX + tile.gutterLeft),
-                        static_cast<float>(texTop - tile.sourceY + tile.gutterTop)),
-                Vector2(static_cast<float>(texRight - tile.sourceX + tile.gutterLeft),
-                        static_cast<float>(texTop - tile.sourceY + tile.gutterTop)),
-                Vector2(static_cast<float>(texRight - tile.sourceX + tile.gutterLeft),
-                        static_cast<float>(texBottom - tile.sourceY + tile.gutterTop)),
-                Vector2(static_cast<float>(texLeft - tile.sourceX + tile.gutterLeft),
-                        static_cast<float>(texBottom - tile.sourceY + tile.gutterTop)) };
+                Vector2(static_cast<float>(texLeft - tile.sourceX + tile.gutterLeft) * coordinateScale,
+                        static_cast<float>(texTop - tile.sourceY + tile.gutterTop) * coordinateScale),
+                Vector2(static_cast<float>(texRight - tile.sourceX + tile.gutterLeft) * coordinateScale,
+                        static_cast<float>(texTop - tile.sourceY + tile.gutterTop) * coordinateScale),
+                Vector2(static_cast<float>(texRight - tile.sourceX + tile.gutterLeft) * coordinateScale,
+                        static_cast<float>(texBottom - tile.sourceY + tile.gutterTop) * coordinateScale),
+                Vector2(static_cast<float>(texLeft - tile.sourceX + tile.gutterLeft) * coordinateScale,
+                        static_cast<float>(texBottom - tile.sourceY + tile.gutterTop) * coordinateScale) };
             const auto makeVertex = [&](int index) -> GlideVertex
             {
                 return GlideVertex{
@@ -2225,10 +2230,14 @@ namespace CNA::Internal::Backends::Glide
             const float ndcX = input.clipX * reciprocalW;
             const float ndcY = input.clipY * reciprocalW;
             const float ndcZ = input.clipZ * reciprocalW;
+            // Convert the tile-local texel offset (including its gutter padding) into Glide's
+            // native "0..256 per repeat" window-coordinate S/T units before dividing by W.
+            const float coordinateScale = tile == nullptr ? 0.0f :
+                GlideNativeTextureCoordinateScale(tile->paddedWidth, tile->paddedHeight);
             const float s = tile == nullptr ? 0.0f :
-                input.u * static_cast<float>(texture->GetWidth()) - tile->sourceX + tile->gutterLeft;
+                (input.u * static_cast<float>(texture->GetWidth()) - tile->sourceX + tile->gutterLeft) * coordinateScale;
             const float t = tile == nullptr ? 0.0f :
-                input.v * static_cast<float>(texture->GetHeight()) - tile->sourceY + tile->gutterTop;
+                (input.v * static_cast<float>(texture->GetHeight()) - tile->sourceY + tile->gutterTop) * coordinateScale;
             const float viewportDepth = impl_->viewportMinDepth + ndcZ *
                 (impl_->viewportMaxDepth - impl_->viewportMinDepth);
             return GlideVertex{

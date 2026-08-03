@@ -14,8 +14,8 @@ renderer.
 
 - [x] Native `grSstWinOpen`, back-buffer clear/present, LFB readback, and loader support for both
   undecorated and x86 stdcall-exported Glide DLLs.
-- [x] `SpriteBatch` texture upload and quad submission through TMU0 plus `grDrawTriangle`; native
-  texture-coordinate unit conversion remains open under GLIDE-AUD-010.
+- [x] `SpriteBatch` texture upload and quad submission through TMU0 plus `grDrawTriangle`, with
+  native `0..256`-per-repeat texture-coordinate unit conversion (GLIDE-AUD-010).
 - [x] Fixed-function `VertexPositionColor` triangle lists/strips, including indexed draws and CPU
   `world * view * projection` transforms. Compatible clipped triangle runs are batched through
   native `grDrawVertexArray(GR_TRIANGLES)`; SpriteBatch remains two direct `grDrawTriangle` calls.
@@ -29,9 +29,9 @@ renderer.
   to Glide's FIFO. Triangle clipping shares the same strict positive-W eye-plane margin as
   point/line clipping (GLIDE-AUD-014).
 - [x] Textured 3D `VertexPositionTexture` and `VertexPositionColorTexture` through TMU0, with
-  Glide `s/w`, `t/w`, and `1/w`. Indexed versions expand the index stream before the same real
-  triangle submission. Correct native coordinate scaling remains open under GLIDE-AUD-010, and
-  indexed custom-layout preservation under GLIDE-AUD-012.
+  Glide `s/w`, `t/w`, and `1/w` using native `0..256`-per-repeat coordinate scaling
+  (GLIDE-AUD-010). Indexed versions expand the index stream, preserving the source buffer's
+  resolved vertex layout (GLIDE-AUD-012), before the same real triangle submission.
 - [x] The documented fixed-function `BasicEffect` subset: unlit diffuse/vertex-colour, or
   `VertexPositionNormalTexture` directional **per-vertex** diffuse and Blinn-Phong specular
   lighting with ambient and emissive terms. It deliberately rejects `PreferPerPixelLighting`.
@@ -124,14 +124,33 @@ renderer.
   fake-DLL native call-order capture and overlapping-translucent-multi-tile dgVoodoo image remain
   blocked by the same external i686 `sharp-runtime` `__int128` dependency as GLIDE-AUD-006/007.
   SpriteBatch keeps its direct two-triangle path, unaffected by this change.
-- [ ] **GLIDE-AUD-010 — Convert all texture coordinates to native Glide units.** Glide window-space
-  TMU coordinates use `0..256` across the texture's long side and an aspect-scaled range across the
-  short side. The current SpriteBatch path submits normalized UVs directly, while the 3D path
-  submits tile texel coordinates; neither applies the required native scale. Define one shared
-  conversion based on each physical tile's padded dimensions, use it for sprites, triangles,
-  points and lines before multiplying by reciprocal W, and keep gutter/tile offsets in the same
-  unit system. Add fake-DLL vertex-value assertions plus coloured 2x2, 64x32, 128x128, NPOT and
-  multi-tile Point/Linear image probes. A uniform 1x1 texture is not sufficient evidence.
+- [x] **GLIDE-AUD-010 — Convert all texture coordinates to native Glide units.** Confirmed against
+  the Glide 3.0 Reference Manual's `grVertexLayout`/`GR_PARAM_STn` description: in the
+  `GR_WINDOW_COORDS` mode CNA uses (`grCoordinateSpace(GR_WINDOW_COORDS)`), "s and t coordinates
+  for TMU n [are] stored as s/q, t/q in the range [0..256] for one repeat of the texture. The
+  range of the smaller dimension is limited by the aspect ratio." (The competing `[0..1]`
+  normalized range documented under `grCoordinateSpace` applies only to the separate
+  `GR_CLIP_COORDS` mode, which this backend does not use.) Both the SpriteBatch quad path and the
+  3D `makeGlideVertex` helper (shared by triangles, points and lines) were instead submitting raw
+  tile-local texel offsets — including the address-mode gutter — directly as `sow`/`tow`, with no
+  conversion to Glide's native units at all. Added a shared, portable
+  `include/CNA/Internal/Backends/Glide/GlideTextureCoordinate.hpp`
+  (`GlideNativeTextureCoordinateScale(paddedWidth, paddedHeight)`), returning
+  `256 / max(paddedWidth, paddedHeight)`. Because both axes share this one scale, a tile's long
+  axis always spans exactly `0..256` for a full wrap while its short axis — having proportionally
+  fewer texels — automatically spans a proportionally smaller native range, matching the
+  documented aspect-ratio limiting without any explicit branching on which axis is longer. Both
+  draw paths now multiply their existing tile-local texel offset (gutter included, so it stays in
+  the same unit system as everything else) by this scale before the perspective-divide step that
+  already existed. This is a real behavioural change for any tile whose padded long dimension
+  isn't exactly 256 (i.e. almost all real textures): previously, e.g. a 128-padded tile only ever
+  addressed native coordinates up to 128 out of the required 0..256 range. Five portable probes
+  cover a square tile, a 2:1 wide tile, a 1:4 tall tile, size-independence (a 2×2 tile and a
+  128×128 tile both reach exactly 256 at their full width), and the invalid-dimension rejection.
+  Verified with i686 MinGW `-fsyntax-only` recompilation of the whole backend and the portable
+  Glide unit suite (44/44). Fake-DLL vertex-value assertions and the coloured 2×2/64×32/128×128/
+  NPOT/multi-tile dgVoodoo image probes remain blocked by the same external i686 `sharp-runtime`
+  `__int128` dependency as GLIDE-AUD-006/007.
 - [x] **GLIDE-AUD-011 — Make blend-factor mapping argument-aware and reject impossible states
   atomically.** The Glide 3.0 Reference documents `grAlphaBlendFunction(rgb_sf, rgb_df, alpha_sf,
   alpha_df)` as accepting a *different* 9-constant set for the two `*_sf` ("source factor") slots
