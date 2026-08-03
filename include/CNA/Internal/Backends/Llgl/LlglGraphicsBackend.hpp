@@ -1494,7 +1494,12 @@ namespace CNA::Internal::Backends::Llgl
         /**
          * @brief Applies a `SamplerState` to a texture slot.
          *
-         * @param slot          Texture slot index; only slot 0 is consumed by the 2D pipeline.
+         * LLGL-49: tracked independently per slot (0..`kTrackedSamplerSlotCount`-1) -- the only
+         * slots this backend's stock effects ever consume (see `samplerFilter_`'s own doc comment
+         * for the exact slot-to-texture-unit mapping). A slot outside that range is a no-op: no
+         * shader binding on this backend reaches it.
+         *
+         * @param slot          Texture slot index.
          * @param filter        Raw `TextureFilter` ordinal.
          * @param addressU      Raw `TextureAddressMode` ordinal for U.
          * @param addressV      Raw `TextureAddressMode` ordinal for V.
@@ -2017,15 +2022,30 @@ namespace CNA::Internal::Backends::Llgl
             /** @brief Primitives only, when `pbr`: tangent-space normal map, or the 1x1 default
              *  flat-normal texture when `PbrEffect::NormalMap` was null. */
             LLGL::Texture*   pbrNormalTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: this draw's own slot-1 sampler (LLGL-49) --
+             *  see `pbrMetallicRoughnessSampler`'s own doc comment for why each PBR map gets its
+             *  own sampler now instead of all five sharing `sampler`. */
+            LLGL::Sampler*   pbrNormalSampler = nullptr;
             /** @brief Primitives only, when `pbr`: glTF-packed (G=roughness, B=metallic)
              *  metallic-roughness map, or the 1x1 default white texture when null. */
             LLGL::Texture*   pbrMetallicRoughnessTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: this draw's own slot-2 sampler (LLGL-49).
+             *  PbrEffect's 5 maps occupy `GraphicsDevice.SamplerStates[0..4]` (matching the
+             *  Vulkan backend's own `PbrSlotSamplersRawEXT()` convention), so each needs its own
+             *  captured sampler rather than all reusing slot 0's -- previously every one of these
+             *  4 fields (see the 3 siblings below) was absent and `ReplayFrameCommandsList` bound
+             *  `sampler` (slot 0) at every one of the 5 texture units instead. */
+            LLGL::Sampler*   pbrMetallicRoughnessSampler = nullptr;
             /** @brief Primitives only, when `pbr`: emissive map, or the 1x1 default white texture
              *  when null. */
             LLGL::Texture*   pbrEmissiveTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: this draw's own slot-3 sampler (LLGL-49). */
+            LLGL::Sampler*   pbrEmissiveSampler = nullptr;
             /** @brief Primitives only, when `pbr`: occlusion map (R channel), or the 1x1 default
              *  white texture when null. */
             LLGL::Texture*   pbrOcclusionTexture = nullptr;
+            /** @brief Primitives only, when `pbr`: this draw's own slot-4 sampler (LLGL-49). */
+            LLGL::Sampler*   pbrOcclusionSampler = nullptr;
             /** @brief Primitives only: first index of an indexed draw; ignored otherwise. */
             std::uint32_t    firstIndex   = 0;
             /** @brief Primitives only: value added to each index before vertex fetch. */
@@ -2414,10 +2434,20 @@ namespace CNA::Internal::Backends::Llgl
         bool  blendEnabled_   = false;
         float blendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 
-        int   samplerFilter_  = 0;
-        int   samplerAddressU_ = 1;
-        int   samplerAddressV_ = 1;
-        int   samplerMaxAnisotropy_ = 1;
+        /// LLGL-49: per-slot SamplerState, one entry per texture slot this backend's stock effects
+        /// actually consume -- slot 0 (every family's own base/primary texture), slot 1
+        /// (DualTextureEffect's second texture OR EnvironmentMapEffect's cube map -- the two are
+        /// mutually exclusive per draw, matching the Vulkan backend's own `slotSamplers_[1]`
+        /// convention), and slots 2-4 (PbrEffect's metallic-roughness/emissive/occlusion maps,
+        /// matching the Vulkan backend's own `PbrSlotSamplersRawEXT()` slot-0..4 convention --
+        /// "EasyGL binds the same five to Texture0..4"). Previously a single, un-indexed set of
+        /// scalars that `ApplySamplerState()` only ever wrote for slot 0, so every OTHER slot
+        /// always sampled with whatever slot 0's current state was.
+        static constexpr int kTrackedSamplerSlotCount = 5;
+        int   samplerFilter_[kTrackedSamplerSlotCount]        = {0, 0, 0, 0, 0};
+        int   samplerAddressU_[kTrackedSamplerSlotCount]      = {1, 1, 1, 1, 1};
+        int   samplerAddressV_[kTrackedSamplerSlotCount]      = {1, 1, 1, 1, 1};
+        int   samplerMaxAnisotropy_[kTrackedSamplerSlotCount] = {1, 1, 1, 1, 1};
 
         bool  scissorTestEnabled_ = false;
         bool  scissorRectSet_     = false;

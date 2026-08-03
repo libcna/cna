@@ -3506,27 +3506,43 @@ namespace CNA::Internal::Backends::Llgl
         if (textured)
         {
             command.texture = resolvedTexture.texture;
-            command.sampler = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
-                                             samplerMaxAnisotropy_);
+            command.sampler = AcquireSampler(samplerFilter_[0], samplerAddressU_[0], samplerAddressV_[0],
+                                             samplerMaxAnisotropy_[0]);
         }
         if (dualTexture)
         {
+            // LLGL-49: DualTextureEffect's second texture occupies slot 1 (matches the Vulkan
+            // backend's own slotSamplers_[1] convention), independent of slot 0's own state.
             command.texture2 = resolvedTexture2.texture;
-            command.sampler2 = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
-                                              samplerMaxAnisotropy_);
+            command.sampler2 = AcquireSampler(samplerFilter_[1], samplerAddressU_[1], samplerAddressV_[1],
+                                              samplerMaxAnisotropy_[1]);
         }
         if (envMapping)
         {
+            // LLGL-49: EnvironmentMapEffect's cube map also occupies slot 1 -- mutually exclusive
+            // with dualTexture per draw, so this never conflicts with the case above.
             command.envMapTexture = resolvedEnvMap;
-            command.envMapSampler = AcquireSampler(samplerFilter_, samplerAddressU_, samplerAddressV_,
-                                                    samplerMaxAnisotropy_);
+            command.envMapSampler = AcquireSampler(samplerFilter_[1], samplerAddressU_[1], samplerAddressV_[1],
+                                                    samplerMaxAnisotropy_[1]);
         }
         if (pbr)
         {
+            // LLGL-49: PbrEffect's 5 maps occupy SamplerStates[0..4] (base=0, already captured
+            // above via the `textured` branch; matches the Vulkan backend's own
+            // PbrSlotSamplersRawEXT() convention) -- each of the remaining 4 needs its OWN
+            // captured sampler rather than reusing slot 0's.
             command.pbrNormalTexture = resolvedPbrNormalMap;
+            command.pbrNormalSampler = AcquireSampler(samplerFilter_[1], samplerAddressU_[1],
+                                                      samplerAddressV_[1], samplerMaxAnisotropy_[1]);
             command.pbrMetallicRoughnessTexture = resolvedPbrMetallicRoughnessMap;
+            command.pbrMetallicRoughnessSampler = AcquireSampler(samplerFilter_[2], samplerAddressU_[2],
+                                                                 samplerAddressV_[2], samplerMaxAnisotropy_[2]);
             command.pbrEmissiveTexture = resolvedPbrEmissiveMap;
+            command.pbrEmissiveSampler = AcquireSampler(samplerFilter_[3], samplerAddressU_[3],
+                                                        samplerAddressV_[3], samplerMaxAnisotropy_[3]);
             command.pbrOcclusionTexture = resolvedPbrOcclusionMap;
+            command.pbrOcclusionSampler = AcquireSampler(samplerFilter_[4], samplerAddressU_[4],
+                                                         samplerAddressV_[4], samplerMaxAnisotropy_[4]);
         }
         command.envMapping = envMapping;
         command.transformIndex = transformIndex;
@@ -4342,7 +4358,10 @@ namespace CNA::Internal::Backends::Llgl
             : nullptr;
         command.mipRegenColorTexture = GetActiveMipRegenColorTextureEXT();
         command.texture = resolved.texture;
-        command.sampler = AcquireSampler(filter, addressU, addressV, samplerMaxAnisotropy_);
+        // SpriteBatch always samples through slot 0 (LLGL-49): filter/addressU/addressV are this
+        // draw's own explicit SpriteBatch.Begin() arguments, but MaxAnisotropy has no such
+        // per-draw override, so it still comes from GraphicsDevice.SamplerStates[0].
+        command.sampler = AcquireSampler(filter, addressU, addressV, samplerMaxAnisotropy_[0]);
 
         if (currentCustomEffect_ != nullptr)
         {
@@ -4925,35 +4944,33 @@ namespace CNA::Internal::Backends::Llgl
                     else if (command.pbr)
                     {
                         commands_->SetResource(0, *pbrUniformBuffers_[command.pbrUniformIndex]);
-                        // All 5 texture units share this backend's single global sampler state
-                        // (ApplySamplerState only ever tracks slot 0) -- the SAME LLGL::Sampler
-                        // object is bound at every one of the 5 sampler slots below, since each
-                        // GLSL sampler2D declaration still needs its own binding even when the
-                        // underlying resource is identical.
+                        // LLGL-49: each of the 5 texture units now binds its OWN captured sampler
+                        // (SamplerStates[0..4], matching the Vulkan backend's own
+                        // PbrSlotSamplersRawEXT() convention) instead of all 5 sharing slot 0's.
                         if (command.texture != nullptr && command.sampler != nullptr)
                         {
                             commands_->SetResource(1, *command.texture);
                             commands_->SetResource(2, *command.sampler);
                         }
-                        if (command.pbrNormalTexture != nullptr && command.sampler != nullptr)
+                        if (command.pbrNormalTexture != nullptr && command.pbrNormalSampler != nullptr)
                         {
                             commands_->SetResource(3, *command.pbrNormalTexture);
-                            commands_->SetResource(4, *command.sampler);
+                            commands_->SetResource(4, *command.pbrNormalSampler);
                         }
-                        if (command.pbrMetallicRoughnessTexture != nullptr && command.sampler != nullptr)
+                        if (command.pbrMetallicRoughnessTexture != nullptr && command.pbrMetallicRoughnessSampler != nullptr)
                         {
                             commands_->SetResource(5, *command.pbrMetallicRoughnessTexture);
-                            commands_->SetResource(6, *command.sampler);
+                            commands_->SetResource(6, *command.pbrMetallicRoughnessSampler);
                         }
-                        if (command.pbrEmissiveTexture != nullptr && command.sampler != nullptr)
+                        if (command.pbrEmissiveTexture != nullptr && command.pbrEmissiveSampler != nullptr)
                         {
                             commands_->SetResource(7, *command.pbrEmissiveTexture);
-                            commands_->SetResource(8, *command.sampler);
+                            commands_->SetResource(8, *command.pbrEmissiveSampler);
                         }
-                        if (command.pbrOcclusionTexture != nullptr && command.sampler != nullptr)
+                        if (command.pbrOcclusionTexture != nullptr && command.pbrOcclusionSampler != nullptr)
                         {
                             commands_->SetResource(9, *command.pbrOcclusionTexture);
-                            commands_->SetResource(10, *command.sampler);
+                            commands_->SetResource(10, *command.pbrOcclusionSampler);
                         }
                         // SkinnedPbrEffect: the bone transform array, reused verbatim from
                         // SkinnedEffect's own pool -- bone data is effect-agnostic. Bound at
@@ -5796,15 +5813,16 @@ namespace CNA::Internal::Backends::Llgl
     void LlglGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                                  int maxAnisotropy)
     {
-        // Slot 0 is the only unit the sprite pipeline samples; a state applied to any other slot
-        // has no shader binding to reach on this backend yet.
-        if (slot != 0)
+        // LLGL-49: any slot beyond kTrackedSamplerSlotCount has no shader binding to reach on this
+        // backend (every stock effect's own texture units fit in slots 0..4 -- see
+        // samplerFilter_'s own doc comment for the exact mapping).
+        if (slot < 0 || slot >= kTrackedSamplerSlotCount)
             return;
 
-        samplerFilter_ = filter;
-        samplerAddressU_ = addressU;
-        samplerAddressV_ = addressV;
-        samplerMaxAnisotropy_ = maxAnisotropy;
+        samplerFilter_[slot] = filter;
+        samplerAddressU_[slot] = addressU;
+        samplerAddressV_[slot] = addressV;
+        samplerMaxAnisotropy_[slot] = maxAnisotropy;
     }
 
     void LlglGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,

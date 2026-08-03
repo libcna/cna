@@ -632,7 +632,7 @@ reported before submission.
 | LLGL-46 | P0 | **Version deferred vertex/index data.** A queued draw must retain the exact buffer contents and native resource lifetime visible at its public draw call even if `SetData()` later overwrites or enlarges the same object. Prefer immutable per-frame slices/ring allocation or explicit versioned upload commands over in-place writes; releasing a replaced buffer must remain deferred until its last queued consumer is submitted. | Register `frontface_winding_test.cpp`; all W3 persistent-buffer reuse entry points pass for indexed/non-indexed and dynamic/static buffers on Vulkan and OpenGL. Add a focused grow-capacity regression proving the old resource is neither freed early nor reused with new contents. | 🟡 |
 | LLGL-47 | P0 | **Make custom-effect resource layouts safe.** Reflect or validate compiled GLSL/SPIR-V before LLGL pipeline creation. Either build every referenced descriptor set/binding or reject unsupported set numbers, resource types and stage visibility with a deterministic CNA exception; malformed/unsupported shader input must never reach a driver-crash path. | Enable `rendertarget_effect_source_test.cpp` C1 and add shaders using sets 0+1, missing bindings and conflicting declarations. Each supported shader renders correctly; each unsupported shader throws before `CreatePipelineState`. Run with Vulkan validation enabled where available. | 🟡 |
 | LLGL-48 | P1 | **Use collision-free typed pipeline-cache keys.** Replace ad-hoc multiply/truncate packing with key structs whose equality and hash include every field consumed by the relevant LLGL pipeline descriptor: vertex layout, topology, render-pass signature, depth/raster state, all blend factors/functions/write masks, full 32-bit `MultiSampleMask`, scissor enable and effective sample count. | Register `gfx077_colorwritechannels_3d_test.cpp`; add pairwise tests for blend factors/functions and masks that differ only above bit 3, including an 8x-MSAA mask when supported. Instrumented test builds assert that descriptor equality and key equality cannot disagree. `Llgl_BasicEffect` alpha blending remains green. | ⬜ |
-| LLGL-49 | P1 | **Track and capture sampler state per texture slot.** Store at least every slot consumed by stock effects, acquire the correct sampler for each slot, and capture those sampler objects in each deferred command so later state changes cannot leak backward. | Register `stock_effect_sampler_contract_test.cpp` at 65/65 or better. Add independent filter/address tests for `DualTextureEffect` slot 1 and all five `PbrEffect` maps; slot 0 changes must not alter another slot and vice versa. | ⬜ |
+| LLGL-49 | P1 | **Track and capture sampler state per texture slot.** Store at least every slot consumed by stock effects, acquire the correct sampler for each slot, and capture those sampler objects in each deferred command so later state changes cannot leak backward. | Register `stock_effect_sampler_contract_test.cpp` at 65/65 or better. Add independent filter/address tests for `DualTextureEffect` slot 1 and all five `PbrEffect` maps; slot 0 changes must not alter another slot and vice versa. | 🟡 |
 | LLGL-50 | P1 | **Separate logical back-buffer dimensions from presentation scaling.** `FixedHeightDynamicWidth` may choose a presentation rectangle, but it must not silently shrink an explicitly requested readable back buffer or make valid columns unreachable. Define the mode contract once and make draw, readback, viewport and resize code use the same dimensions. | Register and fully pass `backbuffer_first_read_test.cpp`, `bound_target_lifetime_test.cpp` and `deferred_source_lifetime_test.cpp` with their 72x36 cases. Add wider-than-window and narrower-than-window aspect tests plus resize round-trips. | ⬜ |
 | LLGL-51 | P1 | **Fix OpenGL back-buffer viewport/scissor Y conversion and test both modules explicitly.** Normalize LLGL's screen-origin rules at the command boundary without changing render-target orientation or the already-passing zero-Y cases. | Add `_OpenGL` registrations for `deferred_viewport_capture_test.cpp`, `deferred_scissor_capture_test.cpp`, `spritebatch_custom_viewport_test.cpp`, `spritebatch_viewport_switch_test.cpp` and the applicable cube/plural tests. The current 37/39 and 43/47 OpenGL results become full passes, including non-zero-Y target→backbuffer→target sequences. | ⬜ |
 | LLGL-52 | P1 | **Complete legal stock-effect vertex-layout permutations and resolve the orthographic camera case.** Add a defined untextured+unlit colourless BasicEffect path and a defined policy/shader for lit+textured input without normals; diagnose the `Orthographic`+`CreateLookAt` mismatch rather than masking it with a contract branch. | Register and pass `rasterizerstate_cullmode_indexed_basiceffect_test.cpp`, `rendertarget_sampling_orientation_test.cpp` CD4 and `rasterizerstate_cullmode_camera_test.cpp` on each capable module. Unsupported declarations, if any remain, are rejected before queuing with a precise message. | ⬜ |
@@ -746,6 +746,28 @@ leads (`CommandBuffer::CopyTextureFromFramebuffer`'s own path, or leftover sciss
 the off-screen bind) for whoever continues this. `Llgl_Deferred_Viewport`/`Llgl_Deferred_Scissor`
 remain unchanged at 37/39 and 43/47 -- this pass corrected the understanding of the defect but did
 not close it, and no code in this repository was changed by this investigation.
+
+**`LLGL-49` progress (2026-08-03): fixed and verified; PbrEffect's own dedicated multi-slot test not
+added.** `ApplySamplerState(int slot, ...)` now tracks 5 slots independently
+(`samplerFilter_[5]`/`samplerAddressU_[5]`/`samplerAddressV_[5]`/`samplerMaxAnisotropy_[5]`) instead
+of a single set of scalars slot 0 alone ever wrote -- confirmed against the Vulkan backend's own
+reference convention (`slotSamplers_[]`/`PbrSlotSamplersRawEXT()`): slot 0 is every family's own
+base/primary texture, slot 1 is `DualTextureEffect`'s second texture OR `EnvironmentMapEffect`'s
+cube map (mutually exclusive per draw), and slots 2/3/4 are `PbrEffect`'s metallic-roughness/
+emissive/occlusion maps. `FrameCommand` grew 4 new `pbr*Sampler` fields (previously absent --
+`ReplayFrameCommandsList` bound slot 0's own sampler at all 5 PBR texture units, a limitation the old
+code already self-documented in a comment) so each PBR map now binds its own captured sampler.
+**Verified fixed** (`CNA_LLGL_RENDERER=opengl`, Xvfb, 2026-08-03):
+`stock_effect_sampler_contract_test.cpp`'s M3 ("slot 1's Linear filter alone breaks block
+uniformity") now passes, confirmed by a fresh run with zero failures and by reproducing the exact
+pre-fix M3-only failure against a stashed pre-fix binary. Now registered as
+`Llgl_StockEffectSampler`. A regression sweep (`Llgl_DualTexture`, `Llgl_DualTextureEffect_VertexColor`,
+`Llgl_PbrEffect_HandDerived`, `Llgl_BasicEffect`, `Llgl_Lighting`, `Llgl_2D`, `Llgl_Smoke`) shows no
+regressions. **Left at 🟡:** the acceptance gate's own "add independent filter/address tests for
+... all five `PbrEffect` maps" was not done this session -- `stock_effect_sampler_contract_test.cpp`
+only exercises the DualTextureEffect slot-0/1 case (its own `M` leg); a dedicated PbrEffect
+multi-slot test proving each of the 5 maps independently (not just that the mechanism exists) is
+still open for whoever continues this.
 
 ---
 

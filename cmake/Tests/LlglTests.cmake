@@ -697,13 +697,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "LLGL")
         TIMEOUT 90 LABELS "Llgl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # stock_effect_sampler_contract_test.cpp is deliberately NOT registered here: 64/65 checks pass
-    # (its own CNA_BACKEND_LLGL Contract branch is otherwise accurate). M3 fails for a real, distinct,
-    # OPEN finding: ApplySamplerState() only ever tracks slot 0's own filter/address/anisotropy in a
-    # single set of member variables, so DualTextureEffect's slot 1 (and PbrEffect's other 4 texture
-    # units, already self-documented in a code comment) always samples with whatever slot 0's current
-    # sampler state is, never its own. See known_bugs.md's new open entry.
+    # LLGL-49: ApplySamplerState() now tracks 5 slots independently (0..4, matching the Vulkan
+    # backend's own slotSamplers_[]/PbrSlotSamplersRawEXT() convention) instead of a single set of
+    # member variables slot 0 alone wrote. M3 (slot 1's Linear filter alone breaking block
+    # uniformity) now passes, confirmed by a fresh run with zero failures.
     cna_llgl_test(cna_test_llgl_stock_effect_sampler
                   examples/stock_effect_sampler_contract_test.cpp)
+    cna_register_backend_test(NAME Llgl_StockEffectSampler COMMAND cna_test_llgl_stock_effect_sampler
+        TIMEOUT 120 LABELS "Llgl"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
 endif()

@@ -1088,14 +1088,28 @@ grow-capacity regression is registered alongside it (`Llgl_VertexIndexBuffer_Gro
 
 ---
 
-## LLGL backend: every texture slot beyond slot 0 shares slot 0's own sampler state — OPEN
+## LLGL backend: every texture slot beyond slot 0 shares slot 0's own sampler state — FIXED
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-44`,
-`stock_effect_sampler_contract_test.cpp`). Root cause identified with certainty from the source
-itself -- the limitation is already self-documented in a code comment, just not previously surfaced
-as a public finding since no test had exercised two texture slots with genuinely DIFFERENT sampler
-states before this file. Not fixed here (a real fix needs per-slot sampler state tracking, out of
-scope for a test-wiring task).
+**Status:** fixed by `plan_llgl.md` `LLGL-49` (2026-08-03). `ApplySamplerState(int slot, ...)` now
+writes into `samplerFilter_[slot]`/`samplerAddressU_[slot]`/`samplerAddressV_[slot]`/
+`samplerMaxAnisotropy_[slot]` (5-element arrays, `kTrackedSamplerSlotCount`) instead of a single
+global set of scalars, for the exact 5 slots this backend's stock effects ever consume (confirmed
+against the Vulkan backend's own reference convention, `slotSamplers_[]`/`PbrSlotSamplersRawEXT()`:
+slot 0 = every family's base/primary texture, slot 1 = `DualTextureEffect`'s second texture OR
+`EnvironmentMapEffect`'s cube map -- the two are mutually exclusive per draw -- slots 2/3/4 =
+`PbrEffect`'s metallic-roughness/emissive/occlusion maps). Every multi-texture-unit
+`QueuePrimitives()` call site now acquires its OWN slot's sampler instead of reusing slot 0's;
+`FrameCommand` grew 4 new `pbr*Sampler` fields (previously PBR's 4 extra maps had no sampler field
+of their own at all, and `ReplayFrameCommandsList` bound `command.sampler` -- slot 0's -- at all 5
+texture units, a limitation this file's own OLD code comment already self-documented).
+
+**Verified fixed** (`CNA_LLGL_RENDERER=opengl`, Xvfb, 2026-08-03): `stock_effect_sampler_contract_test.cpp`
+now passes with zero failures (M3 -- "slot 1's Linear filter alone breaks block uniformity" --
+explicitly confirmed passing), now registered as `Llgl_StockEffectSampler`. Confirmed the pre-fix
+binary reproduces the exact documented M3 failure and nothing else (same stash-and-rebuild technique
+used for the other fixes this session). A regression sweep of `Llgl_DualTexture`,
+`Llgl_DualTextureEffect_VertexColor`, `Llgl_PbrEffect_HandDerived`, `Llgl_BasicEffect`,
+`Llgl_Lighting`, `Llgl_2D` and `Llgl_Smoke` shows no regressions.
 
 **Symptom:** `stock_effect_sampler_contract_test.cpp`'s M leg (64/65 checks otherwise pass) sets
 `DualTextureEffect`'s slot 0 to `TextureFilter.Point` and slot 1 to `TextureFilter.Linear`, then
@@ -1105,26 +1119,13 @@ filter alone should break block uniformity, since a linearly-interpolated slot s
 texel boundaries -- FAILS: the rendered image stays block-uniform, as if slot 1 were ALSO sampled
 with `Point` despite the game requesting `Linear` for it.
 
-**Root cause:** `LlglGraphicsBackend::ApplySamplerState(int slot, ...)` only ever writes into the
-single global `samplerFilter_`/`samplerAddressU_`/`samplerAddressV_`/`samplerMaxAnisotropy_` member
-variables regardless of which `slot` the game names -- there is no per-slot storage at all. Every
-`QueuePrimitives()` call that builds a multi-texture-unit command (`DualTextureEffect`'s own
-`command.sampler2`, and `PbrEffect`'s 5 texture units, which already carry a code comment
-acknowledging this exact limitation: "All 5 texture units share this backend's single global sampler
-state (`ApplySamplerState` only ever tracks slot 0)") calls `AcquireSampler()` with those SAME global
-values for every slot, so slot 1+ always ends up with whatever slot 0's own sampler state currently
-is, never its own.
+**The fix took exactly the shape this entry's own earlier analysis anticipated:** an array of
+per-slot filter/address/anisotropy values (mirroring how `colorWriteChannels_` is already an array
+of 4 for MRT), plus every multi-texture-unit `QueuePrimitives()` call site reading its own slot's
+entry instead of a shared global. See this entry's opening paragraphs for the implementation and
+verification.
 
-**Why this needs more than a test-wiring fix:** correcting it needs `ApplySamplerState` to track an
-array of per-slot filter/address/anisotropy values (mirroring how `colorWriteChannels_` is already an
-array of 4 for MRT), plus every multi-texture-unit `QueuePrimitives()` call site (`DualTextureEffect`,
-`PbrEffect`'s 5 units, `SkinnedPbrEffect`) reading its OWN slot's entry instead of the shared globals.
-Given this session's own recent, closely-related attempt at a `VertexBuffer`/`IndexBuffer` fix in this
-exact same hot path introduced a new crash (see the entry above) and had to be reverted, a second
-speculative change to adjacent, equally sensitive draw-command-building code was judged too risky to
-attempt blind at the same point in the same session.
-
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-44` (no CTest registration for
-`stock_effect_sampler_contract_test.cpp` until this is resolved).
+**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-49` -- fixed and verified (see above);
+`stock_effect_sampler_contract_test.cpp` is now registered as `Llgl_StockEffectSampler`.
 
 ---
