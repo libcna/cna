@@ -16,7 +16,7 @@ produced:
 
 | Page | What it checks | Result |
 |---|---|---|
-| `cna_test_htmldom_smoke` | DOM surface, sprite pool/recycling, `RenderTarget2D` readback, backbuffer refusal, `SpriteFont`, `TextureAddressMode::Wrap`/`Mirror`/mixed-axis, `SetScissorRect` (per-batch region isolation, region container has a real non-zero layout box), resize + scissor interaction, `SetViewport` sub-rectangle | 39/39 + 2 real screenshot pixel checks |
+| `cna_test_htmldom_smoke` | DOM surface, sprite pool/recycling, `RenderTarget2D` readback, backbuffer refusal, `SpriteFont`, `TextureAddressMode::Wrap`/`Mirror`/mixed-axis, `SetScissorRect` (per-batch region isolation, region container has a real non-zero layout box, true per-flush paint order across regions, non-destructive eviction), resize + scissor interaction, `SetViewport` sub-rectangle | 43/43 + 2 real screenshot pixel checks |
 | `cna_test_htmldom_pixel_verification` | Pixel-exact tint/`AlphaBlend`/`Opaque`/`Additive`, multi-glyph `SpriteFont` (kerning/`\n`/scale/flip), `transformMatrix`, render-target-as-`Draw()`-source, plain-texture `GetData`, `FromStream` decode, `TextureAddressMode::Mirror`/mixed-axis tiling | 15/15 |
 | `cna_test_htmldom_stress` | Performance benchmark, 300-frame stability run, LRU cache eviction | 3/3 |
 | `cna_test_htmldom_dispose` | Texture/render-target dispose actually shrinks the JS texture registry, bound-target auto-unbind, create/destroy churn | 6/6 |

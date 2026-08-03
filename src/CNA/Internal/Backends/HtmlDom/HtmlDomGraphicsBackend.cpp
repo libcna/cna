@@ -51,6 +51,17 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // had, so the overwhelmingly common no-scissor case costs nothing beyond what it always did.
     Module['cnaDomRegions'] = { 'full': { container: root, pool: [], used: 0, highWater: 0, rect: null } };
     Module['cnaDomRegionOrder'] = [];
+    // plan_html_dom.md HTMLDOM-103: which non-default regions a batch has actually flushed into
+    // THIS FRAME -- reset in CNA_HtmlDom_Clear (frame start), populated by cnaDomTouchRegion. A
+    // region in this set must never be evicted, even if it is the least-recently-used candidate:
+    // evicting it would remove a container whose sprites are still part of the frame being built,
+    // making already-submitted draws silently disappear.
+    Module['cnaDomRegionsTouchedThisFrame'] = new Set();
+    // plan_html_dom.md HTMLDOM-103: a monotonically increasing per-flush counter, used as each
+    // region's/full-region-sprite's CSS z-index so paint order reflects the ACTUAL sequence of
+    // SpriteBatch flushes this frame, not merely each region's own first-creation order (DOM
+    // position, which HTMLDOM-94 originally relied on, only ever captured the latter).
+    Module['cnaDomPaintOrderCounter'] = 0;
 
     // Sets a region's own clip-path from its stored rect against the CURRENT logical size. Called
     // once when a region is created and again for every region whenever the surface's logical size
@@ -123,13 +134,17 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
         if (regions) for (const key in regions) Module['cnaDomApplyRegionClip'](regions[key]);
     };
 
-    // Moves `key` to the most-recently-used end of the eviction order. The default 'full' region
-    // is never tracked here -- it is never evicted.
+    // Moves `key` to the most-recently-used end of the eviction order (appending it if it is not
+    // there yet -- a brand new region's own first touch), and marks it active for the current
+    // frame so the eviction loop below can never remove it out from under an in-progress frame
+    // (HTMLDOM-103). The default 'full' region is never tracked here -- it is never evicted.
     Module['cnaDomTouchRegion'] = function (key) {
         if (key === 'full') return;
+        Module['cnaDomRegionsTouchedThisFrame'].add(key);
         const order = Module['cnaDomRegionOrder'];
         const idx = order.indexOf(key);
-        if (idx >= 0) { order.splice(idx, 1); order.push(key); }
+        if (idx >= 0) order.splice(idx, 1);
+        order.push(key);
     };
 
     // Returns the region that should own sprites drawn under the given scissor rect (an {x,y,w,h}
@@ -157,10 +172,29 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
 
         // LRU-evict the least-recently-used non-default region at capacity -- bounds a
         // pathological game that cycles through many distinct scissor rects, mirroring the texture
-        // variant cache's own cap.
+        // variant cache's own cap. plan_html_dom.md HTMLDOM-103: skips any region already touched
+        // THIS FRAME (cnaDomRegionsTouchedThisFrame) -- the old unconditional order.shift() could
+        // remove the oldest region even while its sprites were still part of the frame being built
+        // right now, making an already-submitted draw silently disappear. Scans oldest-first (the
+        // order array's own invariant) for the first evictable candidate rather than just the head.
         const order = Module['cnaDomRegionOrder'];
+        const touchedThisFrame = Module['cnaDomRegionsTouchedThisFrame'];
         while (order.length >= Module['cnaDomMaxRegions']) {
-            const evictKey = order.shift();
+            let evictIdx = -1;
+            for (let i = 0; i < order.length; ++i) {
+                if (!touchedThisFrame.has(order[i])) { evictIdx = i; break; }
+            }
+            if (evictIdx < 0) {
+                // Every existing region is active this frame -- nothing is safe to remove. Allow a
+                // temporary over-cap rather than dropping a region a draw call this same frame still
+                // depends on; the cap is restored on a later frame once some of these go cold again.
+                console.warn('[CNA] HTML_DOM: scissor-region cap (' + Module['cnaDomMaxRegions'] +
+                             ') exceeded within a single frame -- every existing region is still ' +
+                             'active this frame, so none were evicted.');
+                break;
+            }
+            const evictKey = order[evictIdx];
+            order.splice(evictIdx, 1);
             const evictRegion = regions[evictKey];
             if (evictRegion && evictRegion.container.parentNode) {
                 evictRegion.container.parentNode.removeChild(evictRegion.container);
@@ -183,7 +217,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
         Module['cnaDomRoot'].appendChild(container);
         region = { container: container, pool: [], used: 0, highWater: 0, rect: rect };
         regions[key] = region;
-        order.push(key);
+        Module['cnaDomTouchRegion'](key);
         Module['cnaDomApplyRegionClip'](region);
         return region;
     };
@@ -200,6 +234,8 @@ EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
     Module['cnaDomRegionOrder'] = null;
     Module['cnaDomScissorRect'] = null;
     Module['cnaDomViewport'] = null;
+    Module['cnaDomRegionsTouchedThisFrame'] = null;
+    Module['cnaDomPaintOrderCounter'] = null;
 });
 
 // plan_html_dom.md HTMLDOM-11 / design decision 9: XNA's Clear overwrites everything drawn so far,
@@ -240,6 +276,11 @@ EM_JS(void, CNA_HtmlDom_Clear, (double r, double g, double b, double a), {
         root.style.backgroundColor = css;
         Module['cnaDomClearColor'] = css;
     }
+    // plan_html_dom.md HTMLDOM-103: Clear() is this backend's own "frame start" marker (design
+    // decision 9's own reasoning -- XNA games call it once per frame, before any Draw()), so it is
+    // where "which regions are active THIS frame" resets, ready for cnaDomTouchRegion to repopulate
+    // as this frame's batches actually flush.
+    Module['cnaDomRegionsTouchedThisFrame'].clear();
     // Every region's pool is cleared, not just the default one -- a sprite drawn under a narrower
     // scissor rect earlier this frame must disappear on Clear() exactly like one drawn unclipped.
     const regions = Module['cnaDomRegions'];

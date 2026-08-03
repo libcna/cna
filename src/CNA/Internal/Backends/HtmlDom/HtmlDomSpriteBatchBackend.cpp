@@ -141,6 +141,21 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     const pool = region.pool;
     let used = region.used;
 
+    // plan_html_dom.md HTMLDOM-103: true per-flush paint order across regions, via z-index instead
+    // of relying on DOM position -- DOM position only ever reflected each region's own FIRST-
+    // creation order, not the sequence its flushes actually happened in this frame (interleaving a
+    // 'full'-region draw between two different-region draws could never be reproduced by document
+    // order alone, since 'full's sprites are direct children of #cna-dom-root, siblings of every
+    // other region's own container). Every sprite already forms its own stacking context
+    // (will-change:transform below), so a z-index only changes ordering AMONG those already-
+    // separate contexts -- it does not change how mix-blend-mode resolves within one.
+    const paintOrder = ++Module['cnaDomPaintOrderCounter'];
+    const isFullRegion = container === root;
+    if (!isFullRegion) {
+        const z = String(paintOrder);
+        if (container.style.zIndex !== z) container.style.zIndex = z;
+    }
+
     for (let i = 0; i < count; ++i) {
         const o = base + i * stride;
         const packed = HEAPU32[o + 16];
@@ -164,7 +179,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             el.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;' +
                                'background-repeat:no-repeat;will-change:transform;pointer-events:none;';
             el.__cnaState = { w: -1, h: -1, url: null, bp: null, rep: null, ir: null,
-                              mb: null, tf: null, op: -1, hidden: false };
+                              mb: null, tf: null, op: -1, hidden: false, zi: -1 };
             container.appendChild(el);
             pool[used] = el;
         }
@@ -211,6 +226,10 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
 
         const opacity = ((packed >>> 24) & 255) / 255;
         if (st.op !== opacity) { style.opacity = opacity; st.op = opacity; }
+        // HTMLDOM-103: the 'full' region has no container of its own to stamp a single z-index on
+        // (its sprites are direct children of #cna-dom-root, siblings of every named region's own
+        // container) -- so each of ITS sprites carries the current flush's paint order individually.
+        if (isFullRegion && st.zi !== paintOrder) { style.zIndex = paintOrder; st.zi = paintOrder; }
         if (st.hidden) { style.display = ""; st.hidden = false; }
         ++used;
     }

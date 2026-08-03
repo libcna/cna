@@ -44,7 +44,7 @@ using namespace CNA::Internal::Backends::HtmlDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 39;
+    constexpr int kExpectedChecks = 43;
 
 #if defined(__EMSCRIPTEN__)
     /// Number of sprite elements currently visible in the DOM surface.
@@ -197,6 +197,30 @@ namespace
         return region ? region.container.offsetHeight : -1;
     });
 
+    /// plan_html_dom.md HTMLDOM-103: the region for rectangle `(x,y,w,h)`'s own container's current
+    /// CSS `z-index` (the paint-order value its most recent flush stamped on it), or -1 if the
+    /// region does not exist or carries no z-index yet.
+    EM_JS(int, JsRegionZIndex, (int x, int y, int w, int h), {
+        const regions = Module['cnaDomRegions'];
+        const region = regions ? regions[x + ',' + y + ',' + w + ',' + h] : null;
+        if (!region) return -1;
+        const z = region.container.style.zIndex;
+        return z ? parseInt(z, 10) : -1;
+    });
+
+    /// plan_html_dom.md HTMLDOM-103: the DEFAULT ('full') region's own pool element at
+    /// `poolIndex`'s current CSS `z-index`, or -1 if that pool slot does not exist. Reads the pool
+    /// array directly (not `root.children[i]`) so the index is exactly the same one the backend
+    /// itself uses, with no dependency on where that element happens to sit in root's child list.
+    EM_JS(int, JsFullRegionSpriteZIndexAt, (int poolIndex), {
+        const regions = Module['cnaDomRegions'];
+        const full = regions ? regions['full'] : null;
+        const el = full ? full.pool[poolIndex] : null;
+        if (!el) return -1;
+        const z = el.style.zIndex;
+        return z ? parseInt(z, 10) : -1;
+    });
+
     /// 1 when sprite `i`'s `background-repeat` is `'repeat'` (TextureAddressMode::Wrap tiling).
     EM_JS(int, JsSpriteBackgroundRepeat, (int i), {
         const root = document.getElementById('cna-dom-root');
@@ -264,6 +288,8 @@ namespace
     int JsRegionVisibleSpriteCount(int, int, int, int) { return -1; }
     int JsRegionOffsetWidth(int, int, int, int) { return -1; }
     int JsRegionOffsetHeight(int, int, int, int) { return -1; }
+    int JsRegionZIndex(int, int, int, int) { return -1; }
+    int JsFullRegionSpriteZIndexAt(int) { return -1; }
     void JsPublishResult(int, int, int) {}
 #endif
 }
@@ -704,7 +730,77 @@ protected:
         // SetVirtualResolution(0,0)), so the logical->physical scale is exactly 1 -- the expected
         // "+4" offset below is a real, not-incidentally-1 multiplier check, not a coincidence of
         // skipping the scale math.
+        // plan_html_dom.md HTMLDOM-103: true per-flush paint order across regions (a region's own
+        // DOM position previously reflected only its FIRST-creation order, not the actual sequence
+        // its flushes happened in this frame) and non-destructive eviction (a region still active
+        // this frame must never be LRU-evicted out from under the frame being built).
         if (frame_ == 10)
+        {
+            // A/B/A: region A flushed, then region B, then region A again. True per-flush ordering
+            // means A's SECOND paint order must be HIGHER than B's -- DOM-position-only ordering
+            // could never show this, since A's own container was already placed in the DOM the
+            // first time it was created and never moved after that.
+            dev.setScissorRectangleProperty(Rectangle(1, 1, 5, 5));
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(1, 1), Color::White);
+            spriteBatch_->End();
+            const int zA1 = JsRegionZIndex(1, 1, 5, 5);
+
+            dev.setScissorRectangleProperty(Rectangle(10, 1, 5, 5));
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(10, 1), Color::White);
+            spriteBatch_->End();
+            const int zB = JsRegionZIndex(10, 1, 5, 5);
+
+            dev.setScissorRectangleProperty(Rectangle(1, 1, 5, 5));
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(1, 1), Color::White);
+            spriteBatch_->End();
+            const int zA2 = JsRegionZIndex(1, 1, 5, 5);
+
+            check(zA1 > 0 && zB > zA1 && zA2 > zB,
+                  "HTMLDOM-103: true per-flush paint order across an A/B/A sequence of scissor "
+                  "rects -- region A's SECOND flush (after B's) gets a HIGHER paint order than B, "
+                  "reflecting the actual draw sequence rather than each region's own "
+                  "first-creation order (which would have left A permanently below B)");
+
+            // The DEFAULT ('full') region interleaved between two named-region flushes: 'full's
+            // sprites are direct children of #cna-dom-root, siblings of every named region's own
+            // container, so this is the one case DOM position could never reproduce at all.
+            dev.setScissorRectangleProperty(Rectangle(0, 0, 128, 128));
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(*texture_, Vector2(20, 1), Color::White);
+            spriteBatch_->End();
+            const int zFull = JsFullRegionSpriteZIndexAt(0);
+            check(zFull > zA2,
+                  "HTMLDOM-103: a 'full'-region flush interleaved after region A's second flush "
+                  "gets a HIGHER paint order than A -- not merely whatever DOM position 'full' "
+                  "sprites already occupied from earlier frames");
+
+            // Non-destructive eviction: touch 15 MORE distinct regions in this SAME frame (17 total
+            // with A and B above -- one past the 16-region cap). All 17 are active THIS frame, so
+            // none may be evicted; the eviction loop must allow a temporary over-cap instead of
+            // silently dropping A or B out from under the frame still being built.
+            for (int i = 0; i < 15; ++i)
+            {
+                dev.setScissorRectangleProperty(Rectangle(30 + i, 1, 2, 2));
+                spriteBatch_->Begin();
+                spriteBatch_->Draw(*texture_, Vector2(30 + i, 1), Color::White);
+                spriteBatch_->End();
+            }
+            check(JsRegionExists(1, 1, 5, 5) == 1,
+                  "HTMLDOM-103: region A survives after 17 distinct regions were touched within "
+                  "this SAME frame (one past the 16-region cap) -- a region still active this "
+                  "frame is never evicted, even as the oldest LRU candidate");
+            check(JsRegionExists(10, 1, 5, 5) == 1,
+                  "HTMLDOM-103: region B likewise survives -- eviction skipped every "
+                  "touched-this-frame candidate rather than removing the oldest one "
+                  "unconditionally");
+
+            dev.setScissorRectangleProperty(Rectangle(0, 0, 128, 128));
+        }
+
+        if (frame_ == 11)
         {
             const double baseLeft = JsRootLeft(), baseTop = JsRootTop();
 
