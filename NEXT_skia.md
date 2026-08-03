@@ -2374,12 +2374,64 @@ level-boundary contract.
   publishing, after catching -- for the second time this session -- a literal `|` character
   (this time from `|N.E|` absolute-value notation) that would have silently broken a table row.
 
+## Completed in this session: SKIA-153
+
+- Before writing any implementation, checked the pinned Skia source directly and found a real,
+  plan-altering blocker: `SkBitmapDevice::drawMesh` (`~/deps/skia/src/core/SkBitmapDevice.cpp:561`)
+  is a literal empty function body (`// TODO: Implement, maybe with a subclass of BitmapDevice
+  that has SkSL support.`). CNA's Skia backend creates its surfaces via `SkSurfaces::Raster(...)`
+  (`SkiaSurface.cpp:92`), which is backed by exactly this `SkBitmapDevice` class -- so
+  `SkMeshSpecification`/`SkMesh`, the API SKIA-153's original text asked to prototype (and that
+  SKIA-154-157 were all implicitly built on top of), draws *nothing at all* on this backend. Not a
+  CNA gap -- an upstream Skia stub in the pinned revision.
+- Asked the user how to proceed (three options: redesign around the older `SkVertices` API, stop
+  and document the dead end, or investigate re-pinning to a newer Skia revision first). They chose
+  redesigning around `SkVertices`. Before writing the redesign, confirmed `SkBitmapDevice::drawVertices`
+  really is implemented for raster (`BDDraw(this).drawVertices(...)` in the same file, delegating to
+  a real triangle rasterizer in `src/core/SkDraw_vertices.cpp`) -- and that this is what SKIA-96
+  already used earlier in this project, so the substitution has real precedent.
+- Read `SkVertices.h`/`SkDraw_vertices.cpp` closely before designing anything further and found the
+  substitution is a clean fit, not a compromise: `SkVertices` carries exactly position/texCoord/
+  colour per vertex, no custom varyings -- which happens to be exactly SKIA-153's own original scope
+  ("transforms, colour, UV interpolation, clipping, and child sampling", never lighting/tangent/
+  skinning). Two real, load-bearing architectural facts confirmed by reading the rasterizer source
+  itself (not assumed): (1) `SkPoint` positions carry no W component anywhere in the type, so true
+  perspective-correct interpolation is impossible in principle, not just unimplemented -- proven by
+  API absence, not by a pixel test that could never demonstrate a missing capability; (2) the fill
+  path (`fill_triangle`/`VertState`) contains no winding-order check or cull-mode concept at all --
+  both triangle windings render identically, by construction, matching ordinary 2D `SkPath` fill
+  semantics rather than XNA's real back-face-culling `CullMode`. Also traced `applyShaderColorBlend`/
+  `texture_to_matrix` precisely enough to predict, before testing: vertex colour combines with the
+  paint's shader (or the paint's own forced-opaque colour, if no shader) via the blend mode passed to
+  `drawVertices`; and `texCoords` drive a per-triangle local-matrix transform applied to the paint
+  shader, so an `SkRuntimeEffect`-based shader (not just a plain image shader) should receive the
+  correctly-interpolated per-pixel local coordinate exactly like a plain texture sample would --
+  which, if true, directly de-risks SKIA-154's real ABI (arbitrary custom fragment math, not just
+  single-texture sampling, working through this same mechanism).
+- Wrote `docs/skia-vertices-2d-effect-contract.md` fixing this design (matching SKIA-144's own
+  precedent: fix the contract before implementation) before writing the actual spike, then wrote and
+  ran `Skia_Vertices2D_Spike` (`examples/skia_vertices_2d_spike_test.cpp`, 10 checks, headless
+  raster) -- every one of the predictions above was confirmed exactly on the first real run, no
+  correction needed: exact vertex-colour reproduction and `kModulate` combine math (`colored`);
+  exact single-texture sampling through `texCoords` (`textured`); vertex-colour-times-texture
+  combine (`col_textured`); a 2-child `SkRuntimeEffect` paint shader reproducing
+  `docs/skia-easygl-effect-inventory.md`'s own `dual_textured` `tex0.rgb*=2` formula exactly; a
+  reversed-winding quad rendering byte-identically to the forward one; half-alpha unpremultiplied
+  vertex colour blending onto an opaque background as ordinary straight-alpha src-over compositing;
+  and painter's-order preservation when `drawVertices` is interleaved with ordinary `drawRect` calls
+  on one canvas.
+- Updated `plan_skia.md`'s SKIA-153/154 task text in place to describe the redesign (SKIA-154's own
+  scope note: "mesh" now means the fixed `SkVertices` channel set, not a `SkMeshSpecification`
+  custom-attribute declaration).
+- Full Skia suite (up from 165 to 166 -- one net new Raster test) passes in Debug, Release, and
+  ASan+UBSan with zero regressions and zero sanitizer findings.
+
 ## Next candidates
 
-1. SKIA-153: prototype `SkMeshSpecification` for the complete reusable 2D vertex/fragment subset
-   `docs/skia-easygl-effect-inventory.md` identified as `SkMesh`-shaped (position+colour,
-   position+uv, position+colour+uv, position+normal+uv, position+normal+tangent+uv layouts).
-2. SKIA-154–158: continue Phase S16 in dependency order once SKIA-153 lands.
+1. SKIA-154: define and implement the versioned explicit SkSL mesh/effect ABI on top of SKIA-153's
+   confirmed `SkVertices` + `SkRuntimeEffect` mechanism (fixed position/texCoord/colour channels,
+   reflected fragment-stage uniforms/child textures matching `CNA_SKIA_SKSL_V1`'s existing pattern).
+2. SKIA-155–158: continue Phase S16 in dependency order once SKIA-154 lands.
 3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
 4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
