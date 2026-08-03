@@ -204,4 +204,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_BACKEND STREQUAL "DILIGEN
         TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
+
+    # plan_diligent.md DILIGENT-60: BlendState.MultiSampleMask reaches
+    # Dg::GraphicsPipelineDesc::SampleMask instead of being silently discarded.
+    cna_diligent_test(cna_test_diligent_multisamplemask
+                      examples/diligent_multisamplemask_test.cpp)
+    cna_register_backend_test(NAME Diligent_MultiSampleMask
+        COMMAND cna_test_diligent_multisamplemask
+        TIMEOUT 90 LABELS "GraphicsSmoke;Diligent"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA Diligent smoke")
 endif()

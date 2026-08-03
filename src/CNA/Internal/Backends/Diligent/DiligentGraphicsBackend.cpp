@@ -2227,7 +2227,7 @@ float4 main(in PSInput psIn) : SV_Target
                raster == other.raster && targetFormats == other.targetFormats &&
                extraTargetFormats == other.extraTargetFormats && sampleCount == other.sampleCount &&
                scissorEnable == other.scissorEnable && depthBias == other.depthBias &&
-               slopeScaledDepthBias == other.slopeScaledDepthBias;
+               slopeScaledDepthBias == other.slopeScaledDepthBias && sampleMask == other.sampleMask;
     }
 
     std::size_t DiligentGraphicsBackend::PipelineKeyHash::operator()(const PipelineKey& key) const noexcept
@@ -2239,7 +2239,8 @@ float4 main(in PSInput psIn) : SV_Target
                                         key.depth, key.stencilFront, key.stencilBack,
                                         key.stencilMasks, key.raster, key.targetFormats,
                                         key.extraTargetFormats, key.sampleCount, key.scissorEnable,
-                                        static_cast<std::uint32_t>(key.depthBias), slopeBits};
+                                        static_cast<std::uint32_t>(key.depthBias), slopeBits,
+                                        key.sampleMask};
         for (const std::uint32_t field : fields)
             hash = hash * 1099511628211ull ^ static_cast<std::size_t>(field);
         return hash;
@@ -3400,14 +3401,14 @@ float4 main(in PSInput psIn) : SV_Target
         // All four slot masks are carried into the pipeline state (DILIGENT-24 made slots 1..3
         // bindable), but only slot 0's is observable today: every built-in shader here declares a
         // single SV_TARGET, so slots 1..3 receive clears and no fragments until a multi-output
-        // custom ShaderEffect exists (DILIGENT-42). MultiSampleMask stays inert regardless -- the
-        // back buffer and every render target here are single-sampled.
+        // custom ShaderEffect exists (DILIGENT-42).
         state_.writeMask = 0;
         for (int slot = 0; slot < 4; ++slot)
         {
             state_.writeMask |= static_cast<std::uint32_t>(writeState.colorWriteChannels[slot] & 0xF)
                                 << (slot * 4);
         }
+        state_.sampleMask = writeState.multiSampleMask;
     }
 
     void DiligentGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -3789,6 +3790,7 @@ float4 main(in PSInput psIn) : SV_Target
         // Must match the sample count of whatever framebuffer this pipeline is ever bound against,
         // or Vulkan rejects it as incompatible with the render pass -- see PipelineKey::sampleCount.
         graphicsPipeline.SmplDesc.Count = static_cast<Dg::Uint8>(std::max<std::uint32_t>(1, key.sampleCount));
+        graphicsPipeline.SampleMask = key.sampleMask;
         graphicsPipeline.PrimitiveTopology = static_cast<Dg::PRIMITIVE_TOPOLOGY>(key.topology);
         graphicsPipeline.InputLayout.LayoutElements = layout.data();
         graphicsPipeline.InputLayout.NumElements = static_cast<Dg::Uint32>(layout.size());

@@ -1441,6 +1441,10 @@ namespace CNA::Internal::Backends::Diligent
             /// `Dg::RasterizerStateDesc::SlopeScaledDepthBias` is itself a `Float32`, so this is
             /// stored exactly rather than quantized to 1/16 steps the way the old byte packing did.
             float slopeScaledDepthBias = 0.0f;
+            /// `BlendState.MultiSampleMask` (`BlendWriteState::multiSampleMask`), carried straight
+            /// into `Dg::GraphicsPipelineDesc::SampleMask`. Previously silently discarded entirely
+            /// (`DILIGENT-60`).
+            std::uint32_t sampleMask = 0xFFFFFFFFu;
 
             bool operator==(const PipelineKey& other) const noexcept;
         };
