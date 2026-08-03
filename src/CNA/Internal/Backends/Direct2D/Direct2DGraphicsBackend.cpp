@@ -59,6 +59,41 @@ namespace CNA::Internal::Backends::Direct2D
             throw std::runtime_error(std::string("Direct2D does not support 3D: ") + operation);
         }
 
+        /// D2D-92: RAII guard for ID2D1Bitmap1::Map/Unmap. An exception raised while the bitmap is
+        /// mapped (e.g. during the pixel-copy loop) must still unmap it -- best-effort, since a
+        /// destructor cannot safely propagate a second failure while already unwinding. The normal,
+        /// non-exceptional path instead calls the explicit Unmap() below, whose HRESULT is checked
+        /// and thrown on failure rather than discarded.
+        class ScopedBitmapMap final
+        {
+        public:
+            ScopedBitmapMap(ID2D1Bitmap1& bitmap, D2D1_MAP_OPTIONS options) : bitmap_(bitmap)
+            {
+                ThrowIfFailed(bitmap_.Map(options, &mapped_), "ID2D1Bitmap1::Map");
+                active_ = true;
+            }
+            ScopedBitmapMap(const ScopedBitmapMap&) = delete;
+            ScopedBitmapMap& operator=(const ScopedBitmapMap&) = delete;
+            ~ScopedBitmapMap()
+            {
+                if (active_) bitmap_.Unmap();
+            }
+
+            [[nodiscard]] const D2D1_MAPPED_RECT& Rect() const { return mapped_; }
+
+            void Unmap(const char* operation)
+            {
+                if (!active_) return;
+                active_ = false;
+                ThrowIfFailed(bitmap_.Unmap(), operation);
+            }
+
+        private:
+            ID2D1Bitmap1& bitmap_;
+            D2D1_MAPPED_RECT mapped_{};
+            bool active_ = false;
+        };
+
         [[nodiscard]] D2D1_PRIMITIVE_BLEND ToPrimitiveBlend(Direct2DBlendMode blendMode)
         {
             switch (blendMode)
@@ -1182,9 +1217,8 @@ namespace CNA::Internal::Backends::Direct2D
         }
         ThrowIfFailed(copyResult, "ID2D1Bitmap::CopyFromRenderTarget/CopyFromBitmap(readback)");
 
-        D2D1_MAPPED_RECT mapped{};
-        ThrowIfFailed(readableBitmap->Map(D2D1_MAP_OPTIONS_READ, &mapped),
-                      "ID2D1Bitmap1::Map(readback)");
+        ScopedBitmapMap mapGuard(*readableBitmap.Get(), D2D1_MAP_OPTIONS_READ);
+        const D2D1_MAPPED_RECT& mapped = mapGuard.Rect();
         for (int row = 0; row < height; ++row)
         {
             const uint8_t* sourceRow = mapped.bits + static_cast<std::size_t>(row) * mapped.pitch;
@@ -1197,7 +1231,7 @@ namespace CNA::Internal::Backends::Direct2D
                 destinationRow[column * 4 + 3] = sourceRow[column * 4 + 3];
             }
         }
-        readableBitmap->Unmap();
+        mapGuard.Unmap("ID2D1Bitmap1::Unmap(readback)");
     }
 
     Direct2DGraphicsBackend::PresentationTransform Direct2DGraphicsBackend::GetPresentationTransform() const

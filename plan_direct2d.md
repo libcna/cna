@@ -238,7 +238,7 @@ mezi `SpriteBatch::End` a `Present`.
 
 | # | Úkol | Stav | Akceptace |
 |---|---|---|---|
-| D2D-92 | Zabal `Map`/`Unmap` do RAII a kontroluj výsledek `Unmap`. | ⬜ | Každá výjimka po mapování bezpečně odmapuje bitmapu a HRESULT se neztratí. |
+| D2D-92 | Zabal `Map`/`Unmap` do RAII a kontroluj výsledek `Unmap`. | 🟨 | Nový `ScopedBitmapMap` (jediné volané místo, `ReadCurrentTargetPixels`) mapuje v konstruktoru a v destruktoru provede best-effort no-throw `Unmap` pro výjimku během kopírování; normální cesta volá explicitní `Unmap(operation)`, jehož HRESULT se kontroluje přes `ThrowIfFailed` místo zahození. `Direct2D_2DParity`/`Direct2D_Lifetime` ve Wine dál procházejí (žádná změna pozorovatelného chování na happy-path). Skutečný fault-injection test vynuceného selhání `Unmap` chybí — stejné omezení jako u D2D-60. |
 | D2D-93 | Otestuj readback row pitch, BGRA/RGBA převod a alpha režim na celé matici rozměrů. | ⬜ | Liché šířky, padding, subregiony, texture/RT/logical backbuffer a transparentní pixely mají byte-exact oracle. |
 | D2D-94 | Sjednoť null, zero-size a prázdný readback kontrakt. | ⬜ | Všechny veřejné endpointy mají stejné návratové hodnoty/výjimky a nikdy nedereferencují null ani nemapují 0×0. |
 | D2D-95 | Přidej checked aritmetiku pro všechny pixelové a pitch alokace. | ⬜ | Násobení width×height×4 a mip součty odmítají overflow před `std::vector`/D2D alokací. |
