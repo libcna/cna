@@ -738,6 +738,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_skia_test(cna_test_skia_rendertarget_setdata examples/skia_rendertarget_setdata_test.cpp)
     cna_register_skia_display_test(Skia_RenderTarget2D_SetData cna_test_skia_rendertarget_setdata)
 
+    cna_skia_test(cna_test_skia_rendertarget2d_format_support examples/skia_rendertarget2d_format_support_test.cpp)
+    target_include_directories(cna_test_skia_rendertarget2d_format_support
+                               PRIVATE "${CNA_SKIA_ROOT}")
+    cna_register_skia_display_test(Skia_RenderTarget2D_FormatSupport cna_test_skia_rendertarget2d_format_support)
+
     cna_skia_test(cna_test_skia_getbackbuffer_after_rt_unbind examples/sdlrenderer_getbackbufferdata_after_rt_unbind_test.cpp)
     cna_register_skia_display_test(Skia_GetBackBufferData_AfterRtUnbind cna_test_skia_getbackbuffer_after_rt_unbind)
 

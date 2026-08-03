@@ -6,8 +6,8 @@ public backend/resource interfaces in `IGraphicsBackend.hpp`, every `GraphicsCap
 public non-deleted `GraphicsDevice` method declaration. Overloads use `name/arity`; when that is
 still ambiguous, `#N` is their declaration order in the audited header.
 
-The current audited inventory contains 248 entries: 130 backend/resource methods, nine
-`GraphicsCapability` values, and 109 public `GraphicsDevice` declarations. The number is descriptive;
+The current audited inventory contains 250 entries: 128 backend/resource methods, nine
+`GraphicsCapability` values, and 113 public `GraphicsDevice` declarations. The number is descriptive;
 the validator derives the authoritative live set from the headers.
 
 Statuses have exact meanings:
@@ -110,7 +110,8 @@ file. The validator rejects missing, stale, duplicated, malformed, or unclassifi
 | `IGraphicsBackend::CreateOcclusionQuery/0` | Creates GL samples-passed query. | Creates a refusal object: safe false/zero properties; Begin/End throw after SKIA-104 disproves raster emulation. | `unsupported` | SKIA-102, SKIA-104–105 |
 | `IGraphicsBackend::CreateTexture3D/5` | Allocates GL volume texture/mips. | Creates bounded CPU voxel/mip storage only. | `bounded` | SKIA-82–84; `Skia_TextureStorage_Policy` |
 | `IGraphicsBackend::CreateTextureCube/3` | Allocates GL cube texture/mips. | Creates six bounded CPU faces/mips only. | `bounded` | SKIA-80–84; `Skia_TextureStorage_Policy` |
-| `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Color targets own a bindable level-zero surface; mip requests add complete stable per-level surfaces, exact shadows and deterministic resolve generation. Depth and MSAA remain bounded refusals. | `bounded` | SKIA-61–79, SKIA-131–132; `Skia_RenderTarget2D_MipGeneration` |
+| `IGraphicsBackend::CreateRenderTarget2D/6` | Allocates GL FBO with requested attachments. | Color targets own a bindable level-zero surface; mip requests add complete stable per-level surfaces, exact shadows and deterministic resolve generation. Depth and MSAA remain bounded refusals. Superseded as the live construction path by `CreateRenderTarget2DEXT`; kept for the shared interface's default-forwarding base case. | `bounded` | SKIA-61–79, SKIA-131–132; `Skia_RenderTarget2D_MipGeneration` |
+| `IGraphicsBackend::CreateRenderTarget2DEXT/7` | N/A -- SKIA-142 NOXNA extension carrying an explicit `SurfaceFormat`. | The live Skia render-target construction path. Promotes the 13 formats FNA itself reports renderable (matching real XNA/FNA renderability, not Skia's own raster capability); every other format is refused before allocation. Depth and MSAA remain bounded refusals, matching `CreateRenderTarget2D`. | `bounded` | SKIA-142; `Skia_RenderTarget2D_FormatSupport` |
 | `IGraphicsBackend::SetRenderTarget2D/1` | Binds/unbinds one EasyGL FBO and resolves mips when leaving it. | Binds checked raster target/backbuffer and resolves dirty descendants once; foreign/cross-device requests reject before changing or resolving the active target. | `implemented` | SKIA-61, SKIA-69, SKIA-132; `Skia_RenderTarget2D_MipGeneration` |
 | `IGraphicsBackend::CreateRenderTargetCube/5` | Allocates cube-face FBO target. | Creates bounded six-face raster/mip storage; no depth/MSAA/sampler. | `bounded` | SKIA-85–86; four public contracts |
 | `IGraphicsBackend::CreateEffectBackend/2` | Compiles arbitrary EasyGL GLSL. | Untagged strings return null; exact `CNA_SKIA_SKSL_V1` constructs the bounded fragment-only SkSL adapter. | `bounded` | SKIA-89–92; `docs/skia-effects.md`; `Skia_SkSL_Effect_Prototype` |

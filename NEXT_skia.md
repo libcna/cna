@@ -1794,25 +1794,85 @@ level-boundary contract.
   `python3 scripts/validate_skia_surface_formats.py "$(pwd)"`,
   `ctest --test-dir cmake-build-skia -L 'Raster|Display|Audit' --output-on-failure -j3`.
 - No real display or subagent was used, compilation never exceeded three jobs, and `NEXT.md`
-  remained untouched. The exact next implementation point is SKIA-142: establish per-format
-  `RenderTarget2D` support and refuse non-renderable/compressed formats before allocation, now
-  that SKIA-140/141 have settled the promoted Texture2D-only compressed-format set (Dxt1/Dxt3/
-  Dxt5/Bc7EXT/Bc7SrgbEXT promoted; Dxt5SrgbEXT is the sole remaining refusal among the eight
-  original compressed rows).
+  remained untouched.
+
+## Completed in this session: SKIA-142
+
+- `RenderTarget2D.cpp`'s `IsRenderableSkiaFormatEXT` gate now accepts the thirteen non-`Color`
+  formats FNA itself reports renderable (`Rgba1010102`, `Rg32`, `Rgba64`, `Single`, `Vector2`,
+  `Vector4`, `HalfSingle`, `HalfVector2`, `HalfVector4`, `HdrBlendable`, `ColorSrgbEXT`, `ByteEXT`,
+  `UShortEXT`) alongside `Color` -- matching real XNA/FNA hardware renderability, not Skia's own
+  broader raster capability. Every other format (packed 16-bit colours, all compressed formats,
+  both SNORM formats, `Alpha8`, `ColorBgraEXT`) stays permanently refused before allocation.
+- Added `IGraphicsBackend::CreateRenderTarget2DEXT` (NOXNA), a new virtual with a default body that
+  forwards to the existing `CreateRenderTarget2D`, so the shared 7-arg interface used by ~12
+  backends needed no breaking change; only `SkiaGraphicsBackend` overrides it to thread the
+  explicit `SurfaceFormat` through.
+- `SkiaRenderTargetBackend` now builds each level's `SkiaSurface` in the format's real native Skia
+  colour type instead of hardcoded RGBA8: eleven formats map their public transfer bytes onto an
+  existing native colour type 1:1 (`kRGBA_1010102`, `kR16G16_unorm`, `kR16G16B16A16_unorm`,
+  `kR16_float`, `kR16G16_float`, `kRGBA_F16` x2, `kSRGBA_8888`, `kR8_unorm`, `kR16_unorm`, plus
+  `Color`'s existing `kRGBA_8888`); `Single`/`Vector2` have no native 1/2-channel 32-bit-float
+  colour type, so they widen to `kRGBA_F32` with only R (or R,G) meaningful, via new
+  `ExpandToRgbaF32`/`ExtractFromRgbaF32` helpers applied at every surface read/write boundary
+  (initial upload, mip materialization, and the rendered-level-zero resync path alike).
+  `SkiaSurface` itself gained a second constructor taking an explicit `SkColorType`/`SkAlphaType`
+  and generalized `Resize`/`ReadPixels`/`WritePixels` off a hardcoded 4-byte RGBA8 assumption; an
+  empirical standalone spike against the pinned Skia headers/libs confirmed all thirteen candidate
+  colour types construct as writable raster surfaces before this work began, de-risking the design.
+- Mip generation was extracted verbatim (not reimplemented) from `SkiaTextureBackend.cpp`'s former
+  anonymous-namespace helpers into a new shared `SkiaMipGeneration.hpp/cpp`
+  (`GenerateFormattedSkiaMipLevel`), so a render target's generated mips use exactly the same
+  per-format algorithm (UNORM/SNORM/float/half/sRGB dispatch) as a texture's; verified byte-identical
+  via a full rebuild plus the complete 158/158 pre-existing suite before it was reused by the
+  render-target path.
+- Found and fixed a real, separate bug this work exposed: `Texture2D::Texture2D(..., SurfaceFormat,
+  int, shared_ptr<ITextureBackend>)` (the constructor used exclusively by `RenderTarget2D`) had an
+  unconditional `Texture::ValidateFormat` call -- a hardcoded Color-only check dating from when
+  every backend's render target was Color-only -- that silently re-rejected every one of the
+  thirteen newly promoted formats immediately after `CreateValidatedRenderTargetBackend` had
+  already accepted them one call frame up. Removed as provably redundant: that upstream call is the
+  sole, already-authoritative, backend-aware gate, and it must complete (throwing on any refused
+  format) before its `backend` return value can even be passed into this constructor.
+- Considered and explicitly preserved SKIA-68's established `Skia_GetBackBufferData_ActiveTarget`
+  contract (`GetBackBufferData` deliberately follows Skia's active canvas while a `RenderTarget2D`
+  is bound, not the literal FNA3D swapchain) rather than "fixing" it to always read the true
+  backbuffer -- that would have broken a real, intentional, already-tested backend decision.
+  Instead, `ReadBackbuffer` now refuses clearly with `NotSupportedException` if the currently active
+  target's native format isn't 4-byte RGBA8-shaped, since SKIA-142 is what first makes that
+  reachable and a naive hardcoded `width*4` raw read would otherwise silently reinterpret bytes.
+- Added `Skia_RenderTarget2D_FormatSupport` (73/73 checks), covering for all thirteen promoted
+  formats: construction with exact native-surface resource accounting (`targetSurfaceBytes` tracks
+  the true native byte layout, not the public transfer width, so `Single`/`Vector2` account for
+  4x more bytes than their public `bytesPerTexel` -- verified via a second checked mip-chain-layout
+  pass against the native bytes-per-pixel whenever it differs from the public one); level-0 and
+  partial-rectangle `SetData`/`GetData` round-trips; uniform-value mip generation (all four level-0
+  texels identical, so any reasonable averaging algorithm's output is provably exact regardless of
+  its per-format rounding behaviour, without needing to re-derive that behaviour here); a
+  `SynchronizeRenderedLevelZero` check reading back a real Skia canvas `Clear()` (not a `SetData`
+  upload) through the active-target surface for both a direct format and both extract-subset
+  formats, using a tolerance comparison since the exact SkColor-to-native-format conversion path is
+  Skia-internal; `SpriteBatch` sampling of a non-Color-format target through the existing RT-as-
+  texture snapshot path; and a consolidated refusal check for the twelve formats that must stay
+  refused. The four existing per-family `Texture2D` format test files (`colour`, `unorm`, `packed`,
+  `float`) had their now-stale "RenderTarget2D remains refused pending SKIA-142" assertions split
+  into a refusal check for the formats that stay refused plus a new construction/accounting check
+  for each newly promoted format.
+- The complete Debug Skia suite passes 159/159 (21 Raster, 133 Display, six Audit -- one net new
+  Display test) on the persistent `:99` Xvfb display. Release and ASan+UBSan
+  (`ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1`) pass the same
+  changed/new test set. No real display or subagent was used; compilation never exceeded three
+  jobs; `NEXT.md` remained untouched.
 
 ## Next candidates
 
-1. SKIA-142: establish per-format `RenderTarget2D` support and refuse non-renderable/compressed
-   formats before allocation, now that SKIA-140/141 have settled the promoted Texture2D-only
-   compressed-format set (Dxt1/Dxt3/Dxt5/Bc7EXT/Bc7SrgbEXT promoted texture-only; Dxt5SrgbEXT the
-   sole remaining refusal).
-2. SKIA-143: run the exhaustive cross-format validation/documentation sweep once SKIA-142 settles
-   render-target support.
-3. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
+1. SKIA-143: run the exhaustive cross-format validation/documentation sweep now that SKIA-142 has
+   settled render-target support.
+2. SKIA-144–158: implement bounded cube/volume sampling and wider explicit 2D effects in dependency
    order.
-4. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
+3. SKIA-159–170: add opt-in Ganesh, probe real MSAA/anisotropy, re-evaluate MRT, and hold the
    successor gate only after the raster extensions are stable.
-5. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
+4. The pre-existing `CNA_ENABLE_NET=OFF`/monolithic-`CnaTests` ENet build-graph defect is recorded
    by SKIA-112/113 but remains outside Skia scope.
 
 ## Known boundaries / assumptions

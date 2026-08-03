@@ -1312,6 +1312,20 @@ namespace CNA::Internal::Backends
         /// RenderTarget2D — Task 337/878/879).
         virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
+        /// SKIA-142: same contract as CreateRenderTarget2D, plus an explicit
+        /// Microsoft::Xna::Framework::Graphics::SurfaceFormat (passed as `int` so this header
+        /// does not need to include SurfaceFormat.hpp, matching CreateTexture's ImageData
+        /// convention). The default forwards to CreateRenderTarget2D and ignores the format,
+        /// preserving every existing backend's Color-only render-target behavior unchanged; only
+        /// a backend that actually supports additional render-target formats needs to override
+        /// this instead.
+        virtual std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int /*surfaceFormat*/)
+        {
+            return CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
+        }
+
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetBackend* rt) {}

@@ -441,8 +441,8 @@ private:
         }
         Check(checks_, failures_,
               allRejected && SameStats(graphicsBackend.GetResourceStatsEXT(), before),
-              "Dxt1/Dxt3/Dxt5 RenderTarget2D construction remains transactionally refused "
-              "pending SKIA-142");
+              "Dxt1/Dxt3/Dxt5 RenderTarget2D construction rejects transactionally "
+              "(block-compressed formats are never FNA-renderable)");
     }
 
     std::unique_ptr<GraphicsDeviceManager> graphics_;

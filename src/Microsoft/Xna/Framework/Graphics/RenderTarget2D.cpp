@@ -37,25 +37,50 @@ namespace Microsoft::Xna::Framework::Graphics
         return static_cast<int>(result >> 1);
     }
 
+#ifdef CNA_BACKEND_SKIA
+    // SKIA-142: the formats FNA itself reports renderable (see the surface-format matrix's
+    // "FNA/Skia RT decision" column) that this raster backend can now genuinely render into --
+    // Skia's raster SkSurface has no hardware format restriction, but promoting only these keeps
+    // parity with real XNA/FNA renderability, not "whatever Skia happens to allow". Every other
+    // format (packed 16-bit colours, all compressed formats, SNORM, Alpha8, ColorBgraEXT) is a
+    // real non-renderable format on actual XNA/FNA hardware and stays refused regardless.
+    static bool IsRenderableSkiaFormatEXT(SurfaceFormat format) noexcept
+    {
+        return format == SurfaceFormat::Color
+            || format == SurfaceFormat::Rgba1010102
+            || format == SurfaceFormat::Rg32
+            || format == SurfaceFormat::Rgba64
+            || format == SurfaceFormat::Single
+            || format == SurfaceFormat::Vector2
+            || format == SurfaceFormat::Vector4
+            || format == SurfaceFormat::HalfSingle
+            || format == SurfaceFormat::HalfVector2
+            || format == SurfaceFormat::HalfVector4
+            || format == SurfaceFormat::HdrBlendable
+            || format == SurfaceFormat::ColorSrgbEXT
+            || format == SurfaceFormat::ByteEXT
+            || format == SurfaceFormat::UShortEXT;
+    }
+#endif
+
     static std::shared_ptr<IRenderTargetBackend> CreateValidatedRenderTargetBackend(
         GraphicsDevice& device, int width, int height, SurfaceFormat format,
         DepthFormat depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
 #ifdef CNA_BACKEND_SKIA
-        // SKIA-135 promotes packed formats for Texture2D only. Target format selection is a
-        // separate contract (SKIA-142); reject before the Color raster target allocates so a
-        // failed packed request cannot report one format while owning another.
-        if (format != SurfaceFormat::Color)
+        if (!IsRenderableSkiaFormatEXT(format))
         {
             throw System::NotSupportedException(
-                "Skia RenderTarget2D supports only SurfaceFormat::Color until SKIA-142.");
+                "Skia RenderTarget2D: this SurfaceFormat is not renderable (matches FNA "
+                "hardware renderability, not Skia's own raster capability).");
         }
-#endif
+#else
         Texture::ValidateFormat(format);
+#endif
         return std::shared_ptr<IRenderTargetBackend>(
-            device.GetBackend().CreateRenderTarget2D(
+            device.GetBackend().CreateRenderTarget2DEXT(
                 width, height, static_cast<int>(depthFormat), preserveContents, mipMap,
-                ClosestMSAAPower(multiSampleCount)));
+                ClosestMSAAPower(multiSampleCount), static_cast<int>(format)));
     }
 
     RenderTarget2D::RenderTarget2D(GraphicsDevice& device, int width, int height)

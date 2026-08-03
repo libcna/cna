@@ -32,6 +32,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
@@ -213,7 +214,7 @@ protected:
             device, *graphicsBackend, SurfaceFormat::HdrBlendable, "HdrBlendable", 4);
         CheckSpecialMipPolicy(device);
         CheckMetadataSamplingAndHdr(device);
-        CheckTypedAndTargetRefusal(device, *graphicsBackend);
+        CheckTypedRefusalAndTargetPromotion(device, *graphicsBackend);
         Check(SameStats(graphicsBackend->GetResourceStatsEXT(), baseline),
               "all float fixtures return Skia resource counters to baseline");
 
@@ -512,7 +513,7 @@ private:
                   + std::to_string(blended.getAProperty()) + ")");
     }
 
-    void CheckTypedAndTargetRefusal(GraphicsDevice& device,
+    void CheckTypedRefusalAndTargetPromotion(GraphicsDevice& device,
                                     SkiaGraphicsBackend& graphicsBackend)
     {
         InspectableFloatTexture2D single(device, 1, 1, false, SurfaceFormat::Single);
@@ -527,22 +528,32 @@ private:
                   == std::bit_cast<std::uint32_t>(original),
               "mismatched typed upload leaves existing float bits unchanged");
 
-        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
-        const std::array formats{
-            SurfaceFormat::Single, SurfaceFormat::Vector2, SurfaceFormat::Vector4,
-            SurfaceFormat::HalfSingle, SurfaceFormat::HalfVector2,
-            SurfaceFormat::HalfVector4, SurfaceFormat::HdrBlendable,
-        };
-        bool allRejected = true;
-        for (const SurfaceFormat format : formats)
+        // SKIA-142: all seven float/half formats are now constructible RenderTarget2D targets.
+        // Single/Vector2 have no native 1/2-channel 32-bit-float SkColorType, so their surfaces
+        // widen to kRGBA_F32 (16 bytes/pixel) even though their public transfer width stays
+        // narrow -- `nativeBytesPerPixel` below is the surface accounting truth, not the public
+        // GetData/SetData element size exercised elsewhere in this file.
+        const std::array<std::pair<SurfaceFormat, std::size_t>, 7> promoted{{
+            {SurfaceFormat::Single, 16u}, {SurfaceFormat::Vector2, 16u},
+            {SurfaceFormat::Vector4, 16u}, {SurfaceFormat::HalfSingle, 2u},
+            {SurfaceFormat::HalfVector2, 4u}, {SurfaceFormat::HalfVector4, 8u},
+            {SurfaceFormat::HdrBlendable, 8u},
+        }};
+        for (const auto& [format, nativeBytesPerPixel] : promoted)
         {
-            allRejected = allRejected && Throws([&] {
+            const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+            {
                 RenderTarget2D target(device, 2, 2, false, format, DepthFormat::None);
-                (void)target;
-            });
+                const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
+                Check(allocated.renderTargets == before.renderTargets + 1u
+                          && allocated.targetSurfaceBytes
+                              == before.targetSurfaceBytes + 4u * nativeBytesPerPixel,
+                      "SKIA-142 promotes a constructible float/half RenderTarget2D with exact "
+                      "native surface accounting");
+            }
+            Check(SameStats(graphicsBackend.GetResourceStatsEXT(), before),
+                  "promoted float/half RenderTarget2D destruction releases its surface accounting");
         }
-        Check(allRejected && SameStats(graphicsBackend.GetResourceStatsEXT(), before),
-              "all seven RenderTarget2D formats remain transactionally gated until SKIA-142");
     }
 
     void Check(bool pass, const std::string& label)

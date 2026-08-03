@@ -28,6 +28,7 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 using CNA::Internal::Backends::Skia::SkiaGraphicsBackend;
@@ -221,6 +222,7 @@ protected:
         CheckTypedRefusalIsAtomic(device);
         CheckMetadataAndSampling(device, *graphicsBackend);
         CheckRenderTargetRefusal(device, *graphicsBackend);
+        CheckRenderTargetPromotion(device, *graphicsBackend);
         Check(SameTextureStats(graphicsBackend->GetResourceStatsEXT(), baseline),
               "all UNORM fixtures return resource counters to baseline");
 
@@ -445,23 +447,37 @@ private:
     void CheckRenderTargetRefusal(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
     {
         const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
-        const std::array formats{
-            SurfaceFormat::Alpha8,
-            SurfaceFormat::ByteEXT,
-            SurfaceFormat::UShortEXT,
-            SurfaceFormat::Rg32,
-            SurfaceFormat::Rgba64,
-        };
-        bool allRejected = true;
-        for (const SurfaceFormat format : formats)
+        Check(Throws([&] {
+                  RenderTarget2D target(device, 2, 2, false, SurfaceFormat::Alpha8,
+                                        DepthFormat::None);
+                  (void)target;
+              }) && SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
+              "Alpha8 RenderTarget2D requests reject transactionally");
+    }
+
+    void CheckRenderTargetPromotion(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
+    {
+        const std::array<std::pair<SurfaceFormat, std::size_t>, 4> promoted{{
+            {SurfaceFormat::ByteEXT, 1u},
+            {SurfaceFormat::UShortEXT, 2u},
+            {SurfaceFormat::Rg32, 4u},
+            {SurfaceFormat::Rgba64, 8u},
+        }};
+        for (const auto& [format, bytesPerTexel] : promoted)
         {
-            allRejected = allRejected && Throws([&] {
+            const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+            {
                 RenderTarget2D target(device, 2, 2, false, format, DepthFormat::None);
-                (void)target;
-            });
+                const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
+                Check(allocated.renderTargets == before.renderTargets + 1u
+                          && allocated.targetSurfaceBytes
+                              == before.targetSurfaceBytes + 4u * bytesPerTexel,
+                      "SKIA-142 promotes a constructible UNORM RenderTarget2D with exact "
+                      "surface accounting");
+            }
+            Check(SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
+                  "promoted UNORM RenderTarget2D destruction releases its surface accounting");
         }
-        Check(allRejected && SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
-              "SKIA-137 RenderTarget2D requests reject transactionally before SKIA-142");
     }
 
     [[nodiscard]] static bool SameTextureStats(const SkiaResourceStats& left,

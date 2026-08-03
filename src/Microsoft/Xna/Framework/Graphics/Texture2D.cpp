@@ -331,10 +331,17 @@ namespace Microsoft::Xna::Framework::Graphics
         : Texture(&device), width(w), height(h), backend_(std::move(backend))
     {
         // Task 774 finding: this constructor (used exclusively by RenderTarget2D) previously
-        // skipped ValidateFormat entirely, silently accepting any SurfaceFormat even though
-        // CreateRenderTarget2D's own backend call never actually forwards it -- a RenderTarget2D
+        // skipped format validation entirely, silently accepting any SurfaceFormat even though
+        // CreateRenderTarget2D's own backend call never actually forwarded it -- a RenderTarget2D
         // could report a non-Color Format() while its real GPU resource was always Color.
-        ValidateFormat(fmt);
+        //
+        // SKIA-142: that validation now happens one call frame up, in RenderTarget2D.cpp's
+        // CreateValidatedRenderTargetBackend -- which must run (and throw on an unsupported
+        // format) before `backend` above can even be constructed, since it supplies this
+        // constructor's `backend` argument. Re-validating here with the base Texture::ValidateFormat
+        // (a hardcoded Color-only check, the same for every backend) would silently re-reject every
+        // one of the thirteen formats CreateValidatedRenderTargetBackend's Skia-aware gate just
+        // accepted, so it must not run again; `fmt` is already known consistent with `backend`.
         format_     = fmt;
         levelCount_ = lvlCount;
         gpuOnlyContent_ = true;

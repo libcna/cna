@@ -87,6 +87,12 @@ namespace CNA::Internal::Backends::Skia
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
+        /// SKIA-142: the live construction path, carrying an explicit SurfaceFormat (as `int`,
+        /// matching CreateTexture's ImageData convention). CreateRenderTarget2D above forwards
+        /// here with Color for source/ABI compatibility with any existing direct caller.
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2DEXT(
+            int width, int height, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
             int size, int depthFormat, bool preserveContents = false,
             bool mipMap = false, int multiSampleCount = 0) override;

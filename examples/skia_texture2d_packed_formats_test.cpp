@@ -217,6 +217,7 @@ protected:
               "packed transfer fixtures release every image view and mip chain");
         CheckTypedRefusalIsAtomic(device);
         CheckRenderTargetRefusal(device, *graphicsBackend);
+        CheckRenderTargetPromotion(device, *graphicsBackend);
         CheckSampling(device, *graphicsBackend);
         Check(SameTextureStats(graphicsBackend->GetResourceStatsEXT(), baseline),
               "packed sampling fixtures return all texture counters to baseline");
@@ -346,11 +347,7 @@ private:
     void CheckRenderTargetRefusal(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
     {
         const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
-        const std::array formats{
-            SurfaceFormat::Bgr565,
-            SurfaceFormat::Bgra4444,
-            SurfaceFormat::Rgba1010102,
-        };
+        const std::array formats{SurfaceFormat::Bgr565, SurfaceFormat::Bgra4444};
         bool allRejected = true;
         for (const SurfaceFormat format : formats)
         {
@@ -360,7 +357,22 @@ private:
             });
         }
         Check(allRejected && SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
-              "packed RenderTarget2D requests reject transactionally before SKIA-142");
+              "Bgr565/Bgra4444 RenderTarget2D requests reject transactionally");
+    }
+
+    void CheckRenderTargetPromotion(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
+    {
+        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        {
+            RenderTarget2D target(device, 2, 2, false, SurfaceFormat::Rgba1010102,
+                                  DepthFormat::None);
+            const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
+            Check(allocated.renderTargets == before.renderTargets + 1u
+                      && allocated.targetSurfaceBytes == before.targetSurfaceBytes + 16u,
+                  "SKIA-142 promotes Rgba1010102 to a constructible RenderTarget2D");
+        }
+        Check(SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
+              "Rgba1010102 RenderTarget2D destruction releases its surface accounting");
     }
 
     void CheckSampling(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)

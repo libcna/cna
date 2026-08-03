@@ -458,7 +458,8 @@ private:
             });
         }
         Check(allRejected && SameStats(graphicsBackend.GetResourceStatsEXT(), before),
-              "three RenderTarget2D formats remain transactionally refused until SKIA-142");
+              "Bgra5551/NormalizedByte2/NormalizedByte4 RenderTarget2D requests reject "
+              "transactionally (not FNA-renderable)");
     }
 
     void Check(bool pass, const std::string& label)

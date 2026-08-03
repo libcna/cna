@@ -7,22 +7,37 @@
 #include "CNA/Internal/Backends/Skia/SkiaRenderTargetBinding.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaResourceCounters.hpp"
 #include "CNA/Internal/Backends/Skia/SkiaSurface.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <memory>
 #include <vector>
 
 namespace CNA::Internal::Backends::Skia
 {
-    /** CPU raster off-screen target with a bindable level zero and stable sampleable mip levels. */
+    /**
+     * CPU raster off-screen target with a bindable level zero and stable sampleable mip levels.
+     *
+     * SKIA-142: @p format selects the native Skia pixel type each level's SkiaSurface is created
+     * with (matching the exact format contract from docs/skia-surface-format-matrix.md's "FNA/Skia
+     * RT decision" column: only the formats FNA itself reports renderable are promoted). For every
+     * promoted format except Single/Vector2, the surface's native bytes ARE the public XNA
+     * GetData/SetData bytes -- no shadow duality is needed because Skia has no lossy layout
+     * mismatch for these types, unlike some Texture2D formats. Single/Vector2 have no 1/2-channel
+     * 32-bit-float SkColorType, so their surface is kRGBA_F32 with only R (or R,G) meaningful;
+     * mipChain_ still stores the narrow public bytes, and the extra channels are expanded/dropped
+     * at the surface boundary only.
+     */
     class SkiaRenderTargetBackend final : public IRenderTargetBackend,
                                           public SkiaImageSource,
                                           public SkiaRasterTarget
     {
     public:
-        SkiaRenderTargetBackend(int width, int height, bool preserveContents,
-                                std::weak_ptr<SkiaRenderTargetBinding> binding,
-                                std::shared_ptr<SkiaResourceCounters> resourceCounters = {},
-                                bool mipMap = false);
+        SkiaRenderTargetBackend(
+            int width, int height, bool preserveContents,
+            std::weak_ptr<SkiaRenderTargetBinding> binding,
+            std::shared_ptr<SkiaResourceCounters> resourceCounters = {}, bool mipMap = false,
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat format =
+                Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color);
         ~SkiaRenderTargetBackend() override;
 
         [[nodiscard]] int GetWidth() const override { return Surface().Width(); }
@@ -75,6 +90,11 @@ namespace CNA::Internal::Backends::Skia
         NOXNA [[nodiscard]] bool MipLevelDirtyEXT(int level) const;
         [[nodiscard]] bool BelongsToBindingEXT(
             const std::shared_ptr<SkiaRenderTargetBinding>& binding) const noexcept;
+        NOXNA [[nodiscard]] Microsoft::Xna::Framework::Graphics::SurfaceFormat FormatEXT() const
+            noexcept
+        {
+            return format_;
+        }
 
     private:
         [[nodiscard]] SkiaSurface* LevelSurface(int level) noexcept;
@@ -84,6 +104,9 @@ namespace CNA::Internal::Backends::Skia
         void GenerateDirtyMipLevels();
         void InvalidateSnapshot(int level) noexcept;
 
+        Microsoft::Xna::Framework::Graphics::SurfaceFormat format_ =
+            Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color;
+        std::size_t bytesPerTexel_ = 4u;
         std::unique_ptr<SkiaMipChain2D> mipChain_;
         std::vector<std::unique_ptr<SkiaSurface>> surfaces_;
         bool preserveContents_ = false;

@@ -534,15 +534,25 @@ namespace CNA::Internal::Backends::Skia
     std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2D(
         int width, int height, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        AssertOwnership("CreateRenderTarget2D");
+        return CreateRenderTarget2DEXT(
+            width, height, depthFormat, preserveContents, mipMap, multiSampleCount,
+            static_cast<int>(Microsoft::Xna::Framework::Graphics::SurfaceFormat::Color));
+    }
+
+    std::unique_ptr<IRenderTargetBackend> SkiaGraphicsBackend::CreateRenderTarget2DEXT(
+        int width, int height, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        AssertOwnership("CreateRenderTarget2DEXT");
         (void)depthFormat;
         if (width <= 0 || height <= 0)
             throw std::runtime_error("Skia RenderTarget2D dimensions must be positive.");
         if (multiSampleCount != 0)
             throw std::runtime_error(
                 "Skia raster RenderTarget2D does not support multisampling; real sample counts are rejected.");
-        return std::make_unique<SkiaRenderTargetBackend>(width, height, preserveContents,
-                                                         targetBinding_, resourceCounters_, mipMap);
+        return std::make_unique<SkiaRenderTargetBackend>(
+            width, height, preserveContents, targetBinding_, resourceCounters_, mipMap,
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat));
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> SkiaGraphicsBackend::CreateRenderTargetCube(
@@ -614,8 +624,21 @@ namespace CNA::Internal::Backends::Skia
     void SkiaGraphicsBackend::ReadBackbuffer(int x, int y, int width, int height, std::uint8_t* pixels)
     {
         AssertOwnership("ReadBackbuffer");
-        ActiveSurface().Flush();
-        if (!ActiveSurface().ReadPixels(x, y, width, height, pixels, width * 4))
+        // SKIA-68 (established, tested contract -- see Skia_GetBackBufferData_ActiveTarget):
+        // GetBackBufferData deliberately follows Skia's active canvas while a RenderTarget2D is
+        // bound, reverting to the preserved default backbuffer after unbind. SKIA-142 makes that
+        // active canvas capable of a native pixel layout other than RGBA8 for the first time; this
+        // hardcoded width*4 raw read would silently reinterpret those bytes as straight Color
+        // instead of converting them, so refuse clearly instead of returning corrupted pixels.
+        SkiaSurface& active = ActiveSurface();
+        if (active.NativeBytesPerPixelEXT() != 4u)
+        {
+            throw System::NotSupportedException(
+                "Skia GetBackBufferData does not yet support a non-Color-format RenderTarget2D "
+                "as the active render target; unbind it (or read it directly) first.");
+        }
+        active.Flush();
+        if (!active.ReadPixels(x, y, width, height, pixels, width * 4))
             throw std::runtime_error("Skia ReadBackbuffer request is outside the raster backbuffer.");
     }
 

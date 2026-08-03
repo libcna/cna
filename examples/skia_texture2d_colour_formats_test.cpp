@@ -167,6 +167,7 @@ protected:
         CheckColourMetadata(device);
         CheckSampling(device);
         CheckRefusals(device, *graphicsBackend);
+        CheckSrgbRenderTargetPromotion(device, *graphicsBackend);
         Check(SameTextureStats(graphicsBackend->GetResourceStatsEXT(), baseline),
               "all colour-format fixtures return resource counters to baseline");
 
@@ -348,17 +349,12 @@ private:
     void CheckRefusals(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
     {
         const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
-        const std::array formats{SurfaceFormat::ColorBgraEXT, SurfaceFormat::ColorSrgbEXT};
-        bool targetsRejected = true;
-        for (const SurfaceFormat format : formats)
-        {
-            targetsRejected = targetsRejected && Throws([&] {
-                RenderTarget2D target(device, 2, 2, false, format, DepthFormat::None);
-                (void)target;
-            });
-        }
-        Check(targetsRejected && SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
-              "BGRA/sRGB RenderTarget2D requests reject transactionally before SKIA-142");
+        Check(Throws([&] {
+                  RenderTarget2D target(device, 2, 2, false, SurfaceFormat::ColorBgraEXT,
+                                        DepthFormat::None);
+                  (void)target;
+              }) && SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
+              "ColorBgraEXT RenderTarget2D requests reject transactionally");
 
         Texture2D srgb(device, 1, 1, false, SurfaceFormat::ColorSrgbEXT);
         PackedVector::Rgba1010102 wrong;
@@ -368,6 +364,21 @@ private:
         const std::array<std::uint8_t, 4> raw{1, 2, 3, 4};
         Check(Throws([&] { srgb.SetDataRGBA(raw.data(), 1); }),
               "raw-RGBA convenience overload remains restricted to SurfaceFormat::Color");
+    }
+
+    void CheckSrgbRenderTargetPromotion(GraphicsDevice& device, SkiaGraphicsBackend& graphicsBackend)
+    {
+        const SkiaResourceStats before = graphicsBackend.GetResourceStatsEXT();
+        {
+            RenderTarget2D target(device, 2, 2, false, SurfaceFormat::ColorSrgbEXT,
+                                  DepthFormat::None);
+            const SkiaResourceStats allocated = graphicsBackend.GetResourceStatsEXT();
+            Check(allocated.renderTargets == before.renderTargets + 1u
+                      && allocated.targetSurfaceBytes == before.targetSurfaceBytes + 16u,
+                  "SKIA-142 promotes ColorSrgbEXT to a constructible RenderTarget2D");
+        }
+        Check(SameTextureStats(graphicsBackend.GetResourceStatsEXT(), before),
+              "ColorSrgbEXT RenderTarget2D destruction releases its surface accounting");
     }
 
     [[nodiscard]] static bool SameTextureStats(const SkiaResourceStats& left,

@@ -25,8 +25,12 @@ binary32/16 float formats for Skia `Texture2D`. SKIA-140 additionally enables `D
 `Dxt5`, and SKIA-141 enables `Bc7EXT`/`Bc7SrgbEXT` via a native BC7 decoder; all five share an
 exact padded compressed-block CPU chain and a bounded decoded sampling image, and none of their
 descendant mip levels are ever generated -- each must be explicitly authored. `Dxt5SrgbEXT` is the
-only remaining compressed row, refused pending a task that scopes it; every non-`Color` render
-target remains refused pending SKIA-142.
+only remaining compressed row, refused pending a task that scopes it. SKIA-142 promotes
+`RenderTarget2D` construction for the thirteen non-`Color` formats FNA itself reports renderable
+(`Rgba1010102`, `Rg32`, `Rgba64`, `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2`,
+`HalfVector4`, `HdrBlendable`, `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`); every other format --
+packed 16-bit colours, all compressed formats, both SNORM formats, `Alpha8`, `ColorBgraEXT` --
+stays permanently refused as a render target.
 
 The implemented surface is intentionally bounded: `Clear`, `Present`, backbuffer readback,
 logical-size handling, window-coordinate transforms, every `Texture2D` mip upload/readback, CPU-raster
@@ -46,9 +50,10 @@ authoritative compact capability boundary; later sections explain the individual
 | All nine TextureFilter ordinals, Anisotropic fallback, and independent Clamp/Wrap/Mirror U/V | Verified bounded 2D path | Point/Linear tile sampling is direct; affine mip LOD and inter-level interpolation are bounded raster routes. Anisotropic is byte-identical to complete Linear while the capability stays false. | [SKIA-43–46, SKIA-70, SKIA-78–79, SKIA-129](../plan_skia.md); `Skia_TextureAddressAxes`, `Skia_MipSampling_Raster`, `Skia_Sampler_MipmapFilterPolicy` |
 | Blend presets, arbitrary raster states, and target-0 colour-write masks | Verified direct/generated runtime-blender path | All 714,025 valid factor/function tuples, independent RGB/alpha equations, live constants, and all target-0 masks draw. Invalid raw selectors and sample/MRT-only state reject before drawing. | [SKIA-47–57, SKIA-108, SKIA-119–124](../plan_skia.md); [generated blender](skia-generated-blender.md); `Skia_BlendMapping_Raster`, `Skia_GeneratedBlend_PublicCorpus` |
 | `Texture2D` image path, promoted formats, checked mip allocation, transfer, generation, sampling and content loading | Verified direct/bounded CPU path | `Color`; direct packed/BGRA/UNORM/F32/F16 routes; conversion-shadow `Bgra4444`, `Bgra5551`, `NormalizedByte2/4`, `Single`, and `Vector2`; and colour-managed `ColorSrgbEXT` transfer/sample exactly. `mipMap=true` owns a complete native-width CNA chain; changed parents generate only unauthored descendants, and exact DDS/XNB level spans upload as authored `Color` barriers. | [SKIA-22–30, SKIA-70, SKIA-106, SKIA-109, SKIA-125–130, SKIA-135–139](../plan_skia.md); [format matrix](skia-surface-format-matrix.md); `Skia_Texture2D_PackedFormats`, `Skia_Texture2D_ColourFormats`, `Skia_Texture2D_UnormFormats`, `Skia_Texture2D_FloatFormats`, `Skia_Texture2D_ShadowFormats`, `Skia_Texture2D_MipGeneration`, `Skia_Sampler_MipmapFilterPolicy`, `Skia_Texture2D_ContentMips` |
-| `Dxt1`/`Dxt3`/`Dxt5` compressed `Texture2D` storage and sampling | Verified compressed-shadow CPU path | Exact padded-block CPU chain (`ceil(w/4)*ceil(h/4)` blocks per level) with block-aligned-or-edge partial transfer; a bounded decoded `kRGBA_8888` image drives public sampling. Unlike every other promoted format, descendant mip levels are never generated -- there is no direct Skia block-encoder -- so each level must be explicitly authored. `RenderTarget2D` and the remaining compressed formats stay refused. | [SKIA-140](../plan_skia.md); [format matrix](skia-surface-format-matrix.md); `Skia_Texture2D_CompressedFormats` |
-| `Bc7EXT`/`Bc7SrgbEXT` compressed `Texture2D` storage and sampling | Verified compressed-shadow CPU path | Same padded-block chain design as Dxt1/3/5, decoded through a native BC7 decoder implemented directly from the public Khronos BPTC specification (all eight modes, partition/anchor tables, interpolation formula) -- no third-party decoder dependency. `Bc7SrgbEXT` reuses the established `ColorSrgbEXT`/`kSRGBA_8888` colour-space convention. Mip levels are never generated. `RenderTarget2D` and `Dxt5SrgbEXT` stay refused. | [SKIA-141](../plan_skia.md); [BC7 decoder notes](skia-bc7-decoder.md); [format matrix](skia-surface-format-matrix.md); `Skia_Texture2D_Bc7` |
+| `Dxt1`/`Dxt3`/`Dxt5` compressed `Texture2D` storage and sampling | Verified compressed-shadow CPU path | Exact padded-block CPU chain (`ceil(w/4)*ceil(h/4)` blocks per level) with block-aligned-or-edge partial transfer; a bounded decoded `kRGBA_8888` image drives public sampling. Unlike every other promoted format, descendant mip levels are never generated -- there is no direct Skia block-encoder -- so each level must be explicitly authored. `RenderTarget2D` and the remaining compressed formats stay permanently refused (never FNA-renderable). | [SKIA-140](../plan_skia.md); [format matrix](skia-surface-format-matrix.md); `Skia_Texture2D_CompressedFormats` |
+| `Bc7EXT`/`Bc7SrgbEXT` compressed `Texture2D` storage and sampling | Verified compressed-shadow CPU path | Same padded-block chain design as Dxt1/3/5, decoded through a native BC7 decoder implemented directly from the public Khronos BPTC specification (all eight modes, partition/anchor tables, interpolation formula) -- no third-party decoder dependency. `Bc7SrgbEXT` reuses the established `ColorSrgbEXT`/`kSRGBA_8888` colour-space convention. Mip levels are never generated. `RenderTarget2D` and `Dxt5SrgbEXT` stay permanently refused. | [SKIA-141](../plan_skia.md); [BC7 decoder notes](skia-bc7-decoder.md); [format matrix](skia-surface-format-matrix.md); `Skia_Texture2D_Bc7` |
 | `RenderTarget2D` colour rendering, per-level transfer/sampling, and Preserve/Discard | Verified bounded raster target | Level zero is a directly bindable `SkSurface`; mipmapped targets own stable surfaces and exact canonical shadows at every level. Parent uploads and pass-boundary resolves deterministically regenerate dirty descendants once. Real depth and MSAA stay unavailable rather than fabricated. | [SKIA-61–75, SKIA-131–132](../plan_skia.md); `Skia_RenderTarget2D_Golden`, `Skia_RenderTarget2D_MipStorage`, `Skia_RenderTarget2D_MipGeneration`, `Skia_RenderTarget2D_MsaaPolicy` |
+| `RenderTarget2D` per-format construction for the thirteen FNA-renderable non-`Color` formats | Verified direct/conversion-shadow native surface path | Each level constructs a real native-format `SkSurface` (`kRGBA_1010102`, `kR16G16_unorm`, `kR16G16B16A16_unorm`, `kR16_float`, `kR16G16_float`, `kRGBA_F16`, `kSRGBA_8888`, `kR8_unorm`, `kR16_unorm` map 1:1 to the public transfer bytes; `Single`/`Vector2` widen to `kRGBA_F32` since no native 1/2-channel 32-bit-float colour type exists). Mip generation reuses the exact same per-format algorithm as `Texture2D`. Every other format (packed 16-bit colours, all compressed formats, both SNORM formats, `Alpha8`, `ColorBgraEXT`) stays permanently refused, matching real XNA/FNA hardware renderability. | [SKIA-142](../plan_skia.md); [format matrix](skia-surface-format-matrix.md); `Skia_RenderTarget2D_FormatSupport` |
 | `TextureCube`/`Texture3D` transfers and mip storage | Verified bounded CPU storage | Emulated only as exact CPU face/voxel transfer storage. Sampling was evaluated and rejected because no compatible Skia cube/volume sampler or CNA 3D effect route exists. | [SKIA-80–84, SKIA-101–102](../plan_skia.md); [texture storage policy](skia-texture-storage.md) |
 | `RenderTargetCube` face rendering, transfers, Preserve/Discard and generated mips | Verified bounded six-surface 2D emulation | Each face is an independent raster target. Cube sampling, real depth and real MSAA reject explicitly. | [SKIA-85–86](../plan_skia.md); `Skia_RenderTargetCube_Policy` and four shared cube contracts |
 | Multiple render targets | Unsupported | Direct support is absent because `SkCanvas` has one colour result; replay emulation was evaluated and rejected because distinct shader outputs for slots 0–3 cannot be reproduced. Empty or one-target plural binding remains supported. | [SKIA-87–88](../plan_skia.md); `Skia_MRT_Rejection` |
@@ -246,8 +251,9 @@ The current Skia public `Texture2D` format policy accepts `SurfaceFormat::Color`
 `Alpha8`, `ColorBgraEXT`, `ColorSrgbEXT`, `ByteEXT`, `UShortEXT`, `Single`, `Vector2`, `Vector4`,
 `HalfSingle`, `HalfVector2`, `HalfVector4`, and `HdrBlendable`. The remaining six compressed values
 are rejected by backend-local validation before a Skia
-allocation is attempted; shared cube/volume validation remains `Color`-only and non-`Color`
-`RenderTarget2D` construction refuses before allocating a Color surface. Raster textures accept one-pixel and
+allocation is attempted; shared cube/volume validation remains `Color`-only. SKIA-142's
+`RenderTarget2D` construction accepts the thirteen non-`Color` formats FNA itself reports
+renderable and refuses every other format before allocating a surface. Raster textures accept one-pixel and
 NPOT dimensions, report the shared 16384 maximum single axis, and reject a dimension above that
 limit before allocation. SKIA-125/126 replace the old Texture2D constructor refusal with a checked
 CNA-owned chain: all levels are allocated contiguously, zero initialized, and reported through the
@@ -286,15 +292,17 @@ SKIA-136 adds direct `kBGRA_8888` Texture2D views and `kSRGBA_8888` encoded stor
 pinned sRGB colour type decodes during texel gathering, its attached colour space deliberately
 describes linear-sRGB working components: linear destinations do not decode twice and explicit
 sRGB destinations re-encode once. CNA generates sRGB mip RGB in linear light while alpha remains
-an ordinary linear byte average. Both formats retain exact public transfer bytes and remain
-Texture2D-only until the independent target gate.
+an ordinary linear byte average. Both formats retain exact public transfer bytes; SKIA-142 promotes
+`ColorSrgbEXT` to a constructible `RenderTarget2D` (matching FNA's conditional renderability),
+while `ColorBgraEXT` stays permanently Texture2D-only (never FNA-renderable).
 SKIA-137 adds exact `kAlpha_8`, `kR8_unorm`, `kR16_unorm`, `kR16G16_unorm`, and
 `kR16G16B16A16_unorm` Texture2D views. Public `Alpha8`, `Rg32`, and `Rgba64` packed-vector
 overloads serialize their properties rather than polymorphic object memory; `ByteEXT` and
 `UShortEXT` use typed unsigned transfers. Multi-byte storage is explicit little-endian, generated
 mips average every native UNORM component, and pinned Skia gather semantics provide zero missing
-colour channels and opaque missing alpha without an emulated swizzle. These five formats remain
-Texture2D-only until SKIA-142.
+colour channels and opaque missing alpha without an emulated swizzle. SKIA-142 promotes `Rg32`,
+`Rgba64`, `ByteEXT`, and `UShortEXT` to constructible `RenderTarget2D` formats; `Alpha8` stays
+permanently Texture2D-only (never FNA-renderable).
 SKIA-138 adds exact IEEE float/half Texture2D storage. `Vector4`, `HalfSingle`, `HalfVector2`,
 `HalfVector4`, and `HdrBlendable` use pinned direct `kRGBA_F32`, `kR16_float`, `kR16G16_float`, or
 `kRGBA_F16` views; `Single` and `Vector2` retain exact binary32 shadows and construct bounded
@@ -302,15 +310,17 @@ opaque RGBA32F working images with zero missing channels. Public typed transfers
 word little-endian without copying vector or polymorphic packed-object layout. Original NaN
 payloads, infinities, subnormals and signed zero round-trip unchanged; generated mips use the
 documented canonical-NaN/infinity policy. HDR values remain unclamped in F16-to-F32 sampling and
-participate in the existing bounded public blend path. All seven formats remain Texture2D-only
-until SKIA-142.
+participate in the existing bounded public blend path. SKIA-142 promotes all seven formats to
+constructible `RenderTarget2D` formats; `Single`/`Vector2` widen to a native `kRGBA_F32` surface
+(no 1/2-channel 32-bit-float colour type exists) while the other five map their public bytes
+directly onto their existing native colour type.
 SKIA-139 adds exact `Bgra5551` word and `NormalizedByte2/4` byte shadows with bounded RGBA32F
 working views. Typed packed-vector transfers serialize properties explicitly little-endian;
 authored bytes, including SNORM `0x80`, round-trip unchanged. Sampling follows the standard SNORM
 endpoint where signed -128 and -127 both gather as -1, while missing NormalizedByte2 channels are
 B=0/A=1. Generated Bgra5551 mips average native 5/5/5/1 components. Generated SNORM mips
 canonicalize both -1 encodings to -127, average exact signed integers, and round half ties away
-from zero. All three formats remain Texture2D-only until SKIA-142.
+from zero. All three formats stay permanently Texture2D-only (never FNA-renderable).
 
 ## Verification recorded for the initial slice
 

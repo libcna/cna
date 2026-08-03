@@ -5,6 +5,7 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkSurface.h"
@@ -23,16 +24,6 @@ namespace CNA::Internal::Backends::Skia
             return static_cast<std::uint8_t>(std::clamp(value, 0.0f, 1.0f) * 255.0f + 0.5f);
         }
 
-        [[nodiscard]] SkImageInfo RgbaPremulInfo(int width, int height)
-        {
-            return SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-        }
-
-        [[nodiscard]] SkImageInfo RgbaUnpremulInfo(int width, int height)
-        {
-            return SkImageInfo::Make(width, height, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
-        }
-
         [[nodiscard]] std::uint64_t NextSurfaceIdentity()
         {
             static std::atomic<std::uint64_t> nextIdentity{1};
@@ -40,6 +31,15 @@ namespace CNA::Internal::Backends::Skia
             if (identity == 0)
                 throw std::runtime_error("Skia raster surface identity space is exhausted.");
             return identity;
+        }
+
+        /// The read/write request always asks for the caller-facing straight-alpha convention
+        /// (matching the default RGBA8 path's existing hardcoded kUnpremul_SkAlphaType exactly);
+        /// an opaque native format has no premul/unpremul distinction to make.
+        [[nodiscard]] SkAlphaType RequestedAlphaType(SkAlphaType nativeAlphaType) noexcept
+        {
+            return nativeAlphaType == kOpaque_SkAlphaType ? kOpaque_SkAlphaType
+                                                           : kUnpremul_SkAlphaType;
         }
     }
 
@@ -54,6 +54,27 @@ namespace CNA::Internal::Backends::Skia
         Resize(width, height);
     }
 
+    SkiaSurface::SkiaSurface(int width, int height, SkColorType colorType, SkAlphaType alphaType)
+        : identity_(NextSurfaceIdentity())
+        , colorType_(colorType)
+        , alphaType_(alphaType)
+        , bytesPerPixel_(static_cast<std::size_t>(SkColorTypeBytesPerPixel(colorType)))
+    {
+        Resize(width, height);
+    }
+
+    SkImageInfo SkiaSurface::NativeImageInfoEXT(int width, int height, SkAlphaType alphaType) const
+    {
+        // kSRGBA_8888 performs the sRGB transfer decode while gathering texels; tagging every
+        // request (creation and read/write alike) with the same linear-sRGB working colour space
+        // keeps every request an identity conversion in colour-space terms -- only ToByte-style
+        // alpha-type premul/unpremul conversion happens, never an accidental second sRGB decode.
+        if (colorType_ == kSRGBA_8888_SkColorType)
+            return SkImageInfo::Make(width, height, colorType_, alphaType,
+                                     SkColorSpace::MakeSRGBLinear());
+        return SkImageInfo::Make(width, height, colorType_, alphaType);
+    }
+
     void SkiaSurface::Resize(int width, int height)
     {
         if (width <= 0 || height <= 0)
@@ -61,14 +82,14 @@ namespace CNA::Internal::Backends::Skia
         std::size_t bytes = 0;
         if (!IsValidSkiaResourceAxis(width) || !IsValidSkiaResourceAxis(height)
             || !CheckedTexelBytes2D(static_cast<std::size_t>(width),
-                                    static_cast<std::size_t>(height), 4u, bytes)
+                                    static_cast<std::size_t>(height), bytesPerPixel_, bytes)
             || bytes > kSkiaCpuTextureStorageLimitBytes)
         {
             throw System::NotSupportedException(
                 "Skia raster surface exceeds the checked 16384-axis/256-MiB resource policy.");
         }
 
-        auto nextSurface = SkSurfaces::Raster(RgbaPremulInfo(width, height));
+        auto nextSurface = SkSurfaces::Raster(NativeImageInfoEXT(width, height, alphaType_));
         if (!nextSurface)
             throw std::runtime_error("Skia failed to allocate a raster surface.");
 
@@ -98,25 +119,28 @@ namespace CNA::Internal::Backends::Skia
     bool SkiaSurface::ReadPixels(int x, int y, int width, int height,
                                  std::uint8_t* destination, int destinationRowBytes) const
     {
+        const int minRowBytes = width * static_cast<int>(bytesPerPixel_);
         if (!surface_ || destination == nullptr || width < 0 || height < 0 || x < 0 || y < 0
-            || x > width_ - width || y > height_ - height || destinationRowBytes < width * 4)
+            || x > width_ - width || y > height_ - height || destinationRowBytes < minRowBytes)
             return false;
 
-        return surface_->readPixels(RgbaUnpremulInfo(width, height), destination,
-                                    static_cast<std::size_t>(destinationRowBytes), x, y);
+        return surface_->readPixels(
+            NativeImageInfoEXT(width, height, RequestedAlphaType(alphaType_)), destination,
+            static_cast<std::size_t>(destinationRowBytes), x, y);
     }
 
     bool SkiaSurface::WritePixels(int x, int y, int width, int height,
                                   const std::uint8_t* source, int sourceRowBytes)
     {
+        const int minRowBytes = width * static_cast<int>(bytesPerPixel_);
         if (!surface_ || source == nullptr || width < 0 || height < 0 || x < 0 || y < 0
-            || x > width_ - width || y > height_ - height || sourceRowBytes < width * 4)
+            || x > width_ - width || y > height_ - height || sourceRowBytes < minRowBytes)
         {
             return false;
         }
 
-        const SkPixmap pixmap(RgbaUnpremulInfo(width, height), source,
-                              static_cast<std::size_t>(sourceRowBytes));
+        const SkPixmap pixmap(NativeImageInfoEXT(width, height, RequestedAlphaType(alphaType_)),
+                              source, static_cast<std::size_t>(sourceRowBytes));
         surface_->writePixels(pixmap, x, y);
         return true;
     }
