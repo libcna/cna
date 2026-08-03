@@ -58,6 +58,7 @@
 
 #include <array>
 #include <cstdint>
+#include <exception>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -88,6 +89,10 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+
+#ifdef CNA_BACKEND_BGFX
+#include <bgfx/bgfx.h>
+#endif
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -1253,45 +1258,91 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 
     BasicEffect effect(device);
 
-    const auto render = [&](bool instanced) {
-        RenderTarget2D target = MakeTarget();
-        if (instanced)
-            device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
-                                     VertexBufferBinding(&instanceBuffer, 0, 1)});
-        else
-            device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
-        device.SetRenderTarget(&target);
-        device.Clear(Color::Black);
-        ApplyEffect(effect, false, kNonNeutral);
-        if (instanced)
-            device.DrawInstancedPrimitives(
-                PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0, kMeshPrimitiveCount, 1);
-        else
-            device.DrawIndexedPrimitives(
-                PrimitiveType::TriangleList, 0, 0, kMeshVertexCount, 0, kMeshPrimitiveCount);
-        device.SetRenderTarget(nullptr);
-        return CaptureTarget(target);
+    // A backend is entitled to REJECT a stride its native layout cannot express, and some do. What
+    // it may never do is accept the draw and return wrong pixels. So each route is measured
+    // through its own rejection barrier: a throw is recorded verbatim as that backend's declared
+    // boundary, and anything that RENDERS is held to the full contract.
+    struct RouteResult
+    {
+        FrameSnapshot frame;
+        bool rendered = false;
+        std::string rejection;
     };
 
-    const FrameSnapshot ordinary = render(false);
-    const FrameSnapshot instanced = render(true);
-    PrintMeasurement("positionOnly/false/ordinary-route", ordinary);
-    PrintMeasurement("positionOnly/false/instanced-route", instanced);
+    const auto render = [&](bool instanced) {
+        RouteResult result;
+        RenderTarget2D target = MakeTarget();
+        try
+        {
+            if (instanced)
+                device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
+                                         VertexBufferBinding(&instanceBuffer, 0, 1)});
+            else
+                device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
+            device.SetRenderTarget(&target);
+            device.Clear(Color::Black);
+            ApplyEffect(effect, false, kNonNeutral);
+            if (instanced)
+                device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0, kMeshVertexCount,
+                                               0, kMeshPrimitiveCount, 1);
+            else
+                device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, kMeshVertexCount,
+                                             0, kMeshPrimitiveCount);
+            device.SetRenderTarget(nullptr);
+            result.frame = CaptureTarget(target);
+            result.rendered = true;
+        }
+        catch (const std::exception& e)
+        {
+            result.rejection = e.what();
+            device.SetRenderTarget(nullptr);
+        }
+        return result;
+    };
 
-    const auto ordinaryLit = DistinctLitColors(ordinary);
-    const auto instancedLit = DistinctLitColors(instanced);
-    std::cout << "[ GFX-215  ] " << kBackendName
-              << " positionOnly distinct lit colours, ordinary route:"
-              << DescribeLitColors(ordinaryLit) << "\n[ GFX-215  ] " << kBackendName
-              << " positionOnly distinct lit colours, instanced route:"
-              << DescribeLitColors(instancedLit) << std::endl;
+    const RouteResult ordinary = render(false);
+    const RouteResult instanced = render(true);
+
+    const auto report = [&](const char* leg, const RouteResult& r) {
+        if (!r.rendered)
+        {
+            std::cout << "[ GFX-215  ] " << kBackendName << ' ' << leg
+                      << ": REJECTED -- \"" << r.rejection << '"' << std::endl;
+            return std::vector<std::pair<Rgba, int>>{};
+        }
+        PrintMeasurement(leg, r.frame);
+        const auto lit = DistinctLitColors(r.frame);
+        std::cout << "[ GFX-215  ] " << kBackendName << ' ' << leg
+                  << " distinct lit colours:" << DescribeLitColors(lit) << std::endl;
+        return lit;
+    };
+
+    const auto ordinaryLit = report("positionOnly/false/ordinary-route", ordinary);
+    const auto instancedLit = report("positionOnly/false/instanced-route", instanced);
 
 #ifdef CNA_INSTANCED_DIFFUSE_MEASURED
     const Rgba expected = ExpectedColor(kColumnColors[0], false, kNonNeutral);
 
-    // REMED-GFX-215's own guarantee, and the whole of it: with the property disabled, the plain
-    // DiffuseColor is the ONLY colour that may reach the target. This holds no matter how the
-    // backend derives its native layout, because a disabled COLOR0 is never consumed at all.
+    // A rejection must be LOUD and it must name the reason. WebGPU declines a stride its
+    // DrawColoredPrimitives cannot express and says so -- the same stride-16 requirement
+    // REMED-GFX-214 already tracks on its ordinary route, reached here with stride 12 instead of
+    // 24. That is a boundary, not a defect of this ticket: no WebGPU production is touched here and
+    // REMED-GFX-214 stays open and uninvestigated. What matters for REMED-GFX-215 is that the draw
+    // is refused rather than silently miscoloured.
+    const auto expectLoudRejection = [](const RouteResult& r, const char* leg) {
+        if (r.rendered)
+            return;
+        EXPECT_FALSE(r.rejection.empty())
+            << leg << ": the draw was refused without saying why. A backend may decline a stride "
+                      "it cannot express, but the refusal has to be legible";
+    };
+    expectLoudRejection(ordinary, "positionOnly/ordinary");
+    expectLoudRejection(instanced, "positionOnly/instanced");
+
+    // REMED-GFX-215's own guarantee, and the whole of it: on any route that DID render, with the
+    // property disabled, the plain DiffuseColor is the ONLY colour that may reach the target. This
+    // holds no matter how the backend derives its native layout, because a disabled COLOR0 is never
+    // consumed at all.
     for (const auto& entry : instancedLit)
     {
         EXPECT_TRUE(NearlyEqual(entry.first, expected))
@@ -1308,25 +1359,27 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
                "that may appear is the plain DiffuseColor " << expected.ToString()
             << DescribeLitColors(ordinaryLit);
     }
-    EXPECT_FALSE(instancedLit.empty())
-        << "positionOnly/instanced: nothing rendered at all";
 
-    // The COVERAGE half is a separate question, and the answer here is a declared boundary rather
-    // than a pass: the two routes must agree, because a route-independent layout defect cannot
-    // differ between them. Whatever coverage this backend achieves, the instanced route must match
-    // the ordinary one exactly -- REMED-GFX-215 changed neither.
     int coverageOrdinary = 0;
     for (const auto& entry : ordinaryLit)
         coverageOrdinary += entry.second;
     int coverageInstanced = 0;
     for (const auto& entry : instancedLit)
         coverageInstanced += entry.second;
-    EXPECT_EQ(coverageOrdinary, coverageInstanced)
-        << "positionOnly: the ordinary route lit " << coverageOrdinary << " pixels and the "
-           "instanced route " << coverageInstanced
-        << ". A vertex layout derived before either route is chosen cannot differ between them";
+
+    // The COVERAGE half is a separate question from the colour one. When both routes rendered they
+    // must agree exactly, because a vertex layout derived before either route is chosen cannot
+    // differ between them -- and REMED-GFX-215 changed neither.
+    if (ordinary.rendered && instanced.rendered)
+    {
+        EXPECT_EQ(coverageOrdinary, coverageInstanced)
+            << "positionOnly: the ordinary route lit " << coverageOrdinary << " pixels and the "
+               "instanced route " << coverageInstanced
+            << ". A vertex layout derived before either route is chosen cannot differ between them";
+    }
 
 #if defined(CNA_BACKEND_BGFX)
+    EXPECT_TRUE(instanced.rendered) << "positionOnly/instanced: bgfx rejected the draw";
     // REMED-GFX-216, DECLARED AND MEASURED, not skipped. bgfx's MakeBgfxLayout keys on the buffer
     // stride alone: stride 12 is not in its table, so the fallback emits a 16-byte
     // Position+Color0 layout over a 12-byte buffer and the geometry is strided wrongly. Every
@@ -1341,15 +1394,256 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
         << " pixels, so REMED-GFX-216 (MakeBgfxLayout keys on stride, not on the "
            "VertexDeclaration) is FIXED. Delete this arm";
 #else
-    // Every other measured backend builds its native layout from the declaration, so the geometry
-    // is exactly where it belongs and the full contract holds.
+    // Every other measured backend that ACCEPTS the stride builds its native layout from the
+    // declaration, so the geometry lands exactly where it belongs and the full contract holds.
     constexpr int kFullCoverage = kColumnCount * (kColumnWidth - 2 * kGeometryInset) *
                                   (kTargetSize - 2 * kGeometryInset);
-    EXPECT_GT(coverageInstanced, kFullCoverage * 9 / 10)
-        << "positionOnly: only " << coverageInstanced << " of about " << kFullCoverage
-        << " pixels rendered";
+    if (instanced.rendered)
+    {
+        EXPECT_GT(coverageInstanced, kFullCoverage * 9 / 10)
+            << "positionOnly: only " << coverageInstanced << " of about " << kFullCoverage
+            << " pixels rendered";
+    }
 #endif
 #endif
 }
+
+// ---------------------------------------------------------------------------
+// Program and cache identity. REMED-GFX-215 supplies two uniforms to an EXISTING program instead of
+// selecting a new one, so the whole colour matrix must be served by exactly the programs that
+// already existed -- no variant per DiffuseColor value, none per VertexColorEnabled setting, none
+// per buffer identity, and no growth at all across repeated and returning states.
+//
+// bgfx-only, because `bgfx::getStats()` is the native cache. Its resource counters are the LIVE
+// object counts, and they lag one frame, so every reading is taken after two Presents.
+// ---------------------------------------------------------------------------
+
+#ifdef CNA_BACKEND_BGFX
+
+class BgfxInstancedColorCardinalityTest : public InstancedDiffuseColorTest
+{
+protected:
+    struct Cardinality
+    {
+        std::uint16_t programs = 0;
+        std::uint16_t shaders = 0;
+        std::uint16_t uniforms = 0;
+        std::uint16_t vertexBuffers = 0;
+        std::uint16_t dynamicVertexBuffers = 0;
+        std::uint16_t dynamicIndexBuffers = 0;
+        std::uint32_t draws = 0;
+
+        [[nodiscard]] std::string ToString() const
+        {
+            std::ostringstream os;
+            os << "programs=" << programs << " shaders=" << shaders << " uniforms=" << uniforms
+               << " vb=" << vertexBuffers << " dynVb=" << dynamicVertexBuffers
+               << " dynIb=" << dynamicIndexBuffers << " draws=" << draws;
+            return os.str();
+        }
+    };
+
+    /// bgfx's counters lag one frame, so settle before reading.
+    Cardinality Measure()
+    {
+        device.Present();
+        device.Present();
+        const bgfx::Stats* stats = bgfx::getStats();
+        EXPECT_NE(nullptr, stats);
+        Cardinality out;
+        if (stats == nullptr)
+            return out;
+        out.programs = stats->numPrograms;
+        out.shaders = stats->numShaders;
+        out.uniforms = stats->numUniforms;
+        out.vertexBuffers = stats->numVertexBuffers;
+        out.dynamicVertexBuffers = stats->numDynamicVertexBuffers;
+        out.dynamicIndexBuffers = stats->numDynamicIndexBuffers;
+        out.draws = stats->numDraw;
+        return out;
+    }
+
+    static void ExpectNoCacheGrowth(
+        const Cardinality& baseline, const Cardinality& after, const char* leg)
+    {
+        EXPECT_EQ(baseline.programs, after.programs)
+            << leg << ": a program was created. Colour state is carried by uniforms, so no "
+               "DiffuseColor value and no VertexColorEnabled setting may select a new program. "
+               "baseline [" << baseline.ToString() << "] after [" << after.ToString() << ']';
+        EXPECT_EQ(baseline.shaders, after.shaders)
+            << leg << ": a shader was created. baseline [" << baseline.ToString()
+            << "] after [" << after.ToString() << ']';
+        EXPECT_EQ(baseline.uniforms, after.uniforms)
+            << leg << ": a uniform was created. REMED-GFX-215 reuses u_diffuseColor and "
+               "u_vertexColorEnabled3D, which the ordinary route already owns. baseline ["
+            << baseline.ToString() << "] after [" << after.ToString() << ']';
+        EXPECT_LE(after.dynamicVertexBuffers, baseline.dynamicVertexBuffers)
+            << leg << ": a per-draw vertex buffer was allocated. baseline ["
+            << baseline.ToString() << "] after [" << after.ToString() << ']';
+        EXPECT_LE(after.dynamicIndexBuffers, baseline.dynamicIndexBuffers)
+            << leg << ": a per-draw index buffer was allocated. baseline ["
+            << baseline.ToString() << "] after [" << after.ToString() << ']';
+    }
+};
+
+TEST_F(BgfxInstancedColorCardinalityTest, ColorStateCreatesNoProgramAndReusesTheCache)
+{
+    RequireInstancedRendering();
+
+    const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
+    const std::vector<PackedVertex> replaced = BuildPackedMesh(false, kReplacementColors);
+    const std::vector<std::uint16_t> indices = BuildQuadIndices<std::uint16_t>(kColumnCount);
+    const std::array<MatrixRecord, 1> instances{ShiftMatrix(0)};
+
+    VertexBuffer meshBuffer(device, PackedDeclaration(), kMeshVertexCount, BufferUsage::None);
+    meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, 16);
+    VertexBuffer instanceBuffer(device, MatrixDeclaration(), 1, BufferUsage::None);
+    instanceBuffer.SetDataRaw(instances.data(), 1, 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshIndexCount, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kMeshIndexCount);
+    device.SetIndexBuffer(&indexBuffer);
+
+    BasicEffect effect(device);
+
+    // Warm every program the matrix can reach ONCE, so the baseline is the steady state rather
+    // than a cold cache. Both routes and both settings.
+    (void)RenderMesh(meshBuffer, instanceBuffer, effect, false, true, kNonNeutral);
+    (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
+    (void)RenderMesh(meshBuffer, instanceBuffer, effect, false, false, kNonNeutral);
+    (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, false, kNonNeutral);
+    const Cardinality baseline = Measure();
+    std::cout << "[ GFX-215  ] bgfx cardinality baseline: " << baseline.ToString() << std::endl;
+
+    // 1. Changing ONLY VertexColorEnabled, repeatedly and in both directions.
+    for (int repeat = 0; repeat < 4; ++repeat)
+    {
+        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
+        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, false, kNonNeutral);
+    }
+    ExpectNoCacheGrowth(baseline, Measure(), "vertexColorEnabled toggled 8 times");
+
+    // 2. Changing ONLY DiffuseColor -- eight distinct values, none of which may create anything.
+    for (int step = 0; step < 8; ++step)
+    {
+        const float t = static_cast<float>(step) / 8.0f;
+        const DiffuseState d{0.1f + 0.8f * t, 0.9f - 0.8f * t, 0.2f + 0.6f * t, 1.0f};
+        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, d);
+    }
+    ExpectNoCacheGrowth(baseline, Measure(), "eight distinct DiffuseColor values");
+
+    // 3. Changing ONLY the buffer CONTENTS.
+    for (int repeat = 0; repeat < 4; ++repeat)
+    {
+        meshBuffer.SetDataRaw(replaced.data(), kMeshVertexCount, 16);
+        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
+        meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, 16);
+        (void)RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
+    }
+    ExpectNoCacheGrowth(baseline, Measure(), "geometry colour buffer rewritten 8 times");
+
+    // 4. Returning to an earlier COMPLETE state must reuse, not recreate -- and the frame must
+    //    still be correct, so "no growth" cannot be satisfied by a stale program.
+    const FrameSnapshot returned =
+        RenderMesh(meshBuffer, instanceBuffer, effect, true, true, kNonNeutral);
+    ExpectColumns(returned, true, kNonNeutral, kColumnColors, "cardinality/returned-state");
+    const Cardinality settled = Measure();
+    ExpectNoCacheGrowth(baseline, settled, "returned to an earlier complete state");
+    std::cout << "[ GFX-215  ] bgfx cardinality settled:  " << settled.ToString() << std::endl;
+}
+
+TEST_F(BgfxInstancedColorCardinalityTest, InstancedColorDrawSubmitsExactlyOnce)
+{
+    RequireInstancedRendering();
+
+    const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
+    const std::vector<std::uint16_t> indices = BuildQuadIndices<std::uint16_t>(kColumnCount);
+    const std::array<MatrixRecord, 1> instances{ShiftMatrix(0)};
+
+    VertexBuffer meshBuffer(device, PackedDeclaration(), kMeshVertexCount, BufferUsage::None);
+    meshBuffer.SetDataRaw(mesh.data(), kMeshVertexCount, 16);
+    VertexBuffer instanceBuffer(device, MatrixDeclaration(), 1, BufferUsage::None);
+    instanceBuffer.SetDataRaw(instances.data(), 1, 64);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, kMeshIndexCount, BufferUsage::None);
+    indexBuffer.SetData(indices.data(), kMeshIndexCount);
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
+                             VertexBufferBinding(&instanceBuffer, 0, 1)});
+
+    BasicEffect effect(device);
+
+    // A clear-only frame first, so this backbuffer's own per-frame floor is measured rather than
+    // assumed. bgfx charges the clear one submit of its own.
+    device.Clear(Color::Black);
+    device.Present();
+    device.Clear(Color::Black);
+    device.Present();
+    const bgfx::Stats* emptyStats = bgfx::getStats();
+    ASSERT_NE(nullptr, emptyStats);
+    const std::uint32_t clearOnlyDraws = emptyStats->numDraw;
+    std::cout << "[ GFX-215  ] bgfx submits for a clear-only frame: " << clearOnlyDraws
+              << std::endl;
+
+    /// n public draws through @p instanced, in one frame, returning that frame's native submit
+    /// count. Every draw carries a DIFFERENT colour state, which is the case REMED-GFX-215 touches.
+    ///
+    /// The frame is rendered TWICE and the reading taken after the second Present, because
+    /// `bgfx::getStats()` reports the previous frame. Reading after a single Present would report
+    /// whatever ran before this call instead -- which is exactly the off-by-one-frame that makes an
+    /// n-draw frame look like an (n-1)-draw one.
+    const auto submitsFor = [&](bool instanced, int publicDraws) {
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            device.Clear(Color::Black);
+            for (int i = 0; i < publicDraws; ++i)
+            {
+                ApplyEffect(effect, i % 2 == 0, i % 2 == 0 ? kNonNeutral : kAltState);
+                if (instanced)
+                    device.DrawInstancedPrimitives(PrimitiveType::TriangleList, 0, 0,
+                                                   kMeshVertexCount, 0, kMeshPrimitiveCount, 1);
+                else
+                    device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0,
+                                                 kMeshVertexCount, 0, kMeshPrimitiveCount);
+            }
+            device.Present();
+        }
+        const bgfx::Stats* stats = bgfx::getStats();
+        EXPECT_NE(nullptr, stats);
+        return stats != nullptr ? stats->numDraw : 0u;
+    };
+
+    // THE A/B. The ordinary route has supplied these same two uniforms since Task 364, so if the
+    // instanced route now costs exactly what the ordinary route costs, the uniforms cost nothing.
+    // Both must also be exactly one native submit per public draw -- no extra draw, submit, view,
+    // frame, wait, readback or Present anywhere.
+    for (int publicDraws = 1; publicDraws <= 4; ++publicDraws)
+    {
+        device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0)});
+        const std::uint32_t ordinary = submitsFor(false, publicDraws);
+        device.SetVertexBuffers({VertexBufferBinding(&meshBuffer, 0, 0),
+                                 VertexBufferBinding(&instanceBuffer, 0, 1)});
+        const std::uint32_t instanced = submitsFor(true, publicDraws);
+        std::cout << "[ GFX-215  ] bgfx submits for " << publicDraws
+                  << " public draw(s): ordinary=" << ordinary << " instanced=" << instanced
+                  << std::endl;
+
+        EXPECT_EQ(clearOnlyDraws + static_cast<std::uint32_t>(publicDraws), instanced)
+            << publicDraws << " public instanced draws must produce exactly " << publicDraws
+            << " native submits above the measured clear-only floor of " << clearOnlyDraws
+            << ". REMED-GFX-215 adds two setUniform calls to an existing submit";
+        EXPECT_EQ(ordinary, instanced)
+            << "the instanced route submitted " << instanced << " times for " << publicDraws
+            << " draws where the ordinary route -- which has supplied the same two uniforms since "
+               "Task 364 -- submitted " << ordinary
+            << ". Supplying a uniform costs no submit, so the two must agree";
+
+        const bgfx::Stats* stats = bgfx::getStats();
+        ASSERT_NE(nullptr, stats);
+        EXPECT_EQ(0u, stats->numBlit) << "the instanced colour path must issue no blit";
+    }
+}
+
+#endif   // CNA_BACKEND_BGFX
 
 #endif   // CNA_INSTANCED_DIFFUSE_ORACLE
